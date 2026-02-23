@@ -20,15 +20,7 @@ jobs:
       - name: Run migrations
         env:
           MIGRATE_DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
-        run: |
-          VERSION_OUTPUT=$(migrate -path db/migrations -database "$MIGRATE_DATABASE_URL" version 2>&1 || true)
-          if echo "$VERSION_OUTPUT" | grep -q "dirty"; then
-            DIRTY_VERSION=$(echo "$VERSION_OUTPUT" | grep -o '^[0-9]*')
-            PREV=$((DIRTY_VERSION - 1))
-            echo "Dirty version $DIRTY_VERSION detected, forcing to $PREV"
-            migrate -path db/migrations -database "$MIGRATE_DATABASE_URL" force $PREV
-          fi
-          migrate -path db/migrations -database "$MIGRATE_DATABASE_URL" up
+        run: migrate -path db/migrations -database "$MIGRATE_DATABASE_URL" up
 
   deploy-api:
     name: Deploy API to Fly.io

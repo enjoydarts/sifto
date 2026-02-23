@@ -208,7 +208,7 @@ JSON配列として返してください。例: ["事実1", "事実2"]
 
 def summarize(title: str | None, facts: list[str]) -> dict:
     if _client is None:
-        summary = " / ".join(facts[:3])[:200] if facts else (title or "")
+        summary = " / ".join(facts[:5])[:420] if facts else (title or "")
         return {
             "summary": summary or "要約を生成できませんでした",
             "topics": ["local-dev"],
@@ -228,19 +228,25 @@ def summarize(title: str | None, facts: list[str]) -> dict:
     prompt = f"""以下の事実リストをもとに、記事の要約を作成してください。
 以下のJSON形式で返してください:
 {{
-  "summary": "200字程度の要約",
+  "summary": "350〜600字程度の要約",
   "topics": ["トピック1", "トピック2"],
   "score": 0.0〜1.0の関連度スコア（一般的な読者にとっての重要度）
 }}
+
+要約スタイル:
+- 客観的・中立的に書く（意見や煽りを入れない）
+- 読みやすい自然な日本語にする（硬すぎる定型文を避ける）
+- 記事の主題、何が起きたか、重要なポイントを過不足なく含める
+- 箇条書きではなく、1〜2段落の文章でまとめる
 
 タイトル: {title or "（不明）"}
 
 事実:
 {facts_text}
 """
-    message, used_model = _call_with_model_fallback(prompt, _summary_model, _summary_model_fallback, max_tokens=1400)
+    message, used_model = _call_with_model_fallback(prompt, _summary_model, _summary_model_fallback, max_tokens=1800)
     if message is None:
-        summary = " / ".join(facts[:3])[:200] if facts else (title or "")
+        summary = " / ".join(facts[:5])[:420] if facts else (title or "")
         return {
             "summary": summary or "要約を生成できませんでした",
             "topics": ["local-dev"],

@@ -1,10 +1,13 @@
 import html
+import logging
 import os
 import re
 
 import httpx
 import trafilatura
 from trafilatura.settings import use_config
+
+_log = logging.getLogger(__name__)
 
 
 def _fallback_extract(downloaded: str) -> dict | None:
@@ -36,61 +39,74 @@ def _result_value(result, key: str, default=None):
 
 
 def extract_body(url: str) -> dict | None:
-    config = use_config()
-    config.set("DEFAULT", "EXTRACTION_TIMEOUT", "30")
+    try:
+        config = use_config()
+        config.set("DEFAULT", "EXTRACTION_TIMEOUT", "30")
 
-    downloaded = trafilatura.fetch_url(url)
-    if downloaded is None:
+        downloaded = trafilatura.fetch_url(url)
+        if downloaded is None:
+            try:
+                resp = httpx.get(url, timeout=30.0, follow_redirects=True)
+                resp.raise_for_status()
+                downloaded = resp.text
+            except Exception as e:
+                _log.warning("extract fetch failed url=%s err=%s", url, e)
+                if os.getenv("ALLOW_DEV_EXTRACT_PLACEHOLDER") == "true":
+                    return {
+                        "title": None,
+                        "content": f"[dev placeholder] Failed to fetch content for URL: {url}",
+                        "published_at": None,
+                    }
+                return None
+
         try:
-            resp = httpx.get(url, timeout=30.0, follow_redirects=True)
-            resp.raise_for_status()
-            downloaded = resp.text
-        except Exception:
+            # `output_format="python"` is only supported by bare_extraction().
+            result = trafilatura.bare_extraction(
+                downloaded,
+                include_comments=False,
+                include_tables=False,
+                with_metadata=True,
+                config=config,
+            )
+        except Exception as e:
+            _log.warning("trafilatura bare_extraction failed url=%s err=%s", url, e)
+            result = None
+
+        if result is None:
+            fallback = _fallback_extract(downloaded)
+            if fallback is not None:
+                return fallback
             if os.getenv("ALLOW_DEV_EXTRACT_PLACEHOLDER") == "true":
                 return {
                     "title": None,
-                    "content": f"[dev placeholder] Failed to fetch content for URL: {url}",
+                    "content": f"[dev placeholder] Failed to extract content for URL: {url}",
                     "published_at": None,
                 }
             return None
 
-    try:
-        # `output_format="python"` is only supported by bare_extraction().
-        result = trafilatura.bare_extraction(
-            downloaded,
-            include_comments=False,
-            include_tables=False,
-            with_metadata=True,
-            config=config,
-        )
+        content = _result_value(result, "text", "") or ""
+        if not content.strip():
+            fallback = _fallback_extract(downloaded)
+            if fallback is not None:
+                return fallback
+            if os.getenv("ALLOW_DEV_EXTRACT_PLACEHOLDER") == "true":
+                return {
+                    "title": _result_value(result, "title"),
+                    "content": f"[dev placeholder] Empty extracted content for URL: {url}",
+                    "published_at": _result_value(result, "date"),
+                }
+
+        return {
+            "title": _result_value(result, "title"),
+            "content": content,
+            "published_at": _result_value(result, "date"),
+        }
     except Exception:
-        result = None
-    if result is None:
-        fallback = _fallback_extract(downloaded)
-        if fallback is not None:
-            return fallback
+        _log.exception("extract_body unexpected failure url=%s", url)
         if os.getenv("ALLOW_DEV_EXTRACT_PLACEHOLDER") == "true":
             return {
                 "title": None,
-                "content": f"[dev placeholder] Failed to extract content for URL: {url}",
+                "content": f"[dev placeholder] Unexpected extract error for URL: {url}",
                 "published_at": None,
             }
         return None
-
-    content = _result_value(result, "text", "") or ""
-    if not content.strip():
-        fallback = _fallback_extract(downloaded)
-        if fallback is not None:
-            return fallback
-        if os.getenv("ALLOW_DEV_EXTRACT_PLACEHOLDER") == "true":
-            return {
-                "title": _result_value(result, "title"),
-                "content": f"[dev placeholder] Empty extracted content for URL: {url}",
-                "published_at": _result_value(result, "date"),
-            }
-
-    return {
-        "title": _result_value(result, "title"),
-        "content": content,
-        "published_at": _result_value(result, "date"),
-    }

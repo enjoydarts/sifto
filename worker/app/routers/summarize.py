@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from app.services.claude_service import summarize
 
@@ -18,6 +18,7 @@ class SummarizeResponse(BaseModel):
 
 
 @router.post("/summarize", response_model=SummarizeResponse)
-def summarize_endpoint(req: SummarizeRequest):
-    result = summarize(req.title, req.facts)
+def summarize_endpoint(req: SummarizeRequest, request: Request):
+    api_key = request.headers.get("x-anthropic-api-key") or None
+    result = summarize(req.title, req.facts, api_key=api_key)
     return result

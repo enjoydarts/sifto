@@ -26,6 +26,15 @@ type DigestEmailCopy struct {
 	Body    string
 }
 
+type BudgetAlertEmail struct {
+	MonthJST            string
+	MonthlyBudgetUSD    float64
+	UsedCostUSD         float64
+	RemainingBudgetUSD  float64
+	RemainingPct        float64
+	ThresholdPct        int
+}
+
 func NewResendClient() *ResendClient {
 	return &ResendClient{
 		apiKey: os.Getenv("RESEND_API_KEY"),
@@ -71,6 +80,41 @@ func (r *ResendClient) SendDigest(ctx context.Context, to string, digest *model.
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("resend: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (r *ResendClient) SendBudgetAlert(ctx context.Context, to string, alert BudgetAlertEmail) error {
+	if !r.Enabled() {
+		log.Printf("resend disabled (missing RESEND_API_KEY or RESEND_FROM_EMAIL), skip budget alert to %s", to)
+		return nil
+	}
+
+	subject := fmt.Sprintf("Sifto: 月次LLM予算の残りが%d%%を下回りました", alert.ThresholdPct)
+	htmlBody := buildBudgetAlertHTML(alert)
+
+	body, _ := json.Marshal(map[string]any{
+		"from":    r.from,
+		"to":      []string{to},
+		"subject": subject,
+		"html":    htmlBody,
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://api.resend.com/emails", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := r.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("resend: status %d", resp.StatusCode)
 	}
@@ -127,6 +171,23 @@ func buildDigestHTML(d *model.DigestDetail, copy *DigestEmailCopy) string {
 			item.Rank, escapedTopics, escapedURL, escapedTitle, escapedSummary, escapedTopics))
 	}
 
+	sb.WriteString(`</body></html>`)
+	return sb.String()
+}
+
+func buildBudgetAlertHTML(a BudgetAlertEmail) string {
+	var sb strings.Builder
+	sb.WriteString(`<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:640px;margin:0 auto;padding:20px">`)
+	sb.WriteString(`<h1 style="font-size:22px;margin:0 0 12px">Sifto 予算アラート</h1>`)
+	sb.WriteString(fmt.Sprintf(`<p style="line-height:1.7;color:#333">%s の月次LLM予算の残りが <strong>%d%%</strong> を下回りました。</p>`,
+		html.EscapeString(a.MonthJST), a.ThresholdPct))
+	sb.WriteString(`<div style="border:1px solid #e4e4e7;border-radius:10px;padding:14px 16px;background:#fafafa">`)
+	sb.WriteString(fmt.Sprintf(`<p style="margin:0 0 6px;color:#444">月次予算: <strong>$%.4f</strong></p>`, a.MonthlyBudgetUSD))
+	sb.WriteString(fmt.Sprintf(`<p style="margin:0 0 6px;color:#444">利用額（推定）: <strong>$%.4f</strong></p>`, a.UsedCostUSD))
+	sb.WriteString(fmt.Sprintf(`<p style="margin:0 0 6px;color:#444">残額（推定）: <strong>$%.4f</strong></p>`, a.RemainingBudgetUSD))
+	sb.WriteString(fmt.Sprintf(`<p style="margin:0;color:#444">残り比率: <strong>%.1f%%</strong></p>`, a.RemainingPct))
+	sb.WriteString(`</div>`)
+	sb.WriteString(`<p style="margin-top:12px;color:#666;line-height:1.6">設定画面で予算・警告しきい値・Anthropic APIキー（ユーザー別）を管理できます。</p>`)
 	sb.WriteString(`</body></html>`)
 	return sb.String()
 }

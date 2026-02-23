@@ -106,9 +106,7 @@ export default function ItemDetailPage() {
               </span>
             )}
           </div>
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50/60 p-4">
-            <p className="text-base leading-8 text-zinc-900">{item.summary.summary}</p>
-          </div>
+          <p className="text-base leading-8 text-zinc-900">{item.summary.summary}</p>
           {item.summary.topics.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-1.5">
               {item.summary.topics.map((topic) => (
@@ -145,7 +143,7 @@ export default function ItemDetailPage() {
           <h2 className="mb-3 text-sm font-semibold text-zinc-700">
             {locale === "ja" ? "本文" : "Content"}
           </h2>
-          <div className="max-h-[40rem] overflow-y-auto rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-sm leading-relaxed whitespace-pre-wrap text-zinc-700">
+          <div className="-mx-1 max-h-[40rem] overflow-y-auto px-1 text-[15px] leading-8 whitespace-pre-wrap text-zinc-700 sm:mx-0 sm:rounded-lg sm:border sm:border-zinc-200 sm:bg-zinc-50 sm:p-4 sm:text-sm sm:leading-relaxed">
             {item.content_text}
           </div>
         </section>

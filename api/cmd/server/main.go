@@ -27,18 +27,21 @@ func main() {
 
 	worker := service.NewWorkerClient()
 	resend := service.NewResendClient()
+	secretCipher := service.NewSecretCipher()
 	eventPublisher, err := service.NewEventPublisher()
 	if err != nil {
 		log.Fatalf("event publisher: %v", err)
 	}
 
 	userRepo := repository.NewUserRepo(db)
+	userSettingsRepo := repository.NewUserSettingsRepo(db)
 	sourceRepo := repository.NewSourceRepo(db)
 	itemRepo := repository.NewItemRepo(db)
 	itemInngestRepo := repository.NewItemInngestRepo(db)
 	digestRepo := repository.NewDigestRepo(db)
 	digestInngestRepo := repository.NewDigestInngestRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	settingsH := handler.NewSettingsHandler(userSettingsRepo, llmUsageRepo, secretCipher)
 
 	internalH := handler.NewInternalHandler(userRepo, itemInngestRepo, digestInngestRepo, eventPublisher)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, eventPublisher)
@@ -91,6 +94,13 @@ func main() {
 		r.Route("/llm-usage", func(r chi.Router) {
 			r.Get("/", llmUsageH.List)
 			r.Get("/summary", llmUsageH.DailySummary)
+		})
+
+		r.Route("/settings", func(r chi.Router) {
+			r.Get("/", settingsH.Get)
+			r.Patch("/", settingsH.UpdateBudget)
+			r.Post("/anthropic-key", settingsH.SetAnthropicAPIKey)
+			r.Delete("/anthropic-key", settingsH.DeleteAnthropicAPIKey)
 		})
 	})
 

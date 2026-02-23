@@ -152,3 +152,16 @@ func (r *LLMUsageLogRepo) DailySummaryByUser(ctx context.Context, userID string,
 	}
 	return out, rows.Err()
 }
+
+func (r *LLMUsageLogRepo) SumEstimatedCostByUserBetween(ctx context.Context, userID string, since, until time.Time) (float64, error) {
+	var total float64
+	err := r.db.QueryRow(ctx, `
+		SELECT COALESCE(SUM(estimated_cost_usd), 0)::double precision
+		FROM llm_usage_logs
+		WHERE user_id = $1
+		  AND created_at >= $2
+		  AND created_at < $3`,
+		userID, since, until,
+	).Scan(&total)
+	return total, err
+}

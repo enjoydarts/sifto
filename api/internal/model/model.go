@@ -11,6 +11,17 @@ type User struct {
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
+type UserSettings struct {
+	UserID                 string     `json:"user_id"`
+	AnthropicAPIKeyLast4   *string    `json:"anthropic_api_key_last4,omitempty"`
+	HasAnthropicAPIKey     bool       `json:"has_anthropic_api_key"`
+	MonthlyBudgetUSD       *float64   `json:"monthly_budget_usd,omitempty"`
+	BudgetAlertEnabled     bool       `json:"budget_alert_enabled"`
+	BudgetAlertThresholdPct int       `json:"budget_alert_threshold_pct"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
+}
+
 type Source struct {
 	ID            string     `json:"id"`
 	UserID        string     `json:"user_id"`

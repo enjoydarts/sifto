@@ -73,31 +73,40 @@ type LLMUsage struct {
 }
 
 func (w *WorkerClient) ExtractBody(ctx context.Context, url string) (*ExtractBodyResponse, error) {
-	return post[ExtractBodyResponse](ctx, w, "/extract-body", map[string]any{"url": url})
+	return postWithHeaders[ExtractBodyResponse](ctx, w, "/extract-body", map[string]any{"url": url}, nil)
 }
 
-func (w *WorkerClient) ExtractFacts(ctx context.Context, title *string, content string) (*ExtractFactsResponse, error) {
-	return post[ExtractFactsResponse](ctx, w, "/extract-facts", map[string]any{
+func (w *WorkerClient) ExtractFacts(ctx context.Context, title *string, content string, anthropicAPIKey *string) (*ExtractFactsResponse, error) {
+	return postWithHeaders[ExtractFactsResponse](ctx, w, "/extract-facts", map[string]any{
 		"title":   title,
 		"content": content,
-	})
+	}, workerHeaders(anthropicAPIKey))
 }
 
-func (w *WorkerClient) Summarize(ctx context.Context, title *string, facts []string) (*SummarizeResponse, error) {
-	return post[SummarizeResponse](ctx, w, "/summarize", map[string]any{
+func (w *WorkerClient) Summarize(ctx context.Context, title *string, facts []string, anthropicAPIKey *string) (*SummarizeResponse, error) {
+	return postWithHeaders[SummarizeResponse](ctx, w, "/summarize", map[string]any{
 		"title": title,
 		"facts": facts,
-	})
+	}, workerHeaders(anthropicAPIKey))
 }
 
-func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, items []ComposeDigestItem) (*ComposeDigestResponse, error) {
-	return post[ComposeDigestResponse](ctx, w, "/compose-digest", map[string]any{
+func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string) (*ComposeDigestResponse, error) {
+	return postWithHeaders[ComposeDigestResponse](ctx, w, "/compose-digest", map[string]any{
 		"digest_date": digestDate,
 		"items":       items,
-	})
+	}, workerHeaders(anthropicAPIKey))
 }
 
-func post[T any](ctx context.Context, w *WorkerClient, path string, body any) (*T, error) {
+func workerHeaders(anthropicAPIKey *string) map[string]string {
+	if anthropicAPIKey == nil || *anthropicAPIKey == "" {
+		return nil
+	}
+	return map[string]string{
+		"X-Anthropic-Api-Key": *anthropicAPIKey,
+	}
+}
+
+func postWithHeaders[T any](ctx context.Context, w *WorkerClient, path string, body any, headers map[string]string) (*T, error) {
 	b, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
@@ -107,6 +116,11 @@ func post[T any](ctx context.Context, w *WorkerClient, path string, body any) (*
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		if v != "" {
+			req.Header.Set(k, v)
+		}
+	}
 
 	resp, err := w.http.Do(req)
 	if err != nil {

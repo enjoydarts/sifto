@@ -4,8 +4,7 @@ import os
 import time
 import anthropic
 
-_api_key = os.getenv("ANTHROPIC_API_KEY")
-_client = anthropic.Anthropic(api_key=_api_key) if _api_key else None
+_client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
 _summary_model = os.getenv("ANTHROPIC_SUMMARY_MODEL", "claude-sonnet-4-6")
 _summary_model_fallback = os.getenv("ANTHROPIC_SUMMARY_MODEL_FALLBACK", "claude-sonnet-4-5-20250929")
@@ -210,10 +209,17 @@ def _llm_meta(message, purpose: str, model: str, provider: str = "anthropic") ->
     }
 
 
-def _messages_create(prompt: str, model: str, max_tokens: int = 1024):
-    if _client is None:
+def _client_for_api_key(api_key: str | None):
+    if api_key:
+        return anthropic.Anthropic(api_key=api_key)
+    return None
+
+
+def _messages_create(prompt: str, model: str, max_tokens: int = 1024, api_key: str | None = None):
+    client = _client_for_api_key(api_key)
+    if client is None:
         return None
-    return _client.messages.create(
+    return client.messages.create(
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
@@ -225,11 +231,11 @@ def _is_rate_limit_error(err: Exception) -> bool:
     return "429" in s or "rate_limit" in s
 
 
-def _call_with_retries(prompt: str, model: str, max_tokens: int, retries: int = 2):
+def _call_with_retries(prompt: str, model: str, max_tokens: int, retries: int = 2, api_key: str | None = None):
     last_err = None
     for attempt in range(retries + 1):
         try:
-            return _messages_create(prompt, model, max_tokens=max_tokens)
+            return _messages_create(prompt, model, max_tokens=max_tokens, api_key=api_key)
         except Exception as e:
             last_err = e
             if attempt >= retries or not _is_rate_limit_error(e):
@@ -250,24 +256,24 @@ def _call_with_retries(prompt: str, model: str, max_tokens: int, retries: int = 
 
 
 def _call_with_model_fallback(
-    prompt: str, primary_model: str, fallback_model: str | None, max_tokens: int = 1024
+    prompt: str, primary_model: str, fallback_model: str | None, max_tokens: int = 1024, api_key: str | None = None
 ):
-    if _client is None:
+    if _client_for_api_key(api_key) is None:
         return None, None
     try:
-        return _call_with_retries(prompt, primary_model, max_tokens=max_tokens), primary_model
+        return _call_with_retries(prompt, primary_model, max_tokens=max_tokens, api_key=api_key), primary_model
     except Exception as e:
         _log.warning("anthropic call failed model=%s err=%s", primary_model, e)
         if fallback_model and fallback_model != primary_model:
             try:
-                return _call_with_retries(prompt, fallback_model, max_tokens=max_tokens), fallback_model
+                return _call_with_retries(prompt, fallback_model, max_tokens=max_tokens, api_key=api_key), fallback_model
             except Exception as e2:
                 _log.warning("anthropic fallback failed model=%s err=%s", fallback_model, e2)
         return None, None
 
 
-def extract_facts(title: str | None, content: str) -> dict:
-    if _client is None:
+def extract_facts(title: str | None, content: str, api_key: str | None = None) -> dict:
+    if _client_for_api_key(api_key) is None:
         lines = [line.strip() for line in content.splitlines() if line.strip()]
         facts = lines[:5]
         if not facts and title:
@@ -308,7 +314,7 @@ JSON配列として返してください。例: ["事実1", "事実2"]
 {chunk}
 """
         message, used_model = _call_with_model_fallback(
-            prompt, _facts_model, _facts_model_fallback, max_tokens=1024
+            prompt, _facts_model, _facts_model_fallback, max_tokens=1024, api_key=api_key
         )
         if message is None:
             continue
@@ -342,8 +348,8 @@ JSON配列として返してください。例: ["事実1", "事実2"]
     }
 
 
-def summarize(title: str | None, facts: list[str]) -> dict:
-    if _client is None:
+def summarize(title: str | None, facts: list[str], api_key: str | None = None) -> dict:
+    if _client_for_api_key(api_key) is None:
         summary = " / ".join(facts[:5])[:420] if facts else (title or "")
         return {
             "summary": summary or "要約を生成できませんでした",
@@ -380,7 +386,9 @@ def summarize(title: str | None, facts: list[str]) -> dict:
 事実:
 {facts_text}
 """
-    message, used_model = _call_with_model_fallback(prompt, _summary_model, _summary_model_fallback, max_tokens=1800)
+    message, used_model = _call_with_model_fallback(
+        prompt, _summary_model, _summary_model_fallback, max_tokens=1800, api_key=api_key
+    )
     if message is None:
         summary = " / ".join(facts[:5])[:420] if facts else (title or "")
         return {
@@ -509,7 +517,7 @@ def _build_digest_input_sections(items: list[dict]) -> tuple[str, str]:
     return "topic_grouped", "\n".join(lines)
 
 
-def compose_digest(digest_date: str, items: list[dict]) -> dict:
+def compose_digest(digest_date: str, items: list[dict], api_key: str | None = None) -> dict:
     if not items:
         return {
             "subject": f"Sifto Digest - {digest_date}",
@@ -557,6 +565,7 @@ items:
         _digest_model,
         _digest_model_fallback,
         max_tokens=4000,
+        api_key=api_key,
     )
     if message is None:
         top_topics = []

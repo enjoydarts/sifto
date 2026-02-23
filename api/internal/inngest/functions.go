@@ -76,6 +76,27 @@ func llmUsageIdempotencyKey(purpose string, usage *service.LLMUsage, userID, sou
 	return hex.EncodeToString(sum[:])
 }
 
+func loadUserAnthropicAPIKey(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string) (*string, error) {
+	if settingsRepo == nil || userID == nil || *userID == "" {
+		return nil, fmt.Errorf("user anthropic api key is required")
+	}
+	enc, err := settingsRepo.GetAnthropicAPIKeyEncrypted(ctx, *userID)
+	if err != nil || enc == nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("user anthropic api key is required")
+	}
+	if cipher == nil || !cipher.Enabled() {
+		return nil, fmt.Errorf("user secret encryption is not configured")
+	}
+	plain, err := cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt user anthropic key: %w", err)
+	}
+	return &plain, nil
+}
+
 // Event payloads
 
 type ItemCreatedData struct {
@@ -92,6 +113,7 @@ type DigestCreatedData struct {
 
 // NewHandler registers all Inngest functions and returns the HTTP handler.
 func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient) http.Handler {
+	secretCipher := service.NewSecretCipher()
 	client, err := inngestgo.NewClient(inngestgo.ClientOpts{
 		AppID: "sifto-api",
 	})
@@ -106,9 +128,10 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	}
 
 	register(fetchRSSFn(client, db))
-	register(processItemFn(client, db, worker))
+	register(processItemFn(client, db, worker, secretCipher))
 	register(generateDigestFn(client, db))
-	register(sendDigestFn(client, db, worker, resend))
+	register(sendDigestFn(client, db, worker, resend, secretCipher))
+	register(checkBudgetAlertsFn(client, db, resend))
 
 	return client.Serve()
 }
@@ -175,10 +198,11 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 }
 
 // ② event/process-item — 本文抽出 → 事実抽出 → 要約（各stepでリトライ可能）
-func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient) (inngestgo.ServableFunction, error) {
+func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
 	itemRepo := repository.NewItemInngestRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
 	sourceRepo := repository.NewSourceRepo(db)
+	userSettingsRepo := repository.NewUserSettingsRepo(db)
 
 	type EventData struct {
 		ItemID   string `json:"item_id"`
@@ -201,6 +225,12 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				} else {
 					log.Printf("process-item source owner lookup failed source_id=%s err=%v", data.SourceID, err)
 				}
+			}
+			userAnthropicKey, err := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr)
+			if err != nil {
+				log.Printf("process-item user anthropic key load failed item_id=%s user_id=%v err=%v", itemID, userIDPtr, err)
+				_ = itemRepo.MarkFailed(ctx, itemID)
+				return nil, err
 			}
 			log.Printf("process-item start item_id=%s url=%s", itemID, url)
 
@@ -232,7 +262,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			// Step 2: 事実抽出
 			factsResp, err := step.Run(ctx, "extract-facts", func(ctx context.Context) (*service.ExtractFactsResponse, error) {
 				log.Printf("process-item extract-facts start item_id=%s", itemID)
-				return worker.ExtractFacts(ctx, extracted.Title, extracted.Content)
+				return worker.ExtractFacts(ctx, extracted.Title, extracted.Content, userAnthropicKey)
 			})
 			if err != nil {
 				log.Printf("process-item extract-facts failed item_id=%s err=%v", itemID, err)
@@ -250,7 +280,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			// Step 3: 要約
 			summary, err := step.Run(ctx, "summarize", func(ctx context.Context) (*service.SummarizeResponse, error) {
 				log.Printf("process-item summarize start item_id=%s", itemID)
-				return worker.Summarize(ctx, extracted.Title, factsResp.Facts)
+				return worker.Summarize(ctx, extracted.Title, factsResp.Facts, userAnthropicKey)
 			})
 			if err != nil {
 				log.Printf("process-item summarize failed item_id=%s err=%v", itemID, err)
@@ -328,9 +358,10 @@ func generateDigestFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.Serv
 }
 
 // ④ event/send-digest — メール送信
-func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient) (inngestgo.ServableFunction, error) {
+func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
 	digestRepo := repository.NewDigestInngestRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	userSettingsRepo := repository.NewUserSettingsRepo(db)
 
 	type EventData struct {
 		DigestID string `json:"digest_id"`
@@ -357,6 +388,11 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 				if err := digestRepo.UpdateSendStatus(ctx, data.DigestID, status, msg); err != nil {
 					log.Printf("send-digest update-status failed digest_id=%s status=%s err=%v", data.DigestID, status, err)
 				}
+			}
+			userAnthropicKey, keyErr := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, &data.UserID)
+			if keyErr != nil {
+				markStatus("user_key_failed", keyErr)
+				return nil, keyErr
 			}
 
 			// Read-only DB fetch does not need step state, and keeping large nested structs
@@ -402,7 +438,7 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 							Score:   it.Summary.Score,
 						})
 					}
-					resp, err := worker.ComposeDigest(ctx, digest.DigestDate, items)
+					resp, err := worker.ComposeDigest(ctx, digest.DigestDate, items, userAnthropicKey)
 					if err != nil {
 						return "", err
 					}
@@ -456,6 +492,87 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 			log.Printf("send-digest complete digest_id=%s", data.DigestID)
 
 			return map[string]string{"status": "sent", "to": data.To}, nil
+		},
+	)
+}
+
+func checkBudgetAlertsFn(client inngestgo.Client, db *pgxpool.Pool, resend *service.ResendClient) (inngestgo.ServableFunction, error) {
+	settingsRepo := repository.NewUserSettingsRepo(db)
+	alertLogRepo := repository.NewBudgetAlertLogRepo(db)
+	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "check-budget-alerts", Name: "Check Monthly Budget Alerts"},
+		inngestgo.CronTrigger("0 0 * * *"), // 09:00 JST
+		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
+			if !resend.Enabled() {
+				return map[string]any{"status": "skipped", "reason": "resend_disabled"}, nil
+			}
+
+			targets, err := settingsRepo.ListBudgetAlertTargets(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("list budget alert targets: %w", err)
+			}
+
+			nowJST := timeutil.NowJST()
+			monthStartJST := time.Date(nowJST.Year(), nowJST.Month(), 1, 0, 0, 0, 0, timeutil.JST)
+			nextMonthJST := monthStartJST.AddDate(0, 1, 0)
+			checked := 0
+			sent := 0
+			skipped := 0
+
+			for _, tgt := range targets {
+				checked++
+				usedCostUSD, err := llmUsageRepo.SumEstimatedCostByUserBetween(ctx, tgt.UserID, monthStartJST, nextMonthJST)
+				if err != nil {
+					log.Printf("check-budget-alerts sum cost user_id=%s: %v", tgt.UserID, err)
+					continue
+				}
+				if tgt.MonthlyBudgetUSD <= 0 {
+					skipped++
+					continue
+				}
+				remainingRatio := (tgt.MonthlyBudgetUSD - usedCostUSD) / tgt.MonthlyBudgetUSD
+				thresholdRatio := float64(tgt.BudgetAlertThresholdPct) / 100.0
+				if remainingRatio >= thresholdRatio {
+					skipped++
+					continue
+				}
+				alreadySent, err := alertLogRepo.Exists(ctx, tgt.UserID, monthStartJST, tgt.BudgetAlertThresholdPct)
+				if err != nil {
+					log.Printf("check-budget-alerts exists user_id=%s: %v", tgt.UserID, err)
+					continue
+				}
+				if alreadySent {
+					skipped++
+					continue
+				}
+
+				remainingUSD := tgt.MonthlyBudgetUSD - usedCostUSD
+				if err := resend.SendBudgetAlert(ctx, tgt.Email, service.BudgetAlertEmail{
+					MonthJST:           monthStartJST.Format("2006-01"),
+					MonthlyBudgetUSD:   tgt.MonthlyBudgetUSD,
+					UsedCostUSD:        usedCostUSD,
+					RemainingBudgetUSD: remainingUSD,
+					RemainingPct:       remainingRatio * 100,
+					ThresholdPct:       tgt.BudgetAlertThresholdPct,
+				}); err != nil {
+					log.Printf("check-budget-alerts send user_id=%s email=%s: %v", tgt.UserID, tgt.Email, err)
+					continue
+				}
+				if err := alertLogRepo.Insert(ctx, tgt.UserID, monthStartJST, tgt.BudgetAlertThresholdPct, tgt.MonthlyBudgetUSD, usedCostUSD, remainingRatio); err != nil {
+					log.Printf("check-budget-alerts log user_id=%s: %v", tgt.UserID, err)
+				}
+				sent++
+			}
+
+			return map[string]any{
+				"checked":   checked,
+				"sent":      sent,
+				"skipped":   skipped,
+				"month_jst": monthStartJST.Format("2006-01"),
+			}, nil
 		},
 	)
 }

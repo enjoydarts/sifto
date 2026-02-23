@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.services.claude_service import compose_digest
@@ -27,7 +27,8 @@ class ComposeDigestResponse(BaseModel):
 
 
 @router.post("/compose-digest", response_model=ComposeDigestResponse)
-def compose_digest_endpoint(req: ComposeDigestRequest):
+def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
+    api_key = request.headers.get("x-anthropic-api-key") or None
     result = compose_digest(
         req.digest_date,
         [
@@ -41,5 +42,6 @@ def compose_digest_endpoint(req: ComposeDigestRequest):
             }
             for i in req.items
         ],
+        api_key=api_key,
     )
     return ComposeDigestResponse(**result)

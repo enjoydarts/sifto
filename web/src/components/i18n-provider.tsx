@@ -19,6 +19,7 @@ const dict: Record<Locale, Dict> = {
     "nav.sources": "ソース",
     "nav.digests": "ダイジェスト",
     "nav.llmUsage": "LLM利用",
+    "nav.settings": "設定",
     "nav.debug": "デバッグ",
     "nav.signOut": "サインアウト",
     "nav.language": "言語",
@@ -83,12 +84,15 @@ const dict: Record<Locale, Dict> = {
     "llm.recentLogs": "最新履歴",
     "llm.noSummary": "集計データがありません。",
     "llm.noLogs": "履歴がありません。",
+    "settings.title": "設定",
+    "settings.subtitle": "Anthropic APIキー（ユーザー別）と月次LLM予算を管理",
   },
   en: {
     "nav.items": "Items",
     "nav.sources": "Sources",
     "nav.digests": "Digests",
     "nav.llmUsage": "LLM Usage",
+    "nav.settings": "Settings",
     "nav.debug": "Debug",
     "nav.signOut": "Sign out",
     "nav.language": "Language",
@@ -153,6 +157,8 @@ const dict: Record<Locale, Dict> = {
     "llm.recentLogs": "Recent Logs",
     "llm.noSummary": "No summary data.",
     "llm.noLogs": "No logs.",
+    "settings.title": "Settings",
+    "settings.subtitle": "Manage per-user Anthropic API key and monthly LLM budget",
   },
 };
 

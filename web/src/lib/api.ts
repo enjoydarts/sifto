@@ -114,6 +114,25 @@ export interface LLMUsageDailySummary {
   estimated_cost_usd: number;
 }
 
+export interface UserSettingsCurrentMonth {
+  month_jst: string;
+  period_start_jst: string;
+  period_end_jst: string;
+  estimated_cost_usd: number;
+  remaining_budget_usd: number | null;
+  remaining_budget_pct: number | null;
+}
+
+export interface UserSettings {
+  user_id: string;
+  has_anthropic_api_key: boolean;
+  anthropic_api_key_last4: string | null;
+  monthly_budget_usd: number | null;
+  budget_alert_enabled: boolean;
+  budget_alert_threshold_pct: number;
+  current_month: UserSettingsCurrentMonth;
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...options,
@@ -181,6 +200,28 @@ export const api = {
     const qs = q.toString();
     return apiFetch<LLMUsageDailySummary[]>(`/llm-usage/summary${qs ? `?${qs}` : ""}`);
   },
+
+  // Settings
+  getSettings: () => apiFetch<UserSettings>("/settings"),
+  updateSettings: (body: {
+    monthly_budget_usd: number | null;
+    budget_alert_enabled: boolean;
+    budget_alert_threshold_pct: number;
+  }) =>
+    apiFetch<UserSettings>("/settings", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  setAnthropicApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_anthropic_api_key: boolean; anthropic_api_key_last4: string | null }>(
+      "/settings/anthropic-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteAnthropicApiKey: () =>
+    apiFetch<{ user_id: string; has_anthropic_api_key: boolean; anthropic_api_key_last4: string | null }>(
+      "/settings/anthropic-key",
+      { method: "DELETE" }
+    ),
 
   // Digests
   getDigests: () => apiFetch<Digest[]>("/digests"),

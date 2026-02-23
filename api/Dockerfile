@@ -1,14 +1,19 @@
-FROM golang:1.23-alpine AS builder
+FROM golang:alpine AS builder
 
 WORKDIR /app
 
-COPY go.mod go.sum ./
-RUN go mod download
-
+# Copy all sources first, then get deps (so go.mod is updated in-place)
 COPY . .
-RUN go build -o bin/server ./cmd/server
+RUN go get \
+    github.com/go-chi/chi/v5@latest \
+    github.com/golang-jwt/jwt/v5@latest \
+    github.com/inngest/inngestgo@latest \
+    github.com/jackc/pgx/v5@latest \
+    github.com/mmcdole/gofeed@latest && \
+    go mod tidy && \
+    go build -o bin/server ./cmd/server
 
-FROM alpine:3.20
+FROM alpine:latest
 
 RUN apk add --no-cache ca-certificates
 

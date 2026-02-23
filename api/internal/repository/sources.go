@@ -1,0 +1,90 @@
+package repository
+
+import (
+	"context"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/minoru-kitayama/sifto/api/internal/model"
+)
+
+type SourceRepo struct{ db *pgxpool.Pool }
+
+func NewSourceRepo(db *pgxpool.Pool) *SourceRepo { return &SourceRepo{db} }
+
+func (r *SourceRepo) List(ctx context.Context, userID string) ([]model.Source, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, user_id, url, type, title, enabled, last_fetched_at, created_at, updated_at
+		FROM sources WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sources []model.Source
+	for rows.Next() {
+		var s model.Source
+		if err := rows.Scan(&s.ID, &s.UserID, &s.URL, &s.Type, &s.Title,
+			&s.Enabled, &s.LastFetchedAt, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+		sources = append(sources, s)
+	}
+	return sources, nil
+}
+
+func (r *SourceRepo) Create(ctx context.Context, userID, url, srcType string, title *string) (*model.Source, error) {
+	var s model.Source
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO sources (user_id, url, type, title)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, user_id, url, type, title, enabled, last_fetched_at, created_at, updated_at`,
+		userID, url, srcType, title,
+	).Scan(&s.ID, &s.UserID, &s.URL, &s.Type, &s.Title,
+		&s.Enabled, &s.LastFetchedAt, &s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (r *SourceRepo) Update(ctx context.Context, id, userID string, enabled bool) (*model.Source, error) {
+	var s model.Source
+	err := r.db.QueryRow(ctx, `
+		UPDATE sources SET enabled = $1, updated_at = NOW()
+		WHERE id = $2 AND user_id = $3
+		RETURNING id, user_id, url, type, title, enabled, last_fetched_at, created_at, updated_at`,
+		enabled, id, userID,
+	).Scan(&s.ID, &s.UserID, &s.URL, &s.Type, &s.Title,
+		&s.Enabled, &s.LastFetchedAt, &s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (r *SourceRepo) Delete(ctx context.Context, id, userID string) error {
+	_, err := r.db.Exec(ctx,
+		`DELETE FROM sources WHERE id = $1 AND user_id = $2`, id, userID)
+	return err
+}
+
+func (r *SourceRepo) ListEnabled(ctx context.Context) ([]model.Source, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, user_id, url, type, title, enabled, last_fetched_at, created_at, updated_at
+		FROM sources WHERE enabled = true AND type = 'rss'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sources []model.Source
+	for rows.Next() {
+		var s model.Source
+		if err := rows.Scan(&s.ID, &s.UserID, &s.URL, &s.Type, &s.Title,
+			&s.Enabled, &s.LastFetchedAt, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+		sources = append(sources, s)
+	}
+	return sources, nil
+}

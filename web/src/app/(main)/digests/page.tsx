@@ -6,6 +6,45 @@ import { api, Digest } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 
+function digestStatusBadge(d: Digest, locale: "ja" | "en") {
+  if (d.sent_at) {
+    return {
+      label: locale === "ja" ? "送信済み" : "Sent",
+      className: "bg-green-50 text-green-700",
+    };
+  }
+  switch (d.send_status) {
+    case "compose_failed":
+    case "send_email_failed":
+    case "fetch_failed":
+    case "user_key_failed":
+      return {
+        label: locale === "ja" ? "失敗" : "Failed",
+        className: "bg-red-50 text-red-700",
+      };
+    case "processing":
+      return {
+        label: locale === "ja" ? "処理中" : "Processing",
+        className: "bg-blue-50 text-blue-700",
+      };
+    case "skipped_resend_disabled":
+      return {
+        label: locale === "ja" ? "送信無効" : "Resend off",
+        className: "bg-amber-50 text-amber-700",
+      };
+    case "skipped_no_items":
+      return {
+        label: locale === "ja" ? "対象なし" : "No items",
+        className: "bg-zinc-100 text-zinc-600",
+      };
+    default:
+      return {
+        label: locale === "ja" ? "未送信" : "Pending",
+        className: "bg-zinc-100 text-zinc-500",
+      };
+  }
+}
+
 export default function DigestsPage() {
   const { t, locale } = useI18n();
   const [digests, setDigests] = useState<Digest[]>([]);
@@ -40,30 +79,36 @@ export default function DigestsPage() {
       )}
 
       <ul className="space-y-2">
-        {paged.map((d) => (
+        {paged.map((d) => {
+          const badge = digestStatusBadge(d, locale);
+          return (
           <li key={d.id}>
             <Link
               href={`/digests/${d.id}`}
-              className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm transition-colors hover:bg-zinc-50"
+              className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm transition-colors hover:bg-zinc-50"
             >
-              <div>
+              <div className="min-w-0 flex-1">
                 <div className="font-medium text-zinc-900">{d.digest_date}</div>
+                <div className="mt-0.5 truncate text-sm text-zinc-600">
+                  {d.email_subject ??
+                    (locale === "ja" ? "メール件名はまだ生成されていません" : "Email subject not generated yet")}
+                </div>
+                {!!d.send_error && !d.sent_at && (
+                  <div className="mt-0.5 truncate text-xs text-red-600">
+                    {d.send_error}
+                  </div>
+                )}
                 <div className="text-xs text-zinc-400">
                   {new Date(d.created_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}
                 </div>
               </div>
-              {d.sent_at ? (
-                <span className="rounded bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
-                  {t("digests.sent")}
-                </span>
-              ) : (
-                <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-500">
-                  {t("digests.pending")}
-                </span>
-              )}
+              <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${badge.className}`}>
+                {badge.label}
+              </span>
             </Link>
           </li>
-        ))}
+          );
+        })}
       </ul>
       <Pagination total={digests.length} page={page} pageSize={pageSize} onPageChange={setPage} />
     </div>

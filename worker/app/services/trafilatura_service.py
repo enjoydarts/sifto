@@ -25,7 +25,7 @@ def _fallback_extract(downloaded: str) -> dict | None:
 
     return {
         "title": title,
-        "content": text[:20000],
+        "content": text,
         "published_at": None,
     }
 

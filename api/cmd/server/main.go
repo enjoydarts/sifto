@@ -35,10 +35,12 @@ func main() {
 	userRepo := repository.NewUserRepo(db)
 	sourceRepo := repository.NewSourceRepo(db)
 	itemRepo := repository.NewItemRepo(db)
+	itemInngestRepo := repository.NewItemInngestRepo(db)
 	digestRepo := repository.NewDigestRepo(db)
+	digestInngestRepo := repository.NewDigestInngestRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
 
-	internalH := handler.NewInternalHandler(userRepo)
+	internalH := handler.NewInternalHandler(userRepo, itemInngestRepo, digestInngestRepo, eventPublisher)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, eventPublisher)
 	itemH := handler.NewItemHandler(itemRepo, eventPublisher)
 	digestH := handler.NewDigestHandler(digestRepo)
@@ -59,6 +61,8 @@ func main() {
 
 	// NextAuth からのみ呼ばれる内部エンドポイント（X-Internal-Secret で保護）
 	r.Post("/api/internal/users/upsert", internalH.UpsertUser)
+	r.Post("/api/internal/debug/digests/generate", internalH.DebugGenerateDigest)
+	r.Post("/api/internal/debug/digests/send", internalH.DebugSendDigest)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(middleware.Auth)

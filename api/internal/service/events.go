@@ -42,3 +42,21 @@ func (p *EventPublisher) SendItemCreatedE(ctx context.Context, itemID, sourceID,
 	}
 	return nil
 }
+
+func (p *EventPublisher) SendDigestCreatedE(ctx context.Context, digestID, userID, to string) error {
+	if p == nil {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, inngestgo.Event{
+		Name: "digest/created",
+		Data: map[string]any{
+			"digest_id": digestID,
+			"user_id":   userID,
+			"to":        to,
+		},
+	}); err != nil {
+		log.Printf("send digest/created: %v", err)
+		return err
+	}
+	return nil
+}

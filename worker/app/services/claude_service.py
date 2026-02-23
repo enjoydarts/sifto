@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 import anthropic
 
 _api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -28,6 +29,95 @@ _DEFAULT_MODEL_PRICING = {
         "cache_read_per_mtok_usd": 0.30,
     },
 }
+
+
+def _split_text_chunks(text: str, chunk_chars: int = 8000, overlap_chars: int = 400) -> list[str]:
+    text = (text or "").strip()
+    if not text:
+        return []
+    if len(text) <= chunk_chars:
+        return [text]
+
+    chunks: list[str] = []
+    start = 0
+    n = len(text)
+    while start < n:
+        end = min(n, start + chunk_chars)
+        chunks.append(text[start:end])
+        if end >= n:
+            break
+        start = max(end - overlap_chars, start + 1)
+    return chunks
+
+
+def _parse_json_string_array(text: str) -> list[str]:
+    start = text.find("[")
+    end = text.rfind("]") + 1
+    if start == -1 or end == 0:
+        return []
+    try:
+        data = json.loads(text[start:end])
+    except Exception:
+        return []
+    return [str(v) for v in data if isinstance(v, str)]
+
+
+def _merge_fact_lists(fact_lists: list[list[str]], max_items: int = 24) -> list[str]:
+    # De-dup while preserving coverage across chunks by interleaving.
+    normalized_seen: set[str] = set()
+    merged: list[str] = []
+    max_len = max((len(xs) for xs in fact_lists), default=0)
+    for i in range(max_len):
+        for facts in fact_lists:
+            if i >= len(facts):
+                continue
+            fact = facts[i].strip()
+            if not fact:
+                continue
+            key = " ".join(fact.lower().split())
+            if key in normalized_seen:
+                continue
+            normalized_seen.add(key)
+            merged.append(fact)
+            if len(merged) >= max_items:
+                return merged
+    return merged
+
+
+def _merge_llm_metas(metas: list[dict], purpose: str) -> dict:
+    valid = [m for m in metas if isinstance(m, dict)]
+    if not valid:
+        return {
+            "provider": "none",
+            "model": "none",
+            "pricing_model_family": "",
+            "pricing_source": "default",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "estimated_cost_usd": 0.0,
+        }
+
+    providers = {str(m.get("provider", "")) for m in valid}
+    models = [str(m.get("model", "")) for m in valid if m.get("model")]
+    families = {str(m.get("pricing_model_family", "")) for m in valid if m.get("pricing_model_family") is not None}
+    sources = {str(m.get("pricing_source", "default")) for m in valid}
+
+    return {
+        "provider": next(iter(providers)) if len(providers) == 1 else "mixed",
+        "model": models[0] if len(set(models)) == 1 and models else "multiple",
+        "pricing_model_family": next(iter(families)) if len(families) == 1 else "mixed",
+        "pricing_source": next(iter(sources)) if len(sources) == 1 else "mixed",
+        "input_tokens": sum(int(m.get("input_tokens", 0) or 0) for m in valid),
+        "output_tokens": sum(int(m.get("output_tokens", 0) or 0) for m in valid),
+        "cache_creation_input_tokens": sum(int(m.get("cache_creation_input_tokens", 0) or 0) for m in valid),
+        "cache_read_input_tokens": sum(int(m.get("cache_read_input_tokens", 0) or 0) for m in valid),
+        "estimated_cost_usd": round(sum(float(m.get("estimated_cost_usd", 0.0) or 0.0) for m in valid), 8),
+        "calls": len(valid),
+        "purpose": purpose,
+    }
+
 
 def _env_optional_float(name: str) -> float | None:
     raw = os.getenv(name)
@@ -130,18 +220,47 @@ def _messages_create(prompt: str, model: str, max_tokens: int = 1024):
     )
 
 
+def _is_rate_limit_error(err: Exception) -> bool:
+    s = str(err).lower()
+    return "429" in s or "rate_limit" in s
+
+
+def _call_with_retries(prompt: str, model: str, max_tokens: int, retries: int = 2):
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            return _messages_create(prompt, model, max_tokens=max_tokens)
+        except Exception as e:
+            last_err = e
+            if attempt >= retries or not _is_rate_limit_error(e):
+                raise
+            # Small exponential backoff for rate limits.
+            sleep_sec = 1.0 * (2 ** attempt)
+            _log.warning(
+                "anthropic rate-limited model=%s retry_in=%.1fs attempt=%d/%d",
+                model,
+                sleep_sec,
+                attempt + 1,
+                retries + 1,
+            )
+            time.sleep(sleep_sec)
+    if last_err is not None:
+        raise last_err
+    return None
+
+
 def _call_with_model_fallback(
     prompt: str, primary_model: str, fallback_model: str | None, max_tokens: int = 1024
 ):
     if _client is None:
         return None, None
     try:
-        return _messages_create(prompt, primary_model, max_tokens=max_tokens), primary_model
+        return _call_with_retries(prompt, primary_model, max_tokens=max_tokens), primary_model
     except Exception as e:
         _log.warning("anthropic call failed model=%s err=%s", primary_model, e)
         if fallback_model and fallback_model != primary_model:
             try:
-                return _messages_create(prompt, fallback_model, max_tokens=max_tokens), fallback_model
+                return _call_with_retries(prompt, fallback_model, max_tokens=max_tokens), fallback_model
             except Exception as e2:
                 _log.warning("anthropic fallback failed model=%s err=%s", fallback_model, e2)
         return None, None
@@ -166,23 +285,45 @@ def extract_facts(title: str | None, content: str) -> dict:
             },
         }
 
-    prompt = f"""以下の記事から重要な事実を箇条書きで抽出してください。
-事実は客観的かつ具体的に記述し、5〜10個程度にまとめてください。
+    chunks = _split_text_chunks(content, chunk_chars=8000, overlap_chars=400)
+    if not chunks:
+        return {"facts": [], "llm": _merge_llm_metas([], "facts")}
+
+    all_fact_lists: list[list[str]] = []
+    llm_metas: list[dict] = []
+    any_llm_success = False
+    per_chunk_fact_target = 4 if len(chunks) <= 3 else 3 if len(chunks) <= 8 else 2
+
+    for idx, chunk in enumerate(chunks, start=1):
+        prompt = f"""以下の記事本文（{idx}/{len(chunks)}チャンク）から重要な事実を箇条書きで抽出してください。
+事実は客観的かつ具体的に記述してください。
+このチャンク内に明示されている内容だけを対象にしてください。
+{per_chunk_fact_target}〜{per_chunk_fact_target + 2}個程度にまとめてください。
 JSON配列として返してください。例: ["事実1", "事実2"]
 
 タイトル: {title or "（不明）"}
+チャンク: {idx}/{len(chunks)}
 
 本文:
-{content[:4000]}
+{chunk}
 """
-    message, used_model = _call_with_model_fallback(prompt, _facts_model, _facts_model_fallback, max_tokens=1024)
-    if message is None:
+        message, used_model = _call_with_model_fallback(
+            prompt, _facts_model, _facts_model_fallback, max_tokens=1024
+        )
+        if message is None:
+            continue
+        any_llm_success = True
+        text = message.content[0].text.strip()
+        all_fact_lists.append(_parse_json_string_array(text))
+        llm_metas.append(_llm_meta(message, "facts", used_model or _facts_model))
+
+    if not any_llm_success:
         lines = [line.strip() for line in content.splitlines() if line.strip()]
         return {
             "facts": lines[:5],
             "llm": {
                 "provider": "local-fallback",
-                "model": used_model or _facts_model,
+                "model": _facts_model,
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "cache_creation_input_tokens": 0,
@@ -190,19 +331,14 @@ JSON配列として返してください。例: ["事実1", "事実2"]
                 "estimated_cost_usd": 0.0,
             },
         }
-    text = message.content[0].text.strip()
-    # Extract JSON array from response
-    start = text.find("[")
-    end = text.rfind("]") + 1
-    if start == -1 or end == 0:
-        return {"facts": [], "llm": _llm_meta(message, "facts", used_model or _facts_model)}
-    try:
-        data = json.loads(text[start:end])
-    except Exception:
-        data = []
+
+    merged_facts = _merge_fact_lists(all_fact_lists, max_items=24)
+    llm = _merge_llm_metas(llm_metas, "facts")
+    llm["chunk_count"] = len(chunks)
+    llm["chunk_success_count"] = len(llm_metas)
     return {
-        "facts": [str(v) for v in data if isinstance(v, str)],
-        "llm": _llm_meta(message, "facts", used_model or _facts_model),
+        "facts": merged_facts,
+        "llm": llm,
     }
 
 

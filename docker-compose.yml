@@ -45,7 +45,7 @@ services:
     image: inngest/inngest:latest
     ports:
       - "8288:8288"
-    command: dev --no-discovery -u http://api:8080/api/inngest
+    command: ["inngest", "dev", "-u", "http://api:8080/api/inngest"]
 
 volumes:
   postgres_data:

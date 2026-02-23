@@ -3,14 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { api, Item } from "@/lib/api";
-
-const STATUS_LABEL: Record<string, string> = {
-  new: "New",
-  fetched: "Fetched",
-  facts_extracted: "Facts",
-  summarized: "Summarized",
-  failed: "Failed",
-};
+import { useI18n } from "@/components/i18n-provider";
+import Pagination from "@/components/pagination";
+import { useToast } from "@/components/toast-provider";
 
 const STATUS_COLOR: Record<string, string> = {
   new: "bg-zinc-100 text-zinc-600",
@@ -20,18 +15,15 @@ const STATUS_COLOR: Record<string, string> = {
   failed: "bg-red-50 text-red-600",
 };
 
-const FILTERS = [
-  { value: "", label: "All" },
-  { value: "summarized", label: "Summarized" },
-  { value: "new", label: "New" },
-  { value: "fetched", label: "Fetched" },
-  { value: "facts_extracted", label: "Facts" },
-  { value: "failed", label: "Failed" },
-];
+const FILTERS = ["", "summarized", "new", "fetched", "facts_extracted", "failed"] as const;
 
 export default function ItemsPage() {
+  const { t, locale } = useI18n();
+  const { showToast } = useToast();
   const [items, setItems] = useState<Item[]>([]);
   const [filter, setFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryingIds, setRetryingIds] = useState<Record<string, boolean>>({});
@@ -50,6 +42,7 @@ export default function ItemsPage() {
   }, []);
 
   useEffect(() => {
+    setPage(1);
     load(filter);
   }, [filter, load]);
 
@@ -58,9 +51,11 @@ export default function ItemsPage() {
       setRetryingIds((prev) => ({ ...prev, [itemId]: true }));
       try {
         await api.retryItem(itemId);
+        showToast(locale === "ja" ? "再試行をキュー投入しました" : "Retry queued", "success");
         await load(filter);
       } catch (e) {
         setError(String(e));
+        showToast(`${t("common.error")}: ${String(e)}`, "error");
       } finally {
         setRetryingIds((prev) => {
           const next = { ...prev };
@@ -69,16 +64,25 @@ export default function ItemsPage() {
         });
       }
     },
-    [filter, load]
+    [filter, load, locale, showToast, t]
   );
 
+  const pagedItems = items.slice((page - 1) * pageSize, page * pageSize);
+
   return (
-    <div>
-      <h1 className="mb-6 text-2xl font-bold">Items</h1>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">{t("items.title")}</h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            {items.length.toLocaleString()} {t("common.rows")}
+          </p>
+        </div>
+      </div>
 
       {/* Filter tabs */}
       <div className="mb-4 flex flex-wrap gap-1">
-        {FILTERS.map(({ value, label }) => (
+        {FILTERS.map((value) => (
           <button
             key={value}
             onClick={() => setFilter(value)}
@@ -88,23 +92,23 @@ export default function ItemsPage() {
                 : "border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
             }`}
           >
-            {label}
+            {t(`items.filter.${value || "all"}`)}
           </button>
         ))}
       </div>
 
       {/* State */}
-      {loading && <p className="text-sm text-zinc-500">Loading…</p>}
-	      {error && <p className="text-sm text-red-500">{error}</p>}
+      {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
+      {error && <p className="text-sm text-red-500">{error}</p>}
       {!loading && items.length === 0 && (
-        <p className="text-sm text-zinc-400">No items.</p>
+        <p className="text-sm text-zinc-400">{t("items.empty")}</p>
       )}
 
       {/* List */}
-	      <ul className="space-y-2">
-	        {items.map((item) => (
+      <ul className="space-y-2">
+        {pagedItems.map((item) => (
 	          <li key={item.id}>
-	            <div className="flex items-start gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3">
+	            <div className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
 	              <Link
 	                href={`/items/${item.id}`}
 	                className="flex min-w-0 flex-1 items-start gap-3 transition-colors hover:text-zinc-700"
@@ -114,7 +118,7 @@ export default function ItemsPage() {
 	                    STATUS_COLOR[item.status] ?? "bg-zinc-100 text-zinc-600"
 	                  }`}
 	                >
-	                  {STATUS_LABEL[item.status] ?? item.status}
+	                  {t(`status.${item.status}`, item.status)}
 	                </span>
 	                <div className="min-w-0 flex-1">
 	                  <div className="truncate text-sm font-medium text-zinc-900">
@@ -128,7 +132,7 @@ export default function ItemsPage() {
 	                  <div className="mt-0.5 text-xs text-zinc-400">
 	                    {new Date(
 	                      item.published_at ?? item.created_at
-	                    ).toLocaleDateString("ja-JP")}
+	                    ).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US")}
 	                  </div>
 	                </div>
 	              </Link>
@@ -139,13 +143,14 @@ export default function ItemsPage() {
 	                  onClick={() => retryItem(item.id)}
 	                  className="shrink-0 rounded border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
 	                >
-	                  {retryingIds[item.id] ? "再試行中…" : "再試行"}
+	                  {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
 	                </button>
 	              )}
 	            </div>
 	          </li>
 	        ))}
 	      </ul>
+      <Pagination total={items.length} page={page} pageSize={pageSize} onPageChange={setPage} />
     </div>
   );
 }

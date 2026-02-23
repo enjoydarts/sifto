@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, LLMUsageDailySummary, LLMUsageLog } from "@/lib/api";
+import Pagination from "@/components/pagination";
+import { useI18n } from "@/components/i18n-provider";
 
 function fmtUSD(v: number) {
   return `$${v.toFixed(6)}`;
@@ -16,8 +18,10 @@ type SummaryRow = LLMUsageDailySummary & {
 };
 
 export default function LLMUsagePage() {
+  const { t, locale } = useI18n();
   const [days, setDays] = useState(14);
   const [limit, setLimit] = useState(100);
+  const [logPage, setLogPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [summaryRows, setSummaryRows] = useState<LLMUsageDailySummary[]>([]);
@@ -41,6 +45,7 @@ export default function LLMUsagePage() {
   }, []);
 
   useEffect(() => {
+    setLogPage(1);
     load(days, limit);
   }, [days, limit, load]);
 
@@ -75,19 +80,22 @@ export default function LLMUsagePage() {
     return Array.from(m.entries());
   }, [summaryRows]);
 
+  const logsPageSize = 20;
+  const pagedLogs = logs.slice((logPage - 1) * logsPageSize, logPage * logsPageSize);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">LLM Usage</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            コスト・トークン利用履歴（JST日次集計 + 最新実行ログ）
+            {t("llm.subtitle")}
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
           <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium text-zinc-600">集計日数</span>
+            <span className="mb-1 block text-xs font-medium text-zinc-600">{t("llm.days")}</span>
             <select
               value={days}
               onChange={(e) => setDays(Number(e.target.value))}
@@ -95,13 +103,13 @@ export default function LLMUsagePage() {
             >
               {[7, 14, 30, 90].map((d) => (
                 <option key={d} value={d}>
-                  {d}日
+                  {locale === "ja" ? `${d}日` : `${d}d`}
                 </option>
               ))}
             </select>
           </label>
           <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium text-zinc-600">履歴件数</span>
+            <span className="mb-1 block text-xs font-medium text-zinc-600">{t("llm.limit")}</span>
             <select
               value={limit}
               onChange={(e) => setLimit(Number(e.target.value))}
@@ -117,7 +125,7 @@ export default function LLMUsagePage() {
         </div>
       </div>
 
-      {loading && <p className="text-sm text-zinc-500">Loading…</p>}
+      {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -125,21 +133,21 @@ export default function LLMUsagePage() {
       )}
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-        <MetricCard label="合計コスト" value={fmtUSD(totals.cost)} />
-        <MetricCard label="呼び出し回数" value={fmtNum(totals.calls)} />
-        <MetricCard label="入力" value={fmtNum(totals.input)} />
-        <MetricCard label="出力" value={fmtNum(totals.output)} />
+        <MetricCard label={t("llm.totalCost")} value={fmtUSD(totals.cost)} />
+        <MetricCard label={t("llm.totalCalls")} value={fmtNum(totals.calls)} />
+        <MetricCard label={t("llm.input")} value={fmtNum(totals.input)} />
+        <MetricCard label={t("llm.output")} value={fmtNum(totals.output)} />
         <MetricCard label="Cache Write" value={fmtNum(totals.cacheWrite)} />
         <MetricCard label="Cache Read" value={fmtNum(totals.cacheRead)} />
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-800">日次集計（JST）</h2>
+          <h2 className="text-sm font-semibold text-zinc-800">{t("llm.dailySummary")}</h2>
           <span className="text-xs text-zinc-400">{summaryRows.length} rows</span>
         </div>
         {groupedByDate.length === 0 ? (
-          <p className="text-sm text-zinc-400">集計データがありません。</p>
+          <p className="text-sm text-zinc-400">{t("llm.noSummary")}</p>
         ) : (
           <div className="space-y-4">
             {groupedByDate.map(([date, rows]) => {
@@ -188,11 +196,11 @@ export default function LLMUsagePage() {
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-800">最新履歴</h2>
+          <h2 className="text-sm font-semibold text-zinc-800">{t("llm.recentLogs")}</h2>
           <span className="text-xs text-zinc-400">{logs.length} rows</span>
         </div>
         {logs.length === 0 ? (
-          <p className="text-sm text-zinc-400">履歴がありません。</p>
+          <p className="text-sm text-zinc-400">{t("llm.noLogs")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -209,10 +217,10 @@ export default function LLMUsagePage() {
                 </tr>
               </thead>
               <tbody>
-                {logs.map((r) => (
+                {pagedLogs.map((r) => (
                   <tr key={r.id} className="border-b border-zinc-100 last:border-0 align-top">
                     <td className="px-3 py-2 whitespace-nowrap text-xs text-zinc-500">
-                      {new Date(r.created_at).toLocaleString("ja-JP")}
+                      {new Date(r.created_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}
                     </td>
                     <td className="px-3 py-2">{r.purpose}</td>
                     <td className="px-3 py-2">
@@ -235,6 +243,7 @@ export default function LLMUsagePage() {
             </table>
           </div>
         )}
+        <Pagination total={logs.length} page={logPage} pageSize={logsPageSize} onPageChange={setLogPage} className="mt-3" />
       </section>
     </div>
   );

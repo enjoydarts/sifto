@@ -2,9 +2,17 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { api, Source } from "@/lib/api";
+import Pagination from "@/components/pagination";
+import { useI18n } from "@/components/i18n-provider";
+import { useToast } from "@/components/toast-provider";
+import { useConfirm } from "@/components/confirm-provider";
 
 export default function SourcesPage() {
+  const { t, locale } = useI18n();
+  const { showToast } = useToast();
+  const { confirm } = useConfirm();
   const [sources, setSources] = useState<Source[]>([]);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [url, setUrl] = useState("");
@@ -15,6 +23,7 @@ export default function SourcesPage() {
     { url: string; title: string | null }[]
   >([]);
   const [addError, setAddError] = useState<string | null>(null);
+  const pageSize = 10;
 
   const load = useCallback(async () => {
     try {
@@ -75,23 +84,38 @@ export default function SourcesPage() {
         prev.map((s) => (s.id === id ? { ...s, enabled: !enabled } : s))
       );
     } catch (e) {
-      alert(`Error: ${e}`);
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("このソースを削除しますか？")) return;
+    const ok = await confirm({
+      title: t("sources.delete"),
+      message: t("sources.confirmDelete"),
+      tone: "danger",
+      confirmLabel: t("sources.delete"),
+      cancelLabel: locale === "ja" ? "キャンセル" : "Cancel",
+    });
+    if (!ok) return;
     try {
       await api.deleteSource(id);
       setSources((prev) => prev.filter((s) => s.id !== id));
+      showToast(locale === "ja" ? "ソースを削除しました" : "Source deleted", "success");
     } catch (e) {
-      alert(`Error: ${e}`);
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
     }
   };
 
+  const pagedSources = sources.slice((page - 1) * pageSize, page * pageSize);
+
   return (
-    <div>
-      <h1 className="mb-6 text-2xl font-bold">Sources</h1>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold">{t("sources.title")}</h1>
+        <p className="mt-1 text-sm text-zinc-500">
+          {sources.length.toLocaleString()} {t("common.rows")}
+        </p>
+      </div>
 
       {/* Add form */}
       <form
@@ -99,20 +123,20 @@ export default function SourcesPage() {
         className="mb-8 rounded-lg border border-zinc-200 bg-white p-4"
       >
         <h2 className="mb-3 text-sm font-semibold text-zinc-700">
-          Add Source
+          {t("sources.addSource")}
         </h2>
         <div className="mb-2 flex gap-3 text-sm">
-          {(["rss", "manual"] as const).map((t) => (
-            <label key={t} className="flex cursor-pointer items-center gap-1.5">
+          {(["rss", "manual"] as const).map((kind) => (
+            <label key={kind} className="flex cursor-pointer items-center gap-1.5">
               <input
                 type="radio"
                 name="type"
-                value={t}
-                checked={type === t}
-                onChange={() => setType(t)}
+                value={kind}
+                checked={type === kind}
+                onChange={() => setType(kind)}
                 className="accent-zinc-900"
               />
-              {t === "rss" ? "RSS Feed" : "Manual URL"}
+              {kind === "rss" ? t("sources.rss") : t("sources.manual")}
             </label>
           ))}
         </div>
@@ -141,7 +165,7 @@ export default function SourcesPage() {
             disabled={adding}
             className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
           >
-            {adding ? "Adding…" : "Add"}
+            {adding ? t("sources.adding") : t("sources.add")}
           </button>
         </div>
         {addError && (
@@ -200,20 +224,20 @@ export default function SourcesPage() {
       </form>
 
       {/* State */}
-      {loading && <p className="text-sm text-zinc-500">Loading…</p>}
+      {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
       {error && <p className="text-sm text-red-500">{error}</p>}
       {!loading && sources.length === 0 && (
         <p className="text-sm text-zinc-400">
-          No sources yet. Add an RSS feed above.
+          {t("sources.empty")}
         </p>
       )}
 
       {/* List */}
       <ul className="space-y-2">
-        {sources.map((src) => (
+        {pagedSources.map((src) => (
           <li
             key={src.id}
-            className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3"
+            className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm"
           >
             {/* Toggle */}
             <button
@@ -240,8 +264,8 @@ export default function SourcesPage() {
               )}
               {src.last_fetched_at && (
                 <div className="text-xs text-zinc-400">
-                  Last fetched:{" "}
-                  {new Date(src.last_fetched_at).toLocaleString("ja-JP")}
+                  {t("sources.lastFetched")}:{" "}
+                  {new Date(src.last_fetched_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}
                 </div>
               )}
             </div>
@@ -251,11 +275,12 @@ export default function SourcesPage() {
               onClick={() => handleDelete(src.id)}
               className="shrink-0 text-xs text-zinc-400 hover:text-red-500"
             >
-              Delete
+              {t("sources.delete")}
             </button>
           </li>
         ))}
       </ul>
+      <Pagination total={sources.length} page={page} pageSize={pageSize} onPageChange={setPage} />
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { api, DigestDetail } from "@/lib/api";
+import { useToast } from "@/components/toast-provider";
 
 type GenerateResponse = {
   status: string;
@@ -46,6 +47,7 @@ function todayJstPlusOneDateString() {
 }
 
 export default function DebugDigestsPage() {
+  const { showToast } = useToast();
   const [userId, setUserId] = useState("00000000-0000-0000-0000-000000000001");
   const [digestDate, setDigestDate] = useState(todayJstPlusOneDateString());
   const [skipSend, setSkipSend] = useState(true);
@@ -78,6 +80,7 @@ export default function DebugDigestsPage() {
       if (digestDate.trim()) payload.digest_date = digestDate.trim();
       const res = await postJSON<GenerateResponse>("/api/debug/digests/generate", payload);
       setGenerateResult(res);
+      showToast("Generate debug request queued", "success");
       const firstDigestId =
         Array.isArray((res as { results?: unknown[] }).results) &&
         (res as { results?: Array<{ digest_id?: string }> }).results?.[0]?.digest_id;
@@ -86,6 +89,7 @@ export default function DebugDigestsPage() {
       }
     } catch (e) {
       setError(String(e));
+      showToast(String(e), "error");
     } finally {
       setBusyGenerate(false);
     }
@@ -102,8 +106,10 @@ export default function DebugDigestsPage() {
         digest_id: digestId.trim(),
       });
       setSendResult(res);
+      showToast("Send debug request queued", "success");
     } catch (e) {
       setError(String(e));
+      showToast(String(e), "error");
     } finally {
       setBusySend(false);
     }
@@ -116,8 +122,10 @@ export default function DebugDigestsPage() {
     try {
       const detail = await api.getDigest(digestId.trim());
       setDigestDetail(detail);
+      showToast("Digest status loaded", "info");
     } catch (e) {
       setError(String(e));
+      showToast(String(e), "error");
     } finally {
       setBusyInspect(false);
     }

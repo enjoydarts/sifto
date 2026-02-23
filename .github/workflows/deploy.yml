@@ -19,8 +19,8 @@ jobs:
 
       - name: Run migrations
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: migrate -path db/migrations -database "$DATABASE_URL" up
+          MIGRATE_DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
+        run: migrate -path db/migrations -database "$MIGRATE_DATABASE_URL" up
 
   deploy-api:
     name: Deploy API to Fly.io

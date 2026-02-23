@@ -66,6 +66,9 @@ export interface Digest {
   digest_date: string;
   email_subject: string | null;
   email_body: string | null;
+  send_status?: string | null;
+  send_error?: string | null;
+  send_tried_at?: string | null;
   sent_at: string | null;
   created_at: string;
 }

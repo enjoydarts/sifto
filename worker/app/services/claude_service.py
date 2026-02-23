@@ -421,6 +421,94 @@ def summarize(title: str | None, facts: list[str]) -> dict:
     }
 
 
+def _digest_primary_topic(item: dict) -> str:
+    topics = item.get("topics") or []
+    if isinstance(topics, list):
+        for t in topics:
+            s = str(t).strip()
+            if s:
+                return s[:40]
+    return "その他"
+
+
+def _digest_item_score(item: dict) -> float:
+    try:
+        return float(item.get("score", 0.0) or 0.0)
+    except Exception:
+        return 0.0
+
+
+def _build_digest_input_sections(items: list[dict]) -> tuple[str, str]:
+    # Small/medium days: preserve per-item details.
+    if len(items) <= 80:
+        summary_limit = 450 if len(items) <= 20 else 240 if len(items) <= 50 else 120
+        lines = []
+        for idx, item in enumerate(items, start=1):
+            rank = item.get("rank")
+            title = item.get("title") or "（タイトルなし）"
+            summary = str(item.get("summary") or "")[:summary_limit]
+            topics = ", ".join(item.get("topics") or [])
+            score = item.get("score")
+            lines.append(
+                f"- item={idx} rank={rank} | title={title} | topics={topics} | score={score} | summary={summary}"
+            )
+        return "items", "\n".join(lines)
+
+    # Large days: topic-based compression + top item highlights.
+    sorted_items = sorted(
+        items,
+        key=lambda x: (
+            int(x.get("rank") or 10**9),
+            -_digest_item_score(x),
+        ),
+    )
+    highlights = sorted_items[: min(24, len(sorted_items))]
+
+    groups: dict[str, list[dict]] = {}
+    for item in items:
+        groups.setdefault(_digest_primary_topic(item), []).append(item)
+
+    ordered_groups = sorted(
+        groups.items(),
+        key=lambda kv: (-len(kv[1]), -max((_digest_item_score(i) for i in kv[1]), default=0.0), kv[0]),
+    )
+
+    lines: list[str] = []
+    lines.append("[top_items]")
+    for idx, item in enumerate(highlights, start=1):
+        title = item.get("title") or "（タイトルなし）"
+        summary = str(item.get("summary") or "")[:140]
+        topics = ", ".join(item.get("topics") or [])
+        rank = item.get("rank")
+        score = item.get("score")
+        lines.append(
+            f"- top={idx} rank={rank} | title={title} | topics={topics} | score={score} | summary={summary}"
+        )
+
+    lines.append("")
+    lines.append("[topic_groups]")
+    for topic, topic_items in ordered_groups[:40]:
+        sorted_topic_items = sorted(
+            topic_items,
+            key=lambda x: (
+                int(x.get("rank") or 10**9),
+                -_digest_item_score(x),
+            ),
+        )
+        sample_titles = [str(i.get("title") or "（タイトルなし）")[:60] for i in sorted_topic_items[:4]]
+        sample_summaries = [str(i.get("summary") or "")[:90] for i in sorted_topic_items[:3]]
+        avg_score = round(
+            sum(_digest_item_score(i) for i in topic_items) / max(1, len(topic_items)),
+            3,
+        )
+        lines.append(
+            f"- topic={topic} | count={len(topic_items)} | avg_score={avg_score} | "
+            f"sample_titles={' / '.join(sample_titles)} | sample_summaries={' / '.join(sample_summaries)}"
+        )
+
+    return "topic_grouped", "\n".join(lines)
+
+
 def compose_digest(digest_date: str, items: list[dict]) -> dict:
     if not items:
         return {
@@ -437,17 +525,7 @@ def compose_digest(digest_date: str, items: list[dict]) -> dict:
             },
         }
 
-    item_lines = []
-    for idx, item in enumerate(items, start=1):
-        rank = item.get("rank")
-        title = item.get("title") or "（タイトルなし）"
-        summary_limit = 450 if len(items) <= 20 else 240 if len(items) <= 50 else 120
-        summary = str(item.get("summary") or "")[:summary_limit]
-        topics = ", ".join(item.get("topics") or [])
-        score = item.get("score")
-        item_lines.append(
-            f"- item={idx} rank={rank} | title={title} | topics={topics} | score={score} | summary={summary}"
-        )
+    input_mode, digest_input = _build_digest_input_sections(items)
 
     prompt = f"""あなたはニュースダイジェスト編集者です。
 以下の記事一覧をもとに、メール用のダイジェスト本文を日本語で作成してください。
@@ -469,8 +547,9 @@ def compose_digest(digest_date: str, items: list[dict]) -> dict:
 
 digest_date: {digest_date}
 items_count: {len(items)}
+input_mode: {input_mode}
 items:
-{chr(10).join(item_lines)}
+{digest_input}
 """
 
     message, used_model = _call_with_model_fallback(
@@ -514,8 +593,11 @@ items:
 
     subject = str(data.get("subject") or f"Sifto Digest {digest_date}")
     body = str(data.get("body") or "本日のダイジェストをお送りします。")
+    llm = _llm_meta(message, "digest", used_model or _digest_model)
+    llm["input_mode"] = input_mode
+    llm["items_count"] = len(items)
     return {
         "subject": subject,
         "body": body,
-        "llm": _llm_meta(message, "digest", used_model or _digest_model),
+        "llm": llm,
     }

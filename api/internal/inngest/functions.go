@@ -345,23 +345,40 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 		func(ctx context.Context, input inngestgo.Input[EventData]) (any, error) {
 			data := input.Event.Data
 			log.Printf("send-digest start digest_id=%s to=%s", data.DigestID, data.To)
+			markStatus := func(status string, sendErr error) {
+				var msg *string
+				if sendErr != nil {
+					s := sendErr.Error()
+					if len(s) > 2000 {
+						s = s[:2000]
+					}
+					msg = &s
+				}
+				if err := digestRepo.UpdateSendStatus(ctx, data.DigestID, status, msg); err != nil {
+					log.Printf("send-digest update-status failed digest_id=%s status=%s err=%v", data.DigestID, status, err)
+				}
+			}
 
 			// Read-only DB fetch does not need step state, and keeping large nested structs
 			// out of step results avoids serialization/replay issues.
 			digest, err := digestRepo.GetForEmail(ctx, data.DigestID)
 			if err != nil {
+				markStatus("fetch_failed", err)
 				return nil, fmt.Errorf("fetch digest: %w", err)
 			}
 			log.Printf("send-digest fetched digest_id=%s items=%d", data.DigestID, len(digest.Items))
 
 			if len(digest.Items) == 0 {
 				log.Printf("send-digest skip-no-items digest_id=%s", data.DigestID)
+				markStatus("skipped_no_items", nil)
 				return map[string]string{"status": "skipped", "reason": "no items"}, nil
 			}
 			if !resend.Enabled() {
 				log.Printf("send-digest skip-resend-disabled digest_id=%s", data.DigestID)
+				markStatus("skipped_resend_disabled", nil)
 				return map[string]string{"status": "skipped", "reason": "resend_disabled"}, nil
 			}
+			markStatus("processing", nil)
 
 			var copy *service.ComposeDigestResponse
 			if digest.EmailSubject != nil && digest.EmailBody != nil {
@@ -395,17 +412,21 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 						return "", err
 					}
 					return "stored", nil
-				})
-				if err != nil {
-					return nil, fmt.Errorf("compose digest copy: %w", err)
-				}
-				digest, err = digestRepo.GetForEmail(ctx, data.DigestID)
-				if err != nil {
-					return nil, fmt.Errorf("refetch digest after compose: %w", err)
-				}
-				if digest.EmailSubject == nil || digest.EmailBody == nil {
-					return nil, fmt.Errorf("compose digest copy: email copy not persisted")
-				}
+					})
+					if err != nil {
+						markStatus("compose_failed", err)
+						return nil, fmt.Errorf("compose digest copy: %w", err)
+					}
+					digest, err = digestRepo.GetForEmail(ctx, data.DigestID)
+					if err != nil {
+						markStatus("refetch_after_compose_failed", err)
+						return nil, fmt.Errorf("refetch digest after compose: %w", err)
+					}
+					if digest.EmailSubject == nil || digest.EmailBody == nil {
+						err := fmt.Errorf("compose digest copy: email copy not persisted")
+						markStatus("compose_failed", err)
+						return nil, err
+					}
 				copy = &service.ComposeDigestResponse{
 					Subject: *digest.EmailSubject,
 					Body:    *digest.EmailBody,
@@ -422,13 +443,14 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 					return "", err
 				}
 				return "sent", nil
-			})
-			if err != nil {
-				return nil, fmt.Errorf("send email: %w", err)
-			}
-			log.Printf("send-digest send-email done digest_id=%s", data.DigestID)
+				})
+				if err != nil {
+					markStatus("send_email_failed", err)
+					return nil, fmt.Errorf("send email: %w", err)
+				}
+				log.Printf("send-digest send-email done digest_id=%s", data.DigestID)
 
-			if err := digestRepo.UpdateSentAt(ctx, data.DigestID); err != nil {
+				if err := digestRepo.UpdateSentAt(ctx, data.DigestID); err != nil {
 				log.Printf("update sent_at: %v", err)
 			}
 			log.Printf("send-digest complete digest_id=%s", data.DigestID)

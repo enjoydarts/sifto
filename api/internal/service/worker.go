@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -114,6 +115,10 @@ func post[T any](ctx context.Context, w *WorkerClient, path string, body any) (*
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if len(b) > 0 {
+			return nil, fmt.Errorf("worker %s: status %d body=%s", path, resp.StatusCode, string(b))
+		}
 		return nil, fmt.Errorf("worker %s: status %d", path, resp.StatusCode)
 	}
 

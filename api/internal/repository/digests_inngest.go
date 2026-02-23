@@ -58,7 +58,13 @@ func (r *DigestInngestRepo) Create(ctx context.Context, userID string, date time
 }
 
 func (r *DigestInngestRepo) UpdateSentAt(ctx context.Context, digestID string) error {
-	_, err := r.db.Exec(ctx, `UPDATE digests SET sent_at = NOW() WHERE id = $1`, digestID)
+	_, err := r.db.Exec(ctx, `
+		UPDATE digests
+		SET sent_at = NOW(),
+		    send_status = 'sent',
+		    send_error = NULL,
+		    send_tried_at = NOW()
+		WHERE id = $1`, digestID)
 	return err
 }
 
@@ -68,6 +74,17 @@ func (r *DigestInngestRepo) UpdateEmailCopy(ctx context.Context, digestID string
 		SET email_subject = $1, email_body = $2
 		WHERE id = $3`,
 		subject, body, digestID)
+	return err
+}
+
+func (r *DigestInngestRepo) UpdateSendStatus(ctx context.Context, digestID, status string, sendErr *string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE digests
+		SET send_status = $1,
+		    send_error = $2,
+		    send_tried_at = NOW()
+		WHERE id = $3`,
+		status, sendErr, digestID)
 	return err
 }
 

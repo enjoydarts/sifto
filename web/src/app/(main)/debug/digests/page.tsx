@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { api, DigestDetail } from "@/lib/api";
 
 type GenerateResponse = {
   status: string;
@@ -55,6 +56,8 @@ export default function DebugDigestsPage() {
   const [error, setError] = useState<string | null>(null);
   const [generateResult, setGenerateResult] = useState<GenerateResponse | null>(null);
   const [sendResult, setSendResult] = useState<SendResponse | null>(null);
+  const [digestDetail, setDigestDetail] = useState<DigestDetail | null>(null);
+  const [busyInspect, setBusyInspect] = useState(false);
 
   const helperText = useMemo(
     () =>
@@ -75,6 +78,12 @@ export default function DebugDigestsPage() {
       if (digestDate.trim()) payload.digest_date = digestDate.trim();
       const res = await postJSON<GenerateResponse>("/api/debug/digests/generate", payload);
       setGenerateResult(res);
+      const firstDigestId =
+        Array.isArray((res as { results?: unknown[] }).results) &&
+        (res as { results?: Array<{ digest_id?: string }> }).results?.[0]?.digest_id;
+      if (typeof firstDigestId === "string" && firstDigestId) {
+        setDigestId(firstDigestId);
+      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -97,6 +106,20 @@ export default function DebugDigestsPage() {
       setError(String(e));
     } finally {
       setBusySend(false);
+    }
+  };
+
+  const inspectDigest = async () => {
+    if (!digestId.trim()) return;
+    setBusyInspect(true);
+    setError(null);
+    try {
+      const detail = await api.getDigest(digestId.trim());
+      setDigestDetail(detail);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusyInspect(false);
     }
   };
 
@@ -180,12 +203,35 @@ export default function DebugDigestsPage() {
           >
             {busySend ? "実行中…" : "Queue Send"}
           </button>
+          <button
+            type="button"
+            disabled={busyInspect || !digestId.trim()}
+            onClick={inspectDigest}
+            className="rounded border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            {busyInspect ? "確認中…" : "状態確認"}
+          </button>
         </form>
 
         {sendResult && (
           <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
             {JSON.stringify(sendResult, null, 2)}
           </pre>
+        )}
+
+        {digestDetail && (
+          <div className="mt-4 rounded border border-zinc-200 bg-zinc-50 p-3 text-sm">
+            <div><span className="font-medium">digest_id:</span> {digestDetail.id}</div>
+            <div><span className="font-medium">send_status:</span> {digestDetail.send_status ?? "-"}</div>
+            <div><span className="font-medium">send_tried_at:</span> {digestDetail.send_tried_at ?? "-"}</div>
+            <div><span className="font-medium">sent_at:</span> {digestDetail.sent_at ?? "-"}</div>
+            <div><span className="font-medium">email_copy:</span> {digestDetail.email_subject && digestDetail.email_body ? "generated" : "not generated"}</div>
+            {digestDetail.send_error && (
+              <pre className="mt-2 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+                {digestDetail.send_error}
+              </pre>
+            )}
+          </div>
         )}
       </section>
     </div>

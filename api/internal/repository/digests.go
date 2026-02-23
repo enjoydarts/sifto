@@ -13,7 +13,7 @@ func NewDigestRepo(db *pgxpool.Pool) *DigestRepo { return &DigestRepo{db} }
 
 func (r *DigestRepo) List(ctx context.Context, userID string) ([]model.Digest, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT id, user_id, digest_date, sent_at, created_at
+		SELECT id, user_id, digest_date::text, email_subject, email_body, sent_at, created_at
 		FROM digests WHERE user_id = $1 ORDER BY digest_date DESC LIMIT 30`, userID)
 	if err != nil {
 		return nil, err
@@ -23,7 +23,7 @@ func (r *DigestRepo) List(ctx context.Context, userID string) ([]model.Digest, e
 	var digests []model.Digest
 	for rows.Next() {
 		var d model.Digest
-		if err := rows.Scan(&d.ID, &d.UserID, &d.DigestDate, &d.SentAt, &d.CreatedAt); err != nil {
+		if err := rows.Scan(&d.ID, &d.UserID, &d.DigestDate, &d.EmailSubject, &d.EmailBody, &d.SentAt, &d.CreatedAt); err != nil {
 			return nil, err
 		}
 		digests = append(digests, d)
@@ -34,11 +34,11 @@ func (r *DigestRepo) List(ctx context.Context, userID string) ([]model.Digest, e
 func (r *DigestRepo) GetDetail(ctx context.Context, id, userID string) (*model.DigestDetail, error) {
 	var d model.DigestDetail
 	err := r.db.QueryRow(ctx, `
-		SELECT id, user_id, digest_date, sent_at, created_at
+		SELECT id, user_id, digest_date::text, email_subject, email_body, sent_at, created_at
 		FROM digests WHERE id = $1 AND user_id = $2`, id, userID,
-	).Scan(&d.ID, &d.UserID, &d.DigestDate, &d.SentAt, &d.CreatedAt)
+	).Scan(&d.ID, &d.UserID, &d.DigestDate, &d.EmailSubject, &d.EmailBody, &d.SentAt, &d.CreatedAt)
 	if err != nil {
-		return nil, err
+		return nil, mapDBError(err)
 	}
 
 	rows, err := r.db.Query(ctx, `
@@ -79,7 +79,7 @@ func (r *DigestRepo) GetLatest(ctx context.Context, userID string) (*model.Diges
 		SELECT id FROM digests WHERE user_id = $1 ORDER BY digest_date DESC LIMIT 1`, userID,
 	).Scan(&id)
 	if err != nil {
-		return nil, err
+		return nil, mapDBError(err)
 	}
 	return r.GetDetail(ctx, id, userID)
 }

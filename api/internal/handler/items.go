@@ -24,7 +24,7 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := h.repo.List(r.Context(), userID, status, sourceID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeRepoError(w, err)
 		return
 	}
 	writeJSON(w, items)
@@ -35,7 +35,7 @@ func (h *ItemHandler) GetDetail(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	item, err := h.repo.GetDetail(r.Context(), id, userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeRepoError(w, err)
 		return
 	}
 	writeJSON(w, item)

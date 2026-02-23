@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- ユーザー
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -26,7 +28,7 @@ CREATE TABLE sources (
 CREATE TABLE items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_id UUID NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
-  url TEXT UNIQUE NOT NULL,
+  url TEXT NOT NULL,
   title TEXT,
   content_text TEXT,
   status TEXT NOT NULL DEFAULT 'new'
@@ -34,7 +36,8 @@ CREATE TABLE items (
   published_at TIMESTAMPTZ,
   fetched_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(source_id, url)
 );
 
 -- 事実抽出結果
@@ -60,6 +63,8 @@ CREATE TABLE digests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   digest_date DATE NOT NULL,
+  email_subject TEXT,
+  email_body TEXT,
   sent_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(user_id, digest_date)

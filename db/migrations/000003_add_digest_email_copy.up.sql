@@ -1,0 +1,4 @@
+ALTER TABLE digests
+  ADD COLUMN IF NOT EXISTS email_subject TEXT,
+  ADD COLUMN IF NOT EXISTS email_body TEXT;
+

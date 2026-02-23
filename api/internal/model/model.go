@@ -59,11 +59,13 @@ type ItemDetail struct {
 }
 
 type Digest struct {
-	ID         string     `json:"id"`
-	UserID     string     `json:"user_id"`
-	DigestDate string     `json:"digest_date"` // YYYY-MM-DD
-	SentAt     *time.Time `json:"sent_at,omitempty"`
-	CreatedAt  time.Time  `json:"created_at"`
+	ID          string     `json:"id"`
+	UserID      string     `json:"user_id"`
+	DigestDate  string     `json:"digest_date"` // YYYY-MM-DD
+	EmailSubject *string   `json:"email_subject,omitempty"`
+	EmailBody   *string    `json:"email_body,omitempty"`
+	SentAt      *time.Time `json:"sent_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 type DigestItem struct {

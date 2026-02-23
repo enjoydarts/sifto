@@ -16,7 +16,7 @@ func (h *DigestHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	digests, err := h.repo.List(r.Context(), userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeRepoError(w, err)
 		return
 	}
 	writeJSON(w, digests)
@@ -27,7 +27,7 @@ func (h *DigestHandler) GetDetail(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	d, err := h.repo.GetDetail(r.Context(), id, userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeRepoError(w, err)
 		return
 	}
 	writeJSON(w, d)
@@ -37,7 +37,7 @@ func (h *DigestHandler) GetLatest(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	d, err := h.repo.GetLatest(r.Context(), userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeRepoError(w, err)
 		return
 	}
 	writeJSON(w, d)

@@ -4,11 +4,13 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: sifto
-      POSTGRES_USER: sifto
-      POSTGRES_PASSWORD: sifto
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sifto"]
       interval: 5s
@@ -23,11 +25,15 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://sifto:sifto@postgres:5432/sifto
-      PYTHON_WORKER_URL: http://worker:8000
-      INNGEST_DEV: "true"
-      INNGEST_EVENT_KEY: local
-      INNGEST_SIGNING_KEY: local
+      DATABASE_URL: ${DOCKER_DATABASE_URL}
+      PYTHON_WORKER_URL: ${DOCKER_PYTHON_WORKER_URL}
+      TZ: ${TZ}
+      INNGEST_DEV: ${INNGEST_DEV}
+      ALLOW_DEV_AUTH_BYPASS: ${ALLOW_DEV_AUTH_BYPASS}
+      DEV_AUTH_USER_ID: ${DEV_AUTH_USER_ID}
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY}
+      INNGEST_BASE_URL: ${DOCKER_INNGEST_BASE_URL}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
     env_file:
       - .env
@@ -38,6 +44,14 @@ services:
       - "8000:8000"
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_FACTS_MODEL: ${ANTHROPIC_FACTS_MODEL}
+      ANTHROPIC_FACTS_MODEL_FALLBACK: ${ANTHROPIC_FACTS_MODEL_FALLBACK}
+      ANTHROPIC_SUMMARY_MODEL: ${ANTHROPIC_SUMMARY_MODEL}
+      ANTHROPIC_SUMMARY_MODEL_FALLBACK: ${ANTHROPIC_SUMMARY_MODEL_FALLBACK}
+      ANTHROPIC_DIGEST_MODEL: ${ANTHROPIC_DIGEST_MODEL}
+      ANTHROPIC_DIGEST_MODEL_FALLBACK: ${ANTHROPIC_DIGEST_MODEL_FALLBACK}
+      TZ: ${TZ}
+      ALLOW_DEV_EXTRACT_PLACEHOLDER: ${ALLOW_DEV_EXTRACT_PLACEHOLDER}
     env_file:
       - .env
 
@@ -45,7 +59,30 @@ services:
     image: inngest/inngest:latest
     ports:
       - "8288:8288"
-    command: ["inngest", "dev", "-u", "http://api:8080/api/inngest"]
+    command: ["inngest", "dev", "-u", "${INNGEST_DEV_UPSTREAM_URL}"]
+
+  web:
+    build:
+      context: ./web
+      target: dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./web:/app
+      - web_node_modules:/app/node_modules
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:8080
+      NEXT_PUBLIC_ALLOW_DEV_AUTH_BYPASS: ${ALLOW_DEV_AUTH_BYPASS}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      ALLOW_DEV_AUTH_BYPASS: ${ALLOW_DEV_AUTH_BYPASS}
+      DEV_AUTH_USER_ID: ${DEV_AUTH_USER_ID}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+    depends_on:
+      - api
 
 volumes:
   postgres_data:
+  web_node_modules:

@@ -12,9 +12,10 @@ class FactsRequest(BaseModel):
 
 class FactsResponse(BaseModel):
     facts: list[str]
+    llm: dict | None = None
 
 
 @router.post("/extract-facts", response_model=FactsResponse)
 def extract_facts_endpoint(req: FactsRequest):
-    facts = extract_facts(req.title, req.content)
-    return FactsResponse(facts=facts)
+    result = extract_facts(req.title, req.content)
+    return FactsResponse(**result)

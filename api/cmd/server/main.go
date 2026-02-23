@@ -9,9 +9,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	inngestfn "github.com/minoru-kitayama/sifto/api/internal/inngest"
 	"github.com/minoru-kitayama/sifto/api/internal/handler"
 	"github.com/minoru-kitayama/sifto/api/internal/middleware"
 	"github.com/minoru-kitayama/sifto/api/internal/repository"
+	"github.com/minoru-kitayama/sifto/api/internal/service"
 )
 
 func main() {
@@ -23,13 +25,26 @@ func main() {
 	}
 	defer db.Close()
 
+	worker := service.NewWorkerClient()
+	resend := service.NewResendClient()
+	eventPublisher, err := service.NewEventPublisher()
+	if err != nil {
+		log.Fatalf("event publisher: %v", err)
+	}
+
+	userRepo := repository.NewUserRepo(db)
 	sourceRepo := repository.NewSourceRepo(db)
 	itemRepo := repository.NewItemRepo(db)
 	digestRepo := repository.NewDigestRepo(db)
+	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
 
-	sourceH := handler.NewSourceHandler(sourceRepo)
+	internalH := handler.NewInternalHandler(userRepo)
+	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, eventPublisher)
 	itemH := handler.NewItemHandler(itemRepo)
 	digestH := handler.NewDigestHandler(digestRepo)
+	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo)
+
+	inngestHandler := inngestfn.NewHandler(db, worker, resend)
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Logger)
@@ -38,6 +53,12 @@ func main() {
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "ok")
 	})
+
+	// Inngest serve endpoint（認証不要）
+	r.Mount("/api/inngest", inngestHandler)
+
+	// NextAuth からのみ呼ばれる内部エンドポイント（X-Internal-Secret で保護）
+	r.Post("/api/internal/users/upsert", internalH.UpsertUser)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(middleware.Auth)
@@ -58,6 +79,11 @@ func main() {
 			r.Get("/", digestH.List)
 			r.Get("/latest", digestH.GetLatest)
 			r.Get("/{id}", digestH.GetDetail)
+		})
+
+		r.Route("/llm-usage", func(r chi.Router) {
+			r.Get("/", llmUsageH.List)
+			r.Get("/summary", llmUsageH.DailySummary)
 		})
 	})
 

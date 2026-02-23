@@ -15,6 +15,14 @@ const UserIDKey contextKey = "userID"
 
 func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if os.Getenv("INNGEST_DEV") == "true" && os.Getenv("ALLOW_DEV_AUTH_BYPASS") == "true" {
+			if userID := devUserID(r); userID != "" {
+				ctx := context.WithValue(r.Context(), UserIDKey, userID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+		}
+
 		token := extractToken(r)
 		if token == "" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -48,6 +56,16 @@ func Auth(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), UserIDKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func devUserID(r *http.Request) string {
+	if v := strings.TrimSpace(r.Header.Get("X-Dev-User-Id")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("DEV_AUTH_USER_ID")); v != "" {
+		return v
+	}
+	return ""
 }
 
 func GetUserID(r *http.Request) string {

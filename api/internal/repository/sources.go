@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minoru-kitayama/sifto/api/internal/model"
@@ -42,7 +43,7 @@ func (r *SourceRepo) Create(ctx context.Context, userID, url, srcType string, ti
 	).Scan(&s.ID, &s.UserID, &s.URL, &s.Type, &s.Title,
 		&s.Enabled, &s.LastFetchedAt, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, mapDBError(err)
 	}
 	return &s, nil
 }
@@ -57,15 +58,21 @@ func (r *SourceRepo) Update(ctx context.Context, id, userID string, enabled bool
 	).Scan(&s.ID, &s.UserID, &s.URL, &s.Type, &s.Title,
 		&s.Enabled, &s.LastFetchedAt, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, mapDBError(err)
 	}
 	return &s, nil
 }
 
 func (r *SourceRepo) Delete(ctx context.Context, id, userID string) error {
-	_, err := r.db.Exec(ctx,
+	tag, err := r.db.Exec(ctx,
 		`DELETE FROM sources WHERE id = $1 AND user_id = $2`, id, userID)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *SourceRepo) ListEnabled(ctx context.Context) ([]model.Source, error) {
@@ -87,4 +94,22 @@ func (r *SourceRepo) ListEnabled(ctx context.Context) ([]model.Source, error) {
 		sources = append(sources, s)
 	}
 	return sources, nil
+}
+
+func (r *SourceRepo) UpdateLastFetchedAt(ctx context.Context, id string, fetchedAt time.Time) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE sources
+		SET last_fetched_at = $1, updated_at = NOW()
+		WHERE id = $2`,
+		fetchedAt, id)
+	return err
+}
+
+func (r *SourceRepo) GetUserIDBySourceID(ctx context.Context, sourceID string) (string, error) {
+	var userID string
+	err := r.db.QueryRow(ctx, `SELECT user_id FROM sources WHERE id = $1`, sourceID).Scan(&userID)
+	if err != nil {
+		return "", mapDBError(err)
+	}
+	return userID, nil
 }

@@ -14,6 +14,7 @@ class SummarizeResponse(BaseModel):
     summary: str
     topics: list[str]
     score: float
+    llm: dict | None = None
 
 
 @router.post("/summarize", response_model=SummarizeResponse)

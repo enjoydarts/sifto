@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minoru-kitayama/sifto/api/internal/model"
@@ -59,7 +60,7 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 	).Scan(&d.ID, &d.SourceID, &d.URL, &d.Title, &d.ContentText,
 		&d.Status, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {
-		return nil, err
+		return nil, mapDBError(err)
 	}
 
 	// facts
@@ -89,18 +90,18 @@ func (r *ItemRepo) UpsertFromFeed(ctx context.Context, sourceID, url string, tit
 	err := r.db.QueryRow(ctx, `
 		INSERT INTO items (source_id, url, title)
 		VALUES ($1, $2, $3)
-		ON CONFLICT (url) DO NOTHING
+		ON CONFLICT (source_id, url) DO NOTHING
 		RETURNING id, true`,
 		sourceID, url, title,
 	).Scan(&id, &created)
 	if err != nil {
 		// conflict - already exists
-		err2 := r.db.QueryRow(ctx, `SELECT id FROM items WHERE url = $1`, url).Scan(&id)
+		err2 := r.db.QueryRow(ctx, `SELECT id FROM items WHERE source_id = $1 AND url = $2`, sourceID, url).Scan(&id)
 		return id, false, err2
 	}
 	return id, true, nil
 }
 
 func itoa(n int) string {
-	return string(rune('0' + n))
+	return strconv.Itoa(n)
 }

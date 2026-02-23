@@ -40,7 +40,7 @@ func main() {
 
 	internalH := handler.NewInternalHandler(userRepo)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, eventPublisher)
-	itemH := handler.NewItemHandler(itemRepo)
+	itemH := handler.NewItemHandler(itemRepo, eventPublisher)
 	digestH := handler.NewDigestHandler(digestRepo)
 	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo)
 
@@ -66,13 +66,16 @@ func main() {
 		r.Route("/sources", func(r chi.Router) {
 			r.Get("/", sourceH.List)
 			r.Post("/", sourceH.Create)
+			r.Post("/discover", sourceH.Discover)
 			r.Patch("/{id}", sourceH.Update)
 			r.Delete("/{id}", sourceH.Delete)
 		})
 
 		r.Route("/items", func(r chi.Router) {
 			r.Get("/", itemH.List)
+			r.Post("/retry-failed", itemH.RetryFailed)
 			r.Get("/{id}", itemH.GetDetail)
+			r.Post("/{id}/retry", itemH.Retry)
 		})
 
 		r.Route("/digests", func(r chi.Router) {

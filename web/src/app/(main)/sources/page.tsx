@@ -11,6 +11,10 @@ export default function SourcesPage() {
   const [title, setTitle] = useState("");
   const [type, setType] = useState<"rss" | "manual">("rss");
   const [adding, setAdding] = useState(false);
+  const [candidates, setCandidates] = useState<
+    { url: string; title: string | null }[]
+  >([]);
+  const [addError, setAddError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -28,21 +32,37 @@ export default function SourcesPage() {
     load();
   }, [load]);
 
+  const registerSource = async (feedUrl: string) => {
+    await api.createSource({
+      url: feedUrl,
+      type,
+      title: title.trim() || undefined,
+    });
+    setUrl("");
+    setTitle("");
+    setCandidates([]);
+    await load();
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim()) return;
     setAdding(true);
+    setAddError(null);
     try {
-      await api.createSource({
-        url: url.trim(),
-        type,
-        title: title.trim() || undefined,
-      });
-      setUrl("");
-      setTitle("");
-      await load();
+      if (type === "rss") {
+        const { feeds } = await api.discoverFeeds(url.trim());
+        if (feeds.length === 1) {
+          await registerSource(feeds[0].url);
+        } else {
+          setCandidates(feeds);
+        }
+      } else {
+        await registerSource(url.trim());
+      }
     } catch (e) {
-      alert(`Error: ${e}`);
+      const msg = e instanceof Error ? e.message.replace(/^\d+:\s*/, "") : String(e);
+      setAddError(msg);
     } finally {
       setAdding(false);
     }
@@ -101,7 +121,7 @@ export default function SourcesPage() {
             type="url"
             placeholder={
               type === "rss"
-                ? "https://example.com/feed.rss"
+                ? "https://example.com or https://example.com/feed.rss"
                 : "https://example.com/article"
             }
             value={url}
@@ -124,6 +144,59 @@ export default function SourcesPage() {
             {adding ? "Adding…" : "Add"}
           </button>
         </div>
+        {addError && (
+          <p className="mt-2 text-sm text-red-500">{addError}</p>
+        )}
+        {candidates.length > 1 && (
+          <div className="mt-3">
+            <p className="mb-2 text-xs font-medium text-zinc-600">
+              Multiple feeds found. Select one to register:
+            </p>
+            <ul className="space-y-1">
+              {candidates.map((c) => (
+                <li
+                  key={c.url}
+                  className="flex items-center justify-between gap-3 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm"
+                >
+                  <div className="min-w-0">
+                    {c.title && (
+                      <div className="truncate font-medium text-zinc-800">
+                        {c.title}
+                      </div>
+                    )}
+                    <div className="truncate text-xs text-zinc-500">{c.url}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setAdding(true);
+                      setAddError(null);
+                      try {
+                        await registerSource(c.url);
+                      } catch (e) {
+                        const msg = e instanceof Error ? e.message.replace(/^\d+:\s*/, "") : String(e);
+                        setAddError(msg);
+                      } finally {
+                        setAdding(false);
+                      }
+                    }}
+                    disabled={adding}
+                    className="shrink-0 rounded bg-zinc-900 px-3 py-1 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+                  >
+                    Register
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => setCandidates([])}
+              className="mt-2 text-xs text-zinc-400 hover:text-zinc-700"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </form>
 
       {/* State */}

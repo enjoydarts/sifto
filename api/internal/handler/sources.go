@@ -1,16 +1,102 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/mmcdole/gofeed"
 	"github.com/minoru-kitayama/sifto/api/internal/middleware"
 	"github.com/minoru-kitayama/sifto/api/internal/repository"
 	"github.com/minoru-kitayama/sifto/api/internal/service"
 )
+
+type FeedCandidate struct {
+	URL   string  `json:"url"`
+	Title *string `json:"title"`
+}
+
+var (
+	reFeedLink1 = regexp.MustCompile(`(?i)<link[^>]+type="application/(rss|atom)\+xml"[^>]+href="([^"]+)"`)
+	reFeedLink2 = regexp.MustCompile(`(?i)<link[^>]+href="([^"]+)"[^>]+type="application/(rss|atom)\+xml"`)
+	reTitleAttr = regexp.MustCompile(`(?i)\btitle="([^"]+)"`)
+)
+
+func discoverRSSFeeds(ctx context.Context, rawURL string) ([]FeedCandidate, error) {
+	// Step 1: Try parsing the URL directly as a feed.
+	fp := gofeed.NewParser()
+	if feed, err := fp.ParseURLWithContext(rawURL, ctx); err == nil {
+		var t *string
+		if feed.Title != "" {
+			t = &feed.Title
+		}
+		return []FeedCandidate{{URL: rawURL, Title: t}}, nil
+	}
+
+	// Step 2: Fetch the URL as HTML and look for RSS/Atom <link> tags.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Sifto/1.0")
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+
+	base, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := map[string]bool{}
+	var candidates []FeedCandidate
+
+	addCandidate := func(href string, tag []byte) {
+		ref, e := url.Parse(href)
+		if e != nil {
+			return
+		}
+		absURL := base.ResolveReference(ref).String()
+		if seen[absURL] {
+			return
+		}
+		seen[absURL] = true
+		var title *string
+		if m := reTitleAttr.FindSubmatch(tag); m != nil {
+			t := string(m[1])
+			title = &t
+		}
+		candidates = append(candidates, FeedCandidate{URL: absURL, Title: title})
+	}
+
+	for _, m := range reFeedLink1.FindAllSubmatch(body, -1) {
+		addCandidate(string(m[2]), m[0])
+	}
+	for _, m := range reFeedLink2.FindAllSubmatch(body, -1) {
+		addCandidate(string(m[1]), m[0])
+	}
+
+	if len(candidates) == 0 {
+		return nil, errors.New("指定されたURLからRSSフィードが見つかりませんでした")
+	}
+	return candidates, nil
+}
 
 type SourceHandler struct {
 	repo      *repository.SourceRepo
@@ -86,6 +172,24 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, s)
+}
+
+func (h *SourceHandler) Discover(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.URL) == "" {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	feeds, err := discoverRSSFeeds(r.Context(), strings.TrimSpace(body.URL))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+
+	writeJSON(w, map[string]any{"feeds": feeds})
 }
 
 func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {

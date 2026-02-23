@@ -34,6 +34,7 @@ export default function ItemsPage() {
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryingIds, setRetryingIds] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async (status: string) => {
     setLoading(true);
@@ -51,6 +52,25 @@ export default function ItemsPage() {
   useEffect(() => {
     load(filter);
   }, [filter, load]);
+
+  const retryItem = useCallback(
+    async (itemId: string) => {
+      setRetryingIds((prev) => ({ ...prev, [itemId]: true }));
+      try {
+        await api.retryItem(itemId);
+        await load(filter);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setRetryingIds((prev) => {
+          const next = { ...prev };
+          delete next[itemId];
+          return next;
+        });
+      }
+    },
+    [filter, load]
+  );
 
   return (
     <div>
@@ -75,45 +95,57 @@ export default function ItemsPage() {
 
       {/* State */}
       {loading && <p className="text-sm text-zinc-500">Loading…</p>}
-      {error && <p className="text-sm text-red-500">{error}</p>}
+	      {error && <p className="text-sm text-red-500">{error}</p>}
       {!loading && items.length === 0 && (
         <p className="text-sm text-zinc-400">No items.</p>
       )}
 
       {/* List */}
-      <ul className="space-y-2">
-        {items.map((item) => (
-          <li key={item.id}>
-            <Link
-              href={`/items/${item.id}`}
-              className="flex items-start gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 transition-colors hover:bg-zinc-50"
-            >
-              <span
-                className={`mt-0.5 shrink-0 rounded px-2 py-0.5 text-xs font-medium ${
-                  STATUS_COLOR[item.status] ?? "bg-zinc-100 text-zinc-600"
-                }`}
-              >
-                {STATUS_LABEL[item.status] ?? item.status}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-zinc-900">
-                  {item.title ?? item.url}
-                </div>
-                {item.title && (
-                  <div className="truncate text-xs text-zinc-400">
-                    {item.url}
-                  </div>
-                )}
-                <div className="mt-0.5 text-xs text-zinc-400">
-                  {new Date(
-                    item.published_at ?? item.created_at
-                  ).toLocaleDateString("ja-JP")}
-                </div>
-              </div>
-            </Link>
-          </li>
-        ))}
-      </ul>
+	      <ul className="space-y-2">
+	        {items.map((item) => (
+	          <li key={item.id}>
+	            <div className="flex items-start gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3">
+	              <Link
+	                href={`/items/${item.id}`}
+	                className="flex min-w-0 flex-1 items-start gap-3 transition-colors hover:text-zinc-700"
+	              >
+	                <span
+	                  className={`mt-0.5 shrink-0 rounded px-2 py-0.5 text-xs font-medium ${
+	                    STATUS_COLOR[item.status] ?? "bg-zinc-100 text-zinc-600"
+	                  }`}
+	                >
+	                  {STATUS_LABEL[item.status] ?? item.status}
+	                </span>
+	                <div className="min-w-0 flex-1">
+	                  <div className="truncate text-sm font-medium text-zinc-900">
+	                    {item.title ?? item.url}
+	                  </div>
+	                  {item.title && (
+	                    <div className="truncate text-xs text-zinc-400">
+	                      {item.url}
+	                    </div>
+	                  )}
+	                  <div className="mt-0.5 text-xs text-zinc-400">
+	                    {new Date(
+	                      item.published_at ?? item.created_at
+	                    ).toLocaleDateString("ja-JP")}
+	                  </div>
+	                </div>
+	              </Link>
+	              {item.status === "failed" && (
+	                <button
+	                  type="button"
+	                  disabled={!!retryingIds[item.id]}
+	                  onClick={() => retryItem(item.id)}
+	                  className="shrink-0 rounded border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+	                >
+	                  {retryingIds[item.id] ? "再試行中…" : "再試行"}
+	                </button>
+	              )}
+	            </div>
+	          </li>
+	        ))}
+	      </ul>
     </div>
   );
 }

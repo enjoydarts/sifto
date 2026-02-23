@@ -84,6 +84,54 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 	return &d, nil
 }
 
+func (r *ItemRepo) GetForRetry(ctx context.Context, id, userID string) (*model.Item, error) {
+	var it model.Item
+	err := r.db.QueryRow(ctx, `
+		SELECT i.id, i.source_id, i.url, i.title, i.content_text, i.status,
+		       i.published_at, i.fetched_at, i.created_at, i.updated_at
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
+	).Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ContentText,
+		&it.Status, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	return &it, nil
+}
+
+func (r *ItemRepo) ListFailedForRetry(ctx context.Context, userID string, sourceID *string) ([]model.Item, error) {
+	query := `
+		SELECT i.id, i.source_id, i.url, i.title, i.content_text, i.status,
+		       i.published_at, i.fetched_at, i.created_at, i.updated_at
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		WHERE s.user_id = $1 AND i.status = 'failed'`
+	args := []any{userID}
+	if sourceID != nil {
+		args = append(args, *sourceID)
+		query += ` AND i.source_id = $2`
+	}
+	query += ` ORDER BY i.updated_at DESC LIMIT 500`
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []model.Item
+	for rows.Next() {
+		var it model.Item
+		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ContentText,
+			&it.Status, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, it)
+	}
+	return items, nil
+}
+
 func (r *ItemRepo) UpsertFromFeed(ctx context.Context, sourceID, url string, title *string) (string, bool, error) {
 	var id string
 	var created bool

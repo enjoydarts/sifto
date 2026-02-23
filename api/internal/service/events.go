@@ -22,8 +22,12 @@ func NewEventPublisher() (*EventPublisher, error) {
 }
 
 func (p *EventPublisher) SendItemCreated(ctx context.Context, itemID, sourceID, url string) {
+	_ = p.SendItemCreatedE(ctx, itemID, sourceID, url)
+}
+
+func (p *EventPublisher) SendItemCreatedE(ctx context.Context, itemID, sourceID, url string) error {
 	if p == nil {
-		return
+		return nil
 	}
 	if _, err := p.client.Send(ctx, inngestgo.Event{
 		Name: "item/created",
@@ -34,6 +38,7 @@ func (p *EventPublisher) SendItemCreated(ctx context.Context, itemID, sourceID, 
 		},
 	}); err != nil {
 		log.Printf("send item/created: %v", err)
+		return err
 	}
+	return nil
 }
-

@@ -47,6 +47,19 @@ export interface ItemDetail extends Item {
   summary: ItemSummary | null;
 }
 
+export interface ItemRetryResult {
+  item_id: string;
+  status: "queued";
+}
+
+export interface BulkRetryFailedResult {
+  status: "queued";
+  source_id: string | null;
+  matched: number;
+  queued_count: number;
+  failed_count: number;
+}
+
 export interface Digest {
   id: string;
   user_id: string;
@@ -95,6 +108,11 @@ export const api = {
     }),
   deleteSource: (id: string) =>
     apiFetch<void>(`/sources/${id}`, { method: "DELETE" }),
+  discoverFeeds: (url: string) =>
+    apiFetch<{ feeds: { url: string; title: string | null }[] }>(
+      "/sources/discover",
+      { method: "POST", body: JSON.stringify({ url }) }
+    ),
 
   // Items
   getItems: (params?: { status?: string; source_id?: string }) => {
@@ -105,6 +123,16 @@ export const api = {
     return apiFetch<Item[]>(`/items${qs ? `?${qs}` : ""}`);
   },
   getItem: (id: string) => apiFetch<ItemDetail>(`/items/${id}`),
+  retryItem: (id: string) =>
+    apiFetch<ItemRetryResult>(`/items/${id}/retry`, { method: "POST" }),
+  retryFailedItems: (params?: { source_id?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.source_id) q.set("source_id", params.source_id);
+    const qs = q.toString();
+    return apiFetch<BulkRetryFailedResult>(`/items/retry-failed${qs ? `?${qs}` : ""}`, {
+      method: "POST",
+    });
+  },
 
   // Digests
   getDigests: () => apiFetch<Digest[]>("/digests"),

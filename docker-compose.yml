@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: sifto
+      POSTGRES_USER: sifto
+      POSTGRES_PASSWORD: sifto
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sifto"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./api
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://sifto:sifto@postgres:5432/sifto
+      PYTHON_WORKER_URL: http://worker:8000
+      INNGEST_DEV: "true"
+      INNGEST_EVENT_KEY: local
+      INNGEST_SIGNING_KEY: local
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+    env_file:
+      - .env
+
+  worker:
+    build: ./worker
+    ports:
+      - "8000:8000"
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    env_file:
+      - .env
+
+  inngest:
+    image: inngest/inngest:latest
+    ports:
+      - "8288:8288"
+    command: dev --no-discovery -u http://api:8080/api/inngest
+
+volumes:
+  postgres_data:

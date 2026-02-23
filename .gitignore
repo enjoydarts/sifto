@@ -1,0 +1,55 @@
+# ========================
+# Environment
+# ========================
+.env
+.env.local
+.env.*.local
+
+# ========================
+# Go
+# ========================
+api/bin/
+api/*.exe
+api/*.test
+
+# ========================
+# Python
+# ========================
+worker/__pycache__/
+worker/**/__pycache__/
+worker/*.pyc
+worker/.venv/
+worker/venv/
+worker/.pytest_cache/
+worker/*.egg-info/
+
+# ========================
+# Next.js
+# ========================
+web/.next/
+web/out/
+web/node_modules/
+web/.vercel/
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
+web/.pnpm-debug.log*
+
+# ========================
+# OS
+# ========================
+.DS_Store
+Thumbs.db
+
+# ========================
+# IDE
+# ========================
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ========================
+# Claude Code
+# ========================
+.claude/settings.local.json

@@ -83,6 +83,37 @@ export interface DigestDetail extends Digest {
   items: DigestItemDetail[];
 }
 
+export interface LLMUsageLog {
+  id: string;
+  user_id?: string | null;
+  source_id?: string | null;
+  item_id?: string | null;
+  digest_id?: string | null;
+  provider: string;
+  model: string;
+  pricing_model_family?: string | null;
+  pricing_source: string;
+  purpose: "facts" | "summary" | "digest" | string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  estimated_cost_usd: number;
+  created_at: string;
+}
+
+export interface LLMUsageDailySummary {
+  date_jst: string;
+  purpose: string;
+  pricing_source: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  estimated_cost_usd: number;
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...options,
@@ -135,6 +166,20 @@ export const api = {
     return apiFetch<BulkRetryFailedResult>(`/items/retry-failed${qs ? `?${qs}` : ""}`, {
       method: "POST",
     });
+  },
+
+  // LLM Usage
+  getLLMUsage: (params?: { limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiFetch<LLMUsageLog[]>(`/llm-usage${qs ? `?${qs}` : ""}`);
+  },
+  getLLMUsageSummary: (params?: { days?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.days) q.set("days", String(params.days));
+    const qs = q.toString();
+    return apiFetch<LLMUsageDailySummary[]>(`/llm-usage/summary${qs ? `?${qs}` : ""}`);
   },
 
   // Digests

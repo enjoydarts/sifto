@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { api, Item } from "@/lib/api";
@@ -29,7 +29,7 @@ function scoreTone(score: number) {
   return "bg-amber-50 text-amber-700 border-amber-200";
 }
 
-export default function ItemsPage() {
+function ItemsPageContent() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const router = useRouter();
@@ -61,7 +61,6 @@ export default function ItemsPage() {
   const [focusSize, setFocusSize] = useState<FocusSize>(15);
   const [focusWindow, setFocusWindow] = useState<FocusWindow>("24h");
   const [diversifyTopics, setDiversifyTopics] = useState(true);
-  const [excludeReadInPlan, setExcludeReadInPlan] = useState(true);
   const pageSize = 20;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +81,6 @@ export default function ItemsPage() {
           setFocusSize(rp.size);
         }
         setDiversifyTopics(Boolean(rp.diversify_topics));
-        setExcludeReadInPlan(Boolean(rp.exclude_read));
       })
       .catch(() => {});
   }, []);
@@ -568,5 +566,13 @@ export default function ItemsPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function ItemsPage() {
+  return (
+    <Suspense fallback={<p className="text-sm text-zinc-500">Loading...</p>}>
+      <ItemsPageContent />
+    </Suspense>
   );
 }

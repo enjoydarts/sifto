@@ -13,6 +13,24 @@ RUN go get \
     go mod tidy && \
     go build -o bin/server ./cmd/server
 
+FROM golang:alpine AS dev
+
+WORKDIR /app
+
+COPY . .
+
+RUN go get \
+    github.com/go-chi/chi/v5@latest \
+    github.com/golang-jwt/jwt/v5@latest \
+    github.com/inngest/inngestgo@latest \
+    github.com/jackc/pgx/v5@latest \
+    github.com/mmcdole/gofeed@latest && \
+    go mod tidy
+
+EXPOSE 8080
+
+CMD ["go", "run", "./cmd/server"]
+
 FROM alpine:latest
 
 RUN apk add --no-cache ca-certificates

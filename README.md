@@ -258,6 +258,16 @@ migrate -path db/migrations \
   up
 ```
 
+### Go コード整形（gofmt）
+
+```sh
+# Go API の Go ファイルを整形
+make fmt-go
+
+# gofmt 済みかチェック（CI相当）
+make fmt-go-check
+```
+
 ## 環境変数
 
 | 変数名 | 説明 | 必須 |

@@ -445,7 +445,7 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 	if limit > 20 {
 		limit = 20
 	}
-	const minSimilarity = 0.55
+	const minSimilarity = 0.35
 
 	rows, err := r.db.Query(ctx, `
 		WITH target AS (
@@ -466,6 +466,7 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 			         ),
 			         0
 			       )::double precision AS similarity,
+			       (i.source_id = t.target_source_id) AS is_same_source,
 			       i.published_at, i.created_at
 			FROM target t
 			JOIN item_embeddings ie ON ie.item_id <> $1 AND ie.dimensions = t.dims
@@ -474,13 +475,12 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 			LEFT JOIN item_summaries sm ON sm.item_id = i.id
 			WHERE s.user_id = $2
 			  AND i.status = 'summarized'
-			  AND i.source_id <> t.target_source_id
 		)
 		SELECT id, source_id, url, title,
 		       summary, topics, score, similarity, published_at, created_at
 		FROM scored
 		WHERE similarity >= $4
-		ORDER BY similarity DESC, COALESCE(published_at, created_at) DESC
+		ORDER BY is_same_source ASC, similarity DESC, COALESCE(published_at, created_at) DESC
 		LIMIT $3`, id, userID, limit, minSimilarity)
 	if err != nil {
 		return nil, err

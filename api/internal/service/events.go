@@ -60,3 +60,20 @@ func (p *EventPublisher) SendDigestCreatedE(ctx context.Context, digestID, userI
 	}
 	return nil
 }
+
+func (p *EventPublisher) SendItemEmbedE(ctx context.Context, itemID, sourceID string) error {
+	if p == nil {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, inngestgo.Event{
+		Name: "item/embed",
+		Data: map[string]any{
+			"item_id":   itemID,
+			"source_id": sourceID,
+		},
+	}); err != nil {
+		log.Printf("send item/embed: %v", err)
+		return err
+	}
+	return nil
+}

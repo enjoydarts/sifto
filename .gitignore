@@ -11,6 +11,7 @@
 api/bin/
 api/*.exe
 api/*.test
+api/tmp/
 
 # ========================
 # Python

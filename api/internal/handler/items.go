@@ -107,6 +107,26 @@ func (h *ItemHandler) GetDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, item)
 }
 
+func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	id := chi.URLParam(r, "id")
+	limit := parseIntOrDefault(r.URL.Query().Get("limit"), 6)
+	if limit < 1 || limit > 20 {
+		http.Error(w, "invalid limit", http.StatusBadRequest)
+		return
+	}
+	items, err := h.repo.ListRelated(r.Context(), id, userID, limit)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"items":  items,
+		"limit":  limit,
+		"item_id": id,
+	})
+}
+
 func (h *ItemHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	id := chi.URLParam(r, "id")

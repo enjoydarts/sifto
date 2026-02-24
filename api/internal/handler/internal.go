@@ -244,3 +244,68 @@ func (h *InternalHandler) DebugSendDigest(w http.ResponseWriter, r *http.Request
 		"to":        userEmail,
 	})
 }
+
+func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http.Request) {
+	if !checkInternalSecret(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.itemRepo == nil || h.publisher == nil {
+		http.Error(w, "embedding backfill unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	var body struct {
+		UserID *string `json:"user_id"`
+		Limit  int     `json:"limit"`
+		DryRun bool    `json:"dry_run"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body.Limit <= 0 {
+		body.Limit = 100
+	}
+	if body.Limit > 1000 {
+		http.Error(w, "invalid limit", http.StatusBadRequest)
+		return
+	}
+
+	targets, err := h.itemRepo.ListEmbeddingBackfillTargets(r.Context(), body.UserID, body.Limit)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("list embedding backfill targets: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	queued := 0
+	failed := 0
+	if !body.DryRun {
+		for _, t := range targets {
+			if err := h.publisher.SendItemEmbedE(r.Context(), t.ItemID, t.SourceID); err != nil {
+				failed++
+				continue
+			}
+			queued++
+		}
+	}
+
+	preview := make([]map[string]any, 0, len(targets))
+	for _, t := range targets {
+		preview = append(preview, map[string]any{
+			"item_id":   t.ItemID,
+			"source_id": t.SourceID,
+			"user_id":   t.UserID,
+			"url":       t.URL,
+		})
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	writeJSON(w, map[string]any{
+		"status":         "accepted",
+		"dry_run":        body.DryRun,
+		"user_filter":    body.UserID,
+		"limit":          body.Limit,
+		"matched":        len(targets),
+		"queued_count":   queued,
+		"failed_count":   failed,
+		"targets":        preview,
+	})
+}

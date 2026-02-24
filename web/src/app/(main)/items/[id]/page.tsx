@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { api, ItemDetail } from "@/lib/api";
+import { api, ItemDetail, RelatedItem } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 
@@ -23,11 +23,27 @@ export default function ItemDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [readUpdating, setReadUpdating] = useState(false);
+  const [related, setRelated] = useState<RelatedItem[]>([]);
+  const [relatedError, setRelatedError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .getItem(id)
-      .then(setItem)
+    setLoading(true);
+    Promise.allSettled([api.getItem(id), api.getRelatedItems(id, { limit: 6 })])
+      .then((results) => {
+        const [detailRes, relatedRes] = results;
+        if (detailRes.status === "rejected") {
+          throw detailRes.reason;
+        }
+        setItem(detailRes.value);
+
+        if (relatedRes.status === "fulfilled") {
+          setRelated(relatedRes.value.items ?? []);
+          setRelatedError(null);
+        } else {
+          setRelated([]);
+          setRelatedError(String(relatedRes.reason));
+        }
+      })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
   }, [id]);
@@ -233,6 +249,67 @@ export default function ItemDetailPage() {
           </div>
         </section>
       )}
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-zinc-700">
+            {locale === "ja" ? "関連記事" : "Related articles"}
+          </h2>
+          <span className="text-xs text-zinc-400">{related.length}</span>
+        </div>
+        {related.length === 0 ? (
+          <p className="text-sm text-zinc-500">
+            {relatedError
+              ? locale === "ja"
+                ? "関連記事の取得に失敗しました（本文表示は継続）"
+                : "Failed to load related articles (item content is still available)."
+              : locale === "ja"
+                ? "関連記事はまだありません（embedding未生成 or 候補なし）"
+                : "No related articles yet (no embeddings or no candidates)."}
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {related.map((r) => (
+              <div key={r.id} className="rounded-lg border border-zinc-200 p-3">
+                <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                  <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                    sim {r.similarity.toFixed(3)}
+                  </span>
+                  {r.summary_score != null && (
+                    <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                      score {r.summary_score.toFixed(2)}
+                    </span>
+                  )}
+                  <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
+                </div>
+                <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-zinc-900 hover:underline">
+                  {r.title ?? (locale === "ja" ? "タイトルなし" : "No title")}
+                </Link>
+                <a
+                  href={r.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 block break-all text-xs text-blue-600 hover:underline"
+                >
+                  {r.url}
+                </a>
+                {r.summary && (
+                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
+                )}
+                {!!r.topics?.length && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {r.topics.slice(0, 6).map((topic) => (
+                      <span key={`${r.id}-${topic}`} className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-700">
+                        {topic}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

@@ -66,6 +66,7 @@ func main() {
 	r.Post("/api/internal/users/upsert", internalH.UpsertUser)
 	r.Post("/api/internal/debug/digests/generate", internalH.DebugGenerateDigest)
 	r.Post("/api/internal/debug/digests/send", internalH.DebugSendDigest)
+	r.Post("/api/internal/debug/embeddings/backfill", internalH.DebugBackfillEmbeddings)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(middleware.Auth)
@@ -83,6 +84,7 @@ func main() {
 			r.Get("/stats", itemH.Stats)
 			r.Post("/retry-failed", itemH.RetryFailed)
 			r.Get("/reading-plan", itemH.ReadingPlan)
+			r.Get("/{id}/related", itemH.Related)
 			r.Get("/{id}", itemH.GetDetail)
 			r.Post("/{id}/read", itemH.MarkRead)
 			r.Delete("/{id}/read", itemH.MarkUnread)
@@ -105,6 +107,8 @@ func main() {
 			r.Patch("/", settingsH.UpdateBudget)
 			r.Post("/anthropic-key", settingsH.SetAnthropicAPIKey)
 			r.Delete("/anthropic-key", settingsH.DeleteAnthropicAPIKey)
+			r.Post("/openai-key", settingsH.SetOpenAIAPIKey)
+			r.Delete("/openai-key", settingsH.DeleteOpenAIAPIKey)
 		})
 	})
 

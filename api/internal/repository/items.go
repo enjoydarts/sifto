@@ -438,6 +438,63 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 	return &d, nil
 }
 
+func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int) ([]model.RelatedItem, error) {
+	if limit <= 0 {
+		limit = 6
+	}
+	if limit > 20 {
+		limit = 20
+	}
+
+	rows, err := r.db.Query(ctx, `
+		WITH target AS (
+			SELECT ie.embedding AS emb, ie.dimensions AS dims
+			FROM item_embeddings ie
+			JOIN items ti ON ti.id = ie.item_id
+			JOIN sources ts ON ts.id = ti.source_id
+			WHERE ie.item_id = $1
+			  AND ts.user_id = $2
+		)
+		SELECT i.id, i.source_id, i.url, i.title,
+		       sm.summary, COALESCE(sm.topics, '{}'::text[]), sm.score,
+		       COALESCE(
+		         (
+		           SELECT SUM(tv * cv)
+		           FROM unnest(t.emb) WITH ORDINALITY AS tval(tv, idx)
+		           JOIN unnest(ie.embedding) WITH ORDINALITY AS cval(cv, idx) USING (idx)
+		         ),
+		         0
+		       )::double precision AS similarity,
+		       i.published_at, i.created_at
+		FROM target t
+		JOIN item_embeddings ie ON ie.item_id <> $1 AND ie.dimensions = t.dims
+		JOIN items i ON i.id = ie.item_id
+		JOIN sources s ON s.id = i.source_id
+		LEFT JOIN item_summaries sm ON sm.item_id = i.id
+		WHERE s.user_id = $2
+		  AND i.status = 'summarized'
+		ORDER BY similarity DESC, COALESCE(i.published_at, i.created_at) DESC
+		LIMIT $3`, id, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []model.RelatedItem
+	for rows.Next() {
+		var v model.RelatedItem
+		if err := rows.Scan(
+			&v.ID, &v.SourceID, &v.URL, &v.Title,
+			&v.Summary, &v.Topics, &v.SummaryScore,
+			&v.Similarity, &v.PublishedAt, &v.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 func (r *ItemRepo) GetForRetry(ctx context.Context, id, userID string) (*model.Item, error) {
 	var it model.Item
 	err := r.db.QueryRow(ctx, `

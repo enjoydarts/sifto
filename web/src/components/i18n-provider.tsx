@@ -85,7 +85,7 @@ const dict: Record<Locale, Dict> = {
     "llm.noSummary": "集計データがありません。",
     "llm.noLogs": "履歴がありません。",
     "settings.title": "設定",
-    "settings.subtitle": "Anthropic APIキー（ユーザー別）と月次LLM予算を管理",
+    "settings.subtitle": "ユーザー別 APIキー（Anthropic / OpenAI）と月次LLM予算を管理",
   },
   en: {
     "nav.items": "Items",
@@ -158,7 +158,7 @@ const dict: Record<Locale, Dict> = {
     "llm.noSummary": "No summary data.",
     "llm.noLogs": "No logs.",
     "settings.title": "Settings",
-    "settings.subtitle": "Manage per-user Anthropic API key and monthly LLM budget",
+    "settings.subtitle": "Manage per-user API keys (Anthropic / OpenAI) and monthly LLM budget",
   },
 };
 

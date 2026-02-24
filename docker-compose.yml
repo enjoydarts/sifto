@@ -40,6 +40,8 @@ services:
       USER_SECRET_ENCRYPTION_KEY: ${USER_SECRET_ENCRYPTION_KEY}
     env_file:
       - .env
+    volumes:
+      - ./api:/app
 
   worker:
     build: ./worker

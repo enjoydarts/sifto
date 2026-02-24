@@ -25,11 +25,12 @@ RUN go get \
     github.com/inngest/inngestgo@latest \
     github.com/jackc/pgx/v5@latest \
     github.com/mmcdole/gofeed@latest && \
+    go install github.com/air-verse/air@latest && \
     go mod tidy
 
 EXPOSE 8080
 
-CMD ["go", "run", "./cmd/server"]
+CMD ["air", "-c", ".air.toml"]
 
 FROM alpine:latest
 

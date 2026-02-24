@@ -52,6 +52,8 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"user_id":                   settings.UserID,
 		"has_anthropic_api_key":     settings.HasAnthropicAPIKey,
 		"anthropic_api_key_last4":   settings.AnthropicAPIKeyLast4,
+		"has_openai_api_key":        settings.HasOpenAIAPIKey,
+		"openai_api_key_last4":      settings.OpenAIAPIKeyLast4,
 		"monthly_budget_usd":        settings.MonthlyBudgetUSD,
 		"budget_alert_enabled":      settings.BudgetAlertEnabled,
 		"budget_alert_threshold_pct": settings.BudgetAlertThresholdPct,
@@ -147,5 +149,58 @@ func (h *SettingsHandler) DeleteAnthropicAPIKey(w http.ResponseWriter, r *http.R
 		"user_id":                 settings.UserID,
 		"has_anthropic_api_key":   settings.HasAnthropicAPIKey,
 		"anthropic_api_key_last4": settings.AnthropicAPIKeyLast4,
+	})
+}
+
+func (h *SettingsHandler) SetOpenAIAPIKey(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	key := strings.TrimSpace(body.APIKey)
+	if key == "" {
+		http.Error(w, "api_key is required", http.StatusBadRequest)
+		return
+	}
+	if h.cipher == nil || !h.cipher.Enabled() {
+		http.Error(w, "user secret encryption is not configured", http.StatusInternalServerError)
+		return
+	}
+	enc, err := h.cipher.EncryptString(key)
+	if err != nil {
+		http.Error(w, "failed to encrypt api key", http.StatusInternalServerError)
+		return
+	}
+	last4 := key
+	if len(last4) > 4 {
+		last4 = last4[len(last4)-4:]
+	}
+	settings, err := h.repo.SetOpenAIAPIKey(r.Context(), userID, enc, last4)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"user_id":              settings.UserID,
+		"has_openai_api_key":   settings.HasOpenAIAPIKey,
+		"openai_api_key_last4": settings.OpenAIAPIKeyLast4,
+	})
+}
+
+func (h *SettingsHandler) DeleteOpenAIAPIKey(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	settings, err := h.repo.ClearOpenAIAPIKey(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"user_id":              settings.UserID,
+		"has_openai_api_key":   settings.HasOpenAIAPIKey,
+		"openai_api_key_last4": settings.OpenAIAPIKeyLast4,
 	})
 }

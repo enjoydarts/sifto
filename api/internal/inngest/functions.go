@@ -97,6 +97,27 @@ func loadUserAnthropicAPIKey(ctx context.Context, settingsRepo *repository.UserS
 	return &plain, nil
 }
 
+func loadUserOpenAIAPIKey(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string) (*string, error) {
+	if settingsRepo == nil || userID == nil || *userID == "" {
+		return nil, fmt.Errorf("user openai api key is required")
+	}
+	enc, err := settingsRepo.GetOpenAIAPIKeyEncrypted(ctx, *userID)
+	if err != nil || enc == nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("user openai api key is required")
+	}
+	if cipher == nil || !cipher.Enabled() {
+		return nil, fmt.Errorf("user secret encryption is not configured")
+	}
+	plain, err := cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt user openai key: %w", err)
+	}
+	return &plain, nil
+}
+
 // Event payloads
 
 type ItemCreatedData struct {
@@ -114,6 +135,7 @@ type DigestCreatedData struct {
 // NewHandler registers all Inngest functions and returns the HTTP handler.
 func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient) http.Handler {
 	secretCipher := service.NewSecretCipher()
+	openAI := service.NewOpenAIClient()
 	client, err := inngestgo.NewClient(inngestgo.ClientOpts{
 		AppID: "sifto-api",
 	})
@@ -128,7 +150,8 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	}
 
 	register(fetchRSSFn(client, db))
-	register(processItemFn(client, db, worker, secretCipher))
+	register(processItemFn(client, db, worker, openAI, secretCipher))
+	register(embedItemFn(client, db, openAI, secretCipher))
 	register(generateDigestFn(client, db))
 	register(sendDigestFn(client, db, worker, resend, secretCipher))
 	register(checkBudgetAlertsFn(client, db, resend))
@@ -198,7 +221,7 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 }
 
 // ② event/process-item — 本文抽出 → 事実抽出 → 要約（各stepでリトライ可能）
-func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
+func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, openAI *service.OpenAIClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
 	itemRepo := repository.NewItemInngestRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
 	sourceRepo := repository.NewSourceRepo(db)
@@ -293,11 +316,111 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				log.Printf("process-item insert-summary failed item_id=%s err=%v", itemID, err)
 				return nil, fmt.Errorf("insert summary: %w", err)
 			}
+
+			// Step 4: Embedding生成（関連記事用）: 失敗しても記事処理全体は成功扱い
+			if userOpenAIKey, err := loadUserOpenAIAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr); err != nil {
+				log.Printf("process-item embedding skip item_id=%s reason=%v", itemID, err)
+			} else {
+				inputText := buildItemEmbeddingInput(extracted.Title, summary.Summary, summary.Topics, factsResp.Facts)
+				embModel := service.OpenAIEmbeddingModel()
+				embResp, err := step.Run(ctx, "create-embedding", func(ctx context.Context) (*service.CreateEmbeddingResponse, error) {
+					log.Printf("process-item create-embedding start item_id=%s model=%s", itemID, embModel)
+					return openAI.CreateEmbedding(ctx, *userOpenAIKey, embModel, inputText)
+				})
+				if err != nil {
+					log.Printf("process-item create-embedding failed item_id=%s err=%v", itemID, err)
+				} else {
+					if err := itemRepo.UpsertEmbedding(ctx, itemID, embModel, embResp.Embedding); err != nil {
+						log.Printf("process-item upsert-embedding failed item_id=%s err=%v", itemID, err)
+					} else {
+						recordLLMUsage(ctx, llmUsageRepo, "embedding", embResp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
+						log.Printf("process-item create-embedding done item_id=%s dims=%d", itemID, len(embResp.Embedding))
+					}
+				}
+			}
 			log.Printf("process-item complete item_id=%s", itemID)
 
 			return map[string]string{"item_id": itemID, "status": "summarized"}, nil
 		},
 	)
+}
+
+func embedItemFn(client inngestgo.Client, db *pgxpool.Pool, openAI *service.OpenAIClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
+	itemRepo := repository.NewItemInngestRepo(db)
+	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	userSettingsRepo := repository.NewUserSettingsRepo(db)
+
+	type EventData struct {
+		ItemID   string `json:"item_id"`
+		SourceID string `json:"source_id"`
+	}
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "embed-item", Name: "Create Item Embedding"},
+		inngestgo.EventTrigger("item/embed", nil),
+		func(ctx context.Context, input inngestgo.Input[EventData]) (any, error) {
+			data := input.Event.Data
+			if data.ItemID == "" {
+				return nil, fmt.Errorf("item_id is required")
+			}
+
+			candidate, err := itemRepo.GetEmbeddingCandidate(ctx, data.ItemID)
+			if err != nil {
+				return nil, fmt.Errorf("get embedding candidate: %w", err)
+			}
+			userID := candidate.UserID
+			userOpenAIKey, err := loadUserOpenAIAPIKey(ctx, userSettingsRepo, secretCipher, &userID)
+			if err != nil {
+				return nil, err
+			}
+
+			inputText := buildItemEmbeddingInput(candidate.Title, candidate.Summary, candidate.Topics, candidate.Facts)
+			embModel := service.OpenAIEmbeddingModel()
+			embResp, err := step.Run(ctx, "create-embedding", func(ctx context.Context) (*service.CreateEmbeddingResponse, error) {
+				return openAI.CreateEmbedding(ctx, *userOpenAIKey, embModel, inputText)
+			})
+			if err != nil {
+				return nil, err
+			}
+			if err := itemRepo.UpsertEmbedding(ctx, candidate.ItemID, embModel, embResp.Embedding); err != nil {
+				return nil, fmt.Errorf("upsert embedding: %w", err)
+			}
+
+			recordLLMUsage(ctx, llmUsageRepo, "embedding", embResp.LLM, &candidate.UserID, &candidate.SourceID, &candidate.ItemID, nil)
+			return map[string]any{
+				"item_id":     candidate.ItemID,
+				"source_id":   candidate.SourceID,
+				"dimensions":  len(embResp.Embedding),
+				"status":      "embedded",
+				"model":       embModel,
+			}, nil
+		},
+	)
+}
+
+func buildItemEmbeddingInput(title *string, summary string, topics, facts []string) string {
+	out := ""
+	if title != nil && *title != "" {
+		out += "title: " + *title + "\n"
+	}
+	if summary != "" {
+		out += "summary: " + summary + "\n"
+	}
+	if len(topics) > 0 {
+		out += "topics: " + fmt.Sprintf("%v", topics) + "\n"
+	}
+	if len(facts) > 0 {
+		out += "facts:\n"
+		limit := len(facts)
+		if limit > 12 {
+			limit = 12
+		}
+		for i := 0; i < limit; i++ {
+			out += "- " + facts[i] + "\n"
+		}
+	}
+	return out
 }
 
 // ③ cron/generate-digest — 毎朝6:00 JST (UTC 21:00) にDigest生成

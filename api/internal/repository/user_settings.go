@@ -22,11 +22,14 @@ type BudgetAlertTarget struct {
 
 func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*model.UserSettings, error) {
 	var v model.UserSettings
-	var keyEnc *string
+	var anthropicKeyEnc *string
+	var openAIKeyEnc *string
 	err := r.db.QueryRow(ctx, `
 		SELECT user_id,
 		       anthropic_api_key_enc,
 		       anthropic_api_key_last4,
+		       openai_api_key_enc,
+		       openai_api_key_last4,
 		       monthly_budget_usd,
 		       budget_alert_enabled,
 		       budget_alert_threshold_pct,
@@ -37,8 +40,10 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		userID,
 	).Scan(
 		&v.UserID,
-		&keyEnc,
+		&anthropicKeyEnc,
 		&v.AnthropicAPIKeyLast4,
+		&openAIKeyEnc,
+		&v.OpenAIAPIKeyLast4,
 		&v.MonthlyBudgetUSD,
 		&v.BudgetAlertEnabled,
 		&v.BudgetAlertThresholdPct,
@@ -48,7 +53,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	if err != nil {
 		return nil, mapDBError(err)
 	}
-	v.HasAnthropicAPIKey = keyEnc != nil && *keyEnc != ""
+	v.HasAnthropicAPIKey = anthropicKeyEnc != nil && *anthropicKeyEnc != ""
+	v.HasOpenAIAPIKey = openAIKeyEnc != nil && *openAIKeyEnc != ""
 	return &v, nil
 }
 
@@ -106,6 +112,26 @@ func (r *UserSettingsRepo) UpsertBudgetConfig(ctx context.Context, userID string
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) GetOpenAIAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT openai_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1`,
+		userID,
+	).Scan(&v)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
 func (r *UserSettingsRepo) SetAnthropicAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, anthropic_api_key_enc, anthropic_api_key_last4)
@@ -122,6 +148,22 @@ func (r *UserSettingsRepo) SetAnthropicAPIKey(ctx context.Context, userID, encry
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetOpenAIAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, openai_api_key_enc, openai_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET openai_api_key_enc = EXCLUDED.openai_api_key_enc,
+		    openai_api_key_last4 = EXCLUDED.openai_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) ClearAnthropicAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, anthropic_api_key_enc, anthropic_api_key_last4)
@@ -129,6 +171,22 @@ func (r *UserSettingsRepo) ClearAnthropicAPIKey(ctx context.Context, userID stri
 		ON CONFLICT (user_id) DO UPDATE
 		SET anthropic_api_key_enc = NULL,
 		    anthropic_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearOpenAIAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, openai_api_key_enc, openai_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET openai_api_key_enc = NULL,
+		    openai_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

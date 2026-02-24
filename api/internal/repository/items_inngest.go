@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -12,6 +13,23 @@ import (
 type ItemInngestRepo struct{ db *pgxpool.Pool }
 
 func NewItemInngestRepo(db *pgxpool.Pool) *ItemInngestRepo { return &ItemInngestRepo{db} }
+
+type ItemEmbeddingCandidate struct {
+	ItemID   string
+	SourceID string
+	UserID   string
+	Title    *string
+	Summary  string
+	Topics   []string
+	Facts    []string
+}
+
+type ItemEmbeddingBackfillTarget struct {
+	ItemID   string
+	SourceID string
+	UserID   string
+	URL      string
+}
 
 func (r *ItemInngestRepo) UpdateAfterExtract(ctx context.Context, id, contentText string, title *string, publishedAt *time.Time) error {
 	_, err := r.db.Exec(ctx, `
@@ -77,6 +95,80 @@ func (r *ItemInngestRepo) MarkFailed(ctx context.Context, id string) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE items SET status = 'failed', updated_at = NOW() WHERE id = $1`, id)
 	return err
+}
+
+func (r *ItemInngestRepo) UpsertEmbedding(ctx context.Context, itemID, model string, embedding []float64) error {
+	if len(embedding) == 0 {
+		return nil
+	}
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO item_embeddings (item_id, model, dimensions, embedding)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (item_id) DO UPDATE SET
+		    model = EXCLUDED.model,
+		    dimensions = EXCLUDED.dimensions,
+		    embedding = EXCLUDED.embedding,
+		    updated_at = NOW()`,
+		itemID, model, len(embedding), embedding)
+	return err
+}
+
+func (r *ItemInngestRepo) GetEmbeddingCandidate(ctx context.Context, itemID string) (*ItemEmbeddingCandidate, error) {
+	var v ItemEmbeddingCandidate
+	err := r.db.QueryRow(ctx, `
+		SELECT i.id, i.source_id, src.user_id, i.title,
+		       sm.summary, COALESCE(sm.topics, '{}'::text[]), COALESCE(f.facts, '{}'::text[])
+		FROM items i
+		JOIN sources src ON src.id = i.source_id
+		JOIN item_summaries sm ON sm.item_id = i.id
+		LEFT JOIN item_facts f ON f.item_id = i.id
+		WHERE i.id = $1
+		  AND i.status = 'summarized'`, itemID).
+		Scan(&v.ItemID, &v.SourceID, &v.UserID, &v.Title, &v.Summary, &v.Topics, &v.Facts)
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func (r *ItemInngestRepo) ListEmbeddingBackfillTargets(ctx context.Context, userID *string, limit int) ([]ItemEmbeddingBackfillTarget, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	query := `
+		SELECT i.id, i.source_id, src.user_id, i.url
+		FROM items i
+		JOIN sources src ON src.id = i.source_id
+		JOIN item_summaries sm ON sm.item_id = i.id
+		LEFT JOIN item_embeddings ie ON ie.item_id = i.id
+		WHERE i.status = 'summarized'
+		  AND ie.item_id IS NULL`
+	args := []any{}
+	if userID != nil && *userID != "" {
+		args = append(args, *userID)
+		query += ` AND src.user_id = $1`
+	}
+	args = append(args, limit)
+	query += ` ORDER BY sm.summarized_at DESC LIMIT $` + strconv.Itoa(len(args))
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []ItemEmbeddingBackfillTarget
+	for rows.Next() {
+		var v ItemEmbeddingBackfillTarget
+		if err := rows.Scan(&v.ItemID, &v.SourceID, &v.UserID, &v.URL); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
 }
 
 func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID string, since, until time.Time) ([]model.DigestItemDetail, error) {

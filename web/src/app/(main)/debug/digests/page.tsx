@@ -23,6 +23,17 @@ type SendResponse = {
   to: string;
 };
 
+type EmbeddingBackfillResponse = {
+  status: string;
+  dry_run: boolean;
+  user_filter?: string | null;
+  limit: number;
+  matched: number;
+  queued_count: number;
+  failed_count: number;
+  targets?: unknown[];
+};
+
 async function postJSON<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
@@ -60,6 +71,11 @@ export default function DebugDigestsPage() {
   const [sendResult, setSendResult] = useState<SendResponse | null>(null);
   const [digestDetail, setDigestDetail] = useState<DigestDetail | null>(null);
   const [busyInspect, setBusyInspect] = useState(false);
+  const [backfillUserId, setBackfillUserId] = useState("");
+  const [backfillLimit, setBackfillLimit] = useState("100");
+  const [backfillDryRun, setBackfillDryRun] = useState(true);
+  const [busyBackfill, setBusyBackfill] = useState(false);
+  const [backfillResult, setBackfillResult] = useState<EmbeddingBackfillResponse | null>(null);
 
   const helperText = useMemo(
     () =>
@@ -128,6 +144,35 @@ export default function DebugDigestsPage() {
       showToast(String(e), "error");
     } finally {
       setBusyInspect(false);
+    }
+  };
+
+  const onBackfillEmbeddings = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusyBackfill(true);
+    setError(null);
+    setBackfillResult(null);
+    try {
+      const parsedLimit = Number(backfillLimit);
+      if (!Number.isFinite(parsedLimit) || parsedLimit < 1 || parsedLimit > 1000) {
+        throw new Error("limit must be between 1 and 1000");
+      }
+      const payload: { user_id?: string; limit: number; dry_run: boolean } = {
+        limit: parsedLimit,
+        dry_run: backfillDryRun,
+      };
+      if (backfillUserId.trim()) payload.user_id = backfillUserId.trim();
+      const res = await postJSON<EmbeddingBackfillResponse>("/api/debug/embeddings/backfill", payload);
+      setBackfillResult(res);
+      showToast(
+        backfillDryRun ? "Embedding backfill dry-run completed" : "Embedding backfill queued",
+        "success"
+      );
+    } catch (e) {
+      setError(String(e));
+      showToast(String(e), "error");
+    } finally {
+      setBusyBackfill(false);
     }
   };
 
@@ -240,6 +285,56 @@ export default function DebugDigestsPage() {
               </pre>
             )}
           </div>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold text-zinc-800">Embeddings Backfill (Debug)</h2>
+        <form onSubmit={onBackfillEmbeddings} className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="text-sm sm:col-span-2">
+              <div className="mb-1 text-xs font-medium text-zinc-600">User ID (optional)</div>
+              <input
+                value={backfillUserId}
+                onChange={(e) => setBackfillUserId(e.target.value)}
+                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                placeholder="all users if empty"
+              />
+            </label>
+            <label className="text-sm">
+              <div className="mb-1 text-xs font-medium text-zinc-600">Limit (1-1000)</div>
+              <input
+                type="number"
+                min={1}
+                max={1000}
+                value={backfillLimit}
+                onChange={(e) => setBackfillLimit(e.target.value)}
+                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              />
+            </label>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-zinc-700">
+            <input
+              type="checkbox"
+              checked={backfillDryRun}
+              onChange={(e) => setBackfillDryRun(e.target.checked)}
+              className="accent-zinc-900"
+            />
+            `dry_run`（候補確認だけしてキュー投入しない）
+          </label>
+          <button
+            type="submit"
+            disabled={busyBackfill}
+            className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {busyBackfill ? "実行中…" : backfillDryRun ? "Preview Backfill" : "Queue Backfill"}
+          </button>
+        </form>
+
+        {backfillResult && (
+          <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+            {JSON.stringify(backfillResult, null, 2)}
+          </pre>
         )}
       </section>
     </div>

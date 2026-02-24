@@ -15,6 +15,8 @@ type UserSettings struct {
 	UserID                 string     `json:"user_id"`
 	AnthropicAPIKeyLast4   *string    `json:"anthropic_api_key_last4,omitempty"`
 	HasAnthropicAPIKey     bool       `json:"has_anthropic_api_key"`
+	OpenAIAPIKeyLast4      *string    `json:"openai_api_key_last4,omitempty"`
+	HasOpenAIAPIKey        bool       `json:"has_openai_api_key"`
 	MonthlyBudgetUSD       *float64   `json:"monthly_budget_usd,omitempty"`
 	BudgetAlertEnabled     bool       `json:"budget_alert_enabled"`
 	BudgetAlertThresholdPct int       `json:"budget_alert_threshold_pct"`
@@ -81,6 +83,19 @@ type ItemDetail struct {
 	Item
 	Facts   *ItemFacts   `json:"facts,omitempty"`
 	Summary *ItemSummary `json:"summary,omitempty"`
+}
+
+type RelatedItem struct {
+	ID           string     `json:"id"`
+	SourceID      string     `json:"source_id"`
+	URL          string     `json:"url"`
+	Title        *string    `json:"title"`
+	Summary      *string    `json:"summary,omitempty"`
+	Topics       []string   `json:"topics,omitempty"`
+	SummaryScore *float64   `json:"summary_score,omitempty"`
+	Similarity   float64    `json:"similarity"`
+	PublishedAt  *time.Time `json:"published_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 type ItemListResponse struct {

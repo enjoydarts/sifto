@@ -12,14 +12,17 @@ export default function SettingsPage() {
   const { confirm } = useConfirm();
   const [loading, setLoading] = useState(true);
   const [savingBudget, setSavingBudget] = useState(false);
-  const [savingKey, setSavingKey] = useState(false);
-  const [deletingKey, setDeletingKey] = useState(false);
+  const [savingAnthropicKey, setSavingAnthropicKey] = useState(false);
+  const [deletingAnthropicKey, setDeletingAnthropicKey] = useState(false);
+  const [savingOpenAIKey, setSavingOpenAIKey] = useState(false);
+  const [deletingOpenAIKey, setDeletingOpenAIKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [budgetUSD, setBudgetUSD] = useState<string>("");
   const [alertEnabled, setAlertEnabled] = useState(false);
   const [thresholdPct, setThresholdPct] = useState<number>(20);
-  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [anthropicApiKeyInput, setAnthropicApiKeyInput] = useState("");
+  const [openAIApiKeyInput, setOpenAIApiKeyInput] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,25 +74,25 @@ export default function SettingsPage() {
     }
   }
 
-  async function submitApiKey(e: FormEvent) {
+  async function submitAnthropicApiKey(e: FormEvent) {
     e.preventDefault();
-    setSavingKey(true);
+    setSavingAnthropicKey(true);
     try {
-      if (!apiKeyInput.trim()) {
+      if (!anthropicApiKeyInput.trim()) {
         throw new Error(locale === "ja" ? "APIキーを入力してください" : "Enter API key");
       }
-      await api.setAnthropicApiKey(apiKeyInput.trim());
-      setApiKeyInput("");
+      await api.setAnthropicApiKey(anthropicApiKeyInput.trim());
+      setAnthropicApiKeyInput("");
       await load();
       showToast(locale === "ja" ? "Anthropic APIキーを保存しました" : "Anthropic API key saved", "success");
     } catch (e) {
       showToast(String(e), "error");
     } finally {
-      setSavingKey(false);
+      setSavingAnthropicKey(false);
     }
   }
 
-  async function handleDeleteApiKey() {
+  async function handleDeleteAnthropicApiKey() {
     if (!(await confirm({
       title: locale === "ja" ? "Anthropic APIキーを削除しますか？" : "Delete Anthropic API key?",
       message:
@@ -101,7 +104,7 @@ export default function SettingsPage() {
     }))) {
       return;
     }
-    setDeletingKey(true);
+    setDeletingAnthropicKey(true);
     try {
       await api.deleteAnthropicApiKey();
       await load();
@@ -109,7 +112,49 @@ export default function SettingsPage() {
     } catch (e) {
       showToast(String(e), "error");
     } finally {
-      setDeletingKey(false);
+      setDeletingAnthropicKey(false);
+    }
+  }
+
+  async function submitOpenAIApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingOpenAIKey(true);
+    try {
+      if (!openAIApiKeyInput.trim()) {
+        throw new Error(locale === "ja" ? "APIキーを入力してください" : "Enter API key");
+      }
+      await api.setOpenAIApiKey(openAIApiKeyInput.trim());
+      setOpenAIApiKeyInput("");
+      await load();
+      showToast(locale === "ja" ? "OpenAI APIキーを保存しました" : "OpenAI API key saved", "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingOpenAIKey(false);
+    }
+  }
+
+  async function handleDeleteOpenAIApiKey() {
+    if (!(await confirm({
+      title: locale === "ja" ? "OpenAI APIキーを削除しますか？" : "Delete OpenAI API key?",
+      message:
+        locale === "ja"
+          ? "削除後はこのユーザーのembedding生成が失敗します。再利用するには再設定が必要です。"
+          : "After deletion, embedding generation for this user will fail until a new key is configured.",
+      confirmLabel: locale === "ja" ? "削除" : "Delete",
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingOpenAIKey(true);
+    try {
+      await api.deleteOpenAIApiKey();
+      await load();
+      showToast(locale === "ja" ? "OpenAI APIキーを削除しました" : "OpenAI API key deleted", "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingOpenAIKey(false);
     }
   }
 
@@ -145,14 +190,14 @@ export default function SettingsPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.1fr_1fr]">
-        <form onSubmit={submitApiKey} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <form onSubmit={submitAnthropicApiKey} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
             <h2 className="text-base font-semibold text-zinc-900">
               {locale === "ja" ? "Anthropic APIキー（ユーザー別）" : "Anthropic API Key (Per User)"}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
               {locale === "ja"
-                ? "このユーザーの記事の事実抽出・要約・ダイジェスト生成に必須です。"
+                ? "このユーザーの記事の事実抽出・要約・ダイジェスト生成に使います。"
                 : "Required for this user's facts extraction, summaries, and digest generation."}
             </p>
           </div>
@@ -178,8 +223,8 @@ export default function SettingsPage() {
           <input
             type="password"
             autoComplete="off"
-            value={apiKeyInput}
-            onChange={(e) => setApiKeyInput(e.target.value)}
+            value={anthropicApiKeyInput}
+            onChange={(e) => setAnthropicApiKeyInput(e.target.value)}
             placeholder="sk-ant-..."
             className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-400"
           />
@@ -187,10 +232,10 @@ export default function SettingsPage() {
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="submit"
-              disabled={savingKey}
+              disabled={savingAnthropicKey}
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
-              {savingKey
+              {savingAnthropicKey
                 ? locale === "ja"
                   ? "保存中…"
                   : "Saving…"
@@ -200,11 +245,11 @@ export default function SettingsPage() {
             </button>
             <button
               type="button"
-              disabled={deletingKey || !settings.has_anthropic_api_key}
-              onClick={handleDeleteApiKey}
+              disabled={deletingAnthropicKey || !settings.has_anthropic_api_key}
+              onClick={handleDeleteAnthropicApiKey}
               className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
             >
-              {deletingKey
+              {deletingAnthropicKey
                 ? locale === "ja"
                   ? "削除中…"
                   : "Deleting…"
@@ -215,6 +260,79 @@ export default function SettingsPage() {
           </div>
         </form>
 
+        <form onSubmit={submitOpenAIApiKey} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-zinc-900">
+              {locale === "ja" ? "OpenAI APIキー（ユーザー別）" : "OpenAI API Key (Per User)"}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              {locale === "ja"
+                ? "このユーザーの記事 embedding 生成と関連記事判定に使います。"
+                : "Used for this user's embedding generation and related-article retrieval."}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+            {settings.has_openai_api_key ? (
+              <>
+                {locale === "ja" ? "設定済み" : "Configured"}{" "}
+                <span className="font-mono text-xs text-zinc-500">
+                  ••••{settings.openai_api_key_last4 ?? "****"}
+                </span>
+              </>
+            ) : (
+              <span className="text-zinc-500">
+                {locale === "ja" ? "未設定（embedding生成は実行不可）" : "Not set (embedding generation unavailable)"}
+              </span>
+            )}
+          </div>
+
+          <label className="mt-4 block text-sm font-medium text-zinc-700">
+            {locale === "ja" ? "新しいAPIキー" : "New API key"}
+          </label>
+          <input
+            type="password"
+            autoComplete="off"
+            value={openAIApiKeyInput}
+            onChange={(e) => setOpenAIApiKeyInput(e.target.value)}
+            placeholder="sk-..."
+            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-400"
+          />
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={savingOpenAIKey}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {savingOpenAIKey
+                ? locale === "ja"
+                  ? "保存中…"
+                  : "Saving…"
+                : locale === "ja"
+                  ? "保存 / 更新"
+                  : "Save / Update"}
+            </button>
+            <button
+              type="button"
+              disabled={deletingOpenAIKey || !settings.has_openai_api_key}
+              onClick={handleDeleteOpenAIApiKey}
+              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
+            >
+              {deletingOpenAIKey
+                ? locale === "ja"
+                  ? "削除中…"
+                  : "Deleting…"
+                : locale === "ja"
+                  ? "キーを削除"
+                  : "Delete key"}
+            </button>
+          </div>
+        </form>
+
+      </section>
+
+      <section>
         <form onSubmit={submitBudget} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
             <h2 className="text-base font-semibold text-zinc-900">

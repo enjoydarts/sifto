@@ -59,6 +59,25 @@ export interface ItemDetail extends Item {
   summary: ItemSummary | null;
 }
 
+export interface RelatedItem {
+  id: string;
+  source_id: string;
+  url: string;
+  title: string | null;
+  summary?: string | null;
+  topics?: string[];
+  summary_score?: number | null;
+  similarity: number;
+  published_at?: string | null;
+  created_at: string;
+}
+
+export interface RelatedItemsResponse {
+  item_id: string;
+  limit: number;
+  items: RelatedItem[];
+}
+
 export interface ItemRetryResult {
   item_id: string;
   status: "queued";
@@ -138,7 +157,7 @@ export interface LLMUsageLog {
   model: string;
   pricing_model_family?: string | null;
   pricing_source: string;
-  purpose: "facts" | "summary" | "digest" | string;
+  purpose: "facts" | "summary" | "digest" | "embedding" | string;
   input_tokens: number;
   output_tokens: number;
   cache_creation_input_tokens: number;
@@ -172,6 +191,8 @@ export interface UserSettings {
   user_id: string;
   has_anthropic_api_key: boolean;
   anthropic_api_key_last4: string | null;
+  has_openai_api_key: boolean;
+  openai_api_key_last4: string | null;
   monthly_budget_usd: number | null;
   budget_alert_enabled: boolean;
   budget_alert_threshold_pct: number;
@@ -240,6 +261,12 @@ export const api = {
   },
   getItemStats: () => apiFetch<ItemStats>("/items/stats"),
   getItem: (id: string) => apiFetch<ItemDetail>(`/items/${id}`),
+  getRelatedItems: (id: string, params?: { limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiFetch<RelatedItemsResponse>(`/items/${id}/related${qs ? `?${qs}` : ""}`);
+  },
   markItemRead: (id: string) =>
     apiFetch<ItemReadResult>(`/items/${id}/read`, { method: "POST" }),
   markItemUnread: (id: string) =>
@@ -288,6 +315,16 @@ export const api = {
   deleteAnthropicApiKey: () =>
     apiFetch<{ user_id: string; has_anthropic_api_key: boolean; anthropic_api_key_last4: string | null }>(
       "/settings/anthropic-key",
+      { method: "DELETE" }
+    ),
+  setOpenAIApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_openai_api_key: boolean; openai_api_key_last4: string | null }>(
+      "/settings/openai-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteOpenAIApiKey: () =>
+    apiFetch<{ user_id: string; has_openai_api_key: boolean; openai_api_key_last4: string | null }>(
+      "/settings/openai-key",
       { method: "DELETE" }
     ),
 

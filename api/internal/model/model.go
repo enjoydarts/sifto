@@ -41,6 +41,7 @@ type Item struct {
 	Title       *string    `json:"title"`
 	ContentText *string    `json:"content_text,omitempty"`
 	Status      string     `json:"status"` // new | fetched | facts_extracted | summarized | failed
+	IsRead      bool       `json:"is_read"`
 	SummaryScore *float64  `json:"summary_score,omitempty"`
 	SummaryTopics []string `json:"summary_topics,omitempty"`
 	PublishedAt *time.Time `json:"published_at,omitempty"`
@@ -80,6 +81,40 @@ type ItemDetail struct {
 	Item
 	Facts   *ItemFacts   `json:"facts,omitempty"`
 	Summary *ItemSummary `json:"summary,omitempty"`
+}
+
+type ItemListResponse struct {
+	Items     []Item `json:"items"`
+	Page      int    `json:"page"`
+	PageSize  int    `json:"page_size"`
+	Total     int    `json:"total"`
+	HasNext   bool   `json:"has_next"`
+	Sort      string `json:"sort"`
+	Status    *string `json:"status,omitempty"`
+	SourceID  *string `json:"source_id,omitempty"`
+}
+
+type ReadingPlanResponse struct {
+	Items           []Item `json:"items"`
+	Window          string `json:"window"`
+	Size            int    `json:"size"`
+	DiversifyTopics bool   `json:"diversify_topics"`
+	ExcludeRead     bool   `json:"exclude_read"`
+	SourcePoolCount int    `json:"source_pool_count"`
+	Topics          []ReadingPlanTopic `json:"topics"`
+}
+
+type ReadingPlanTopic struct {
+	Topic    string   `json:"topic"`
+	Count    int      `json:"count"`
+	MaxScore *float64 `json:"max_score,omitempty"`
+}
+
+type ItemStatsResponse struct {
+	Total    int         `json:"total"`
+	Read     int         `json:"read"`
+	Unread   int         `json:"unread"`
+	ByStatus map[string]int `json:"by_status"`
 }
 
 type Digest struct {

@@ -28,12 +28,72 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("source_id"); v != "" {
 		sourceID = &v
 	}
-	items, err := h.repo.List(r.Context(), userID, status, sourceID)
+	page := parseIntOrDefault(q.Get("page"), 1)
+	pageSize := parseIntOrDefault(q.Get("page_size"), 20)
+	if page < 1 || page > 100000 {
+		http.Error(w, "invalid page", http.StatusBadRequest)
+		return
+	}
+	if pageSize < 1 || pageSize > 200 {
+		http.Error(w, "invalid page_size", http.StatusBadRequest)
+		return
+	}
+	sort := q.Get("sort")
+	if sort == "" {
+		sort = "newest"
+	}
+	if sort != "newest" && sort != "score" {
+		http.Error(w, "invalid sort", http.StatusBadRequest)
+		return
+	}
+	unreadOnly := q.Get("unread_only") == "true"
+	resp, err := h.repo.ListPage(r.Context(), userID, repository.ItemListParams{
+		Status:    status,
+		SourceID:  sourceID,
+		UnreadOnly: unreadOnly,
+		Sort:      sort,
+		Page:      page,
+		PageSize:  pageSize,
+	})
 	if err != nil {
 		writeRepoError(w, err)
 		return
 	}
-	writeJSON(w, items)
+	writeJSON(w, resp)
+}
+
+func (h *ItemHandler) Stats(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	resp, err := h.repo.Stats(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, resp)
+}
+
+func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	q := r.URL.Query()
+	window := q.Get("window")
+	size := parseIntOrDefault(q.Get("size"), 15)
+	if size < 1 || size > 100 {
+		http.Error(w, "invalid size", http.StatusBadRequest)
+		return
+	}
+	diversify := q.Get("diversify_topics") != "false"
+	excludeRead := q.Get("exclude_read") != "false"
+	resp, err := h.repo.ReadingPlan(r.Context(), userID, repository.ReadingPlanParams{
+		Window:          window,
+		Size:            size,
+		DiversifyTopics: diversify,
+		ExcludeRead:     excludeRead,
+	})
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, resp)
 }
 
 func (h *ItemHandler) GetDetail(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +105,26 @@ func (h *ItemHandler) GetDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, item)
+}
+
+func (h *ItemHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	id := chi.URLParam(r, "id")
+	if err := h.repo.MarkRead(r.Context(), userID, id); err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"item_id": id, "is_read": true})
+}
+
+func (h *ItemHandler) MarkUnread(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	id := chi.URLParam(r, "id")
+	if err := h.repo.MarkUnread(r.Context(), userID, id); err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"item_id": id, "is_read": false})
 }
 
 func (h *ItemHandler) Retry(w http.ResponseWriter, r *http.Request) {

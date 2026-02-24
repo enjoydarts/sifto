@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, Digest, Item, LLMUsageDailySummary, Source } from "@/lib/api";
+import { api, Digest, Item, ItemStats, LLMUsageDailySummary, Source } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 
 export default function DashboardPage() {
@@ -11,20 +11,23 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [itemStats, setItemStats] = useState<ItemStats | null>(null);
   const [digests, setDigests] = useState<Digest[]>([]);
   const [llmSummary, setLlmSummary] = useState<LLMUsageDailySummary[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [srcs, its, dgs, llm] = await Promise.all([
+      const [srcs, its, stats, dgs, llm] = await Promise.all([
         api.getSources(),
-        api.getItems(),
+        api.getItems({ page: 1, page_size: 200 }),
+        api.getItemStats(),
         api.getDigests(),
         api.getLLMUsageSummary({ days: 7 }),
       ]);
       setSources(srcs ?? []);
-      setItems(its ?? []);
+      setItems(its?.items ?? []);
+      setItemStats(stats ?? null);
       setDigests(dgs ?? []);
       setLlmSummary(llm ?? []);
       setError(null);
@@ -41,9 +44,10 @@ export default function DashboardPage() {
 
   const itemStatus = useMemo(() => {
     const counts: Record<string, number> = {};
+    if (itemStats?.by_status) return { ...itemStats.by_status };
     for (const item of items) counts[item.status] = (counts[item.status] ?? 0) + 1;
     return counts;
-  }, [items]);
+  }, [itemStats, items]);
 
   const llmTotals = useMemo(() => {
     return llmSummary.reduce(
@@ -87,7 +91,7 @@ export default function DashboardPage() {
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Card label={t("dashboard.card.sources")} value={String(sources.length)} />
-        <Card label={t("dashboard.card.items")} value={String(items.length)} />
+        <Card label={t("dashboard.card.items")} value={String(itemStats?.total ?? items.length)} />
         <Card label={t("dashboard.card.failedItems")} value={String(itemStatus.failed ?? 0)} />
         <Card label={t("dashboard.card.digests")} value={String(digests.length)} />
         <Card label={t("dashboard.card.llmCalls")} value={String(llmTotals.calls)} />
@@ -105,7 +109,7 @@ export default function DashboardPage() {
           <div className="space-y-2">
             {(["new", "fetched", "facts_extracted", "summarized", "failed"] as const).map((key) => {
               const count = itemStatus[key] ?? 0;
-              const total = Math.max(1, items.length);
+              const total = Math.max(1, itemStats?.total ?? items.length);
               const ratio = (count / total) * 100;
               return (
                 <div key={key}>

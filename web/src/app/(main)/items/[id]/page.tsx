@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api, ItemDetail } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
+import { useToast } from "@/components/toast-provider";
 
 const STATUS_COLOR: Record<string, string> = {
   new: "bg-zinc-100 text-zinc-600",
@@ -16,10 +17,12 @@ const STATUS_COLOR: Record<string, string> = {
 
 export default function ItemDetailPage() {
   const { t, locale } = useI18n();
+  const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [readUpdating, setReadUpdating] = useState(false);
 
   useEffect(() => {
     api
@@ -30,6 +33,30 @@ export default function ItemDetailPage() {
   }, [id]);
 
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
+
+  const toggleRead = async () => {
+    if (!item) return;
+    setReadUpdating(true);
+    try {
+      const next = item.is_read ? await api.markItemUnread(item.id) : await api.markItemRead(item.id);
+      setItem({ ...item, is_read: next.is_read });
+      showToast(
+        next.is_read
+          ? locale === "ja"
+            ? "既読にしました"
+            : "Marked as read"
+          : locale === "ja"
+            ? "未読に戻しました"
+            : "Marked as unread",
+        "success"
+      );
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setReadUpdating(false);
+    }
+  };
 
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
@@ -56,6 +83,24 @@ export default function ItemDetailPage() {
             </span>
           )}
           <span className="text-xs text-zinc-400">id: {item.id}</span>
+          <button
+            type="button"
+            onClick={toggleRead}
+            disabled={readUpdating}
+            className="ml-auto rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {readUpdating
+              ? locale === "ja"
+                ? "更新中..."
+                : "Updating..."
+              : item.is_read
+                ? locale === "ja"
+                  ? "未読に戻す"
+                  : "Mark unread"
+                : locale === "ja"
+                  ? "既読にする"
+                  : "Mark read"}
+          </button>
         </div>
 
         <h1 className="mb-2 text-2xl font-bold leading-snug text-zinc-900">

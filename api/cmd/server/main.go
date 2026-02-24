@@ -80,8 +80,12 @@ func main() {
 
 		r.Route("/items", func(r chi.Router) {
 			r.Get("/", itemH.List)
+			r.Get("/stats", itemH.Stats)
 			r.Post("/retry-failed", itemH.RetryFailed)
+			r.Get("/reading-plan", itemH.ReadingPlan)
 			r.Get("/{id}", itemH.GetDetail)
+			r.Post("/{id}/read", itemH.MarkRead)
+			r.Delete("/{id}/read", itemH.MarkUnread)
 			r.Post("/{id}/retry", itemH.Retry)
 		})
 

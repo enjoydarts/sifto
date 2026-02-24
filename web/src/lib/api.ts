@@ -20,6 +20,7 @@ export interface Item {
   title: string | null;
   content_text: string | null;
   status: "new" | "fetched" | "facts_extracted" | "summarized" | "failed";
+  is_read: boolean;
   summary_score?: number | null;
   summary_topics?: string[];
   published_at: string | null;
@@ -61,6 +62,39 @@ export interface ItemDetail extends Item {
 export interface ItemRetryResult {
   item_id: string;
   status: "queued";
+}
+
+export interface ItemReadResult {
+  item_id: string;
+  is_read: boolean;
+}
+
+export interface ItemListResponse {
+  items: Item[];
+  page: number;
+  page_size: number;
+  total: number;
+  has_next: boolean;
+  sort: "newest" | "score" | string;
+  status?: string | null;
+  source_id?: string | null;
+}
+
+export interface ReadingPlanResponse {
+  items: Item[];
+  window: "24h" | "today_jst" | "7d" | string;
+  size: number;
+  diversify_topics: boolean;
+  exclude_read: boolean;
+  source_pool_count: number;
+  topics: { topic: string; count: number; max_score?: number | null }[];
+}
+
+export interface ItemStats {
+  total: number;
+  read: number;
+  unread: number;
+  by_status: Record<string, number>;
 }
 
 export interface BulkRetryFailedResult {
@@ -179,14 +213,37 @@ export const api = {
     ),
 
   // Items
-  getItems: (params?: { status?: string; source_id?: string }) => {
+  getItems: (params?: { status?: string; source_id?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.source_id) q.set("source_id", params.source_id);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.page_size) q.set("page_size", String(params.page_size));
+    if (params?.sort) q.set("sort", params.sort);
+    if (params?.unread_only != null) q.set("unread_only", String(params.unread_only));
     const qs = q.toString();
-    return apiFetch<Item[]>(`/items${qs ? `?${qs}` : ""}`);
+    return apiFetch<ItemListResponse>(`/items${qs ? `?${qs}` : ""}`);
   },
+  getReadingPlan: (params?: {
+    window?: "24h" | "today_jst" | "7d";
+    size?: number;
+    diversify_topics?: boolean;
+    exclude_read?: boolean;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.window) q.set("window", params.window);
+    if (params?.size) q.set("size", String(params.size));
+    if (params?.diversify_topics != null) q.set("diversify_topics", String(params.diversify_topics));
+    if (params?.exclude_read != null) q.set("exclude_read", String(params.exclude_read));
+    const qs = q.toString();
+    return apiFetch<ReadingPlanResponse>(`/items/reading-plan${qs ? `?${qs}` : ""}`);
+  },
+  getItemStats: () => apiFetch<ItemStats>("/items/stats"),
   getItem: (id: string) => apiFetch<ItemDetail>(`/items/${id}`),
+  markItemRead: (id: string) =>
+    apiFetch<ItemReadResult>(`/items/${id}/read`, { method: "POST" }),
+  markItemUnread: (id: string) =>
+    apiFetch<ItemReadResult>(`/items/${id}/read`, { method: "DELETE" }),
   retryItem: (id: string) =>
     apiFetch<ItemRetryResult>(`/items/${id}/retry`, { method: "POST" }),
   retryFailedItems: (params?: { source_id?: string }) => {

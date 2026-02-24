@@ -31,7 +31,12 @@ export default function ItemsPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const [items, setItems] = useState<Item[]>([]);
+  const [itemsTotal, setItemsTotal] = useState(0);
+  const [planPoolCount, setPlanPoolCount] = useState(0);
+  const [planTopics, setPlanTopics] = useState<{ label: string; count: number; maxScore: number }[]>([]);
+  const [planLoading, setPlanLoading] = useState(false);
   const [filter, setFilter] = useState("");
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [focusMode, setFocusMode] = useState(true);
@@ -39,37 +44,83 @@ export default function ItemsPage() {
   const [focusSize, setFocusSize] = useState<FocusSize>(15);
   const [focusWindow, setFocusWindow] = useState<FocusWindow>("24h");
   const [diversifyTopics, setDiversifyTopics] = useState(true);
+  const [excludeReadInPlan, setExcludeReadInPlan] = useState(true);
   const pageSize = 20;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryingIds, setRetryingIds] = useState<Record<string, boolean>>({});
+  const [readUpdatingIds, setReadUpdatingIds] = useState<Record<string, boolean>>({});
 
-  const load = useCallback(async (status: string) => {
+  const load = useCallback(async (status: string, pageNum: number, sort: SortMode) => {
     setLoading(true);
     try {
-      const data = await api.getItems(status ? { status } : undefined);
-      setItems(data ?? []);
+      const data = await api.getItems({
+        ...(status ? { status } : {}),
+        page: pageNum,
+        page_size: pageSize,
+        sort,
+        unread_only: unreadOnly,
+      });
+      setItems(data?.items ?? []);
+      setItemsTotal(data?.total ?? 0);
       setError(null);
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [unreadOnly]);
+
+  const loadReadingPlan = useCallback(async () => {
+    if (!focusMode) return;
+    setPlanLoading(true);
+    try {
+      const data = await api.getReadingPlan({
+        window: focusWindow,
+        size: focusSize,
+        diversify_topics: diversifyTopics,
+        exclude_read: excludeReadInPlan,
+      });
+      setPlanPoolCount(data?.source_pool_count ?? 0);
+      setPlanTopics(
+        (data?.topics ?? []).map((t) => ({
+          label:
+            t.topic === "__untagged__"
+              ? locale === "ja"
+                ? "未分類"
+                : "Other"
+              : t.topic,
+          count: t.count,
+          maxScore: t.max_score ?? -1,
+        }))
+      );
+      // Reuse items state only while focus mode is on; keeps rendering path simple.
+      setItems(data?.items ?? []);
+      setItemsTotal(data?.items?.length ?? 0);
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPlanLoading(false);
+    }
+  }, [excludeReadInPlan, diversifyTopics, focusMode, focusSize, focusWindow, locale]);
 
   useEffect(() => {
     setPage(1);
-    load(filter);
-  }, [filter, load]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [sortMode]);
+  }, [filter, sortMode, unreadOnly]);
 
   useEffect(() => {
     if (focusMode) setSortMode("score");
     setPage(1);
-  }, [focusMode, focusSize, focusWindow, diversifyTopics]);
+  }, [focusMode, focusSize, focusWindow, diversifyTopics, excludeReadInPlan]);
+
+  useEffect(() => {
+    if (focusMode) {
+      loadReadingPlan();
+      return;
+    }
+    load(filter, page, sortMode);
+  }, [focusMode, loadReadingPlan, load, filter, page, sortMode]);
 
   const retryItem = useCallback(
     async (itemId: string) => {
@@ -77,7 +128,11 @@ export default function ItemsPage() {
       try {
         await api.retryItem(itemId);
         showToast(locale === "ja" ? "再試行をキュー投入しました" : "Retry queued", "success");
-        await load(filter);
+        if (focusMode) {
+          await loadReadingPlan();
+        } else {
+          await load(filter, page, sortMode);
+        }
       } catch (e) {
         setError(String(e));
         showToast(`${t("common.error")}: ${String(e)}`, "error");
@@ -89,7 +144,35 @@ export default function ItemsPage() {
         });
       }
     },
-    [filter, load, locale, showToast, t]
+    [filter, focusMode, load, loadReadingPlan, locale, page, showToast, sortMode, t]
+  );
+
+  const toggleRead = useCallback(
+    async (item: Item) => {
+      setReadUpdatingIds((prev) => ({ ...prev, [item.id]: true }));
+      try {
+        if (item.is_read) {
+          await api.markItemUnread(item.id);
+          showToast(locale === "ja" ? "未読に戻しました" : "Marked as unread", "success");
+        } else {
+          await api.markItemRead(item.id);
+          showToast(locale === "ja" ? "既読にしました" : "Marked as read", "success");
+        }
+        setItems((prev) =>
+          prev.map((v) => (v.id === item.id ? { ...v, is_read: !item.is_read } : v))
+        );
+      } catch (e) {
+        setError(String(e));
+        showToast(`${t("common.error")}: ${String(e)}`, "error");
+      } finally {
+        setReadUpdatingIds((prev) => {
+          const next = { ...prev };
+          delete next[item.id];
+          return next;
+        });
+      }
+    },
+    [locale, showToast, t]
   );
 
   const sortedItems = [...items].sort((a, b) => {
@@ -131,7 +214,11 @@ export default function ItemsPage() {
         return true;
     }
   };
-  const focusSourceItems = summarizedRanked.filter(inFocusWindow);
+  const focusSourceItems = summarizedRanked.filter((item) => {
+    if (!inFocusWindow(item)) return false;
+    if (excludeReadInPlan && item.is_read) return false;
+    return true;
+  });
 
   const focusCandidates = (sortMode === "score" ? focusSourceItems : [...focusSourceItems].sort((a, b) => {
     const as = a.summary_score ?? -1;
@@ -170,6 +257,7 @@ export default function ItemsPage() {
   }
 
   const topicSummary = (() => {
+    if (focusMode && planTopics.length > 0) return planTopics;
     const m = new Map<string, { label: string; count: number; maxScore: number }>();
     for (const item of focusSourceItems) {
       const topics = item.summary_topics?.length ? item.summary_topics : [locale === "ja" ? "未分類" : "Other"];
@@ -187,8 +275,8 @@ export default function ItemsPage() {
       .slice(0, 12);
   })();
 
-  const displayItems = focusMode ? focusItems : sortedItems;
-  const pagedItems = displayItems.slice((page - 1) * pageSize, page * pageSize);
+  const displayItems = focusMode ? items : sortedItems;
+  const pagedItems = focusMode ? displayItems : sortedItems;
 
   return (
     <div className="space-y-4">
@@ -196,12 +284,12 @@ export default function ItemsPage() {
         <div>
           <h1 className="text-2xl font-bold">{t("items.title")}</h1>
           <p className="mt-1 text-sm text-zinc-500">
-            {(focusMode ? displayItems.length : items.length).toLocaleString()} {t("common.rows")}
+            {(focusMode ? displayItems.length : itemsTotal).toLocaleString()} {t("common.rows")}
             {focusMode && (
               <span className="ml-2 text-zinc-400">
                 {locale === "ja"
-                  ? `（対象 ${focusSourceItems.length.toLocaleString()} 件 / 全 ${items.length.toLocaleString()} 件）`
-                  : `(${focusSourceItems.length.toLocaleString()} in window / ${items.length.toLocaleString()} total)`}
+                  ? `（対象 ${planPoolCount.toLocaleString()} 件から厳選）`
+                  : `(selected from ${planPoolCount.toLocaleString()} items in window)`}
               </span>
             )}
           </p>
@@ -250,11 +338,13 @@ export default function ItemsPage() {
               {locale === "ja"
                 ? `対象: ${focusWindow === "24h" ? "過去24時間" : focusWindow === "today_jst" ? "今日(JST)" : "過去7日"} / ${
                     focusSize === 7 ? "クイック" : focusSize === 15 ? "標準" : "しっかり"
-                  } / ${diversifyTopics ? "トピック分散" : "スコア優先"}`
+                  } / ${diversifyTopics ? "トピック分散" : "スコア優先"} / ${excludeReadInPlan ? "未読優先" : "既読含む"}`
                 : `Window: ${
                     focusWindow === "24h" ? "Last 24h" : focusWindow === "today_jst" ? "Today (JST)" : "Last 7d"
                   } / ${focusSize === 7 ? "Quick" : focusSize === 15 ? "Standard" : "Deep"} / ${
                     diversifyTopics ? "Diversified" : "Score-first"
+                  } / ${
+                    excludeReadInPlan ? "Unread first" : "Include read"
                   }`}
             </div>
           </div>
@@ -341,15 +431,26 @@ export default function ItemsPage() {
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
               {locale === "ja" ? "選び方" : "Selection"}
             </div>
-            <label className="inline-flex items-center gap-2 text-xs text-zinc-700">
-              <input
-                type="checkbox"
-                checked={diversifyTopics}
-                onChange={(e) => setDiversifyTopics(e.target.checked)}
-                className="size-3.5 rounded border-zinc-300"
-              />
-              {locale === "ja" ? "トピックを散らして偏りを減らす" : "Reduce topic duplication"}
-            </label>
+            <div className="space-y-2">
+              <label className="inline-flex items-center gap-2 text-xs text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={diversifyTopics}
+                  onChange={(e) => setDiversifyTopics(e.target.checked)}
+                  className="size-3.5 rounded border-zinc-300"
+                />
+                {locale === "ja" ? "トピックを散らして偏りを減らす" : "Reduce topic duplication"}
+              </label>
+              <label className="inline-flex items-center gap-2 text-xs text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={excludeReadInPlan}
+                  onChange={(e) => setExcludeReadInPlan(e.target.checked)}
+                  className="size-3.5 rounded border-zinc-300"
+                />
+                {locale === "ja" ? "既読を除外して未読を優先" : "Prioritize unread (exclude read)"}
+              </label>
+            </div>
           </div>
         </div>
         )}
@@ -372,7 +473,7 @@ export default function ItemsPage() {
       </section>
 
       {/* Filter tabs */}
-      <div className="mb-4 flex flex-wrap gap-1">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         {FILTERS.map((value) => (
           <button
             key={value}
@@ -386,20 +487,33 @@ export default function ItemsPage() {
             {t(`items.filter.${value || "all"}`)}
           </button>
         ))}
+        {!focusMode && (
+          <label className="ml-auto inline-flex items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700">
+            <input
+              type="checkbox"
+              checked={unreadOnly}
+              onChange={(e) => setUnreadOnly(e.target.checked)}
+              className="size-4 rounded border-zinc-300"
+            />
+            {locale === "ja" ? "未読のみ" : "Unread only"}
+          </label>
+        )}
       </div>
 
       {/* State */}
-      {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
+      {(loading || planLoading) && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
       {error && <p className="text-sm text-red-500">{error}</p>}
-      {!loading && items.length === 0 && (
+      {!loading && !planLoading && items.length === 0 && (
         <p className="text-sm text-zinc-400">{t("items.empty")}</p>
       )}
 
       {/* List */}
-      <ul className="space-y-2">
+	      <ul className="space-y-2">
         {pagedItems.map((item) => (
 	          <li key={item.id}>
-	            <div className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm">
+	            <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 shadow-sm ${
+                item.is_read ? "border-zinc-200 bg-zinc-50/70" : "border-zinc-200 bg-white"
+              }`}>
 	              <Link
 	                href={`/items/${item.id}`}
 	                className="flex min-w-0 flex-1 items-start gap-3 transition-colors hover:text-zinc-700"
@@ -413,7 +527,7 @@ export default function ItemsPage() {
 	                </span>
 	                <div className="min-w-0 flex-1">
 	                  <div className="flex items-start gap-2">
-	                    <div className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900">
+	                    <div className={`min-w-0 flex-1 truncate text-sm font-medium ${item.is_read ? "text-zinc-600" : "text-zinc-900"}`}>
 	                      {item.title ?? item.url}
 	                    </div>
 	                    {item.summary_score != null ? (
@@ -456,28 +570,57 @@ export default function ItemsPage() {
 	                          : "Not scored"}
 	                    </span>
 	                  </div>
-	                  <div className="mt-0.5 text-xs text-zinc-400">
+	                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+                      {item.is_read && (
+                        <span className="rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-500">
+                          {locale === "ja" ? "既読" : "Read"}
+                        </span>
+                      )}
+                      <span>
 	                    {new Date(
 	                      item.published_at ?? item.created_at
 	                    ).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US")}
+                      </span>
 	                  </div>
 	                </div>
 	              </Link>
-	              {item.status === "failed" && (
-	                <button
-	                  type="button"
-	                  disabled={!!retryingIds[item.id]}
-	                  onClick={() => retryItem(item.id)}
-	                  className="shrink-0 rounded border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-	                >
-	                  {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
-	                </button>
-	              )}
+                <div className="flex shrink-0 flex-col items-end gap-2">
+                  <button
+                    type="button"
+                    disabled={!!readUpdatingIds[item.id]}
+                    onClick={() => toggleRead(item)}
+                    className="rounded border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {readUpdatingIds[item.id]
+                      ? locale === "ja"
+                        ? "更新中..."
+                        : "Updating..."
+                      : item.is_read
+                        ? locale === "ja"
+                          ? "未読に戻す"
+                          : "Mark unread"
+                        : locale === "ja"
+                          ? "既読にする"
+                          : "Mark read"}
+                  </button>
+	                {item.status === "failed" && (
+	                  <button
+	                    type="button"
+	                    disabled={!!retryingIds[item.id]}
+	                    onClick={() => retryItem(item.id)}
+	                    className="rounded border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+	                  >
+	                    {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
+	                  </button>
+	                )}
+                </div>
 	            </div>
 	          </li>
 	        ))}
 	      </ul>
-      <Pagination total={displayItems.length} page={page} pageSize={pageSize} onPageChange={setPage} />
+      {!focusMode && (
+        <Pagination total={itemsTotal} page={page} pageSize={pageSize} onPageChange={setPage} />
+      )}
     </div>
   );
 }

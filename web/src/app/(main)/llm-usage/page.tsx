@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Brain, CalendarDays, ReceiptText } from "lucide-react";
 import { api, LLMUsageDailySummary, LLMUsageLog } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
@@ -98,7 +99,10 @@ export default function LLMUsagePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">LLM Usage</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            <Brain className="size-6 text-zinc-500" aria-hidden="true" />
+            <span>LLM Usage</span>
+          </h1>
           <p className="mt-1 text-sm text-zinc-500">
             {t("llm.subtitle")}
           </p>
@@ -157,7 +161,10 @@ export default function LLMUsagePage() {
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-800">{t("llm.dailySummary")}</h2>
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+            <CalendarDays className="size-4 text-zinc-500" aria-hidden="true" />
+            <span>{t("llm.dailySummary")}</span>
+          </h2>
           <span className="text-xs text-zinc-400">{summaryRows.length} rows</span>
         </div>
         {groupedByDate.length === 0 ? (
@@ -212,7 +219,10 @@ export default function LLMUsagePage() {
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-800">{t("llm.recentLogs")}</h2>
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+            <ReceiptText className="size-4 text-zinc-500" aria-hidden="true" />
+            <span>{t("llm.recentLogs")}</span>
+          </h2>
           <span className="text-xs text-zinc-400">{logs.length} rows</span>
         </div>
         {logs.length === 0 ? (

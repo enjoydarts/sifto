@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BarChart3, Brain, LayoutDashboard, Mail } from "lucide-react";
 import { api, Digest, Item, ItemStats, LLMUsageDailySummary, Source } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 
@@ -74,7 +75,10 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("dashboard.title")}</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+            <LayoutDashboard className="size-6 text-zinc-500" aria-hidden="true" />
+            <span>{t("dashboard.title")}</span>
+          </h1>
           <p className="mt-1 text-sm text-zinc-500">{t("dashboard.subtitle")}</p>
         </div>
         <button
@@ -101,7 +105,10 @@ export default function DashboardPage() {
       <section className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
         <div className="rounded-xl border border-zinc-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-800">{t("dashboard.section.itemsStatus")}</h2>
+            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+              <BarChart3 className="size-4 text-zinc-500" aria-hidden="true" />
+              <span>{t("dashboard.section.itemsStatus")}</span>
+            </h2>
             <Link href="/items" className="text-xs text-zinc-500 hover:text-zinc-900">
               {locale === "ja" ? "記事一覧へ" : "Open Items"}
             </Link>
@@ -128,7 +135,10 @@ export default function DashboardPage() {
 
         <div className="rounded-xl border border-zinc-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-800">{t("dashboard.section.latestDigests")}</h2>
+            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+              <Mail className="size-4 text-zinc-500" aria-hidden="true" />
+              <span>{t("dashboard.section.latestDigests")}</span>
+            </h2>
             <Link href="/digests" className="text-xs text-zinc-500 hover:text-zinc-900">
               {locale === "ja" ? "一覧へ" : "View all"}
             </Link>
@@ -166,7 +176,10 @@ export default function DashboardPage() {
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-800">{t("dashboard.section.llmSummary")}</h2>
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+            <Brain className="size-4 text-zinc-500" aria-hidden="true" />
+            <span>{t("dashboard.section.llmSummary")}</span>
+          </h2>
           <Link href="/llm-usage" className="text-xs text-zinc-500 hover:text-zinc-900">
             {locale === "ja" ? "LLM利用へ" : "Open LLM Usage"}
           </Link>

@@ -5,16 +5,26 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
+import {
+  LayoutDashboard,
+  Newspaper,
+  Rss,
+  Mail,
+  Brain,
+  Settings as SettingsIcon,
+  Bug,
+  type LucideIcon,
+} from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 
 const links = [
-  { href: "/", labelKey: "dashboard.title" },
-  { href: "/items", labelKey: "nav.items" },
-  { href: "/sources", labelKey: "nav.sources" },
-  { href: "/digests", labelKey: "nav.digests" },
-  { href: "/llm-usage", labelKey: "nav.llmUsage" },
-  { href: "/settings", labelKey: "nav.settings" },
-  { href: "/debug/digests", labelKey: "nav.debug" },
+  { href: "/", labelKey: "dashboard.title", icon: LayoutDashboard },
+  { href: "/items", labelKey: "nav.items", icon: Newspaper },
+  { href: "/sources", labelKey: "nav.sources", icon: Rss },
+  { href: "/digests", labelKey: "nav.digests", icon: Mail },
+  { href: "/llm-usage", labelKey: "nav.llmUsage", icon: Brain },
+  { href: "/settings", labelKey: "nav.settings", icon: SettingsIcon },
+  { href: "/debug/digests", labelKey: "nav.debug", icon: Bug },
 ];
 
 export default function Nav() {
@@ -59,19 +69,23 @@ export default function Nav() {
 
         <div className="mt-2 hidden items-center gap-2 md:flex">
           <nav className="flex min-w-0 flex-1 flex-wrap gap-1">
-            {links.map(({ href, labelKey }) => (
-              <Link
-                key={href}
-                href={href}
-                className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-                  isActive(href)
-                    ? "bg-zinc-900 text-white"
-                    : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
-                }`}
-              >
-                {t(labelKey)}
-              </Link>
-            ))}
+            {links.map(({ href, labelKey, icon: Icon }) => {
+              const active = isActive(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={`inline-flex items-center gap-2 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                    active
+                      ? "bg-zinc-900 text-white"
+                      : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+                  }`}
+                >
+                  <NavIcon icon={Icon} />
+                  <span>{t(labelKey)}</span>
+                </Link>
+              );
+            })}
           </nav>
           {session?.user && (
             <>
@@ -91,20 +105,24 @@ export default function Nav() {
         {menuOpen && (
           <div className="mt-2 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm md:hidden">
             <nav className="grid gap-1">
-              {links.map(({ href, labelKey }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setMenuOpen(false)}
-                  className={`rounded px-3 py-2 text-sm font-medium ${
-                    isActive(href)
-                      ? "bg-zinc-900 text-white"
-                      : "text-zinc-700 hover:bg-zinc-50"
-                  }`}
-                >
-                  {t(labelKey)}
-                </Link>
-              ))}
+              {links.map(({ href, labelKey, icon: Icon }) => {
+                const active = isActive(href);
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setMenuOpen(false)}
+                    className={`inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium ${
+                      active
+                        ? "bg-zinc-900 text-white"
+                        : "text-zinc-700 hover:bg-zinc-50"
+                    }`}
+                  >
+                    <NavIcon icon={Icon} />
+                    <span>{t(labelKey)}</span>
+                  </Link>
+                );
+              })}
             </nav>
             {session?.user && (
               <div className="mt-2 border-t border-zinc-100 px-2 pt-2">
@@ -124,4 +142,8 @@ export default function Nav() {
       </div>
     </header>
   );
+}
+
+function NavIcon({ icon: Icon }: { icon: LucideIcon }) {
+  return <Icon className="size-4 shrink-0" strokeWidth={2} aria-hidden="true" />;
 }

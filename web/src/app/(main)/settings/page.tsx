@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Brain, Coins, KeyRound, Settings as SettingsIcon } from "lucide-react";
 import { api, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -194,7 +195,10 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t("settings.title")}</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+          <SettingsIcon className="size-6 text-zinc-500" aria-hidden="true" />
+          <span>{t("settings.title")}</span>
+        </h1>
         <p className="mt-1 text-sm text-zinc-500">{t("settings.subtitle")}</p>
       </div>
 
@@ -221,7 +225,8 @@ export default function SettingsPage() {
       <section className="grid gap-6 xl:grid-cols-[1.1fr_1fr]">
         <form onSubmit={submitAnthropicApiKey} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-base font-semibold text-zinc-900">
+            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+              <KeyRound className="size-4 text-zinc-500" aria-hidden="true" />
               {locale === "ja" ? "Anthropic APIキー（ユーザー別）" : "Anthropic API Key (Per User)"}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
@@ -291,7 +296,8 @@ export default function SettingsPage() {
 
         <form onSubmit={submitOpenAIApiKey} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-base font-semibold text-zinc-900">
+            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+              <KeyRound className="size-4 text-zinc-500" aria-hidden="true" />
               {locale === "ja" ? "OpenAI APIキー（ユーザー別）" : "OpenAI API Key (Per User)"}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
@@ -364,7 +370,8 @@ export default function SettingsPage() {
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <form onSubmit={submitReadingPlan} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-base font-semibold text-zinc-900">
+            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+              <Brain className="size-4 text-zinc-500" aria-hidden="true" />
               {locale === "ja" ? "おすすめ記事設定" : "Recommended Feed Settings"}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
@@ -429,7 +436,8 @@ export default function SettingsPage() {
         <div>
         <form onSubmit={submitBudget} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-base font-semibold text-zinc-900">
+            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+              <Coins className="size-4 text-zinc-500" aria-hidden="true" />
               {locale === "ja" ? "月次LLM予算と警告" : "Monthly LLM Budget & Alerts"}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">

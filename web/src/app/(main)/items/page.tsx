@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Newspaper } from "lucide-react";
 import { api, Item } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import Pagination from "@/components/pagination";
@@ -391,7 +392,10 @@ function ItemsPageContent() {
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">{t("items.title")}</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold">
+            <Newspaper className="size-6 text-zinc-500" aria-hidden="true" />
+            <span>{t("items.title")}</span>
+          </h1>
           <p className="mt-1 text-sm text-zinc-500">
             {(focusMode ? displayItems.length : itemsTotal).toLocaleString()} {t("common.rows")}
             {focusMode && (

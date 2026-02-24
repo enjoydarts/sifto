@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
+import { AlignLeft, FileText, Link2, ListChecks, Sparkles } from "lucide-react";
 import { api, ItemDetail, RelatedItem } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -141,9 +142,12 @@ export default function ItemDetailPage() {
           </button>
         </div>
 
-        <h1 className="mb-2 text-2xl font-bold leading-snug text-zinc-900">
-          {item.title ?? (locale === "ja" ? "タイトルなし" : "No title")}
-        </h1>
+        <div className="mb-2 flex items-start gap-2">
+          <FileText className="mt-1 size-5 shrink-0 text-zinc-500" aria-hidden="true" />
+          <h1 className="text-2xl font-bold leading-snug text-zinc-900">
+            {item.title ?? (locale === "ja" ? "タイトルなし" : "No title")}
+          </h1>
+        </div>
         <a
           href={item.url}
           target="_blank"
@@ -180,7 +184,8 @@ export default function ItemDetailPage() {
       {item.summary && (
         <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-semibold text-zinc-800">
+            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+              <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
               {locale === "ja" ? "要約" : "Summary"}
             </h2>
             {item.summary.score != null && (
@@ -247,7 +252,8 @@ export default function ItemDetailPage() {
 
       {item.facts && item.facts.facts.length > 0 && (
         <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-700">
+          <h2 className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
+            <ListChecks className="size-4 text-zinc-500" aria-hidden="true" />
             {locale === "ja" ? "事実抽出" : "Facts"}
           </h2>
           <ul className="space-y-2">
@@ -263,7 +269,8 @@ export default function ItemDetailPage() {
 
       {item.content_text && (
         <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-700">
+          <h2 className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
+            <AlignLeft className="size-4 text-zinc-500" aria-hidden="true" />
             {locale === "ja" ? "本文" : "Content"}
           </h2>
           <div className="-mx-1 max-h-[40rem] overflow-y-auto px-1 text-[15px] leading-8 whitespace-pre-wrap text-zinc-700 sm:mx-0 sm:rounded-lg sm:border sm:border-zinc-200 sm:bg-zinc-50 sm:p-4 sm:text-sm sm:leading-relaxed">
@@ -274,7 +281,8 @@ export default function ItemDetailPage() {
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-zinc-700">
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
+            <Link2 className="size-4 text-zinc-500" aria-hidden="true" />
             {locale === "ja" ? "関連記事" : "Related articles"}
           </h2>
           <span className="text-xs text-zinc-400">{related.length}</span>

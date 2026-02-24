@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "rea
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image as ImageIcon, Newspaper } from "lucide-react";
+import { Image as ImageIcon, Newspaper, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, Item } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import Pagination from "@/components/pagination";
@@ -55,13 +55,14 @@ function ItemsPageContent() {
       qFilter && FILTERS.includes(qFilter as (typeof FILTERS)[number]) ? qFilter : "";
 
     const unreadOnly = searchParams.get("unread") === "1";
+    const favoriteOnly = searchParams.get("favorite") === "1";
 
     const qPage = Number(searchParams.get("page"));
     const page = Number.isFinite(qPage) && qPage >= 1 ? Math.floor(qPage) : 1;
 
-    return { feedMode, sortMode, filter, unreadOnly, page };
+    return { feedMode, sortMode, filter, unreadOnly, favoriteOnly, page };
   }, [searchParams]);
-  const { feedMode, sortMode, filter, unreadOnly, page } = queryState;
+  const { feedMode, sortMode, filter, unreadOnly, favoriteOnly, page } = queryState;
   const focusMode = feedMode === "recommended";
   const pageSize = 20;
   const [error, setError] = useState<string | null>(null);
@@ -92,11 +93,12 @@ function ItemsPageContent() {
       page,
       sortMode,
       unreadOnly ? 1 : 0,
+      favoriteOnly ? 1 : 0,
       focusWindow,
       focusSize,
       diversifyTopics ? 1 : 0,
     ] as const,
-    [diversifyTopics, feedMode, filter, focusSize, focusWindow, page, sortMode, unreadOnly]
+    [diversifyTopics, favoriteOnly, feedMode, filter, focusSize, focusWindow, page, sortMode, unreadOnly]
   );
 
   const listQuery = useQuery<ItemsFeedQueryData>({
@@ -121,6 +123,7 @@ function ItemsPageContent() {
         page_size: pageSize,
         sort: sortMode,
         unread_only: unreadOnly,
+        favorite_only: favoriteOnly,
       });
       return {
         items: data?.items ?? [],
@@ -145,6 +148,7 @@ function ItemsPageContent() {
         sort: SortMode;
         status: string;
         unread: boolean;
+        favorite: boolean;
         page: number;
       }>
     ) => {
@@ -156,6 +160,7 @@ function ItemsPageContent() {
       const nextSort = patch.sort ?? sortMode;
       const nextStatus = patch.status ?? filter;
       const nextUnread = patch.unread ?? unreadOnly;
+      const nextFavorite = patch.favorite ?? favoriteOnly;
       const nextPage = patch.page ?? page;
 
       if (nextFeed === "all") {
@@ -164,12 +169,15 @@ function ItemsPageContent() {
         q.set("sort", nextSort);
         if (nextUnread) q.set("unread", "1");
         else q.delete("unread");
+        if (nextFavorite) q.set("favorite", "1");
+        else q.delete("favorite");
         if (nextPage > 1) q.set("page", String(nextPage));
         else q.delete("page");
       } else {
         q.delete("status");
         q.delete("sort");
         q.delete("unread");
+        q.delete("favorite");
         q.delete("page");
       }
 
@@ -177,7 +185,7 @@ function ItemsPageContent() {
       const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
       router.replace(nextUrl, { scroll: false });
     },
-    [feedMode, filter, page, pathname, router, searchParams, sortMode, unreadOnly]
+    [favoriteOnly, feedMode, filter, page, pathname, router, searchParams, sortMode, unreadOnly]
   );
 
   const itemsQueryString = useMemo(() => {
@@ -188,9 +196,10 @@ function ItemsPageContent() {
       q.set("sort", sortMode);
       if (page > 1) q.set("page", String(page));
       if (unreadOnly) q.set("unread", "1");
+      if (favoriteOnly) q.set("favorite", "1");
     }
     return q.toString();
-  }, [feedMode, filter, focusMode, page, sortMode, unreadOnly]);
+  }, [favoriteOnly, feedMode, filter, focusMode, page, sortMode, unreadOnly]);
 
   const currentItemsHref = useMemo(
     () => (itemsQueryString ? `${pathname}?${itemsQueryString}` : pathname),
@@ -418,6 +427,20 @@ function ItemsPageContent() {
             {locale === "ja" ? "未読のみ" : "Unread only"}
           </label>
         )}
+        {!focusMode && (
+          <label className="inline-flex items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700">
+            <input
+              type="checkbox"
+              checked={favoriteOnly}
+              onChange={(e) => replaceItemsQuery({ favorite: e.target.checked, page: 1 })}
+              className="size-4 rounded border-zinc-300"
+            />
+            <span className="inline-flex items-center gap-1">
+              <Star className="size-3.5 text-amber-500" aria-hidden="true" />
+              {locale === "ja" ? "お気に入りのみ" : "Favorites only"}
+            </span>
+          </label>
+        )}
       </div>
 
       {/* State */}
@@ -497,6 +520,30 @@ function ItemsPageContent() {
                               item.published_at ?? item.created_at
                             ).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US")}
                           </span>
+                          {item.is_favorite && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                              <Star className="size-3 fill-current" aria-hidden="true" />
+                              {locale === "ja" ? "お気に入り" : "Favorite"}
+                            </span>
+                          )}
+                          {item.feedback_rating === 1 && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700"
+                              title={locale === "ja" ? "良い評価" : "Liked"}
+                            >
+                              <ThumbsUp className="size-3" aria-hidden="true" />
+                              {locale === "ja" ? "良い" : "Like"}
+                            </span>
+                          )}
+                          {item.feedback_rating === -1 && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700"
+                              title={locale === "ja" ? "微妙評価" : "Disliked"}
+                            >
+                              <ThumbsDown className="size-3" aria-hidden="true" />
+                              {locale === "ja" ? "微妙" : "Dislike"}
+                            </span>
+                          )}
                         </div>
                       </div>
 	                    {item.summary_score != null ? (

@@ -22,6 +22,8 @@ export interface Item {
   content_text: string | null;
   status: "new" | "fetched" | "facts_extracted" | "summarized" | "failed";
   is_read: boolean;
+  is_favorite: boolean;
+  feedback_rating: -1 | 0 | 1 | number;
   summary_score?: number | null;
   summary_topics?: string[];
   published_at: string | null;
@@ -55,9 +57,18 @@ export interface ItemSummary {
   summarized_at: string;
 }
 
+export interface ItemFeedback {
+  user_id: string;
+  item_id: string;
+  rating: -1 | 0 | 1 | number;
+  is_favorite: boolean;
+  updated_at: string;
+}
+
 export interface ItemDetail extends Item {
   facts: ItemFacts | null;
   summary: ItemSummary | null;
+  feedback?: ItemFeedback | null;
 }
 
 export interface RelatedItem {
@@ -88,6 +99,8 @@ export interface ItemReadResult {
   item_id: string;
   is_read: boolean;
 }
+
+export type ItemFeedbackResult = ItemFeedback;
 
 export interface ItemListResponse {
   items: Item[];
@@ -244,7 +257,7 @@ export const api = {
     ),
 
   // Items
-  getItems: (params?: { status?: string; source_id?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean }) => {
+  getItems: (params?: { status?: string; source_id?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean; favorite_only?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.source_id) q.set("source_id", params.source_id);
@@ -252,6 +265,7 @@ export const api = {
     if (params?.page_size) q.set("page_size", String(params.page_size));
     if (params?.sort) q.set("sort", params.sort);
     if (params?.unread_only != null) q.set("unread_only", String(params.unread_only));
+    if (params?.favorite_only != null) q.set("favorite_only", String(params.favorite_only));
     const qs = q.toString();
     return apiFetch<ItemListResponse>(`/items${qs ? `?${qs}` : ""}`);
   },
@@ -281,6 +295,11 @@ export const api = {
     apiFetch<ItemReadResult>(`/items/${id}/read`, { method: "POST" }),
   markItemUnread: (id: string) =>
     apiFetch<ItemReadResult>(`/items/${id}/read`, { method: "DELETE" }),
+  setItemFeedback: (id: string, body: { rating: number; is_favorite: boolean }) =>
+    apiFetch<ItemFeedbackResult>(`/items/${id}/feedback`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   retryItem: (id: string) =>
     apiFetch<ItemRetryResult>(`/items/${id}/retry`, { method: "POST" }),
   retryFailedItems: (params?: { source_id?: string }) => {

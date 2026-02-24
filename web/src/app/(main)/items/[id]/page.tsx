@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlignLeft, FileText, Link2, ListChecks, Sparkles } from "lucide-react";
+import { AlignLeft, FileText, Link2, ListChecks, Sparkles, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, ItemDetail, RelatedItem } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -27,6 +27,7 @@ export default function ItemDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [readUpdating, setReadUpdating] = useState(false);
+  const [feedbackUpdating, setFeedbackUpdating] = useState(false);
   const [related, setRelated] = useState<RelatedItem[]>([]);
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const autoMarkedRef = useRef<Record<string, true>>({});
@@ -42,6 +43,29 @@ export default function ItemDetailPage() {
       };
     });
   }, [queryClient]);
+
+  const syncItemFeedbackInFeedCaches = useCallback(
+    (itemId: string, patch: { is_favorite?: boolean; feedback_rating?: -1 | 0 | 1 | number }) => {
+      queryClient.setQueriesData({ queryKey: ["items-feed"] }, (prev: unknown) => {
+        if (!prev || typeof prev !== "object") return prev;
+        const data = prev as { items?: Array<Record<string, unknown>> };
+        if (!Array.isArray(data.items)) return prev;
+        return {
+          ...data,
+          items: data.items.map((v) =>
+            v.id === itemId
+              ? {
+                  ...v,
+                  ...(patch.is_favorite != null ? { is_favorite: patch.is_favorite } : {}),
+                  ...(patch.feedback_rating != null ? { feedback_rating: patch.feedback_rating } : {}),
+                }
+              : v
+          ),
+        };
+      });
+    },
+    [queryClient]
+  );
 
   useEffect(() => {
     setLoading(true);
@@ -113,6 +137,32 @@ export default function ItemDetailPage() {
     }
   };
 
+  const updateFeedback = async (patch: { rating?: -1 | 0 | 1; is_favorite?: boolean }) => {
+    if (!item) return;
+    setFeedbackUpdating(true);
+    const nextRating =
+      patch.rating != null ? patch.rating : ((item.feedback?.rating ?? 0) as -1 | 0 | 1);
+    const nextFavorite =
+      patch.is_favorite != null ? patch.is_favorite : Boolean(item.feedback?.is_favorite ?? false);
+    try {
+      const next = await api.setItemFeedback(item.id, {
+        rating: nextRating,
+        is_favorite: nextFavorite,
+      });
+      syncItemFeedbackInFeedCaches(item.id, {
+        is_favorite: next.is_favorite,
+        feedback_rating: next.rating,
+      });
+      setItem((prev) => (prev ? { ...prev, feedback: next } : prev));
+      showToast(locale === "ja" ? "評価を保存しました" : "Feedback saved", "success");
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setFeedbackUpdating(false);
+    }
+  };
+
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!item) return null;
@@ -155,6 +205,52 @@ export default function ItemDetailPage() {
                 : locale === "ja"
                   ? "既読にする"
                   : "Mark read"}
+          </button>
+        </div>
+
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={feedbackUpdating}
+            onClick={() =>
+              updateFeedback({ rating: (item.feedback?.rating ?? 0) === 1 ? 0 : 1 })
+            }
+            className={`inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs font-medium transition-colors ${
+              (item.feedback?.rating ?? 0) === 1
+                ? "border-green-200 bg-green-50 text-green-700"
+                : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+            }`}
+          >
+            <ThumbsUp className="size-3.5" aria-hidden="true" />
+            <span>{locale === "ja" ? "良い" : "Like"}</span>
+          </button>
+          <button
+            type="button"
+            disabled={feedbackUpdating}
+            onClick={() =>
+              updateFeedback({ rating: (item.feedback?.rating ?? 0) === -1 ? 0 : -1 })
+            }
+            className={`inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs font-medium transition-colors ${
+              (item.feedback?.rating ?? 0) === -1
+                ? "border-rose-200 bg-rose-50 text-rose-700"
+                : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+            }`}
+          >
+            <ThumbsDown className="size-3.5" aria-hidden="true" />
+            <span>{locale === "ja" ? "微妙" : "Dislike"}</span>
+          </button>
+          <button
+            type="button"
+            disabled={feedbackUpdating}
+            onClick={() => updateFeedback({ is_favorite: !Boolean(item.feedback?.is_favorite) })}
+            className={`inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs font-medium transition-colors ${
+              item.feedback?.is_favorite
+                ? "border-amber-200 bg-amber-50 text-amber-700"
+                : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+            }`}
+          >
+            <Star className={`size-3.5 ${item.feedback?.is_favorite ? "fill-current" : ""}`} aria-hidden="true" />
+            <span>{locale === "ja" ? "お気に入り" : "Favorite"}</span>
           </button>
         </div>
 

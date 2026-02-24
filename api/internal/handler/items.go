@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -47,13 +48,15 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	unreadOnly := q.Get("unread_only") == "true"
+	favoriteOnly := q.Get("favorite_only") == "true"
 	resp, err := h.repo.ListPage(r.Context(), userID, repository.ItemListParams{
-		Status:     status,
-		SourceID:   sourceID,
-		UnreadOnly: unreadOnly,
-		Sort:       sort,
-		Page:       page,
-		PageSize:   pageSize,
+		Status:       status,
+		SourceID:     sourceID,
+		UnreadOnly:   unreadOnly,
+		FavoriteOnly: favoriteOnly,
+		Sort:         sort,
+		Page:         page,
+		PageSize:     pageSize,
 	})
 	if err != nil {
 		writeRepoError(w, err)
@@ -145,6 +148,29 @@ func (h *ItemHandler) MarkUnread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"item_id": id, "is_read": false})
+}
+
+func (h *ItemHandler) SetFeedback(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	id := chi.URLParam(r, "id")
+	var body struct {
+		Rating     int  `json:"rating"`
+		IsFavorite bool `json:"is_favorite"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if body.Rating < -1 || body.Rating > 1 {
+		http.Error(w, "invalid rating", http.StatusBadRequest)
+		return
+	}
+	fb, err := h.repo.UpsertFeedback(r.Context(), userID, id, body.Rating, body.IsFavorite)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, fb)
 }
 
 func (h *ItemHandler) Retry(w http.ResponseWriter, r *http.Request) {

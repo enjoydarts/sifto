@@ -175,12 +175,15 @@ func (r *ItemInngestRepo) ListEmbeddingBackfillTargets(ctx context.Context, user
 func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID string, since, until time.Time) ([]model.DigestItemDetail, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
+		       COALESCE(fb.is_favorite, false) AS is_favorite,
+		       COALESCE(fb.rating, 0) AS feedback_rating,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at,
 		       s.id, s.item_id, s.summary, s.topics, s.score,
 		       s.score_breakdown, s.score_reason, s.score_policy_version, s.summarized_at
 		FROM items i
 		JOIN sources src ON src.id = i.source_id
 		JOIN item_summaries s ON s.item_id = i.id
+		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 		WHERE src.user_id = $1
 		  AND i.status = 'summarized'
 		  AND s.summarized_at >= $2
@@ -193,12 +196,11 @@ func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID stri
 	defer rows.Close()
 
 	var items []model.DigestItemDetail
-	rank := 1
 	for rows.Next() {
 		var d model.DigestItemDetail
 		if err := rows.Scan(
 			&d.Item.ID, &d.Item.SourceID, &d.Item.URL, &d.Item.Title, &d.Item.ThumbnailURL,
-			&d.Item.ContentText, &d.Item.Status, &d.Item.PublishedAt,
+			&d.Item.ContentText, &d.Item.Status, &d.Item.IsFavorite, &d.Item.FeedbackRating, &d.Item.PublishedAt,
 			&d.Item.FetchedAt, &d.Item.CreatedAt, &d.Item.UpdatedAt,
 			&d.Summary.ID, &d.Summary.ItemID, &d.Summary.Summary,
 			&d.Summary.Topics, &d.Summary.Score, scoreBreakdownScanner{dst: &d.Summary.ScoreBreakdown},
@@ -206,9 +208,23 @@ func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID stri
 		); err != nil {
 			return nil, err
 		}
-		d.Rank = rank
-		rank++
 		items = append(items, d)
+	}
+	profile, err := loadFeedbackPreferenceProfile(ctx, r.db, userID)
+	if err != nil {
+		return nil, err
+	}
+	itemIDs := make([]string, 0, len(items))
+	for _, it := range items {
+		itemIDs = append(itemIDs, it.Item.ID)
+	}
+	embeddingBiasByItemID, err := loadEmbeddingBiasByItemID(ctx, r.db, itemIDs, profile)
+	if err != nil {
+		return nil, err
+	}
+	sortDigestItemsByPreference(items, profile, embeddingBiasByItemID)
+	for i := range items {
+		items[i].Rank = i + 1
 	}
 	return items, nil
 }

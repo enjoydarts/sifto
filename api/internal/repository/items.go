@@ -13,12 +13,13 @@ type ItemRepo struct{ db *pgxpool.Pool }
 func NewItemRepo(db *pgxpool.Pool) *ItemRepo { return &ItemRepo{db} }
 
 type ItemListParams struct {
-	Status     *string
-	SourceID   *string
-	UnreadOnly bool
-	Sort       string // newest | score
-	Page       int
-	PageSize   int
+	Status       *string
+	SourceID     *string
+	UnreadOnly   bool
+	FavoriteOnly bool
+	Sort         string // newest | score
+	Page         int
+	PageSize     int
 }
 
 type ReadingPlanParams struct {
@@ -38,11 +39,14 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 	query := `
 		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       (ir.item_id IS NOT NULL) AS is_read,
+		       COALESCE(fb.is_favorite, false) AS is_favorite,
+		       COALESCE(fb.rating, 0) AS feedback_rating,
 		       sm.score, COALESCE(sm.topics, '{}'::text[]),
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		WHERE s.user_id = $1`
 	args := []any{userID}
@@ -71,7 +75,7 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 	for rows.Next() {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
-			&it.Status, &it.IsRead, &it.SummaryScore, &it.SummaryTopics, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)
@@ -111,6 +115,12 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 			WHERE ir2.item_id = i.id AND ir2.user_id = $1
 		)`
 	}
+	if p.FavoriteOnly {
+		baseWhere += ` AND EXISTS (
+			SELECT 1 FROM item_feedbacks fb2
+			WHERE fb2.item_id = i.id AND fb2.user_id = $1 AND fb2.is_favorite = true
+		)`
+	}
 
 	var total int
 	if err := r.db.QueryRow(ctx, `SELECT COUNT(*)`+baseWhere, args...).Scan(&total); err != nil {
@@ -130,11 +140,14 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 	rows, err := r.db.Query(ctx, `
 		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       (ir.item_id IS NOT NULL) AS is_read,
+		       COALESCE(fb.is_favorite, false) AS is_favorite,
+		       COALESCE(fb.rating, 0) AS feedback_rating,
 		       sm.score, COALESCE(sm.topics, '{}'::text[]),
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		WHERE s.user_id = $1`+
 		func() string {
@@ -151,6 +164,9 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 			}
 			if p.UnreadOnly {
 				q += ` AND ir.item_id IS NULL`
+			}
+			if p.FavoriteOnly {
+				q += ` AND COALESCE(fb.is_favorite, false) = true`
 			}
 			return q
 		}()+
@@ -218,11 +234,14 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 	rows, err := r.db.Query(ctx, `
 		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       (ir.item_id IS NOT NULL) AS is_read,
+		       COALESCE(fb.is_favorite, false) AS is_favorite,
+		       COALESCE(fb.rating, 0) AS feedback_rating,
 		       sm.score, COALESCE(sm.topics, '{}'::text[]),
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		WHERE s.user_id = $1
 		  AND i.status = 'summarized'`+filterSQL+`
@@ -236,6 +255,19 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 	if err != nil {
 		return nil, err
 	}
+	profile, err := loadFeedbackPreferenceProfile(ctx, r.db, userID)
+	if err != nil {
+		return nil, err
+	}
+	candidateIDs := make([]string, 0, len(candidates))
+	for _, it := range candidates {
+		candidateIDs = append(candidateIDs, it.ID)
+	}
+	embeddingBiasByItemID, err := loadEmbeddingBiasByItemID(ctx, r.db, candidateIDs, profile)
+	if err != nil {
+		return nil, err
+	}
+	sortItemsByPreference(candidates, profile, embeddingBiasByItemID)
 
 	selected := make([]model.Item, 0, p.Size)
 	if p.DiversifyTopics {
@@ -268,7 +300,6 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 			exists[it.ID] = struct{}{}
 		}
 	}
-
 	topics, err := r.readingPlanTopics(ctx, userID, p)
 	if err != nil {
 		return nil, err
@@ -389,7 +420,7 @@ func scanItems(rows itemRowScanner) ([]model.Item, error) {
 	for rows.Next() {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
-			&it.Status, &it.IsRead, &it.SummaryScore, &it.SummaryTopics, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)
@@ -435,7 +466,48 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 		d.Summary = &s
 	}
 
+	// feedback (optional)
+	fb, err := r.GetFeedback(ctx, userID, id)
+	if err == nil {
+		d.Feedback = fb
+	}
+
 	return &d, nil
+}
+
+func (r *ItemRepo) GetFeedback(ctx context.Context, userID, itemID string) (*model.ItemFeedback, error) {
+	var fb model.ItemFeedback
+	err := r.db.QueryRow(ctx, `
+		SELECT user_id, item_id, rating, is_favorite, updated_at
+		FROM item_feedbacks
+		WHERE user_id = $1 AND item_id = $2`,
+		userID, itemID,
+	).Scan(&fb.UserID, &fb.ItemID, &fb.Rating, &fb.IsFavorite, &fb.UpdatedAt)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	return &fb, nil
+}
+
+func (r *ItemRepo) UpsertFeedback(ctx context.Context, userID, itemID string, rating int, isFavorite bool) (*model.ItemFeedback, error) {
+	if err := r.ensureOwned(ctx, userID, itemID); err != nil {
+		return nil, err
+	}
+	var fb model.ItemFeedback
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO item_feedbacks (user_id, item_id, rating, is_favorite)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (user_id, item_id) DO UPDATE SET
+		  rating = EXCLUDED.rating,
+		  is_favorite = EXCLUDED.is_favorite,
+		  updated_at = NOW()
+		RETURNING user_id, item_id, rating, is_favorite, updated_at`,
+		userID, itemID, rating, isFavorite,
+	).Scan(&fb.UserID, &fb.ItemID, &fb.Rating, &fb.IsFavorite, &fb.UpdatedAt)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	return &fb, nil
 }
 
 func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int) ([]model.RelatedItem, error) {
@@ -507,12 +579,14 @@ func (r *ItemRepo) GetForRetry(ctx context.Context, id, userID string) (*model.I
 	err := r.db.QueryRow(ctx, `
 		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       FALSE AS is_read,
+		       FALSE AS is_favorite,
+		       0 AS feedback_rating,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
 	).Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
-		&it.Status, &it.IsRead, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt)
+		&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt)
 	if err != nil {
 		return nil, mapDBError(err)
 	}
@@ -523,6 +597,8 @@ func (r *ItemRepo) ListFailedForRetry(ctx context.Context, userID string, source
 	query := `
 		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       FALSE AS is_read,
+		       FALSE AS is_favorite,
+		       0 AS feedback_rating,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
@@ -544,7 +620,7 @@ func (r *ItemRepo) ListFailedForRetry(ctx context.Context, userID string, source
 	for rows.Next() {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
-			&it.Status, &it.IsRead, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)

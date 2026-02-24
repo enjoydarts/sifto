@@ -57,6 +57,7 @@ export default function LLMUsagePage() {
       cacheWrite: 0,
       cacheRead: 0,
       cost: 0,
+      byProviderCost: new Map<string, number>(),
     };
     for (const r of summaryRows) {
       t.calls += r.calls;
@@ -65,14 +66,24 @@ export default function LLMUsagePage() {
       t.cacheWrite += r.cache_creation_input_tokens;
       t.cacheRead += r.cache_read_input_tokens;
       t.cost += r.estimated_cost_usd;
+      t.byProviderCost.set(r.provider, (t.byProviderCost.get(r.provider) ?? 0) + r.estimated_cost_usd);
     }
     return t;
   }, [summaryRows]);
 
+  const providerTotals = useMemo(() => {
+    const openai = totals.byProviderCost.get("openai") ?? 0;
+    const anthropic = totals.byProviderCost.get("anthropic") ?? 0;
+    const others = [...totals.byProviderCost.entries()]
+      .filter(([k]) => k !== "openai" && k !== "anthropic")
+      .reduce((acc, [, v]) => acc + v, 0);
+    return { openai, anthropic, others };
+  }, [totals]);
+
   const groupedByDate = useMemo(() => {
     const m = new Map<string, SummaryRow[]>();
     for (const row of summaryRows) {
-      const key = `${row.date_jst}:${row.purpose}:${row.pricing_source}`;
+      const key = `${row.date_jst}:${row.provider}:${row.purpose}:${row.pricing_source}`;
       const list = m.get(row.date_jst) ?? [];
       list.push({ ...row, key });
       m.set(row.date_jst, list);
@@ -132,8 +143,11 @@ export default function LLMUsagePage() {
         </div>
       )}
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-8">
         <MetricCard label={t("llm.totalCost")} value={fmtUSD(totals.cost)} />
+        <MetricCard label="OpenAI" value={fmtUSD(providerTotals.openai)} />
+        <MetricCard label="Anthropic" value={fmtUSD(providerTotals.anthropic)} />
+        {providerTotals.others > 0 && <MetricCard label="Other" value={fmtUSD(providerTotals.others)} />}
         <MetricCard label={t("llm.totalCalls")} value={fmtNum(totals.calls)} />
         <MetricCard label={t("llm.input")} value={fmtNum(totals.input)} />
         <MetricCard label={t("llm.output")} value={fmtNum(totals.output)} />
@@ -166,6 +180,7 @@ export default function LLMUsagePage() {
                       <thead className="text-xs text-zinc-500">
                         <tr className="border-b border-zinc-100">
                           <th className="px-3 py-2 text-left font-medium">purpose</th>
+                          <th className="px-3 py-2 text-left font-medium">provider</th>
                           <th className="px-3 py-2 text-left font-medium">pricing</th>
                           <th className="px-3 py-2 text-right font-medium">calls</th>
                           <th className="px-3 py-2 text-right font-medium">input</th>
@@ -177,6 +192,7 @@ export default function LLMUsagePage() {
                         {rows.map((r) => (
                           <tr key={r.key} className="border-b border-zinc-100 last:border-0">
                             <td className="px-3 py-2">{r.purpose}</td>
+                            <td className="px-3 py-2">{r.provider}</td>
                             <td className="px-3 py-2">{r.pricing_source}</td>
                             <td className="px-3 py-2 text-right">{fmtNum(r.calls)}</td>
                             <td className="px-3 py-2 text-right">{fmtNum(r.input_tokens)}</td>

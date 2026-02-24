@@ -168,6 +168,7 @@ export interface LLMUsageLog {
 
 export interface LLMUsageDailySummary {
   date_jst: string;
+  provider: string;
   purpose: string;
   pricing_source: string;
   calls: number;

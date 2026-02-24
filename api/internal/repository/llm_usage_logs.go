@@ -50,6 +50,7 @@ type LLMUsageLog struct {
 
 type LLMUsageDailySummary struct {
 	DateJST                  string  `json:"date_jst"`
+	Provider                 string  `json:"provider"`
 	Purpose                  string  `json:"purpose"`
 	PricingSource            string  `json:"pricing_source"`
 	Calls                    int     `json:"calls"`
@@ -120,6 +121,7 @@ func (r *LLMUsageLogRepo) DailySummaryByUser(ctx context.Context, userID string,
 	}
 	rows, err := r.db.Query(ctx, `
 		SELECT (created_at AT TIME ZONE 'Asia/Tokyo')::date::text AS date_jst,
+		       provider,
 		       purpose,
 		       pricing_source,
 		       COUNT(*)::int AS calls,
@@ -131,8 +133,8 @@ func (r *LLMUsageLogRepo) DailySummaryByUser(ctx context.Context, userID string,
 		FROM llm_usage_logs
 		WHERE user_id = $1
 		  AND created_at >= (NOW() AT TIME ZONE 'UTC') - ($2::int * INTERVAL '1 day')
-		GROUP BY 1,2,3
-		ORDER BY date_jst DESC, purpose ASC, pricing_source ASC`, userID, days)
+		GROUP BY 1,2,3,4
+		ORDER BY date_jst DESC, provider ASC, purpose ASC, pricing_source ASC`, userID, days)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +144,7 @@ func (r *LLMUsageLogRepo) DailySummaryByUser(ctx context.Context, userID string,
 	for rows.Next() {
 		var v LLMUsageDailySummary
 		if err := rows.Scan(
-			&v.DateJST, &v.Purpose, &v.PricingSource, &v.Calls,
+			&v.DateJST, &v.Provider, &v.Purpose, &v.PricingSource, &v.Calls,
 			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens,
 			&v.CacheReadInputTokens, &v.EstimatedCostUSD,
 		); err != nil {

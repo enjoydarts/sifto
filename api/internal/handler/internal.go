@@ -277,10 +277,18 @@ func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http
 
 	queued := 0
 	failed := 0
+	sendErrorSamples := make([]map[string]any, 0, 5)
 	if !body.DryRun {
 		for _, t := range targets {
 			if err := h.publisher.SendItemEmbedE(r.Context(), t.ItemID, t.SourceID); err != nil {
 				failed++
+				if len(sendErrorSamples) < 5 {
+					sendErrorSamples = append(sendErrorSamples, map[string]any{
+						"item_id":   t.ItemID,
+						"source_id": t.SourceID,
+						"error":     err.Error(),
+					})
+				}
 				continue
 			}
 			queued++
@@ -299,13 +307,14 @@ func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http
 
 	w.WriteHeader(http.StatusAccepted)
 	writeJSON(w, map[string]any{
-		"status":       "accepted",
-		"dry_run":      body.DryRun,
-		"user_filter":  body.UserID,
-		"limit":        body.Limit,
-		"matched":      len(targets),
-		"queued_count": queued,
-		"failed_count": failed,
-		"targets":      preview,
+		"status":             "accepted",
+		"dry_run":            body.DryRun,
+		"user_filter":        body.UserID,
+		"limit":              body.Limit,
+		"matched":            len(targets),
+		"queued_count":       queued,
+		"failed_count":       failed,
+		"send_error_samples": sendErrorSamples,
+		"targets":            preview,
 	})
 }

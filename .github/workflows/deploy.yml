@@ -34,7 +34,7 @@ jobs:
       - name: Deploy API
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: flyctl deploy --remote-only
+        run: flyctl deploy --remote-only --build-arg APP_COMMIT_SHA=${GITHUB_SHA}
         working-directory: api
 
   deploy-worker:
@@ -49,5 +49,5 @@ jobs:
       - name: Deploy Worker
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: flyctl deploy --remote-only
+        run: flyctl deploy --remote-only --build-arg APP_COMMIT_SHA=${GITHUB_SHA}
         working-directory: worker

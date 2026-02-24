@@ -1,4 +1,5 @@
 FROM golang:alpine AS builder
+ARG APP_COMMIT_SHA=unknown
 
 WORKDIR /app
 
@@ -33,10 +34,12 @@ EXPOSE 8080
 CMD ["air", "-c", ".air.toml"]
 
 FROM alpine:latest
+ARG APP_COMMIT_SHA=unknown
 
 RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
+ENV APP_COMMIT_SHA=${APP_COMMIT_SHA}
 
 COPY --from=builder /app/bin/server .
 

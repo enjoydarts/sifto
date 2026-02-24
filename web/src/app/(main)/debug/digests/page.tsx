@@ -31,6 +31,7 @@ type EmbeddingBackfillResponse = {
   matched: number;
   queued_count: number;
   failed_count: number;
+  send_error_samples?: unknown[];
   targets?: unknown[];
 };
 

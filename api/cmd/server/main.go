@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -56,7 +56,15 @@ func main() {
 	r.Use(chimiddleware.Recoverer)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "ok")
+		commitSHA := os.Getenv("APP_COMMIT_SHA")
+		if commitSHA == "" {
+			commitSHA = "unknown"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "ok",
+			"commit": commitSHA,
+		})
 	})
 
 	// Inngest serve endpoint（認証不要）
@@ -117,8 +125,13 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
+	commitSHA := os.Getenv("APP_COMMIT_SHA")
+	if commitSHA == "" {
+		commitSHA = "unknown"
+	}
 
 	log.Printf("api listening on :%s", port)
+	log.Printf("api build commit=%s", commitSHA)
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatal(err)
 	}

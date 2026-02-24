@@ -39,10 +39,13 @@ type ExtractFactsResponse struct {
 }
 
 type SummarizeResponse struct {
-	Summary string   `json:"summary"`
-	Topics  []string `json:"topics"`
-	Score   float64  `json:"score"`
-	LLM     *LLMUsage `json:"llm,omitempty"`
+	Summary            string         `json:"summary"`
+	Topics             []string       `json:"topics"`
+	Score              float64        `json:"score"`
+	ScoreBreakdown     map[string]any `json:"score_breakdown,omitempty"`
+	ScoreReason        string         `json:"score_reason,omitempty"`
+	ScorePolicyVersion string         `json:"score_policy_version,omitempty"`
+	LLM                *LLMUsage      `json:"llm,omitempty"`
 }
 
 type ComposeDigestItem struct {

@@ -61,6 +61,33 @@ def _parse_json_string_array(text: str) -> list[str]:
     return [str(v) for v in data if isinstance(v, str)]
 
 
+def _clamp01(v, default: float = 0.5) -> float:
+    try:
+        x = float(v)
+    except Exception:
+        return default
+    if x < 0:
+        return 0.0
+    if x > 1:
+        return 1.0
+    return x
+
+
+def _summary_composite_score(breakdown: dict) -> float:
+    # Weighted for digest ranking / operations triage.
+    weights = {
+        "importance": 0.38,
+        "novelty": 0.22,
+        "actionability": 0.18,
+        "reliability": 0.17,
+        "relevance": 0.05,
+    }
+    total = 0.0
+    for k, w in weights.items():
+        total += _clamp01(breakdown.get(k, 0.5), 0.5) * w
+    return round(total, 4)
+
+
 def _merge_fact_lists(fact_lists: list[list[str]], max_items: int = 24) -> list[str]:
     # De-dup while preserving coverage across chunks by interleaving.
     normalized_seen: set[str] = set()
@@ -351,10 +378,20 @@ JSON配列として返してください。例: ["事実1", "事実2"]
 def summarize(title: str | None, facts: list[str], api_key: str | None = None) -> dict:
     if _client_for_api_key(api_key) is None:
         summary = " / ".join(facts[:5])[:420] if facts else (title or "")
+        score_breakdown = {
+            "importance": 0.4,
+            "novelty": 0.4,
+            "actionability": 0.4,
+            "reliability": 0.5,
+            "relevance": 0.5,
+        }
         return {
             "summary": summary or "要約を生成できませんでした",
             "topics": ["local-dev"],
-            "score": 0.5,
+            "score": _summary_composite_score(score_breakdown),
+            "score_breakdown": score_breakdown,
+            "score_reason": "ローカルフォールバックのため簡易スコアです。",
+            "score_policy_version": "v2",
             "llm": {
                 "provider": "local-dev",
                 "model": "local-fallback",
@@ -372,7 +409,14 @@ def summarize(title: str | None, facts: list[str], api_key: str | None = None) -
 {{
   "summary": "350〜600字程度の要約",
   "topics": ["トピック1", "トピック2"],
-  "score": 0.0〜1.0の関連度スコア（一般的な読者にとっての重要度）
+  "score_breakdown": {{
+    "importance": 0.0〜1.0,
+    "novelty": 0.0〜1.0,
+    "actionability": 0.0〜1.0,
+    "reliability": 0.0〜1.0,
+    "relevance": 0.0〜1.0
+  }},
+  "score_reason": "採点理由（1〜2文）"
 }}
 
 要約スタイル:
@@ -380,6 +424,12 @@ def summarize(title: str | None, facts: list[str], api_key: str | None = None) -
 - 読みやすい自然な日本語にする（硬すぎる定型文を避ける）
 - 記事の主題、何が起きたか、重要なポイントを過不足なく含める
 - 箇条書きではなく、1〜2段落の文章でまとめる
+- score_breakdown は以下の観点で付与する
+  - importance: 一般読者にとっての重要度
+  - novelty: 新規性・変化の大きさ
+  - actionability: 実務で行動に繋がる度合い
+  - reliability: 具体性・確度（数値/固有名詞/条件の明確さ）
+  - relevance: 幅広い読者への関連性（個別ユーザー最適化ではない）
 
 タイトル: {title or "（不明）"}
 
@@ -391,10 +441,20 @@ def summarize(title: str | None, facts: list[str], api_key: str | None = None) -
     )
     if message is None:
         summary = " / ".join(facts[:5])[:420] if facts else (title or "")
+        score_breakdown = {
+            "importance": 0.4,
+            "novelty": 0.4,
+            "actionability": 0.4,
+            "reliability": 0.5,
+            "relevance": 0.5,
+        }
         return {
             "summary": summary or "要約を生成できませんでした",
             "topics": ["local-dev"],
-            "score": 0.5,
+            "score": _summary_composite_score(score_breakdown),
+            "score_breakdown": score_breakdown,
+            "score_reason": "Anthropic応答を取得できなかったため簡易スコアです。",
+            "score_policy_version": "v2",
             "llm": {
                 "provider": "local-fallback",
                 "model": used_model or _summary_model,
@@ -412,19 +472,31 @@ def summarize(title: str | None, facts: list[str], api_key: str | None = None) -
         data = json.loads(text[start:end])
     except Exception:
         data = {}
-    try:
-        score = float(data.get("score", 0.5))
-    except Exception:
-        score = 0.5
-
     topics = data.get("topics", [])
     if not isinstance(topics, list):
         topics = []
+    score_breakdown = data.get("score_breakdown", {})
+    if not isinstance(score_breakdown, dict):
+        score_breakdown = {}
+    score_breakdown = {
+        "importance": _clamp01(score_breakdown.get("importance", 0.5)),
+        "novelty": _clamp01(score_breakdown.get("novelty", 0.5)),
+        "actionability": _clamp01(score_breakdown.get("actionability", 0.5)),
+        "reliability": _clamp01(score_breakdown.get("reliability", 0.5)),
+        "relevance": _clamp01(score_breakdown.get("relevance", 0.5)),
+    }
+    score_reason = str(data.get("score_reason") or "").strip()
+    if not score_reason:
+        score_reason = "総合的な重要度・新規性・実用性を基に採点。"
+    score = _summary_composite_score(score_breakdown)
 
     return {
         "summary": data.get("summary", ""),
         "topics": [str(t) for t in topics],
         "score": score,
+        "score_breakdown": score_breakdown,
+        "score_reason": score_reason[:400],
+        "score_policy_version": "v2",
         "llm": _llm_meta(message, "summary", used_model or _summary_model),
     }
 

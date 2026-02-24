@@ -16,6 +16,14 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 const FILTERS = ["", "summarized", "new", "fetched", "facts_extracted", "failed"] as const;
+type SortMode = "newest" | "score";
+
+function scoreTone(score: number) {
+  if (score >= 0.8) return "bg-green-50 text-green-700 border-green-200";
+  if (score >= 0.65) return "bg-blue-50 text-blue-700 border-blue-200";
+  if (score >= 0.5) return "bg-zinc-50 text-zinc-700 border-zinc-200";
+  return "bg-amber-50 text-amber-700 border-amber-200";
+}
 
 export default function ItemsPage() {
   const { t, locale } = useI18n();
@@ -23,6 +31,7 @@ export default function ItemsPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [filter, setFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [sortMode, setSortMode] = useState<SortMode>("newest");
   const pageSize = 20;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +55,10 @@ export default function ItemsPage() {
     load(filter);
   }, [filter, load]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [sortMode]);
+
   const retryItem = useCallback(
     async (itemId: string) => {
       setRetryingIds((prev) => ({ ...prev, [itemId]: true }));
@@ -67,7 +80,16 @@ export default function ItemsPage() {
     [filter, load, locale, showToast, t]
   );
 
-  const pagedItems = items.slice((page - 1) * pageSize, page * pageSize);
+  const sortedItems = [...items].sort((a, b) => {
+    if (sortMode === "score") {
+      const as = a.summary_score ?? -1;
+      const bs = b.summary_score ?? -1;
+      if (bs !== as) return bs - as;
+    }
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  const pagedItems = sortedItems.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="space-y-4">
@@ -77,6 +99,30 @@ export default function ItemsPage() {
           <p className="mt-1 text-sm text-zinc-500">
             {items.length.toLocaleString()} {t("common.rows")}
           </p>
+        </div>
+        <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
+          <button
+            type="button"
+            onClick={() => setSortMode("newest")}
+            className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+              sortMode === "newest"
+                ? "bg-zinc-900 text-white"
+                : "text-zinc-600 hover:bg-zinc-50"
+            }`}
+          >
+            {locale === "ja" ? "新着順" : "Newest"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSortMode("score")}
+            className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+              sortMode === "score"
+                ? "bg-zinc-900 text-white"
+                : "text-zinc-600 hover:bg-zinc-50"
+            }`}
+          >
+            {locale === "ja" ? "スコア順" : "Score"}
+          </button>
         </div>
       </div>
 
@@ -121,14 +167,50 @@ export default function ItemsPage() {
 	                  {t(`status.${item.status}`, item.status)}
 	                </span>
 	                <div className="min-w-0 flex-1">
-	                  <div className="truncate text-sm font-medium text-zinc-900">
-	                    {item.title ?? item.url}
+	                  <div className="flex items-start gap-2">
+	                    <div className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900">
+	                      {item.title ?? item.url}
+	                    </div>
+	                    {item.summary_score != null ? (
+	                      <span
+	                        className={`shrink-0 rounded border px-2 py-0.5 text-xs font-semibold ${scoreTone(item.summary_score)}`}
+	                        title={locale === "ja" ? "要約スコア" : "Summary score"}
+	                      >
+	                        {item.summary_score.toFixed(2)}
+	                      </span>
+	                    ) : (
+	                      <span
+	                        className="shrink-0 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-400"
+	                        title={locale === "ja" ? "未採点" : "Not scored"}
+	                      >
+	                        {locale === "ja" ? "未採点" : "N/A"}
+	                      </span>
+	                    )}
 	                  </div>
 	                  {item.title && (
 	                    <div className="truncate text-xs text-zinc-400">
 	                      {item.url}
 	                    </div>
 	                  )}
+	                  <div className="mt-1 flex items-center gap-2">
+	                    <div className="h-1.5 w-24 rounded-full bg-zinc-100">
+	                      {item.summary_score != null && (
+	                        <div
+	                          className="h-1.5 rounded-full bg-zinc-800"
+	                          style={{ width: `${Math.max(4, item.summary_score * 100)}%` }}
+	                        />
+	                      )}
+	                    </div>
+	                    <span className="text-[11px] text-zinc-500">
+	                      {item.summary_score != null
+	                        ? locale === "ja"
+	                          ? "スコア"
+	                          : "Score"
+	                        : locale === "ja"
+	                          ? "未採点"
+	                          : "Not scored"}
+	                    </span>
+	                  </div>
 	                  <div className="mt-0.5 text-xs text-zinc-400">
 	                    {new Date(
 	                      item.published_at ?? item.created_at

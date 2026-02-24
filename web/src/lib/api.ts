@@ -20,6 +20,7 @@ export interface Item {
   title: string | null;
   content_text: string | null;
   status: "new" | "fetched" | "facts_extracted" | "summarized" | "failed";
+  summary_score?: number | null;
   published_at: string | null;
   fetched_at: string | null;
   created_at: string;
@@ -39,6 +40,15 @@ export interface ItemSummary {
   summary: string;
   topics: string[];
   score: number | null;
+  score_breakdown?: {
+    importance?: number;
+    novelty?: number;
+    actionability?: number;
+    reliability?: number;
+    relevance?: number;
+  } | null;
+  score_reason?: string | null;
+  score_policy_version?: string | null;
   summarized_at: string;
 }
 

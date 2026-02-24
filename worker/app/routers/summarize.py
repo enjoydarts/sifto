@@ -14,6 +14,9 @@ class SummarizeResponse(BaseModel):
     summary: str
     topics: list[str]
     score: float
+    score_breakdown: dict | None = None
+    score_reason: str | None = None
+    score_policy_version: str | None = None
     llm: dict | None = None
 
 

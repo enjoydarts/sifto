@@ -41,6 +41,7 @@ type Item struct {
 	Title       *string    `json:"title"`
 	ContentText *string    `json:"content_text,omitempty"`
 	Status      string     `json:"status"` // new | fetched | facts_extracted | summarized | failed
+	SummaryScore *float64  `json:"summary_score,omitempty"`
 	PublishedAt *time.Time `json:"published_at,omitempty"`
 	FetchedAt   *time.Time `json:"fetched_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -60,7 +61,18 @@ type ItemSummary struct {
 	Summary      string    `json:"summary"`
 	Topics       []string  `json:"topics"`
 	Score        *float64  `json:"score,omitempty"`
+	ScoreBreakdown *ItemSummaryScoreBreakdown `json:"score_breakdown,omitempty"`
+	ScoreReason  *string   `json:"score_reason,omitempty"`
+	ScorePolicyVersion *string `json:"score_policy_version,omitempty"`
 	SummarizedAt time.Time `json:"summarized_at"`
+}
+
+type ItemSummaryScoreBreakdown struct {
+	Importance    *float64 `json:"importance,omitempty"`
+	Novelty       *float64 `json:"novelty,omitempty"`
+	Actionability *float64 `json:"actionability,omitempty"`
+	Reliability   *float64 `json:"reliability,omitempty"`
+	Relevance     *float64 `json:"relevance,omitempty"`
 }
 
 type ItemDetail struct {

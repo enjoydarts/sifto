@@ -15,9 +15,11 @@ func NewItemRepo(db *pgxpool.Pool) *ItemRepo { return &ItemRepo{db} }
 func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *string) ([]model.Item, error) {
 	query := `
 		SELECT i.id, i.source_id, i.url, i.title, i.content_text, i.status,
+		       sm.score,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
+		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		WHERE s.user_id = $1`
 	args := []any{userID}
 
@@ -29,7 +31,11 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 		args = append(args, *sourceID)
 		query += ` AND i.source_id = $` + itoa(len(args))
 	}
-	query += ` ORDER BY i.created_at DESC LIMIT 100`
+	if status != nil && *status == "summarized" {
+		query += ` ORDER BY sm.score DESC NULLS LAST, i.created_at DESC LIMIT 100`
+	} else {
+		query += ` ORDER BY i.created_at DESC LIMIT 100`
+	}
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
@@ -41,7 +47,7 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 	for rows.Next() {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ContentText,
-			&it.Status, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.Status, &it.SummaryScore, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)
@@ -75,8 +81,10 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 	// summary
 	var s model.ItemSummary
 	err = r.db.QueryRow(ctx, `
-		SELECT id, item_id, summary, topics, score, summarized_at FROM item_summaries WHERE item_id = $1`, id,
-	).Scan(&s.ID, &s.ItemID, &s.Summary, &s.Topics, &s.Score, &s.SummarizedAt)
+		SELECT id, item_id, summary, topics, score, score_breakdown, score_reason, score_policy_version, summarized_at
+		FROM item_summaries WHERE item_id = $1`, id,
+	).Scan(&s.ID, &s.ItemID, &s.Summary, &s.Topics, &s.Score,
+		scoreBreakdownScanner{dst: &s.ScoreBreakdown}, &s.ScoreReason, &s.ScorePolicyVersion, &s.SummarizedAt)
 	if err == nil {
 		d.Summary = &s
 	}

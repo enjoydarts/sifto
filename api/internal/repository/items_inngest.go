@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,14 +37,34 @@ func (r *ItemInngestRepo) InsertFacts(ctx context.Context, itemID string, facts 
 	return err
 }
 
-func (r *ItemInngestRepo) InsertSummary(ctx context.Context, itemID, summary string, topics []string, score float64) error {
+func (r *ItemInngestRepo) InsertSummary(ctx context.Context, itemID, summary string, topics []string, score float64, scoreBreakdown map[string]any, scoreReason, scorePolicyVersion string) error {
+	var scoreBreakdownJSON []byte
+	if len(scoreBreakdown) > 0 {
+		b, err := json.Marshal(scoreBreakdown)
+		if err != nil {
+			return err
+		}
+		scoreBreakdownJSON = b
+	}
+	var scoreReasonPtr *string
+	if scoreReason != "" {
+		scoreReasonPtr = &scoreReason
+	}
+	var scorePolicyVersionPtr *string
+	if scorePolicyVersion != "" {
+		scorePolicyVersionPtr = &scorePolicyVersion
+	}
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO item_summaries (item_id, summary, topics, score)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO item_summaries (item_id, summary, topics, score, score_breakdown, score_reason, score_policy_version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (item_id) DO UPDATE SET
 		    summary = EXCLUDED.summary, topics = EXCLUDED.topics,
-		    score = EXCLUDED.score, summarized_at = NOW()`,
-		itemID, summary, topics, score)
+		    score = EXCLUDED.score,
+		    score_breakdown = EXCLUDED.score_breakdown,
+		    score_reason = EXCLUDED.score_reason,
+		    score_policy_version = EXCLUDED.score_policy_version,
+		    summarized_at = NOW()`,
+		itemID, summary, topics, score, scoreBreakdownJSON, scoreReasonPtr, scorePolicyVersionPtr)
 	if err != nil {
 		return err
 	}
@@ -62,7 +83,8 @@ func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID stri
 	rows, err := r.db.Query(ctx, `
 		SELECT i.id, i.source_id, i.url, i.title, i.content_text, i.status,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at,
-		       s.id, s.item_id, s.summary, s.topics, s.score, s.summarized_at
+		       s.id, s.item_id, s.summary, s.topics, s.score,
+		       s.score_breakdown, s.score_reason, s.score_policy_version, s.summarized_at
 		FROM items i
 		JOIN sources src ON src.id = i.source_id
 		JOIN item_summaries s ON s.item_id = i.id
@@ -86,7 +108,8 @@ func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID stri
 			&d.Item.ContentText, &d.Item.Status, &d.Item.PublishedAt,
 			&d.Item.FetchedAt, &d.Item.CreatedAt, &d.Item.UpdatedAt,
 			&d.Summary.ID, &d.Summary.ItemID, &d.Summary.Summary,
-			&d.Summary.Topics, &d.Summary.Score, &d.Summary.SummarizedAt,
+			&d.Summary.Topics, &d.Summary.Score, scoreBreakdownScanner{dst: &d.Summary.ScoreBreakdown},
+			&d.Summary.ScoreReason, &d.Summary.ScorePolicyVersion, &d.Summary.SummarizedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -117,14 +117,15 @@ func (r *ItemInngestRepo) GetEmbeddingCandidate(ctx context.Context, itemID stri
 	var v ItemEmbeddingCandidate
 	err := r.db.QueryRow(ctx, `
 		SELECT i.id, i.source_id, src.user_id, i.title,
-		       sm.summary, COALESCE(sm.topics, '{}'::text[]), COALESCE(f.facts, '{}'::text[])
+		       sm.summary, COALESCE(sm.topics, '{}'::text[]),
+		       COALESCE(f.facts, '[]'::jsonb)
 		FROM items i
 		JOIN sources src ON src.id = i.source_id
 		JOIN item_summaries sm ON sm.item_id = i.id
 		LEFT JOIN item_facts f ON f.item_id = i.id
 		WHERE i.id = $1
 		  AND i.status = 'summarized'`, itemID).
-		Scan(&v.ItemID, &v.SourceID, &v.UserID, &v.Title, &v.Summary, &v.Topics, &v.Facts)
+		Scan(&v.ItemID, &v.SourceID, &v.UserID, &v.Title, &v.Summary, &v.Topics, jsonStringArrayScanner{dst: &v.Facts})
 	if err != nil {
 		return nil, err
 	}

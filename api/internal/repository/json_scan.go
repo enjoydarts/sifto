@@ -10,6 +10,10 @@ type scoreBreakdownScanner struct {
 	dst **model.ItemSummaryScoreBreakdown
 }
 
+type jsonStringArrayScanner struct {
+	dst *[]string
+}
+
 func (s scoreBreakdownScanner) Scan(src any) error {
 	if s.dst == nil {
 		return nil
@@ -58,5 +62,35 @@ func (s scoreBreakdownScanner) Scan(src any) error {
 		Reliability:   toPtr("reliability"),
 		Relevance:     toPtr("relevance"),
 	}
+	return nil
+}
+
+func (s jsonStringArrayScanner) Scan(src any) error {
+	if s.dst == nil {
+		return nil
+	}
+	if src == nil {
+		*s.dst = nil
+		return nil
+	}
+	var b []byte
+	switch v := src.(type) {
+	case []byte:
+		b = v
+	case string:
+		b = []byte(v)
+	default:
+		*s.dst = nil
+		return nil
+	}
+	if len(b) == 0 {
+		*s.dst = nil
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal(b, &out); err != nil {
+		return err
+	}
+	*s.dst = out
 	return nil
 }

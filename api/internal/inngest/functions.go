@@ -276,7 +276,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					publishedAt = &t
 				}
 			}
-			if err := itemRepo.UpdateAfterExtract(ctx, itemID, extracted.Content, extracted.Title, publishedAt); err != nil {
+			if err := itemRepo.UpdateAfterExtract(ctx, itemID, extracted.Content, extracted.Title, extracted.ImageURL, publishedAt); err != nil {
 				log.Printf("process-item update-after-extract failed item_id=%s err=%v", itemID, err)
 				return nil, fmt.Errorf("update after extract: %w", err)
 			}

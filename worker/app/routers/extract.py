@@ -13,6 +13,7 @@ class ExtractResponse(BaseModel):
     title: str | None
     content: str
     published_at: str | None
+    image_url: str | None
 
 
 @router.post("/extract-body", response_model=ExtractResponse)

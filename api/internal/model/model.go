@@ -45,6 +45,7 @@ type Item struct {
 	SourceID      string     `json:"source_id"`
 	URL           string     `json:"url"`
 	Title         *string    `json:"title"`
+	ThumbnailURL  *string    `json:"thumbnail_url,omitempty"`
 	ContentText   *string    `json:"content_text,omitempty"`
 	Status        string     `json:"status"` // new | fetched | facts_extracted | summarized | failed
 	IsRead        bool       `json:"is_read"`

@@ -47,7 +47,7 @@ func (r *DigestRepo) GetDetail(ctx context.Context, id, userID string) (*model.D
 
 	rows, err := r.db.Query(ctx, `
 		SELECT di.rank,
-		       i.id, i.source_id, i.url, i.title, i.content_text, i.status,
+		       i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at,
 		       s.id, s.item_id, s.summary, s.topics, s.score,
 		       s.score_breakdown, s.score_reason, s.score_policy_version, s.summarized_at
@@ -65,7 +65,7 @@ func (r *DigestRepo) GetDetail(ctx context.Context, id, userID string) (*model.D
 		var did model.DigestItemDetail
 		if err := rows.Scan(
 			&did.Rank,
-			&did.Item.ID, &did.Item.SourceID, &did.Item.URL, &did.Item.Title,
+			&did.Item.ID, &did.Item.SourceID, &did.Item.URL, &did.Item.Title, &did.Item.ThumbnailURL,
 			&did.Item.ContentText, &did.Item.Status, &did.Item.PublishedAt,
 			&did.Item.FetchedAt, &did.Item.CreatedAt, &did.Item.UpdatedAt,
 			&did.Summary.ID, &did.Summary.ItemID, &did.Summary.Summary,

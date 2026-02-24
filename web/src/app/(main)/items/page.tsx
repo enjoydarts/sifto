@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Newspaper } from "lucide-react";
+import { Image as ImageIcon, Newspaper } from "lucide-react";
 import { api, Item } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import Pagination from "@/components/pagination";
@@ -435,34 +435,74 @@ function ItemsPageContent() {
 	      <ul className="space-y-2">
         {pagedItems.map((item) => (
 	          <li key={item.id} data-item-row-id={item.id}>
-	            <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 shadow-sm transition-colors ${
+	            <div className={`flex min-h-[92px] items-stretch gap-3 rounded-xl border px-4 py-3.5 shadow-sm transition-colors ${
                 item.is_read
                   ? "border-zinc-200 bg-zinc-50/80"
                   : "border-zinc-300 bg-white ring-1 ring-amber-100"
               }`}>
                 <span
                   aria-hidden="true"
-                  className={`mt-0.5 h-12 w-1 shrink-0 rounded-full ${
+                  className={`mt-0.5 h-16 w-1 shrink-0 self-start rounded-full ${
                     item.is_read ? "bg-zinc-200" : "bg-amber-400"
                   }`}
                 />
 	              <Link
 	                href={detailHref(item.id)}
                   onClick={() => rememberScroll(item.id)}
-	                className="flex min-w-0 flex-1 items-start gap-3 transition-colors hover:text-zinc-700"
+	                className="flex min-w-0 flex-1 items-stretch gap-3 transition-colors hover:text-zinc-700"
 	              >
-	                <span
-	                  className={`mt-0.5 shrink-0 rounded px-2 py-0.5 text-xs font-medium ${
-	                    STATUS_COLOR[item.status] ?? "bg-zinc-100 text-zinc-600"
-	                  }`}
-	                >
-	                  {t(`status.${item.status}`, item.status)}
-	                </span>
-	                <div className="min-w-0 flex-1">
+                  <div className="hidden h-[72px] w-[72px] shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 sm:flex">
+                    {item.thumbnail_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={item.thumbnail_url}
+                        alt=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-zinc-300">
+                        <ImageIcon className="size-4" aria-hidden="true" />
+                      </div>
+                    )}
+                  </div>
+	                <div className="flex min-w-0 flex-1 flex-col justify-between gap-1.5 py-0.5">
 	                  <div className="flex items-start gap-2">
-	                    <div className={`min-w-0 flex-1 truncate text-sm font-medium ${item.is_read ? "text-zinc-600" : "text-zinc-900"}`}>
-	                      {item.title ?? item.url}
-	                    </div>
+	                    <div className="min-w-0 flex-1">
+	                      <div className={`overflow-hidden text-[15px] leading-6 font-semibold ${item.is_read ? "text-zinc-600" : "text-zinc-900"}`}>
+	                        {item.title ?? item.url}
+	                      </div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                              item.is_read
+                                ? "border-zinc-200 bg-white text-zinc-500"
+                                : "border-amber-200 bg-amber-50 text-amber-700"
+                            }`}
+                          >
+                            {item.is_read
+                              ? locale === "ja"
+                                ? "既読"
+                                : "Read"
+                              : locale === "ja"
+                                ? "未読"
+                                : "Unread"}
+                          </span>
+                          <span
+                            className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                              STATUS_COLOR[item.status] ?? "bg-zinc-100 text-zinc-600"
+                            }`}
+                          >
+                            {t(`status.${item.status}`, item.status)}
+                          </span>
+                          <span>
+                            {new Date(
+                              item.published_at ?? item.created_at
+                            ).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US")}
+                          </span>
+                        </div>
+                      </div>
 	                    {item.summary_score != null ? (
 	                      <span
 	                        className={`shrink-0 rounded border px-2 py-0.5 text-xs font-semibold ${scoreTone(item.summary_score)}`}
@@ -479,55 +519,12 @@ function ItemsPageContent() {
 	                      </span>
 	                    )}
 	                  </div>
-	                  {item.title && (
-	                    <div className="truncate text-xs text-zinc-400">
-	                      {item.url}
-	                    </div>
-	                  )}
-	                  <div className="mt-1 flex items-center gap-2">
-	                    <div className="h-1.5 w-24 rounded-full bg-zinc-100">
-	                      {item.summary_score != null && (
-	                        <div
-	                          className="h-1.5 rounded-full bg-zinc-800"
-	                          style={{ width: `${Math.max(4, item.summary_score * 100)}%` }}
-	                        />
-	                      )}
-	                    </div>
-	                    <span className="text-[11px] text-zinc-500">
-	                      {item.summary_score != null
-	                        ? locale === "ja"
-	                          ? "スコア"
-	                          : "Score"
-	                        : locale === "ja"
-	                          ? "未採点"
-	                          : "Not scored"}
-	                    </span>
-	                  </div>
-	                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                          item.is_read
-                            ? "border-zinc-200 bg-white text-zinc-500"
-                            : "border-amber-200 bg-amber-50 text-amber-700"
-                        }`}
-                      >
-                        {item.is_read
-                          ? locale === "ja"
-                            ? "既読"
-                            : "Read"
-                          : locale === "ja"
-                            ? "未読"
-                            : "Unread"}
-                      </span>
-                      <span>
-	                    {new Date(
-	                      item.published_at ?? item.created_at
-	                    ).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US")}
-                      </span>
+	                  <div className="h-4 truncate text-[12px] text-zinc-400">
+	                    {item.title ? item.url : "\u00A0"}
 	                  </div>
 	                </div>
 	              </Link>
-                <div className="flex shrink-0 flex-col items-end gap-2">
+                <div className="flex min-h-[72px] shrink-0 flex-col items-end justify-between gap-2">
                   <button
                     type="button"
                     disabled={!!readUpdatingIds[item.id]}
@@ -546,7 +543,7 @@ function ItemsPageContent() {
                           ? "既読にする"
                           : "Mark read"}
                   </button>
-	                {item.status === "failed" && (
+	                {item.status === "failed" ? (
 	                  <button
 	                    type="button"
 	                    disabled={!!retryingIds[item.id]}
@@ -555,7 +552,11 @@ function ItemsPageContent() {
 	                  >
 	                    {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
 	                  </button>
-	                )}
+	                ) : (
+                    <span className="invisible rounded border border-zinc-300 px-3 py-1 text-xs font-medium">
+                      _
+                    </span>
+                  )}
                 </div>
 	            </div>
 	          </li>

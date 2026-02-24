@@ -36,7 +36,7 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 		limit = 5000
 	}
 	query := `
-		SELECT i.id, i.source_id, i.url, i.title, i.content_text, i.status,
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       sm.score, COALESCE(sm.topics, '{}'::text[]),
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
@@ -70,7 +70,7 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 	var items []model.Item
 	for rows.Next() {
 		var it model.Item
-		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ContentText,
+		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
 			&it.Status, &it.IsRead, &it.SummaryScore, &it.SummaryTopics, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -128,7 +128,7 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.content_text, i.status,
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       sm.score, COALESCE(sm.topics, '{}'::text[]),
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
@@ -216,7 +216,7 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.content_text, i.status,
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       sm.score, COALESCE(sm.topics, '{}'::text[]),
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
@@ -388,7 +388,7 @@ func scanItems(rows itemRowScanner) ([]model.Item, error) {
 	var items []model.Item
 	for rows.Next() {
 		var it model.Item
-		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ContentText,
+		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
 			&it.Status, &it.IsRead, &it.SummaryScore, &it.SummaryTopics, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -400,7 +400,7 @@ func scanItems(rows itemRowScanner) ([]model.Item, error) {
 func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.ItemDetail, error) {
 	var d model.ItemDetail
 	err := r.db.QueryRow(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.content_text, i.status,
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       EXISTS (
 		           SELECT 1 FROM item_reads ir
 		           WHERE ir.item_id = i.id AND ir.user_id = $2
@@ -409,7 +409,7 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
-	).Scan(&d.ID, &d.SourceID, &d.URL, &d.Title, &d.ContentText,
+	).Scan(&d.ID, &d.SourceID, &d.URL, &d.Title, &d.ThumbnailURL, &d.ContentText,
 		&d.Status, &d.IsRead, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {
 		return nil, mapDBError(err)
@@ -505,13 +505,13 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 func (r *ItemRepo) GetForRetry(ctx context.Context, id, userID string) (*model.Item, error) {
 	var it model.Item
 	err := r.db.QueryRow(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.content_text, i.status,
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       FALSE AS is_read,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
-	).Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ContentText,
+	).Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
 		&it.Status, &it.IsRead, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt)
 	if err != nil {
 		return nil, mapDBError(err)
@@ -521,7 +521,7 @@ func (r *ItemRepo) GetForRetry(ctx context.Context, id, userID string) (*model.I
 
 func (r *ItemRepo) ListFailedForRetry(ctx context.Context, userID string, sourceID *string) ([]model.Item, error) {
 	query := `
-		SELECT i.id, i.source_id, i.url, i.title, i.content_text, i.status,
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       FALSE AS is_read,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
@@ -543,7 +543,7 @@ func (r *ItemRepo) ListFailedForRetry(ctx context.Context, userID string, source
 	var items []model.Item
 	for rows.Next() {
 		var it model.Item
-		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ContentText,
+		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
 			&it.Status, &it.IsRead, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}

@@ -18,6 +18,7 @@ export interface Item {
   source_id: string;
   url: string;
   title: string | null;
+  thumbnail_url?: string | null;
   content_text: string | null;
   status: "new" | "fetched" | "facts_extracted" | "summarized" | "failed";
   is_read: boolean;

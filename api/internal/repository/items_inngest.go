@@ -31,13 +31,13 @@ type ItemEmbeddingBackfillTarget struct {
 	URL      string
 }
 
-func (r *ItemInngestRepo) UpdateAfterExtract(ctx context.Context, id, contentText string, title *string, publishedAt *time.Time) error {
+func (r *ItemInngestRepo) UpdateAfterExtract(ctx context.Context, id, contentText string, title, thumbnailURL *string, publishedAt *time.Time) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE items
-		SET content_text = $1, title = COALESCE($2, title), published_at = $3,
+		SET content_text = $1, title = COALESCE($2, title), thumbnail_url = COALESCE($3, thumbnail_url), published_at = $4,
 		    status = 'fetched', fetched_at = NOW(), updated_at = NOW()
-		WHERE id = $4`,
-		contentText, title, publishedAt, id)
+		WHERE id = $5`,
+		contentText, title, thumbnailURL, publishedAt, id)
 	return err
 }
 
@@ -174,7 +174,7 @@ func (r *ItemInngestRepo) ListEmbeddingBackfillTargets(ctx context.Context, user
 
 func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID string, since, until time.Time) ([]model.DigestItemDetail, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.content_text, i.status,
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at,
 		       s.id, s.item_id, s.summary, s.topics, s.score,
 		       s.score_breakdown, s.score_reason, s.score_policy_version, s.summarized_at
@@ -197,7 +197,7 @@ func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID stri
 	for rows.Next() {
 		var d model.DigestItemDetail
 		if err := rows.Scan(
-			&d.Item.ID, &d.Item.SourceID, &d.Item.URL, &d.Item.Title,
+			&d.Item.ID, &d.Item.SourceID, &d.Item.URL, &d.Item.Title, &d.Item.ThumbnailURL,
 			&d.Item.ContentText, &d.Item.Status, &d.Item.PublishedAt,
 			&d.Item.FetchedAt, &d.Item.CreatedAt, &d.Item.UpdatedAt,
 			&d.Summary.ID, &d.Summary.ItemID, &d.Summary.Summary,

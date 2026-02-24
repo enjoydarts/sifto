@@ -157,6 +157,19 @@ export default function ItemDetailPage() {
           {item.url}
         </a>
 
+        {item.thumbnail_url && (
+          <div className="mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={item.thumbnail_url}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              className="h-44 w-full object-cover sm:h-56"
+            />
+          </div>
+        )}
+
         <div className="mt-4 grid gap-2 text-xs text-zinc-500 sm:grid-cols-2">
           <div>
             <span className="font-medium text-zinc-600">created_at:</span>{" "}

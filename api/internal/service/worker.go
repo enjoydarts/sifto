@@ -31,6 +31,7 @@ type ExtractBodyResponse struct {
 	Title       *string `json:"title"`
 	Content     string  `json:"content"`
 	PublishedAt *string `json:"published_at"`
+	ImageURL    *string `json:"image_url"`
 }
 
 type ExtractFactsResponse struct {

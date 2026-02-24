@@ -15,7 +15,7 @@ func NewItemRepo(db *pgxpool.Pool) *ItemRepo { return &ItemRepo{db} }
 func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *string) ([]model.Item, error) {
 	query := `
 		SELECT i.id, i.source_id, i.url, i.title, i.content_text, i.status,
-		       sm.score,
+		       sm.score, COALESCE(sm.topics, '{}'::text[]),
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
@@ -47,7 +47,7 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 	for rows.Next() {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ContentText,
-			&it.Status, &it.SummaryScore, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.Status, &it.SummaryScore, &it.SummaryTopics, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)

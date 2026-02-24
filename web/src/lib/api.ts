@@ -21,6 +21,7 @@ export interface Item {
   content_text: string | null;
   status: "new" | "fetched" | "facts_extracted" | "summarized" | "failed";
   summary_score?: number | null;
+  summary_topics?: string[];
   published_at: string | null;
   fetched_at: string | null;
   created_at: string;

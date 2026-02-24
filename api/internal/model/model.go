@@ -42,6 +42,7 @@ type Item struct {
 	ContentText *string    `json:"content_text,omitempty"`
 	Status      string     `json:"status"` // new | fetched | facts_extracted | summarized | failed
 	SummaryScore *float64  `json:"summary_score,omitempty"`
+	SummaryTopics []string `json:"summary_topics,omitempty"`
 	PublishedAt *time.Time `json:"published_at,omitempty"`
 	FetchedAt   *time.Time `json:"fetched_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`

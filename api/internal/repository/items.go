@@ -445,36 +445,43 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 	if limit > 20 {
 		limit = 20
 	}
+	const minSimilarity = 0.55
 
 	rows, err := r.db.Query(ctx, `
 		WITH target AS (
-			SELECT ie.embedding AS emb, ie.dimensions AS dims
+			SELECT ie.embedding AS emb, ie.dimensions AS dims, ti.source_id AS target_source_id
 			FROM item_embeddings ie
 			JOIN items ti ON ti.id = ie.item_id
 			JOIN sources ts ON ts.id = ti.source_id
 			WHERE ie.item_id = $1
 			  AND ts.user_id = $2
+		), scored AS (
+			SELECT i.id, i.source_id, i.url, i.title,
+			       sm.summary, COALESCE(sm.topics, '{}'::text[]) AS topics, sm.score,
+			       COALESCE(
+			         (
+			           SELECT SUM(tv * cv)
+			           FROM unnest(t.emb) WITH ORDINALITY AS tval(tv, idx)
+			           JOIN unnest(ie.embedding) WITH ORDINALITY AS cval(cv, idx) USING (idx)
+			         ),
+			         0
+			       )::double precision AS similarity,
+			       i.published_at, i.created_at
+			FROM target t
+			JOIN item_embeddings ie ON ie.item_id <> $1 AND ie.dimensions = t.dims
+			JOIN items i ON i.id = ie.item_id
+			JOIN sources s ON s.id = i.source_id
+			LEFT JOIN item_summaries sm ON sm.item_id = i.id
+			WHERE s.user_id = $2
+			  AND i.status = 'summarized'
+			  AND i.source_id <> t.target_source_id
 		)
-		SELECT i.id, i.source_id, i.url, i.title,
-		       sm.summary, COALESCE(sm.topics, '{}'::text[]), sm.score,
-		       COALESCE(
-		         (
-		           SELECT SUM(tv * cv)
-		           FROM unnest(t.emb) WITH ORDINALITY AS tval(tv, idx)
-		           JOIN unnest(ie.embedding) WITH ORDINALITY AS cval(cv, idx) USING (idx)
-		         ),
-		         0
-		       )::double precision AS similarity,
-		       i.published_at, i.created_at
-		FROM target t
-		JOIN item_embeddings ie ON ie.item_id <> $1 AND ie.dimensions = t.dims
-		JOIN items i ON i.id = ie.item_id
-		JOIN sources s ON s.id = i.source_id
-		LEFT JOIN item_summaries sm ON sm.item_id = i.id
-		WHERE s.user_id = $2
-		  AND i.status = 'summarized'
-		ORDER BY similarity DESC, COALESCE(i.published_at, i.created_at) DESC
-		LIMIT $3`, id, userID, limit)
+		SELECT id, source_id, url, title,
+		       summary, topics, score, similarity, published_at, created_at
+		FROM scored
+		WHERE similarity >= $4
+		ORDER BY similarity DESC, COALESCE(published_at, created_at) DESC
+		LIMIT $3`, id, userID, limit, minSimilarity)
 	if err != nil {
 		return nil, err
 	}

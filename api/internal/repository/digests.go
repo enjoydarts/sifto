@@ -24,8 +24,8 @@ func (r *DigestRepo) List(ctx context.Context, userID string) ([]model.Digest, e
 	var digests []model.Digest
 	for rows.Next() {
 		var d model.Digest
-			if err := rows.Scan(&d.ID, &d.UserID, &d.DigestDate, &d.EmailSubject, &d.EmailBody,
-				&d.SendStatus, &d.SendError, &d.SendTriedAt, &d.SentAt, &d.CreatedAt); err != nil {
+		if err := rows.Scan(&d.ID, &d.UserID, &d.DigestDate, &d.EmailSubject, &d.EmailBody,
+			&d.SendStatus, &d.SendError, &d.SendTriedAt, &d.SentAt, &d.CreatedAt); err != nil {
 			return nil, err
 		}
 		digests = append(digests, d)

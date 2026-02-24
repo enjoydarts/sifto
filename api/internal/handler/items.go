@@ -48,12 +48,12 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	unreadOnly := q.Get("unread_only") == "true"
 	resp, err := h.repo.ListPage(r.Context(), userID, repository.ItemListParams{
-		Status:    status,
-		SourceID:  sourceID,
+		Status:     status,
+		SourceID:   sourceID,
 		UnreadOnly: unreadOnly,
-		Sort:      sort,
-		Page:      page,
-		PageSize:  pageSize,
+		Sort:       sort,
+		Page:       page,
+		PageSize:   pageSize,
 	})
 	if err != nil {
 		writeRepoError(w, err)
@@ -121,8 +121,8 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{
-		"items":  items,
-		"limit":  limit,
+		"items":   items,
+		"limit":   limit,
 		"item_id": id,
 	})
 }

@@ -14,10 +14,10 @@ import (
 )
 
 type InternalHandler struct {
-	userRepo    *repository.UserRepo
-	itemRepo    *repository.ItemInngestRepo
-	digestRepo  *repository.DigestInngestRepo
-	publisher   *service.EventPublisher
+	userRepo   *repository.UserRepo
+	itemRepo   *repository.ItemInngestRepo
+	digestRepo *repository.DigestInngestRepo
+	publisher  *service.EventPublisher
 }
 
 func NewInternalHandler(
@@ -76,9 +76,9 @@ func (h *InternalHandler) DebugGenerateDigest(w http.ResponseWriter, r *http.Req
 	}
 
 	var body struct {
-		UserID      *string `json:"user_id"`
-		DigestDate  *string `json:"digest_date"` // JST date, YYYY-MM-DD
-		SkipSend    bool    `json:"skip_send"`
+		UserID     *string `json:"user_id"`
+		DigestDate *string `json:"digest_date"` // JST date, YYYY-MM-DD
+		SkipSend   bool    `json:"skip_send"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
@@ -172,19 +172,19 @@ func (h *InternalHandler) DebugGenerateDigest(w http.ResponseWriter, r *http.Req
 
 	w.WriteHeader(http.StatusAccepted)
 	writeJSON(w, map[string]any{
-		"status":            "accepted",
-		"digest_date":       targetDate.Format("2006-01-02"),
-		"since_jst":         since.Format(time.RFC3339),
-		"until_jst":         until.Format(time.RFC3339),
-		"user_filter":       body.UserID,
-		"skip_send":         body.SkipSend,
-		"users_checked":     len(users),
-		"digests_created":   created,
-		"events_enqueued":   enqueued,
-		"skipped_no_items":  skippedNoItems,
-		"skipped_sent":      skippedSent,
-		"errors":            failed,
-		"results":           results,
+		"status":           "accepted",
+		"digest_date":      targetDate.Format("2006-01-02"),
+		"since_jst":        since.Format(time.RFC3339),
+		"until_jst":        until.Format(time.RFC3339),
+		"user_filter":      body.UserID,
+		"skip_send":        body.SkipSend,
+		"users_checked":    len(users),
+		"digests_created":  created,
+		"events_enqueued":  enqueued,
+		"skipped_no_items": skippedNoItems,
+		"skipped_sent":     skippedSent,
+		"errors":           failed,
+		"results":          results,
 	})
 }
 
@@ -299,13 +299,13 @@ func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http
 
 	w.WriteHeader(http.StatusAccepted)
 	writeJSON(w, map[string]any{
-		"status":         "accepted",
-		"dry_run":        body.DryRun,
-		"user_filter":    body.UserID,
-		"limit":          body.Limit,
-		"matched":        len(targets),
-		"queued_count":   queued,
-		"failed_count":   failed,
-		"targets":        preview,
+		"status":       "accepted",
+		"dry_run":      body.DryRun,
+		"user_filter":  body.UserID,
+		"limit":        body.Limit,
+		"matched":      len(targets),
+		"queued_count": queued,
+		"failed_count": failed,
+		"targets":      preview,
 	})
 }

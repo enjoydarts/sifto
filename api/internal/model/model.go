@@ -12,16 +12,20 @@ type User struct {
 }
 
 type UserSettings struct {
-	UserID                 string     `json:"user_id"`
-	AnthropicAPIKeyLast4   *string    `json:"anthropic_api_key_last4,omitempty"`
-	HasAnthropicAPIKey     bool       `json:"has_anthropic_api_key"`
-	OpenAIAPIKeyLast4      *string    `json:"openai_api_key_last4,omitempty"`
-	HasOpenAIAPIKey        bool       `json:"has_openai_api_key"`
-	MonthlyBudgetUSD       *float64   `json:"monthly_budget_usd,omitempty"`
-	BudgetAlertEnabled     bool       `json:"budget_alert_enabled"`
-	BudgetAlertThresholdPct int       `json:"budget_alert_threshold_pct"`
-	CreatedAt              time.Time  `json:"created_at"`
-	UpdatedAt              time.Time  `json:"updated_at"`
+	UserID                     string    `json:"user_id"`
+	AnthropicAPIKeyLast4       *string   `json:"anthropic_api_key_last4,omitempty"`
+	HasAnthropicAPIKey         bool      `json:"has_anthropic_api_key"`
+	OpenAIAPIKeyLast4          *string   `json:"openai_api_key_last4,omitempty"`
+	HasOpenAIAPIKey            bool      `json:"has_openai_api_key"`
+	MonthlyBudgetUSD           *float64  `json:"monthly_budget_usd,omitempty"`
+	BudgetAlertEnabled         bool      `json:"budget_alert_enabled"`
+	BudgetAlertThresholdPct    int       `json:"budget_alert_threshold_pct"`
+	ReadingPlanWindow          string    `json:"reading_plan_window"`
+	ReadingPlanSize            int       `json:"reading_plan_size"`
+	ReadingPlanDiversifyTopics bool      `json:"reading_plan_diversify_topics"`
+	ReadingPlanExcludeRead     bool      `json:"reading_plan_exclude_read"`
+	CreatedAt                  time.Time `json:"created_at"`
+	UpdatedAt                  time.Time `json:"updated_at"`
 }
 
 type Source struct {
@@ -37,19 +41,19 @@ type Source struct {
 }
 
 type Item struct {
-	ID          string     `json:"id"`
-	SourceID    string     `json:"source_id"`
-	URL         string     `json:"url"`
-	Title       *string    `json:"title"`
-	ContentText *string    `json:"content_text,omitempty"`
-	Status      string     `json:"status"` // new | fetched | facts_extracted | summarized | failed
-	IsRead      bool       `json:"is_read"`
-	SummaryScore *float64  `json:"summary_score,omitempty"`
-	SummaryTopics []string `json:"summary_topics,omitempty"`
-	PublishedAt *time.Time `json:"published_at,omitempty"`
-	FetchedAt   *time.Time `json:"fetched_at,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID            string     `json:"id"`
+	SourceID      string     `json:"source_id"`
+	URL           string     `json:"url"`
+	Title         *string    `json:"title"`
+	ContentText   *string    `json:"content_text,omitempty"`
+	Status        string     `json:"status"` // new | fetched | facts_extracted | summarized | failed
+	IsRead        bool       `json:"is_read"`
+	SummaryScore  *float64   `json:"summary_score,omitempty"`
+	SummaryTopics []string   `json:"summary_topics,omitempty"`
+	PublishedAt   *time.Time `json:"published_at,omitempty"`
+	FetchedAt     *time.Time `json:"fetched_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 type ItemFacts struct {
@@ -60,15 +64,15 @@ type ItemFacts struct {
 }
 
 type ItemSummary struct {
-	ID           string    `json:"id"`
-	ItemID       string    `json:"item_id"`
-	Summary      string    `json:"summary"`
-	Topics       []string  `json:"topics"`
-	Score        *float64  `json:"score,omitempty"`
-	ScoreBreakdown *ItemSummaryScoreBreakdown `json:"score_breakdown,omitempty"`
-	ScoreReason  *string   `json:"score_reason,omitempty"`
-	ScorePolicyVersion *string `json:"score_policy_version,omitempty"`
-	SummarizedAt time.Time `json:"summarized_at"`
+	ID                 string                     `json:"id"`
+	ItemID             string                     `json:"item_id"`
+	Summary            string                     `json:"summary"`
+	Topics             []string                   `json:"topics"`
+	Score              *float64                   `json:"score,omitempty"`
+	ScoreBreakdown     *ItemSummaryScoreBreakdown `json:"score_breakdown,omitempty"`
+	ScoreReason        *string                    `json:"score_reason,omitempty"`
+	ScorePolicyVersion *string                    `json:"score_policy_version,omitempty"`
+	SummarizedAt       time.Time                  `json:"summarized_at"`
 }
 
 type ItemSummaryScoreBreakdown struct {
@@ -87,7 +91,7 @@ type ItemDetail struct {
 
 type RelatedItem struct {
 	ID           string     `json:"id"`
-	SourceID      string     `json:"source_id"`
+	SourceID     string     `json:"source_id"`
 	URL          string     `json:"url"`
 	Title        *string    `json:"title"`
 	Summary      *string    `json:"summary,omitempty"`
@@ -99,23 +103,23 @@ type RelatedItem struct {
 }
 
 type ItemListResponse struct {
-	Items     []Item `json:"items"`
-	Page      int    `json:"page"`
-	PageSize  int    `json:"page_size"`
-	Total     int    `json:"total"`
-	HasNext   bool   `json:"has_next"`
-	Sort      string `json:"sort"`
-	Status    *string `json:"status,omitempty"`
-	SourceID  *string `json:"source_id,omitempty"`
+	Items    []Item  `json:"items"`
+	Page     int     `json:"page"`
+	PageSize int     `json:"page_size"`
+	Total    int     `json:"total"`
+	HasNext  bool    `json:"has_next"`
+	Sort     string  `json:"sort"`
+	Status   *string `json:"status,omitempty"`
+	SourceID *string `json:"source_id,omitempty"`
 }
 
 type ReadingPlanResponse struct {
-	Items           []Item `json:"items"`
-	Window          string `json:"window"`
-	Size            int    `json:"size"`
-	DiversifyTopics bool   `json:"diversify_topics"`
-	ExcludeRead     bool   `json:"exclude_read"`
-	SourcePoolCount int    `json:"source_pool_count"`
+	Items           []Item             `json:"items"`
+	Window          string             `json:"window"`
+	Size            int                `json:"size"`
+	DiversifyTopics bool               `json:"diversify_topics"`
+	ExcludeRead     bool               `json:"exclude_read"`
+	SourcePoolCount int                `json:"source_pool_count"`
 	Topics          []ReadingPlanTopic `json:"topics"`
 }
 
@@ -126,23 +130,23 @@ type ReadingPlanTopic struct {
 }
 
 type ItemStatsResponse struct {
-	Total    int         `json:"total"`
-	Read     int         `json:"read"`
-	Unread   int         `json:"unread"`
+	Total    int            `json:"total"`
+	Read     int            `json:"read"`
+	Unread   int            `json:"unread"`
 	ByStatus map[string]int `json:"by_status"`
 }
 
 type Digest struct {
-	ID            string     `json:"id"`
-	UserID        string     `json:"user_id"`
-	DigestDate    string     `json:"digest_date"` // YYYY-MM-DD
-	EmailSubject  *string    `json:"email_subject,omitempty"`
-	EmailBody     *string    `json:"email_body,omitempty"`
-	SendStatus    *string    `json:"send_status,omitempty"`
-	SendError     *string    `json:"send_error,omitempty"`
-	SendTriedAt   *time.Time `json:"send_tried_at,omitempty"`
-	SentAt        *time.Time `json:"sent_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
+	ID           string     `json:"id"`
+	UserID       string     `json:"user_id"`
+	DigestDate   string     `json:"digest_date"` // YYYY-MM-DD
+	EmailSubject *string    `json:"email_subject,omitempty"`
+	EmailBody    *string    `json:"email_body,omitempty"`
+	SendStatus   *string    `json:"send_status,omitempty"`
+	SendError    *string    `json:"send_error,omitempty"`
+	SendTriedAt  *time.Time `json:"send_tried_at,omitempty"`
+	SentAt       *time.Time `json:"sent_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 type DigestItem struct {

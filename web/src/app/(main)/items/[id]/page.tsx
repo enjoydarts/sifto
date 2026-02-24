@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { api, ItemDetail, RelatedItem } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -19,12 +19,14 @@ export default function ItemDetailPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [readUpdating, setReadUpdating] = useState(false);
   const [related, setRelated] = useState<RelatedItem[]>([]);
   const [relatedError, setRelatedError] = useState<string | null>(null);
+  const autoMarkedRef = useRef<Record<string, true>>({});
 
   useEffect(() => {
     setLoading(true);
@@ -48,7 +50,27 @@ export default function ItemDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  useEffect(() => {
+    if (!item || item.is_read || autoMarkedRef.current[item.id]) return;
+
+    autoMarkedRef.current[item.id] = true;
+    setReadUpdating(true);
+    api
+      .markItemRead(item.id)
+      .then((next) => {
+        setItem((prev) => (prev && prev.id === item.id ? { ...prev, is_read: next.is_read } : prev));
+      })
+      .catch(() => {
+        delete autoMarkedRef.current[item.id];
+      })
+      .finally(() => setReadUpdating(false));
+  }, [item]);
+
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
+  const backHref = useMemo(() => {
+    const from = searchParams.get("from");
+    return from && from.startsWith("/items") ? from : "/items";
+  }, [searchParams]);
 
   const toggleRead = async () => {
     if (!item) return;
@@ -80,7 +102,7 @@ export default function ItemDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link href="/items" className="inline-block text-sm text-zinc-500 hover:text-zinc-900">
+      <Link href={backHref} className="inline-block text-sm text-zinc-500 hover:text-zinc-900">
         ← {t("nav.items")}
       </Link>
 

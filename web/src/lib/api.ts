@@ -187,6 +187,13 @@ export interface UserSettingsCurrentMonth {
   remaining_budget_pct: number | null;
 }
 
+export interface UserReadingPlanSettings {
+  window: "24h" | "today_jst" | "7d" | string;
+  size: number;
+  diversify_topics: boolean;
+  exclude_read: boolean;
+}
+
 export interface UserSettings {
   user_id: string;
   has_anthropic_api_key: boolean;
@@ -196,6 +203,7 @@ export interface UserSettings {
   monthly_budget_usd: number | null;
   budget_alert_enabled: boolean;
   budget_alert_threshold_pct: number;
+  reading_plan: UserReadingPlanSettings;
   current_month: UserSettingsCurrentMonth;
 }
 
@@ -304,6 +312,11 @@ export const api = {
     budget_alert_threshold_pct: number;
   }) =>
     apiFetch<UserSettings>("/settings", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  updateReadingPlanSettings: (body: Pick<UserReadingPlanSettings, "window" | "size" | "diversify_topics">) =>
+    apiFetch<{ user_id: string; reading_plan: UserReadingPlanSettings }>("/settings/reading-plan", {
       method: "PATCH",
       body: JSON.stringify(body),
     }),

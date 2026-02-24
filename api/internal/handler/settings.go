@@ -13,9 +13,9 @@ import (
 )
 
 type SettingsHandler struct {
-	repo        *repository.UserSettingsRepo
+	repo         *repository.UserSettingsRepo
 	llmUsageRepo *repository.LLMUsageLogRepo
-	cipher      *service.SecretCipher
+	cipher       *service.SecretCipher
 }
 
 func NewSettingsHandler(repo *repository.UserSettingsRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher) *SettingsHandler {
@@ -49,21 +49,63 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]any{
-		"user_id":                   settings.UserID,
-		"has_anthropic_api_key":     settings.HasAnthropicAPIKey,
-		"anthropic_api_key_last4":   settings.AnthropicAPIKeyLast4,
-		"has_openai_api_key":        settings.HasOpenAIAPIKey,
-		"openai_api_key_last4":      settings.OpenAIAPIKeyLast4,
-		"monthly_budget_usd":        settings.MonthlyBudgetUSD,
-		"budget_alert_enabled":      settings.BudgetAlertEnabled,
+		"user_id":                    settings.UserID,
+		"has_anthropic_api_key":      settings.HasAnthropicAPIKey,
+		"anthropic_api_key_last4":    settings.AnthropicAPIKeyLast4,
+		"has_openai_api_key":         settings.HasOpenAIAPIKey,
+		"openai_api_key_last4":       settings.OpenAIAPIKeyLast4,
+		"monthly_budget_usd":         settings.MonthlyBudgetUSD,
+		"budget_alert_enabled":       settings.BudgetAlertEnabled,
 		"budget_alert_threshold_pct": settings.BudgetAlertThresholdPct,
+		"reading_plan": map[string]any{
+			"window":           settings.ReadingPlanWindow,
+			"size":             settings.ReadingPlanSize,
+			"diversify_topics": settings.ReadingPlanDiversifyTopics,
+			"exclude_read":     settings.ReadingPlanExcludeRead,
+		},
 		"current_month": map[string]any{
-			"month_jst":             monthStart.Format("2006-01"),
-			"period_start_jst":      monthStart.Format(time.RFC3339),
-			"period_end_jst":        nextMonth.Format(time.RFC3339),
-			"estimated_cost_usd":    usedCostUSD,
-			"remaining_budget_usd":  remainingBudgetUSD,
-			"remaining_budget_pct":  remainingPct,
+			"month_jst":            monthStart.Format("2006-01"),
+			"period_start_jst":     monthStart.Format(time.RFC3339),
+			"period_end_jst":       nextMonth.Format(time.RFC3339),
+			"estimated_cost_usd":   usedCostUSD,
+			"remaining_budget_usd": remainingBudgetUSD,
+			"remaining_budget_pct": remainingPct,
+		},
+	})
+}
+
+func (h *SettingsHandler) UpdateReadingPlan(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		Window          string `json:"window"`
+		Size            int    `json:"size"`
+		DiversifyTopics bool   `json:"diversify_topics"`
+		ExcludeRead     bool   `json:"exclude_read"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if body.Window != "24h" && body.Window != "today_jst" && body.Window != "7d" {
+		http.Error(w, "invalid window", http.StatusBadRequest)
+		return
+	}
+	if body.Size < 1 || body.Size > 100 {
+		http.Error(w, "invalid size", http.StatusBadRequest)
+		return
+	}
+	settings, err := h.repo.UpsertReadingPlanConfig(r.Context(), userID, body.Window, body.Size, body.DiversifyTopics, body.ExcludeRead)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"user_id": settings.UserID,
+		"reading_plan": map[string]any{
+			"window":           settings.ReadingPlanWindow,
+			"size":             settings.ReadingPlanSize,
+			"diversify_topics": settings.ReadingPlanDiversifyTopics,
+			"exclude_read":     settings.ReadingPlanExcludeRead,
 		},
 	})
 }
@@ -71,9 +113,9 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *SettingsHandler) UpdateBudget(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	var body struct {
-		MonthlyBudgetUSD       *float64 `json:"monthly_budget_usd"`
-		BudgetAlertEnabled     bool     `json:"budget_alert_enabled"`
-		BudgetAlertThresholdPct int     `json:"budget_alert_threshold_pct"`
+		MonthlyBudgetUSD        *float64 `json:"monthly_budget_usd"`
+		BudgetAlertEnabled      bool     `json:"budget_alert_enabled"`
+		BudgetAlertThresholdPct int      `json:"budget_alert_threshold_pct"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)

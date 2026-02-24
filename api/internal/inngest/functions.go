@@ -1,8 +1,8 @@
 package inngest
 
 import (
-	"crypto/sha256"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -12,10 +12,10 @@ import (
 	"github.com/inngest/inngestgo"
 	"github.com/inngest/inngestgo/step"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/mmcdole/gofeed"
 	"github.com/minoru-kitayama/sifto/api/internal/repository"
 	"github.com/minoru-kitayama/sifto/api/internal/service"
 	"github.com/minoru-kitayama/sifto/api/internal/timeutil"
+	"github.com/mmcdole/gofeed"
 )
 
 func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpose string, usage *service.LLMUsage, userID, sourceID, itemID, digestID *string) {
@@ -32,20 +32,20 @@ func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpo
 	}
 	if err := repo.Insert(ctx, repository.LLMUsageLogInput{
 		IdempotencyKey:           &idempotencyKey,
-		UserID:                  userID,
-		SourceID:                sourceID,
-		ItemID:                  itemID,
-		DigestID:                digestID,
-		Provider:                usage.Provider,
-		Model:                   usage.Model,
-		PricingModelFamily:      usage.PricingModelFamily,
-		PricingSource:           pricingSource,
-		Purpose:                 purpose,
-		InputTokens:             usage.InputTokens,
-		OutputTokens:            usage.OutputTokens,
+		UserID:                   userID,
+		SourceID:                 sourceID,
+		ItemID:                   itemID,
+		DigestID:                 digestID,
+		Provider:                 usage.Provider,
+		Model:                    usage.Model,
+		PricingModelFamily:       usage.PricingModelFamily,
+		PricingSource:            pricingSource,
+		Purpose:                  purpose,
+		InputTokens:              usage.InputTokens,
+		OutputTokens:             usage.OutputTokens,
 		CacheCreationInputTokens: usage.CacheCreationInputTokens,
-		CacheReadInputTokens:    usage.CacheReadInputTokens,
-		EstimatedCostUSD:        usage.EstimatedCostUSD,
+		CacheReadInputTokens:     usage.CacheReadInputTokens,
+		EstimatedCostUSD:         usage.EstimatedCostUSD,
 	}); err != nil {
 		log.Printf("record llm usage purpose=%s: %v", purpose, err)
 	}
@@ -389,11 +389,11 @@ func embedItemFn(client inngestgo.Client, db *pgxpool.Pool, openAI *service.Open
 
 			recordLLMUsage(ctx, llmUsageRepo, "embedding", embResp.LLM, &candidate.UserID, &candidate.SourceID, &candidate.ItemID, nil)
 			return map[string]any{
-				"item_id":     candidate.ItemID,
-				"source_id":   candidate.SourceID,
-				"dimensions":  len(embResp.Embedding),
-				"status":      "embedded",
-				"model":       embModel,
+				"item_id":    candidate.ItemID,
+				"source_id":  candidate.SourceID,
+				"dimensions": len(embResp.Embedding),
+				"status":     "embedded",
+				"model":      embModel,
 			}, nil
 		},
 	)
@@ -571,21 +571,21 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 						return "", err
 					}
 					return "stored", nil
-					})
-					if err != nil {
-						markStatus("compose_failed", err)
-						return nil, fmt.Errorf("compose digest copy: %w", err)
-					}
-					digest, err = digestRepo.GetForEmail(ctx, data.DigestID)
-					if err != nil {
-						markStatus("refetch_after_compose_failed", err)
-						return nil, fmt.Errorf("refetch digest after compose: %w", err)
-					}
-					if digest.EmailSubject == nil || digest.EmailBody == nil {
-						err := fmt.Errorf("compose digest copy: email copy not persisted")
-						markStatus("compose_failed", err)
-						return nil, err
-					}
+				})
+				if err != nil {
+					markStatus("compose_failed", err)
+					return nil, fmt.Errorf("compose digest copy: %w", err)
+				}
+				digest, err = digestRepo.GetForEmail(ctx, data.DigestID)
+				if err != nil {
+					markStatus("refetch_after_compose_failed", err)
+					return nil, fmt.Errorf("refetch digest after compose: %w", err)
+				}
+				if digest.EmailSubject == nil || digest.EmailBody == nil {
+					err := fmt.Errorf("compose digest copy: email copy not persisted")
+					markStatus("compose_failed", err)
+					return nil, err
+				}
 				copy = &service.ComposeDigestResponse{
 					Subject: *digest.EmailSubject,
 					Body:    *digest.EmailBody,
@@ -602,14 +602,14 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 					return "", err
 				}
 				return "sent", nil
-				})
-				if err != nil {
-					markStatus("send_email_failed", err)
-					return nil, fmt.Errorf("send email: %w", err)
-				}
-				log.Printf("send-digest send-email done digest_id=%s", data.DigestID)
+			})
+			if err != nil {
+				markStatus("send_email_failed", err)
+				return nil, fmt.Errorf("send email: %w", err)
+			}
+			log.Printf("send-digest send-email done digest_id=%s", data.DigestID)
 
-				if err := digestRepo.UpdateSentAt(ctx, data.DigestID); err != nil {
+			if err := digestRepo.UpdateSentAt(ctx, data.DigestID); err != nil {
 				log.Printf("update sent_at: %v", err)
 			}
 			log.Printf("send-digest complete digest_id=%s", data.DigestID)

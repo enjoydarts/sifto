@@ -13,10 +13,10 @@ type UserSettingsRepo struct{ db *pgxpool.Pool }
 func NewUserSettingsRepo(db *pgxpool.Pool) *UserSettingsRepo { return &UserSettingsRepo{db: db} }
 
 type BudgetAlertTarget struct {
-	UserID                 string
-	Email                  string
-	Name                   *string
-	MonthlyBudgetUSD       float64
+	UserID                  string
+	Email                   string
+	Name                    *string
+	MonthlyBudgetUSD        float64
 	BudgetAlertThresholdPct int
 }
 
@@ -33,6 +33,10 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       monthly_budget_usd,
 		       budget_alert_enabled,
 		       budget_alert_threshold_pct,
+		       reading_plan_window,
+		       reading_plan_size,
+		       reading_plan_diversify_topics,
+		       reading_plan_exclude_read,
 		       created_at,
 		       updated_at
 		FROM user_settings
@@ -47,6 +51,10 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.MonthlyBudgetUSD,
 		&v.BudgetAlertEnabled,
 		&v.BudgetAlertThresholdPct,
+		&v.ReadingPlanWindow,
+		&v.ReadingPlanSize,
+		&v.ReadingPlanDiversifyTopics,
+		&v.ReadingPlanExcludeRead,
 		&v.CreatedAt,
 		&v.UpdatedAt,
 	)
@@ -105,6 +113,29 @@ func (r *UserSettingsRepo) UpsertBudgetConfig(ctx context.Context, userID string
 		    budget_alert_threshold_pct = EXCLUDED.budget_alert_threshold_pct,
 		    updated_at = NOW()`,
 		userID, monthlyBudgetUSD, enabled, thresholdPct,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) UpsertReadingPlanConfig(ctx context.Context, userID, window string, size int, diversifyTopics, excludeRead bool) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (
+			user_id,
+			reading_plan_window,
+			reading_plan_size,
+			reading_plan_diversify_topics,
+			reading_plan_exclude_read
+		) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (user_id) DO UPDATE
+		SET reading_plan_window = EXCLUDED.reading_plan_window,
+		    reading_plan_size = EXCLUDED.reading_plan_size,
+		    reading_plan_diversify_topics = EXCLUDED.reading_plan_diversify_topics,
+		    reading_plan_exclude_read = EXCLUDED.reading_plan_exclude_read,
+		    updated_at = NOW()`,
+		userID, window, size, diversifyTopics, excludeRead,
 	)
 	if err != nil {
 		return nil, err

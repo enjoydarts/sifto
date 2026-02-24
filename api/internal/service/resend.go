@@ -27,12 +27,12 @@ type DigestEmailCopy struct {
 }
 
 type BudgetAlertEmail struct {
-	MonthJST            string
-	MonthlyBudgetUSD    float64
-	UsedCostUSD         float64
-	RemainingBudgetUSD  float64
-	RemainingPct        float64
-	ThresholdPct        int
+	MonthJST           string
+	MonthlyBudgetUSD   float64
+	UsedCostUSD        float64
+	RemainingBudgetUSD float64
+	RemainingPct       float64
+	ThresholdPct       int
 }
 
 func NewResendClient() *ResendClient {

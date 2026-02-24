@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/mmcdole/gofeed"
 	"github.com/minoru-kitayama/sifto/api/internal/middleware"
 	"github.com/minoru-kitayama/sifto/api/internal/repository"
 	"github.com/minoru-kitayama/sifto/api/internal/service"
+	"github.com/mmcdole/gofeed"
 )
 
 type FeedCandidate struct {

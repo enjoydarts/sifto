@@ -12,6 +12,7 @@ export default function SettingsPage() {
   const { confirm } = useConfirm();
   const [loading, setLoading] = useState(true);
   const [savingBudget, setSavingBudget] = useState(false);
+  const [savingReadingPlan, setSavingReadingPlan] = useState(false);
   const [savingAnthropicKey, setSavingAnthropicKey] = useState(false);
   const [deletingAnthropicKey, setDeletingAnthropicKey] = useState(false);
   const [savingOpenAIKey, setSavingOpenAIKey] = useState(false);
@@ -23,6 +24,9 @@ export default function SettingsPage() {
   const [thresholdPct, setThresholdPct] = useState<number>(20);
   const [anthropicApiKeyInput, setAnthropicApiKeyInput] = useState("");
   const [openAIApiKeyInput, setOpenAIApiKeyInput] = useState("");
+  const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
+  const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
+  const [readingPlanDiversifyTopics, setReadingPlanDiversifyTopics] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -32,6 +36,9 @@ export default function SettingsPage() {
       setBudgetUSD(data.monthly_budget_usd == null ? "" : String(data.monthly_budget_usd));
       setAlertEnabled(Boolean(data.budget_alert_enabled));
       setThresholdPct(data.budget_alert_threshold_pct ?? 20);
+      setReadingPlanWindow((data.reading_plan?.window as "24h" | "today_jst" | "7d") ?? "24h");
+      setReadingPlanSize(String(data.reading_plan?.size ?? 15));
+      setReadingPlanDiversifyTopics(Boolean(data.reading_plan?.diversify_topics ?? true));
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -71,6 +78,28 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setSavingBudget(false);
+    }
+  }
+
+  async function submitReadingPlan(e: FormEvent) {
+    e.preventDefault();
+    setSavingReadingPlan(true);
+    try {
+      const parsedSize = Number(readingPlanSize);
+      if (!Number.isFinite(parsedSize) || parsedSize < 1 || parsedSize > 100) {
+        throw new Error(locale === "ja" ? "件数は1〜100で指定してください" : "Size must be between 1 and 100");
+      }
+      await api.updateReadingPlanSettings({
+        window: readingPlanWindow,
+        size: parsedSize,
+        diversify_topics: readingPlanDiversifyTopics,
+      });
+      await load();
+      showToast(locale === "ja" ? "おすすめ記事設定を保存しました" : "Reading plan settings saved", "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingReadingPlan(false);
     }
   }
 
@@ -332,7 +361,72 @@ export default function SettingsPage() {
 
       </section>
 
-      <section>
+      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <form onSubmit={submitReadingPlan} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-zinc-900">
+              {locale === "ja" ? "おすすめ記事設定" : "Recommended Feed Settings"}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              {locale === "ja"
+                ? "記事一覧の「おすすめ」タブで使う既定の選定条件です。"
+                : "Default selection rules used by the Recommended tab in Items."}
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-700">
+                {locale === "ja" ? "対象期間" : "Window"}
+              </label>
+              <select
+                value={readingPlanWindow}
+                onChange={(e) => setReadingPlanWindow(e.target.value as "24h" | "today_jst" | "7d")}
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+              >
+                <option value="24h">{locale === "ja" ? "過去24時間" : "Last 24h"}</option>
+                <option value="today_jst">{locale === "ja" ? "今日 (JST)" : "Today (JST)"}</option>
+                <option value="7d">{locale === "ja" ? "過去7日" : "Last 7d"}</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-zinc-700">
+                {locale === "ja" ? "表示件数" : "Size"}
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={readingPlanSize}
+                onChange={(e) => setReadingPlanSize(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+              />
+            </div>
+            <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+              <span>{locale === "ja" ? "トピック分散を有効化" : "Diversify topics"}</span>
+              <input
+                type="checkbox"
+                checked={readingPlanDiversifyTopics}
+                onChange={(e) => setReadingPlanDiversifyTopics(e.target.checked)}
+                className="size-4 rounded border-zinc-300"
+              />
+            </label>
+          </div>
+
+          <div className="mt-4">
+            <button
+              type="submit"
+              disabled={savingReadingPlan}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {savingReadingPlan
+                ? locale === "ja" ? "保存中…" : "Saving…"
+                : locale === "ja" ? "おすすめ設定を保存" : "Save recommended settings"}
+            </button>
+          </div>
+        </form>
+
+        <div>
         <form onSubmit={submitBudget} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
             <h2 className="text-base font-semibold text-zinc-900">
@@ -420,6 +514,7 @@ export default function SettingsPage() {
             </span>
           </div>
         </form>
+        </div>
       </section>
     </div>
   );

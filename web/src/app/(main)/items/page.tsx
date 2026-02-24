@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { api, Item } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import Pagination from "@/components/pagination";
@@ -19,6 +20,7 @@ const FILTERS = ["", "summarized", "new", "fetched", "facts_extracted", "failed"
 type SortMode = "newest" | "score";
 type FocusSize = 7 | 15 | 25;
 type FocusWindow = "24h" | "today_jst" | "7d";
+type FeedMode = "recommended" | "all";
 
 function scoreTone(score: number) {
   if (score >= 0.8) return "bg-green-50 text-green-700 border-green-200";
@@ -30,17 +32,32 @@ function scoreTone(score: number) {
 export default function ItemsPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [items, setItems] = useState<Item[]>([]);
   const [itemsTotal, setItemsTotal] = useState(0);
   const [planPoolCount, setPlanPoolCount] = useState(0);
-  const [planTopics, setPlanTopics] = useState<{ label: string; count: number; maxScore: number }[]>([]);
-  const [planLoading, setPlanLoading] = useState(false);
-  const [filter, setFilter] = useState("");
-  const [unreadOnly, setUnreadOnly] = useState(false);
-  const [page, setPage] = useState(1);
-  const [sortMode, setSortMode] = useState<SortMode>("newest");
-  const [focusMode, setFocusMode] = useState(true);
-  const [readingPlanExpanded, setReadingPlanExpanded] = useState(false);
+  const queryState = useMemo(() => {
+    const qFeed = searchParams.get("feed");
+    const feedMode: FeedMode = qFeed === "all" ? "all" : "recommended";
+
+    const qSort = searchParams.get("sort");
+    const sortMode: SortMode = qSort === "score" ? "score" : "newest";
+
+    const qFilter = searchParams.get("status");
+    const filter =
+      qFilter && FILTERS.includes(qFilter as (typeof FILTERS)[number]) ? qFilter : "";
+
+    const unreadOnly = searchParams.get("unread") === "1";
+
+    const qPage = Number(searchParams.get("page"));
+    const page = Number.isFinite(qPage) && qPage >= 1 ? Math.floor(qPage) : 1;
+
+    return { feedMode, sortMode, filter, unreadOnly, page };
+  }, [searchParams]);
+  const { feedMode, sortMode, filter, unreadOnly, page } = queryState;
+  const focusMode = feedMode === "recommended";
   const [focusSize, setFocusSize] = useState<FocusSize>(15);
   const [focusWindow, setFocusWindow] = useState<FocusWindow>("24h");
   const [diversifyTopics, setDiversifyTopics] = useState(true);
@@ -50,8 +67,28 @@ export default function ItemsPage() {
   const [error, setError] = useState<string | null>(null);
   const [retryingIds, setRetryingIds] = useState<Record<string, boolean>>({});
   const [readUpdatingIds, setReadUpdatingIds] = useState<Record<string, boolean>>({});
+  const restoredScrollRef = useRef<string | null>(null);
+  const loadRequestSeqRef = useRef(0);
+
+  useEffect(() => {
+    api.getSettings()
+      .then((s) => {
+        const rp = s.reading_plan;
+        if (!rp) return;
+        if (rp.window === "24h" || rp.window === "today_jst" || rp.window === "7d") {
+          setFocusWindow(rp.window);
+        }
+        if (rp.size === 7 || rp.size === 15 || rp.size === 25) {
+          setFocusSize(rp.size);
+        }
+        setDiversifyTopics(Boolean(rp.diversify_topics));
+        setExcludeReadInPlan(Boolean(rp.exclude_read));
+      })
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async (status: string, pageNum: number, sort: SortMode) => {
+    const requestSeq = ++loadRequestSeqRef.current;
     setLoading(true);
     try {
       const data = await api.getItems({
@@ -61,58 +98,44 @@ export default function ItemsPage() {
         sort,
         unread_only: unreadOnly,
       });
+      if (requestSeq !== loadRequestSeqRef.current) return;
       setItems(data?.items ?? []);
       setItemsTotal(data?.total ?? 0);
       setError(null);
     } catch (e) {
+      if (requestSeq !== loadRequestSeqRef.current) return;
       setError(String(e));
     } finally {
+      if (requestSeq !== loadRequestSeqRef.current) return;
       setLoading(false);
     }
   }, [unreadOnly]);
 
   const loadReadingPlan = useCallback(async () => {
     if (!focusMode) return;
-    setPlanLoading(true);
+    const requestSeq = ++loadRequestSeqRef.current;
+    setLoading(true);
     try {
       const data = await api.getReadingPlan({
         window: focusWindow,
         size: focusSize,
         diversify_topics: diversifyTopics,
-        exclude_read: excludeReadInPlan,
+        exclude_read: false,
       });
+      if (requestSeq !== loadRequestSeqRef.current) return;
       setPlanPoolCount(data?.source_pool_count ?? 0);
-      setPlanTopics(
-        (data?.topics ?? []).map((t) => ({
-          label:
-            t.topic === "__untagged__"
-              ? locale === "ja"
-                ? "未分類"
-                : "Other"
-              : t.topic,
-          count: t.count,
-          maxScore: t.max_score ?? -1,
-        }))
-      );
       // Reuse items state only while focus mode is on; keeps rendering path simple.
       setItems(data?.items ?? []);
       setItemsTotal(data?.items?.length ?? 0);
       setError(null);
     } catch (e) {
+      if (requestSeq !== loadRequestSeqRef.current) return;
       setError(String(e));
     } finally {
-      setPlanLoading(false);
+      if (requestSeq !== loadRequestSeqRef.current) return;
+      setLoading(false);
     }
-  }, [excludeReadInPlan, diversifyTopics, focusMode, focusSize, focusWindow, locale]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [filter, sortMode, unreadOnly]);
-
-  useEffect(() => {
-    if (focusMode) setSortMode("score");
-    setPage(1);
-  }, [focusMode, focusSize, focusWindow, diversifyTopics, excludeReadInPlan]);
+  }, [diversifyTopics, focusMode, focusSize, focusWindow]);
 
   useEffect(() => {
     if (focusMode) {
@@ -121,6 +144,117 @@ export default function ItemsPage() {
     }
     load(filter, page, sortMode);
   }, [focusMode, loadReadingPlan, load, filter, page, sortMode]);
+
+  const replaceItemsQuery = useCallback(
+    (
+      patch: Partial<{
+        feed: FeedMode;
+        sort: SortMode;
+        status: string;
+        unread: boolean;
+        page: number;
+      }>
+    ) => {
+      const q = new URLSearchParams(searchParams.toString());
+
+      const nextFeed = patch.feed ?? feedMode;
+      q.set("feed", nextFeed);
+
+      const nextSort = patch.sort ?? sortMode;
+      const nextStatus = patch.status ?? filter;
+      const nextUnread = patch.unread ?? unreadOnly;
+      const nextPage = patch.page ?? page;
+
+      if (nextFeed === "all") {
+        if (nextStatus) q.set("status", nextStatus);
+        else q.delete("status");
+        q.set("sort", nextSort);
+        if (nextUnread) q.set("unread", "1");
+        else q.delete("unread");
+        if (nextPage > 1) q.set("page", String(nextPage));
+        else q.delete("page");
+      } else {
+        q.delete("status");
+        q.delete("sort");
+        q.delete("unread");
+        q.delete("page");
+      }
+
+      const nextQuery = q.toString();
+      const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+      router.replace(nextUrl, { scroll: false });
+    },
+    [feedMode, filter, page, pathname, router, searchParams, sortMode, unreadOnly]
+  );
+
+  const itemsQueryString = useMemo(() => {
+    const q = new URLSearchParams();
+    q.set("feed", feedMode);
+    if (!focusMode) {
+      if (filter) q.set("status", filter);
+      q.set("sort", sortMode);
+      if (page > 1) q.set("page", String(page));
+      if (unreadOnly) q.set("unread", "1");
+    }
+    return q.toString();
+  }, [feedMode, filter, focusMode, page, sortMode, unreadOnly]);
+
+  const currentItemsHref = useMemo(
+    () => (itemsQueryString ? `${pathname}?${itemsQueryString}` : pathname),
+    [itemsQueryString, pathname]
+  );
+
+  const scrollStorageKey = useMemo(() => `items-scroll:${currentItemsHref}`, [currentItemsHref]);
+  const lastItemStorageKey = useMemo(() => `items-last-item:${currentItemsHref}`, [currentItemsHref]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onScroll = () => {
+      sessionStorage.setItem(scrollStorageKey, String(window.scrollY));
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [scrollStorageKey]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (restoredScrollRef.current === scrollStorageKey) return;
+    const raw = sessionStorage.getItem(scrollStorageKey);
+    if (!raw) {
+      restoredScrollRef.current = scrollStorageKey;
+      return;
+    }
+    const y = Number(raw);
+    if (!Number.isFinite(y)) {
+      restoredScrollRef.current = scrollStorageKey;
+      return;
+    }
+    let attempts = 0;
+    let cancelled = false;
+    const targetItemId = sessionStorage.getItem(lastItemStorageKey);
+    const restore = () => {
+      if (cancelled) return;
+      const canReachNow = document.documentElement.scrollHeight - window.innerHeight >= y;
+      if (canReachNow) {
+        window.scrollTo(0, y);
+      }
+      const reached = Math.abs(window.scrollY - y) <= 4;
+      if (reached || attempts >= 10) {
+        if (!reached && targetItemId) {
+          const row = document.querySelector<HTMLElement>(`[data-item-row-id="${targetItemId}"]`);
+          row?.scrollIntoView({ block: "center" });
+        }
+        restoredScrollRef.current = scrollStorageKey;
+        return;
+      }
+      attempts += 1;
+      window.setTimeout(restore, 50);
+    };
+    requestAnimationFrame(restore);
+    return () => {
+      cancelled = true;
+    };
+  }, [items.length, lastItemStorageKey, loading, scrollStorageKey]);
 
   const retryItem = useCallback(
     async (itemId: string) => {
@@ -184,102 +318,79 @@ export default function ItemsPage() {
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
-  const summarizedRanked = sortedItems.filter((i) => i.status === "summarized");
-  const now = new Date();
-  const nowMs = now.getTime();
-  const todayJstKey = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
-  const itemTimeMs = (item: Item) => new Date(item.published_at ?? item.created_at).getTime();
-  const itemJstDateKey = (item: Item) =>
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Tokyo",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date(item.published_at ?? item.created_at));
-  const inFocusWindow = (item: Item) => {
-    const tMs = itemTimeMs(item);
-    switch (focusWindow) {
-      case "24h":
-        return nowMs-tMs <= 24 * 60 * 60 * 1000 && nowMs >= tMs;
-      case "today_jst":
-        return itemJstDateKey(item) === todayJstKey;
-      case "7d":
-        return nowMs-tMs <= 7 * 24 * 60 * 60 * 1000 && nowMs >= tMs;
-      default:
-        return true;
-    }
-  };
-  const focusSourceItems = summarizedRanked.filter((item) => {
-    if (!inFocusWindow(item)) return false;
-    if (excludeReadInPlan && item.is_read) return false;
-    return true;
-  });
-
-  const focusCandidates = (sortMode === "score" ? focusSourceItems : [...focusSourceItems].sort((a, b) => {
-    const as = a.summary_score ?? -1;
-    const bs = b.summary_score ?? -1;
-    if (bs !== as) return bs - as;
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  }));
-
-  const topicKey = (item: Item) => {
-    const topics = item.summary_topics ?? [];
-    const first = topics.find((t) => (t ?? "").trim() !== "");
-    return (first ?? "__untagged__").trim().toLowerCase();
-  };
-
-  const focusItems: Item[] = [];
-  const seenTopics = new Set<string>();
-  for (const item of focusCandidates) {
-    if (focusItems.length >= focusSize) break;
-    if (!diversifyTopics) {
-      focusItems.push(item);
-      continue;
-    }
-    const key = topicKey(item);
-    if (seenTopics.has(key)) continue;
-    seenTopics.add(key);
-    focusItems.push(item);
-  }
-  if (diversifyTopics && focusItems.length < focusSize) {
-    const selected = new Set(focusItems.map((i) => i.id));
-    for (const item of focusCandidates) {
-      if (focusItems.length >= focusSize) break;
-      if (selected.has(item.id)) continue;
-      focusItems.push(item);
-      selected.add(item.id);
-    }
-  }
-
-  const topicSummary = (() => {
-    if (focusMode && planTopics.length > 0) return planTopics;
-    const m = new Map<string, { label: string; count: number; maxScore: number }>();
-    for (const item of focusSourceItems) {
-      const topics = item.summary_topics?.length ? item.summary_topics : [locale === "ja" ? "未分類" : "Other"];
-      for (const t of topics.slice(0, 2)) {
-        const label = (t || "").trim() || (locale === "ja" ? "未分類" : "Other");
-        const key = label.toLowerCase();
-        const cur = m.get(key) ?? { label, count: 0, maxScore: -1 };
-        cur.count += 1;
-        cur.maxScore = Math.max(cur.maxScore, item.summary_score ?? -1);
-        m.set(key, cur);
-      }
-    }
-    return [...m.values()]
-      .sort((a, b) => b.count - a.count || b.maxScore - a.maxScore || a.label.localeCompare(b.label))
-      .slice(0, 12);
-  })();
-
   const displayItems = focusMode ? items : sortedItems;
   const pagedItems = focusMode ? displayItems : sortedItems;
+  const detailHref = useCallback(
+    (itemId: string) => `/items/${itemId}?from=${encodeURIComponent(currentItemsHref)}`,
+    [currentItemsHref]
+  );
+  const rememberScroll = useCallback((itemId: string) => {
+    if (typeof window === "undefined") return;
+    sessionStorage.setItem(scrollStorageKey, String(window.scrollY));
+    sessionStorage.setItem(lastItemStorageKey, itemId);
+  }, [lastItemStorageKey, scrollStorageKey]);
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
+            <button
+              type="button"
+              onClick={() => replaceItemsQuery({ feed: "recommended" })}
+              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                focusMode ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
+              }`}
+            >
+              {locale === "ja" ? "おすすめ" : "Recommended"}
+            </button>
+            <button
+              type="button"
+              onClick={() => replaceItemsQuery({ feed: "all", page: 1 })}
+              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                !focusMode ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
+              }`}
+            >
+              {locale === "ja" ? "すべて" : "All"}
+            </button>
+          </div>
+          {focusMode && (
+            <Link
+              href="/settings"
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+            >
+              {locale === "ja" ? "おすすめ設定" : "Feed settings"}
+            </Link>
+          )}
+        </div>
+        {!focusMode && (
+          <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
+            <button
+              type="button"
+              onClick={() => replaceItemsQuery({ sort: "newest", page: 1 })}
+              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                sortMode === "newest"
+                  ? "bg-zinc-900 text-white"
+                  : "text-zinc-600 hover:bg-zinc-50"
+              }`}
+            >
+              {locale === "ja" ? "新着順" : "Newest"}
+            </button>
+            <button
+              type="button"
+              onClick={() => replaceItemsQuery({ sort: "score", page: 1 })}
+              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                sortMode === "score"
+                  ? "bg-zinc-900 text-white"
+                  : "text-zinc-600 hover:bg-zinc-50"
+              }`}
+            >
+              {locale === "ja" ? "スコア順" : "Score"}
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{t("items.title")}</h1>
@@ -294,205 +405,16 @@ export default function ItemsPage() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
-          <button
-            type="button"
-            onClick={() => setSortMode("newest")}
-            className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-              sortMode === "newest"
-                ? "bg-zinc-900 text-white"
-                : "text-zinc-600 hover:bg-zinc-50"
-            }`}
-          >
-            {locale === "ja" ? "新着順" : "Newest"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setSortMode("score")}
-            className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-              sortMode === "score"
-                ? "bg-zinc-900 text-white"
-                : "text-zinc-600 hover:bg-zinc-50"
-            }`}
-          >
-            {locale === "ja" ? "スコア順" : "Score"}
-          </button>
-        </div>
       </div>
 
-      <section className="rounded-2xl border border-zinc-200 bg-gradient-to-br from-white to-zinc-50 p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-500">
-              {locale === "ja" ? "Reading Plan" : "Reading Plan"}
-            </div>
-            <div className="mt-1 text-sm font-semibold text-zinc-900">
-              {locale === "ja" ? "先に読むべき記事を先頭にまとめる" : "Bring the most useful reads to the top"}
-            </div>
-            <div className="mt-1 text-xs text-zinc-500">
-              {locale === "ja"
-                ? "スコア・トピック分散・対象期間を使って、読み切れる量に圧縮します。"
-                : "Compress the list into a readable set using score, topic diversity, and time window."}
-            </div>
-            <div className="mt-2 text-xs text-zinc-500">
-              {locale === "ja"
-                ? `対象: ${focusWindow === "24h" ? "過去24時間" : focusWindow === "today_jst" ? "今日(JST)" : "過去7日"} / ${
-                    focusSize === 7 ? "クイック" : focusSize === 15 ? "標準" : "しっかり"
-                  } / ${diversifyTopics ? "トピック分散" : "スコア優先"} / ${excludeReadInPlan ? "未読優先" : "既読含む"}`
-                : `Window: ${
-                    focusWindow === "24h" ? "Last 24h" : focusWindow === "today_jst" ? "Today (JST)" : "Last 7d"
-                  } / ${focusSize === 7 ? "Quick" : focusSize === 15 ? "Standard" : "Deep"} / ${
-                    diversifyTopics ? "Diversified" : "Score-first"
-                  } / ${
-                    excludeReadInPlan ? "Unread first" : "Include read"
-                  }`}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setReadingPlanExpanded((v) => !v)}
-              className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-700 shadow-sm hover:bg-zinc-50"
-            >
-              {readingPlanExpanded
-                ? locale === "ja"
-                  ? "折りたたむ"
-                  : "Collapse"
-                : locale === "ja"
-                  ? "設定を開く"
-                  : "Open settings"}
-            </button>
-            <label className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-700 shadow-sm">
-              <input
-                type="checkbox"
-                checked={focusMode}
-                onChange={(e) => setFocusMode(e.target.checked)}
-                className="size-4 rounded border-zinc-300"
-              />
-              {focusMode ? (locale === "ja" ? "読書プランON" : "Reading plan ON") : locale === "ja" ? "一覧そのまま" : "Raw list"}
-            </label>
-          </div>
-        </div>
-        {readingPlanExpanded && (
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-zinc-200 bg-white p-3">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
-              {locale === "ja" ? "読む量" : "Reading budget"}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {([7, 15, 25] as FocusSize[]).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setFocusSize(n)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                    focusSize === n ? "bg-zinc-900 text-white" : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
-                  }`}
-                >
-                  {locale === "ja"
-                    ? n === 7
-                      ? "クイック"
-                      : n === 15
-                        ? "標準"
-                        : "しっかり"
-                    : n === 7
-                      ? "Quick"
-                      : n === 15
-                        ? "Standard"
-                        : "Deep"}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-xl border border-zinc-200 bg-white p-3">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
-              {locale === "ja" ? "対象期間" : "Window"}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {([
-                ["24h", locale === "ja" ? "過去24時間" : "Last 24h"],
-                ["today_jst", locale === "ja" ? "今日(JST)" : "Today (JST)"],
-                ["7d", locale === "ja" ? "過去7日" : "Last 7d"],
-              ] as [FocusWindow, string][]).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setFocusWindow(value)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                    focusWindow === value ? "bg-zinc-900 text-white" : "border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-xl border border-zinc-200 bg-white p-3">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-zinc-500">
-              {locale === "ja" ? "選び方" : "Selection"}
-            </div>
-            <div className="space-y-2">
-              <label className="inline-flex items-center gap-2 text-xs text-zinc-700">
-                <input
-                  type="checkbox"
-                  checked={diversifyTopics}
-                  onChange={(e) => setDiversifyTopics(e.target.checked)}
-                  className="size-3.5 rounded border-zinc-300"
-                />
-                {locale === "ja" ? "トピックを散らして偏りを減らす" : "Reduce topic duplication"}
-              </label>
-              <label className="inline-flex items-center gap-2 text-xs text-zinc-700">
-                <input
-                  type="checkbox"
-                  checked={excludeReadInPlan}
-                  onChange={(e) => setExcludeReadInPlan(e.target.checked)}
-                  className="size-3.5 rounded border-zinc-300"
-                />
-                {locale === "ja" ? "既読を除外して未読を優先" : "Prioritize unread (exclude read)"}
-              </label>
-            </div>
-          </div>
-        </div>
-        )}
-        {!focusMode && (
-          <div className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-500">
-            {locale === "ja"
-              ? "読書プランをOFFにしているため、通常の一覧表示です。"
-              : "Reading plan is off. Showing the regular list."}
-          </div>
-        )}
-        {readingPlanExpanded && topicSummary.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {topicSummary.map((topic) => (
-              <span key={topic.label} className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-700 shadow-sm">
-                {topic.label} · {topic.count}
-              </span>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Filter tabs */}
+      {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        {FILTERS.map((value) => (
-          <button
-            key={value}
-            onClick={() => setFilter(value)}
-            className={`rounded px-3 py-1 text-sm font-medium transition-colors ${
-              filter === value
-                ? "bg-zinc-900 text-white"
-                : "border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
-            }`}
-          >
-            {t(`items.filter.${value || "all"}`)}
-          </button>
-        ))}
         {!focusMode && (
-          <label className="ml-auto inline-flex items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700">
+          <label className="inline-flex items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700">
             <input
               type="checkbox"
               checked={unreadOnly}
-              onChange={(e) => setUnreadOnly(e.target.checked)}
+              onChange={(e) => replaceItemsQuery({ unread: e.target.checked, page: 1 })}
               className="size-4 rounded border-zinc-300"
             />
             {locale === "ja" ? "未読のみ" : "Unread only"}
@@ -501,21 +423,30 @@ export default function ItemsPage() {
       </div>
 
       {/* State */}
-      {(loading || planLoading) && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
+      {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
       {error && <p className="text-sm text-red-500">{error}</p>}
-      {!loading && !planLoading && items.length === 0 && (
+      {!loading && items.length === 0 && (
         <p className="text-sm text-zinc-400">{t("items.empty")}</p>
       )}
 
       {/* List */}
 	      <ul className="space-y-2">
         {pagedItems.map((item) => (
-	          <li key={item.id}>
-	            <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 shadow-sm ${
-                item.is_read ? "border-zinc-200 bg-zinc-50/70" : "border-zinc-200 bg-white"
+	          <li key={item.id} data-item-row-id={item.id}>
+	            <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 shadow-sm transition-colors ${
+                item.is_read
+                  ? "border-zinc-200 bg-zinc-50/80"
+                  : "border-zinc-300 bg-white ring-1 ring-amber-100"
               }`}>
+                <span
+                  aria-hidden="true"
+                  className={`mt-0.5 h-12 w-1 shrink-0 rounded-full ${
+                    item.is_read ? "bg-zinc-200" : "bg-amber-400"
+                  }`}
+                />
 	              <Link
-	                href={`/items/${item.id}`}
+	                href={detailHref(item.id)}
+                  onClick={() => rememberScroll(item.id)}
 	                className="flex min-w-0 flex-1 items-start gap-3 transition-colors hover:text-zinc-700"
 	              >
 	                <span
@@ -571,11 +502,21 @@ export default function ItemsPage() {
 	                    </span>
 	                  </div>
 	                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-                      {item.is_read && (
-                        <span className="rounded-full border border-zinc-200 bg-white px-2 py-0.5 text-[11px] font-medium text-zinc-500">
-                          {locale === "ja" ? "既読" : "Read"}
-                        </span>
-                      )}
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                          item.is_read
+                            ? "border-zinc-200 bg-white text-zinc-500"
+                            : "border-amber-200 bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        {item.is_read
+                          ? locale === "ja"
+                            ? "既読"
+                            : "Read"
+                          : locale === "ja"
+                            ? "未読"
+                            : "Unread"}
+                      </span>
                       <span>
 	                    {new Date(
 	                      item.published_at ?? item.created_at
@@ -619,7 +560,12 @@ export default function ItemsPage() {
 	        ))}
 	      </ul>
       {!focusMode && (
-        <Pagination total={itemsTotal} page={page} pageSize={pageSize} onPageChange={setPage} />
+        <Pagination
+          total={itemsTotal}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={(nextPage) => replaceItemsQuery({ page: nextPage })}
+        />
       )}
     </div>
   );

@@ -34,7 +34,7 @@ type ExtractBodyResponse struct {
 }
 
 type ExtractFactsResponse struct {
-	Facts []string `json:"facts"`
+	Facts []string  `json:"facts"`
 	LLM   *LLMUsage `json:"llm,omitempty"`
 }
 
@@ -58,8 +58,8 @@ type ComposeDigestItem struct {
 }
 
 type ComposeDigestResponse struct {
-	Subject string `json:"subject"`
-	Body    string `json:"body"`
+	Subject string    `json:"subject"`
+	Body    string    `json:"body"`
 	LLM     *LLMUsage `json:"llm,omitempty"`
 }
 

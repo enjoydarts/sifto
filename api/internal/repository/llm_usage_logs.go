@@ -12,40 +12,40 @@ type LLMUsageLogRepo struct{ db *pgxpool.Pool }
 func NewLLMUsageLogRepo(db *pgxpool.Pool) *LLMUsageLogRepo { return &LLMUsageLogRepo{db: db} }
 
 type LLMUsageLogInput struct {
-	IdempotencyKey          *string
-	UserID                  *string
-	SourceID                *string
-	ItemID                  *string
-	DigestID                *string
-	Provider                string
-	Model                   string
-	PricingModelFamily      string
-	PricingSource           string
-	Purpose                 string
-	InputTokens             int
-	OutputTokens            int
+	IdempotencyKey           *string
+	UserID                   *string
+	SourceID                 *string
+	ItemID                   *string
+	DigestID                 *string
+	Provider                 string
+	Model                    string
+	PricingModelFamily       string
+	PricingSource            string
+	Purpose                  string
+	InputTokens              int
+	OutputTokens             int
 	CacheCreationInputTokens int
-	CacheReadInputTokens    int
-	EstimatedCostUSD        float64
+	CacheReadInputTokens     int
+	EstimatedCostUSD         float64
 }
 
 type LLMUsageLog struct {
-	ID                       string     `json:"id"`
-	UserID                   *string    `json:"user_id,omitempty"`
-	SourceID                 *string    `json:"source_id,omitempty"`
-	ItemID                   *string    `json:"item_id,omitempty"`
-	DigestID                 *string    `json:"digest_id,omitempty"`
-	Provider                 string     `json:"provider"`
-	Model                    string     `json:"model"`
-	PricingModelFamily       *string    `json:"pricing_model_family,omitempty"`
-	PricingSource            string     `json:"pricing_source"`
-	Purpose                  string     `json:"purpose"`
-	InputTokens              int        `json:"input_tokens"`
-	OutputTokens             int        `json:"output_tokens"`
-	CacheCreationInputTokens int        `json:"cache_creation_input_tokens"`
-	CacheReadInputTokens     int        `json:"cache_read_input_tokens"`
-	EstimatedCostUSD         float64    `json:"estimated_cost_usd"`
-	CreatedAt                time.Time  `json:"created_at"`
+	ID                       string    `json:"id"`
+	UserID                   *string   `json:"user_id,omitempty"`
+	SourceID                 *string   `json:"source_id,omitempty"`
+	ItemID                   *string   `json:"item_id,omitempty"`
+	DigestID                 *string   `json:"digest_id,omitempty"`
+	Provider                 string    `json:"provider"`
+	Model                    string    `json:"model"`
+	PricingModelFamily       *string   `json:"pricing_model_family,omitempty"`
+	PricingSource            string    `json:"pricing_source"`
+	Purpose                  string    `json:"purpose"`
+	InputTokens              int       `json:"input_tokens"`
+	OutputTokens             int       `json:"output_tokens"`
+	CacheCreationInputTokens int       `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int       `json:"cache_read_input_tokens"`
+	EstimatedCostUSD         float64   `json:"estimated_cost_usd"`
+	CreatedAt                time.Time `json:"created_at"`
 }
 
 type LLMUsageDailySummary struct {

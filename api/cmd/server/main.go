@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	inngestfn "github.com/minoru-kitayama/sifto/api/internal/inngest"
 	"github.com/minoru-kitayama/sifto/api/internal/handler"
+	inngestfn "github.com/minoru-kitayama/sifto/api/internal/inngest"
 	"github.com/minoru-kitayama/sifto/api/internal/middleware"
 	"github.com/minoru-kitayama/sifto/api/internal/repository"
 	"github.com/minoru-kitayama/sifto/api/internal/service"
@@ -105,6 +105,7 @@ func main() {
 		r.Route("/settings", func(r chi.Router) {
 			r.Get("/", settingsH.Get)
 			r.Patch("/", settingsH.UpdateBudget)
+			r.Patch("/reading-plan", settingsH.UpdateReadingPlan)
 			r.Post("/anthropic-key", settingsH.SetAnthropicAPIKey)
 			r.Delete("/anthropic-key", settingsH.DeleteAnthropicAPIKey)
 			r.Post("/openai-key", settingsH.SetOpenAIAPIKey)

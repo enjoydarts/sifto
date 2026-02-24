@@ -13,19 +13,19 @@ type ItemRepo struct{ db *pgxpool.Pool }
 func NewItemRepo(db *pgxpool.Pool) *ItemRepo { return &ItemRepo{db} }
 
 type ItemListParams struct {
-	Status   *string
-	SourceID *string
+	Status     *string
+	SourceID   *string
 	UnreadOnly bool
-	Sort     string // newest | score
-	Page     int
-	PageSize int
+	Sort       string // newest | score
+	Page       int
+	PageSize   int
 }
 
 type ReadingPlanParams struct {
-	Window         string // 24h | today_jst | 7d
+	Window          string // 24h | today_jst | 7d
 	Size            int
 	DiversifyTopics bool
-	ExcludeRead    bool
+	ExcludeRead     bool
 }
 
 func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *string, limit int) ([]model.Item, error) {

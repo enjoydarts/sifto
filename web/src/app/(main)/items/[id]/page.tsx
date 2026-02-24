@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { AlignLeft, FileText, Link2, ListChecks, Sparkles } from "lucide-react";
 import { api, ItemDetail, RelatedItem } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
@@ -19,6 +20,7 @@ const STATUS_COLOR: Record<string, string> = {
 export default function ItemDetailPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const [item, setItem] = useState<ItemDetail | null>(null);
@@ -28,6 +30,18 @@ export default function ItemDetailPage() {
   const [related, setRelated] = useState<RelatedItem[]>([]);
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const autoMarkedRef = useRef<Record<string, true>>({});
+
+  const syncItemReadInFeedCaches = useCallback((itemId: string, isRead: boolean) => {
+    queryClient.setQueriesData({ queryKey: ["items-feed"] }, (prev: unknown) => {
+      if (!prev || typeof prev !== "object") return prev;
+      const data = prev as { items?: Array<Record<string, unknown>> };
+      if (!Array.isArray(data.items)) return prev;
+      return {
+        ...data,
+        items: data.items.map((v) => (v.id === itemId ? { ...v, is_read: isRead } : v)),
+      };
+    });
+  }, [queryClient]);
 
   useEffect(() => {
     setLoading(true);
@@ -59,13 +73,14 @@ export default function ItemDetailPage() {
     api
       .markItemRead(item.id)
       .then((next) => {
+        syncItemReadInFeedCaches(item.id, next.is_read);
         setItem((prev) => (prev && prev.id === item.id ? { ...prev, is_read: next.is_read } : prev));
       })
       .catch(() => {
         delete autoMarkedRef.current[item.id];
       })
       .finally(() => setReadUpdating(false));
-  }, [item]);
+  }, [item, syncItemReadInFeedCaches]);
 
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
   const backHref = useMemo(() => {
@@ -78,6 +93,7 @@ export default function ItemDetailPage() {
     setReadUpdating(true);
     try {
       const next = item.is_read ? await api.markItemUnread(item.id) : await api.markItemRead(item.id);
+      syncItemReadInFeedCaches(item.id, next.is_read);
       setItem({ ...item, is_read: next.is_read });
       showToast(
         next.is_read

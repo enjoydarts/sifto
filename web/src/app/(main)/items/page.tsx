@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image as ImageIcon, Newspaper } from "lucide-react";
 import { api, Item } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
@@ -22,6 +23,11 @@ type SortMode = "newest" | "score";
 type FocusSize = 7 | 15 | 25;
 type FocusWindow = "24h" | "today_jst" | "7d";
 type FeedMode = "recommended" | "all";
+type ItemsFeedQueryData = {
+  items: Item[];
+  total: number;
+  planPoolCount: number;
+};
 
 function scoreTone(score: number) {
   if (score >= 0.8) return "bg-green-50 text-green-700 border-green-200";
@@ -33,12 +39,10 @@ function scoreTone(score: number) {
 function ItemsPageContent() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [items, setItems] = useState<Item[]>([]);
-  const [itemsTotal, setItemsTotal] = useState(0);
-  const [planPoolCount, setPlanPoolCount] = useState(0);
   const queryState = useMemo(() => {
     const qFeed = searchParams.get("feed");
     const feedMode: FeedMode = qFeed === "all" ? "all" : "recommended";
@@ -59,90 +63,80 @@ function ItemsPageContent() {
   }, [searchParams]);
   const { feedMode, sortMode, filter, unreadOnly, page } = queryState;
   const focusMode = feedMode === "recommended";
-  const [focusSize, setFocusSize] = useState<FocusSize>(15);
-  const [focusWindow, setFocusWindow] = useState<FocusWindow>("24h");
-  const [diversifyTopics, setDiversifyTopics] = useState(true);
   const pageSize = 20;
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryingIds, setRetryingIds] = useState<Record<string, boolean>>({});
   const [readUpdatingIds, setReadUpdatingIds] = useState<Record<string, boolean>>({});
   const restoredScrollRef = useRef<string | null>(null);
-  const loadRequestSeqRef = useRef(0);
+  const settingsQuery = useQuery({
+    queryKey: ["settings"],
+    queryFn: api.getSettings,
+  });
 
-  useEffect(() => {
-    api.getSettings()
-      .then((s) => {
-        const rp = s.reading_plan;
-        if (!rp) return;
-        if (rp.window === "24h" || rp.window === "today_jst" || rp.window === "7d") {
-          setFocusWindow(rp.window);
-        }
-        if (rp.size === 7 || rp.size === 15 || rp.size === 25) {
-          setFocusSize(rp.size);
-        }
-        setDiversifyTopics(Boolean(rp.diversify_topics));
-      })
-      .catch(() => {});
-  }, []);
+  const readingPlanPrefs = settingsQuery.data?.reading_plan;
+  const focusWindow: FocusWindow =
+    readingPlanPrefs?.window === "today_jst" || readingPlanPrefs?.window === "7d" || readingPlanPrefs?.window === "24h"
+      ? readingPlanPrefs.window
+      : "24h";
+  const focusSize: FocusSize =
+    readingPlanPrefs?.size === 7 || readingPlanPrefs?.size === 15 || readingPlanPrefs?.size === 25
+      ? readingPlanPrefs.size
+      : 15;
+  const diversifyTopics = Boolean(readingPlanPrefs?.diversify_topics ?? true);
 
-  const load = useCallback(async (status: string, pageNum: number, sort: SortMode) => {
-    const requestSeq = ++loadRequestSeqRef.current;
-    setLoading(true);
-    try {
+  const listQueryKey = useMemo(
+    () => [
+      "items-feed",
+      feedMode,
+      filter,
+      page,
+      sortMode,
+      unreadOnly ? 1 : 0,
+      focusWindow,
+      focusSize,
+      diversifyTopics ? 1 : 0,
+    ] as const,
+    [diversifyTopics, feedMode, filter, focusSize, focusWindow, page, sortMode, unreadOnly]
+  );
+
+  const listQuery = useQuery<ItemsFeedQueryData>({
+    queryKey: listQueryKey,
+    queryFn: async () => {
+      if (feedMode === "recommended") {
+        const data = await api.getReadingPlan({
+          window: focusWindow,
+          size: focusSize,
+          diversify_topics: diversifyTopics,
+          exclude_read: false,
+        });
+        return {
+          items: data?.items ?? [],
+          total: data?.items?.length ?? 0,
+          planPoolCount: data?.source_pool_count ?? 0,
+        };
+      }
       const data = await api.getItems({
-        ...(status ? { status } : {}),
-        page: pageNum,
+        ...(filter ? { status: filter } : {}),
+        page,
         page_size: pageSize,
-        sort,
+        sort: sortMode,
         unread_only: unreadOnly,
       });
-      if (requestSeq !== loadRequestSeqRef.current) return;
-      setItems(data?.items ?? []);
-      setItemsTotal(data?.total ?? 0);
-      setError(null);
-    } catch (e) {
-      if (requestSeq !== loadRequestSeqRef.current) return;
-      setError(String(e));
-    } finally {
-      if (requestSeq !== loadRequestSeqRef.current) return;
-      setLoading(false);
-    }
-  }, [unreadOnly]);
-
-  const loadReadingPlan = useCallback(async () => {
-    if (!focusMode) return;
-    const requestSeq = ++loadRequestSeqRef.current;
-    setLoading(true);
-    try {
-      const data = await api.getReadingPlan({
-        window: focusWindow,
-        size: focusSize,
-        diversify_topics: diversifyTopics,
-        exclude_read: false,
-      });
-      if (requestSeq !== loadRequestSeqRef.current) return;
-      setPlanPoolCount(data?.source_pool_count ?? 0);
-      // Reuse items state only while focus mode is on; keeps rendering path simple.
-      setItems(data?.items ?? []);
-      setItemsTotal(data?.items?.length ?? 0);
-      setError(null);
-    } catch (e) {
-      if (requestSeq !== loadRequestSeqRef.current) return;
-      setError(String(e));
-    } finally {
-      if (requestSeq !== loadRequestSeqRef.current) return;
-      setLoading(false);
-    }
-  }, [diversifyTopics, focusMode, focusSize, focusWindow]);
-
-  useEffect(() => {
-    if (focusMode) {
-      loadReadingPlan();
-      return;
-    }
-    load(filter, page, sortMode);
-  }, [focusMode, loadReadingPlan, load, filter, page, sortMode]);
+      return {
+        items: data?.items ?? [],
+        total: data?.total ?? 0,
+        planPoolCount: 0,
+      };
+    },
+    placeholderData: (prev) => prev,
+  });
+  const cachedItemsLength = listQuery.data?.items?.length ?? 0;
+  const items = listQuery.data?.items ?? [];
+  const itemsTotal = listQuery.data?.total ?? 0;
+  const planPoolCount = listQuery.data?.planPoolCount ?? 0;
+  const loading = !listQuery.data && (listQuery.isLoading || listQuery.isFetching);
+  const queryError = listQuery.error ? String(listQuery.error) : null;
+  const visibleError = error ?? queryError;
 
   const replaceItemsQuery = useCallback(
     (
@@ -253,7 +247,7 @@ function ItemsPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [items.length, lastItemStorageKey, loading, scrollStorageKey]);
+  }, [cachedItemsLength, lastItemStorageKey, loading, scrollStorageKey]);
 
   const retryItem = useCallback(
     async (itemId: string) => {
@@ -261,11 +255,7 @@ function ItemsPageContent() {
       try {
         await api.retryItem(itemId);
         showToast(locale === "ja" ? "再試行をキュー投入しました" : "Retry queued", "success");
-        if (focusMode) {
-          await loadReadingPlan();
-        } else {
-          await load(filter, page, sortMode);
-        }
+        await queryClient.invalidateQueries({ queryKey: ["items-feed"] });
       } catch (e) {
         setError(String(e));
         showToast(`${t("common.error")}: ${String(e)}`, "error");
@@ -277,13 +267,21 @@ function ItemsPageContent() {
         });
       }
     },
-    [filter, focusMode, load, loadReadingPlan, locale, page, showToast, sortMode, t]
+    [locale, queryClient, showToast, t]
   );
 
   const toggleRead = useCallback(
     async (item: Item) => {
       setReadUpdatingIds((prev) => ({ ...prev, [item.id]: true }));
       try {
+        queryClient.setQueryData<ItemsFeedQueryData>(listQueryKey, (prev) =>
+          prev
+            ? {
+                ...prev,
+                items: prev.items.map((v) => (v.id === item.id ? { ...v, is_read: !item.is_read } : v)),
+              }
+            : prev
+        );
         if (item.is_read) {
           await api.markItemUnread(item.id);
           showToast(locale === "ja" ? "未読に戻しました" : "Marked as unread", "success");
@@ -291,10 +289,8 @@ function ItemsPageContent() {
           await api.markItemRead(item.id);
           showToast(locale === "ja" ? "既読にしました" : "Marked as read", "success");
         }
-        setItems((prev) =>
-          prev.map((v) => (v.id === item.id ? { ...v, is_read: !item.is_read } : v))
-        );
       } catch (e) {
+        queryClient.invalidateQueries({ queryKey: listQueryKey });
         setError(String(e));
         showToast(`${t("common.error")}: ${String(e)}`, "error");
       } finally {
@@ -305,7 +301,7 @@ function ItemsPageContent() {
         });
       }
     },
-    [locale, showToast, t]
+    [listQueryKey, locale, queryClient, showToast, t]
   );
 
   const sortedItems = [...items].sort((a, b) => {
@@ -426,7 +422,7 @@ function ItemsPageContent() {
 
       {/* State */}
       {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {visibleError && <p className="text-sm text-red-500">{visibleError}</p>}
       {!loading && items.length === 0 && (
         <p className="text-sm text-zinc-400">{t("items.empty")}</p>
       )}

@@ -16,9 +16,10 @@ import (
 )
 
 type ResendClient struct {
-	apiKey string
-	from   string
-	http   *http.Client
+	apiKey   string
+	from     string
+	fromName string
+	http     *http.Client
 }
 
 type DigestEmailCopy struct {
@@ -37,9 +38,10 @@ type BudgetAlertEmail struct {
 
 func NewResendClient() *ResendClient {
 	return &ResendClient{
-		apiKey: os.Getenv("RESEND_API_KEY"),
-		from:   os.Getenv("RESEND_FROM_EMAIL"),
-		http:   &http.Client{Timeout: 15 * time.Second},
+		apiKey:   os.Getenv("RESEND_API_KEY"),
+		from:     os.Getenv("RESEND_FROM_EMAIL"),
+		fromName: os.Getenv("RESEND_FROM_NAME"),
+		http:     &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -60,7 +62,7 @@ func (r *ResendClient) SendDigest(ctx context.Context, to string, digest *model.
 	html := buildDigestHTML(digest, copy)
 
 	body, _ := json.Marshal(map[string]any{
-		"from":    r.from,
+		"from":    r.formattedFrom(),
 		"to":      []string{to},
 		"subject": subject,
 		"html":    html,
@@ -96,7 +98,7 @@ func (r *ResendClient) SendBudgetAlert(ctx context.Context, to string, alert Bud
 	htmlBody := buildBudgetAlertHTML(alert)
 
 	body, _ := json.Marshal(map[string]any{
-		"from":    r.from,
+		"from":    r.formattedFrom(),
 		"to":      []string{to},
 		"subject": subject,
 		"html":    htmlBody,
@@ -119,6 +121,24 @@ func (r *ResendClient) SendBudgetAlert(ctx context.Context, to string, alert Bud
 		return fmt.Errorf("resend: status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func (r *ResendClient) formattedFrom() string {
+	if r == nil {
+		return ""
+	}
+	addr := strings.TrimSpace(r.from)
+	if addr == "" {
+		return ""
+	}
+	if strings.Contains(addr, "<") && strings.Contains(addr, ">") {
+		return addr
+	}
+	name := strings.TrimSpace(r.fromName)
+	if name == "" {
+		name = "Sifto"
+	}
+	return fmt.Sprintf("%s <%s>", name, addr)
 }
 
 func buildDigestHTML(d *model.DigestDetail, copy *DigestEmailCopy) string {

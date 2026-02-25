@@ -80,12 +80,27 @@ func (r *ItemRepo) readingPlanClustersByEmbeddings(ctx context.Context, items []
 			if !ok || len(cEmb) == 0 {
 				continue
 			}
-			sim := cosineSimilarity(seedEmb, cEmb)
-			if shouldClusterReadingPlan(seed, cand, sim) {
+			match := false
+			bestSim := 0.0
+			for _, member := range members {
+				mEmb, ok := embByID[member.ID]
+				if !ok || len(mEmb) == 0 {
+					continue
+				}
+				sim := cosineSimilarity(mEmb, cEmb)
+				if sim > bestSim {
+					bestSim = sim
+				}
+				if shouldClusterReadingPlan(member, cand, sim) {
+					match = true
+					break
+				}
+			}
+			if match {
 				used[j] = true
 				members = append(members, cand)
-				if sim > maxSim {
-					maxSim = sim
+				if bestSim > maxSim {
+					maxSim = bestSim
 				}
 			}
 		}
@@ -158,10 +173,10 @@ func (r *ItemRepo) readingPlanClustersByEmbeddings(ctx context.Context, items []
 }
 
 func shouldClusterReadingPlan(seed, cand model.Item, similarity float64) bool {
-	if similarity >= 0.84 {
+	if similarity >= 0.76 {
 		return true
 	}
-	if similarity < 0.68 {
+	if similarity < 0.58 {
 		return false
 	}
 	return hasTopicOverlap(seed.SummaryTopics, cand.SummaryTopics)

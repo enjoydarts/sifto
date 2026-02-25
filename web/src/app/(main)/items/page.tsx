@@ -771,6 +771,20 @@ function ItemsPageContent() {
           </div>
         </section>
       )}
+      {focusMode && recommendedLooseItems.length > 0 && (
+        <div className={`${featuredItems.length > 0 || visibleClusterSections.length > 0 ? "pt-2" : ""}`}>
+          <div className="mb-2 flex items-center justify-between">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                {locale === "ja" ? "その他のおすすめ" : "More Picks"}
+              </div>
+              <div className="text-sm text-zinc-500">
+                {locale === "ja" ? "単発で読んでおきたい記事" : "Good standalone reads"}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <ul className={`list-none space-y-2 ${focusMode && (featuredItems.length > 0 || visibleClusterSections.length > 0) ? "pt-1" : ""}`}>
         {recommendedLooseItems.map((item) => (
           <li key={item.id} className="list-none">

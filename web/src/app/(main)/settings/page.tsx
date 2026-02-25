@@ -63,7 +63,8 @@ export default function SettingsPage() {
       setThresholdPct(data.budget_alert_threshold_pct ?? 20);
       setDigestEmailEnabled(Boolean(data.digest_email_enabled ?? true));
       setReadingPlanWindow((data.reading_plan?.window as "24h" | "today_jst" | "7d") ?? "24h");
-      setReadingPlanSize(String(data.reading_plan?.size ?? 15));
+      const rpSize = data.reading_plan?.size;
+      setReadingPlanSize(String(rpSize === 7 || rpSize === 15 || rpSize === 25 ? rpSize : 15));
       setReadingPlanDiversifyTopics(Boolean(data.reading_plan?.diversify_topics ?? true));
       setAnthropicFactsModel(data.llm_models?.anthropic_facts ?? "");
       setAnthropicSummaryModel(data.llm_models?.anthropic_summary ?? "");
@@ -162,8 +163,8 @@ export default function SettingsPage() {
     setSavingReadingPlan(true);
     try {
       const parsedSize = Number(readingPlanSize);
-      if (!Number.isFinite(parsedSize) || parsedSize < 1 || parsedSize > 100) {
-        throw new Error(locale === "ja" ? "件数は1〜100で指定してください" : "Size must be between 1 and 100");
+      if (!(parsedSize === 7 || parsedSize === 15 || parsedSize === 25)) {
+        throw new Error(locale === "ja" ? "件数は 7 / 15 / 25 から選択してください" : "Size must be one of 7 / 15 / 25");
       }
       await api.updateReadingPlanSettings({
         window: readingPlanWindow,
@@ -537,14 +538,17 @@ export default function SettingsPage() {
               <label className="block text-sm font-medium text-zinc-700">
                 {locale === "ja" ? "表示件数" : "Size"}
               </label>
-              <input
-                type="number"
-                min={1}
-                max={100}
+              <select
                 value={readingPlanSize}
                 onChange={(e) => setReadingPlanSize(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-              />
+              >
+                {[7, 15, 25].map((n) => (
+                  <option key={n} value={String(n)}>
+                    {n}
+                  </option>
+                ))}
+              </select>
             </div>
             <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
               <span>{locale === "ja" ? "トピック分散を有効化" : "Diversify topics"}</span>

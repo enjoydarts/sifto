@@ -340,28 +340,34 @@ function ItemsPageContent() {
   const renderItemRow = useCallback((item: Item, opts?: { featured?: boolean; rank?: number }) => {
     const featured = Boolean(opts?.featured);
     const rank = opts?.rank ?? 0;
+    const href = detailHref(item.id);
+    const openDetail = () => {
+      rememberScroll(item.id);
+      router.push(href);
+    };
     return (
       <div data-item-row-id={item.id}>
         <div
+          role="link"
+          tabIndex={0}
+          onClick={openDetail}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              openDetail();
+            }
+          }}
           className={`group flex items-stretch gap-3 rounded-xl px-4 py-3.5 transition-all ${
             featured
-              ? "border border-zinc-200 bg-gradient-to-b from-white to-stone-50 shadow-sm hover:shadow-md"
+              ? item.is_read
+                ? "cursor-pointer border border-zinc-300 bg-gradient-to-b from-zinc-200 to-zinc-100 shadow-sm hover:border-zinc-400 hover:shadow-md"
+                : "cursor-pointer border border-zinc-200 bg-white shadow-sm hover:border-zinc-300 hover:shadow-md"
               : item.is_read
-                ? "border border-zinc-200 bg-zinc-50/70 shadow-sm"
-                : "border border-zinc-200 bg-white shadow-sm ring-1 ring-amber-100"
+                ? "cursor-pointer border border-zinc-300 bg-zinc-200/80 shadow-sm hover:border-zinc-400"
+                : "cursor-pointer border border-zinc-200 bg-white shadow-sm hover:border-zinc-300"
           }`}
         >
-          <span
-            aria-hidden="true"
-            className={`mt-0.5 w-1 shrink-0 self-start rounded-full ${
-              featured ? "h-24 bg-gradient-to-b from-amber-400 to-orange-400" : item.is_read ? "h-16 bg-zinc-200" : "h-16 bg-amber-400"
-            }`}
-          />
-          <Link
-            href={detailHref(item.id)}
-            onClick={() => rememberScroll(item.id)}
-            className="flex min-w-0 flex-1 items-stretch gap-3 transition-colors hover:text-zinc-700"
-          >
+          <div className="flex min-w-0 flex-1 items-stretch gap-3 transition-colors group-hover:text-zinc-700">
             <div
               className={`shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 ${
                 featured ? "hidden h-[104px] w-[136px] sm:flex" : "hidden h-[72px] w-[72px] sm:flex"
@@ -403,8 +409,8 @@ function ItemsPageContent() {
                     <span
                       className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
                         item.is_read
-                          ? "border-zinc-200 bg-white text-zinc-500"
-                          : "border-amber-200 bg-amber-50 text-amber-700"
+                          ? "border-zinc-300 bg-zinc-50 text-zinc-700"
+                          : "border-zinc-200 bg-white text-zinc-700"
                       }`}
                     >
                       {item.is_read ? (locale === "ja" ? "既読" : "Read") : (locale === "ja" ? "未読" : "Unread")}
@@ -443,16 +449,19 @@ function ItemsPageContent() {
                   </span>
                 )}
               </div>
-              <div className={`${featured ? "text-[12px] text-zinc-500" : "h-4 truncate text-[12px] text-zinc-400"}`}>
+              <div className={`${featured ? "h-4 truncate text-[12px] text-zinc-500" : "h-4 truncate text-[12px] text-zinc-400"}`}>
                 {item.title ? item.url : "\u00A0"}
               </div>
             </div>
-          </Link>
+          </div>
           <div className={`flex shrink-0 flex-col items-end justify-between gap-2 ${featured ? "min-h-[104px]" : "min-h-[72px]"}`}>
             <button
               type="button"
               disabled={!!readUpdatingIds[item.id]}
-              onClick={() => toggleRead(item)}
+              onClick={(e) => {
+                e.stopPropagation();
+                void toggleRead(item);
+              }}
               className="rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {readUpdatingIds[item.id]
@@ -471,7 +480,10 @@ function ItemsPageContent() {
               <button
                 type="button"
                 disabled={!!retryingIds[item.id]}
-                onClick={() => retryItem(item.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void retryItem(item.id);
+                }}
                 className="rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
@@ -483,7 +495,7 @@ function ItemsPageContent() {
         </div>
       </div>
     );
-  }, [detailHref, locale, readUpdatingIds, rememberScroll, retryItem, retryingIds, t, toggleRead]);
+  }, [detailHref, locale, readUpdatingIds, rememberScroll, retryItem, retryingIds, router, t, toggleRead]);
 
   return (
     <div className={`space-y-4 ${focusMode ? "pb-8" : ""}`}>

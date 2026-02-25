@@ -286,38 +286,12 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 		return nil, err
 	}
 	sortItemsByPreference(candidates, profile, embeddingBiasByItemID)
+	candidateEmbByItemID, err := loadItemEmbeddingsByID(ctx, r.db, candidateIDs)
+	if err != nil {
+		return nil, err
+	}
 
-	selected := make([]model.Item, 0, p.Size)
-	if p.DiversifyTopics {
-		seen := map[string]struct{}{}
-		for _, it := range candidates {
-			if len(selected) >= p.Size {
-				break
-			}
-			key := firstTopicKey(it.SummaryTopics)
-			if _, ok := seen[key]; ok {
-				continue
-			}
-			seen[key] = struct{}{}
-			selected = append(selected, it)
-		}
-	}
-	if !p.DiversifyTopics || len(selected) < p.Size {
-		exists := map[string]struct{}{}
-		for _, it := range selected {
-			exists[it.ID] = struct{}{}
-		}
-		for _, it := range candidates {
-			if len(selected) >= p.Size {
-				break
-			}
-			if _, ok := exists[it.ID]; ok {
-				continue
-			}
-			selected = append(selected, it)
-			exists[it.ID] = struct{}{}
-		}
-	}
+	selected := selectItemsByMMR(candidates, p.Size, p.DiversifyTopics, profile, embeddingBiasByItemID, candidateEmbByItemID)
 	topics, err := r.readingPlanTopics(ctx, userID, p)
 	if err != nil {
 		return nil, err

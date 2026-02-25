@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"math"
 	"sort"
 	"time"
 
@@ -119,6 +120,103 @@ func sortItemsByPreference(items []model.Item, profile *feedbackPreferenceProfil
 		}
 		return items[i].CreatedAt.After(items[j].CreatedAt)
 	})
+}
+
+func selectItemsByMMR(
+	candidates []model.Item,
+	size int,
+	diversifyTopics bool,
+	profile *feedbackPreferenceProfile,
+	embeddingBiasByItemID map[string]float64,
+	embByItemID map[string][]float64,
+) []model.Item {
+	if size <= 0 || len(candidates) == 0 {
+		return nil
+	}
+	if len(candidates) <= size {
+		out := make([]model.Item, len(candidates))
+		copy(out, candidates)
+		return out
+	}
+	remaining := make([]model.Item, len(candidates))
+	copy(remaining, candidates)
+	selected := make([]model.Item, 0, size)
+
+	sourceCounts := map[string]int{}
+	topicCounts := map[string]int{}
+
+	// Seed with the strongest recommendation by base relevance.
+	bestSeedIdx := 0
+	bestSeedScore := -1e9
+	for i, it := range remaining {
+		s := itemPreferenceAdjustedScoreWithEmbedding(it, profile, embeddingBiasByItemID)
+		if s > bestSeedScore {
+			bestSeedScore = s
+			bestSeedIdx = i
+		}
+	}
+	first := remaining[bestSeedIdx]
+	selected = append(selected, first)
+	sourceCounts[first.SourceID]++
+	topicCounts[firstTopicKey(first.SummaryTopics)]++
+	remaining = append(remaining[:bestSeedIdx], remaining[bestSeedIdx+1:]...)
+
+	for len(selected) < size && len(remaining) > 0 {
+		bestIdx := 0
+		bestScore := -1e9
+		for i, it := range remaining {
+			relevance := itemPreferenceAdjustedScoreWithEmbedding(it, profile, embeddingBiasByItemID)
+			divPenalty := maxSimilarityToSelected(it, selected, embByItemID)
+
+			// Weak source penalty, stronger topic penalty when diversify is enabled.
+			sourcePenalty := 0.0
+			if c := sourceCounts[it.SourceID]; c > 0 {
+				sourcePenalty = math.Min(0.12, 0.05*float64(c))
+			}
+			topicPenalty := 0.0
+			if diversifyTopics {
+				if c := topicCounts[firstTopicKey(it.SummaryTopics)]; c > 0 {
+					topicPenalty = math.Min(0.18, 0.07*float64(c))
+				}
+			}
+
+			// MMR-ish on item selection: relevance vs similarity to already selected items.
+			score := 0.78*relevance - 0.22*divPenalty - sourcePenalty - topicPenalty
+			if score > bestScore {
+				bestScore = score
+				bestIdx = i
+			}
+		}
+		chosen := remaining[bestIdx]
+		selected = append(selected, chosen)
+		sourceCounts[chosen.SourceID]++
+		topicCounts[firstTopicKey(chosen.SummaryTopics)]++
+		remaining = append(remaining[:bestIdx], remaining[bestIdx+1:]...)
+	}
+
+	return selected
+}
+
+func maxSimilarityToSelected(item model.Item, selected []model.Item, embByItemID map[string][]float64) float64 {
+	if len(selected) == 0 || embByItemID == nil {
+		return 0
+	}
+	emb := embByItemID[item.ID]
+	if len(emb) == 0 {
+		return 0
+	}
+	maxSim := 0.0
+	for _, s := range selected {
+		o := embByItemID[s.ID]
+		if len(o) == 0 {
+			continue
+		}
+		sim := cosineSimilarity(emb, o)
+		if sim > maxSim {
+			maxSim = sim
+		}
+	}
+	return maxSim
 }
 
 func digestPreferenceAdjustedScore(d model.DigestItemDetail, profile *feedbackPreferenceProfile) float64 {

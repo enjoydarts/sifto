@@ -80,6 +80,28 @@ func (r *DigestRepo) GetDetail(ctx context.Context, id, userID string) (*model.D
 		}
 		d.Items = append(d.Items, did)
 	}
+	clusterDraftRows, err := r.db.Query(ctx, `
+		SELECT id, digest_id, cluster_key, cluster_label, rank, item_count, topics, max_score, draft_summary, created_at, updated_at
+		FROM digest_cluster_drafts
+		WHERE digest_id = $1
+		ORDER BY rank ASC, created_at ASC`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer clusterDraftRows.Close()
+	for clusterDraftRows.Next() {
+		var cd model.DigestClusterDraft
+		if err := clusterDraftRows.Scan(
+			&cd.ID, &cd.DigestID, &cd.ClusterKey, &cd.ClusterLabel, &cd.Rank, &cd.ItemCount,
+			&cd.Topics, &cd.MaxScore, &cd.DraftSummary, &cd.CreatedAt, &cd.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		d.ClusterDrafts = append(d.ClusterDrafts, cd)
+	}
+	if err := clusterDraftRows.Err(); err != nil {
+		return nil, err
+	}
 	return &d, nil
 }
 

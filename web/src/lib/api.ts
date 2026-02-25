@@ -197,10 +197,26 @@ export interface DigestItemDetail {
   rank: number;
   item: Item;
   summary: ItemSummary;
+  facts?: string[];
+}
+
+export interface DigestClusterDraft {
+  id: string;
+  digest_id: string;
+  cluster_key: string;
+  cluster_label: string;
+  rank: number;
+  item_count: number;
+  topics: string[];
+  max_score?: number | null;
+  draft_summary: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DigestDetail extends Digest {
   items: DigestItemDetail[];
+  cluster_drafts?: DigestClusterDraft[];
 }
 
 export interface LLMUsageLog {

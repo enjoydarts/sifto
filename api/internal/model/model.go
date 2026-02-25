@@ -202,7 +202,8 @@ type DigestItem struct {
 
 type DigestDetail struct {
 	Digest
-	Items []DigestItemDetail `json:"items"`
+	Items         []DigestItemDetail   `json:"items"`
+	ClusterDrafts []DigestClusterDraft `json:"cluster_drafts,omitempty"`
 }
 
 type DigestItemDetail struct {

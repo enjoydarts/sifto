@@ -129,6 +129,43 @@ export default function DigestDetailPage() {
         </section>
       )}
 
+      {digest.cluster_drafts && digest.cluster_drafts.length > 0 && (
+        <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+              <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
+              {locale === "ja" ? "中間ドラフト（クラスタ別）" : "Intermediate Cluster Drafts"}
+            </h2>
+            <span className="text-xs text-zinc-400">
+              {digest.cluster_drafts.length} {locale === "ja" ? "クラスタ" : "clusters"}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {digest.cluster_drafts.map((cd) => (
+              <div key={cd.id} className="rounded-lg border border-zinc-200 bg-zinc-50/70 p-4">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-zinc-700 ring-1 ring-zinc-200">
+                    #{cd.rank}
+                  </span>
+                  <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-semibold text-zinc-800">
+                    {cd.cluster_label}
+                  </span>
+                  <span className="text-xs text-zinc-500">
+                    {locale === "ja" ? `${cd.item_count}件` : `${cd.item_count} items`}
+                  </span>
+                  {typeof cd.max_score === "number" && (
+                    <span className="rounded border border-zinc-200 bg-white px-2 py-0.5 text-xs font-medium text-zinc-600">
+                      score {cd.max_score.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                <pre className="whitespace-pre-wrap text-xs leading-6 text-zinc-700">{cd.draft_summary}</pre>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">

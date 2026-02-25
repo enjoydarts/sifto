@@ -138,17 +138,6 @@ func digestTopicKey(topics []string) string {
 	return "__untagged__"
 }
 
-func trimDigestSummary(s string, max int) string {
-	s = strings.TrimSpace(s)
-	if max <= 0 || len(s) <= max {
-		return s
-	}
-	if max <= 1 {
-		return s[:max]
-	}
-	return s[:max-1] + "…"
-}
-
 // buildDigestClusterDrafts compacts digest inputs into topic buckets and stores
 // representative snippets per bucket. This becomes the intermediate artifact for final compose.
 func buildDigestClusterDrafts(details []model.DigestItemDetail, embClusters []model.ReadingPlanCluster) []model.DigestClusterDraft {
@@ -180,7 +169,7 @@ func buildDigestClusterDrafts(details []model.DigestItemDetail, embClusters []mo
 				continue
 			}
 			title := strings.TrimSpace(coalescePtrStr(it.Item.Title, it.Item.URL))
-			summary := trimDigestSummary(it.Summary.Summary, 180)
+			summary := strings.TrimSpace(it.Summary.Summary)
 			factLine := ""
 			if len(it.Facts) > 0 {
 				facts := make([]string, 0, minInt(2, len(it.Facts)))
@@ -189,7 +178,7 @@ func buildDigestClusterDrafts(details []model.DigestItemDetail, embClusters []mo
 					if f == "" {
 						continue
 					}
-					facts = append(facts, trimDigestSummary(f, 90))
+					facts = append(facts, f)
 					if len(facts) >= 2 {
 						break
 					}

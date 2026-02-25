@@ -173,10 +173,10 @@ func (r *ItemRepo) readingPlanClustersByEmbeddings(ctx context.Context, items []
 }
 
 func shouldClusterReadingPlan(seed, cand model.Item, similarity float64) bool {
-	if similarity >= 0.76 {
+	if similarity >= 0.72 {
 		return true
 	}
-	if similarity < 0.58 {
+	if similarity < 0.54 {
 		return false
 	}
 	return hasTopicOverlap(seed.SummaryTopics, cand.SummaryTopics)

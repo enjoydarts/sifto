@@ -37,9 +37,13 @@ func loadItemEmbeddingsByID(ctx context.Context, db *pgxpool.Pool, itemIDs []str
 	return out, rows.Err()
 }
 
-func (r *ItemRepo) readingPlanClustersByEmbeddings(ctx context.Context, items []model.Item) ([]model.ReadingPlanCluster, error) {
+func (r *ItemRepo) readingPlanClustersByEmbeddings(ctx context.Context, items []model.Item, selectedItemIDs []string) ([]model.ReadingPlanCluster, error) {
 	if len(items) < 2 {
 		return nil, nil
+	}
+	selectedSet := make(map[string]struct{}, len(selectedItemIDs))
+	for _, id := range selectedItemIDs {
+		selectedSet[id] = struct{}{}
 	}
 	itemIDs := make([]string, 0, len(items))
 	for _, it := range items {
@@ -85,30 +89,39 @@ func (r *ItemRepo) readingPlanClustersByEmbeddings(ctx context.Context, items []
 				}
 			}
 		}
-		if len(members) < 2 {
+		filtered := members
+		if len(selectedSet) > 0 {
+			filtered = make([]model.Item, 0, len(members))
+			for _, m := range members {
+				if _, ok := selectedSet[m.ID]; ok {
+					filtered = append(filtered, m)
+				}
+			}
+		}
+		if len(filtered) < 2 {
 			continue
 		}
-		sort.SliceStable(members, func(a, b int) bool {
+		sort.SliceStable(filtered, func(a, b int) bool {
 			as := -1.0
-			if members[a].SummaryScore != nil {
-				as = *members[a].SummaryScore
+			if filtered[a].SummaryScore != nil {
+				as = *filtered[a].SummaryScore
 			}
 			bs := -1.0
-			if members[b].SummaryScore != nil {
-				bs = *members[b].SummaryScore
+			if filtered[b].SummaryScore != nil {
+				bs = *filtered[b].SummaryScore
 			}
 			if as != bs {
 				return as > bs
 			}
-			return members[a].CreatedAt.After(members[b].CreatedAt)
+			return filtered[a].CreatedAt.After(filtered[b].CreatedAt)
 		})
 		clusters = append(clusters, model.ReadingPlanCluster{
-			ID:             members[0].ID,
-			Label:          readingPlanClusterLabel(members[0]),
-			Size:           len(members),
+			ID:             filtered[0].ID,
+			Label:          readingPlanClusterLabel(filtered[0]),
+			Size:           len(filtered),
 			MaxSimilarity:  maxSim,
-			Representative: members[0],
-			Items:          members,
+			Representative: filtered[0],
+			Items:          filtered,
 		})
 	}
 

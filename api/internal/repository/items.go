@@ -322,7 +322,11 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 	if err != nil {
 		return nil, err
 	}
-	clusters, err := r.readingPlanClustersByEmbeddings(ctx, selected)
+	selectedIDs := make([]string, 0, len(selected))
+	for _, it := range selected {
+		selectedIDs = append(selectedIDs, it.ID)
+	}
+	clusters, err := r.readingPlanClustersByEmbeddings(ctx, candidates, selectedIDs)
 	if err != nil {
 		return nil, err
 	}

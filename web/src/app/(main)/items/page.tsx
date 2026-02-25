@@ -381,6 +381,11 @@ function ItemsPageContent() {
     ),
     [featuredItemIDs, focusMode, pagedItems, recommendedSectionItemIds]
   );
+  const recommendedRenderedCount = useMemo(() => {
+    if (!focusMode) return pagedItems.length;
+    const clusteredCount = visibleClusterSections.reduce((acc, section) => acc + section.items.length, 0);
+    return featuredItems.length + clusteredCount + recommendedLooseItems.length;
+  }, [featuredItems.length, focusMode, pagedItems.length, recommendedLooseItems.length, visibleClusterSections]);
   const detailHref = useCallback(
     (itemId: string) => `/items/${itemId}?from=${encodeURIComponent(currentItemsHref)}`,
     [currentItemsHref]
@@ -684,7 +689,7 @@ function ItemsPageContent() {
             <span>{t("items.title")}</span>
           </h1>
           <p className="mt-1 text-sm text-zinc-500">
-            {(focusMode ? displayItems.length : itemsTotal).toLocaleString()} {t("common.rows")}
+            {(focusMode ? recommendedRenderedCount : itemsTotal).toLocaleString()} {t("common.rows")}
             {!focusMode && topic && (
               <span className="ml-2 text-zinc-400">
                 {locale === "ja" ? `（トピック: ${topic}）` : `(topic: ${topic})`}
@@ -693,15 +698,8 @@ function ItemsPageContent() {
             {focusMode && (
               <span className="ml-2 text-zinc-400">
                 {locale === "ja"
-                  ? `（対象 ${planPoolCount.toLocaleString()} 件から厳選）`
-                  : `(selected from ${planPoolCount.toLocaleString()} items in window)`}
-              </span>
-            )}
-            {focusMode && (
-              <span className="ml-2 text-zinc-400">
-                {locale === "ja"
-                  ? `（クラスタ ${recommendedEmbeddingSections.length} / 表示 ${visibleClusterSections.length}）`
-                  : `(clusters ${recommendedEmbeddingSections.length} / visible ${visibleClusterSections.length})`}
+                  ? `（${displayItems.length.toLocaleString()}件を選定 / 対象 ${planPoolCount.toLocaleString()} 件）`
+                  : `(${displayItems.length.toLocaleString()} selected / ${planPoolCount.toLocaleString()} in window)`}
               </span>
             )}
           </p>

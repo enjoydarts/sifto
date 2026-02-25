@@ -147,6 +147,14 @@ export interface ReadingPlanResponse {
   exclude_read: boolean;
   source_pool_count: number;
   topics: { topic: string; count: number; max_score?: number | null }[];
+  clusters?: {
+    id: string;
+    label: string;
+    size: number;
+    max_similarity: number;
+    representative: Item;
+    items: Item[];
+  }[];
 }
 
 export interface ItemStats {

@@ -140,19 +140,29 @@ type ItemListResponse struct {
 }
 
 type ReadingPlanResponse struct {
-	Items           []Item             `json:"items"`
-	Window          string             `json:"window"`
-	Size            int                `json:"size"`
-	DiversifyTopics bool               `json:"diversify_topics"`
-	ExcludeRead     bool               `json:"exclude_read"`
-	SourcePoolCount int                `json:"source_pool_count"`
-	Topics          []ReadingPlanTopic `json:"topics"`
+	Items           []Item               `json:"items"`
+	Window          string               `json:"window"`
+	Size            int                  `json:"size"`
+	DiversifyTopics bool                 `json:"diversify_topics"`
+	ExcludeRead     bool                 `json:"exclude_read"`
+	SourcePoolCount int                  `json:"source_pool_count"`
+	Topics          []ReadingPlanTopic   `json:"topics"`
+	Clusters        []ReadingPlanCluster `json:"clusters,omitempty"`
 }
 
 type ReadingPlanTopic struct {
 	Topic    string   `json:"topic"`
 	Count    int      `json:"count"`
 	MaxScore *float64 `json:"max_score,omitempty"`
+}
+
+type ReadingPlanCluster struct {
+	ID             string  `json:"id"`
+	Label          string  `json:"label"`
+	Size           int     `json:"size"`
+	MaxSimilarity  float64 `json:"max_similarity"`
+	Representative Item    `json:"representative"`
+	Items          []Item  `json:"items"`
 }
 
 type ItemStatsResponse struct {

@@ -322,6 +322,10 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 	if err != nil {
 		return nil, err
 	}
+	clusters, err := r.readingPlanClustersByEmbeddings(ctx, selected)
+	if err != nil {
+		return nil, err
+	}
 
 	return &model.ReadingPlanResponse{
 		Items:           selected,
@@ -331,6 +335,7 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 		ExcludeRead:     p.ExcludeRead,
 		SourcePoolCount: poolCount,
 		Topics:          topics,
+		Clusters:        clusters,
 	}, nil
 }
 

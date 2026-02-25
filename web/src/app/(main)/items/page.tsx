@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image as ImageIcon, Newspaper, Star, ThumbsDown, ThumbsUp } from "lucide-react";
-import { api, Item } from "@/lib/api";
+import { api, Item, ReadingPlanResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import Pagination from "@/components/pagination";
 import { useToast } from "@/components/toast-provider";
@@ -19,6 +19,7 @@ type ItemsFeedQueryData = {
   items: Item[];
   total: number;
   planPoolCount: number;
+  planClusters?: ReadingPlanResponse["clusters"];
 };
 
 function scoreTone(score: number) {
@@ -109,6 +110,7 @@ function ItemsPageContent() {
           items: data?.items ?? [],
           total: data?.items?.length ?? 0,
           planPoolCount: data?.source_pool_count ?? 0,
+          planClusters: data?.clusters ?? [],
         };
       }
       const data = await api.getItems({
@@ -124,6 +126,7 @@ function ItemsPageContent() {
         items: data?.items ?? [],
         total: data?.total ?? 0,
         planPoolCount: 0,
+        planClusters: [],
       };
     },
     placeholderData: (prev) => prev,
@@ -327,26 +330,20 @@ function ItemsPageContent() {
   const pagedItems = focusMode ? displayItems : sortedItems;
   const featuredItems = focusMode ? pagedItems.slice(0, 3) : [];
   const remainingItems = focusMode ? pagedItems.slice(3) : pagedItems;
-  const recommendedTopicSections = useMemo(() => {
+  const recommendedEmbeddingSections = useMemo(() => {
     if (!focusMode) return [] as Array<{ topic: string; items: Item[] }>;
-    const groups = new Map<string, Item[]>();
-    const order: string[] = [];
-    for (const item of remainingItems) {
-      const topicKey = (item.summary_topics?.[0] ?? "").trim();
-      if (!topicKey) continue;
-      if (!groups.has(topicKey)) {
-        groups.set(topicKey, []);
-        order.push(topicKey);
-      }
-      groups.get(topicKey)!.push(item);
-    }
-    return order
-      .map((topic) => ({ topic, items: groups.get(topic) ?? [] }))
-      .filter((section) => section.items.length >= 2);
-  }, [focusMode, remainingItems]);
+    const clusters = (listQuery.data?.planClusters ?? [])
+      .filter((c) => (c.items?.length ?? 0) >= 2)
+      .map((c) => ({
+        topic: c.label,
+        items: c.items.filter((it) => remainingItems.some((ri) => ri.id === it.id)),
+      }))
+      .filter((s) => s.items.length >= 2);
+    return clusters;
+  }, [focusMode, listQuery.data?.planClusters, remainingItems]);
   const recommendedSectionItemIds = useMemo(
-    () => new Set(recommendedTopicSections.flatMap((section) => section.items.map((item) => item.id))),
-    [recommendedTopicSections]
+    () => new Set(recommendedEmbeddingSections.flatMap((section) => section.items.map((item) => item.id))),
+    [recommendedEmbeddingSections]
   );
   const recommendedLooseItems = useMemo(
     () => (focusMode ? remainingItems.filter((item) => !recommendedSectionItemIds.has(item.id)) : remainingItems),
@@ -679,7 +676,7 @@ function ItemsPageContent() {
           </ul>
         </section>
       )}
-      {focusMode && recommendedTopicSections.length > 0 && (
+      {focusMode && recommendedEmbeddingSections.length > 0 && (
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -692,7 +689,7 @@ function ItemsPageContent() {
             </div>
           </div>
           <div className="space-y-4">
-            {recommendedTopicSections.map((section) => {
+            {recommendedEmbeddingSections.map((section) => {
               const [hero, ...rest] = section.items;
               if (!hero) return null;
               return (
@@ -727,7 +724,7 @@ function ItemsPageContent() {
           </div>
         </section>
       )}
-      <ul className={`list-none space-y-2 ${focusMode && (featuredItems.length > 0 || recommendedTopicSections.length > 0) ? "pt-1" : ""}`}>
+      <ul className={`list-none space-y-2 ${focusMode && (featuredItems.length > 0 || recommendedEmbeddingSections.length > 0) ? "pt-1" : ""}`}>
         {recommendedLooseItems.map((item) => (
           <li key={item.id} className="list-none">
             {renderItemRow(item)}

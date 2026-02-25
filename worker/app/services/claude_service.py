@@ -14,6 +14,7 @@ _digest_model_fallback = os.getenv("ANTHROPIC_DIGEST_MODEL_FALLBACK", _summary_m
 _feed_suggest_model = os.getenv("ANTHROPIC_FEED_SUGGEST_MODEL", _summary_model)
 _feed_suggest_model_fallback = os.getenv("ANTHROPIC_FEED_SUGGEST_MODEL_FALLBACK", _summary_model_fallback)
 _log = logging.getLogger(__name__)
+_ANTHROPIC_PRICING_SOURCE_VERSION = "anthropic_static_2026_02"
 
 _DEFAULT_MODEL_PRICING = {
     # USD per 1M tokens (Claude API pricing); cache write assumes 5m cache.
@@ -125,7 +126,7 @@ def _merge_llm_metas(metas: list[dict], purpose: str) -> dict:
             "provider": "none",
             "model": "none",
             "pricing_model_family": "",
-            "pricing_source": "default",
+            "pricing_source": _ANTHROPIC_PRICING_SOURCE_VERSION,
             "input_tokens": 0,
             "output_tokens": 0,
             "cache_creation_input_tokens": 0,
@@ -185,7 +186,7 @@ def _pricing_for_model(model: str, purpose: str) -> dict:
             },
         )
     )
-    source = "default"
+    source = _ANTHROPIC_PRICING_SOURCE_VERSION
     # Optional per-purpose overrides for temporary pricing changes without deploy.
     prefix = f"ANTHROPIC_{purpose.upper()}_"
     override_map = {

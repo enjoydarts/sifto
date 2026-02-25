@@ -12,7 +12,7 @@ type OpenAIEmbeddingCostEstimate struct {
 }
 
 const (
-	openAIEmbeddingPricingSource = "openai_static_embeddings"
+	openAIEmbeddingPricingSource = "openai_static_embeddings_2026_02"
 )
 
 var openAIEmbeddingPricePer1MTokensUSD = map[string]float64{

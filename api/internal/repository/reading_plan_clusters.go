@@ -169,7 +169,7 @@ func (r *ItemRepo) readingPlanClustersByEmbeddings(ctx context.Context, items []
 		}
 		return clusters[i].Representative.CreatedAt.After(clusters[j].Representative.CreatedAt)
 	})
-	return clusters, nil
+	return reorderReadingPlanClustersMMR(clusters, embByID), nil
 }
 
 func shouldClusterReadingPlan(seed, cand model.Item, similarity float64) bool {
@@ -211,6 +211,68 @@ func readingPlanClusterLabel(it model.Item) string {
 		return *it.Title
 	}
 	return "Related"
+}
+
+func reorderReadingPlanClustersMMR(clusters []model.ReadingPlanCluster, embByID map[string][]float64) []model.ReadingPlanCluster {
+	if len(clusters) <= 2 {
+		return clusters
+	}
+	remaining := make([]model.ReadingPlanCluster, len(clusters))
+	copy(remaining, clusters)
+	out := make([]model.ReadingPlanCluster, 0, len(clusters))
+
+	// Seed with the strongest cluster from the existing sort order.
+	out = append(out, remaining[0])
+	remaining = remaining[1:]
+
+	for len(remaining) > 0 {
+		bestIdx := 0
+		bestScore := -1e9
+		for i, c := range remaining {
+			relevance := clusterRelevanceScore(c)
+			divPenalty := maxClusterSimilarityToSelected(c, out, embByID)
+			// MMR-ish: prioritize relevance while penalizing similarity to already chosen clusters.
+			score := 0.72*relevance - 0.28*divPenalty
+			if score > bestScore {
+				bestScore = score
+				bestIdx = i
+			}
+		}
+		out = append(out, remaining[bestIdx])
+		remaining = append(remaining[:bestIdx], remaining[bestIdx+1:]...)
+	}
+	return out
+}
+
+func clusterRelevanceScore(c model.ReadingPlanCluster) float64 {
+	score := 0.0
+	if c.Representative.SummaryScore != nil {
+		score = *c.Representative.SummaryScore
+	}
+	// Mild size bonus so clusters with more context don't vanish.
+	return score + math.Min(0.12, float64(c.Size-1)*0.03)
+}
+
+func maxClusterSimilarityToSelected(c model.ReadingPlanCluster, selected []model.ReadingPlanCluster, embByID map[string][]float64) float64 {
+	if len(selected) == 0 {
+		return 0
+	}
+	emb := embByID[c.Representative.ID]
+	if len(emb) == 0 {
+		return 0
+	}
+	maxSim := 0.0
+	for _, s := range selected {
+		other := embByID[s.Representative.ID]
+		if len(other) == 0 {
+			continue
+		}
+		sim := cosineSimilarity(emb, other)
+		if sim > maxSim {
+			maxSim = sim
+		}
+	}
+	return maxSim
 }
 
 func cosineSimilarity(a, b []float64) float64 {

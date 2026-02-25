@@ -44,7 +44,7 @@ func main() {
 	settingsH := handler.NewSettingsHandler(userSettingsRepo, llmUsageRepo, secretCipher)
 
 	internalH := handler.NewInternalHandler(userRepo, itemInngestRepo, digestInngestRepo, eventPublisher)
-	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, eventPublisher)
+	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher)
 	itemH := handler.NewItemHandler(itemRepo, eventPublisher)
 	digestH := handler.NewDigestHandler(digestRepo)
 	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo)
@@ -83,6 +83,7 @@ func main() {
 			r.Get("/", sourceH.List)
 			r.Post("/", sourceH.Create)
 			r.Post("/discover", sourceH.Discover)
+			r.Get("/suggestions", sourceH.Suggest)
 			r.Patch("/{id}", sourceH.Update)
 			r.Delete("/{id}", sourceH.Delete)
 		})

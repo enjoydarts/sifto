@@ -13,6 +13,16 @@ export interface Source {
   updated_at: string;
 }
 
+export interface SourceSuggestion {
+  url: string;
+  title: string | null;
+  reasons: string[];
+  matched_topics?: string[];
+  ai_reason?: string | null;
+  ai_confidence?: number | null;
+  seed_source_ids: string[];
+}
+
 export interface Item {
   id: string;
   source_id: string;
@@ -266,6 +276,12 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   // Sources
   getSources: () => apiFetch<Source[]>("/sources"),
+  getSourceSuggestions: (params?: { limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiFetch<{ items: SourceSuggestion[]; limit: number; llm?: { provider?: string; model?: string; estimated_cost_usd?: number } | null }>(`/sources/suggestions${qs ? `?${qs}` : ""}`);
+  },
   createSource: (body: { url: string; title?: string; type?: string }) =>
     apiFetch<Source>("/sources", { method: "POST", body: JSON.stringify(body) }),
   updateSource: (id: string, body: { enabled?: boolean; title?: string }) =>

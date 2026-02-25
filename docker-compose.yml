@@ -47,6 +47,7 @@ services:
     build: ./worker
     ports:
       - "8000:8000"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
     environment:
       ANTHROPIC_FACTS_MODEL: ${ANTHROPIC_FACTS_MODEL}
       ANTHROPIC_FACTS_MODEL_FALLBACK: ${ANTHROPIC_FACTS_MODEL_FALLBACK}
@@ -58,6 +59,8 @@ services:
       ALLOW_DEV_EXTRACT_PLACEHOLDER: ${ALLOW_DEV_EXTRACT_PLACEHOLDER}
     env_file:
       - .env
+    volumes:
+      - ./worker:/app
 
   inngest:
     image: inngest/inngest:latest

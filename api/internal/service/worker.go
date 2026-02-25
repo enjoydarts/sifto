@@ -64,6 +64,39 @@ type ComposeDigestResponse struct {
 	LLM     *LLMUsage `json:"llm,omitempty"`
 }
 
+type RankFeedSuggestionsCandidate struct {
+	URL           string   `json:"url"`
+	Title         *string  `json:"title,omitempty"`
+	Reasons       []string `json:"reasons,omitempty"`
+	MatchedTopics []string `json:"matched_topics,omitempty"`
+}
+
+type RankFeedSuggestionsExistingSource struct {
+	URL   string  `json:"url"`
+	Title *string `json:"title,omitempty"`
+}
+
+type RankFeedSuggestionsItem struct {
+	URL        string  `json:"url"`
+	Reason     string  `json:"reason"`
+	Confidence float64 `json:"confidence"`
+}
+
+type RankFeedSuggestionsResponse struct {
+	Items []RankFeedSuggestionsItem `json:"items"`
+	LLM   *LLMUsage                 `json:"llm,omitempty"`
+}
+
+type SuggestFeedSeedSitesItem struct {
+	URL    string `json:"url"`
+	Reason string `json:"reason"`
+}
+
+type SuggestFeedSeedSitesResponse struct {
+	Items []SuggestFeedSeedSitesItem `json:"items"`
+	LLM   *LLMUsage                  `json:"llm,omitempty"`
+}
+
 type LLMUsage struct {
 	Provider                 string  `json:"provider"`
 	Model                    string  `json:"model"`
@@ -98,6 +131,32 @@ func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, ite
 	return postWithHeaders[ComposeDigestResponse](ctx, w, "/compose-digest", map[string]any{
 		"digest_date": digestDate,
 		"items":       items,
+	}, workerHeaders(anthropicAPIKey))
+}
+
+func (w *WorkerClient) RankFeedSuggestions(
+	ctx context.Context,
+	existing []RankFeedSuggestionsExistingSource,
+	preferredTopics []string,
+	candidates []RankFeedSuggestionsCandidate,
+	anthropicAPIKey *string,
+) (*RankFeedSuggestionsResponse, error) {
+	return postWithHeaders[RankFeedSuggestionsResponse](ctx, w, "/rank-feed-suggestions", map[string]any{
+		"existing_sources": existing,
+		"preferred_topics": preferredTopics,
+		"candidates":       candidates,
+	}, workerHeaders(anthropicAPIKey))
+}
+
+func (w *WorkerClient) SuggestFeedSeedSites(
+	ctx context.Context,
+	existing []RankFeedSuggestionsExistingSource,
+	preferredTopics []string,
+	anthropicAPIKey *string,
+) (*SuggestFeedSeedSitesResponse, error) {
+	return postWithHeaders[SuggestFeedSeedSitesResponse](ctx, w, "/suggest-feed-seed-sites", map[string]any{
+		"existing_sources": existing,
+		"preferred_topics": preferredTopics,
 	}, workerHeaders(anthropicAPIKey))
 }
 

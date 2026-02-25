@@ -11,6 +11,8 @@ _summary_model_fallback = os.getenv("ANTHROPIC_SUMMARY_MODEL_FALLBACK", "claude-
 _facts_model_fallback = os.getenv("ANTHROPIC_FACTS_MODEL_FALLBACK", "claude-3-5-haiku-20241022")
 _digest_model = os.getenv("ANTHROPIC_DIGEST_MODEL", _summary_model)
 _digest_model_fallback = os.getenv("ANTHROPIC_DIGEST_MODEL_FALLBACK", _summary_model_fallback)
+_feed_suggest_model = os.getenv("ANTHROPIC_FEED_SUGGEST_MODEL", _summary_model)
+_feed_suggest_model_fallback = os.getenv("ANTHROPIC_FEED_SUGGEST_MODEL_FALLBACK", _summary_model_fallback)
 _log = logging.getLogger(__name__)
 
 _DEFAULT_MODEL_PRICING = {
@@ -681,4 +683,217 @@ items:
         "subject": subject,
         "body": body,
         "llm": llm,
+    }
+
+
+def rank_feed_suggestions(
+    existing_sources: list[dict], preferred_topics: list[str], candidates: list[dict], api_key: str | None = None
+) -> dict:
+    if not candidates:
+        return {
+            "items": [],
+            "llm": {
+                "provider": "none",
+                "model": "none",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+
+    # Keep prompt bounded.
+    existing_sources = existing_sources[:20]
+    preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:12]
+    candidates = candidates[:20]
+
+    if _client_for_api_key(api_key) is None:
+        # Local/dev fallback: keep order and synthesize simple reasons.
+        out = []
+        for c in candidates:
+            reasons = c.get("reasons") or []
+            matched_topics = c.get("matched_topics") or []
+            reason = " / ".join([*(["高評価トピックに近い"] if matched_topics else []), *[str(r) for r in reasons[:1]]]) or "関連候補"
+            out.append(
+                {
+                    "url": c.get("url"),
+                    "reason": reason[:120],
+                    "confidence": 0.4 if matched_topics else 0.25,
+                }
+            )
+        return {
+            "items": out,
+            "llm": {
+                "provider": "local-dev",
+                "model": "local-fallback",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+
+    prompt = f"""あなたはRSSフィードの推薦アシスタントです。
+既存の購読ソース・興味トピック・候補フィードを見て、ユーザーに合いそうな候補を順位付けしてください。
+
+要件:
+- URLは入力候補のものだけ使う（新しいURLを作らない）
+- 既存ソースと重複しすぎる候補は下げる
+- 興味トピックに近い候補を優先
+- 理由は日本語で短く（40〜100字）
+- JSONのみで返す
+
+返却形式:
+{{
+  "items": [
+    {{"url":"...", "reason":"...", "confidence":0.0-1.0}}
+  ]
+}}
+
+既存ソース:
+{json.dumps(existing_sources, ensure_ascii=False)}
+
+興味トピック:
+{json.dumps(preferred_topics, ensure_ascii=False)}
+
+候補フィード:
+{json.dumps(candidates, ensure_ascii=False)}
+"""
+
+    message, used_model = _call_with_model_fallback(
+        prompt,
+        _feed_suggest_model,
+        _feed_suggest_model_fallback,
+        max_tokens=1800,
+        api_key=api_key,
+    )
+    if message is None:
+        return {
+            "items": [],
+            "llm": {
+                "provider": "local-fallback",
+                "model": used_model or _feed_suggest_model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+
+    text = message.content[0].text.strip()
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    try:
+        data = json.loads(text[start:end])
+    except Exception:
+        data = {}
+    rows = data.get("items", [])
+    if not isinstance(rows, list):
+        rows = []
+    out: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        url = str(row.get("url") or "").strip()
+        if not url:
+            continue
+        reason = str(row.get("reason") or "").strip()[:180]
+        try:
+            confidence = _clamp01(float(row.get("confidence", 0.5)), 0.5)
+        except Exception:
+            confidence = 0.5
+        out.append({"url": url, "reason": reason, "confidence": confidence})
+    return {
+        "items": out,
+        "llm": _llm_meta(message, "source_suggestion", used_model or _feed_suggest_model),
+    }
+
+
+def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list[str], api_key: str | None = None) -> dict:
+    existing_sources = existing_sources[:20]
+    preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:12]
+
+    if _client_for_api_key(api_key) is None:
+        return {
+            "items": [],
+            "llm": {
+                "provider": "local-dev",
+                "model": "local-fallback",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+
+    prompt = f"""あなたはRSSフィード探索アシスタントです。
+既存の購読ソースと興味トピックを元に、「まだ登録していない可能性が高い」ニュース/技術メディアのサイトURL（ホームページURL）候補を提案してください。
+
+要件:
+- URLは実在しそうなサイトのトップURLを優先（https://example.com/ 形式）
+- RSS URLを直接知らない場合はサイトトップURLでよい（後段でRSS探索する）
+- 既存ソースと同じURLは除外
+- 日本語で短い理由を付ける
+- 最大8件
+- JSONのみで返す
+
+返却形式:
+{{
+  "items": [
+    {{"url":"https://...", "reason":"..."}}
+  ]
+}}
+
+既存ソース:
+{json.dumps(existing_sources, ensure_ascii=False)}
+
+興味トピック:
+{json.dumps(preferred_topics, ensure_ascii=False)}
+"""
+    message, used_model = _call_with_model_fallback(
+        prompt,
+        _feed_suggest_model,
+        _feed_suggest_model_fallback,
+        max_tokens=1200,
+        api_key=api_key,
+    )
+    if message is None:
+        return {
+            "items": [],
+            "llm": {
+                "provider": "local-fallback",
+                "model": used_model or _feed_suggest_model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+    text = message.content[0].text.strip()
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    try:
+        data = json.loads(text[start:end])
+    except Exception:
+        data = {}
+    rows = data.get("items", [])
+    if not isinstance(rows, list):
+        rows = []
+    out: list[dict] = []
+    for row in rows[:12]:
+        if not isinstance(row, dict):
+            continue
+        url = str(row.get("url") or "").strip()
+        reason = str(row.get("reason") or "").strip()[:180]
+        if not url:
+            continue
+        out.append({"url": url, "reason": reason})
+    return {
+        "items": out,
+        "llm": _llm_meta(message, "source_suggestion", used_model or _feed_suggest_model),
     }

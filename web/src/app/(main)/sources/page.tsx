@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { api, Source } from "@/lib/api";
+import { Lightbulb, Sparkles } from "lucide-react";
+import { api, Source, SourceSuggestion } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -22,6 +23,11 @@ export default function SourcesPage() {
   const [editingSource, setEditingSource] = useState<Source | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [suggestions, setSuggestions] = useState<SourceSuggestion[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [suggestionsLLM, setSuggestionsLLM] = useState<{ provider?: string; model?: string; estimated_cost_usd?: number } | null>(null);
+  const [addingSuggestedURL, setAddingSuggestedURL] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<
     { url: string; title: string | null }[]
   >([]);
@@ -54,6 +60,39 @@ export default function SourcesPage() {
     setTitle("");
     setCandidates([]);
     await load();
+  };
+
+  const registerSuggestedSource = async (s: SourceSuggestion) => {
+    setAddingSuggestedURL(s.url);
+    try {
+      await api.createSource({
+        url: s.url,
+        type: "rss",
+        title: s.title ?? undefined,
+      });
+      setSuggestions((prev) => prev.filter((v) => v.url !== s.url));
+      await load();
+      showToast(locale === "ja" ? "おすすめ候補を追加しました" : "Suggested feed added", "success");
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setAddingSuggestedURL(null);
+    }
+  };
+
+  const loadSuggestions = async () => {
+    setLoadingSuggestions(true);
+    setSuggestionsError(null);
+    try {
+      const res = await api.getSourceSuggestions({ limit: 12 });
+      setSuggestions(res.items ?? []);
+      setSuggestionsLLM(res.llm ?? null);
+    } catch (e) {
+      setSuggestionsError(String(e));
+      setSuggestionsLLM(null);
+    } finally {
+      setLoadingSuggestions(false);
+    }
   };
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -253,6 +292,117 @@ export default function SourcesPage() {
           </div>
         )}
       </form>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
+              <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
+              {locale === "ja" ? "おすすめフィード候補（試作）" : "Suggested feeds (preview)"}
+            </h2>
+            <p className="mt-1 text-xs text-zinc-500">
+              {locale === "ja"
+                ? "登録済みソースの同一サイト/親URLから追加のRSS/Atomを探索します"
+                : "Discover additional RSS/Atom feeds from the same sites or parent URLs of your current sources."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={loadSuggestions}
+            disabled={loadingSuggestions}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            <Lightbulb className="size-3.5" aria-hidden="true" />
+            {loadingSuggestions
+              ? locale === "ja"
+                ? "探索中…"
+                : "Finding…"
+              : locale === "ja"
+                ? "候補を提案"
+                : "Suggest feeds"}
+          </button>
+        </div>
+        {suggestionsLLM && (
+          <p className="mt-2 text-xs text-zinc-500">
+            {locale === "ja" ? "AIで候補を並べ替え" : "AI-ranked"}: {suggestionsLLM.provider ?? "unknown"} /{" "}
+            {suggestionsLLM.model ?? "unknown"}
+            {typeof suggestionsLLM.estimated_cost_usd === "number" && (
+              <span className="ml-2 text-zinc-400">{`$${suggestionsLLM.estimated_cost_usd.toFixed(6)}`}</span>
+            )}
+          </p>
+        )}
+        {suggestionsError && (
+          <p className="mt-3 text-sm text-red-500">{suggestionsError}</p>
+        )}
+        {!suggestionsError && !loadingSuggestions && suggestions.length === 0 && (
+          <p className="mt-3 text-sm text-zinc-500">
+            {locale === "ja"
+              ? "まだ候補はありません。登録済みソースを増やしてから試すと見つかりやすくなります。"
+              : "No suggestions yet. Try again after adding more sources."}
+          </p>
+        )}
+        {suggestions.length > 0 && (
+          <ul className="mt-3 space-y-2">
+            {suggestions.map((s) => (
+              <li
+                key={s.url}
+                className="flex items-start justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-zinc-900">{s.title ?? s.url}</div>
+                  {s.title && <div className="truncate text-xs text-zinc-500">{s.url}</div>}
+                  {s.reasons.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {s.reasons.slice(0, 2).map((reason) => (
+                        <span
+                          key={`${s.url}-${reason}`}
+                          className="rounded-full bg-white px-2 py-0.5 text-[11px] text-zinc-600 ring-1 ring-zinc-200"
+                        >
+                          {reason}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {!!s.matched_topics?.length && (
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {s.matched_topics.slice(0, 3).map((topic) => (
+                        <span
+                          key={`${s.url}-topic-${topic}`}
+                          className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700 ring-1 ring-blue-200"
+                        >
+                          {locale === "ja" ? `興味トピック: ${topic}` : `Topic: ${topic}`}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {s.ai_reason && (
+                    <p className="mt-1 text-xs leading-5 text-zinc-600">
+                      <span className="font-medium text-zinc-700">
+                        {locale === "ja" ? "AI理由" : "AI reason"}:
+                      </span>{" "}
+                      {s.ai_reason}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => registerSuggestedSource(s)}
+                  disabled={addingSuggestedURL === s.url}
+                  className="shrink-0 rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+                >
+                  {addingSuggestedURL === s.url
+                    ? locale === "ja"
+                      ? "追加中…"
+                      : "Adding…"
+                    : locale === "ja"
+                      ? "追加"
+                      : "Add"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {/* State */}
       {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}

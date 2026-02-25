@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minoru-kitayama/sifto/api/internal/model"
@@ -468,6 +469,54 @@ func (r *ItemRepo) TopicTrends(ctx context.Context, userID string, limit int) ([
 		}
 		v.Delta = v.Count24h - v.CountPrev24h
 		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+func (r *ItemRepo) PositiveFeedbackTopics(ctx context.Context, userID string, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 12
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	rows, err := r.db.Query(ctx, `
+		WITH weighted AS (
+			SELECT COALESCE(NULLIF(BTRIM(t.topic), ''), '') AS topic,
+			       (
+			         CASE WHEN fb.rating > 0 THEN 2 ELSE 0 END
+			         + CASE WHEN fb.is_favorite THEN 3 ELSE 0 END
+			       )::int AS w
+			FROM item_feedbacks fb
+			JOIN items i ON i.id = fb.item_id
+			JOIN sources s ON s.id = i.source_id
+			JOIN item_summaries sm ON sm.item_id = i.id
+			CROSS JOIN LATERAL unnest(COALESCE(sm.topics, '{}'::text[])) AS t(topic)
+			WHERE fb.user_id = $1
+			  AND s.user_id = $1
+			  AND (fb.rating > 0 OR fb.is_favorite = true)
+		)
+		SELECT topic
+		FROM weighted
+		WHERE topic <> ''
+		GROUP BY topic
+		ORDER BY SUM(w) DESC, COUNT(*) DESC, topic ASC
+		LIMIT $2`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]string, 0, limit)
+	for rows.Next() {
+		var topic string
+		if err := rows.Scan(&topic); err != nil {
+			return nil, err
+		}
+		topic = strings.TrimSpace(topic)
+		if topic == "" {
+			continue
+		}
+		out = append(out, topic)
 	}
 	return out, rows.Err()
 }

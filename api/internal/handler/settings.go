@@ -67,6 +67,7 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"llm_models": map[string]any{
 			"anthropic_facts":             settings.AnthropicFactsModel,
 			"anthropic_summary":           settings.AnthropicSummaryModel,
+			"anthropic_digest_cluster":    settings.AnthropicDigestClusterModel,
 			"anthropic_digest":            settings.AnthropicDigestModel,
 			"anthropic_source_suggestion": settings.AnthropicSourceSuggestModel,
 			"openai_embedding":            settings.OpenAIEmbeddingModel,
@@ -87,6 +88,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 	var body struct {
 		AnthropicFacts            *string `json:"anthropic_facts"`
 		AnthropicSummary          *string `json:"anthropic_summary"`
+		AnthropicDigestCluster    *string `json:"anthropic_digest_cluster"`
 		AnthropicDigest           *string `json:"anthropic_digest"`
 		AnthropicSourceSuggestion *string `json:"anthropic_source_suggestion"`
 		OpenAIEmbedding           *string `json:"openai_embedding"`
@@ -115,6 +117,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		userID,
 		norm(body.AnthropicFacts),
 		norm(body.AnthropicSummary),
+		norm(body.AnthropicDigestCluster),
 		norm(body.AnthropicDigest),
 		norm(body.AnthropicSourceSuggestion),
 		openAIEmbedding,
@@ -128,6 +131,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		"llm_models": map[string]any{
 			"anthropic_facts":             settings.AnthropicFactsModel,
 			"anthropic_summary":           settings.AnthropicSummaryModel,
+			"anthropic_digest_cluster":    settings.AnthropicDigestClusterModel,
 			"anthropic_digest":            settings.AnthropicDigestModel,
 			"anthropic_source_suggestion": settings.AnthropicSourceSuggestModel,
 			"openai_embedding":            settings.OpenAIEmbeddingModel,

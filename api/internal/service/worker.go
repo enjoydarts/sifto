@@ -64,6 +64,11 @@ type ComposeDigestResponse struct {
 	LLM     *LLMUsage `json:"llm,omitempty"`
 }
 
+type ComposeDigestClusterDraftResponse struct {
+	DraftSummary string    `json:"draft_summary"`
+	LLM          *LLMUsage `json:"llm,omitempty"`
+}
+
 type RankFeedSuggestionsCandidate struct {
 	URL           string   `json:"url"`
 	Title         *string  `json:"title,omitempty"`
@@ -158,6 +163,24 @@ func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate st
 		"digest_date": digestDate,
 		"items":       items,
 		"model":       model,
+	}, workerHeaders(anthropicAPIKey))
+}
+
+func (w *WorkerClient) ComposeDigestClusterDraftWithModel(
+	ctx context.Context,
+	clusterLabel string,
+	itemCount int,
+	topics []string,
+	sourceLines []string,
+	anthropicAPIKey *string,
+	model *string,
+) (*ComposeDigestClusterDraftResponse, error) {
+	return postWithHeaders[ComposeDigestClusterDraftResponse](ctx, w, "/compose-digest-cluster-draft", map[string]any{
+		"cluster_label": clusterLabel,
+		"item_count":    itemCount,
+		"topics":        topics,
+		"source_lines":  sourceLines,
+		"model":         model,
 	}, workerHeaders(anthropicAPIKey))
 }
 

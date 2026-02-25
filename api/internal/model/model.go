@@ -27,6 +27,7 @@ type UserSettings struct {
 	ReadingPlanExcludeRead      bool      `json:"reading_plan_exclude_read"`
 	AnthropicFactsModel         *string   `json:"anthropic_facts_model,omitempty"`
 	AnthropicSummaryModel       *string   `json:"anthropic_summary_model,omitempty"`
+	AnthropicDigestClusterModel *string   `json:"anthropic_digest_cluster_model,omitempty"`
 	AnthropicDigestModel        *string   `json:"anthropic_digest_model,omitempty"`
 	AnthropicSourceSuggestModel *string   `json:"anthropic_source_suggestion_model,omitempty"`
 	OpenAIEmbeddingModel        *string   `json:"openai_embedding_model,omitempty"`

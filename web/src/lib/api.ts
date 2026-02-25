@@ -293,6 +293,7 @@ export interface UserSettings {
   llm_models?: {
     anthropic_facts?: string | null;
     anthropic_summary?: string | null;
+    anthropic_digest_cluster?: string | null;
     anthropic_digest?: string | null;
     anthropic_source_suggestion?: string | null;
     openai_embedding?: string | null;
@@ -442,6 +443,7 @@ export const api = {
   updateLLMModelSettings: (body: {
     anthropic_facts?: string | null;
     anthropic_summary?: string | null;
+    anthropic_digest_cluster?: string | null;
     anthropic_digest?: string | null;
     anthropic_source_suggestion?: string | null;
     openai_embedding?: string | null;

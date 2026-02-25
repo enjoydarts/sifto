@@ -39,6 +39,7 @@ export default function SettingsPage() {
   const [readingPlanDiversifyTopics, setReadingPlanDiversifyTopics] = useState(true);
   const [anthropicFactsModel, setAnthropicFactsModel] = useState("");
   const [anthropicSummaryModel, setAnthropicSummaryModel] = useState("");
+  const [anthropicDigestClusterModel, setAnthropicDigestClusterModel] = useState("");
   const [anthropicDigestModel, setAnthropicDigestModel] = useState("");
   const [anthropicSourceSuggestionModel, setAnthropicSourceSuggestionModel] = useState("");
   const [openAIEmbeddingModel, setOpenAIEmbeddingModel] = useState("");
@@ -68,6 +69,7 @@ export default function SettingsPage() {
       setReadingPlanDiversifyTopics(Boolean(data.reading_plan?.diversify_topics ?? true));
       setAnthropicFactsModel(data.llm_models?.anthropic_facts ?? "");
       setAnthropicSummaryModel(data.llm_models?.anthropic_summary ?? "");
+      setAnthropicDigestClusterModel(data.llm_models?.anthropic_digest_cluster ?? "");
       setAnthropicDigestModel(data.llm_models?.anthropic_digest ?? "");
       setAnthropicSourceSuggestionModel(data.llm_models?.anthropic_source_suggestion ?? "");
       setOpenAIEmbeddingModel(data.llm_models?.openai_embedding ?? "");
@@ -125,6 +127,7 @@ export default function SettingsPage() {
       await api.updateLLMModelSettings({
         anthropic_facts: emptyToNull(anthropicFactsModel),
         anthropic_summary: emptyToNull(anthropicSummaryModel),
+        anthropic_digest_cluster: emptyToNull(anthropicDigestClusterModel),
         anthropic_digest: emptyToNull(anthropicDigestModel),
         anthropic_source_suggestion: emptyToNull(anthropicSourceSuggestionModel),
         openai_embedding: emptyToNull(openAIEmbeddingModel),
@@ -469,6 +472,12 @@ export default function SettingsPage() {
               label={locale === "ja" ? "要約 (Claude)" : "Summary (Claude)"}
               value={anthropicSummaryModel}
               onChange={setAnthropicSummaryModel}
+              options={anthropicModelOptions}
+            />
+            <ModelSelect
+              label={locale === "ja" ? "ダイジェスト前段（クラスタ草稿）(Claude)" : "Digest Cluster Drafts (Claude)"}
+              value={anthropicDigestClusterModel}
+              onChange={setAnthropicDigestClusterModel}
               options={anthropicModelOptions}
             />
             <ModelSelect

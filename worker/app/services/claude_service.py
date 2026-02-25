@@ -693,6 +693,104 @@ items:
     }
 
 
+def compose_digest_cluster_draft(
+    cluster_label: str,
+    item_count: int,
+    topics: list[str],
+    source_lines: list[str],
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
+    cluster_label = str(cluster_label or "話題").strip() or "話題"
+    topics = [str(t).strip() for t in topics if str(t).strip()][:8]
+    source_lines = [str(x).strip() for x in source_lines if str(x).strip()][:16]
+    if not source_lines:
+        return {
+            "draft_summary": "",
+            "llm": {
+                "provider": "none",
+                "model": "none",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+
+    if _client_for_api_key(api_key) is None:
+        return {
+            "draft_summary": "\n".join(source_lines),
+            "llm": {
+                "provider": "local-dev",
+                "model": "local-fallback",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+
+    prompt = f"""あなたはニュースダイジェストの下書き編集者です。
+以下は同じ話題（クラスタ）に属する複数記事の要点メモです。重複をまとめ、事実ベースで読みやすいクラスタ下書きに整理してください。
+
+要件:
+- 与えられた内容のみ使う（推測しない）
+- 重複をまとめる
+- 重要な相違点があれば残す
+- プレーンテキストで返す
+- 箇条書き 3〜8 行程度
+- JSONのみで返す
+
+返却形式:
+{{
+  "draft_summary": "- ...\\n- ..."
+}}
+
+cluster_label: {cluster_label}
+item_count: {item_count}
+topics: {json.dumps(topics, ensure_ascii=False)}
+source_lines:
+{json.dumps(source_lines, ensure_ascii=False)}
+"""
+
+    message, used_model = _call_with_model_fallback(
+        prompt,
+        str(model or _digest_model),
+        _digest_model_fallback,
+        max_tokens=1200,
+        api_key=api_key,
+    )
+    if message is None:
+        return {
+            "draft_summary": "\n".join(source_lines),
+            "llm": {
+                "provider": "local-fallback",
+                "model": used_model or _digest_model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+    text = message.content[0].text.strip()
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    try:
+        data = json.loads(text[start:end])
+    except Exception:
+        data = {}
+    draft_summary = str(data.get("draft_summary") or "").strip()
+    if not draft_summary:
+        draft_summary = "\n".join(source_lines)
+    return {
+        "draft_summary": draft_summary,
+        "llm": _llm_meta(message, "digest_cluster_draft", used_model or _digest_model),
+    }
+
+
 def rank_feed_suggestions(
     existing_sources: list[dict], preferred_topics: list[str], candidates: list[dict], api_key: str | None = None, model: str | None = None
 ) -> dict:

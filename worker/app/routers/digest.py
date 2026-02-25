@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from app.services.claude_service import compose_digest
+from app.services.claude_service import compose_digest, compose_digest_cluster_draft
 
 router = APIRouter()
 
@@ -27,6 +27,19 @@ class ComposeDigestResponse(BaseModel):
     llm: dict | None = None
 
 
+class ComposeDigestClusterDraftRequest(BaseModel):
+    cluster_label: str
+    item_count: int
+    topics: list[str] = []
+    source_lines: list[str]
+    model: str | None = None
+
+
+class ComposeDigestClusterDraftResponse(BaseModel):
+    draft_summary: str
+    llm: dict | None = None
+
+
 @router.post("/compose-digest", response_model=ComposeDigestResponse)
 def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
     api_key = request.headers.get("x-anthropic-api-key") or None
@@ -47,3 +60,17 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
         model=req.model,
     )
     return ComposeDigestResponse(**result)
+
+
+@router.post("/compose-digest-cluster-draft", response_model=ComposeDigestClusterDraftResponse)
+def compose_digest_cluster_draft_endpoint(req: ComposeDigestClusterDraftRequest, request: Request):
+    api_key = request.headers.get("x-anthropic-api-key") or None
+    result = compose_digest_cluster_draft(
+        cluster_label=req.cluster_label,
+        item_count=req.item_count,
+        topics=req.topics,
+        source_lines=req.source_lines,
+        api_key=api_key,
+        model=req.model,
+    )
+    return ComposeDigestClusterDraftResponse(**result)

@@ -259,6 +259,19 @@ func buildDigestClusterDrafts(details []model.DigestItemDetail, embClusters []mo
 	return out
 }
 
+func draftSourceLines(draftSummary string) []string {
+	lines := strings.Split(draftSummary, "\n")
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		if l == "" {
+			continue
+		}
+		out = append(out, l)
+	}
+	return out
+}
+
 func minInt(a, b int) int {
 	if a < b {
 		return a
@@ -848,6 +861,34 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					}
 					drafts := buildDigestClusterDrafts(digest.Items, embClusters)
 					drafts = compressDigestClusterDrafts(drafts, 20)
+					var clusterDraftModel *string
+					if userModelSettings != nil {
+						clusterDraftModel = ptrStringOrNil(userModelSettings.AnthropicDigestClusterModel)
+					}
+					for i := range drafts {
+						sourceLines := draftSourceLines(drafts[i].DraftSummary)
+						if len(sourceLines) == 0 {
+							continue
+						}
+						resp, err := worker.ComposeDigestClusterDraftWithModel(
+							ctx,
+							drafts[i].ClusterLabel,
+							drafts[i].ItemCount,
+							drafts[i].Topics,
+							sourceLines,
+							userAnthropicKey,
+							clusterDraftModel,
+						)
+						if err != nil {
+							return "", fmt.Errorf("compose digest cluster draft rank=%d: %w", drafts[i].Rank, err)
+						}
+						if resp != nil && strings.TrimSpace(resp.DraftSummary) != "" {
+							drafts[i].DraftSummary = resp.DraftSummary
+						}
+						if resp != nil {
+							recordLLMUsage(ctx, llmUsageRepo, "digest_cluster_draft", resp.LLM, &data.UserID, nil, nil, &data.DigestID)
+						}
+					}
 					if err := digestRepo.ReplaceClusterDrafts(ctx, data.DigestID, drafts); err != nil {
 						return "", fmt.Errorf("store digest cluster drafts: %w", err)
 					}

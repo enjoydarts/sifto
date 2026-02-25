@@ -40,6 +40,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       reading_plan_exclude_read,
 		       anthropic_facts_model,
 		       anthropic_summary_model,
+		       anthropic_digest_cluster_model,
 		       anthropic_digest_model,
 		       anthropic_source_suggestion_model,
 		       openai_embedding_model,
@@ -64,6 +65,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.ReadingPlanExcludeRead,
 		&v.AnthropicFactsModel,
 		&v.AnthropicSummaryModel,
+		&v.AnthropicDigestClusterModel,
 		&v.AnthropicDigestModel,
 		&v.AnthropicSourceSuggestModel,
 		&v.OpenAIEmbeddingModel,
@@ -175,27 +177,30 @@ func (r *UserSettingsRepo) UpsertReadingPlanConfig(ctx context.Context, userID, 
 func (r *UserSettingsRepo) UpsertLLMModelConfig(
 	ctx context.Context,
 	userID string,
-	anthropicFactsModel, anthropicSummaryModel, anthropicDigestModel, anthropicSourceSuggestionModel, openAIEmbeddingModel *string,
+	anthropicFactsModel, anthropicSummaryModel, anthropicDigestClusterModel, anthropicDigestModel, anthropicSourceSuggestionModel, openAIEmbeddingModel *string,
 ) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (
 			user_id,
-			anthropic_facts_model,
-			anthropic_summary_model,
-			anthropic_digest_model,
-			anthropic_source_suggestion_model,
-			openai_embedding_model
-		) VALUES ($1,$2,$3,$4,$5,$6)
-		ON CONFLICT (user_id) DO UPDATE
-		SET anthropic_facts_model = EXCLUDED.anthropic_facts_model,
-		    anthropic_summary_model = EXCLUDED.anthropic_summary_model,
-		    anthropic_digest_model = EXCLUDED.anthropic_digest_model,
-		    anthropic_source_suggestion_model = EXCLUDED.anthropic_source_suggestion_model,
-		    openai_embedding_model = EXCLUDED.openai_embedding_model,
-		    updated_at = NOW()`,
+				anthropic_facts_model,
+				anthropic_summary_model,
+				anthropic_digest_cluster_model,
+				anthropic_digest_model,
+				anthropic_source_suggestion_model,
+				openai_embedding_model
+			) VALUES ($1,$2,$3,$4,$5,$6,$7)
+			ON CONFLICT (user_id) DO UPDATE
+			SET anthropic_facts_model = EXCLUDED.anthropic_facts_model,
+			    anthropic_summary_model = EXCLUDED.anthropic_summary_model,
+			    anthropic_digest_cluster_model = EXCLUDED.anthropic_digest_cluster_model,
+			    anthropic_digest_model = EXCLUDED.anthropic_digest_model,
+			    anthropic_source_suggestion_model = EXCLUDED.anthropic_source_suggestion_model,
+			    openai_embedding_model = EXCLUDED.openai_embedding_model,
+			    updated_at = NOW()`,
 		userID,
 		anthropicFactsModel,
 		anthropicSummaryModel,
+		anthropicDigestClusterModel,
 		anthropicDigestModel,
 		anthropicSourceSuggestionModel,
 		openAIEmbeddingModel,

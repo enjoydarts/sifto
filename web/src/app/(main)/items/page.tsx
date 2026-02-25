@@ -740,10 +740,10 @@ function ItemsPageContent() {
               const [hero, ...rest] = section.items;
               if (!hero) return null;
               return (
-                <section key={section.id} className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-3 sm:p-4">
-                  <div className="mb-3 flex items-center justify-between gap-2">
+                <section key={section.id} className="space-y-2">
+                  <div className="flex items-center justify-between gap-2 px-1">
                     <div className="inline-flex items-center gap-2">
-                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-zinc-800 shadow-sm ring-1 ring-zinc-200">
+                      <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-800">
                         {section.topic}
                       </span>
                       <span className="text-xs text-zinc-500">

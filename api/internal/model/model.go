@@ -209,4 +209,19 @@ type DigestItemDetail struct {
 	Rank    int         `json:"rank"`
 	Item    Item        `json:"item"`
 	Summary ItemSummary `json:"summary"`
+	Facts   []string    `json:"facts,omitempty"`
+}
+
+type DigestClusterDraft struct {
+	ID           string    `json:"id"`
+	DigestID     string    `json:"digest_id"`
+	ClusterKey   string    `json:"cluster_key"`
+	ClusterLabel string    `json:"cluster_label"`
+	Rank         int       `json:"rank"`
+	ItemCount    int       `json:"item_count"`
+	Topics       []string  `json:"topics"`
+	MaxScore     *float64  `json:"max_score,omitempty"`
+	DraftSummary string    `json:"draft_summary"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }

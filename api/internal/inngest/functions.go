@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/inngest/inngestgo"
 	"github.com/inngest/inngestgo/step"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/minoru-kitayama/sifto/api/internal/model"
 	"github.com/minoru-kitayama/sifto/api/internal/repository"
 	"github.com/minoru-kitayama/sifto/api/internal/service"
 	"github.com/minoru-kitayama/sifto/api/internal/timeutil"
@@ -126,6 +128,189 @@ func ptrStringOrNil(v *string) *string {
 	return &s
 }
 
+func digestTopicKey(topics []string) string {
+	for _, t := range topics {
+		t = strings.TrimSpace(t)
+		if t != "" {
+			return t
+		}
+	}
+	return "__untagged__"
+}
+
+func trimDigestSummary(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	if max <= 1 {
+		return s[:max]
+	}
+	return s[:max-1] + "…"
+}
+
+// buildDigestClusterDrafts compacts digest inputs into topic buckets and stores
+// representative snippets per bucket. This becomes the intermediate artifact for final compose.
+func buildDigestClusterDrafts(details []model.DigestItemDetail, embClusters []model.ReadingPlanCluster) []model.DigestClusterDraft {
+	if len(details) == 0 {
+		return nil
+	}
+	byID := make(map[string]model.DigestItemDetail, len(details))
+	for _, d := range details {
+		byID[d.Item.ID] = d
+	}
+	seen := map[string]struct{}{}
+	out := make([]model.DigestClusterDraft, 0, len(details))
+
+	appendDraft := func(idx int, key, label string, group []model.DigestItemDetail) {
+		if len(group) == 0 {
+			return
+		}
+		maxScore := 0.0
+		hasScore := false
+		lines := make([]string, 0, minInt(4, len(group)))
+		for i, it := range group {
+			if it.Summary.Score != nil {
+				if !hasScore || *it.Summary.Score > maxScore {
+					maxScore = *it.Summary.Score
+					hasScore = true
+				}
+			}
+			if i >= 4 {
+				continue
+			}
+			title := strings.TrimSpace(coalescePtrStr(it.Item.Title, it.Item.URL))
+			summary := trimDigestSummary(it.Summary.Summary, 180)
+			factLine := ""
+			if len(it.Facts) > 0 {
+				facts := make([]string, 0, minInt(2, len(it.Facts)))
+				for _, f := range it.Facts {
+					f = strings.TrimSpace(f)
+					if f == "" {
+						continue
+					}
+					facts = append(facts, trimDigestSummary(f, 90))
+					if len(facts) >= 2 {
+						break
+					}
+				}
+				if len(facts) > 0 {
+					factLine = strings.Join(facts, " / ")
+				}
+			}
+			switch {
+			case summary != "" && factLine != "":
+				lines = append(lines, "- "+title+": "+summary+" | facts: "+factLine)
+			case summary != "":
+				lines = append(lines, "- "+title+": "+summary)
+			case factLine != "":
+				lines = append(lines, "- "+title+": "+factLine)
+			default:
+				lines = append(lines, "- "+title)
+			}
+		}
+		draftSummary := strings.Join(lines, "\n")
+		if len(group) > 4 {
+			draftSummary += fmt.Sprintf("\n- ...and %d more related items", len(group)-4)
+		}
+		var scorePtr *float64
+		if hasScore {
+			v := maxScore
+			scorePtr = &v
+		}
+		out = append(out, model.DigestClusterDraft{
+			ClusterKey:   key,
+			ClusterLabel: label,
+			Rank:         idx,
+			ItemCount:    len(group),
+			Topics:       group[0].Summary.Topics,
+			MaxScore:     scorePtr,
+			DraftSummary: draftSummary,
+		})
+	}
+
+	rank := 1
+	for _, c := range embClusters {
+		group := make([]model.DigestItemDetail, 0, len(c.Items))
+		for _, m := range c.Items {
+			d, ok := byID[m.ID]
+			if !ok {
+				continue
+			}
+			if _, dup := seen[d.Item.ID]; dup {
+				continue
+			}
+			seen[d.Item.ID] = struct{}{}
+			group = append(group, d)
+		}
+		if len(group) == 0 {
+			continue
+		}
+		label := c.Label
+		if strings.TrimSpace(label) == "" {
+			label = digestTopicKey(group[0].Summary.Topics)
+		}
+		appendDraft(rank, c.ID, label, group)
+		rank++
+	}
+
+	// Add remaining singletons so the first-stage processing still covers all items.
+	for _, d := range details {
+		if _, ok := seen[d.Item.ID]; ok {
+			continue
+		}
+		seen[d.Item.ID] = struct{}{}
+		key := d.Item.ID
+		label := digestTopicKey(d.Summary.Topics)
+		appendDraft(rank, key, label, []model.DigestItemDetail{d})
+		rank++
+	}
+	return out
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func buildComposeItemsFromClusterDrafts(drafts []model.DigestClusterDraft, maxItems int) []service.ComposeDigestItem {
+	if maxItems <= 0 {
+		maxItems = 24
+	}
+	if maxItems > 40 {
+		maxItems = 40
+	}
+	if len(drafts) > maxItems {
+		drafts = drafts[:maxItems]
+	}
+	out := make([]service.ComposeDigestItem, 0, len(drafts))
+	for i, d := range drafts {
+		title := d.ClusterLabel
+		if d.ItemCount > 1 {
+			title = fmt.Sprintf("%s (%d items)", d.ClusterLabel, d.ItemCount)
+		}
+		titlePtr := title
+		out = append(out, service.ComposeDigestItem{
+			Rank:    i + 1,
+			Title:   &titlePtr,
+			URL:     "",
+			Summary: d.DraftSummary,
+			Topics:  d.Topics,
+			Score:   d.MaxScore,
+		})
+	}
+	return out
+}
+
+func coalescePtrStr(a *string, b string) string {
+	if a != nil && strings.TrimSpace(*a) != "" {
+		return *a
+	}
+	return b
+}
+
 // Event payloads
 
 type ItemCreatedData struct {
@@ -135,6 +320,12 @@ type ItemCreatedData struct {
 }
 
 type DigestCreatedData struct {
+	DigestID string `json:"digest_id"`
+	UserID   string `json:"user_id"`
+	To       string `json:"to"`
+}
+
+type DigestCopyComposedData struct {
 	DigestID string `json:"digest_id"`
 	UserID   string `json:"user_id"`
 	To       string `json:"to"`
@@ -161,6 +352,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(processItemFn(client, db, worker, openAI, secretCipher))
 	register(embedItemFn(client, db, openAI, secretCipher))
 	register(generateDigestFn(client, db))
+	register(composeDigestCopyFn(client, db, worker, secretCipher))
 	register(sendDigestFn(client, db, worker, resend, secretCipher))
 	register(checkBudgetAlertsFn(client, db, resend))
 
@@ -504,25 +696,20 @@ func generateDigestFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.Serv
 	)
 }
 
-// ④ event/send-digest — メール送信
-func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
+// ④ event/compose-digest-copy — メール本文生成（重い処理を分離）
+func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
 	digestRepo := repository.NewDigestInngestRepo(db)
+	itemRepo := repository.NewItemRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
 
-	type EventData struct {
-		DigestID string `json:"digest_id"`
-		UserID   string `json:"user_id"`
-		To       string `json:"to"`
-	}
-
 	return inngestgo.CreateFunction(
 		client,
-		inngestgo.FunctionOpts{ID: "send-digest", Name: "Send Digest Email"},
+		inngestgo.FunctionOpts{ID: "compose-digest-copy", Name: "Compose Digest Email Copy"},
 		inngestgo.EventTrigger("digest/created", nil),
-		func(ctx context.Context, input inngestgo.Input[EventData]) (any, error) {
+		func(ctx context.Context, input inngestgo.Input[DigestCreatedData]) (any, error) {
 			data := input.Event.Data
-			log.Printf("send-digest start digest_id=%s to=%s", data.DigestID, data.To)
+			log.Printf("compose-digest-copy start digest_id=%s", data.DigestID)
 			markStatus := func(status string, sendErr error) {
 				var msg *string
 				if sendErr != nil {
@@ -533,7 +720,7 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 					msg = &s
 				}
 				if err := digestRepo.UpdateSendStatus(ctx, data.DigestID, status, msg); err != nil {
-					log.Printf("send-digest update-status failed digest_id=%s status=%s err=%v", data.DigestID, status, err)
+					log.Printf("compose-digest-copy update-status failed digest_id=%s status=%s err=%v", data.DigestID, status, err)
 				}
 			}
 			userAnthropicKey, keyErr := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, &data.UserID)
@@ -550,42 +737,44 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 				markStatus("fetch_failed", err)
 				return nil, fmt.Errorf("fetch digest: %w", err)
 			}
-			log.Printf("send-digest fetched digest_id=%s items=%d", data.DigestID, len(digest.Items))
+			log.Printf("compose-digest-copy fetched digest_id=%s items=%d", data.DigestID, len(digest.Items))
 
 			if len(digest.Items) == 0 {
-				log.Printf("send-digest skip-no-items digest_id=%s", data.DigestID)
+				log.Printf("compose-digest-copy skip-no-items digest_id=%s", data.DigestID)
 				markStatus("skipped_no_items", nil)
 				return map[string]string{"status": "skipped", "reason": "no items"}, nil
 			}
-			if !resend.Enabled() {
-				log.Printf("send-digest skip-resend-disabled digest_id=%s", data.DigestID)
-				markStatus("skipped_resend_disabled", nil)
-				return map[string]string{"status": "skipped", "reason": "resend_disabled"}, nil
-			}
 			markStatus("processing", nil)
 
-			var copy *service.ComposeDigestResponse
 			if digest.EmailSubject != nil && digest.EmailBody != nil {
-				copy = &service.ComposeDigestResponse{
-					Subject: *digest.EmailSubject,
-					Body:    *digest.EmailBody,
-				}
-				log.Printf("send-digest reuse-copy digest_id=%s", data.DigestID)
+				log.Printf("compose-digest-copy reuse-copy digest_id=%s", data.DigestID)
 			} else {
-				log.Printf("send-digest compose-copy start digest_id=%s", data.DigestID)
 				_, err := step.Run(ctx, "compose-digest-copy", func(ctx context.Context) (string, error) {
-					log.Printf("send-digest compose-copy step-exec digest_id=%s", data.DigestID)
-					items := make([]service.ComposeDigestItem, 0, len(digest.Items))
-					for _, it := range digest.Items {
-						items = append(items, service.ComposeDigestItem{
-							Rank:    it.Rank,
-							Title:   it.Item.Title,
-							URL:     it.Item.URL,
-							Summary: it.Summary.Summary,
-							Topics:  it.Summary.Topics,
-							Score:   it.Summary.Score,
-						})
+					log.Printf("compose-digest-copy step-exec digest_id=%s", data.DigestID)
+					clusterItems := make([]model.Item, 0, len(digest.Items))
+					for _, di := range digest.Items {
+						it := di.Item
+						it.SummaryScore = di.Summary.Score
+						it.SummaryTopics = di.Summary.Topics
+						clusterItems = append(clusterItems, it)
 					}
+					embClusters, err := itemRepo.ClusterItemsByEmbeddings(ctx, clusterItems)
+					if err != nil {
+						return "", fmt.Errorf("cluster digest items: %w", err)
+					}
+					drafts := buildDigestClusterDrafts(digest.Items, embClusters)
+					if err := digestRepo.ReplaceClusterDrafts(ctx, data.DigestID, drafts); err != nil {
+						return "", fmt.Errorf("store digest cluster drafts: %w", err)
+					}
+					storedDrafts, err := digestRepo.ListClusterDrafts(ctx, data.DigestID)
+					if err != nil {
+						return "", fmt.Errorf("reload digest cluster drafts: %w", err)
+					}
+					items := buildComposeItemsFromClusterDrafts(storedDrafts, 24)
+					log.Printf(
+						"compose-digest-copy compacted digest_id=%s source_items=%d cluster_drafts=%d compose_items=%d",
+						data.DigestID, len(digest.Items), len(storedDrafts), len(items),
+					)
 					var modelOverride *string
 					if userModelSettings != nil {
 						modelOverride = ptrStringOrNil(userModelSettings.AnthropicDigestModel)
@@ -595,7 +784,7 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 						return "", err
 					}
 					recordLLMUsage(ctx, llmUsageRepo, "digest", resp.LLM, &data.UserID, nil, nil, &data.DigestID)
-					log.Printf("send-digest compose-copy worker-done digest_id=%s subject_len=%d body_len=%d", data.DigestID, len(resp.Subject), len(resp.Body))
+					log.Printf("compose-digest-copy worker-done digest_id=%s subject_len=%d body_len=%d", data.DigestID, len(resp.Subject), len(resp.Body))
 					if err := digestRepo.UpdateEmailCopy(ctx, data.DigestID, resp.Subject, resp.Body); err != nil {
 						return "", err
 					}
@@ -605,39 +794,82 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 					markStatus("compose_failed", err)
 					return nil, fmt.Errorf("compose digest copy: %w", err)
 				}
-				digest, err = digestRepo.GetForEmail(ctx, data.DigestID)
-				if err != nil {
-					markStatus("refetch_after_compose_failed", err)
-					return nil, fmt.Errorf("refetch digest after compose: %w", err)
-				}
-				if digest.EmailSubject == nil || digest.EmailBody == nil {
-					err := fmt.Errorf("compose digest copy: email copy not persisted")
-					markStatus("compose_failed", err)
-					return nil, err
-				}
-				copy = &service.ComposeDigestResponse{
-					Subject: *digest.EmailSubject,
-					Body:    *digest.EmailBody,
-				}
-				log.Printf("send-digest compose-copy done digest_id=%s subject_len=%d body_len=%d", data.DigestID, len(copy.Subject), len(copy.Body))
 			}
 
+			if _, err := client.Send(ctx, inngestgo.Event{
+				Name: "digest/copy-composed",
+				Data: map[string]any{
+					"digest_id": data.DigestID,
+					"user_id":   data.UserID,
+					"to":        data.To,
+				},
+			}); err != nil {
+				markStatus("enqueue_send_failed", err)
+				return nil, fmt.Errorf("send digest/copy-composed: %w", err)
+			}
+			log.Printf("compose-digest-copy complete digest_id=%s", data.DigestID)
+			return map[string]string{"status": "composed", "digest_id": data.DigestID}, nil
+		},
+	)
+}
+
+// ⑤ event/send-digest — メール送信（compose完了後）
+func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
+	_ = worker
+	_ = secretCipher
+	digestRepo := repository.NewDigestInngestRepo(db)
+	userSettingsRepo := repository.NewUserSettingsRepo(db)
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "send-digest", Name: "Send Digest Email"},
+		inngestgo.EventTrigger("digest/copy-composed", nil),
+		func(ctx context.Context, input inngestgo.Input[DigestCopyComposedData]) (any, error) {
+			data := input.Event.Data
+			log.Printf("send-digest start digest_id=%s to=%s", data.DigestID, data.To)
+			markStatus := func(status string, sendErr error) {
+				var msg *string
+				if sendErr != nil {
+					s := sendErr.Error()
+					if len(s) > 2000 {
+						s = s[:2000]
+					}
+					msg = &s
+				}
+				if err := digestRepo.UpdateSendStatus(ctx, data.DigestID, status, msg); err != nil {
+					log.Printf("send-digest update-status failed digest_id=%s status=%s err=%v", data.DigestID, status, err)
+				}
+			}
+
+			digest, err := digestRepo.GetForEmail(ctx, data.DigestID)
+			if err != nil {
+				markStatus("fetch_failed", err)
+				return nil, fmt.Errorf("fetch digest: %w", err)
+			}
+			if digest.EmailSubject == nil || digest.EmailBody == nil {
+				err := fmt.Errorf("digest email copy is missing")
+				markStatus("compose_failed", err)
+				return nil, err
+			}
+			if !resend.Enabled() {
+				markStatus("skipped_resend_disabled", nil)
+				return map[string]string{"status": "skipped", "reason": "resend_disabled"}, nil
+			}
 			digestEmailEnabled, err := userSettingsRepo.IsDigestEmailEnabled(ctx, data.UserID)
 			if err != nil {
 				markStatus("user_settings_failed", err)
 				return nil, fmt.Errorf("load user digest email setting: %w", err)
 			}
 			if !digestEmailEnabled {
-				log.Printf("send-digest skip-user-disabled digest_id=%s", data.DigestID)
 				markStatus("skipped_user_disabled", nil)
 				return map[string]string{"status": "skipped", "reason": "user_disabled"}, nil
 			}
+			markStatus("processing", nil)
 
-			log.Printf("send-digest send-email start digest_id=%s", data.DigestID)
 			_, err = step.Run(ctx, "send-email", func(ctx context.Context) (string, error) {
 				if err := resend.SendDigest(ctx, data.To, digest, &service.DigestEmailCopy{
-					Subject: copy.Subject,
-					Body:    copy.Body,
+					Subject: *digest.EmailSubject,
+					Body:    *digest.EmailBody,
 				}); err != nil {
 					return "", err
 				}
@@ -647,13 +879,10 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 				markStatus("send_email_failed", err)
 				return nil, fmt.Errorf("send email: %w", err)
 			}
-			log.Printf("send-digest send-email done digest_id=%s", data.DigestID)
-
 			if err := digestRepo.UpdateSentAt(ctx, data.DigestID); err != nil {
 				log.Printf("update sent_at: %v", err)
 			}
 			log.Printf("send-digest complete digest_id=%s", data.DigestID)
-
 			return map[string]string{"status": "sent", "to": data.To}, nil
 		},
 	)

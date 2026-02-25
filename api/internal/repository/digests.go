@@ -46,15 +46,17 @@ func (r *DigestRepo) GetDetail(ctx context.Context, id, userID string) (*model.D
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT di.rank,
-		       i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
-		       i.published_at, i.fetched_at, i.created_at, i.updated_at,
-		       s.id, s.item_id, s.summary, s.topics, s.score,
-		       s.score_breakdown, s.score_reason, s.score_policy_version, s.summarized_at
-		FROM digest_items di
-		JOIN items i ON i.id = di.item_id
-		JOIN item_summaries s ON s.item_id = i.id
-		WHERE di.digest_id = $1
+			SELECT di.rank,
+			       i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
+			       i.published_at, i.fetched_at, i.created_at, i.updated_at,
+			       s.id, s.item_id, s.summary, s.topics, s.score,
+			       s.score_breakdown, s.score_reason, s.score_policy_version, s.summarized_at,
+			       COALESCE(f.facts, '[]'::jsonb) AS facts
+			FROM digest_items di
+			JOIN items i ON i.id = di.item_id
+			JOIN item_summaries s ON s.item_id = i.id
+			LEFT JOIN item_facts f ON f.item_id = i.id
+			WHERE di.digest_id = $1
 		ORDER BY di.rank`, id)
 	if err != nil {
 		return nil, err
@@ -72,6 +74,7 @@ func (r *DigestRepo) GetDetail(ctx context.Context, id, userID string) (*model.D
 			&did.Summary.Topics, &did.Summary.Score,
 			scoreBreakdownScanner{dst: &did.Summary.ScoreBreakdown}, &did.Summary.ScoreReason,
 			&did.Summary.ScorePolicyVersion, &did.Summary.SummarizedAt,
+			jsonStringArrayScanner{dst: &did.Facts},
 		); err != nil {
 			return nil, err
 		}

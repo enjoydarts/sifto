@@ -77,6 +77,53 @@ func (r *DigestInngestRepo) UpdateEmailCopy(ctx context.Context, digestID string
 	return err
 }
 
+func (r *DigestInngestRepo) ReplaceClusterDrafts(ctx context.Context, digestID string, drafts []model.DigestClusterDraft) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `DELETE FROM digest_cluster_drafts WHERE digest_id = $1`, digestID); err != nil {
+		return err
+	}
+	for _, d := range drafts {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO digest_cluster_drafts (
+				digest_id, cluster_key, cluster_label, rank, item_count, topics, max_score, draft_summary
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			digestID, d.ClusterKey, d.ClusterLabel, d.Rank, d.ItemCount, d.Topics, d.MaxScore, d.DraftSummary,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *DigestInngestRepo) ListClusterDrafts(ctx context.Context, digestID string) ([]model.DigestClusterDraft, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, digest_id, cluster_key, cluster_label, rank, item_count, topics, max_score, draft_summary, created_at, updated_at
+		FROM digest_cluster_drafts
+		WHERE digest_id = $1
+		ORDER BY rank ASC, created_at ASC`, digestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []model.DigestClusterDraft{}
+	for rows.Next() {
+		var d model.DigestClusterDraft
+		if err := rows.Scan(
+			&d.ID, &d.DigestID, &d.ClusterKey, &d.ClusterLabel, &d.Rank, &d.ItemCount,
+			&d.Topics, &d.MaxScore, &d.DraftSummary, &d.CreatedAt, &d.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
 func (r *DigestInngestRepo) UpdateSendStatus(ctx context.Context, digestID, status string, sendErr *string) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE digests

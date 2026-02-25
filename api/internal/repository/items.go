@@ -317,6 +317,12 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 	}, nil
 }
 
+// ClusterItemsByEmbeddings clusters arbitrary items using the same embeddings-based
+// logic as ReadingPlan (without filtering by selected IDs).
+func (r *ItemRepo) ClusterItemsByEmbeddings(ctx context.Context, items []model.Item) ([]model.ReadingPlanCluster, error) {
+	return r.readingPlanClustersByEmbeddings(ctx, items, nil)
+}
+
 func (r *ItemRepo) readingPlanTopics(ctx context.Context, userID string, p ReadingPlanParams) ([]model.ReadingPlanTopic, error) {
 	filterSQL := ``
 	switch p.Window {

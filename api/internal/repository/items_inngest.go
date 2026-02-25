@@ -174,16 +174,18 @@ func (r *ItemInngestRepo) ListEmbeddingBackfillTargets(ctx context.Context, user
 
 func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID string, since, until time.Time) ([]model.DigestItemDetail, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
-		       COALESCE(fb.is_favorite, false) AS is_favorite,
-		       COALESCE(fb.rating, 0) AS feedback_rating,
-		       i.published_at, i.fetched_at, i.created_at, i.updated_at,
-		       s.id, s.item_id, s.summary, s.topics, s.score,
-		       s.score_breakdown, s.score_reason, s.score_policy_version, s.summarized_at
-		FROM items i
-		JOIN sources src ON src.id = i.source_id
-		JOIN item_summaries s ON s.item_id = i.id
-		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
+			SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
+			       COALESCE(fb.is_favorite, false) AS is_favorite,
+			       COALESCE(fb.rating, 0) AS feedback_rating,
+			       i.published_at, i.fetched_at, i.created_at, i.updated_at,
+			       s.id, s.item_id, s.summary, s.topics, s.score,
+			       s.score_breakdown, s.score_reason, s.score_policy_version, s.summarized_at,
+			       COALESCE(f.facts, '[]'::jsonb) AS facts
+			FROM items i
+			JOIN sources src ON src.id = i.source_id
+			JOIN item_summaries s ON s.item_id = i.id
+			LEFT JOIN item_facts f ON f.item_id = i.id
+			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 		WHERE src.user_id = $1
 		  AND i.status = 'summarized'
 		  AND s.summarized_at >= $2
@@ -205,6 +207,7 @@ func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID stri
 			&d.Summary.ID, &d.Summary.ItemID, &d.Summary.Summary,
 			&d.Summary.Topics, &d.Summary.Score, scoreBreakdownScanner{dst: &d.Summary.ScoreBreakdown},
 			&d.Summary.ScoreReason, &d.Summary.ScorePolicyVersion, &d.Summary.SummarizedAt,
+			jsonStringArrayScanner{dst: &d.Facts},
 		); err != nil {
 			return nil, err
 		}

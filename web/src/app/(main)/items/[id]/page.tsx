@@ -322,7 +322,7 @@ export default function ItemDetailPage() {
               alt=""
               loading="lazy"
               referrerPolicy="no-referrer"
-              className="h-44 w-full object-cover sm:h-56"
+              className="h-56 w-full object-cover sm:h-72"
             />
           </div>
         )}

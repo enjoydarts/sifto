@@ -411,7 +411,7 @@ function ItemsPageContent() {
               openDetail();
             }
           }}
-          className={`group ${featured ? "flex flex-col gap-3 sm:flex-row sm:items-stretch" : "flex items-stretch gap-3"} rounded-xl px-4 py-3.5 transition-all ${
+          className={`group ${featured ? "flex flex-col gap-3 sm:flex-row sm:items-start" : "flex items-stretch gap-3"} rounded-xl px-4 py-3.5 transition-all ${
             featured
               ? item.is_read
                 ? "cursor-pointer border border-zinc-300 bg-gradient-to-b from-zinc-200 to-zinc-100 shadow-sm hover:border-zinc-400 hover:shadow-md"
@@ -421,7 +421,7 @@ function ItemsPageContent() {
                 : "cursor-pointer border border-zinc-200 bg-white shadow-sm hover:border-zinc-300"
           }`}
         >
-          <div className={`min-w-0 flex-1 transition-colors group-hover:text-zinc-700 ${featured ? "flex flex-col gap-3 sm:flex-row sm:items-stretch" : "flex items-stretch gap-3"}`}>
+          <div className={`min-w-0 flex-1 transition-colors group-hover:text-zinc-700 ${featured ? "flex flex-col gap-3 sm:flex-row sm:items-start" : "flex items-stretch gap-3"}`}>
             <div
               className={`shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 ${
                 featured ? "hidden h-[104px] w-[136px] sm:flex" : "hidden h-[72px] w-[72px] sm:flex"
@@ -442,8 +442,8 @@ function ItemsPageContent() {
                 </div>
               )}
             </div>
-            <div className={`flex min-w-0 flex-1 flex-col justify-between ${featured ? "gap-2 py-0.5" : "gap-1.5 py-0.5"}`}>
-              <div className="flex items-start gap-2">
+            <div className={`flex min-w-0 flex-1 flex-col ${featured ? "justify-start gap-2 py-0.5" : "justify-between gap-1.5 py-0.5"}`}>
+              <div className={`${featured ? "space-y-2" : "flex items-start gap-2"}`}>
                 <div className="min-w-0 flex-1">
                   {featured && rank > 0 && (
                     <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white">
@@ -488,31 +488,83 @@ function ItemsPageContent() {
                         {locale === "ja" ? "微妙" : "Dislike"}
                       </span>
                     )}
+                    {featured &&
+                      (item.summary_score != null ? (
+                        <span
+                          className={`rounded border px-2 py-0.5 text-xs font-semibold ${scoreTone(item.summary_score)}`}
+                          title={locale === "ja" ? "要約スコア" : "Summary score"}
+                        >
+                          {item.summary_score.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-400">
+                          {locale === "ja" ? "未採点" : "N/A"}
+                        </span>
+                      ))}
                   </div>
                 </div>
-                {item.summary_score != null ? (
-                  <span
-                    className={`shrink-0 rounded border px-2 py-0.5 text-xs font-semibold ${scoreTone(item.summary_score)}`}
-                    title={locale === "ja" ? "要約スコア" : "Summary score"}
-                  >
-                    {item.summary_score.toFixed(2)}
-                  </span>
-                ) : (
-                  <span className="shrink-0 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-400">
-                    {locale === "ja" ? "未採点" : "N/A"}
-                  </span>
+                {!featured && (
+                  <div>
+                    {item.summary_score != null ? (
+                      <span
+                        className={`shrink-0 rounded border px-2 py-0.5 text-xs font-semibold ${scoreTone(item.summary_score)}`}
+                        title={locale === "ja" ? "要約スコア" : "Summary score"}
+                      >
+                        {item.summary_score.toFixed(2)}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-400">
+                        {locale === "ja" ? "未採点" : "N/A"}
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
               <div className={`${featured ? "h-4 truncate text-[12px] text-zinc-500" : "h-4 truncate text-[12px] text-zinc-400"}`}>
                 {item.title ? item.url : "\u00A0"}
               </div>
+              {featured && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    disabled={!!readUpdatingIds[item.id]}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void toggleRead(item);
+                    }}
+                    className="rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {readUpdatingIds[item.id]
+                      ? locale === "ja"
+                        ? "更新中..."
+                        : "Updating..."
+                      : item.is_read
+                        ? locale === "ja"
+                          ? "未読に戻す"
+                          : "Mark unread"
+                        : locale === "ja"
+                          ? "既読にする"
+                          : "Mark read"}
+                  </button>
+                  {item.status === "failed" && (
+                    <button
+                      type="button"
+                      disabled={!!retryingIds[item.id]}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void retryItem(item.id);
+                      }}
+                      className="rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-          <div className={`flex shrink-0 justify-between gap-2 ${
-            featured
-              ? "w-full flex-row items-center sm:min-h-[104px] sm:w-auto sm:flex-col sm:items-end"
-              : "min-h-[72px] flex-col items-end"
-          }`}>
+          {!featured && (
+            <div className="flex min-h-[72px] shrink-0 flex-col items-end justify-between gap-2">
             <button
               type="button"
               disabled={!!readUpdatingIds[item.id]}
@@ -551,9 +603,14 @@ function ItemsPageContent() {
                 {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
               </button>
             ) : (
-              <span className={`invisible rounded border border-zinc-300 px-3 py-1 text-xs font-medium ${featured ? "flex-1 sm:flex-none text-center" : ""}`}>_</span>
+              !featured && (
+                <span className="invisible rounded border border-zinc-300 px-3 py-1 text-xs font-medium">
+                  _
+                </span>
+              )
             )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     );

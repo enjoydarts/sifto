@@ -64,6 +64,13 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"diversify_topics": settings.ReadingPlanDiversifyTopics,
 			"exclude_read":     settings.ReadingPlanExcludeRead,
 		},
+		"llm_models": map[string]any{
+			"anthropic_facts":             settings.AnthropicFactsModel,
+			"anthropic_summary":           settings.AnthropicSummaryModel,
+			"anthropic_digest":            settings.AnthropicDigestModel,
+			"anthropic_source_suggestion": settings.AnthropicSourceSuggestModel,
+			"openai_embedding":            settings.OpenAIEmbeddingModel,
+		},
 		"current_month": map[string]any{
 			"month_jst":            monthStart.Format("2006-01"),
 			"period_start_jst":     monthStart.Format(time.RFC3339),
@@ -71,6 +78,59 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"estimated_cost_usd":   usedCostUSD,
 			"remaining_budget_usd": remainingBudgetUSD,
 			"remaining_budget_pct": remainingPct,
+		},
+	})
+}
+
+func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		AnthropicFacts            *string `json:"anthropic_facts"`
+		AnthropicSummary          *string `json:"anthropic_summary"`
+		AnthropicDigest           *string `json:"anthropic_digest"`
+		AnthropicSourceSuggestion *string `json:"anthropic_source_suggestion"`
+		OpenAIEmbedding           *string `json:"openai_embedding"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	norm := func(v *string) *string {
+		if v == nil {
+			return nil
+		}
+		s := strings.TrimSpace(*v)
+		if s == "" {
+			return nil
+		}
+		return &s
+	}
+	openAIEmbedding := norm(body.OpenAIEmbedding)
+	if openAIEmbedding != nil && !service.IsSupportedOpenAIEmbeddingModel(*openAIEmbedding) {
+		http.Error(w, "invalid openai_embedding model", http.StatusBadRequest)
+		return
+	}
+	settings, err := h.repo.UpsertLLMModelConfig(
+		r.Context(),
+		userID,
+		norm(body.AnthropicFacts),
+		norm(body.AnthropicSummary),
+		norm(body.AnthropicDigest),
+		norm(body.AnthropicSourceSuggestion),
+		openAIEmbedding,
+	)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"user_id": settings.UserID,
+		"llm_models": map[string]any{
+			"anthropic_facts":             settings.AnthropicFactsModel,
+			"anthropic_summary":           settings.AnthropicSummaryModel,
+			"anthropic_digest":            settings.AnthropicDigestModel,
+			"anthropic_source_suggestion": settings.AnthropicSourceSuggestModel,
+			"openai_embedding":            settings.OpenAIEmbeddingModel,
 		},
 	})
 }

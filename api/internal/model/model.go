@@ -12,21 +12,26 @@ type User struct {
 }
 
 type UserSettings struct {
-	UserID                     string    `json:"user_id"`
-	AnthropicAPIKeyLast4       *string   `json:"anthropic_api_key_last4,omitempty"`
-	HasAnthropicAPIKey         bool      `json:"has_anthropic_api_key"`
-	OpenAIAPIKeyLast4          *string   `json:"openai_api_key_last4,omitempty"`
-	HasOpenAIAPIKey            bool      `json:"has_openai_api_key"`
-	MonthlyBudgetUSD           *float64  `json:"monthly_budget_usd,omitempty"`
-	BudgetAlertEnabled         bool      `json:"budget_alert_enabled"`
-	BudgetAlertThresholdPct    int       `json:"budget_alert_threshold_pct"`
-	DigestEmailEnabled         bool      `json:"digest_email_enabled"`
-	ReadingPlanWindow          string    `json:"reading_plan_window"`
-	ReadingPlanSize            int       `json:"reading_plan_size"`
-	ReadingPlanDiversifyTopics bool      `json:"reading_plan_diversify_topics"`
-	ReadingPlanExcludeRead     bool      `json:"reading_plan_exclude_read"`
-	CreatedAt                  time.Time `json:"created_at"`
-	UpdatedAt                  time.Time `json:"updated_at"`
+	UserID                      string    `json:"user_id"`
+	AnthropicAPIKeyLast4        *string   `json:"anthropic_api_key_last4,omitempty"`
+	HasAnthropicAPIKey          bool      `json:"has_anthropic_api_key"`
+	OpenAIAPIKeyLast4           *string   `json:"openai_api_key_last4,omitempty"`
+	HasOpenAIAPIKey             bool      `json:"has_openai_api_key"`
+	MonthlyBudgetUSD            *float64  `json:"monthly_budget_usd,omitempty"`
+	BudgetAlertEnabled          bool      `json:"budget_alert_enabled"`
+	BudgetAlertThresholdPct     int       `json:"budget_alert_threshold_pct"`
+	DigestEmailEnabled          bool      `json:"digest_email_enabled"`
+	ReadingPlanWindow           string    `json:"reading_plan_window"`
+	ReadingPlanSize             int       `json:"reading_plan_size"`
+	ReadingPlanDiversifyTopics  bool      `json:"reading_plan_diversify_topics"`
+	ReadingPlanExcludeRead      bool      `json:"reading_plan_exclude_read"`
+	AnthropicFactsModel         *string   `json:"anthropic_facts_model,omitempty"`
+	AnthropicSummaryModel       *string   `json:"anthropic_summary_model,omitempty"`
+	AnthropicDigestModel        *string   `json:"anthropic_digest_model,omitempty"`
+	AnthropicSourceSuggestModel *string   `json:"anthropic_source_suggestion_model,omitempty"`
+	OpenAIEmbeddingModel        *string   `json:"openai_embedding_model,omitempty"`
+	CreatedAt                   time.Time `json:"created_at"`
+	UpdatedAt                   time.Time `json:"updated_at"`
 }
 
 type Source struct {

@@ -22,6 +22,7 @@ class FeedSuggestionRankRequest(BaseModel):
     existing_sources: list[ExistingSource]
     preferred_topics: list[str] = []
     candidates: list[CandidateFeed]
+    model: str | None = None
 
 
 class FeedSuggestionRankItem(BaseModel):
@@ -51,5 +52,6 @@ def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Requ
             for c in req.candidates
         ],
         api_key=api_key,
+        model=req.model,
     )
     return FeedSuggestionRankResponse(**result)

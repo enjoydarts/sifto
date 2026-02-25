@@ -18,6 +18,7 @@ class DigestItem(BaseModel):
 class ComposeDigestRequest(BaseModel):
     digest_date: str
     items: list[DigestItem]
+    model: str | None = None
 
 
 class ComposeDigestResponse(BaseModel):
@@ -43,5 +44,6 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
             for i in req.items
         ],
         api_key=api_key,
+        model=req.model,
     )
     return ComposeDigestResponse(**result)

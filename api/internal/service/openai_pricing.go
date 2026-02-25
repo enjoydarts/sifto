@@ -20,6 +20,15 @@ var openAIEmbeddingPricePer1MTokensUSD = map[string]float64{
 	"text-embedding-3-large": 0.13,
 }
 
+func SupportedOpenAIEmbeddingModels() []string {
+	return []string{"text-embedding-3-small", "text-embedding-3-large"}
+}
+
+func IsSupportedOpenAIEmbeddingModel(model string) bool {
+	_, ok := openAIEmbeddingPricePer1MTokensUSD[model]
+	return ok
+}
+
 func EstimateOpenAIEmbeddingCostUSD(model string, inputTokens int) (*OpenAIEmbeddingCostEstimate, error) {
 	if inputTokens < 0 {
 		return nil, fmt.Errorf("inputTokens must be >= 0")

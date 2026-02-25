@@ -118,6 +118,14 @@ func loadUserOpenAIAPIKey(ctx context.Context, settingsRepo *repository.UserSett
 	return &plain, nil
 }
 
+func ptrStringOrNil(v *string) *string {
+	if v == nil || *v == "" {
+		return nil
+	}
+	s := *v
+	return &s
+}
+
 // Event payloads
 
 type ItemCreatedData struct {
@@ -255,6 +263,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				_ = itemRepo.MarkFailed(ctx, itemID)
 				return nil, err
 			}
+			userModelSettings, _ := userSettingsRepo.GetByUserID(ctx, *userIDPtr)
 			log.Printf("process-item start item_id=%s url=%s", itemID, url)
 
 			// Step 1: 本文抽出
@@ -285,7 +294,11 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			// Step 2: 事実抽出
 			factsResp, err := step.Run(ctx, "extract-facts", func(ctx context.Context) (*service.ExtractFactsResponse, error) {
 				log.Printf("process-item extract-facts start item_id=%s", itemID)
-				return worker.ExtractFacts(ctx, extracted.Title, extracted.Content, userAnthropicKey)
+				var modelOverride *string
+				if userModelSettings != nil {
+					modelOverride = ptrStringOrNil(userModelSettings.AnthropicFactsModel)
+				}
+				return worker.ExtractFactsWithModel(ctx, extracted.Title, extracted.Content, userAnthropicKey, modelOverride)
 			})
 			if err != nil {
 				log.Printf("process-item extract-facts failed item_id=%s err=%v", itemID, err)
@@ -303,7 +316,11 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			// Step 3: 要約
 			summary, err := step.Run(ctx, "summarize", func(ctx context.Context) (*service.SummarizeResponse, error) {
 				log.Printf("process-item summarize start item_id=%s", itemID)
-				return worker.Summarize(ctx, extracted.Title, factsResp.Facts, userAnthropicKey)
+				var modelOverride *string
+				if userModelSettings != nil {
+					modelOverride = ptrStringOrNil(userModelSettings.AnthropicSummaryModel)
+				}
+				return worker.SummarizeWithModel(ctx, extracted.Title, factsResp.Facts, userAnthropicKey, modelOverride)
 			})
 			if err != nil {
 				log.Printf("process-item summarize failed item_id=%s err=%v", itemID, err)
@@ -323,6 +340,9 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			} else {
 				inputText := buildItemEmbeddingInput(extracted.Title, summary.Summary, summary.Topics, factsResp.Facts)
 				embModel := service.OpenAIEmbeddingModel()
+				if userModelSettings != nil && userModelSettings.OpenAIEmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*userModelSettings.OpenAIEmbeddingModel) {
+					embModel = *userModelSettings.OpenAIEmbeddingModel
+				}
 				embResp, err := step.Run(ctx, "create-embedding", func(ctx context.Context) (*service.CreateEmbeddingResponse, error) {
 					log.Printf("process-item create-embedding start item_id=%s model=%s", itemID, embModel)
 					return openAI.CreateEmbedding(ctx, *userOpenAIKey, embModel, inputText)
@@ -374,9 +394,13 @@ func embedItemFn(client inngestgo.Client, db *pgxpool.Pool, openAI *service.Open
 			if err != nil {
 				return nil, err
 			}
+			userModelSettings, _ := userSettingsRepo.GetByUserID(ctx, userID)
 
 			inputText := buildItemEmbeddingInput(candidate.Title, candidate.Summary, candidate.Topics, candidate.Facts)
 			embModel := service.OpenAIEmbeddingModel()
+			if userModelSettings != nil && userModelSettings.OpenAIEmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*userModelSettings.OpenAIEmbeddingModel) {
+				embModel = *userModelSettings.OpenAIEmbeddingModel
+			}
 			embResp, err := step.Run(ctx, "create-embedding", func(ctx context.Context) (*service.CreateEmbeddingResponse, error) {
 				return openAI.CreateEmbedding(ctx, *userOpenAIKey, embModel, inputText)
 			})
@@ -517,6 +541,7 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 				markStatus("user_key_failed", keyErr)
 				return nil, keyErr
 			}
+			userModelSettings, _ := userSettingsRepo.GetByUserID(ctx, data.UserID)
 
 			// Read-only DB fetch does not need step state, and keeping large nested structs
 			// out of step results avoids serialization/replay issues.
@@ -561,7 +586,11 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 							Score:   it.Summary.Score,
 						})
 					}
-					resp, err := worker.ComposeDigest(ctx, digest.DigestDate, items, userAnthropicKey)
+					var modelOverride *string
+					if userModelSettings != nil {
+						modelOverride = ptrStringOrNil(userModelSettings.AnthropicDigestModel)
+					}
+					resp, err := worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, userAnthropicKey, modelOverride)
 					if err != nil {
 						return "", err
 					}

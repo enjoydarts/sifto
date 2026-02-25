@@ -38,6 +38,11 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       reading_plan_size,
 		       reading_plan_diversify_topics,
 		       reading_plan_exclude_read,
+		       anthropic_facts_model,
+		       anthropic_summary_model,
+		       anthropic_digest_model,
+		       anthropic_source_suggestion_model,
+		       openai_embedding_model,
 		       created_at,
 		       updated_at
 		FROM user_settings
@@ -57,6 +62,11 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.ReadingPlanSize,
 		&v.ReadingPlanDiversifyTopics,
 		&v.ReadingPlanExcludeRead,
+		&v.AnthropicFactsModel,
+		&v.AnthropicSummaryModel,
+		&v.AnthropicDigestModel,
+		&v.AnthropicSourceSuggestModel,
+		&v.OpenAIEmbeddingModel,
 		&v.CreatedAt,
 		&v.UpdatedAt,
 	)
@@ -155,6 +165,40 @@ func (r *UserSettingsRepo) UpsertReadingPlanConfig(ctx context.Context, userID, 
 		    reading_plan_exclude_read = EXCLUDED.reading_plan_exclude_read,
 		    updated_at = NOW()`,
 		userID, window, size, diversifyTopics, excludeRead,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) UpsertLLMModelConfig(
+	ctx context.Context,
+	userID string,
+	anthropicFactsModel, anthropicSummaryModel, anthropicDigestModel, anthropicSourceSuggestionModel, openAIEmbeddingModel *string,
+) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (
+			user_id,
+			anthropic_facts_model,
+			anthropic_summary_model,
+			anthropic_digest_model,
+			anthropic_source_suggestion_model,
+			openai_embedding_model
+		) VALUES ($1,$2,$3,$4,$5,$6)
+		ON CONFLICT (user_id) DO UPDATE
+		SET anthropic_facts_model = EXCLUDED.anthropic_facts_model,
+		    anthropic_summary_model = EXCLUDED.anthropic_summary_model,
+		    anthropic_digest_model = EXCLUDED.anthropic_digest_model,
+		    anthropic_source_suggestion_model = EXCLUDED.anthropic_source_suggestion_model,
+		    openai_embedding_model = EXCLUDED.openai_embedding_model,
+		    updated_at = NOW()`,
+		userID,
+		anthropicFactsModel,
+		anthropicSummaryModel,
+		anthropicDigestModel,
+		anthropicSourceSuggestionModel,
+		openAIEmbeddingModel,
 	)
 	if err != nil {
 		return nil, err

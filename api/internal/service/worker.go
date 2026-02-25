@@ -117,6 +117,15 @@ func (w *WorkerClient) ExtractFacts(ctx context.Context, title *string, content 
 	return postWithHeaders[ExtractFactsResponse](ctx, w, "/extract-facts", map[string]any{
 		"title":   title,
 		"content": content,
+		"model":   nil,
+	}, workerHeaders(anthropicAPIKey))
+}
+
+func (w *WorkerClient) ExtractFactsWithModel(ctx context.Context, title *string, content string, anthropicAPIKey *string, model *string) (*ExtractFactsResponse, error) {
+	return postWithHeaders[ExtractFactsResponse](ctx, w, "/extract-facts", map[string]any{
+		"title":   title,
+		"content": content,
+		"model":   model,
 	}, workerHeaders(anthropicAPIKey))
 }
 
@@ -124,6 +133,15 @@ func (w *WorkerClient) Summarize(ctx context.Context, title *string, facts []str
 	return postWithHeaders[SummarizeResponse](ctx, w, "/summarize", map[string]any{
 		"title": title,
 		"facts": facts,
+		"model": nil,
+	}, workerHeaders(anthropicAPIKey))
+}
+
+func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, facts []string, anthropicAPIKey *string, model *string) (*SummarizeResponse, error) {
+	return postWithHeaders[SummarizeResponse](ctx, w, "/summarize", map[string]any{
+		"title": title,
+		"facts": facts,
+		"model": model,
 	}, workerHeaders(anthropicAPIKey))
 }
 
@@ -131,6 +149,15 @@ func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, ite
 	return postWithHeaders[ComposeDigestResponse](ctx, w, "/compose-digest", map[string]any{
 		"digest_date": digestDate,
 		"items":       items,
+		"model":       nil,
+	}, workerHeaders(anthropicAPIKey))
+}
+
+func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, model *string) (*ComposeDigestResponse, error) {
+	return postWithHeaders[ComposeDigestResponse](ctx, w, "/compose-digest", map[string]any{
+		"digest_date": digestDate,
+		"items":       items,
+		"model":       model,
 	}, workerHeaders(anthropicAPIKey))
 }
 
@@ -145,6 +172,23 @@ func (w *WorkerClient) RankFeedSuggestions(
 		"existing_sources": existing,
 		"preferred_topics": preferredTopics,
 		"candidates":       candidates,
+		"model":            nil,
+	}, workerHeaders(anthropicAPIKey))
+}
+
+func (w *WorkerClient) RankFeedSuggestionsWithModel(
+	ctx context.Context,
+	existing []RankFeedSuggestionsExistingSource,
+	preferredTopics []string,
+	candidates []RankFeedSuggestionsCandidate,
+	anthropicAPIKey *string,
+	model *string,
+) (*RankFeedSuggestionsResponse, error) {
+	return postWithHeaders[RankFeedSuggestionsResponse](ctx, w, "/rank-feed-suggestions", map[string]any{
+		"existing_sources": existing,
+		"preferred_topics": preferredTopics,
+		"candidates":       candidates,
+		"model":            model,
 	}, workerHeaders(anthropicAPIKey))
 }
 
@@ -157,6 +201,21 @@ func (w *WorkerClient) SuggestFeedSeedSites(
 	return postWithHeaders[SuggestFeedSeedSitesResponse](ctx, w, "/suggest-feed-seed-sites", map[string]any{
 		"existing_sources": existing,
 		"preferred_topics": preferredTopics,
+		"model":            nil,
+	}, workerHeaders(anthropicAPIKey))
+}
+
+func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
+	ctx context.Context,
+	existing []RankFeedSuggestionsExistingSource,
+	preferredTopics []string,
+	anthropicAPIKey *string,
+	model *string,
+) (*SuggestFeedSeedSitesResponse, error) {
+	return postWithHeaders[SuggestFeedSeedSitesResponse](ctx, w, "/suggest-feed-seed-sites", map[string]any{
+		"existing_sources": existing,
+		"preferred_topics": preferredTopics,
+		"model":            model,
 	}, workerHeaders(anthropicAPIKey))
 }
 

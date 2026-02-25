@@ -29,6 +29,12 @@ _DEFAULT_MODEL_PRICING = {
         "cache_write_per_mtok_usd": 3.75,
         "cache_read_per_mtok_usd": 0.30,
     },
+    "claude-opus-4-6": {
+        "input_per_mtok_usd": 5.0,
+        "output_per_mtok_usd": 25.0,
+        "cache_write_per_mtok_usd": 6.25,
+        "cache_read_per_mtok_usd": 0.50,
+    },
 }
 
 
@@ -301,7 +307,7 @@ def _call_with_model_fallback(
         return None, None
 
 
-def extract_facts(title: str | None, content: str, api_key: str | None = None) -> dict:
+def extract_facts(title: str | None, content: str, api_key: str | None = None, model: str | None = None) -> dict:
     if _client_for_api_key(api_key) is None:
         lines = [line.strip() for line in content.splitlines() if line.strip()]
         facts = lines[:5]
@@ -343,7 +349,7 @@ JSON配列として返してください。例: ["事実1", "事実2"]
 {chunk}
 """
         message, used_model = _call_with_model_fallback(
-            prompt, _facts_model, _facts_model_fallback, max_tokens=1024, api_key=api_key
+            prompt, str(model or _facts_model), _facts_model_fallback, max_tokens=1024, api_key=api_key
         )
         if message is None:
             continue
@@ -377,7 +383,7 @@ JSON配列として返してください。例: ["事実1", "事実2"]
     }
 
 
-def summarize(title: str | None, facts: list[str], api_key: str | None = None) -> dict:
+def summarize(title: str | None, facts: list[str], api_key: str | None = None, model: str | None = None) -> dict:
     if _client_for_api_key(api_key) is None:
         summary = " / ".join(facts[:5])[:420] if facts else (title or "")
         score_breakdown = {
@@ -439,7 +445,7 @@ def summarize(title: str | None, facts: list[str], api_key: str | None = None) -
 {facts_text}
 """
     message, used_model = _call_with_model_fallback(
-        prompt, _summary_model, _summary_model_fallback, max_tokens=1800, api_key=api_key
+        prompt, str(model or _summary_model), _summary_model_fallback, max_tokens=1800, api_key=api_key
     )
     if message is None:
         summary = " / ".join(facts[:5])[:420] if facts else (title or "")
@@ -591,7 +597,7 @@ def _build_digest_input_sections(items: list[dict]) -> tuple[str, str]:
     return "topic_grouped", "\n".join(lines)
 
 
-def compose_digest(digest_date: str, items: list[dict], api_key: str | None = None) -> dict:
+def compose_digest(digest_date: str, items: list[dict], api_key: str | None = None, model: str | None = None) -> dict:
     if not items:
         return {
             "subject": f"Sifto Digest - {digest_date}",
@@ -636,7 +642,7 @@ items:
 
     message, used_model = _call_with_model_fallback(
         prompt,
-        _digest_model,
+        str(model or _digest_model),
         _digest_model_fallback,
         max_tokens=4000,
         api_key=api_key,
@@ -687,7 +693,7 @@ items:
 
 
 def rank_feed_suggestions(
-    existing_sources: list[dict], preferred_topics: list[str], candidates: list[dict], api_key: str | None = None
+    existing_sources: list[dict], preferred_topics: list[str], candidates: list[dict], api_key: str | None = None, model: str | None = None
 ) -> dict:
     if not candidates:
         return {
@@ -764,7 +770,7 @@ def rank_feed_suggestions(
 
     message, used_model = _call_with_model_fallback(
         prompt,
-        _feed_suggest_model,
+        str(model or _feed_suggest_model),
         _feed_suggest_model_fallback,
         max_tokens=1800,
         api_key=api_key,
@@ -812,7 +818,7 @@ def rank_feed_suggestions(
     }
 
 
-def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list[str], api_key: str | None = None) -> dict:
+def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list[str], api_key: str | None = None, model: str | None = None) -> dict:
     existing_sources = existing_sources[:20]
     preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:12]
 
@@ -856,7 +862,7 @@ def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list
 """
     message, used_model = _call_with_model_fallback(
         prompt,
-        _feed_suggest_model,
+        str(model or _feed_suggest_model),
         _feed_suggest_model_fallback,
         max_tokens=1200,
         api_key=api_key,

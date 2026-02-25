@@ -117,6 +117,7 @@ func main() {
 			r.Get("/", settingsH.Get)
 			r.Patch("/", settingsH.UpdateBudget)
 			r.Patch("/reading-plan", settingsH.UpdateReadingPlan)
+			r.Patch("/llm-models", settingsH.UpdateLLMModels)
 			r.Post("/anthropic-key", settingsH.SetAnthropicAPIKey)
 			r.Delete("/anthropic-key", settingsH.DeleteAnthropicAPIKey)
 			r.Post("/openai-key", settingsH.SetOpenAIAPIKey)

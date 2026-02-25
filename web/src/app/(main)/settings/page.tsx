@@ -7,6 +7,12 @@ import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 
+type ModelOption = {
+  value: string;
+  label: string;
+  note?: string;
+};
+
 export default function SettingsPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
@@ -15,6 +21,7 @@ export default function SettingsPage() {
   const [savingBudget, setSavingBudget] = useState(false);
   const [savingDigestDelivery, setSavingDigestDelivery] = useState(false);
   const [savingReadingPlan, setSavingReadingPlan] = useState(false);
+  const [savingLLMModels, setSavingLLMModels] = useState(false);
   const [savingAnthropicKey, setSavingAnthropicKey] = useState(false);
   const [deletingAnthropicKey, setDeletingAnthropicKey] = useState(false);
   const [savingOpenAIKey, setSavingOpenAIKey] = useState(false);
@@ -30,6 +37,21 @@ export default function SettingsPage() {
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
   const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
   const [readingPlanDiversifyTopics, setReadingPlanDiversifyTopics] = useState(true);
+  const [anthropicFactsModel, setAnthropicFactsModel] = useState("");
+  const [anthropicSummaryModel, setAnthropicSummaryModel] = useState("");
+  const [anthropicDigestModel, setAnthropicDigestModel] = useState("");
+  const [anthropicSourceSuggestionModel, setAnthropicSourceSuggestionModel] = useState("");
+  const [openAIEmbeddingModel, setOpenAIEmbeddingModel] = useState("");
+
+  const anthropicModelOptions: ModelOption[] = [
+    { value: "claude-haiku-4-5", label: "claude-haiku-4-5", note: "in $1 / out $5 / 1M tok" },
+    { value: "claude-sonnet-4-6", label: "claude-sonnet-4-6", note: "in $3 / out $15 / 1M tok" },
+    { value: "claude-opus-4-6", label: "claude-opus-4-6", note: "in $5 / out $25 / 1M tok" },
+  ];
+  const openAIEmbeddingModelOptions: ModelOption[] = [
+    { value: "text-embedding-3-small", label: "text-embedding-3-small", note: "$0.02 / 1M tok" },
+    { value: "text-embedding-3-large", label: "text-embedding-3-large", note: "$0.13 / 1M tok" },
+  ];
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -43,6 +65,11 @@ export default function SettingsPage() {
       setReadingPlanWindow((data.reading_plan?.window as "24h" | "today_jst" | "7d") ?? "24h");
       setReadingPlanSize(String(data.reading_plan?.size ?? 15));
       setReadingPlanDiversifyTopics(Boolean(data.reading_plan?.diversify_topics ?? true));
+      setAnthropicFactsModel(data.llm_models?.anthropic_facts ?? "");
+      setAnthropicSummaryModel(data.llm_models?.anthropic_summary ?? "");
+      setAnthropicDigestModel(data.llm_models?.anthropic_digest ?? "");
+      setAnthropicSourceSuggestionModel(data.llm_models?.anthropic_source_suggestion ?? "");
+      setOpenAIEmbeddingModel(data.llm_models?.openai_embedding ?? "");
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -83,6 +110,30 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setSavingBudget(false);
+    }
+  }
+
+  async function submitLLMModels(e: FormEvent) {
+    e.preventDefault();
+    setSavingLLMModels(true);
+    try {
+      const emptyToNull = (v: string) => {
+        const s = v.trim();
+        return s === "" ? null : s;
+      };
+      await api.updateLLMModelSettings({
+        anthropic_facts: emptyToNull(anthropicFactsModel),
+        anthropic_summary: emptyToNull(anthropicSummaryModel),
+        anthropic_digest: emptyToNull(anthropicDigestModel),
+        anthropic_source_suggestion: emptyToNull(anthropicSourceSuggestionModel),
+        openai_embedding: emptyToNull(openAIEmbeddingModel),
+      });
+      await load();
+      showToast(locale === "ja" ? "LLMモデル設定を保存しました" : "LLM model settings saved", "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingLLMModels(false);
     }
   }
 
@@ -389,6 +440,68 @@ export default function SettingsPage() {
           </div>
         </form>
 
+        <form onSubmit={submitLLMModels} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+              <Brain className="size-4 text-zinc-500" aria-hidden="true" />
+              {locale === "ja" ? "LLMモデル設定（フェーズ別）" : "LLM Model Settings (Per Phase)"}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              {locale === "ja"
+                ? "未設定時はサーバー既定モデルを使います。AnthropicはOpusも選択できます。"
+                : "Uses server defaults when empty. Anthropic Opus is also available."}
+            </p>
+            <p className="mt-1 text-xs text-zinc-400">
+              {locale === "ja"
+                ? "単価はコード内の静的テーブル表示（将来改定時は更新が必要）"
+                : "Prices shown from the app's static pricing table (update required if provider pricing changes)."}
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <ModelSelect
+              label={locale === "ja" ? "事実抽出 (Claude)" : "Facts (Claude)"}
+              value={anthropicFactsModel}
+              onChange={setAnthropicFactsModel}
+              options={anthropicModelOptions}
+            />
+            <ModelSelect
+              label={locale === "ja" ? "要約 (Claude)" : "Summary (Claude)"}
+              value={anthropicSummaryModel}
+              onChange={setAnthropicSummaryModel}
+              options={anthropicModelOptions}
+            />
+            <ModelSelect
+              label={locale === "ja" ? "ダイジェスト生成 (Claude)" : "Digest (Claude)"}
+              value={anthropicDigestModel}
+              onChange={setAnthropicDigestModel}
+              options={anthropicModelOptions}
+            />
+            <ModelSelect
+              label={locale === "ja" ? "ソース提案 (Claude)" : "Source Suggestions (Claude)"}
+              value={anthropicSourceSuggestionModel}
+              onChange={setAnthropicSourceSuggestionModel}
+              options={anthropicModelOptions}
+            />
+            <ModelSelect
+              label={locale === "ja" ? "Embeddings (OpenAI)" : "Embeddings (OpenAI)"}
+              value={openAIEmbeddingModel}
+              onChange={setOpenAIEmbeddingModel}
+              options={openAIEmbeddingModelOptions}
+            />
+          </div>
+          <div className="mt-4">
+            <button
+              type="submit"
+              disabled={savingLLMModels}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {savingLLMModels
+                ? locale === "ja" ? "保存中…" : "Saving…"
+                : locale === "ja" ? "モデル設定を保存" : "Save model settings"}
+            </button>
+          </div>
+        </form>
+
       </section>
 
       <section className="space-y-6">
@@ -617,6 +730,36 @@ function MetricCard({
       <div className={`mt-2 text-xl font-semibold tracking-tight ${valueClassName ?? "text-zinc-900"}`}>
         {value}
       </div>
+    </div>
+  );
+}
+
+function ModelSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: ModelOption[];
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-zinc-700">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+      >
+        <option value="">Default</option>
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.note ? `${opt.label} (${opt.note})` : opt.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

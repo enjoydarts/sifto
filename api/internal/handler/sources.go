@@ -249,6 +249,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	anthropicAPIKey := h.getUserAnthropicAPIKey(r.Context(), userID)
+	anthropicSourceSuggestionModel := h.getUserAnthropicSourceSuggestionModel(r.Context(), userID)
 	var preferredTopics []string
 	if h.itemRepo != nil {
 		if topics, err := h.itemRepo.PositiveFeedbackTopics(r.Context(), userID, 8); err == nil {
@@ -333,7 +334,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(cands) < minInt(limit, 4) && anthropicAPIKey != nil && h.worker != nil {
-		h.expandSourceSuggestionsWithLLMSeeds(r.Context(), userID, sources, preferredTopics, registered, cands, anthropicAPIKey)
+		h.expandSourceSuggestionsWithLLMSeeds(r.Context(), userID, sources, preferredTopics, registered, cands, anthropicAPIKey, anthropicSourceSuggestionModel)
 	}
 
 	out := make([]sourceSuggestionResponse, 0, len(cands))
@@ -375,7 +376,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	for _, r := range rows {
 		out = append(out, r.row)
 	}
-	llmMeta := h.rankSourceSuggestionsWithLLM(r.Context(), userID, sources, preferredTopics, out, anthropicAPIKey)
+	llmMeta := h.rankSourceSuggestionsWithLLM(r.Context(), userID, sources, preferredTopics, out, anthropicAPIKey, anthropicSourceSuggestionModel)
 	writeJSON(w, map[string]any{"items": out, "limit": limit, "llm": llmMeta})
 }
 
@@ -452,6 +453,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	preferredTopics []string,
 	suggestions []sourceSuggestionResponse,
 	anthropicAPIKey *string,
+	model *string,
 ) map[string]any {
 	if h.worker == nil || len(suggestions) == 0 || anthropicAPIKey == nil || strings.TrimSpace(*anthropicAPIKey) == "" {
 		return nil
@@ -472,7 +474,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 			MatchedTopics: s.MatchedTopics,
 		})
 	}
-	resp, err := h.worker.RankFeedSuggestions(ctx, existing, preferredTopics, cands, anthropicAPIKey)
+	resp, err := h.worker.RankFeedSuggestionsWithModel(ctx, existing, preferredTopics, cands, anthropicAPIKey, model)
 	if err != nil || resp == nil {
 		return nil
 	}
@@ -557,6 +559,21 @@ func (h *SourceHandler) getUserAnthropicAPIKey(ctx context.Context, userID strin
 	return &plain
 }
 
+func (h *SourceHandler) getUserAnthropicSourceSuggestionModel(ctx context.Context, userID string) *string {
+	if h.settingsRepo == nil {
+		return nil
+	}
+	settings, err := h.settingsRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil
+	}
+	if settings.AnthropicSourceSuggestModel == nil || strings.TrimSpace(*settings.AnthropicSourceSuggestModel) == "" {
+		return nil
+	}
+	v := strings.TrimSpace(*settings.AnthropicSourceSuggestModel)
+	return &v
+}
+
 func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	ctx context.Context,
 	userID string,
@@ -565,12 +582,13 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	registered map[string]bool,
 	cands map[string]*sourceSuggestionAgg,
 	anthropicAPIKey *string,
+	model *string,
 ) {
 	existing := make([]service.RankFeedSuggestionsExistingSource, 0, len(sources))
 	for _, s := range sources {
 		existing = append(existing, service.RankFeedSuggestionsExistingSource{URL: s.URL, Title: s.Title})
 	}
-	resp, err := h.worker.SuggestFeedSeedSites(ctx, existing, preferredTopics, anthropicAPIKey)
+	resp, err := h.worker.SuggestFeedSeedSitesWithModel(ctx, existing, preferredTopics, anthropicAPIKey, model)
 	if err != nil || resp == nil {
 		return
 	}

@@ -254,6 +254,13 @@ export interface UserSettings {
   budget_alert_threshold_pct: number;
   digest_email_enabled: boolean;
   reading_plan: UserReadingPlanSettings;
+  llm_models?: {
+    anthropic_facts?: string | null;
+    anthropic_summary?: string | null;
+    anthropic_digest?: string | null;
+    anthropic_source_suggestion?: string | null;
+    openai_embedding?: string | null;
+  };
   current_month: UserSettingsCurrentMonth;
 }
 
@@ -387,6 +394,17 @@ export const api = {
     }),
   updateReadingPlanSettings: (body: Pick<UserReadingPlanSettings, "window" | "size" | "diversify_topics">) =>
     apiFetch<{ user_id: string; reading_plan: UserReadingPlanSettings }>("/settings/reading-plan", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  updateLLMModelSettings: (body: {
+    anthropic_facts?: string | null;
+    anthropic_summary?: string | null;
+    anthropic_digest?: string | null;
+    anthropic_source_suggestion?: string | null;
+    openai_embedding?: string | null;
+  }) =>
+    apiFetch<{ user_id: string; llm_models: UserSettings["llm_models"] }>("/settings/llm-models", {
       method: "PATCH",
       body: JSON.stringify(body),
     }),

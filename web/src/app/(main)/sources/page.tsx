@@ -19,6 +19,9 @@ export default function SourcesPage() {
   const [title, setTitle] = useState("");
   const [type, setType] = useState<"rss" | "manual">("rss");
   const [adding, setAdding] = useState(false);
+  const [editingSource, setEditingSource] = useState<Source | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const [candidates, setCandidates] = useState<
     { url: string; title: string | null }[]
   >([]);
@@ -103,6 +106,34 @@ export default function SourcesPage() {
       showToast(locale === "ja" ? "ソースを削除しました" : "Source deleted", "success");
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
+    }
+  };
+
+  const openEditDialog = (src: Source) => {
+    setEditingSource(src);
+    setEditTitle(src.title ?? "");
+  };
+
+  const closeEditDialog = () => {
+    if (savingEdit) return;
+    setEditingSource(null);
+    setEditTitle("");
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSource) return;
+    setSavingEdit(true);
+    try {
+      const next = await api.updateSource(editingSource.id, { title: editTitle });
+      setSources((prev) => prev.map((s) => (s.id === next.id ? next : s)));
+      setEditingSource(null);
+      setEditTitle("");
+      showToast(locale === "ja" ? "ソースを更新しました" : "Source updated", "success");
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -270,17 +301,73 @@ export default function SourcesPage() {
               )}
             </div>
 
-            {/* Delete */}
-            <button
-              onClick={() => handleDelete(src.id)}
-              className="shrink-0 text-xs text-zinc-400 hover:text-red-500"
-            >
-              {t("sources.delete")}
-            </button>
+            <div className="flex shrink-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={() => openEditDialog(src)}
+                className="text-xs text-zinc-500 hover:text-zinc-900"
+              >
+                {locale === "ja" ? "編集" : "Edit"}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(src.id)}
+                className="text-xs text-zinc-400 hover:text-red-500"
+              >
+                {t("sources.delete")}
+              </button>
+            </div>
           </li>
         ))}
       </ul>
       <Pagination total={sources.length} page={page} pageSize={pageSize} onPageChange={setPage} />
+
+      {editingSource && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 px-4">
+          <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl">
+            <div className="mb-4">
+              <h2 className="text-base font-semibold text-zinc-900">
+                {locale === "ja" ? "ソースを編集" : "Edit source"}
+              </h2>
+              <p className="mt-1 break-all text-xs text-zinc-500">{editingSource.url}</p>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-700">
+                  {locale === "ja" ? "表示名" : "Display name"}
+                </label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder={locale === "ja" ? "未設定時はURLを表示" : "Leave empty to show URL"}
+                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-400"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeEditDialog}
+                  disabled={savingEdit}
+                  className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
+                >
+                  {locale === "ja" ? "キャンセル" : "Cancel"}
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {savingEdit ? (locale === "ja" ? "保存中…" : "Saving…") : (locale === "ja" ? "保存" : "Save")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

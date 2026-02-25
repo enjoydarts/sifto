@@ -323,6 +323,14 @@ export default function ItemDetailPage() {
                 {item.summary.score_policy_version}
               </span>
             )}
+            {item.summary_llm && (
+              <span
+                className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
+                title={locale === "ja" ? "要約生成モデル" : "Summary generation model"}
+              >
+                {item.summary_llm.provider} / {item.summary_llm.model}
+              </span>
+            )}
           </div>
           <p className="text-base leading-8 text-zinc-900">{item.summary.summary}</p>
           {item.summary.score_reason && (

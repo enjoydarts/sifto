@@ -465,6 +465,20 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 	if err == nil {
 		d.Summary = &s
 	}
+	if d.Summary != nil {
+		var llm model.ItemSummaryLLM
+		err = r.db.QueryRow(ctx, `
+			SELECT provider, model, pricing_source, created_at
+			FROM llm_usage_logs
+			WHERE item_id = $1
+			  AND purpose = 'summary'
+			ORDER BY created_at DESC
+			LIMIT 1`, id,
+		).Scan(&llm.Provider, &llm.Model, &llm.PricingSource, &llm.CreatedAt)
+		if err == nil {
+			d.SummaryLLM = &llm
+		}
+	}
 
 	// feedback (optional)
 	fb, err := r.GetFeedback(ctx, userID, id)

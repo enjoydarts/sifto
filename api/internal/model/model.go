@@ -79,6 +79,13 @@ type ItemSummary struct {
 	SummarizedAt       time.Time                  `json:"summarized_at"`
 }
 
+type ItemSummaryLLM struct {
+	Provider      string    `json:"provider"`
+	Model         string    `json:"model"`
+	PricingSource string    `json:"pricing_source"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
 type ItemSummaryScoreBreakdown struct {
 	Importance    *float64 `json:"importance,omitempty"`
 	Novelty       *float64 `json:"novelty,omitempty"`
@@ -89,9 +96,10 @@ type ItemSummaryScoreBreakdown struct {
 
 type ItemDetail struct {
 	Item
-	Facts    *ItemFacts    `json:"facts,omitempty"`
-	Summary  *ItemSummary  `json:"summary,omitempty"`
-	Feedback *ItemFeedback `json:"feedback,omitempty"`
+	Facts      *ItemFacts      `json:"facts,omitempty"`
+	Summary    *ItemSummary    `json:"summary,omitempty"`
+	SummaryLLM *ItemSummaryLLM `json:"summary_llm,omitempty"`
+	Feedback   *ItemFeedback   `json:"feedback,omitempty"`
 }
 
 type ItemFeedback struct {

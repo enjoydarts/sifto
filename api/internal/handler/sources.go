@@ -197,12 +197,21 @@ func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var body struct {
 		Enabled *bool `json:"enabled"`
+		Title   *string `json:"title"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Enabled == nil {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || (body.Enabled == nil && body.Title == nil) {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
-	s, err := h.repo.Update(r.Context(), id, userID, *body.Enabled)
+	var title *string
+	updateTitle := body.Title != nil
+	if body.Title != nil {
+		v := strings.TrimSpace(*body.Title)
+		if v != "" {
+			title = &v
+		}
+	}
+	s, err := h.repo.Update(r.Context(), id, userID, body.Enabled, updateTitle, title)
 	if err != nil {
 		writeRepoError(w, err)
 		return

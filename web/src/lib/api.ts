@@ -57,6 +57,13 @@ export interface ItemSummary {
   summarized_at: string;
 }
 
+export interface ItemSummaryLLM {
+  provider: string;
+  model: string;
+  pricing_source: string;
+  created_at: string;
+}
+
 export interface ItemFeedback {
   user_id: string;
   item_id: string;
@@ -68,6 +75,7 @@ export interface ItemFeedback {
 export interface ItemDetail extends Item {
   facts: ItemFacts | null;
   summary: ItemSummary | null;
+  summary_llm?: ItemSummaryLLM | null;
   feedback?: ItemFeedback | null;
 }
 

@@ -48,13 +48,16 @@ func (r *SourceRepo) Create(ctx context.Context, userID, url, srcType string, ti
 	return &s, nil
 }
 
-func (r *SourceRepo) Update(ctx context.Context, id, userID string, enabled bool) (*model.Source, error) {
+func (r *SourceRepo) Update(ctx context.Context, id, userID string, enabled *bool, updateTitle bool, title *string) (*model.Source, error) {
 	var s model.Source
 	err := r.db.QueryRow(ctx, `
-		UPDATE sources SET enabled = $1, updated_at = NOW()
-		WHERE id = $2 AND user_id = $3
+		UPDATE sources
+		SET enabled = COALESCE($1, enabled),
+		    title = CASE WHEN $2 THEN $3 ELSE title END,
+		    updated_at = NOW()
+		WHERE id = $4 AND user_id = $5
 		RETURNING id, user_id, url, type, title, enabled, last_fetched_at, created_at, updated_at`,
-		enabled, id, userID,
+		enabled, updateTitle, title, id, userID,
 	).Scan(&s.ID, &s.UserID, &s.URL, &s.Type, &s.Title,
 		&s.Enabled, &s.LastFetchedAt, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {

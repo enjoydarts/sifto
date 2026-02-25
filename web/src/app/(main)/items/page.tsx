@@ -53,6 +53,7 @@ function ItemsPageContent() {
     const qFilter = searchParams.get("status");
     const filter =
       qFilter && FILTERS.includes(qFilter as (typeof FILTERS)[number]) ? qFilter : "";
+    const topic = (searchParams.get("topic") ?? "").trim();
 
     const unreadOnly = searchParams.get("unread") === "1";
     const favoriteOnly = searchParams.get("favorite") === "1";
@@ -60,9 +61,9 @@ function ItemsPageContent() {
     const qPage = Number(searchParams.get("page"));
     const page = Number.isFinite(qPage) && qPage >= 1 ? Math.floor(qPage) : 1;
 
-    return { feedMode, sortMode, filter, unreadOnly, favoriteOnly, page };
+    return { feedMode, sortMode, filter, topic, unreadOnly, favoriteOnly, page };
   }, [searchParams]);
-  const { feedMode, sortMode, filter, unreadOnly, favoriteOnly, page } = queryState;
+  const { feedMode, sortMode, filter, topic, unreadOnly, favoriteOnly, page } = queryState;
   const focusMode = feedMode === "recommended";
   const pageSize = 20;
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +91,7 @@ function ItemsPageContent() {
       "items-feed",
       feedMode,
       filter,
+      topic,
       page,
       sortMode,
       unreadOnly ? 1 : 0,
@@ -98,7 +100,7 @@ function ItemsPageContent() {
       focusSize,
       diversifyTopics ? 1 : 0,
     ] as const,
-    [diversifyTopics, favoriteOnly, feedMode, filter, focusSize, focusWindow, page, sortMode, unreadOnly]
+    [diversifyTopics, favoriteOnly, feedMode, filter, focusSize, focusWindow, page, sortMode, topic, unreadOnly]
   );
 
   const listQuery = useQuery<ItemsFeedQueryData>({
@@ -119,6 +121,7 @@ function ItemsPageContent() {
       }
       const data = await api.getItems({
         ...(filter ? { status: filter } : {}),
+        ...(topic ? { topic } : {}),
         page,
         page_size: pageSize,
         sort: sortMode,
@@ -143,13 +146,14 @@ function ItemsPageContent() {
 
   const replaceItemsQuery = useCallback(
     (
-      patch: Partial<{
-        feed: FeedMode;
-        sort: SortMode;
-        status: string;
-        unread: boolean;
-        favorite: boolean;
-        page: number;
+        patch: Partial<{
+          feed: FeedMode;
+          sort: SortMode;
+          status: string;
+          topic: string;
+          unread: boolean;
+          favorite: boolean;
+          page: number;
       }>
     ) => {
       const q = new URLSearchParams(searchParams.toString());
@@ -159,6 +163,7 @@ function ItemsPageContent() {
 
       const nextSort = patch.sort ?? sortMode;
       const nextStatus = patch.status ?? filter;
+      const nextTopic = patch.topic ?? topic;
       const nextUnread = patch.unread ?? unreadOnly;
       const nextFavorite = patch.favorite ?? favoriteOnly;
       const nextPage = patch.page ?? page;
@@ -166,6 +171,8 @@ function ItemsPageContent() {
       if (nextFeed === "all") {
         if (nextStatus) q.set("status", nextStatus);
         else q.delete("status");
+        if (nextTopic) q.set("topic", nextTopic);
+        else q.delete("topic");
         q.set("sort", nextSort);
         if (nextUnread) q.set("unread", "1");
         else q.delete("unread");
@@ -175,6 +182,7 @@ function ItemsPageContent() {
         else q.delete("page");
       } else {
         q.delete("status");
+        q.delete("topic");
         q.delete("sort");
         q.delete("unread");
         q.delete("favorite");
@@ -185,7 +193,7 @@ function ItemsPageContent() {
       const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
       router.replace(nextUrl, { scroll: false });
     },
-    [favoriteOnly, feedMode, filter, page, pathname, router, searchParams, sortMode, unreadOnly]
+    [favoriteOnly, feedMode, filter, page, pathname, router, searchParams, sortMode, topic, unreadOnly]
   );
 
   const itemsQueryString = useMemo(() => {
@@ -193,13 +201,14 @@ function ItemsPageContent() {
     q.set("feed", feedMode);
     if (!focusMode) {
       if (filter) q.set("status", filter);
+      if (topic) q.set("topic", topic);
       q.set("sort", sortMode);
       if (page > 1) q.set("page", String(page));
       if (unreadOnly) q.set("unread", "1");
       if (favoriteOnly) q.set("favorite", "1");
     }
     return q.toString();
-  }, [favoriteOnly, feedMode, filter, focusMode, page, sortMode, unreadOnly]);
+  }, [favoriteOnly, feedMode, filter, focusMode, page, sortMode, topic, unreadOnly]);
 
   const currentItemsHref = useMemo(
     () => (itemsQueryString ? `${pathname}?${itemsQueryString}` : pathname),
@@ -403,6 +412,11 @@ function ItemsPageContent() {
           </h1>
           <p className="mt-1 text-sm text-zinc-500">
             {(focusMode ? displayItems.length : itemsTotal).toLocaleString()} {t("common.rows")}
+            {!focusMode && topic && (
+              <span className="ml-2 text-zinc-400">
+                {locale === "ja" ? `（トピック: ${topic}）` : `(topic: ${topic})`}
+              </span>
+            )}
             {focusMode && (
               <span className="ml-2 text-zinc-400">
                 {locale === "ja"
@@ -416,6 +430,20 @@ function ItemsPageContent() {
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        {!focusMode && topic && (
+          <div className="inline-flex items-center gap-2 rounded border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-800">
+            <span className="font-medium">
+              {locale === "ja" ? "トピック" : "Topic"}: {topic}
+            </span>
+            <button
+              type="button"
+              onClick={() => replaceItemsQuery({ topic: "", page: 1 })}
+              className="rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-100"
+            >
+              {locale === "ja" ? "解除" : "Clear"}
+            </button>
+          </div>
+        )}
         {!focusMode && (
           <label className="inline-flex items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700">
             <input

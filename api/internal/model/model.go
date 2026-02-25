@@ -157,6 +157,14 @@ type ItemStatsResponse struct {
 	ByStatus map[string]int `json:"by_status"`
 }
 
+type TopicTrend struct {
+	Topic        string   `json:"topic"`
+	Count24h     int      `json:"count_24h"`
+	CountPrev24h int      `json:"count_prev_24h"`
+	Delta        int      `json:"delta"`
+	MaxScore24h  *float64 `json:"max_score_24h,omitempty"`
+}
+
 type Digest struct {
 	ID           string     `json:"id"`
 	UserID       string     `json:"user_id"`

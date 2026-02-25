@@ -29,6 +29,11 @@ export default function ItemDetailPage() {
   const [readUpdating, setReadUpdating] = useState(false);
   const [feedbackUpdating, setFeedbackUpdating] = useState(false);
   const [related, setRelated] = useState<RelatedItem[]>([]);
+  const [relatedClusters, setRelatedClusters] = useState<
+    { id: string; label: string; size: number; max_similarity: number; representative: RelatedItem; items: RelatedItem[] }[]
+  >([]);
+  const [expandedRelatedClusterIds, setExpandedRelatedClusterIds] = useState<Record<string, boolean>>({});
+  const [relatedSortMode, setRelatedSortMode] = useState<"similarity" | "recent">("similarity");
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const autoMarkedRef = useRef<Record<string, true>>({});
 
@@ -79,9 +84,13 @@ export default function ItemDetailPage() {
 
         if (relatedRes.status === "fulfilled") {
           setRelated(relatedRes.value.items ?? []);
+          setRelatedClusters(relatedRes.value.clusters ?? []);
+          setExpandedRelatedClusterIds({});
           setRelatedError(null);
         } else {
           setRelated([]);
+          setRelatedClusters([]);
+          setExpandedRelatedClusterIds({});
           setRelatedError(String(relatedRes.reason));
         }
       })
@@ -111,6 +120,42 @@ export default function ItemDetailPage() {
     const from = searchParams.get("from");
     return from && from.startsWith("/items") ? from : "/items";
   }, [searchParams]);
+  const clusteredRelated = useMemo(() => {
+    const clusters = relatedClusters.filter((c) => c.size >= 2).map((c) => ({
+      ...c,
+      items: [...c.items].sort((a, b) => {
+        if (relatedSortMode === "recent") {
+          return new Date(b.published_at ?? b.created_at).getTime() - new Date(a.published_at ?? a.created_at).getTime();
+        }
+        if (b.similarity !== a.similarity) return b.similarity - a.similarity;
+        return new Date(b.published_at ?? b.created_at).getTime() - new Date(a.published_at ?? a.created_at).getTime();
+      }),
+    }));
+    clusters.sort((a, b) => {
+      if (relatedSortMode === "recent") {
+        const aTime = Math.max(...a.items.map((v) => new Date(v.published_at ?? v.created_at).getTime()));
+        const bTime = Math.max(...b.items.map((v) => new Date(v.published_at ?? v.created_at).getTime()));
+        if (bTime !== aTime) return bTime - aTime;
+      } else if (b.max_similarity !== a.max_similarity) {
+        return b.max_similarity - a.max_similarity;
+      }
+      return b.size - a.size;
+    });
+    return clusters;
+  }, [relatedClusters, relatedSortMode]);
+  const singleRelated = useMemo(
+    () =>
+      relatedClusters.length > 0
+        ? [...relatedClusters.filter((c) => c.size < 2).flatMap((c) => c.items)].sort((a, b) => {
+            if (relatedSortMode === "recent") {
+              return new Date(b.published_at ?? b.created_at).getTime() - new Date(a.published_at ?? a.created_at).getTime();
+            }
+            if (b.similarity !== a.similarity) return b.similarity - a.similarity;
+            return new Date(b.published_at ?? b.created_at).getTime() - new Date(a.published_at ?? a.created_at).getTime();
+          })
+        : related,
+    [related, relatedClusters, relatedSortMode]
+  );
 
   const toggleRead = async () => {
     if (!item) return;
@@ -414,11 +459,41 @@ export default function ItemDetailPage() {
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
-            <Link2 className="size-4 text-zinc-500" aria-hidden="true" />
-            {locale === "ja" ? "関連記事" : "Related articles"}
-          </h2>
-          <span className="text-xs text-zinc-400">{related.length}</span>
+          <div className="flex min-w-0 items-center gap-3">
+            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
+              <Link2 className="size-4 text-zinc-500" aria-hidden="true" />
+              {locale === "ja" ? "関連記事" : "Related articles"}
+            </h2>
+            <span className="text-xs text-zinc-400">
+              {clusteredRelated.length > 0
+                ? `${clusteredRelated.length} ${locale === "ja" ? "クラスタ" : "clusters"} / ${related.length}`
+                : related.length}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
+            <button
+              type="button"
+              onClick={() => setRelatedSortMode("similarity")}
+              className={`rounded px-2 py-1 text-xs font-medium ${
+                relatedSortMode === "similarity"
+                  ? "bg-zinc-900 text-white"
+                  : "text-zinc-600 hover:bg-zinc-50"
+              }`}
+            >
+              {locale === "ja" ? "類似度順" : "Similarity"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRelatedSortMode("recent")}
+              className={`rounded px-2 py-1 text-xs font-medium ${
+                relatedSortMode === "recent"
+                  ? "bg-zinc-900 text-white"
+                  : "text-zinc-600 hover:bg-zinc-50"
+              }`}
+            >
+              {locale === "ja" ? "新しい順" : "Recent"}
+            </button>
+          </div>
         </div>
         {related.length === 0 ? (
           <p className="text-sm text-zinc-500">
@@ -432,44 +507,119 @@ export default function ItemDetailPage() {
           </p>
         ) : (
           <div className="space-y-3">
-            {related.map((r) => (
-              <div key={r.id} className="rounded-lg border border-zinc-200 p-3">
-                <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                  <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
-                    sim {r.similarity.toFixed(3)}
-                  </span>
-                  {r.summary_score != null && (
-                    <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
-                      score {r.summary_score.toFixed(2)}
-                    </span>
-                  )}
-                  <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
-                </div>
-                <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-zinc-900 hover:underline">
-                  {r.title ?? (locale === "ja" ? "タイトルなし" : "No title")}
-                </Link>
-                <a
-                  href={r.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-1 block break-all text-xs text-blue-600 hover:underline"
-                >
-                  {r.url}
-                </a>
-                {r.summary && (
-                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
-                )}
-                {!!r.topics?.length && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {r.topics.slice(0, 6).map((topic) => (
-                      <span key={`${r.id}-${topic}`} className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-700">
-                        {topic}
+            {clusteredRelated.map((c) => {
+              const expanded = !!expandedRelatedClusterIds[c.id];
+              const restItems = c.items.slice(1);
+              return (
+                  <div key={c.id} className="rounded-lg border border-zinc-200 p-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-700">
+                        {c.label}
                       </span>
-                    ))}
+                      <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                        {c.size} {locale === "ja" ? "件" : "items"}
+                      </span>
+                      <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                        sim {c.max_similarity.toFixed(3)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedRelatedClusterIds((prev) => ({ ...prev, [c.id]: !prev[c.id] }))
+                        }
+                        className="ml-auto rounded border border-zinc-200 bg-white px-2 py-0.5 text-zinc-600 hover:bg-zinc-50"
+                      >
+                        {expanded
+                          ? locale === "ja"
+                            ? "たたむ"
+                            : "Collapse"
+                          : locale === "ja"
+                            ? `+${restItems.length}件を見る`
+                            : `Show +${restItems.length}`}
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {[c.items[0], ...(expanded ? restItems : [])].map((r, idx) => (
+                        <div key={r.id} className={`rounded-lg p-3 ${idx === 0 ? "bg-zinc-50" : "border border-zinc-200 bg-white"}`}>
+                          <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                            <span className="rounded bg-white px-2 py-0.5 text-zinc-700 ring-1 ring-zinc-200">
+                              sim {r.similarity.toFixed(3)}
+                            </span>
+                            {r.summary_score != null && (
+                              <span className="rounded bg-white px-2 py-0.5 text-zinc-700 ring-1 ring-zinc-200">
+                                score {r.summary_score.toFixed(2)}
+                              </span>
+                            )}
+                            <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
+                          </div>
+                          <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-zinc-900 hover:underline">
+                            {r.title ?? (locale === "ja" ? "タイトルなし" : "No title")}
+                          </Link>
+                          <a
+                            href={r.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1 block break-all text-xs text-blue-600 hover:underline"
+                          >
+                            {r.url}
+                          </a>
+                          {r.summary && (
+                            <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
+                          )}
+                          {!!r.topics?.length && (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {r.topics.slice(0, 6).map((topic) => (
+                                <span key={`${r.id}-${topic}`} className="rounded-full bg-white px-2 py-0.5 text-[11px] text-zinc-700 ring-1 ring-zinc-200">
+                                  {topic}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                );
+              })}
+
+            {singleRelated.map((r) => (
+                <div key={r.id} className="rounded-lg border border-zinc-200 p-3">
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                    <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                      sim {r.similarity.toFixed(3)}
+                    </span>
+                    {r.summary_score != null && (
+                      <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                        score {r.summary_score.toFixed(2)}
+                      </span>
+                    )}
+                    <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
+                  </div>
+                  <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-zinc-900 hover:underline">
+                    {r.title ?? (locale === "ja" ? "タイトルなし" : "No title")}
+                  </Link>
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 block break-all text-xs text-blue-600 hover:underline"
+                  >
+                    {r.url}
+                  </a>
+                  {r.summary && (
+                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
+                  )}
+                  {!!r.topics?.length && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {r.topics.slice(0, 6).map((topic) => (
+                        <span key={`${r.id}-${topic}`} className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-700">
+                          {topic}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
           </div>
         )}
       </section>

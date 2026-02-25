@@ -3,9 +3,11 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"sort"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/minoru-kitayama/sifto/api/internal/middleware"
+	"github.com/minoru-kitayama/sifto/api/internal/model"
 	"github.com/minoru-kitayama/sifto/api/internal/repository"
 	"github.com/minoru-kitayama/sifto/api/internal/service"
 )
@@ -22,12 +24,15 @@ func NewItemHandler(repo *repository.ItemRepo, publisher *service.EventPublisher
 func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	q := r.URL.Query()
-	var status, sourceID *string
+	var status, sourceID, topic *string
 	if v := q.Get("status"); v != "" {
 		status = &v
 	}
 	if v := q.Get("source_id"); v != "" {
 		sourceID = &v
+	}
+	if v := q.Get("topic"); v != "" {
+		topic = &v
 	}
 	page := parseIntOrDefault(q.Get("page"), 1)
 	pageSize := parseIntOrDefault(q.Get("page_size"), 20)
@@ -52,6 +57,7 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.repo.ListPage(r.Context(), userID, repository.ItemListParams{
 		Status:       status,
 		SourceID:     sourceID,
+		Topic:        topic,
 		UnreadOnly:   unreadOnly,
 		FavoriteOnly: favoriteOnly,
 		Sort:         sort,
@@ -73,6 +79,24 @@ func (h *ItemHandler) Stats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, resp)
+}
+
+func (h *ItemHandler) TopicTrends(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	limit := parseIntOrDefault(r.URL.Query().Get("limit"), 8)
+	if limit < 1 || limit > 50 {
+		http.Error(w, "invalid limit", http.StatusBadRequest)
+		return
+	}
+	rows, err := h.repo.TopicTrends(r.Context(), userID, limit)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"items": rows,
+		"limit": limit,
+	})
 }
 
 func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
@@ -123,11 +147,113 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	clusters := clusterRelatedItems(items)
 	writeJSON(w, map[string]any{
-		"items":   items,
-		"limit":   limit,
-		"item_id": id,
+		"items":    items,
+		"clusters": clusters,
+		"limit":    limit,
+		"item_id":  id,
 	})
+}
+
+type relatedClusterResponse struct {
+	ID             string              `json:"id"`
+	Label          string              `json:"label"`
+	Size           int                 `json:"size"`
+	MaxSimilarity  float64             `json:"max_similarity"`
+	Representative model.RelatedItem   `json:"representative"`
+	Items          []model.RelatedItem `json:"items"`
+}
+
+func clusterRelatedItems(items []model.RelatedItem) []relatedClusterResponse {
+	if len(items) == 0 {
+		return nil
+	}
+	remaining := make([]model.RelatedItem, len(items))
+	copy(remaining, items)
+	sort.SliceStable(remaining, func(i, j int) bool {
+		if remaining[i].Similarity != remaining[j].Similarity {
+			return remaining[i].Similarity > remaining[j].Similarity
+		}
+		return remaining[i].CreatedAt.After(remaining[j].CreatedAt)
+	})
+
+	used := make([]bool, len(remaining))
+	clusters := make([]relatedClusterResponse, 0, len(remaining))
+	for i := range remaining {
+		if used[i] {
+			continue
+		}
+		seed := remaining[i]
+		used[i] = true
+		members := []model.RelatedItem{seed}
+		maxSim := seed.Similarity
+		seedTopicSet := map[string]struct{}{}
+		for _, t := range seed.Topics {
+			if t != "" {
+				seedTopicSet[t] = struct{}{}
+			}
+		}
+		for j := i + 1; j < len(remaining); j++ {
+			if used[j] {
+				continue
+			}
+			cand := remaining[j]
+			if shouldClusterRelated(seed, seedTopicSet, cand) {
+				used[j] = true
+				members = append(members, cand)
+				if cand.Similarity > maxSim {
+					maxSim = cand.Similarity
+				}
+			}
+		}
+		sort.SliceStable(members, func(a, b int) bool {
+			if members[a].Similarity != members[b].Similarity {
+				return members[a].Similarity > members[b].Similarity
+			}
+			return members[a].CreatedAt.After(members[b].CreatedAt)
+		})
+		label := clusterLabel(members[0])
+		clusters = append(clusters, relatedClusterResponse{
+			ID:             members[0].ID,
+			Label:          label,
+			Size:           len(members),
+			MaxSimilarity:  maxSim,
+			Representative: members[0],
+			Items:          members,
+		})
+	}
+	return clusters
+}
+
+func shouldClusterRelated(seed model.RelatedItem, seedTopics map[string]struct{}, cand model.RelatedItem) bool {
+	// Strong similarity alone groups items.
+	if cand.Similarity >= 0.78 {
+		return true
+	}
+	// Otherwise require moderate similarity + topic overlap.
+	if cand.Similarity < 0.58 {
+		return false
+	}
+	if len(seedTopics) == 0 || len(cand.Topics) == 0 {
+		return false
+	}
+	for _, t := range cand.Topics {
+		if _, ok := seedTopics[t]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func clusterLabel(it model.RelatedItem) string {
+	if len(it.Topics) > 0 && it.Topics[0] != "" {
+		return it.Topics[0]
+	}
+	if it.Title != nil && *it.Title != "" {
+		return *it.Title
+	}
+	return "Related"
 }
 
 func (h *ItemHandler) MarkRead(w http.ResponseWriter, r *http.Request) {

@@ -90,6 +90,7 @@ func main() {
 		r.Route("/items", func(r chi.Router) {
 			r.Get("/", itemH.List)
 			r.Get("/stats", itemH.Stats)
+			r.Get("/topic-trends", itemH.TopicTrends)
 			r.Post("/retry-failed", itemH.RetryFailed)
 			r.Get("/reading-plan", itemH.ReadingPlan)
 			r.Get("/{id}/related", itemH.Related)

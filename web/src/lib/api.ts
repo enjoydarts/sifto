@@ -96,6 +96,14 @@ export interface RelatedItemsResponse {
   item_id: string;
   limit: number;
   items: RelatedItem[];
+  clusters?: {
+    id: string;
+    label: string;
+    size: number;
+    max_similarity: number;
+    representative: RelatedItem;
+    items: RelatedItem[];
+  }[];
 }
 
 export interface ItemRetryResult {
@@ -136,6 +144,14 @@ export interface ItemStats {
   read: number;
   unread: number;
   by_status: Record<string, number>;
+}
+
+export interface TopicTrend {
+  topic: string;
+  count_24h: number;
+  count_prev_24h: number;
+  delta: number;
+  max_score_24h?: number | null;
 }
 
 export interface BulkRetryFailedResult {
@@ -266,10 +282,11 @@ export const api = {
     ),
 
   // Items
-  getItems: (params?: { status?: string; source_id?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean; favorite_only?: boolean }) => {
+  getItems: (params?: { status?: string; source_id?: string; topic?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean; favorite_only?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.source_id) q.set("source_id", params.source_id);
+    if (params?.topic) q.set("topic", params.topic);
     if (params?.page) q.set("page", String(params.page));
     if (params?.page_size) q.set("page_size", String(params.page_size));
     if (params?.sort) q.set("sort", params.sort);
@@ -293,6 +310,12 @@ export const api = {
     return apiFetch<ReadingPlanResponse>(`/items/reading-plan${qs ? `?${qs}` : ""}`);
   },
   getItemStats: () => apiFetch<ItemStats>("/items/stats"),
+  getItemTopicTrends: (params?: { limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiFetch<{ items: TopicTrend[]; limit: number }>(`/items/topic-trends${qs ? `?${qs}` : ""}`);
+  },
   getItem: (id: string) => apiFetch<ItemDetail>(`/items/${id}`),
   getRelatedItems: (id: string, params?: { limit?: number }) => {
     const q = new URLSearchParams();

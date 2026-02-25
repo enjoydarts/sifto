@@ -15,6 +15,7 @@ func NewItemRepo(db *pgxpool.Pool) *ItemRepo { return &ItemRepo{db} }
 type ItemListParams struct {
 	Status       *string
 	SourceID     *string
+	Topic        *string
 	UnreadOnly   bool
 	FavoriteOnly bool
 	Sort         string // newest | score
@@ -109,6 +110,15 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 		args = append(args, *p.SourceID)
 		baseWhere += ` AND i.source_id = $` + itoa(len(args))
 	}
+	if p.Topic != nil && *p.Topic != "" {
+		args = append(args, *p.Topic)
+		baseWhere += ` AND EXISTS (
+			SELECT 1
+			FROM item_summaries smt
+			WHERE smt.item_id = i.id
+			  AND $` + itoa(len(args)) + `::text = ANY(COALESCE(smt.topics, '{}'::text[]))
+		)`
+	}
 	if p.UnreadOnly {
 		baseWhere += ` AND NOT EXISTS (
 			SELECT 1 FROM item_reads ir2
@@ -152,15 +162,22 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 		WHERE s.user_id = $1`+
 		func() string {
 			q := ""
+			nextIdx := 2
 			if p.Status != nil {
-				q += ` AND i.status = $2`
+				q += ` AND i.status = $` + itoa(nextIdx)
+				nextIdx++
 			}
 			if p.SourceID != nil {
-				if p.Status != nil {
-					q += ` AND i.source_id = $3`
-				} else {
-					q += ` AND i.source_id = $2`
-				}
+				q += ` AND i.source_id = $` + itoa(nextIdx)
+				nextIdx++
+			}
+			if p.Topic != nil && *p.Topic != "" {
+				q += ` AND EXISTS (
+					SELECT 1 FROM item_summaries smt
+					WHERE smt.item_id = i.id
+					  AND $` + itoa(nextIdx) + `::text = ANY(COALESCE(smt.topics, '{}'::text[]))
+				)`
+				nextIdx++
 			}
 			if p.UnreadOnly {
 				q += ` AND ir.item_id IS NULL`
@@ -398,6 +415,61 @@ func (r *ItemRepo) Stats(ctx context.Context, userID string) (*model.ItemStatsRe
 	}
 	resp.Unread = resp.Total - resp.Read
 	return resp, nil
+}
+
+func (r *ItemRepo) TopicTrends(ctx context.Context, userID string, limit int) ([]model.TopicTrend, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	rows, err := r.db.Query(ctx, `
+		WITH base AS (
+			SELECT COALESCE(NULLIF(BTRIM(t.topic), ''), '__untagged__') AS topic_key,
+			       COALESCE(sm.score, 0)::double precision AS score,
+			       COALESCE(i.published_at, i.created_at) AS ts
+			FROM items i
+			JOIN sources s ON s.id = i.source_id
+			JOIN item_summaries sm ON sm.item_id = i.id
+			CROSS JOIN LATERAL unnest(
+				CASE
+					WHEN COALESCE(array_length(sm.topics, 1), 0) = 0 THEN ARRAY['__untagged__']::text[]
+					ELSE sm.topics
+				END
+			) AS t(topic)
+			WHERE s.user_id = $1
+			  AND i.status = 'summarized'
+			  AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '48 hours'
+		)
+		SELECT topic_key,
+		       COUNT(*) FILTER (WHERE ts >= NOW() - INTERVAL '24 hours')::int AS count_24h,
+		       COUNT(*) FILTER (WHERE ts < NOW() - INTERVAL '24 hours')::int AS count_prev_24h,
+		       MAX(score) FILTER (WHERE ts >= NOW() - INTERVAL '24 hours')::double precision AS max_score_24h
+		FROM base
+		GROUP BY topic_key
+		HAVING COUNT(*) FILTER (WHERE ts >= NOW() - INTERVAL '24 hours') > 0
+		ORDER BY
+		  (COUNT(*) FILTER (WHERE ts >= NOW() - INTERVAL '24 hours')
+		   - COUNT(*) FILTER (WHERE ts < NOW() - INTERVAL '24 hours')) DESC,
+		  COUNT(*) FILTER (WHERE ts >= NOW() - INTERVAL '24 hours') DESC,
+		  topic_key ASC
+		LIMIT $2`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []model.TopicTrend
+	for rows.Next() {
+		var v model.TopicTrend
+		if err := rows.Scan(&v.Topic, &v.Count24h, &v.CountPrev24h, &v.MaxScore24h); err != nil {
+			return nil, err
+		}
+		v.Delta = v.Count24h - v.CountPrev24h
+		out = append(out, v)
+	}
+	return out, rows.Err()
 }
 
 func firstTopicKey(topics []string) string {

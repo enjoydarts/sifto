@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BarChart3, Brain, LayoutDashboard, Mail } from "lucide-react";
-import { api, Digest, Item, ItemStats, LLMUsageDailySummary, Source } from "@/lib/api";
+import { api, Digest, Item, ItemStats, LLMUsageDailySummary, Source, TopicTrend } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 
 export default function DashboardPage() {
@@ -15,22 +15,25 @@ export default function DashboardPage() {
   const [itemStats, setItemStats] = useState<ItemStats | null>(null);
   const [digests, setDigests] = useState<Digest[]>([]);
   const [llmSummary, setLlmSummary] = useState<LLMUsageDailySummary[]>([]);
+  const [topicTrends, setTopicTrends] = useState<TopicTrend[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [srcs, its, stats, dgs, llm] = await Promise.all([
+      const [srcs, its, stats, dgs, llm, topics] = await Promise.all([
         api.getSources(),
         api.getItems({ page: 1, page_size: 200 }),
         api.getItemStats(),
         api.getDigests(),
         api.getLLMUsageSummary({ days: 7 }),
+        api.getItemTopicTrends({ limit: 8 }),
       ]);
       setSources(srcs ?? []);
       setItems(its?.items ?? []);
       setItemStats(stats ?? null);
       setDigests(dgs ?? []);
       setLlmSummary(llm ?? []);
+      setTopicTrends(topics?.items ?? []);
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -172,6 +175,52 @@ export default function DashboardPage() {
             </ul>
           )}
         </div>
+      </section>
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+            <BarChart3 className="size-4 text-zinc-500" aria-hidden="true" />
+            <span>{locale === "ja" ? "トレンドトピック（24h）" : "Trending Topics (24h)"}</span>
+          </h2>
+          <Link href="/items?feed=all&sort=score" className="text-xs text-zinc-500 hover:text-zinc-900">
+            {locale === "ja" ? "記事一覧へ" : "Open Items"}
+          </Link>
+        </div>
+        {topicTrends.length === 0 ? (
+          <p className="text-sm text-zinc-400">{t("common.noData")}</p>
+        ) : (
+          <div className="grid gap-2 md:grid-cols-2">
+            {topicTrends.map((row) => (
+              <Link
+                key={row.topic}
+                href={`/items?feed=all&sort=score&topic=${encodeURIComponent(row.topic)}`}
+                className="rounded-lg border border-zinc-200 bg-zinc-50/70 px-3 py-2 transition-colors hover:border-zinc-300 hover:bg-zinc-100/70"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="truncate text-sm font-medium text-zinc-900">{row.topic}</div>
+                  <div
+                    className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${
+                      row.delta > 0
+                        ? "bg-green-50 text-green-700"
+                        : row.delta < 0
+                          ? "bg-zinc-100 text-zinc-600"
+                          : "bg-blue-50 text-blue-700"
+                    }`}
+                  >
+                    {row.delta > 0 ? "+" : ""}
+                    {row.delta}
+                  </div>
+                </div>
+                <div className="mt-1 flex items-center gap-3 text-xs text-zinc-500">
+                  <span>{locale === "ja" ? `直近24h ${row.count_24h}` : `24h ${row.count_24h}`}</span>
+                  <span>{locale === "ja" ? `前24h ${row.count_prev_24h}` : `prev ${row.count_prev_24h}`}</span>
+                  {row.max_score_24h != null && <span>{`max score ${row.max_score_24h.toFixed(2)}`}</span>}
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4">

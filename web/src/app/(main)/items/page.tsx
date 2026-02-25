@@ -411,7 +411,7 @@ function ItemsPageContent() {
       router.push(href);
     };
     return (
-      <div data-item-row-id={item.id}>
+      <div data-item-row-id={item.id} className="min-w-0">
         <div
           role="link"
           tabIndex={0}
@@ -422,7 +422,7 @@ function ItemsPageContent() {
               openDetail();
             }
           }}
-          className={`group ${featured ? "flex flex-col gap-3 sm:flex-row sm:items-start" : "flex items-stretch gap-3"} rounded-xl px-4 py-3.5 transition-all ${
+          className={`group ${featured ? "flex w-full flex-col gap-3 md:flex-row md:items-start" : "flex items-stretch gap-3"} rounded-xl px-4 py-3.5 transition-all ${
             featured
               ? item.is_read
                 ? "cursor-pointer border border-zinc-300 bg-gradient-to-b from-zinc-200 to-zinc-100 shadow-sm hover:border-zinc-400 hover:shadow-md"
@@ -432,10 +432,10 @@ function ItemsPageContent() {
                 : "cursor-pointer border border-zinc-200 bg-white shadow-sm hover:border-zinc-300"
           }`}
         >
-          <div className={`min-w-0 flex-1 transition-colors group-hover:text-zinc-700 ${featured ? "flex flex-col gap-3 sm:flex-row sm:items-start" : "flex items-stretch gap-3"}`}>
+          <div className={`min-w-0 flex-1 transition-colors group-hover:text-zinc-700 ${featured ? "flex min-w-0 flex-col gap-3 md:flex-row md:items-start" : "flex items-stretch gap-3"}`}>
             <div
               className={`shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 ${
-                featured ? "hidden h-[104px] w-[136px] sm:flex" : "hidden h-[72px] w-[72px] sm:flex"
+                featured ? "flex h-36 w-full md:h-[104px] md:w-[136px] md:shrink-0" : "hidden h-[72px] w-[72px] sm:flex"
               }`}
             >
               {item.thumbnail_url ? (
@@ -470,7 +470,7 @@ function ItemsPageContent() {
                   >
                     {item.title ?? item.url}
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
                     <span
                       className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
                         item.is_read
@@ -531,11 +531,11 @@ function ItemsPageContent() {
                   </div>
                 )}
               </div>
-              <div className={`${featured ? "h-4 truncate text-[12px] text-zinc-500" : "h-4 truncate text-[12px] text-zinc-400"}`}>
+              <div className={`${featured ? "h-4 w-full truncate text-[12px] text-zinc-500" : "h-4 truncate text-[12px] text-zinc-400"}`}>
                 {item.title ? item.url : "\u00A0"}
               </div>
               {featured && (
-                <div className="flex flex-wrap items-center gap-2 pt-1">
+                <div className="flex w-full flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap sm:items-center">
                   <button
                     type="button"
                     disabled={!!readUpdatingIds[item.id]}
@@ -543,7 +543,7 @@ function ItemsPageContent() {
                       e.stopPropagation();
                       void toggleRead(item);
                     }}
-                    className="rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full rounded border border-zinc-300 bg-white px-3 py-1 text-center text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                   >
                     {readUpdatingIds[item.id]
                       ? locale === "ja"
@@ -565,7 +565,7 @@ function ItemsPageContent() {
                         e.stopPropagation();
                         void retryItem(item.id);
                       }}
-                      className="rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="w-full rounded border border-zinc-300 bg-white px-3 py-1 text-center text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                     >
                       {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
                     </button>
@@ -777,7 +777,7 @@ function ItemsPageContent() {
           </div>
           <ul className="grid list-none gap-3 lg:grid-cols-2">
             {featuredItems.map((item, idx) => (
-              <li key={item.id} className={`${idx === 0 ? "lg:col-span-2" : ""} list-none`}>
+              <li key={item.id} className={`${idx === 0 ? "lg:col-span-2" : ""} min-w-0 list-none`}>
                 {renderItemRow(item, { featured: true, rank: idx + 1 })}
               </li>
             ))}
@@ -813,12 +813,12 @@ function ItemsPageContent() {
                     </div>
                   </div>
                   <ul className="list-none space-y-2">
-                    <li className="list-none">{renderItemRow(hero, { featured: true })}</li>
+                    <li className="min-w-0 list-none">{renderItemRow(hero, { featured: true })}</li>
                     {rest.length > 0 && (
                       <li className="list-none">
                         <ul className="list-none space-y-2 pt-1">
                           {rest.map((item) => (
-                            <li key={item.id} className="list-none">
+                            <li key={item.id} className="min-w-0 list-none">
                               {renderItemRow(item)}
                             </li>
                           ))}
@@ -848,7 +848,7 @@ function ItemsPageContent() {
       )}
       <ul className={`list-none space-y-2 ${focusMode && (featuredItems.length > 0 || visibleClusterSections.length > 0) ? "pt-1" : ""}`}>
         {recommendedLooseItems.map((item) => (
-          <li key={item.id} className="list-none">
+          <li key={item.id} className="min-w-0 list-none">
             {renderItemRow(item)}
           </li>
         ))}

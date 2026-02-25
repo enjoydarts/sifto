@@ -88,6 +88,7 @@ export default function SettingsPage() {
 
   async function submitDigestDelivery(e: FormEvent) {
     e.preventDefault();
+    if (!settings) return;
     setSavingDigestDelivery(true);
     try {
       await api.updateSettings({

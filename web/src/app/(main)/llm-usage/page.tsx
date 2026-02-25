@@ -2,7 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Brain, CalendarDays, ReceiptText } from "lucide-react";
-import { api, LLMUsageDailySummary, LLMUsageLog } from "@/lib/api";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { api, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 
@@ -12,6 +24,12 @@ function fmtUSD(v: number) {
 
 function fmtNum(v: number) {
   return new Intl.NumberFormat("ja-JP").format(v);
+}
+
+function fmtUSDShort(v: number) {
+  if (v >= 1) return `$${v.toFixed(2)}`;
+  if (v >= 0.01) return `$${v.toFixed(3)}`;
+  return `$${v.toFixed(4)}`;
 }
 
 type SummaryRow = LLMUsageDailySummary & {
@@ -26,16 +44,19 @@ export default function LLMUsagePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [summaryRows, setSummaryRows] = useState<LLMUsageDailySummary[]>([]);
+  const [modelRows, setModelRows] = useState<LLMUsageModelSummary[]>([]);
   const [logs, setLogs] = useState<LLMUsageLog[]>([]);
 
   const load = useCallback(async (daysParam: number, limitParam: number) => {
     setLoading(true);
     try {
-      const [summary, recent] = await Promise.all([
+      const [summary, byModel, recent] = await Promise.all([
         api.getLLMUsageSummary({ days: daysParam }),
+        api.getLLMUsageByModel({ days: daysParam }),
         api.getLLMUsage({ limit: limitParam }),
       ]);
       setSummaryRows(summary ?? []);
+      setModelRows(byModel ?? []);
       setLogs(recent ?? []);
       setError(null);
     } catch (e) {
@@ -91,6 +112,41 @@ export default function LLMUsagePage() {
     }
     return Array.from(m.entries());
   }, [summaryRows]);
+
+  const dailyChartRows = useMemo(() => {
+    const m = new Map<string, { date: string; total: number; openai: number; anthropic: number; other: number }>();
+    for (const row of summaryRows) {
+      const cur = m.get(row.date_jst) ?? { date: row.date_jst, total: 0, openai: 0, anthropic: 0, other: 0 };
+      cur.total += row.estimated_cost_usd;
+      if (row.provider === "openai") cur.openai += row.estimated_cost_usd;
+      else if (row.provider === "anthropic") cur.anthropic += row.estimated_cost_usd;
+      else cur.other += row.estimated_cost_usd;
+      m.set(row.date_jst, cur);
+    }
+    return Array.from(m.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [summaryRows]);
+
+  const visibleModelRows = useMemo(
+    () => modelRows.filter((r) => r.estimated_cost_usd > 0),
+    [modelRows]
+  );
+
+  const topModelRows = useMemo(() => visibleModelRows.slice(0, 10), [visibleModelRows]);
+  const topModelChartRows = useMemo(
+    () =>
+      topModelRows
+        .slice()
+        .reverse()
+        .map((r) => ({
+          key: `${r.provider}:${r.model}:${r.pricing_source}`,
+          label: `${r.provider}/${r.model}`,
+          shortLabel: `${r.provider}:${r.model.length > 28 ? `${r.model.slice(0, 28)}…` : r.model}`,
+          cost: r.estimated_cost_usd,
+          calls: r.calls,
+          pricingSource: r.pricing_source,
+        })),
+    [topModelRows]
+  );
 
   const logsPageSize = 20;
   const pagedLogs = logs.slice((logPage - 1) * logsPageSize, logPage * logsPageSize);
@@ -157,6 +213,156 @@ export default function LLMUsagePage() {
         <MetricCard label={t("llm.output")} value={fmtNum(totals.output)} />
         <MetricCard label="Cache Write" value={fmtNum(totals.cacheWrite)} />
         <MetricCard label="Cache Read" value={fmtNum(totals.cacheRead)} />
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+            <CalendarDays className="size-4 text-zinc-500" aria-hidden="true" />
+            <span>{locale === "ja" ? "日次コスト推移" : "Daily Cost Trend"}</span>
+          </h2>
+          <span className="text-xs text-zinc-400">{dailyChartRows.length} days</span>
+        </div>
+        {dailyChartRows.length === 0 ? (
+          <p className="text-sm text-zinc-400">{t("llm.noSummary")}</p>
+        ) : (
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={dailyChartRows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#71717a" }} tickLine={false} axisLine={false} />
+                <YAxis
+                  tick={{ fontSize: 12, fill: "#71717a" }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => fmtUSDShort(Number(v))}
+                />
+                <Tooltip
+                  formatter={(value: number | string | undefined, name: string) => [
+                    fmtUSD(Number(value ?? 0)),
+                    name,
+                  ]}
+                  labelFormatter={(label) => `${label}`}
+                  contentStyle={{ borderRadius: 10, borderColor: "#e4e4e7" }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Area
+                  type="monotone"
+                  dataKey="openai"
+                  name="OpenAI"
+                  stackId="cost"
+                  stroke="#10b981"
+                  fill="#34d399"
+                  fillOpacity={0.65}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="anthropic"
+                  name="Anthropic"
+                  stackId="cost"
+                  stroke="#3b82f6"
+                  fill="#60a5fa"
+                  fillOpacity={0.6}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="other"
+                  name="Other"
+                  stackId="cost"
+                  stroke="#71717a"
+                  fill="#a1a1aa"
+                  fillOpacity={0.45}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+            <Brain className="size-4 text-zinc-500" aria-hidden="true" />
+            <span>{locale === "ja" ? "モデル別利用状況" : "Usage by Model"}</span>
+          </h2>
+          <span className="text-xs text-zinc-400">{visibleModelRows.length} models</span>
+        </div>
+        {visibleModelRows.length === 0 ? (
+          <p className="text-sm text-zinc-400">{t("llm.noSummary")}</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="h-80 w-full rounded border border-zinc-100 p-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={topModelChartRows}
+                  layout="vertical"
+                  margin={{ top: 8, right: 24, left: 8, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" horizontal={true} vertical={false} />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 12, fill: "#71717a" }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => fmtUSDShort(Number(v))}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="shortLabel"
+                    width={220}
+                    tick={{ fontSize: 12, fill: "#3f3f46" }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip
+                    formatter={(value: number | string | undefined, name: string) => [
+                      name === "calls" ? fmtNum(Number(value ?? 0)) : fmtUSD(Number(value ?? 0)),
+                      name,
+                    ]}
+                    labelFormatter={(_, payload) => {
+                      const row = payload?.[0]?.payload as { label?: string; pricingSource?: string } | undefined;
+                      if (!row) return "";
+                      return `${row.label} (${row.pricingSource ?? ""})`;
+                    }}
+                    contentStyle={{ borderRadius: 10, borderColor: "#e4e4e7" }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="cost" name="Cost (USD)" fill="#18181b" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="text-xs text-zinc-500">
+                  <tr className="border-b border-zinc-100">
+                    <th className="px-3 py-2 text-left font-medium">provider</th>
+                    <th className="px-3 py-2 text-left font-medium">model</th>
+                    <th className="px-3 py-2 text-left font-medium">pricing</th>
+                    <th className="px-3 py-2 text-right font-medium">calls</th>
+                    <th className="px-3 py-2 text-right font-medium">input</th>
+                    <th className="px-3 py-2 text-right font-medium">output</th>
+                    <th className="px-3 py-2 text-right font-medium">avg/call</th>
+                    <th className="px-3 py-2 text-right font-medium">cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleModelRows.map((r) => (
+                    <tr key={`${r.provider}:${r.model}:${r.pricing_source}`} className="border-b border-zinc-100 last:border-0">
+                      <td className="px-3 py-2">{r.provider}</td>
+                      <td className="px-3 py-2 text-xs break-all">{r.model}</td>
+                      <td className="px-3 py-2 text-xs">{r.pricing_source}</td>
+                      <td className="px-3 py-2 text-right">{fmtNum(r.calls)}</td>
+                      <td className="px-3 py-2 text-right">{fmtNum(r.input_tokens)}</td>
+                      <td className="px-3 py-2 text-right">{fmtNum(r.output_tokens)}</td>
+                      <td className="px-3 py-2 text-right">{fmtUSD(r.calls > 0 ? r.estimated_cost_usd / r.calls : 0)}</td>
+                      <td className="px-3 py-2 text-right">{fmtUSD(r.estimated_cost_usd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">

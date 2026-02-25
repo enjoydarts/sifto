@@ -111,6 +111,7 @@ func main() {
 		r.Route("/llm-usage", func(r chi.Router) {
 			r.Get("/", llmUsageH.List)
 			r.Get("/summary", llmUsageH.DailySummary)
+			r.Get("/by-model", llmUsageH.ModelSummary)
 		})
 
 		r.Route("/settings", func(r chi.Router) {

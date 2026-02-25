@@ -44,6 +44,21 @@ func (h *LLMUsageHandler) DailySummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, rows)
 }
 
+func (h *LLMUsageHandler) ModelSummary(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	days := parseIntOrDefault(r.URL.Query().Get("days"), 14)
+	if days < 1 || days > 365 {
+		http.Error(w, "invalid days", http.StatusBadRequest)
+		return
+	}
+	rows, err := h.repo.ModelSummaryByUser(r.Context(), userID, days)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, rows)
+}
+
 func parseIntOrDefault(s string, d int) int {
 	if s == "" {
 		return d

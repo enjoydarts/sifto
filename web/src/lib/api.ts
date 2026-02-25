@@ -227,6 +227,18 @@ export interface LLMUsageDailySummary {
   estimated_cost_usd: number;
 }
 
+export interface LLMUsageModelSummary {
+  provider: string;
+  model: string;
+  pricing_source: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  estimated_cost_usd: number;
+}
+
 export interface UserSettingsCurrentMonth {
   month_jst: string;
   period_start_jst: string;
@@ -378,6 +390,12 @@ export const api = {
     if (params?.days) q.set("days", String(params.days));
     const qs = q.toString();
     return apiFetch<LLMUsageDailySummary[]>(`/llm-usage/summary${qs ? `?${qs}` : ""}`);
+  },
+  getLLMUsageByModel: (params?: { days?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.days) q.set("days", String(params.days));
+    const qs = q.toString();
+    return apiFetch<LLMUsageModelSummary[]>(`/llm-usage/by-model${qs ? `?${qs}` : ""}`);
   },
 
   // Settings

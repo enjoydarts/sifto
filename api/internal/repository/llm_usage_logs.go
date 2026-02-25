@@ -61,6 +61,18 @@ type LLMUsageDailySummary struct {
 	EstimatedCostUSD         float64 `json:"estimated_cost_usd"`
 }
 
+type LLMUsageModelSummary struct {
+	Provider                 string  `json:"provider"`
+	Model                    string  `json:"model"`
+	PricingSource            string  `json:"pricing_source"`
+	Calls                    int     `json:"calls"`
+	InputTokens              int64   `json:"input_tokens"`
+	OutputTokens             int64   `json:"output_tokens"`
+	CacheCreationInputTokens int64   `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int64   `json:"cache_read_input_tokens"`
+	EstimatedCostUSD         float64 `json:"estimated_cost_usd"`
+}
+
 func (r *LLMUsageLogRepo) Insert(ctx context.Context, in LLMUsageLogInput) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO llm_usage_logs (
@@ -145,6 +157,45 @@ func (r *LLMUsageLogRepo) DailySummaryByUser(ctx context.Context, userID string,
 		var v LLMUsageDailySummary
 		if err := rows.Scan(
 			&v.DateJST, &v.Provider, &v.Purpose, &v.PricingSource, &v.Calls,
+			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens,
+			&v.CacheReadInputTokens, &v.EstimatedCostUSD,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+func (r *LLMUsageLogRepo) ModelSummaryByUser(ctx context.Context, userID string, days int) ([]LLMUsageModelSummary, error) {
+	if days <= 0 || days > 365 {
+		days = 14
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT provider,
+		       model,
+		       pricing_source,
+		       COUNT(*)::int AS calls,
+		       COALESCE(SUM(input_tokens),0)::bigint AS input_tokens,
+		       COALESCE(SUM(output_tokens),0)::bigint AS output_tokens,
+		       COALESCE(SUM(cache_creation_input_tokens),0)::bigint AS cache_creation_input_tokens,
+		       COALESCE(SUM(cache_read_input_tokens),0)::bigint AS cache_read_input_tokens,
+		       COALESCE(SUM(estimated_cost_usd),0)::double precision AS estimated_cost_usd
+		FROM llm_usage_logs
+		WHERE user_id = $1
+		  AND created_at >= (NOW() AT TIME ZONE 'UTC') - ($2::int * INTERVAL '1 day')
+		GROUP BY provider, model, pricing_source
+		ORDER BY estimated_cost_usd DESC, calls DESC, provider ASC, model ASC`, userID, days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []LLMUsageModelSummary
+	for rows.Next() {
+		var v LLMUsageModelSummary
+		if err := rows.Scan(
+			&v.Provider, &v.Model, &v.PricingSource, &v.Calls,
 			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens,
 			&v.CacheReadInputTokens, &v.EstimatedCostUSD,
 		); err != nil {

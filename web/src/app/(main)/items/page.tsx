@@ -327,6 +327,31 @@ function ItemsPageContent() {
   const pagedItems = focusMode ? displayItems : sortedItems;
   const featuredItems = focusMode ? pagedItems.slice(0, 3) : [];
   const remainingItems = focusMode ? pagedItems.slice(3) : pagedItems;
+  const recommendedTopicSections = useMemo(() => {
+    if (!focusMode) return [] as Array<{ topic: string; items: Item[] }>;
+    const groups = new Map<string, Item[]>();
+    const order: string[] = [];
+    for (const item of remainingItems) {
+      const topicKey = (item.summary_topics?.[0] ?? "").trim();
+      if (!topicKey) continue;
+      if (!groups.has(topicKey)) {
+        groups.set(topicKey, []);
+        order.push(topicKey);
+      }
+      groups.get(topicKey)!.push(item);
+    }
+    return order
+      .map((topic) => ({ topic, items: groups.get(topic) ?? [] }))
+      .filter((section) => section.items.length >= 2);
+  }, [focusMode, remainingItems]);
+  const recommendedSectionItemIds = useMemo(
+    () => new Set(recommendedTopicSections.flatMap((section) => section.items.map((item) => item.id))),
+    [recommendedTopicSections]
+  );
+  const recommendedLooseItems = useMemo(
+    () => (focusMode ? remainingItems.filter((item) => !recommendedSectionItemIds.has(item.id)) : remainingItems),
+    [focusMode, remainingItems, recommendedSectionItemIds]
+  );
   const detailHref = useCallback(
     (itemId: string) => `/items/${itemId}?from=${encodeURIComponent(currentItemsHref)}`,
     [currentItemsHref]
@@ -654,8 +679,56 @@ function ItemsPageContent() {
           </ul>
         </section>
       )}
-      <ul className={`list-none space-y-2 ${focusMode && featuredItems.length > 0 ? "pt-1" : ""}`}>
-        {remainingItems.map((item) => (
+      {focusMode && recommendedTopicSections.length > 0 && (
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                {locale === "ja" ? "話題ごとに読む" : "Read by Topic"}
+              </div>
+              <div className="text-sm text-zinc-500">
+                {locale === "ja" ? "関連記事がまとまっている話題" : "Clusters of related stories"}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-4">
+            {recommendedTopicSections.map((section) => {
+              const [hero, ...rest] = section.items;
+              if (!hero) return null;
+              return (
+                <section key={section.topic} className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-3 sm:p-4">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div className="inline-flex items-center gap-2">
+                      <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-zinc-800 shadow-sm ring-1 ring-zinc-200">
+                        {section.topic}
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        {locale === "ja" ? `${section.items.length}本` : `${section.items.length} stories`}
+                      </span>
+                    </div>
+                  </div>
+                  <ul className="list-none space-y-2">
+                    <li className="list-none">{renderItemRow(hero, { featured: true })}</li>
+                    {rest.length > 0 && (
+                      <li className="list-none">
+                        <ul className="list-none space-y-2 pt-1">
+                          {rest.map((item) => (
+                            <li key={item.id} className="list-none">
+                              {renderItemRow(item)}
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
+                    )}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
+        </section>
+      )}
+      <ul className={`list-none space-y-2 ${focusMode && (featuredItems.length > 0 || recommendedTopicSections.length > 0) ? "pt-1" : ""}`}>
+        {recommendedLooseItems.map((item) => (
           <li key={item.id} className="list-none">
             {renderItemRow(item)}
           </li>

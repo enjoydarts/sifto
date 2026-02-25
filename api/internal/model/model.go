@@ -20,6 +20,7 @@ type UserSettings struct {
 	MonthlyBudgetUSD           *float64  `json:"monthly_budget_usd,omitempty"`
 	BudgetAlertEnabled         bool      `json:"budget_alert_enabled"`
 	BudgetAlertThresholdPct    int       `json:"budget_alert_threshold_pct"`
+	DigestEmailEnabled         bool      `json:"digest_email_enabled"`
 	ReadingPlanWindow          string    `json:"reading_plan_window"`
 	ReadingPlanSize            int       `json:"reading_plan_size"`
 	ReadingPlanDiversifyTopics bool      `json:"reading_plan_diversify_topics"`

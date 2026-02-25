@@ -593,6 +593,17 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 				log.Printf("send-digest compose-copy done digest_id=%s subject_len=%d body_len=%d", data.DigestID, len(copy.Subject), len(copy.Body))
 			}
 
+			digestEmailEnabled, err := userSettingsRepo.IsDigestEmailEnabled(ctx, data.UserID)
+			if err != nil {
+				markStatus("user_settings_failed", err)
+				return nil, fmt.Errorf("load user digest email setting: %w", err)
+			}
+			if !digestEmailEnabled {
+				log.Printf("send-digest skip-user-disabled digest_id=%s", data.DigestID)
+				markStatus("skipped_user_disabled", nil)
+				return map[string]string{"status": "skipped", "reason": "user_disabled"}, nil
+			}
+
 			log.Printf("send-digest send-email start digest_id=%s", data.DigestID)
 			_, err = step.Run(ctx, "send-email", func(ctx context.Context) (string, error) {
 				if err := resend.SendDigest(ctx, data.To, digest, &service.DigestEmailCopy{

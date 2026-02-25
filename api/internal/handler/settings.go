@@ -57,6 +57,7 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"monthly_budget_usd":         settings.MonthlyBudgetUSD,
 		"budget_alert_enabled":       settings.BudgetAlertEnabled,
 		"budget_alert_threshold_pct": settings.BudgetAlertThresholdPct,
+		"digest_email_enabled":       settings.DigestEmailEnabled,
 		"reading_plan": map[string]any{
 			"window":           settings.ReadingPlanWindow,
 			"size":             settings.ReadingPlanSize,
@@ -116,6 +117,7 @@ func (h *SettingsHandler) UpdateBudget(w http.ResponseWriter, r *http.Request) {
 		MonthlyBudgetUSD        *float64 `json:"monthly_budget_usd"`
 		BudgetAlertEnabled      bool     `json:"budget_alert_enabled"`
 		BudgetAlertThresholdPct int      `json:"budget_alert_threshold_pct"`
+		DigestEmailEnabled      bool     `json:"digest_email_enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -133,7 +135,7 @@ func (h *SettingsHandler) UpdateBudget(w http.ResponseWriter, r *http.Request) {
 	if body.MonthlyBudgetUSD != nil && *body.MonthlyBudgetUSD > 0 {
 		budget = body.MonthlyBudgetUSD
 	}
-	settings, err := h.repo.UpsertBudgetConfig(r.Context(), userID, budget, body.BudgetAlertEnabled, body.BudgetAlertThresholdPct)
+	settings, err := h.repo.UpsertBudgetConfig(r.Context(), userID, budget, body.BudgetAlertEnabled, body.BudgetAlertThresholdPct, body.DigestEmailEnabled)
 	if err != nil {
 		writeRepoError(w, err)
 		return

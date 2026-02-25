@@ -33,6 +33,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       monthly_budget_usd,
 		       budget_alert_enabled,
 		       budget_alert_threshold_pct,
+		       digest_email_enabled,
 		       reading_plan_window,
 		       reading_plan_size,
 		       reading_plan_diversify_topics,
@@ -51,6 +52,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.MonthlyBudgetUSD,
 		&v.BudgetAlertEnabled,
 		&v.BudgetAlertThresholdPct,
+		&v.DigestEmailEnabled,
 		&v.ReadingPlanWindow,
 		&v.ReadingPlanSize,
 		&v.ReadingPlanDiversifyTopics,
@@ -99,25 +101,42 @@ func (r *UserSettingsRepo) GetAnthropicAPIKeyEncrypted(ctx context.Context, user
 	return v, nil
 }
 
-func (r *UserSettingsRepo) UpsertBudgetConfig(ctx context.Context, userID string, monthlyBudgetUSD *float64, enabled bool, thresholdPct int) (*model.UserSettings, error) {
+func (r *UserSettingsRepo) UpsertBudgetConfig(ctx context.Context, userID string, monthlyBudgetUSD *float64, enabled bool, thresholdPct int, digestEmailEnabled bool) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (
 			user_id,
 			monthly_budget_usd,
 			budget_alert_enabled,
-			budget_alert_threshold_pct
-		) VALUES ($1, $2, $3, $4)
+			budget_alert_threshold_pct,
+			digest_email_enabled
+		) VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (user_id) DO UPDATE
 		SET monthly_budget_usd = EXCLUDED.monthly_budget_usd,
 		    budget_alert_enabled = EXCLUDED.budget_alert_enabled,
 		    budget_alert_threshold_pct = EXCLUDED.budget_alert_threshold_pct,
+		    digest_email_enabled = EXCLUDED.digest_email_enabled,
 		    updated_at = NOW()`,
-		userID, monthlyBudgetUSD, enabled, thresholdPct,
+		userID, monthlyBudgetUSD, enabled, thresholdPct, digestEmailEnabled,
 	)
 	if err != nil {
 		return nil, err
 	}
 	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) IsDigestEmailEnabled(ctx context.Context, userID string) (bool, error) {
+	var enabled bool
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO user_settings (user_id)
+		VALUES ($1)
+		ON CONFLICT (user_id) DO UPDATE SET user_id = EXCLUDED.user_id
+		RETURNING digest_email_enabled`,
+		userID,
+	).Scan(&enabled)
+	if err != nil {
+		return false, err
+	}
+	return enabled, nil
 }
 
 func (r *UserSettingsRepo) UpsertReadingPlanConfig(ctx context.Context, userID, window string, size int, diversifyTopics, excludeRead bool) (*model.UserSettings, error) {

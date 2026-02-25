@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Brain, Coins, KeyRound, Settings as SettingsIcon } from "lucide-react";
+import { Brain, Coins, KeyRound, Mail, Settings as SettingsIcon } from "lucide-react";
 import { api, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const { confirm } = useConfirm();
   const [loading, setLoading] = useState(true);
   const [savingBudget, setSavingBudget] = useState(false);
+  const [savingDigestDelivery, setSavingDigestDelivery] = useState(false);
   const [savingReadingPlan, setSavingReadingPlan] = useState(false);
   const [savingAnthropicKey, setSavingAnthropicKey] = useState(false);
   const [deletingAnthropicKey, setDeletingAnthropicKey] = useState(false);
@@ -23,6 +24,7 @@ export default function SettingsPage() {
   const [budgetUSD, setBudgetUSD] = useState<string>("");
   const [alertEnabled, setAlertEnabled] = useState(false);
   const [thresholdPct, setThresholdPct] = useState<number>(20);
+  const [digestEmailEnabled, setDigestEmailEnabled] = useState(true);
   const [anthropicApiKeyInput, setAnthropicApiKeyInput] = useState("");
   const [openAIApiKeyInput, setOpenAIApiKeyInput] = useState("");
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
@@ -37,6 +39,7 @@ export default function SettingsPage() {
       setBudgetUSD(data.monthly_budget_usd == null ? "" : String(data.monthly_budget_usd));
       setAlertEnabled(Boolean(data.budget_alert_enabled));
       setThresholdPct(data.budget_alert_threshold_pct ?? 20);
+      setDigestEmailEnabled(Boolean(data.digest_email_enabled ?? true));
       setReadingPlanWindow((data.reading_plan?.window as "24h" | "today_jst" | "7d") ?? "24h");
       setReadingPlanSize(String(data.reading_plan?.size ?? 15));
       setReadingPlanDiversifyTopics(Boolean(data.reading_plan?.diversify_topics ?? true));
@@ -72,6 +75,7 @@ export default function SettingsPage() {
         monthly_budget_usd: parsed,
         budget_alert_enabled: alertEnabled,
         budget_alert_threshold_pct: thresholdPct,
+        digest_email_enabled: digestEmailEnabled,
       });
       await load();
       showToast(locale === "ja" ? "予算設定を保存しました" : "Budget settings saved", "success");
@@ -79,6 +83,25 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setSavingBudget(false);
+    }
+  }
+
+  async function submitDigestDelivery(e: FormEvent) {
+    e.preventDefault();
+    setSavingDigestDelivery(true);
+    try {
+      await api.updateSettings({
+        monthly_budget_usd: settings.monthly_budget_usd,
+        budget_alert_enabled: settings.budget_alert_enabled,
+        budget_alert_threshold_pct: settings.budget_alert_threshold_pct,
+        digest_email_enabled: digestEmailEnabled,
+      });
+      await load();
+      showToast(locale === "ja" ? "ダイジェスト配信設定を保存しました" : "Digest delivery settings saved", "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingDigestDelivery(false);
     }
   }
 
@@ -193,7 +216,7 @@ export default function SettingsPage() {
   if (!settings) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
           <SettingsIcon className="size-6 text-zinc-500" aria-hidden="true" />
@@ -222,7 +245,7 @@ export default function SettingsPage() {
         />
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.1fr_1fr]">
+      <section className="space-y-6">
         <form onSubmit={submitAnthropicApiKey} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
@@ -367,7 +390,7 @@ export default function SettingsPage() {
 
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+      <section className="space-y-6">
         <form onSubmit={submitReadingPlan} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
@@ -433,7 +456,58 @@ export default function SettingsPage() {
           </div>
         </form>
 
-        <div>
+        <form onSubmit={submitDigestDelivery} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+              <Mail className="size-4 text-zinc-500" aria-hidden="true" />
+              {locale === "ja" ? "ダイジェスト配信" : "Digest Delivery"}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              {locale === "ja"
+                ? "ダイジェストは生成したまま、メール送信だけ停止できます。"
+                : "Keep generating digests while disabling email delivery."}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
+            <div>
+              <div className="text-sm font-medium text-zinc-800">
+                {locale === "ja" ? "ダイジェストメール送信" : "Digest email sending"}
+              </div>
+              <div className="text-xs text-zinc-500">
+                {locale === "ja"
+                  ? "無効でもダイジェスト生成とアプリ内表示は継続します"
+                  : "When off, digest generation and in-app viewing continue without email sending"}
+              </div>
+            </div>
+            <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+              <input
+                type="checkbox"
+                checked={digestEmailEnabled}
+                onChange={(e) => setDigestEmailEnabled(e.target.checked)}
+                className="size-4 rounded border-zinc-300"
+              />
+              {digestEmailEnabled ? (locale === "ja" ? "有効" : "On") : locale === "ja" ? "無効" : "Off"}
+            </label>
+          </div>
+
+          <div className="mt-4">
+            <button
+              type="submit"
+              disabled={savingDigestDelivery}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {savingDigestDelivery
+                ? locale === "ja"
+                  ? "保存中…"
+                  : "Saving…"
+                : locale === "ja"
+                  ? "配信設定を保存"
+                  : "Save delivery settings"}
+            </button>
+          </div>
+        </form>
+
         <form onSubmit={submitBudget} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
@@ -522,7 +596,6 @@ export default function SettingsPage() {
             </span>
           </div>
         </form>
-        </div>
       </section>
     </div>
   );

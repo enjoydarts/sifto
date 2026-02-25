@@ -218,6 +218,7 @@ export interface UserSettings {
   monthly_budget_usd: number | null;
   budget_alert_enabled: boolean;
   budget_alert_threshold_pct: number;
+  digest_email_enabled: boolean;
   reading_plan: UserReadingPlanSettings;
   current_month: UserSettingsCurrentMonth;
 }
@@ -331,6 +332,7 @@ export const api = {
     monthly_budget_usd: number | null;
     budget_alert_enabled: boolean;
     budget_alert_threshold_pct: number;
+    digest_email_enabled: boolean;
   }) =>
     apiFetch<UserSettings>("/settings", {
       method: "PATCH",

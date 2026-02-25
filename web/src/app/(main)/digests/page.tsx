@@ -32,6 +32,11 @@ function digestStatusBadge(d: Digest, locale: "ja" | "en") {
         label: locale === "ja" ? "送信無効" : "Resend off",
         className: "bg-amber-50 text-amber-700",
       };
+    case "skipped_user_disabled":
+      return {
+        label: locale === "ja" ? "メール送信OFF" : "Email off",
+        className: "bg-zinc-100 text-zinc-600",
+      };
     case "skipped_no_items":
       return {
         label: locale === "ja" ? "対象なし" : "No items",

@@ -623,7 +623,30 @@ export default function LLMUsagePage() {
                     <tr key={`${r.provider}:${r.model}:${r.pricing_source}`} className="border-b border-zinc-100 last:border-0">
                       <td className="px-3 py-2">{r.provider}</td>
                       <td className="px-3 py-2 text-xs break-all">{r.model}</td>
-                      <td className="px-3 py-2 text-xs">{r.pricing_source}</td>
+                      <td className="px-3 py-2 text-xs">
+                        <div className="relative inline-flex items-center gap-1">
+                          <span>{r.pricing_source}</span>
+                          {"pricing_sources" in r &&
+                            Array.isArray(r.pricing_sources) &&
+                            r.pricing_sources.length > 1 && (
+                              <span className="group relative inline-flex">
+                                <button
+                                  type="button"
+                                  className="inline-flex size-4 items-center justify-center rounded-full border border-zinc-300 text-[10px] leading-none text-zinc-500 hover:bg-zinc-50"
+                                  aria-label="pricing source breakdown"
+                                >
+                                  i
+                                </button>
+                                <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-1 hidden w-72 -translate-x-1/2 rounded-md border border-zinc-200 bg-white p-2 text-[11px] text-zinc-700 shadow-lg group-hover:block">
+                                  <span className="mb-1 block font-medium text-zinc-900">Pricing sources</span>
+                                  <span className="block whitespace-pre-line">
+                                    {r.pricing_sources.join("\n")}
+                                  </span>
+                                </span>
+                              </span>
+                            )}
+                        </div>
+                      </td>
                       <td className="px-3 py-2 text-right">{fmtNum(r.calls)}</td>
                       <td className="px-3 py-2 text-right">{fmtNum(r.input_tokens)}</td>
                       <td className="px-3 py-2 text-right">{fmtNum(r.output_tokens)}</td>

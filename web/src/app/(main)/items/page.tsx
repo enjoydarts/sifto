@@ -330,18 +330,15 @@ function ItemsPageContent() {
   const pagedItems = focusMode ? displayItems : sortedItems;
   const recommendedEmbeddingSections = useMemo(() => {
     if (!focusMode) return [] as Array<{ id: string; topic: string; items: Item[] }>;
-    const itemByID = new Map(pagedItems.map((it) => [it.id, it] as const));
     return (listQuery.data?.planClusters ?? [])
       .filter((c) => (c.items?.length ?? 0) >= 2)
       .map((c) => ({
         id: c.id,
         topic: c.label,
-        items: c.items
-          .map((it) => itemByID.get(it.id))
-          .filter((it): it is Item => Boolean(it)),
+        items: c.items ?? [],
       }))
       .filter((s) => s.items.length >= 2);
-  }, [focusMode, listQuery.data?.planClusters, pagedItems]);
+  }, [focusMode, listQuery.data?.planClusters]);
   const featuredItems = useMemo(() => {
     if (!focusMode) return [] as Item[];
     const fromClusters = recommendedEmbeddingSections.map((section) => section.items[0]).filter(Boolean);

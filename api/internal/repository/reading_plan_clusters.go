@@ -89,39 +89,59 @@ func (r *ItemRepo) readingPlanClustersByEmbeddings(ctx context.Context, items []
 				}
 			}
 		}
-		filtered := members
+		selectedMembers := make([]model.Item, 0, len(members))
 		if len(selectedSet) > 0 {
-			filtered = make([]model.Item, 0, len(members))
 			for _, m := range members {
 				if _, ok := selectedSet[m.ID]; ok {
-					filtered = append(filtered, m)
+					selectedMembers = append(selectedMembers, m)
 				}
 			}
 		}
-		if len(filtered) < 2 {
+		if len(members) < 2 {
 			continue
 		}
-		sort.SliceStable(filtered, func(a, b int) bool {
+		if len(selectedSet) > 0 && len(selectedMembers) == 0 {
+			continue
+		}
+		sort.SliceStable(members, func(a, b int) bool {
 			as := -1.0
-			if filtered[a].SummaryScore != nil {
-				as = *filtered[a].SummaryScore
+			if members[a].SummaryScore != nil {
+				as = *members[a].SummaryScore
 			}
 			bs := -1.0
-			if filtered[b].SummaryScore != nil {
-				bs = *filtered[b].SummaryScore
+			if members[b].SummaryScore != nil {
+				bs = *members[b].SummaryScore
 			}
 			if as != bs {
 				return as > bs
 			}
-			return filtered[a].CreatedAt.After(filtered[b].CreatedAt)
+			return members[a].CreatedAt.After(members[b].CreatedAt)
 		})
+		representative := members[0]
+		if len(selectedMembers) > 0 {
+			sort.SliceStable(selectedMembers, func(a, b int) bool {
+				as := -1.0
+				if selectedMembers[a].SummaryScore != nil {
+					as = *selectedMembers[a].SummaryScore
+				}
+				bs := -1.0
+				if selectedMembers[b].SummaryScore != nil {
+					bs = *selectedMembers[b].SummaryScore
+				}
+				if as != bs {
+					return as > bs
+				}
+				return selectedMembers[a].CreatedAt.After(selectedMembers[b].CreatedAt)
+			})
+			representative = selectedMembers[0]
+		}
 		clusters = append(clusters, model.ReadingPlanCluster{
-			ID:             filtered[0].ID,
-			Label:          readingPlanClusterLabel(filtered[0]),
-			Size:           len(filtered),
+			ID:             representative.ID,
+			Label:          readingPlanClusterLabel(representative),
+			Size:           len(members),
 			MaxSimilarity:  maxSim,
-			Representative: filtered[0],
-			Items:          filtered,
+			Representative: representative,
+			Items:          members,
 		})
 	}
 

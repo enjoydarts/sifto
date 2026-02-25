@@ -8,12 +8,15 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
 type WorkerClient struct {
-	baseURL string
-	http    *http.Client
+	baseURL              string
+	http                 *http.Client
+	composeDigestTimeout time.Duration
 }
 
 func NewWorkerClient() *WorkerClient {
@@ -22,9 +25,19 @@ func NewWorkerClient() *WorkerClient {
 		url = "http://localhost:8000"
 	}
 	return &WorkerClient{
-		baseURL: url,
-		http:    &http.Client{Timeout: 60 * time.Second},
+		baseURL:              url,
+		http:                 &http.Client{Timeout: 60 * time.Second},
+		composeDigestTimeout: workerComposeDigestTimeout(),
 	}
+}
+
+func workerComposeDigestTimeout() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("PYTHON_WORKER_COMPOSE_DIGEST_TIMEOUT_SEC")); v != "" {
+		if sec, err := strconv.Atoi(v); err == nil && sec > 0 {
+			return time.Duration(sec) * time.Second
+		}
+	}
+	return 180 * time.Second
 }
 
 type ExtractBodyResponse struct {
@@ -151,6 +164,11 @@ func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, fa
 }
 
 func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string) (*ComposeDigestResponse, error) {
+	if _, ok := ctx.Deadline(); !ok && w.composeDigestTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.composeDigestTimeout)
+		defer cancel()
+	}
 	return postWithHeaders[ComposeDigestResponse](ctx, w, "/compose-digest", map[string]any{
 		"digest_date": digestDate,
 		"items":       items,
@@ -159,6 +177,11 @@ func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, ite
 }
 
 func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, model *string) (*ComposeDigestResponse, error) {
+	if _, ok := ctx.Deadline(); !ok && w.composeDigestTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.composeDigestTimeout)
+		defer cancel()
+	}
 	return postWithHeaders[ComposeDigestResponse](ctx, w, "/compose-digest", map[string]any{
 		"digest_date": digestDate,
 		"items":       items,

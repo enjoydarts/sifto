@@ -139,6 +139,38 @@ export default function LLMUsagePage() {
     [modelRows]
   );
 
+  const mergedModelRows = useMemo(() => {
+    const m = new Map<string, LLMUsageModelSummary & { pricing_sources: string[] }>();
+    for (const r of visibleModelRows) {
+      const key = `${r.provider}:${r.model}`;
+      const cur = m.get(key);
+      if (!cur) {
+        m.set(key, {
+          ...r,
+          pricing_sources: [r.pricing_source],
+        });
+        continue;
+      }
+      cur.calls += r.calls;
+      cur.input_tokens += r.input_tokens;
+      cur.output_tokens += r.output_tokens;
+      cur.cache_creation_input_tokens += r.cache_creation_input_tokens;
+      cur.cache_read_input_tokens += r.cache_read_input_tokens;
+      cur.estimated_cost_usd += r.estimated_cost_usd;
+      if (!cur.pricing_sources.includes(r.pricing_source)) {
+        cur.pricing_sources.push(r.pricing_source);
+      }
+      cur.pricing_source =
+        cur.pricing_sources.length === 1 ? cur.pricing_sources[0] : `mixed(${cur.pricing_sources.length})`;
+    }
+    return Array.from(m.values()).sort((a, b) => {
+      if (b.estimated_cost_usd !== a.estimated_cost_usd) return b.estimated_cost_usd - a.estimated_cost_usd;
+      if (b.calls !== a.calls) return b.calls - a.calls;
+      if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+      return a.model.localeCompare(b.model);
+    });
+  }, [visibleModelRows]);
+
   const availableForecastMonths = useMemo(() => {
     const months = new Set<string>();
     for (const r of summaryRows) {
@@ -155,7 +187,7 @@ export default function LLMUsagePage() {
     }
   }, [availableForecastMonths, forecastMonth]);
 
-  const topModelRows = useMemo(() => visibleModelRows.slice(0, 10), [visibleModelRows]);
+  const topModelRows = useMemo(() => mergedModelRows.slice(0, 10), [mergedModelRows]);
   const topModelChartRows = useMemo(
     () =>
       topModelRows
@@ -526,9 +558,9 @@ export default function LLMUsagePage() {
             <Brain className="size-4 text-zinc-500" aria-hidden="true" />
             <span>{locale === "ja" ? "モデル別利用状況" : "Usage by Model"}</span>
           </h2>
-          <span className="text-xs text-zinc-400">{visibleModelRows.length} models</span>
+          <span className="text-xs text-zinc-400">{mergedModelRows.length} models</span>
         </div>
-        {visibleModelRows.length === 0 ? (
+        {mergedModelRows.length === 0 ? (
           <p className="text-sm text-zinc-400">{t("llm.noSummary")}</p>
         ) : (
           <div className="space-y-4">
@@ -587,7 +619,7 @@ export default function LLMUsagePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleModelRows.map((r) => (
+                  {mergedModelRows.map((r) => (
                     <tr key={`${r.provider}:${r.model}:${r.pricing_source}`} className="border-b border-zinc-100 last:border-0">
                       <td className="px-3 py-2">{r.provider}</td>
                       <td className="px-3 py-2 text-xs break-all">{r.model}</td>

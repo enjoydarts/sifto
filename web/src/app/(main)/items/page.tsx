@@ -328,26 +328,61 @@ function ItemsPageContent() {
 
   const displayItems = focusMode ? items : sortedItems;
   const pagedItems = focusMode ? displayItems : sortedItems;
-  const featuredItems = focusMode ? pagedItems.slice(0, 3) : [];
-  const remainingItems = focusMode ? pagedItems.slice(3) : pagedItems;
   const recommendedEmbeddingSections = useMemo(() => {
-    if (!focusMode) return [] as Array<{ topic: string; items: Item[] }>;
-    const clusters = (listQuery.data?.planClusters ?? [])
+    if (!focusMode) return [] as Array<{ id: string; topic: string; items: Item[] }>;
+    const itemByID = new Map(pagedItems.map((it) => [it.id, it] as const));
+    return (listQuery.data?.planClusters ?? [])
       .filter((c) => (c.items?.length ?? 0) >= 2)
       .map((c) => ({
+        id: c.id,
         topic: c.label,
-        items: c.items.filter((it) => remainingItems.some((ri) => ri.id === it.id)),
+        items: c.items
+          .map((it) => itemByID.get(it.id))
+          .filter((it): it is Item => Boolean(it)),
       }))
       .filter((s) => s.items.length >= 2);
-    return clusters;
-  }, [focusMode, listQuery.data?.planClusters, remainingItems]);
+  }, [focusMode, listQuery.data?.planClusters, pagedItems]);
+  const featuredItems = useMemo(() => {
+    if (!focusMode) return [] as Item[];
+    const fromClusters = recommendedEmbeddingSections.map((section) => section.items[0]).filter(Boolean);
+    const picked: Item[] = [];
+    const seen = new Set<string>();
+    for (const it of fromClusters) {
+      if (!it || seen.has(it.id)) continue;
+      picked.push(it);
+      seen.add(it.id);
+      if (picked.length >= 3) return picked;
+    }
+    for (const it of pagedItems) {
+      if (seen.has(it.id)) continue;
+      picked.push(it);
+      seen.add(it.id);
+      if (picked.length >= 3) break;
+    }
+    return picked;
+  }, [focusMode, pagedItems, recommendedEmbeddingSections]);
   const recommendedSectionItemIds = useMemo(
     () => new Set(recommendedEmbeddingSections.flatMap((section) => section.items.map((item) => item.id))),
     [recommendedEmbeddingSections]
   );
+  const featuredItemIDs = useMemo(() => new Set(featuredItems.map((it) => it.id)), [featuredItems]);
+  const visibleClusterSections = useMemo(
+    () =>
+      recommendedEmbeddingSections
+        .map((section) => ({
+          ...section,
+          items: section.items.filter((item) => !featuredItemIDs.has(item.id)),
+        }))
+        .filter((section) => section.items.length >= 1),
+    [featuredItemIDs, recommendedEmbeddingSections]
+  );
   const recommendedLooseItems = useMemo(
-    () => (focusMode ? remainingItems.filter((item) => !recommendedSectionItemIds.has(item.id)) : remainingItems),
-    [focusMode, remainingItems, recommendedSectionItemIds]
+    () => (
+      focusMode
+        ? pagedItems.filter((item) => !recommendedSectionItemIds.has(item.id) && !featuredItemIDs.has(item.id))
+        : pagedItems
+    ),
+    [featuredItemIDs, focusMode, pagedItems, recommendedSectionItemIds]
   );
   const detailHref = useCallback(
     (itemId: string) => `/items/${itemId}?from=${encodeURIComponent(currentItemsHref)}`,
@@ -379,7 +414,7 @@ function ItemsPageContent() {
               openDetail();
             }
           }}
-          className={`group flex items-stretch gap-3 rounded-xl px-4 py-3.5 transition-all ${
+          className={`group ${featured ? "flex flex-col gap-3 sm:flex-row sm:items-stretch" : "flex items-stretch gap-3"} rounded-xl px-4 py-3.5 transition-all ${
             featured
               ? item.is_read
                 ? "cursor-pointer border border-zinc-300 bg-gradient-to-b from-zinc-200 to-zinc-100 shadow-sm hover:border-zinc-400 hover:shadow-md"
@@ -389,7 +424,7 @@ function ItemsPageContent() {
                 : "cursor-pointer border border-zinc-200 bg-white shadow-sm hover:border-zinc-300"
           }`}
         >
-          <div className="flex min-w-0 flex-1 items-stretch gap-3 transition-colors group-hover:text-zinc-700">
+          <div className={`min-w-0 flex-1 transition-colors group-hover:text-zinc-700 ${featured ? "flex flex-col gap-3 sm:flex-row sm:items-stretch" : "flex items-stretch gap-3"}`}>
             <div
               className={`shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 ${
                 featured ? "hidden h-[104px] w-[136px] sm:flex" : "hidden h-[72px] w-[72px] sm:flex"
@@ -476,7 +511,11 @@ function ItemsPageContent() {
               </div>
             </div>
           </div>
-          <div className={`flex shrink-0 flex-col items-end justify-between gap-2 ${featured ? "min-h-[104px]" : "min-h-[72px]"}`}>
+          <div className={`flex shrink-0 justify-between gap-2 ${
+            featured
+              ? "w-full flex-row items-center sm:min-h-[104px] sm:w-auto sm:flex-col sm:items-end"
+              : "min-h-[72px] flex-col items-end"
+          }`}>
             <button
               type="button"
               disabled={!!readUpdatingIds[item.id]}
@@ -484,7 +523,9 @@ function ItemsPageContent() {
                 e.stopPropagation();
                 void toggleRead(item);
               }}
-              className="rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className={`rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+                featured ? "flex-1 sm:flex-none" : ""
+              }`}
             >
               {readUpdatingIds[item.id]
                 ? locale === "ja"
@@ -506,12 +547,14 @@ function ItemsPageContent() {
                   e.stopPropagation();
                   void retryItem(item.id);
                 }}
-                className="rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className={`rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+                  featured ? "flex-1 sm:flex-none" : ""
+                }`}
               >
                 {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
               </button>
             ) : (
-              <span className="invisible rounded border border-zinc-300 px-3 py-1 text-xs font-medium">_</span>
+              <span className={`invisible rounded border border-zinc-300 px-3 py-1 text-xs font-medium ${featured ? "flex-1 sm:flex-none text-center" : ""}`}>_</span>
             )}
           </div>
         </div>
@@ -676,7 +719,7 @@ function ItemsPageContent() {
           </ul>
         </section>
       )}
-      {focusMode && recommendedEmbeddingSections.length > 0 && (
+      {focusMode && visibleClusterSections.length > 0 && (
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -689,11 +732,11 @@ function ItemsPageContent() {
             </div>
           </div>
           <div className="space-y-4">
-            {recommendedEmbeddingSections.map((section) => {
+            {visibleClusterSections.map((section) => {
               const [hero, ...rest] = section.items;
               if (!hero) return null;
               return (
-                <section key={section.topic} className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-3 sm:p-4">
+                <section key={section.id} className="rounded-2xl border border-zinc-200 bg-zinc-50/60 p-3 sm:p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <div className="inline-flex items-center gap-2">
                       <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-zinc-800 shadow-sm ring-1 ring-zinc-200">
@@ -724,7 +767,7 @@ function ItemsPageContent() {
           </div>
         </section>
       )}
-      <ul className={`list-none space-y-2 ${focusMode && (featuredItems.length > 0 || recommendedEmbeddingSections.length > 0) ? "pt-1" : ""}`}>
+      <ul className={`list-none space-y-2 ${focusMode && (featuredItems.length > 0 || visibleClusterSections.length > 0) ? "pt-1" : ""}`}>
         {recommendedLooseItems.map((item) => (
           <li key={item.id} className="list-none">
             {renderItemRow(item)}

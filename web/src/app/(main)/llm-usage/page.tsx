@@ -9,12 +9,15 @@ import {
   BarChart,
   CartesianGrid,
   Legend,
+  Line,
+  LineChart,
   ResponsiveContainer,
+  ReferenceLine,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { api, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary } from "@/lib/api";
+import { api, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary, UserSettings } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 
@@ -38,6 +41,8 @@ type SummaryRow = LLMUsageDailySummary & {
 
 export default function LLMUsagePage() {
   const { t, locale } = useI18n();
+  const [forecastMode, setForecastMode] = useState<"month_avg" | "recent_7d">("month_avg");
+  const [forecastMonth, setForecastMonth] = useState<string | null>(null);
   const [days, setDays] = useState(14);
   const [limit, setLimit] = useState(100);
   const [logPage, setLogPage] = useState(1);
@@ -46,18 +51,21 @@ export default function LLMUsagePage() {
   const [summaryRows, setSummaryRows] = useState<LLMUsageDailySummary[]>([]);
   const [modelRows, setModelRows] = useState<LLMUsageModelSummary[]>([]);
   const [logs, setLogs] = useState<LLMUsageLog[]>([]);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
 
   const load = useCallback(async (daysParam: number, limitParam: number) => {
     setLoading(true);
     try {
-      const [summary, byModel, recent] = await Promise.all([
+      const [summary, byModel, recent, userSettings] = await Promise.all([
         api.getLLMUsageSummary({ days: daysParam }),
         api.getLLMUsageByModel({ days: daysParam }),
         api.getLLMUsage({ limit: limitParam }),
+        api.getSettings(),
       ]);
       setSummaryRows(summary ?? []);
       setModelRows(byModel ?? []);
       setLogs(recent ?? []);
+      setSettings(userSettings);
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -131,6 +139,22 @@ export default function LLMUsagePage() {
     [modelRows]
   );
 
+  const availableForecastMonths = useMemo(() => {
+    const months = new Set<string>();
+    for (const r of summaryRows) {
+      if (r.date_jst.length >= 7) months.add(r.date_jst.slice(0, 7));
+    }
+    if (settings?.current_month?.month_jst) months.add(settings.current_month.month_jst);
+    return Array.from(months).sort((a, b) => b.localeCompare(a));
+  }, [settings, summaryRows]);
+
+  useEffect(() => {
+    if (availableForecastMonths.length === 0) return;
+    if (!forecastMonth || !availableForecastMonths.includes(forecastMonth)) {
+      setForecastMonth(availableForecastMonths[0]);
+    }
+  }, [availableForecastMonths, forecastMonth]);
+
   const topModelRows = useMemo(() => visibleModelRows.slice(0, 10), [visibleModelRows]);
   const topModelChartRows = useMemo(
     () =>
@@ -150,6 +174,79 @@ export default function LLMUsagePage() {
 
   const logsPageSize = 20;
   const pagedLogs = logs.slice((logPage - 1) * logsPageSize, logPage * logsPageSize);
+
+  const monthlyForecast = useMemo(() => {
+    if (!forecastMonth) return null;
+    const now = new Date();
+    const jstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+    const currentMonthKey = `${jstNow.getFullYear()}-${String(jstNow.getMonth() + 1).padStart(2, "0")}`;
+    const [yearStr, monthStr] = forecastMonth.split("-");
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return null;
+    const isCurrentMonth = forecastMonth === currentMonthKey;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const today = isCurrentMonth ? jstNow.getDate() : daysInMonth;
+
+    const monthPrefix = `${year}-${String(month).padStart(2, "0")}-`;
+    const costByDate = new Map<string, number>();
+    for (const r of summaryRows) {
+      if (!r.date_jst.startsWith(monthPrefix)) continue;
+      costByDate.set(r.date_jst, (costByDate.get(r.date_jst) ?? 0) + r.estimated_cost_usd);
+    }
+
+    let cumulative = 0;
+    const rows: Array<{ day: number; label: string; actual: number | null; forecast: number | null }> = [];
+    const actualTotal = isCurrentMonth
+      ? (settings?.current_month?.estimated_cost_usd ?? 0)
+      : Array.from(costByDate.values()).reduce((acc, v) => acc + v, 0);
+    const monthAvgDailyPace = today > 0 ? actualTotal / today : 0;
+
+    let recent7dSum = 0;
+    let recent7dCount = 0;
+    for (let d = Math.max(1, today - 6); d <= today; d += 1) {
+      const date = `${monthPrefix}${String(d).padStart(2, "0")}`;
+      recent7dSum += costByDate.get(date) ?? 0;
+      recent7dCount += 1;
+    }
+    const recent7dDailyPace = recent7dCount > 0 ? recent7dSum / recent7dCount : monthAvgDailyPace;
+    const selectedDailyPace = forecastMode === "recent_7d" ? recent7dDailyPace : monthAvgDailyPace;
+    const forecastTotal = isCurrentMonth ? selectedDailyPace * daysInMonth : actualTotal;
+
+    for (let d = 1; d <= daysInMonth; d += 1) {
+      const date = `${monthPrefix}${String(d).padStart(2, "0")}`;
+      if (d <= today) {
+        cumulative += costByDate.get(date) ?? 0;
+        rows.push({
+          day: d,
+          label: String(d),
+          actual: cumulative,
+          forecast: isCurrentMonth && d === today ? forecastTotal : null,
+        });
+      } else {
+        rows.push({
+          day: d,
+          label: String(d),
+          actual: null,
+          forecast: isCurrentMonth ? selectedDailyPace * d : null,
+        });
+      }
+    }
+
+    return {
+      monthLabel: forecastMonth,
+      rows,
+      today,
+      daysInMonth,
+      isCurrentMonth,
+      actualTotal,
+      dailyPace: selectedDailyPace,
+      monthAvgDailyPace,
+      recent7dDailyPace,
+      forecastTotal,
+      budget: isCurrentMonth ? (settings?.monthly_budget_usd ?? null) : null,
+    };
+  }, [forecastMode, forecastMonth, settings, summaryRows]);
 
   return (
     <div className="space-y-6">
@@ -219,6 +316,150 @@ export default function LLMUsagePage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
             <CalendarDays className="size-4 text-zinc-500" aria-hidden="true" />
+            <span>{locale === "ja" ? "月末着地予測（JST）" : "Month-End Forecast (JST)"}</span>
+          </h2>
+          <div className="flex items-center gap-2">
+            <select
+              value={forecastMonth ?? ""}
+              onChange={(e) => setForecastMonth(e.target.value)}
+              className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs"
+            >
+              {availableForecastMonths.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <div className="inline-flex rounded-md border border-zinc-200 bg-zinc-50 p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setForecastMode("month_avg")}
+                className={`rounded px-2 py-1 ${forecastMode === "month_avg" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}
+              >
+                {locale === "ja" ? "月初平均" : "Month avg"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setForecastMode("recent_7d")}
+                className={`rounded px-2 py-1 ${forecastMode === "recent_7d" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}
+              >
+                {locale === "ja" ? "直近7日" : "Recent 7d"}
+              </button>
+            </div>
+            <span className="text-xs text-zinc-400">{monthlyForecast?.monthLabel ?? "—"}</span>
+          </div>
+        </div>
+        {!monthlyForecast ? (
+          <p className="text-sm text-zinc-400">{t("common.loading")}</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <MetricCard label={locale === "ja" ? "今月累計" : "Month to Date"} value={fmtUSD(monthlyForecast.actualTotal)} />
+              <MetricCard
+                label={
+                  monthlyForecast.isCurrentMonth
+                    ? (locale === "ja" ? "月末着地予測" : "Forecast EOM")
+                    : (locale === "ja" ? "月間実績" : "Month Total")
+                }
+                value={fmtUSD(monthlyForecast.forecastTotal)}
+              />
+              <MetricCard label={locale === "ja" ? "現在ペース/日" : "Current Pace / day"} value={fmtUSD(monthlyForecast.dailyPace)} />
+              <MetricCard
+                label={locale === "ja" ? "予算差分" : "Budget Delta"}
+                value={
+                  monthlyForecast.budget == null
+                    ? "—"
+                    : `${monthlyForecast.forecastTotal - monthlyForecast.budget >= 0 ? "+" : ""}${fmtUSD(
+                        monthlyForecast.forecastTotal - monthlyForecast.budget
+                      )}`
+                }
+              />
+            </div>
+            <p className="text-xs text-zinc-500">
+              {locale === "ja"
+                ? monthlyForecast.isCurrentMonth
+                  ? `予測方式: ${forecastMode === "month_avg" ? "月初からの平均ペース" : "直近7日平均ペース"}（参考: 月初平均 ${fmtUSD(monthlyForecast.monthAvgDailyPace)} / 直近7日 ${fmtUSD(monthlyForecast.recent7dDailyPace)}）`
+                  : "過去月は実績累計のみ表示（予測線なし）"
+                : monthlyForecast.isCurrentMonth
+                  ? `Forecast mode: ${forecastMode === "month_avg" ? "average pace since month start" : "recent 7-day average pace"} (ref: month avg ${fmtUSD(monthlyForecast.monthAvgDailyPace)} / recent 7d ${fmtUSD(monthlyForecast.recent7dDailyPace)})`
+                  : "Past months show actual cumulative only (no forecast line)"}
+            </p>
+            <div className="h-80 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monthlyForecast.rows} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#71717a" }} tickLine={false} axisLine={false} />
+                  <YAxis
+                    tick={{ fontSize: 12, fill: "#71717a" }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => fmtUSDShort(Number(v))}
+                  />
+                  <Tooltip
+                    formatter={(value: number | string | undefined, name?: string) => [
+                      fmtUSD(Number(value ?? 0)),
+                      name === "actual"
+                        ? (locale === "ja" ? "実績累計" : "Actual cumulative")
+                        : (locale === "ja" ? "月末着地予測" : "Forecast"),
+                    ]}
+                    labelFormatter={(label) => `${monthlyForecast.monthLabel}-${String(label).padStart(2, "0")}`}
+                    contentStyle={{ borderRadius: 10, borderColor: "#e4e4e7" }}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 12 }}
+                    formatter={(value) =>
+                      value === "actual"
+                        ? (locale === "ja" ? "実績累計" : "Actual cumulative")
+                        : value === "forecast"
+                          ? (locale === "ja" ? "月末着地予測" : "Forecast")
+                          : value
+                    }
+                  />
+                  {monthlyForecast.budget != null && (
+                    <ReferenceLine
+                      y={monthlyForecast.budget}
+                      stroke="#ef4444"
+                      strokeDasharray="5 5"
+                      label={{
+                        value: locale === "ja" ? `予算 ${fmtUSDShort(monthlyForecast.budget)}` : `Budget ${fmtUSDShort(monthlyForecast.budget)}`,
+                        fill: "#ef4444",
+                        fontSize: 11,
+                        position: "insideTopRight",
+                      }}
+                    />
+                  )}
+                  <Line
+                    type="monotone"
+                    dataKey="actual"
+                    name="actual"
+                    stroke="#18181b"
+                    strokeWidth={2.5}
+                    dot={false}
+                    connectNulls={false}
+                  />
+                  {monthlyForecast.isCurrentMonth && (
+                    <Line
+                      type="monotone"
+                      dataKey="forecast"
+                      name="forecast"
+                      stroke="#2563eb"
+                      strokeWidth={2}
+                      strokeDasharray="6 4"
+                      dot={false}
+                      connectNulls={false}
+                    />
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+            <CalendarDays className="size-4 text-zinc-500" aria-hidden="true" />
             <span>{locale === "ja" ? "日次コスト推移" : "Daily Cost Trend"}</span>
           </h2>
           <span className="text-xs text-zinc-400">{dailyChartRows.length} days</span>
@@ -238,9 +479,9 @@ export default function LLMUsagePage() {
                   tickFormatter={(v) => fmtUSDShort(Number(v))}
                 />
                 <Tooltip
-                  formatter={(value: number | string | undefined, name: string) => [
+                  formatter={(value: number | string | undefined, name?: string) => [
                     fmtUSD(Number(value ?? 0)),
-                    name,
+                    name ?? "",
                   ]}
                   labelFormatter={(label) => `${label}`}
                   contentStyle={{ borderRadius: 10, borderColor: "#e4e4e7" }}
@@ -315,9 +556,9 @@ export default function LLMUsagePage() {
                     axisLine={false}
                   />
                   <Tooltip
-                    formatter={(value: number | string | undefined, name: string) => [
+                    formatter={(value: number | string | undefined, name?: string) => [
                       name === "calls" ? fmtNum(Number(value ?? 0)) : fmtUSD(Number(value ?? 0)),
-                      name,
+                      name ?? "",
                     ]}
                     labelFormatter={(_, payload) => {
                       const row = payload?.[0]?.payload as { label?: string; pricingSource?: string } | undefined;

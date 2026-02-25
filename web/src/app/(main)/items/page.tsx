@@ -643,6 +643,13 @@ function ItemsPageContent() {
                   : `(selected from ${planPoolCount.toLocaleString()} items in window)`}
               </span>
             )}
+            {focusMode && (
+              <span className="ml-2 text-zinc-400">
+                {locale === "ja"
+                  ? `（クラスタ ${recommendedEmbeddingSections.length} / 表示 ${visibleClusterSections.length}）`
+                  : `(clusters ${recommendedEmbeddingSections.length} / visible ${visibleClusterSections.length})`}
+              </span>
+            )}
           </p>
         </div>
       </div>

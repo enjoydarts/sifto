@@ -363,16 +363,22 @@ function ItemsPageContent() {
     [recommendedEmbeddingSections]
   );
   const featuredItemIDs = useMemo(() => new Set(featuredItems.map((it) => it.id)), [featuredItems]);
-  const visibleClusterSections = useMemo(
-    () =>
-      recommendedEmbeddingSections
-        .map((section) => ({
+  const visibleClusterSections = useMemo(() => {
+    const seen = new Set<string>(featuredItemIDs);
+    return recommendedEmbeddingSections
+      .map((section) => {
+        const dedupedItems = section.items.filter((item) => {
+          if (seen.has(item.id)) return false;
+          seen.add(item.id);
+          return true;
+        });
+        return {
           ...section,
-          items: section.items.filter((item) => !featuredItemIDs.has(item.id)),
-        }))
-        .filter((section) => section.items.length >= 1),
-    [featuredItemIDs, recommendedEmbeddingSections]
-  );
+          items: dedupedItems,
+        };
+      })
+      .filter((section) => section.items.length >= 1);
+  }, [featuredItemIDs, recommendedEmbeddingSections]);
   const recommendedLooseItems = useMemo(
     () => (
       focusMode

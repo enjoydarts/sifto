@@ -10,14 +10,6 @@ import { useI18n } from "@/components/i18n-provider";
 import Pagination from "@/components/pagination";
 import { useToast } from "@/components/toast-provider";
 
-const STATUS_COLOR: Record<string, string> = {
-  new: "bg-zinc-100 text-zinc-600",
-  fetched: "bg-blue-50 text-blue-600",
-  facts_extracted: "bg-purple-50 text-purple-600",
-  summarized: "bg-green-50 text-green-700",
-  failed: "bg-red-50 text-red-600",
-};
-
 const FILTERS = ["", "summarized", "new", "fetched", "facts_extracted", "failed"] as const;
 type SortMode = "newest" | "score";
 type FocusSize = 7 | 15 | 25;
@@ -333,6 +325,8 @@ function ItemsPageContent() {
 
   const displayItems = focusMode ? items : sortedItems;
   const pagedItems = focusMode ? displayItems : sortedItems;
+  const featuredItems = focusMode ? pagedItems.slice(0, 3) : [];
+  const remainingItems = focusMode ? pagedItems.slice(3) : pagedItems;
   const detailHref = useCallback(
     (itemId: string) => `/items/${itemId}?from=${encodeURIComponent(currentItemsHref)}`,
     [currentItemsHref]
@@ -343,8 +337,156 @@ function ItemsPageContent() {
     sessionStorage.setItem(lastItemStorageKey, itemId);
   }, [lastItemStorageKey, scrollStorageKey]);
 
+  const renderItemRow = useCallback((item: Item, opts?: { featured?: boolean; rank?: number }) => {
+    const featured = Boolean(opts?.featured);
+    const rank = opts?.rank ?? 0;
+    return (
+      <div data-item-row-id={item.id}>
+        <div
+          className={`group flex items-stretch gap-3 rounded-xl px-4 py-3.5 transition-all ${
+            featured
+              ? "border border-zinc-200 bg-gradient-to-b from-white to-stone-50 shadow-sm hover:shadow-md"
+              : item.is_read
+                ? "border border-zinc-200 bg-zinc-50/70 shadow-sm"
+                : "border border-zinc-200 bg-white shadow-sm ring-1 ring-amber-100"
+          }`}
+        >
+          <span
+            aria-hidden="true"
+            className={`mt-0.5 w-1 shrink-0 self-start rounded-full ${
+              featured ? "h-24 bg-gradient-to-b from-amber-400 to-orange-400" : item.is_read ? "h-16 bg-zinc-200" : "h-16 bg-amber-400"
+            }`}
+          />
+          <Link
+            href={detailHref(item.id)}
+            onClick={() => rememberScroll(item.id)}
+            className="flex min-w-0 flex-1 items-stretch gap-3 transition-colors hover:text-zinc-700"
+          >
+            <div
+              className={`shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 ${
+                featured ? "hidden h-[104px] w-[136px] sm:flex" : "hidden h-[72px] w-[72px] sm:flex"
+              }`}
+            >
+              {item.thumbnail_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={item.thumbnail_url}
+                  alt=""
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-zinc-300">
+                  <ImageIcon className={featured ? "size-5" : "size-4"} aria-hidden="true" />
+                </div>
+              )}
+            </div>
+            <div className={`flex min-w-0 flex-1 flex-col justify-between ${featured ? "gap-2 py-0.5" : "gap-1.5 py-0.5"}`}>
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  {featured && rank > 0 && (
+                    <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white">
+                      {locale === "ja" ? "PICK" : "PICK"} #{rank}
+                    </div>
+                  )}
+                  <div
+                    className={`overflow-hidden font-semibold ${
+                      featured
+                        ? item.is_read ? "text-base leading-6 text-zinc-700" : "text-[17px] leading-6 text-zinc-950"
+                        : item.is_read ? "text-[15px] leading-6 text-zinc-600" : "text-[15px] leading-6 text-zinc-900"
+                    }`}
+                  >
+                    {item.title ?? item.url}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                        item.is_read
+                          ? "border-zinc-200 bg-white text-zinc-500"
+                          : "border-amber-200 bg-amber-50 text-amber-700"
+                      }`}
+                    >
+                      {item.is_read ? (locale === "ja" ? "既読" : "Read") : (locale === "ja" ? "未読" : "Unread")}
+                    </span>
+                    <span>{new Date(item.published_at ?? item.created_at).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US")}</span>
+                    {item.is_favorite && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                        <Star className="size-3 fill-current" aria-hidden="true" />
+                        {locale === "ja" ? "お気に入り" : "Favorite"}
+                      </span>
+                    )}
+                    {item.feedback_rating === 1 && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700">
+                        <ThumbsUp className="size-3" aria-hidden="true" />
+                        {locale === "ja" ? "良い" : "Like"}
+                      </span>
+                    )}
+                    {item.feedback_rating === -1 && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
+                        <ThumbsDown className="size-3" aria-hidden="true" />
+                        {locale === "ja" ? "微妙" : "Dislike"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {item.summary_score != null ? (
+                  <span
+                    className={`shrink-0 rounded border px-2 py-0.5 text-xs font-semibold ${scoreTone(item.summary_score)}`}
+                    title={locale === "ja" ? "要約スコア" : "Summary score"}
+                  >
+                    {item.summary_score.toFixed(2)}
+                  </span>
+                ) : (
+                  <span className="shrink-0 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-400">
+                    {locale === "ja" ? "未採点" : "N/A"}
+                  </span>
+                )}
+              </div>
+              <div className={`${featured ? "text-[12px] text-zinc-500" : "h-4 truncate text-[12px] text-zinc-400"}`}>
+                {item.title ? item.url : "\u00A0"}
+              </div>
+            </div>
+          </Link>
+          <div className={`flex shrink-0 flex-col items-end justify-between gap-2 ${featured ? "min-h-[104px]" : "min-h-[72px]"}`}>
+            <button
+              type="button"
+              disabled={!!readUpdatingIds[item.id]}
+              onClick={() => toggleRead(item)}
+              className="rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {readUpdatingIds[item.id]
+                ? locale === "ja"
+                  ? "更新中..."
+                  : "Updating..."
+                : item.is_read
+                  ? locale === "ja"
+                    ? "未読に戻す"
+                    : "Mark unread"
+                  : locale === "ja"
+                    ? "既読にする"
+                    : "Mark read"}
+            </button>
+            {item.status === "failed" ? (
+              <button
+                type="button"
+                disabled={!!retryingIds[item.id]}
+                onClick={() => retryItem(item.id)}
+                className="rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
+              </button>
+            ) : (
+              <span className="invisible rounded border border-zinc-300 px-3 py-1 text-xs font-medium">_</span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }, [detailHref, locale, readUpdatingIds, rememberScroll, retryItem, retryingIds, t, toggleRead]);
+
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${focusMode ? "pb-8" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
@@ -479,160 +621,34 @@ function ItemsPageContent() {
       )}
 
       {/* List */}
-	      <ul className="space-y-2">
-        {pagedItems.map((item) => (
-	          <li key={item.id} data-item-row-id={item.id}>
-	            <div className={`flex min-h-[92px] items-stretch gap-3 rounded-xl border px-4 py-3.5 shadow-sm transition-colors ${
-                item.is_read
-                  ? "border-zinc-200 bg-zinc-50/80"
-                  : "border-zinc-300 bg-white ring-1 ring-amber-100"
-              }`}>
-                <span
-                  aria-hidden="true"
-                  className={`mt-0.5 h-16 w-1 shrink-0 self-start rounded-full ${
-                    item.is_read ? "bg-zinc-200" : "bg-amber-400"
-                  }`}
-                />
-	              <Link
-	                href={detailHref(item.id)}
-                  onClick={() => rememberScroll(item.id)}
-	                className="flex min-w-0 flex-1 items-stretch gap-3 transition-colors hover:text-zinc-700"
-	              >
-                  <div className="hidden h-[72px] w-[72px] shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 sm:flex">
-                    {item.thumbnail_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.thumbnail_url}
-                        alt=""
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-zinc-300">
-                        <ImageIcon className="size-4" aria-hidden="true" />
-                      </div>
-                    )}
-                  </div>
-	                <div className="flex min-w-0 flex-1 flex-col justify-between gap-1.5 py-0.5">
-	                  <div className="flex items-start gap-2">
-	                    <div className="min-w-0 flex-1">
-	                      <div className={`overflow-hidden text-[15px] leading-6 font-semibold ${item.is_read ? "text-zinc-600" : "text-zinc-900"}`}>
-	                        {item.title ?? item.url}
-	                      </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-                          <span
-                            className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                              item.is_read
-                                ? "border-zinc-200 bg-white text-zinc-500"
-                                : "border-amber-200 bg-amber-50 text-amber-700"
-                            }`}
-                          >
-                            {item.is_read
-                              ? locale === "ja"
-                                ? "既読"
-                                : "Read"
-                              : locale === "ja"
-                                ? "未読"
-                                : "Unread"}
-                          </span>
-                          <span
-                            className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${
-                              STATUS_COLOR[item.status] ?? "bg-zinc-100 text-zinc-600"
-                            }`}
-                          >
-                            {t(`status.${item.status}`, item.status)}
-                          </span>
-                          <span>
-                            {new Date(
-                              item.published_at ?? item.created_at
-                            ).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US")}
-                          </span>
-                          {item.is_favorite && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                              <Star className="size-3 fill-current" aria-hidden="true" />
-                              {locale === "ja" ? "お気に入り" : "Favorite"}
-                            </span>
-                          )}
-                          {item.feedback_rating === 1 && (
-                            <span
-                              className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700"
-                              title={locale === "ja" ? "良い評価" : "Liked"}
-                            >
-                              <ThumbsUp className="size-3" aria-hidden="true" />
-                              {locale === "ja" ? "良い" : "Like"}
-                            </span>
-                          )}
-                          {item.feedback_rating === -1 && (
-                            <span
-                              className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700"
-                              title={locale === "ja" ? "微妙評価" : "Disliked"}
-                            >
-                              <ThumbsDown className="size-3" aria-hidden="true" />
-                              {locale === "ja" ? "微妙" : "Dislike"}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-	                    {item.summary_score != null ? (
-	                      <span
-	                        className={`shrink-0 rounded border px-2 py-0.5 text-xs font-semibold ${scoreTone(item.summary_score)}`}
-	                        title={locale === "ja" ? "要約スコア" : "Summary score"}
-	                      >
-	                        {item.summary_score.toFixed(2)}
-	                      </span>
-	                    ) : (
-	                      <span
-	                        className="shrink-0 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-400"
-	                        title={locale === "ja" ? "未採点" : "Not scored"}
-	                      >
-	                        {locale === "ja" ? "未採点" : "N/A"}
-	                      </span>
-	                    )}
-	                  </div>
-	                  <div className="h-4 truncate text-[12px] text-zinc-400">
-	                    {item.title ? item.url : "\u00A0"}
-	                  </div>
-	                </div>
-	              </Link>
-                <div className="flex min-h-[72px] shrink-0 flex-col items-end justify-between gap-2">
-                  <button
-                    type="button"
-                    disabled={!!readUpdatingIds[item.id]}
-                    onClick={() => toggleRead(item)}
-                    className="rounded border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {readUpdatingIds[item.id]
-                      ? locale === "ja"
-                        ? "更新中..."
-                        : "Updating..."
-                      : item.is_read
-                        ? locale === "ja"
-                          ? "未読に戻す"
-                          : "Mark unread"
-                        : locale === "ja"
-                          ? "既読にする"
-                          : "Mark read"}
-                  </button>
-	                {item.status === "failed" ? (
-	                  <button
-	                    type="button"
-	                    disabled={!!retryingIds[item.id]}
-	                    onClick={() => retryItem(item.id)}
-	                    className="rounded border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-	                  >
-	                    {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
-	                  </button>
-	                ) : (
-                    <span className="invisible rounded border border-zinc-300 px-3 py-1 text-xs font-medium">
-                      _
-                    </span>
-                  )}
-                </div>
-	            </div>
-	          </li>
-	        ))}
-	      </ul>
+      {focusMode && featuredItems.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
+                {locale === "ja" ? "今日のピックアップ" : "Today's Picks"}
+              </div>
+              <div className="text-sm text-zinc-500">
+                {locale === "ja" ? "まず読む価値が高い記事" : "Start here for high-value reads"}
+              </div>
+            </div>
+          </div>
+          <ul className="grid list-none gap-3 lg:grid-cols-2">
+            {featuredItems.map((item, idx) => (
+              <li key={item.id} className={`${idx === 0 ? "lg:col-span-2" : ""} list-none`}>
+                {renderItemRow(item, { featured: true, rank: idx + 1 })}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      <ul className={`list-none space-y-2 ${focusMode && featuredItems.length > 0 ? "pt-1" : ""}`}>
+        {remainingItems.map((item) => (
+          <li key={item.id} className="list-none">
+            {renderItemRow(item)}
+          </li>
+        ))}
+      </ul>
       {!focusMode && (
         <Pagination
           total={itemsTotal}

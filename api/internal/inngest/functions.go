@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -264,28 +266,121 @@ func minInt(a, b int) int {
 	return b
 }
 
+func compressDigestClusterDrafts(drafts []model.DigestClusterDraft, target int) []model.DigestClusterDraft {
+	if target <= 0 {
+		target = 20
+	}
+	if len(drafts) <= target {
+		return drafts
+	}
+
+	// Keep larger/more informative clusters first; merge tail singletons/small clusters.
+	keep := make([]model.DigestClusterDraft, 0, len(drafts))
+	tail := make([]model.DigestClusterDraft, 0, len(drafts))
+	for i, d := range drafts {
+		if i < 10 || d.ItemCount >= 3 {
+			keep = append(keep, d)
+			continue
+		}
+		tail = append(tail, d)
+	}
+	if len(keep) >= target {
+		keep = keep[:target]
+		for i := range keep {
+			keep[i].Rank = i + 1
+		}
+		return keep
+	}
+
+	remainingSlots := target - len(keep)
+	if remainingSlots <= 0 || len(tail) == 0 {
+		for i := range keep {
+			keep[i].Rank = i + 1
+		}
+		return keep
+	}
+
+	// Merge tail clusters into grouped "other" buckets to preserve coverage.
+	chunkSize := int(math.Ceil(float64(len(tail)) / float64(remainingSlots)))
+	if chunkSize < 2 {
+		chunkSize = 2
+	}
+	for i := 0; i < len(tail) && len(keep) < target; i += chunkSize {
+		end := i + chunkSize
+		if end > len(tail) {
+			end = len(tail)
+		}
+		chunk := tail[i:end]
+		if len(chunk) == 1 {
+			keep = append(keep, chunk[0])
+			continue
+		}
+		itemCount := 0
+		var maxScore *float64
+		lines := make([]string, 0, len(chunk))
+		topicsSet := map[string]struct{}{}
+		for _, d := range chunk {
+			itemCount += d.ItemCount
+			if d.MaxScore != nil && (maxScore == nil || *d.MaxScore > *maxScore) {
+				v := *d.MaxScore
+				maxScore = &v
+			}
+			for _, t := range d.Topics {
+				t = strings.TrimSpace(t)
+				if t == "" {
+					continue
+				}
+				topicsSet[t] = struct{}{}
+			}
+			lines = append(lines, fmt.Sprintf("- [%s] %s", d.ClusterLabel, d.DraftSummary))
+		}
+		topics := make([]string, 0, len(topicsSet))
+		for t := range topicsSet {
+			topics = append(topics, t)
+		}
+		sort.Strings(topics)
+		keep = append(keep, model.DigestClusterDraft{
+			ClusterKey:   fmt.Sprintf("merged-tail-%d", len(keep)+1),
+			ClusterLabel: "その他の話題",
+			ItemCount:    itemCount,
+			Topics:       topics,
+			MaxScore:     maxScore,
+			DraftSummary: strings.Join(lines, "\n"),
+		})
+	}
+
+	for i := range keep {
+		keep[i].Rank = i + 1
+	}
+	return keep
+}
+
 func buildComposeItemsFromClusterDrafts(drafts []model.DigestClusterDraft, maxItems int) []service.ComposeDigestItem {
-	if maxItems <= 0 {
-		maxItems = 24
-	}
-	if maxItems > 40 {
-		maxItems = 40
-	}
-	if len(drafts) > maxItems {
-		drafts = drafts[:maxItems]
-	}
+	_ = maxItems // keep signature compatible; compose now uses all cluster drafts by default.
 	out := make([]service.ComposeDigestItem, 0, len(drafts))
 	for i, d := range drafts {
 		title := d.ClusterLabel
 		if d.ItemCount > 1 {
 			title = fmt.Sprintf("%s (%d items)", d.ClusterLabel, d.ItemCount)
 		}
+		summary := d.DraftSummary
+		// Keep coverage across all cluster drafts, while reducing detail for lower-ranked clusters.
+		// This avoids "top clusters only" behavior without sending every draft at full verbosity.
+		if i >= 12 {
+			lines := strings.Split(strings.TrimSpace(d.DraftSummary), "\n")
+			if len(lines) > 0 && strings.TrimSpace(lines[0]) != "" {
+				summary = lines[0]
+			}
+			if len(lines) > 1 {
+				summary += fmt.Sprintf("\n- ...%d more lines omitted in compose input", len(lines)-1)
+			}
+		}
 		titlePtr := title
 		out = append(out, service.ComposeDigestItem{
 			Rank:    i + 1,
 			Title:   &titlePtr,
 			URL:     "",
-			Summary: d.DraftSummary,
+			Summary: summary,
 			Topics:  d.Topics,
 			Score:   d.MaxScore,
 		})
@@ -752,6 +847,7 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 						return "", fmt.Errorf("cluster digest items: %w", err)
 					}
 					drafts := buildDigestClusterDrafts(digest.Items, embClusters)
+					drafts = compressDigestClusterDrafts(drafts, 20)
 					if err := digestRepo.ReplaceClusterDrafts(ctx, data.DigestID, drafts); err != nil {
 						return "", fmt.Errorf("store digest cluster drafts: %w", err)
 					}
@@ -759,7 +855,7 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					if err != nil {
 						return "", fmt.Errorf("reload digest cluster drafts: %w", err)
 					}
-					items := buildComposeItemsFromClusterDrafts(storedDrafts, 24)
+					items := buildComposeItemsFromClusterDrafts(storedDrafts, len(storedDrafts))
 					log.Printf(
 						"compose-digest-copy compacted digest_id=%s source_items=%d cluster_drafts=%d compose_items=%d",
 						data.DigestID, len(digest.Items), len(storedDrafts), len(items),

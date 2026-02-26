@@ -97,8 +97,8 @@ export default function DashboardPage() {
         <Card label={t("dashboard.card.llmCost")} value={`$${llmTotals.cost.toFixed(6)}`} />
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
-        <div className="rounded-xl border border-zinc-200 bg-white p-4">
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="h-full rounded-xl border border-zinc-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
               <BarChart3 className="size-4 text-zinc-500" aria-hidden="true" />
@@ -166,7 +166,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="rounded-xl border border-zinc-200 bg-white p-4">
+        <div className="h-full rounded-xl border border-zinc-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
               <Mail className="size-4 text-zinc-500" aria-hidden="true" />
@@ -225,7 +225,7 @@ export default function DashboardPage() {
               <Link
                 key={row.topic}
                 href={`/items?feed=all&sort=score&topic=${encodeURIComponent(row.topic)}`}
-                className="rounded-lg border border-zinc-200 bg-zinc-50/70 px-3 py-2 transition-colors hover:border-zinc-300 hover:bg-zinc-100/70"
+                className="block w-full min-w-0 rounded-lg border border-zinc-200 bg-zinc-50/70 px-3 py-2 transition-colors hover:border-zinc-300 hover:bg-zinc-100/70"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="truncate text-sm font-medium text-zinc-900">{row.topic}</div>
@@ -271,7 +271,7 @@ export default function DashboardPage() {
               const cost = rows.reduce((a, r) => a + r.estimated_cost_usd, 0);
               const calls = rows.reduce((a, r) => a + r.calls, 0);
               return (
-                <div key={date} className="rounded-lg border border-zinc-200 p-3">
+                <div key={date} className="h-full rounded-lg border border-zinc-200 p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <div className="text-sm font-medium text-zinc-900">{date}</div>
                     <div className="text-xs text-zinc-500">${cost.toFixed(6)}</div>
@@ -299,7 +299,7 @@ export default function DashboardPage() {
 
 function Card({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+    <div className="h-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
       <div className="text-xs font-medium text-zinc-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold tracking-tight text-zinc-900">{value}</div>
     </div>

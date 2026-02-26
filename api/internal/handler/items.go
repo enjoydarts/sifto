@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"time"
@@ -120,12 +121,19 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 		ExcludeRead:     excludeRead,
 	}
 	cacheKey := fmt.Sprintf("readingplan:%s:%s:%d:%t:%t", userID, params.Window, params.Size, params.DiversifyTopics, params.ExcludeRead)
-	if h.cache != nil {
+	cacheBust := q.Get("cache_bust") == "1"
+	if h.cache != nil && !cacheBust {
 		var cached model.ReadingPlanResponse
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
+			log.Printf("reading-plan cache hit user_id=%s key=%s", userID, cacheKey)
 			writeJSON(w, &cached)
 			return
+		} else if err != nil {
+			log.Printf("reading-plan cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
+		log.Printf("reading-plan cache miss user_id=%s key=%s", userID, cacheKey)
+	} else if cacheBust {
+		log.Printf("reading-plan cache bypass user_id=%s key=%s", userID, cacheKey)
 	}
 
 	resp, err := h.repo.ReadingPlan(r.Context(), userID, params)
@@ -134,7 +142,9 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.cache != nil && resp != nil {
-		_ = h.cache.SetJSON(r.Context(), cacheKey, resp, 45*time.Second)
+		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, 45*time.Second); err != nil {
+			log.Printf("reading-plan cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
 	}
 	writeJSON(w, resp)
 }

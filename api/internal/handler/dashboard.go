@@ -13,6 +13,7 @@ import (
 )
 
 const cacheMetricTTL = 8 * 24 * time.Hour
+const dashboardCacheTTL = 120 * time.Second
 
 type DashboardHandler struct {
 	sourceRepo   *repository.SourceRepo
@@ -190,7 +191,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"llm_days":             llmDays,
 	}
 	if h.cache != nil {
-		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, 30*time.Second); err != nil {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, dashboardCacheTTL); err != nil {
 			dashboardCacheCounter.errors.Add(1)
 			_ = h.cache.IncrMetric(r.Context(), "cache", "dashboard.error", 1, time.Now(), cacheMetricTTL)
 			log.Printf("dashboard cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)

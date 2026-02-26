@@ -107,6 +107,9 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	q := r.URL.Query()
 	window := q.Get("window")
+	if window == "" {
+		window = "24h"
+	}
 	size := parseIntOrDefault(q.Get("size"), 15)
 	if size < 1 || size > 100 {
 		http.Error(w, "invalid size", http.StatusBadRequest)
@@ -152,7 +155,7 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.cache != nil && resp != nil {
-		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, 45*time.Second); err != nil {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, 120*time.Second); err != nil {
 			readingPlanCacheCounter.errors.Add(1)
 			_ = h.cache.IncrMetric(r.Context(), "cache", "reading_plan.error", 1, time.Now(), cacheMetricTTL)
 			log.Printf("reading-plan cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)

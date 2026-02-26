@@ -1,43 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { BarChart3, Brain, LayoutDashboard, Mail } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { api, Digest, Item, ItemStats, LLMUsageDailySummary, TopicTrend } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 
+const EMPTY_DIGESTS: Digest[] = [];
+const EMPTY_ITEMS: Item[] = [];
+const EMPTY_LLM_SUMMARY: LLMUsageDailySummary[] = [];
+const EMPTY_TOPIC_TRENDS: TopicTrend[] = [];
+
 export default function DashboardPage() {
   const { t, locale } = useI18n();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [sourceCount, setSourceCount] = useState(0);
-  const [itemStats, setItemStats] = useState<ItemStats | null>(null);
-  const [digests, setDigests] = useState<Digest[]>([]);
-  const [llmSummary, setLlmSummary] = useState<LLMUsageDailySummary[]>([]);
-  const [topicTrends, setTopicTrends] = useState<TopicTrend[]>([]);
-  const [failedPreview, setFailedPreview] = useState<Item[]>([]);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const snap = await api.getDashboard({ llm_days: 7, topic_limit: 8, digest_limit: 5 });
-      setSourceCount(snap?.sources_count ?? 0);
-      setItemStats(snap?.item_stats ?? null);
-      setDigests(snap?.digests ?? []);
-      setLlmSummary(snap?.llm_summary ?? []);
-      setTopicTrends(snap?.topic_trends?.items ?? []);
-      setFailedPreview(snap?.failed_items_preview?.items ?? []);
-      setError(null);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const dashboardQuery = useQuery({
+    queryKey: ["dashboard-snapshot", 7, 8, 5] as const,
+    queryFn: () => api.getDashboard({ llm_days: 7, topic_limit: 8, digest_limit: 5 }),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+  const loading = !dashboardQuery.data && (dashboardQuery.isLoading || dashboardQuery.isFetching);
+  const error = dashboardQuery.error ? String(dashboardQuery.error) : null;
+  const sourceCount = dashboardQuery.data?.sources_count ?? 0;
+  const itemStats: ItemStats | null = dashboardQuery.data?.item_stats ?? null;
+  const digests: Digest[] = dashboardQuery.data?.digests ?? EMPTY_DIGESTS;
+  const llmSummary: LLMUsageDailySummary[] = dashboardQuery.data?.llm_summary ?? EMPTY_LLM_SUMMARY;
+  const topicTrends: TopicTrend[] = dashboardQuery.data?.topic_trends?.items ?? EMPTY_TOPIC_TRENDS;
+  const failedPreview: Item[] = dashboardQuery.data?.failed_items_preview?.items ?? EMPTY_ITEMS;
 
   const itemStatus = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -78,7 +68,7 @@ export default function DashboardPage() {
         </div>
         <button
           type="button"
-          onClick={load}
+          onClick={() => void dashboardQuery.refetch()}
           className="rounded border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
         >
           {t("common.refresh")}

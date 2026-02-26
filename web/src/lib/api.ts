@@ -307,6 +307,7 @@ export interface DashboardSnapshot {
   digests: Digest[];
   llm_summary: LLMUsageDailySummary[];
   topic_trends: { items: TopicTrend[]; limit: number };
+  failed_items_preview?: ItemListResponse | null;
   llm_days: number;
 }
 

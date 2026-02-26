@@ -68,14 +68,15 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		wg         sync.WaitGroup
-		mu         sync.Mutex
-		firstErr   error
-		sourceCnt  int
-		itemStats  any
-		digests    any
-		llmSummary any
-		topics     any
+		wg          sync.WaitGroup
+		mu          sync.Mutex
+		firstErr    error
+		sourceCnt   int
+		itemStats   any
+		digests     any
+		llmSummary  any
+		topics      any
+		failedItems any
 	)
 	setErr := func(err error) {
 		if err == nil {
@@ -88,7 +89,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	wg.Add(5)
+	wg.Add(6)
 	go func() {
 		defer wg.Done()
 		n, err := h.sourceRepo.CountByUser(r.Context(), userID)
@@ -144,6 +145,23 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		topics = v
 		mu.Unlock()
 	}()
+	go func() {
+		defer wg.Done()
+		status := "failed"
+		v, err := h.itemRepo.ListPage(r.Context(), userID, repository.ItemListParams{
+			Status:   &status,
+			Sort:     "newest",
+			Page:     1,
+			PageSize: 5,
+		})
+		if err != nil {
+			setErr(err)
+			return
+		}
+		mu.Lock()
+		failedItems = v
+		mu.Unlock()
+	}()
 	wg.Wait()
 	if firstErr != nil {
 		writeRepoError(w, firstErr)
@@ -160,7 +178,8 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"limit":  topicLimit,
 			"period": "24h_vs_prev24h",
 		},
-		"llm_days": llmDays,
+		"failed_items_preview": failedItems,
+		"llm_days":             llmDays,
 	}
 	if h.cache != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, 30*time.Second); err != nil {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BarChart3, Brain, LayoutDashboard, Mail } from "lucide-react";
-import { api, Digest, ItemStats, LLMUsageDailySummary, TopicTrend } from "@/lib/api";
+import { api, Digest, Item, ItemStats, LLMUsageDailySummary, TopicTrend } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 
 export default function DashboardPage() {
@@ -15,6 +15,7 @@ export default function DashboardPage() {
   const [digests, setDigests] = useState<Digest[]>([]);
   const [llmSummary, setLlmSummary] = useState<LLMUsageDailySummary[]>([]);
   const [topicTrends, setTopicTrends] = useState<TopicTrend[]>([]);
+  const [failedPreview, setFailedPreview] = useState<Item[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -25,6 +26,7 @@ export default function DashboardPage() {
       setDigests(snap?.digests ?? []);
       setLlmSummary(snap?.llm_summary ?? []);
       setTopicTrends(snap?.topic_trends?.items ?? []);
+      setFailedPreview(snap?.failed_items_preview?.items ?? []);
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -111,8 +113,12 @@ export default function DashboardPage() {
               const count = itemStatus[key] ?? 0;
               const total = Math.max(1, itemStats?.total ?? 0);
               const ratio = (count / total) * 100;
+              const href =
+                key === "summarized"
+                  ? "/items?feed=all&status=summarized&sort=score"
+                  : `/items?feed=all&status=${encodeURIComponent(key)}`;
               return (
-                <div key={key}>
+                <Link key={key} href={href} className="block rounded px-1 py-1 hover:bg-zinc-50">
                   <div className="mb-1 flex items-center justify-between text-sm">
                     <span className="text-zinc-700">{t(`status.${key}`)}</span>
                     <span className="text-zinc-500">{count}</span>
@@ -120,10 +126,44 @@ export default function DashboardPage() {
                   <div className="h-2 rounded-full bg-zinc-100">
                     <div className="h-2 rounded-full bg-zinc-800" style={{ width: `${Math.max(2, ratio)}%` }} />
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
+          {(itemStatus.failed ?? 0) > 0 && (
+            <div className="mt-4 border-t border-zinc-100 pt-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-xs font-medium text-zinc-600">
+                  {locale === "ja" ? "失敗記事（新しい順）" : "Failed Items (Recent)"}
+                </div>
+                <Link
+                  href="/items?feed=all&status=failed"
+                  className="text-xs text-zinc-500 hover:text-zinc-900"
+                >
+                  {locale === "ja" ? "一覧を見る" : "View all"}
+                </Link>
+              </div>
+              {failedPreview.length === 0 ? (
+                <p className="text-xs text-zinc-400">
+                  {locale === "ja" ? "対象記事を読み込み中または未取得" : "No preview available"}
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {failedPreview.map((it) => (
+                    <li key={it.id}>
+                      <Link
+                        href={`/items/${it.id}?from=${encodeURIComponent("/items?feed=all&status=failed")}`}
+                        className="block truncate rounded px-2 py-1.5 text-xs text-zinc-700 hover:bg-zinc-50"
+                        title={it.title ?? it.url}
+                      >
+                        {it.title ?? it.url}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-4">

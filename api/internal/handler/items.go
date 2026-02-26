@@ -2,8 +2,10 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/minoru-kitayama/sifto/api/internal/middleware"
@@ -15,10 +17,11 @@ import (
 type ItemHandler struct {
 	repo      *repository.ItemRepo
 	publisher *service.EventPublisher
+	cache     service.JSONCache
 }
 
-func NewItemHandler(repo *repository.ItemRepo, publisher *service.EventPublisher) *ItemHandler {
-	return &ItemHandler{repo: repo, publisher: publisher}
+func NewItemHandler(repo *repository.ItemRepo, publisher *service.EventPublisher, cache service.JSONCache) *ItemHandler {
+	return &ItemHandler{repo: repo, publisher: publisher, cache: cache}
 }
 
 func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -110,15 +113,28 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	diversify := q.Get("diversify_topics") != "false"
 	excludeRead := q.Get("exclude_read") != "false"
-	resp, err := h.repo.ReadingPlan(r.Context(), userID, repository.ReadingPlanParams{
+	params := repository.ReadingPlanParams{
 		Window:          window,
 		Size:            size,
 		DiversifyTopics: diversify,
 		ExcludeRead:     excludeRead,
-	})
+	}
+	cacheKey := fmt.Sprintf("readingplan:%s:%s:%d:%t:%t", userID, params.Window, params.Size, params.DiversifyTopics, params.ExcludeRead)
+	if h.cache != nil {
+		var cached model.ReadingPlanResponse
+		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
+			writeJSON(w, &cached)
+			return
+		}
+	}
+
+	resp, err := h.repo.ReadingPlan(r.Context(), userID, params)
 	if err != nil {
 		writeRepoError(w, err)
 		return
+	}
+	if h.cache != nil && resp != nil {
+		_ = h.cache.SetJSON(r.Context(), cacheKey, resp, 45*time.Second)
 	}
 	writeJSON(w, resp)
 }

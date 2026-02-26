@@ -301,6 +301,15 @@ export interface UserSettings {
   current_month: UserSettingsCurrentMonth;
 }
 
+export interface DashboardSnapshot {
+  sources_count: number;
+  item_stats: ItemStats | null;
+  digests: Digest[];
+  llm_summary: LLMUsageDailySummary[];
+  topic_trends: { items: TopicTrend[]; limit: number };
+  llm_days: number;
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...options,
@@ -370,6 +379,14 @@ export const api = {
     return apiFetch<ReadingPlanResponse>(`/items/reading-plan${qs ? `?${qs}` : ""}`);
   },
   getItemStats: () => apiFetch<ItemStats>("/items/stats"),
+  getDashboard: (params?: { llm_days?: number; topic_limit?: number; digest_limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.llm_days) q.set("llm_days", String(params.llm_days));
+    if (params?.topic_limit) q.set("topic_limit", String(params.topic_limit));
+    if (params?.digest_limit) q.set("digest_limit", String(params.digest_limit));
+    const qs = q.toString();
+    return apiFetch<DashboardSnapshot>(`/dashboard${qs ? `?${qs}` : ""}`);
+  },
   getItemTopicTrends: (params?: { limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));

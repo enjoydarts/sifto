@@ -28,6 +28,10 @@ func main() {
 	worker := service.NewWorkerClient()
 	resend := service.NewResendClient()
 	secretCipher := service.NewSecretCipher()
+	cache, err := service.NewJSONCacheFromEnv()
+	if err != nil {
+		log.Fatalf("json cache: %v", err)
+	}
 	eventPublisher, err := service.NewEventPublisher()
 	if err != nil {
 		log.Fatalf("event publisher: %v", err)
@@ -45,9 +49,10 @@ func main() {
 
 	internalH := handler.NewInternalHandler(userRepo, itemInngestRepo, digestInngestRepo, eventPublisher)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher)
-	itemH := handler.NewItemHandler(itemRepo, eventPublisher)
+	itemH := handler.NewItemHandler(itemRepo, eventPublisher, cache)
 	digestH := handler.NewDigestHandler(digestRepo)
 	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo)
+	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
 
 	inngestHandler := inngestfn.NewHandler(db, worker, resend)
 
@@ -113,6 +118,8 @@ func main() {
 			r.Get("/summary", llmUsageH.DailySummary)
 			r.Get("/by-model", llmUsageH.ModelSummary)
 		})
+
+		r.Get("/dashboard", dashboardH.Get)
 
 		r.Route("/settings", func(r chi.Router) {
 			r.Get("/", settingsH.Get)

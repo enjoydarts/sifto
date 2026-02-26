@@ -39,7 +39,7 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 		limit = 5000
 	}
 	query := `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status,
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
@@ -149,7 +149,7 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status,
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
@@ -250,7 +250,7 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status,
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,

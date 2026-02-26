@@ -26,9 +26,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     environment:
       DATABASE_URL: ${DOCKER_DATABASE_URL}
       PYTHON_WORKER_URL: ${DOCKER_PYTHON_WORKER_URL}
+      REDIS_URL: ${DOCKER_REDIS_URL:-redis://redis:6379/0}
       TZ: ${TZ}
       INNGEST_DEV: ${INNGEST_DEV}
       ALLOW_DEV_AUTH_BYPASS: ${ALLOW_DEV_AUTH_BYPASS}
@@ -61,6 +64,11 @@ services:
       - .env
     volumes:
       - ./worker:/app
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
 
   inngest:
     image: inngest/inngest:latest

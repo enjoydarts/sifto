@@ -3,15 +3,14 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BarChart3, Brain, LayoutDashboard, Mail } from "lucide-react";
-import { api, Digest, Item, ItemStats, LLMUsageDailySummary, Source, TopicTrend } from "@/lib/api";
+import { api, Digest, ItemStats, LLMUsageDailySummary, TopicTrend } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 
 export default function DashboardPage() {
   const { t, locale } = useI18n();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sources, setSources] = useState<Source[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
+  const [sourceCount, setSourceCount] = useState(0);
   const [itemStats, setItemStats] = useState<ItemStats | null>(null);
   const [digests, setDigests] = useState<Digest[]>([]);
   const [llmSummary, setLlmSummary] = useState<LLMUsageDailySummary[]>([]);
@@ -20,20 +19,12 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [srcs, its, stats, dgs, llm, topics] = await Promise.all([
-        api.getSources(),
-        api.getItems({ page: 1, page_size: 200 }),
-        api.getItemStats(),
-        api.getDigests(),
-        api.getLLMUsageSummary({ days: 7 }),
-        api.getItemTopicTrends({ limit: 8 }),
-      ]);
-      setSources(srcs ?? []);
-      setItems(its?.items ?? []);
-      setItemStats(stats ?? null);
-      setDigests(dgs ?? []);
-      setLlmSummary(llm ?? []);
-      setTopicTrends(topics?.items ?? []);
+      const snap = await api.getDashboard({ llm_days: 7, topic_limit: 8, digest_limit: 5 });
+      setSourceCount(snap?.sources_count ?? 0);
+      setItemStats(snap?.item_stats ?? null);
+      setDigests(snap?.digests ?? []);
+      setLlmSummary(snap?.llm_summary ?? []);
+      setTopicTrends(snap?.topic_trends?.items ?? []);
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -49,9 +40,8 @@ export default function DashboardPage() {
   const itemStatus = useMemo(() => {
     const counts: Record<string, number> = {};
     if (itemStats?.by_status) return { ...itemStats.by_status };
-    for (const item of items) counts[item.status] = (counts[item.status] ?? 0) + 1;
     return counts;
-  }, [itemStats, items]);
+  }, [itemStats]);
 
   const llmTotals = useMemo(() => {
     return llmSummary.reduce(
@@ -97,8 +87,8 @@ export default function DashboardPage() {
       {error && <p className="text-sm text-red-500">{error}</p>}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <Card label={t("dashboard.card.sources")} value={String(sources.length)} />
-        <Card label={t("dashboard.card.items")} value={String(itemStats?.total ?? items.length)} />
+        <Card label={t("dashboard.card.sources")} value={String(sourceCount)} />
+        <Card label={t("dashboard.card.items")} value={String(itemStats?.total ?? 0)} />
         <Card label={t("dashboard.card.failedItems")} value={String(itemStatus.failed ?? 0)} />
         <Card label={t("dashboard.card.digests")} value={String(digests.length)} />
         <Card label={t("dashboard.card.llmCalls")} value={String(llmTotals.calls)} />
@@ -119,7 +109,7 @@ export default function DashboardPage() {
           <div className="space-y-2">
             {(["new", "fetched", "facts_extracted", "summarized", "failed"] as const).map((key) => {
               const count = itemStatus[key] ?? 0;
-              const total = Math.max(1, itemStats?.total ?? items.length);
+              const total = Math.max(1, itemStats?.total ?? 0);
               const ratio = (count / total) * 100;
               return (
                 <div key={key}>

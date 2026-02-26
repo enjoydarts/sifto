@@ -12,6 +12,14 @@ type SourceRepo struct{ db *pgxpool.Pool }
 
 func NewSourceRepo(db *pgxpool.Pool) *SourceRepo { return &SourceRepo{db} }
 
+func (r *SourceRepo) CountByUser(ctx context.Context, userID string) (int, error) {
+	var n int
+	if err := r.db.QueryRow(ctx, `SELECT COUNT(*)::int FROM sources WHERE user_id = $1`, userID).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 func (r *SourceRepo) List(ctx context.Context, userID string) ([]model.Source, error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT id, user_id, url, type, title, enabled, last_fetched_at, created_at, updated_at

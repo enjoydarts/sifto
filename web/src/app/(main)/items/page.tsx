@@ -292,6 +292,14 @@ function ItemsPageContent() {
             ? {
                 ...prev,
                 items: prev.items.map((v) => (v.id === item.id ? { ...v, is_read: !item.is_read } : v)),
+                planClusters: (prev.planClusters ?? []).map((c) => ({
+                  ...c,
+                  representative:
+                    c.representative?.id === item.id
+                      ? { ...c.representative, is_read: !item.is_read }
+                      : c.representative,
+                  items: (c.items ?? []).map((v) => (v.id === item.id ? { ...v, is_read: !item.is_read } : v)),
+                })),
               }
             : prev
         );

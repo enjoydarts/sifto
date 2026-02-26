@@ -42,7 +42,7 @@ export default function ItemDetailPage() {
       if (!prev || typeof prev !== "object") return prev;
       const data = prev as {
         items?: Array<Record<string, unknown>>;
-        clusters?: Array<Record<string, unknown>>;
+        planClusters?: Array<Record<string, unknown>>;
       };
       const patchItem = (v: Record<string, unknown>) => (v.id === itemId ? { ...v, is_read: isRead } : v);
       let changed = false;
@@ -54,8 +54,8 @@ export default function ItemDetailPage() {
           return nv;
         });
       }
-      if (Array.isArray(data.clusters)) {
-        next.clusters = data.clusters.map((cluster) => {
+      if (Array.isArray(data.planClusters)) {
+        next.planClusters = data.planClusters.map((cluster) => {
           const c = { ...cluster } as Record<string, unknown>;
           const rep = c.representative;
           if (rep && typeof rep === "object") {
@@ -88,10 +88,10 @@ export default function ItemDetailPage() {
     (itemId: string, patch: { is_favorite?: boolean; feedback_rating?: -1 | 0 | 1 | number }) => {
       queryClient.setQueriesData({ queryKey: ["items-feed"] }, (prev: unknown) => {
         if (!prev || typeof prev !== "object") return prev;
-        const data = prev as {
-          items?: Array<Record<string, unknown>>;
-          clusters?: Array<Record<string, unknown>>;
-        };
+      const data = prev as {
+        items?: Array<Record<string, unknown>>;
+        planClusters?: Array<Record<string, unknown>>;
+      };
         const patchItem = (v: Record<string, unknown>) =>
           v.id === itemId
             ? {
@@ -109,8 +109,8 @@ export default function ItemDetailPage() {
             return nv;
           });
         }
-        if (Array.isArray(data.clusters)) {
-          next.clusters = data.clusters.map((cluster) => {
+        if (Array.isArray(data.planClusters)) {
+          next.planClusters = data.planClusters.map((cluster) => {
             const c = { ...cluster } as Record<string, unknown>;
             const rep = c.representative;
             if (rep && typeof rep === "object") {

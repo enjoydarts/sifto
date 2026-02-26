@@ -14,6 +14,7 @@ import (
 type JSONCache interface {
 	GetJSON(ctx context.Context, key string, dst any) (bool, error)
 	SetJSON(ctx context.Context, key string, value any, ttl time.Duration) error
+	Ping(ctx context.Context) error
 }
 
 type NoopJSONCache struct{}
@@ -22,6 +23,7 @@ func (NoopJSONCache) GetJSON(context.Context, string, any) (bool, error) { retur
 func (NoopJSONCache) SetJSON(context.Context, string, any, time.Duration) error {
 	return nil
 }
+func (NoopJSONCache) Ping(context.Context) error { return nil }
 
 type RedisJSONCache struct {
 	client *redis.Client
@@ -84,4 +86,11 @@ func (c *RedisJSONCache) SetJSON(ctx context.Context, key string, value any, ttl
 		return err
 	}
 	return c.client.Set(ctx, c.key(key), b, ttl).Err()
+}
+
+func (c *RedisJSONCache) Ping(ctx context.Context) error {
+	if c == nil || c.client == nil {
+		return nil
+	}
+	return c.client.Ping(ctx).Err()
 }

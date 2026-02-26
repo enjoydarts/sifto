@@ -52,14 +52,18 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if h.cache != nil && !cacheBust {
 		var cached map[string]any
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
+			dashboardCacheCounter.hits.Add(1)
 			log.Printf("dashboard cache hit user_id=%s key=%s", userID, cacheKey)
 			writeJSON(w, cached)
 			return
 		} else if err != nil {
+			dashboardCacheCounter.errors.Add(1)
 			log.Printf("dashboard cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
+		dashboardCacheCounter.misses.Add(1)
 		log.Printf("dashboard cache miss user_id=%s key=%s", userID, cacheKey)
 	} else if cacheBust {
+		dashboardCacheCounter.bypass.Add(1)
 		log.Printf("dashboard cache bypass user_id=%s key=%s", userID, cacheKey)
 	}
 
@@ -160,6 +164,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.cache != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, 30*time.Second); err != nil {
+			dashboardCacheCounter.errors.Add(1)
 			log.Printf("dashboard cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 	}

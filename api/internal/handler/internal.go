@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minoru-kitayama/sifto/api/internal/model"
 	"github.com/minoru-kitayama/sifto/api/internal/repository"
 	"github.com/minoru-kitayama/sifto/api/internal/service"
@@ -18,6 +21,9 @@ type InternalHandler struct {
 	itemRepo   *repository.ItemInngestRepo
 	digestRepo *repository.DigestInngestRepo
 	publisher  *service.EventPublisher
+	db         *pgxpool.Pool
+	cache      service.JSONCache
+	worker     *service.WorkerClient
 }
 
 func NewInternalHandler(
@@ -25,12 +31,18 @@ func NewInternalHandler(
 	itemRepo *repository.ItemInngestRepo,
 	digestRepo *repository.DigestInngestRepo,
 	publisher *service.EventPublisher,
+	db *pgxpool.Pool,
+	cache service.JSONCache,
+	worker *service.WorkerClient,
 ) *InternalHandler {
 	return &InternalHandler{
 		userRepo:   userRepo,
 		itemRepo:   itemRepo,
 		digestRepo: digestRepo,
 		publisher:  publisher,
+		db:         db,
+		cache:      cache,
+		worker:     worker,
 	}
 }
 
@@ -316,5 +328,100 @@ func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http
 		"failed_count":       failed,
 		"send_error_samples": sendErrorSamples,
 		"targets":            preview,
+	})
+}
+
+func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Request) {
+	if !checkInternalSecret(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	type checkResult struct {
+		Status    string         `json:"status"`
+		LatencyMS int64          `json:"latency_ms,omitempty"`
+		Detail    string         `json:"detail,omitempty"`
+		HTTPCode  int            `json:"http_status,omitempty"`
+		Meta      map[string]any `json:"meta,omitempty"`
+	}
+	now := time.Now().UTC()
+	checks := map[string]checkResult{
+		"api": {Status: "ok"},
+	}
+
+	run := func(name string, fn func(ctx context.Context) (string, int, map[string]any, error)) {
+		start := time.Now()
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+		detail, code, meta, err := fn(ctx)
+		lat := time.Since(start).Milliseconds()
+		res := checkResult{LatencyMS: lat, HTTPCode: code, Meta: meta}
+		if err != nil {
+			res.Status = "error"
+			res.Detail = err.Error()
+		} else {
+			res.Status = "ok"
+			res.Detail = detail
+		}
+		checks[name] = res
+	}
+
+	run("db", func(ctx context.Context) (string, int, map[string]any, error) {
+		if h.db == nil {
+			return "", 0, nil, fmt.Errorf("db not configured")
+		}
+		err := h.db.Ping(ctx)
+		return "ping", 0, nil, err
+	})
+	run("redis", func(ctx context.Context) (string, int, map[string]any, error) {
+		if h.cache == nil {
+			return "", 0, nil, fmt.Errorf("cache not configured")
+		}
+		err := h.cache.Ping(ctx)
+		return "ping", 0, nil, err
+	})
+	run("worker", func(ctx context.Context) (string, int, map[string]any, error) {
+		if h.worker == nil {
+			return "", 0, nil, fmt.Errorf("worker client not configured")
+		}
+		err := h.worker.Health(ctx)
+		return "GET /health", 200, nil, err
+	})
+	run("inngest", func(ctx context.Context) (string, int, map[string]any, error) {
+		base := os.Getenv("INNGEST_BASE_URL")
+		if base == "" {
+			return "skipped", 0, map[string]any{"reason": "INNGEST_BASE_URL not set"}, nil
+		}
+		u := strings.TrimRight(base, "/")
+		client := &http.Client{Timeout: 3 * time.Second}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u+"/health", nil)
+		if err != nil {
+			return "", 0, nil, err
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", 0, nil, err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode >= 400 {
+			return "", resp.StatusCode, nil, fmt.Errorf("status %d", resp.StatusCode)
+		}
+		return "GET /health", resp.StatusCode, map[string]any{"base_url": base}, nil
+	})
+
+	overall := "ok"
+	for k, v := range checks {
+		if k == "inngest" && v.Detail == "skipped" {
+			continue
+		}
+		if v.Status != "ok" {
+			overall = "degraded"
+			break
+		}
+	}
+	writeJSON(w, map[string]any{
+		"status":      overall,
+		"checked_at":  now.Format(time.RFC3339Nano),
+		"checks":      checks,
+		"cache_stats": cacheStatsSnapshotAll(),
 	})
 }

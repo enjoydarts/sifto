@@ -35,6 +35,34 @@ type EmbeddingBackfillResponse = {
   targets?: unknown[];
 };
 
+type DebugSystemStatusResponse = {
+  proxy_status: number;
+  proxy_latency_ms: number;
+  data?: {
+    status?: string;
+    checked_at?: string;
+    checks?: Record<
+      string,
+      {
+        status?: string;
+        latency_ms?: number;
+        detail?: string;
+        http_status?: number;
+        meta?: Record<string, unknown>;
+      }
+    >;
+    cache_stats?: Record<
+      string,
+      {
+        hits?: number;
+        misses?: number;
+        bypass?: number;
+        errors?: number;
+      }
+    >;
+  };
+};
+
 async function postJSON<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
@@ -77,6 +105,9 @@ export default function DebugDigestsPage() {
   const [backfillDryRun, setBackfillDryRun] = useState(true);
   const [busyBackfill, setBusyBackfill] = useState(false);
   const [backfillResult, setBackfillResult] = useState<EmbeddingBackfillResponse | null>(null);
+  const [busySystemHealth, setBusySystemHealth] = useState(false);
+  const [systemHealth, setSystemHealth] = useState<DebugSystemStatusResponse | null>(null);
+  const [webHealth, setWebHealth] = useState<{ status: number; latency_ms: number; body: unknown } | null>(null);
 
   const helperText = useMemo(
     () =>
@@ -177,6 +208,40 @@ export default function DebugDigestsPage() {
     }
   };
 
+  const loadSystemHealth = async () => {
+    setBusySystemHealth(true);
+    setError(null);
+    try {
+      const webStart = Date.now();
+      const webRes = await fetch("/health", { cache: "no-store" });
+      const webText = await webRes.text();
+      let webBody: unknown = null;
+      try {
+        webBody = webText ? JSON.parse(webText) : null;
+      } catch {
+        webBody = { raw: webText };
+      }
+      setWebHealth({
+        status: webRes.status,
+        latency_ms: Date.now() - webStart,
+        body: webBody,
+      });
+
+      const res = await fetch("/api/debug/system-status", { cache: "no-store" });
+      const text = await res.text();
+      if (!res.ok) {
+        throw new Error(`${res.status}: ${text || res.statusText}`);
+      }
+      setSystemHealth(text ? (JSON.parse(text) as DebugSystemStatusResponse) : null);
+      showToast("System health loaded", "info");
+    } catch (e) {
+      setError(String(e));
+      showToast(String(e), "error");
+    } finally {
+      setBusySystemHealth(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -189,6 +254,92 @@ export default function DebugDigestsPage() {
           {error}
         </div>
       )}
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-800">System Health (Debug)</h2>
+          <button
+            type="button"
+            onClick={loadSystemHealth}
+            disabled={busySystemHealth}
+            className="rounded border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            {busySystemHealth ? "読み込み中…" : "Refresh"}
+          </button>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded border border-zinc-200 p-3">
+            <div className="mb-2 text-xs font-medium text-zinc-600">Web /health</div>
+            {webHealth ? (
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <StatusPill ok={webHealth.status >= 200 && webHealth.status < 400} label={`HTTP ${webHealth.status}`} />
+                  <span className="text-zinc-500">{webHealth.latency_ms} ms</span>
+                </div>
+                <pre className="overflow-x-auto rounded bg-zinc-950 p-2 text-[11px] text-zinc-100">
+                  {JSON.stringify(webHealth.body, null, 2)}
+                </pre>
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-400">未取得</p>
+            )}
+          </div>
+          <div className="rounded border border-zinc-200 p-3">
+            <div className="mb-2 text-xs font-medium text-zinc-600">API Internal System Status</div>
+            {systemHealth ? (
+              <div className="space-y-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <StatusPill ok={systemHealth.data?.status === "ok"} label={systemHealth.data?.status ?? "unknown"} />
+                  <span className="text-zinc-500">proxy {systemHealth.proxy_latency_ms} ms</span>
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(systemHealth.data?.checks ?? {}).map(([name, row]) => (
+                    <div key={name} className="rounded border border-zinc-200 px-2 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-medium text-zinc-800">{name}</div>
+                        <div className="flex items-center gap-2">
+                          <StatusPill ok={row.status === "ok"} label={row.status ?? "unknown"} />
+                          {typeof row.latency_ms === "number" && (
+                            <span className="text-zinc-500">{row.latency_ms} ms</span>
+                          )}
+                          {typeof row.http_status === "number" && row.http_status > 0 && (
+                            <span className="text-zinc-500">HTTP {row.http_status}</span>
+                          )}
+                        </div>
+                      </div>
+                      {row.detail && <div className="mt-1 text-zinc-500">{row.detail}</div>}
+                    </div>
+                  ))}
+                </div>
+                {Object.keys(systemHealth.data?.cache_stats ?? {}).length > 0 && (
+                  <div className="pt-1">
+                    <div className="mb-2 text-[11px] font-medium text-zinc-600">Cache Stats</div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {Object.entries(systemHealth.data?.cache_stats ?? {}).map(([name, stat]) => (
+                        <div key={name} className="rounded border border-zinc-200 px-2 py-2">
+                          <div className="mb-1 text-[11px] font-medium text-zinc-800">{name}</div>
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-zinc-600">
+                            <span>hit</span>
+                            <span className="text-right">{stat.hits ?? 0}</span>
+                            <span>miss</span>
+                            <span className="text-right">{stat.misses ?? 0}</span>
+                            <span>bypass</span>
+                            <span className="text-right">{stat.bypass ?? 0}</span>
+                            <span>errors</span>
+                            <span className="text-right">{stat.errors ?? 0}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-400">未取得</p>
+            )}
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold text-zinc-800">Generate Digest (Debug)</h2>
@@ -339,5 +490,17 @@ export default function DebugDigestsPage() {
         )}
       </section>
     </div>
+  );
+}
+
+function StatusPill({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span
+      className={`rounded px-2 py-0.5 text-[11px] font-medium ${
+        ok ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+      }`}
+    >
+      {label}
+    </span>
   );
 }

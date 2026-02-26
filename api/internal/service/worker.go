@@ -131,6 +131,29 @@ func (w *WorkerClient) ExtractBody(ctx context.Context, url string) (*ExtractBod
 	return postWithHeaders[ExtractBodyResponse](ctx, w, "/extract-body", map[string]any{"url": url}, nil)
 }
 
+func (w *WorkerClient) Health(ctx context.Context) error {
+	if w == nil {
+		return fmt.Errorf("worker client is nil")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, w.baseURL+"/health", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := w.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		if len(b) > 0 {
+			return fmt.Errorf("worker /health: status %d body=%s", resp.StatusCode, string(b))
+		}
+		return fmt.Errorf("worker /health: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 func (w *WorkerClient) ExtractFacts(ctx context.Context, title *string, content string, anthropicAPIKey *string) (*ExtractFactsResponse, error) {
 	return postWithHeaders[ExtractFactsResponse](ctx, w, "/extract-facts", map[string]any{
 		"title":   title,

@@ -60,6 +60,14 @@ type DebugSystemStatusResponse = {
         errors?: number;
       }
     >;
+    cache_stats_by_window?: Record<
+      string,
+      {
+        dashboard?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        reading_plan?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        error?: string;
+      }
+    >;
   };
 };
 
@@ -114,6 +122,27 @@ export default function DebugDigestsPage() {
       "digest_date は JST の日付です。例: 2026-02-24 を指定すると、2026-02-23 JST に生成された要約が対象になります。",
     []
   );
+  const cacheWindowRows = useMemo(() => {
+    const rows = systemHealth?.data?.cache_stats_by_window ?? {};
+    const order = ["1h", "3h", "8h", "24h", "3d", "7d"];
+    return order
+      .filter((k) => rows[k])
+      .map((k) => ({
+        window: k,
+        dashboard_hit_rate:
+          typeof rows[k]?.dashboard?.hit_rate === "number"
+            ? Number((rows[k]!.dashboard!.hit_rate! * 100).toFixed(1))
+            : null,
+        reading_plan_hit_rate:
+          typeof rows[k]?.reading_plan?.hit_rate === "number"
+            ? Number((rows[k]!.reading_plan!.hit_rate! * 100).toFixed(1))
+            : null,
+        dashboard_hits: rows[k]?.dashboard?.hits ?? 0,
+        dashboard_misses: rows[k]?.dashboard?.misses ?? 0,
+        reading_plan_hits: rows[k]?.reading_plan?.hits ?? 0,
+        reading_plan_misses: rows[k]?.reading_plan?.misses ?? 0,
+      }));
+  }, [systemHealth]);
 
   const onGenerate = async (e: FormEvent) => {
     e.preventDefault();
@@ -311,34 +340,109 @@ export default function DebugDigestsPage() {
                     </div>
                   ))}
                 </div>
-                {Object.keys(systemHealth.data?.cache_stats ?? {}).length > 0 && (
-                  <div className="pt-1">
-                    <div className="mb-2 text-[11px] font-medium text-zinc-600">Cache Stats</div>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {Object.entries(systemHealth.data?.cache_stats ?? {}).map(([name, stat]) => (
-                        <div key={name} className="rounded border border-zinc-200 px-2 py-2">
-                          <div className="mb-1 text-[11px] font-medium text-zinc-800">{name}</div>
-                          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-zinc-600">
-                            <span>hit</span>
-                            <span className="text-right">{stat.hits ?? 0}</span>
-                            <span>miss</span>
-                            <span className="text-right">{stat.misses ?? 0}</span>
-                            <span>bypass</span>
-                            <span className="text-right">{stat.bypass ?? 0}</span>
-                            <span>errors</span>
-                            <span className="text-right">{stat.errors ?? 0}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             ) : (
               <p className="text-xs text-zinc-400">未取得</p>
             )}
           </div>
         </div>
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold text-zinc-800">Cache Hit Rate (Debug)</h2>
+        {!systemHealth ? (
+          <p className="text-xs text-zinc-400">System Health を先に取得してください</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded border border-zinc-200 p-3">
+              <div className="mb-2 text-xs font-medium text-zinc-600">Current Process Counters</div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {Object.entries(systemHealth.data?.cache_stats ?? {}).map(([name, stat]) => (
+                  <div key={name} className="rounded border border-zinc-200 px-2 py-2">
+                    <div className="mb-1 text-[11px] font-medium text-zinc-800">{name}</div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-zinc-600">
+                      <span>hit</span><span className="text-right">{stat.hits ?? 0}</span>
+                      <span>miss</span><span className="text-right">{stat.misses ?? 0}</span>
+                      <span>bypass</span><span className="text-right">{stat.bypass ?? 0}</span>
+                      <span>errors</span><span className="text-right">{stat.errors ?? 0}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {cacheWindowRows.length > 0 && (
+              <div className="rounded border border-zinc-200 p-3">
+                <div className="mb-2 text-xs font-medium text-zinc-600">Windowed Hit Rate</div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-separate border-spacing-0 text-[11px]">
+                    <thead>
+                      <tr className="text-zinc-500">
+                        <th className="border-b border-zinc-200 px-2 py-1 text-left font-medium">Window</th>
+                        <th className="border-b border-zinc-200 px-2 py-1 text-left font-medium">dashboard</th>
+                        <th className="border-b border-zinc-200 px-2 py-1 text-right font-medium">h/m</th>
+                        <th className="border-b border-zinc-200 px-2 py-1 text-left font-medium">reading_plan</th>
+                        <th className="border-b border-zinc-200 px-2 py-1 text-right font-medium">h/m</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cacheWindowRows.map((row) => (
+                        <tr key={row.window}>
+                          <td className="border-b border-zinc-100 px-2 py-1.5 font-medium text-zinc-700">
+                            {row.window}
+                          </td>
+                          <td className="border-b border-zinc-100 px-2 py-1.5">
+                            <RateCell value={row.dashboard_hit_rate} />
+                          </td>
+                          <td className="border-b border-zinc-100 px-2 py-1.5 text-right text-zinc-500">
+                            {row.dashboard_hits}/{row.dashboard_misses}
+                          </td>
+                          <td className="border-b border-zinc-100 px-2 py-1.5">
+                            <RateCell value={row.reading_plan_hit_rate} />
+                          </td>
+                          <td className="border-b border-zinc-100 px-2 py-1.5 text-right text-zinc-500">
+                            {row.reading_plan_hits}/{row.reading_plan_misses}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {Object.keys(systemHealth.data?.cache_stats_by_window ?? {}).length > 0 && (
+              <div className="space-y-2">
+                {Object.entries(systemHealth.data?.cache_stats_by_window ?? {}).map(([win, row]) => (
+                  <div key={win} className="rounded border border-zinc-200 px-2 py-2">
+                    <div className="mb-1 text-[11px] font-medium text-zinc-800">{win}</div>
+                    {"error" in row && row.error ? (
+                      <div className="text-[11px] text-red-600">{row.error}</div>
+                    ) : (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {(["dashboard", "reading_plan"] as const).map((k) => {
+                          const v = row[k];
+                          const rate = typeof v?.hit_rate === "number" ? `${(v.hit_rate * 100).toFixed(1)}%` : "N/A";
+                          return (
+                            <div key={k} className="rounded bg-zinc-50 px-2 py-1.5">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-medium text-zinc-700">{k}</span>
+                                <span className="text-zinc-900">{rate}</span>
+                              </div>
+                              <div className="mt-0.5 text-[10px] text-zinc-500">
+                                h {v?.hits ?? 0} / m {v?.misses ?? 0} / b {v?.bypass ?? 0} / e {v?.errors ?? 0}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
@@ -501,6 +605,22 @@ function StatusPill({ ok, label }: { ok: boolean; label: string }) {
       }`}
     >
       {label}
+    </span>
+  );
+}
+
+function RateCell({ value }: { value: number | null }) {
+  if (typeof value !== "number") {
+    return <span className="text-zinc-400">N/A</span>;
+  }
+  let tone = "bg-zinc-100 text-zinc-700";
+  if (value >= 90) tone = "bg-green-100 text-green-800";
+  else if (value >= 70) tone = "bg-emerald-50 text-emerald-700";
+  else if (value >= 50) tone = "bg-amber-50 text-amber-700";
+  else tone = "bg-red-50 text-red-700";
+  return (
+    <span className={`inline-flex min-w-14 justify-center rounded px-2 py-0.5 font-medium ${tone}`}>
+      {value.toFixed(1)}%
     </span>
   );
 }

@@ -12,6 +12,8 @@ import (
 	"github.com/minoru-kitayama/sifto/api/internal/service"
 )
 
+const cacheMetricTTL = 8 * 24 * time.Hour
+
 type DashboardHandler struct {
 	sourceRepo   *repository.SourceRepo
 	itemRepo     *repository.ItemRepo
@@ -53,17 +55,23 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		var cached map[string]any
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
 			dashboardCacheCounter.hits.Add(1)
+			_ = h.cache.IncrMetric(r.Context(), "cache", "dashboard.hit", 1, time.Now(), cacheMetricTTL)
 			log.Printf("dashboard cache hit user_id=%s key=%s", userID, cacheKey)
 			writeJSON(w, cached)
 			return
 		} else if err != nil {
 			dashboardCacheCounter.errors.Add(1)
+			_ = h.cache.IncrMetric(r.Context(), "cache", "dashboard.error", 1, time.Now(), cacheMetricTTL)
 			log.Printf("dashboard cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 		dashboardCacheCounter.misses.Add(1)
+		_ = h.cache.IncrMetric(r.Context(), "cache", "dashboard.miss", 1, time.Now(), cacheMetricTTL)
 		log.Printf("dashboard cache miss user_id=%s key=%s", userID, cacheKey)
 	} else if cacheBust {
 		dashboardCacheCounter.bypass.Add(1)
+		if h.cache != nil {
+			_ = h.cache.IncrMetric(r.Context(), "cache", "dashboard.bypass", 1, time.Now(), cacheMetricTTL)
+		}
 		log.Printf("dashboard cache bypass user_id=%s key=%s", userID, cacheKey)
 	}
 
@@ -184,6 +192,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if h.cache != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, 30*time.Second); err != nil {
 			dashboardCacheCounter.errors.Add(1)
+			_ = h.cache.IncrMetric(r.Context(), "cache", "dashboard.error", 1, time.Now(), cacheMetricTTL)
 			log.Printf("dashboard cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 	}

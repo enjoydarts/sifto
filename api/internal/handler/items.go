@@ -126,17 +126,23 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 		var cached model.ReadingPlanResponse
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
 			readingPlanCacheCounter.hits.Add(1)
+			_ = h.cache.IncrMetric(r.Context(), "cache", "reading_plan.hit", 1, time.Now(), cacheMetricTTL)
 			log.Printf("reading-plan cache hit user_id=%s key=%s", userID, cacheKey)
 			writeJSON(w, &cached)
 			return
 		} else if err != nil {
 			readingPlanCacheCounter.errors.Add(1)
+			_ = h.cache.IncrMetric(r.Context(), "cache", "reading_plan.error", 1, time.Now(), cacheMetricTTL)
 			log.Printf("reading-plan cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 		readingPlanCacheCounter.misses.Add(1)
+		_ = h.cache.IncrMetric(r.Context(), "cache", "reading_plan.miss", 1, time.Now(), cacheMetricTTL)
 		log.Printf("reading-plan cache miss user_id=%s key=%s", userID, cacheKey)
 	} else if cacheBust {
 		readingPlanCacheCounter.bypass.Add(1)
+		if h.cache != nil {
+			_ = h.cache.IncrMetric(r.Context(), "cache", "reading_plan.bypass", 1, time.Now(), cacheMetricTTL)
+		}
 		log.Printf("reading-plan cache bypass user_id=%s key=%s", userID, cacheKey)
 	}
 
@@ -148,6 +154,7 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 	if h.cache != nil && resp != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, 45*time.Second); err != nil {
 			readingPlanCacheCounter.errors.Add(1)
+			_ = h.cache.IncrMetric(r.Context(), "cache", "reading_plan.error", 1, time.Now(), cacheMetricTTL)
 			log.Printf("reading-plan cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 	}

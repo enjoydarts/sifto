@@ -418,10 +418,57 @@ func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Reque
 			break
 		}
 	}
+	cacheWindows := map[string]any{}
+	if h.cache != nil {
+		type winDef struct {
+			Label string
+			Dur   time.Duration
+		}
+		wins := []winDef{
+			{Label: "1h", Dur: 1 * time.Hour},
+			{Label: "3h", Dur: 3 * time.Hour},
+			{Label: "8h", Dur: 8 * time.Hour},
+			{Label: "24h", Dur: 24 * time.Hour},
+			{Label: "3d", Dur: 72 * time.Hour},
+			{Label: "7d", Dur: 7 * 24 * time.Hour},
+		}
+		for _, wd := range wins {
+			sums, err := h.cache.SumMetrics(r.Context(), "cache", now.Add(-wd.Dur), now)
+			if err != nil {
+				cacheWindows[wd.Label] = map[string]any{"error": err.Error()}
+				continue
+			}
+			cacheWindows[wd.Label] = map[string]any{
+				"dashboard":    cacheWindowStats(sums, "dashboard"),
+				"reading_plan": cacheWindowStats(sums, "reading_plan"),
+			}
+		}
+	}
 	writeJSON(w, map[string]any{
-		"status":      overall,
-		"checked_at":  now.Format(time.RFC3339Nano),
-		"checks":      checks,
-		"cache_stats": cacheStatsSnapshotAll(),
+		"status":                overall,
+		"checked_at":            now.Format(time.RFC3339Nano),
+		"checks":                checks,
+		"cache_stats":           cacheStatsSnapshotAll(),
+		"cache_stats_by_window": cacheWindows,
 	})
+}
+
+func cacheWindowStats(sums map[string]int64, prefix string) map[string]any {
+	hits := sums[prefix+".hit"]
+	misses := sums[prefix+".miss"]
+	bypass := sums[prefix+".bypass"]
+	errors := sums[prefix+".error"]
+	denom := hits + misses
+	var hitRate *float64
+	if denom > 0 {
+		v := float64(hits) / float64(denom)
+		hitRate = &v
+	}
+	return map[string]any{
+		"hits":     hits,
+		"misses":   misses,
+		"bypass":   bypass,
+		"errors":   errors,
+		"hit_rate": hitRate,
+	}
 }

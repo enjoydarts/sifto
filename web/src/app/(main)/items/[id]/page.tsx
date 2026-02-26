@@ -40,11 +40,46 @@ export default function ItemDetailPage() {
   const syncItemReadInFeedCaches = useCallback((itemId: string, isRead: boolean) => {
     queryClient.setQueriesData({ queryKey: ["items-feed"] }, (prev: unknown) => {
       if (!prev || typeof prev !== "object") return prev;
-      const data = prev as { items?: Array<Record<string, unknown>> };
-      if (!Array.isArray(data.items)) return prev;
+      const data = prev as {
+        items?: Array<Record<string, unknown>>;
+        clusters?: Array<Record<string, unknown>>;
+      };
+      const patchItem = (v: Record<string, unknown>) => (v.id === itemId ? { ...v, is_read: isRead } : v);
+      let changed = false;
+      const next: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+      if (Array.isArray(data.items)) {
+        next.items = data.items.map((v) => {
+          const nv = patchItem(v);
+          if (nv !== v) changed = true;
+          return nv;
+        });
+      }
+      if (Array.isArray(data.clusters)) {
+        next.clusters = data.clusters.map((cluster) => {
+          const c = { ...cluster } as Record<string, unknown>;
+          const rep = c.representative;
+          if (rep && typeof rep === "object") {
+            const nr = patchItem(rep as Record<string, unknown>);
+            if (nr !== rep) {
+              c.representative = nr;
+              changed = true;
+            }
+          }
+          const items = c.items;
+          if (Array.isArray(items)) {
+            c.items = items.map((v) => {
+              if (!v || typeof v !== "object") return v;
+              const nv = patchItem(v as Record<string, unknown>);
+              if (nv !== v) changed = true;
+              return nv;
+            });
+          }
+          return c;
+        });
+      }
+      if (!changed) return prev;
       return {
-        ...data,
-        items: data.items.map((v) => (v.id === itemId ? { ...v, is_read: isRead } : v)),
+        ...next,
       };
     });
   }, [queryClient]);
@@ -53,19 +88,53 @@ export default function ItemDetailPage() {
     (itemId: string, patch: { is_favorite?: boolean; feedback_rating?: -1 | 0 | 1 | number }) => {
       queryClient.setQueriesData({ queryKey: ["items-feed"] }, (prev: unknown) => {
         if (!prev || typeof prev !== "object") return prev;
-        const data = prev as { items?: Array<Record<string, unknown>> };
-        if (!Array.isArray(data.items)) return prev;
+        const data = prev as {
+          items?: Array<Record<string, unknown>>;
+          clusters?: Array<Record<string, unknown>>;
+        };
+        const patchItem = (v: Record<string, unknown>) =>
+          v.id === itemId
+            ? {
+                ...v,
+                ...(patch.is_favorite != null ? { is_favorite: patch.is_favorite } : {}),
+                ...(patch.feedback_rating != null ? { feedback_rating: patch.feedback_rating } : {}),
+              }
+            : v;
+        let changed = false;
+        const next: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+        if (Array.isArray(data.items)) {
+          next.items = data.items.map((v) => {
+            const nv = patchItem(v);
+            if (nv !== v) changed = true;
+            return nv;
+          });
+        }
+        if (Array.isArray(data.clusters)) {
+          next.clusters = data.clusters.map((cluster) => {
+            const c = { ...cluster } as Record<string, unknown>;
+            const rep = c.representative;
+            if (rep && typeof rep === "object") {
+              const nr = patchItem(rep as Record<string, unknown>);
+              if (nr !== rep) {
+                c.representative = nr;
+                changed = true;
+              }
+            }
+            const items = c.items;
+            if (Array.isArray(items)) {
+              c.items = items.map((v) => {
+                if (!v || typeof v !== "object") return v;
+                const nv = patchItem(v as Record<string, unknown>);
+                if (nv !== v) changed = true;
+                return nv;
+              });
+            }
+            return c;
+          });
+        }
+        if (!changed) return prev;
         return {
-          ...data,
-          items: data.items.map((v) =>
-            v.id === itemId
-              ? {
-                  ...v,
-                  ...(patch.is_favorite != null ? { is_favorite: patch.is_favorite } : {}),
-                  ...(patch.feedback_rating != null ? { feedback_rating: patch.feedback_rating } : {}),
-                }
-              : v
-          ),
+          ...next,
         };
       });
     },

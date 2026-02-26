@@ -17,6 +17,7 @@ type WorkerClient struct {
 	baseURL              string
 	http                 *http.Client
 	composeDigestTimeout time.Duration
+	internalSecret       string
 }
 
 func NewWorkerClient() *WorkerClient {
@@ -28,6 +29,7 @@ func NewWorkerClient() *WorkerClient {
 		baseURL:              url,
 		http:                 &http.Client{Timeout: 60 * time.Second},
 		composeDigestTimeout: workerComposeDigestTimeout(),
+		internalSecret:       strings.TrimSpace(os.Getenv("INTERNAL_WORKER_SECRET")),
 	}
 }
 
@@ -159,7 +161,7 @@ func (w *WorkerClient) ExtractFacts(ctx context.Context, title *string, content 
 		"title":   title,
 		"content": content,
 		"model":   nil,
-	}, workerHeaders(anthropicAPIKey))
+	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) ExtractFactsWithModel(ctx context.Context, title *string, content string, anthropicAPIKey *string, model *string) (*ExtractFactsResponse, error) {
@@ -167,7 +169,7 @@ func (w *WorkerClient) ExtractFactsWithModel(ctx context.Context, title *string,
 		"title":   title,
 		"content": content,
 		"model":   model,
-	}, workerHeaders(anthropicAPIKey))
+	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) Summarize(ctx context.Context, title *string, facts []string, anthropicAPIKey *string) (*SummarizeResponse, error) {
@@ -175,7 +177,7 @@ func (w *WorkerClient) Summarize(ctx context.Context, title *string, facts []str
 		"title": title,
 		"facts": facts,
 		"model": nil,
-	}, workerHeaders(anthropicAPIKey))
+	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, facts []string, anthropicAPIKey *string, model *string) (*SummarizeResponse, error) {
@@ -183,7 +185,7 @@ func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, fa
 		"title": title,
 		"facts": facts,
 		"model": model,
-	}, workerHeaders(anthropicAPIKey))
+	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string) (*ComposeDigestResponse, error) {
@@ -196,7 +198,7 @@ func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, ite
 		"digest_date": digestDate,
 		"items":       items,
 		"model":       nil,
-	}, workerHeaders(anthropicAPIKey))
+	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, model *string) (*ComposeDigestResponse, error) {
@@ -209,7 +211,7 @@ func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate st
 		"digest_date": digestDate,
 		"items":       items,
 		"model":       model,
-	}, workerHeaders(anthropicAPIKey))
+	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) ComposeDigestClusterDraftWithModel(
@@ -227,7 +229,7 @@ func (w *WorkerClient) ComposeDigestClusterDraftWithModel(
 		"topics":        topics,
 		"source_lines":  sourceLines,
 		"model":         model,
-	}, workerHeaders(anthropicAPIKey))
+	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) RankFeedSuggestions(
@@ -242,7 +244,7 @@ func (w *WorkerClient) RankFeedSuggestions(
 		"preferred_topics": preferredTopics,
 		"candidates":       candidates,
 		"model":            nil,
-	}, workerHeaders(anthropicAPIKey))
+	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) RankFeedSuggestionsWithModel(
@@ -258,7 +260,7 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 		"preferred_topics": preferredTopics,
 		"candidates":       candidates,
 		"model":            model,
-	}, workerHeaders(anthropicAPIKey))
+	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) SuggestFeedSeedSites(
@@ -271,7 +273,7 @@ func (w *WorkerClient) SuggestFeedSeedSites(
 		"existing_sources": existing,
 		"preferred_topics": preferredTopics,
 		"model":            nil,
-	}, workerHeaders(anthropicAPIKey))
+	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
@@ -285,16 +287,21 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 		"existing_sources": existing,
 		"preferred_topics": preferredTopics,
 		"model":            model,
-	}, workerHeaders(anthropicAPIKey))
+	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 
-func workerHeaders(anthropicAPIKey *string) map[string]string {
-	if anthropicAPIKey == nil || *anthropicAPIKey == "" {
+func workerHeaders(anthropicAPIKey *string, internalSecret string) map[string]string {
+	headers := map[string]string{}
+	if internalSecret != "" {
+		headers["X-Internal-Worker-Secret"] = internalSecret
+	}
+	if anthropicAPIKey != nil && *anthropicAPIKey != "" {
+		headers["X-Anthropic-Api-Key"] = *anthropicAPIKey
+	}
+	if len(headers) == 0 {
 		return nil
 	}
-	return map[string]string{
-		"X-Anthropic-Api-Key": *anthropicAPIKey,
-	}
+	return headers
 }
 
 func postWithHeaders[T any](ctx context.Context, w *WorkerClient, path string, body any, headers map[string]string) (*T, error) {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlignLeft, FileText, Info, Link2, ListChecks, Sparkles, Star, ThumbsDown, ThumbsUp } from "lucide-react";
+import { AlignLeft, ArrowRight, FileText, Info, Link2, ListChecks, Sparkles, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, ItemDetail, RelatedItem } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -323,6 +323,22 @@ export default function ItemDetailPage() {
       setNextItemHref(null);
     }
   }, [backHref, id, queueStorageKey]);
+  useEffect(() => {
+    if (!nextItemHref) return;
+    router.prefetch(nextItemHref);
+    const nextId = nextItemHref.match(/\/items\/([^?]+)/)?.[1];
+    if (!nextId) return;
+    void queryClient.prefetchQuery({
+      queryKey: ["item-detail", nextId],
+      queryFn: () => api.getItem(nextId),
+      staleTime: 60_000,
+    });
+    void queryClient.prefetchQuery({
+      queryKey: ["item-related", nextId, 6],
+      queryFn: () => api.getRelatedItems(nextId, { limit: 6 }),
+      staleTime: 60_000,
+    });
+  }, [nextItemHref, queryClient, router]);
   const clusteredRelated = useMemo(() => {
     const clusters = relatedClusters.filter((c) => c.size >= 2).map((c) => ({
       ...c,
@@ -435,19 +451,9 @@ export default function ItemDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <Link href={backHref} className="inline-block text-sm text-zinc-500 hover:text-zinc-900">
-          ← {t("nav.items")}
-        </Link>
-        {nextItemHref && (
-          <Link
-            href={nextItemHref}
-            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
-          >
-            {t("itemDetail.next")}
-          </Link>
-        )}
-      </div>
+      <Link href={backHref} className="inline-block text-sm text-zinc-500 hover:text-zinc-900">
+        ← {t("nav.items")}
+      </Link>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -594,6 +600,16 @@ export default function ItemDetailPage() {
           )}
         </div>
       </section>
+
+      {nextItemHref && (
+        <Link
+          href={nextItemHref}
+          className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-zinc-900/20 transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-400"
+        >
+          <span>{t("itemDetail.next")}</span>
+          <ArrowRight className="size-4" aria-hidden="true" />
+        </Link>
+      )}
 
       {item.summary && (
         <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">

@@ -84,8 +84,6 @@ export default function LLMUsagePage() {
       calls: 0,
       input: 0,
       output: 0,
-      cacheWrite: 0,
-      cacheRead: 0,
       cost: 0,
       byProviderCost: new Map<string, number>(),
     };
@@ -93,8 +91,6 @@ export default function LLMUsagePage() {
       t.calls += r.calls;
       t.input += r.input_tokens;
       t.output += r.output_tokens;
-      t.cacheWrite += r.cache_creation_input_tokens;
-      t.cacheRead += r.cache_read_input_tokens;
       t.cost += r.estimated_cost_usd;
       t.byProviderCost.set(r.provider, (t.byProviderCost.get(r.provider) ?? 0) + r.estimated_cost_usd);
     }
@@ -104,10 +100,11 @@ export default function LLMUsagePage() {
   const providerTotals = useMemo(() => {
     const openai = totals.byProviderCost.get("openai") ?? 0;
     const anthropic = totals.byProviderCost.get("anthropic") ?? 0;
+    const google = totals.byProviderCost.get("google") ?? 0;
     const others = [...totals.byProviderCost.entries()]
-      .filter(([k]) => k !== "openai" && k !== "anthropic")
+      .filter(([k]) => k !== "openai" && k !== "anthropic" && k !== "google")
       .reduce((acc, [, v]) => acc + v, 0);
-    return { openai, anthropic, others };
+    return { openai, anthropic, google, others };
   }, [totals]);
 
   const groupedByDate = useMemo(() => {
@@ -122,12 +119,13 @@ export default function LLMUsagePage() {
   }, [summaryRows]);
 
   const dailyChartRows = useMemo(() => {
-    const m = new Map<string, { date: string; total: number; openai: number; anthropic: number; other: number }>();
+    const m = new Map<string, { date: string; total: number; openai: number; anthropic: number; google: number; other: number }>();
     for (const row of summaryRows) {
-      const cur = m.get(row.date_jst) ?? { date: row.date_jst, total: 0, openai: 0, anthropic: 0, other: 0 };
+      const cur = m.get(row.date_jst) ?? { date: row.date_jst, total: 0, openai: 0, anthropic: 0, google: 0, other: 0 };
       cur.total += row.estimated_cost_usd;
       if (row.provider === "openai") cur.openai += row.estimated_cost_usd;
       else if (row.provider === "anthropic") cur.anthropic += row.estimated_cost_usd;
+      else if (row.provider === "google") cur.google += row.estimated_cost_usd;
       else cur.other += row.estimated_cost_usd;
       m.set(row.date_jst, cur);
     }
@@ -332,16 +330,15 @@ export default function LLMUsagePage() {
         </div>
       )}
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-8">
+      <section className="flex w-full gap-3">
         <MetricCard label={t("llm.totalCost")} value={fmtUSD(totals.cost)} />
         <MetricCard label="OpenAI" value={fmtUSD(providerTotals.openai)} />
         <MetricCard label="Anthropic" value={fmtUSD(providerTotals.anthropic)} />
+        <MetricCard label="Google" value={fmtUSD(providerTotals.google)} />
         {providerTotals.others > 0 && <MetricCard label="Other" value={fmtUSD(providerTotals.others)} />}
         <MetricCard label={t("llm.totalCalls")} value={fmtNum(totals.calls)} />
         <MetricCard label={t("llm.input")} value={fmtNum(totals.input)} />
         <MetricCard label={t("llm.output")} value={fmtNum(totals.output)} />
-        <MetricCard label="Cache Write" value={fmtNum(totals.cacheWrite)} />
-        <MetricCard label="Cache Read" value={fmtNum(totals.cacheRead)} />
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
@@ -531,6 +528,15 @@ export default function LLMUsagePage() {
                   stackId="cost"
                   stroke="#3b82f6"
                   fill="#60a5fa"
+                  fillOpacity={0.6}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="google"
+                  name="Google"
+                  stackId="cost"
+                  stroke="#f59e0b"
+                  fill="#fbbf24"
                   fillOpacity={0.6}
                 />
                 <Area
@@ -775,9 +781,9 @@ export default function LLMUsagePage() {
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3">
+    <div className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-4 py-3">
       <div className="text-xs font-medium text-zinc-500">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-zinc-900">{value}</div>
+      <div className="mt-1 truncate text-lg font-semibold text-zinc-900">{value}</div>
     </div>
   );
 }

@@ -21,6 +21,8 @@ type ItemHandler struct {
 	cache     service.JSONCache
 }
 
+const itemsListCacheTTL = 30 * time.Second
+
 func NewItemHandler(repo *repository.ItemRepo, publisher *service.EventPublisher, cache service.JSONCache) *ItemHandler {
 	return &ItemHandler{repo: repo, publisher: publisher, cache: cache}
 }
@@ -58,6 +60,40 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	unreadOnly := q.Get("unread_only") == "true"
 	favoriteOnly := q.Get("favorite_only") == "true"
+	cacheKey := fmt.Sprintf(
+		"items:list:%s:status=%s:source=%s:topic=%s:unread=%t:fav=%t:sort=%s:page=%d:size=%d",
+		userID,
+		q.Get("status"),
+		q.Get("source_id"),
+		q.Get("topic"),
+		unreadOnly,
+		favoriteOnly,
+		sort,
+		page,
+		pageSize,
+	)
+	cacheBust := q.Get("cache_bust") == "1"
+	if h.cache != nil && !cacheBust {
+		var cached model.ItemListResponse
+		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
+			itemsListCacheCounter.hits.Add(1)
+			_ = h.cache.IncrMetric(r.Context(), "cache", "items_list.hit", 1, time.Now(), cacheMetricTTL)
+			writeJSON(w, &cached)
+			return
+		} else if err != nil {
+			itemsListCacheCounter.errors.Add(1)
+			_ = h.cache.IncrMetric(r.Context(), "cache", "items_list.error", 1, time.Now(), cacheMetricTTL)
+			log.Printf("items-list cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
+		itemsListCacheCounter.misses.Add(1)
+		_ = h.cache.IncrMetric(r.Context(), "cache", "items_list.miss", 1, time.Now(), cacheMetricTTL)
+	} else if cacheBust {
+		itemsListCacheCounter.bypass.Add(1)
+		if h.cache != nil {
+			_ = h.cache.IncrMetric(r.Context(), "cache", "items_list.bypass", 1, time.Now(), cacheMetricTTL)
+		}
+	}
+
 	resp, err := h.repo.ListPage(r.Context(), userID, repository.ItemListParams{
 		Status:       status,
 		SourceID:     sourceID,
@@ -71,6 +107,13 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeRepoError(w, err)
 		return
+	}
+	if h.cache != nil && resp != nil {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, itemsListCacheTTL); err != nil {
+			itemsListCacheCounter.errors.Add(1)
+			_ = h.cache.IncrMetric(r.Context(), "cache", "items_list.error", 1, time.Now(), cacheMetricTTL)
+			log.Printf("items-list cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
 	}
 	writeJSON(w, resp)
 }

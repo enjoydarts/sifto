@@ -19,6 +19,7 @@ type cacheStatsSnapshot struct {
 var (
 	dashboardCacheCounter   cacheCounter
 	readingPlanCacheCounter cacheCounter
+	itemsListCacheCounter   cacheCounter
 )
 
 func cacheStatsSnapshotAll() map[string]cacheStatsSnapshot {
@@ -34,6 +35,12 @@ func cacheStatsSnapshotAll() map[string]cacheStatsSnapshot {
 			Misses: readingPlanCacheCounter.misses.Load(),
 			Bypass: readingPlanCacheCounter.bypass.Load(),
 			Errors: readingPlanCacheCounter.errors.Load(),
+		},
+		"items_list": {
+			Hits:   itemsListCacheCounter.hits.Load(),
+			Misses: itemsListCacheCounter.misses.Load(),
+			Bypass: itemsListCacheCounter.bypass.Load(),
+			Errors: itemsListCacheCounter.errors.Load(),
 		},
 	}
 }

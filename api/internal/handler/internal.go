@@ -441,6 +441,7 @@ func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Reque
 			cacheWindows[wd.Label] = map[string]any{
 				"dashboard":    cacheWindowStats(sums, "dashboard"),
 				"reading_plan": cacheWindowStats(sums, "reading_plan"),
+				"items_list":   cacheWindowStats(sums, "items_list"),
 			}
 		}
 	}

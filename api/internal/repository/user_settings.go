@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,6 +25,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var v model.UserSettings
 	var anthropicKeyEnc *string
 	var openAIKeyEnc *string
+	var inoreaderAccessTokenEnc *string
 	err := r.db.QueryRow(ctx, `
 		SELECT user_id,
 		       anthropic_api_key_enc,
@@ -44,6 +46,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       anthropic_digest_model,
 		       anthropic_source_suggestion_model,
 		       openai_embedding_model,
+		       inoreader_access_token_enc,
+		       inoreader_token_expires_at,
 		       created_at,
 		       updated_at
 		FROM user_settings
@@ -69,6 +73,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.AnthropicDigestModel,
 		&v.AnthropicSourceSuggestModel,
 		&v.OpenAIEmbeddingModel,
+		&inoreaderAccessTokenEnc,
+		&v.InoreaderTokenExpiresAt,
 		&v.CreatedAt,
 		&v.UpdatedAt,
 	)
@@ -77,6 +83,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	}
 	v.HasAnthropicAPIKey = anthropicKeyEnc != nil && *anthropicKeyEnc != ""
 	v.HasOpenAIAPIKey = openAIKeyEnc != nil && *openAIKeyEnc != ""
+	v.HasInoreaderOAuth = inoreaderAccessTokenEnc != nil && *inoreaderAccessTokenEnc != ""
 	return &v, nil
 }
 
@@ -229,6 +236,56 @@ func (r *UserSettingsRepo) GetOpenAIAPIKeyEncrypted(ctx context.Context, userID 
 		return nil, nil
 	}
 	return v, nil
+}
+
+func (r *UserSettingsRepo) GetInoreaderTokensEncrypted(ctx context.Context, userID string) (accessTokenEnc, refreshTokenEnc *string, expiresAt *time.Time, err error) {
+	err = r.db.QueryRow(ctx, `
+		SELECT inoreader_access_token_enc, inoreader_refresh_token_enc, inoreader_token_expires_at
+		FROM user_settings
+		WHERE user_id = $1`,
+		userID,
+	).Scan(&accessTokenEnc, &refreshTokenEnc, &expiresAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil, nil, nil
+		}
+		return nil, nil, nil, err
+	}
+	return accessTokenEnc, refreshTokenEnc, expiresAt, nil
+}
+
+func (r *UserSettingsRepo) SetInoreaderOAuthTokens(ctx context.Context, userID, accessTokenEnc string, refreshTokenEnc *string, expiresAt *time.Time) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, inoreader_access_token_enc, inoreader_refresh_token_enc, inoreader_token_expires_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (user_id) DO UPDATE
+		SET inoreader_access_token_enc = EXCLUDED.inoreader_access_token_enc,
+		    inoreader_refresh_token_enc = EXCLUDED.inoreader_refresh_token_enc,
+		    inoreader_token_expires_at = EXCLUDED.inoreader_token_expires_at,
+		    updated_at = NOW()`,
+		userID, accessTokenEnc, refreshTokenEnc, expiresAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearInoreaderOAuthTokens(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, inoreader_access_token_enc, inoreader_refresh_token_enc, inoreader_token_expires_at)
+		VALUES ($1, NULL, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET inoreader_access_token_enc = NULL,
+		    inoreader_refresh_token_enc = NULL,
+		    inoreader_token_expires_at = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
 }
 
 func (r *UserSettingsRepo) SetAnthropicAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {

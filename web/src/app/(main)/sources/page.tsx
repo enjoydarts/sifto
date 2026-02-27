@@ -35,6 +35,7 @@ export default function SourcesPage() {
   const [addError, setAddError] = useState<string | null>(null);
   const [exportingOPML, setExportingOPML] = useState(false);
   const [importingOPML, setImportingOPML] = useState(false);
+  const [importingInoreader, setImportingInoreader] = useState(false);
   const opmlInputRef = useRef<HTMLInputElement | null>(null);
   const pageSize = 10;
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
@@ -225,6 +226,22 @@ export default function SourcesPage() {
     }
   };
 
+  const handleImportInoreader = async () => {
+    setImportingInoreader(true);
+    try {
+      const res = await api.importInoreaderSources();
+      await load();
+      showToast(
+        `${t("sources.toast.inoreaderImportedPrefix")}: ${t("sources.toast.opmlImportedAdded")} ${res.added} / ${t("sources.toast.opmlImportedSkipped")} ${res.skipped} / ${t("sources.toast.opmlImportedInvalid")} ${res.invalid}`,
+        "success"
+      );
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setImportingInoreader(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -371,6 +388,19 @@ export default function SourcesPage() {
           </div>
         )}
       </form>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <h2 className="mb-2 text-sm font-semibold text-zinc-700">{t("sources.inoreader.title")}</h2>
+        <p className="mb-3 text-xs text-zinc-500">{t("sources.inoreader.desc")}</p>
+        <button
+          type="button"
+          onClick={() => void handleImportInoreader()}
+          disabled={importingInoreader}
+          className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+        >
+          {importingInoreader ? t("sources.inoreader.importing") : t("sources.inoreader.import")}
+        </button>
+      </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

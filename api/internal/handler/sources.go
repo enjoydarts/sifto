@@ -227,48 +227,39 @@ func (h *SourceHandler) ImportOPML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	urlTitlePairs := flattenOPMLOutlines(doc.Body.Outlines)
-	added := 0
-	skipped := 0
-	invalid := 0
-	errorsOut := make([]string, 0)
-	for _, pair := range urlTitlePairs {
-		u := strings.TrimSpace(pair.URL)
-		parsed, err := url.ParseRequestURI(u)
-		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
-			invalid++
-			continue
-		}
-		title := pair.Title
-		if title != nil {
-			v := strings.TrimSpace(*title)
-			if v == "" {
-				title = nil
-			} else {
-				title = &v
-			}
-		}
-		if _, err := h.repo.Create(r.Context(), userID, u, "rss", title); err != nil {
-			if errors.Is(err, repository.ErrConflict) {
-				skipped++
-				continue
-			}
-			errorsOut = append(errorsOut, err.Error())
-			if len(errorsOut) >= 10 {
-				break
-			}
-			continue
-		}
-		added++
+	writeJSON(w, importURLTitlePairs(r.Context(), h.repo, userID, urlTitlePairs))
+}
+
+func (h *SourceHandler) ImportInoreader(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		AccessToken string `json:"access_token"`
 	}
-	writeJSON(w, map[string]any{
-		"status":       "ok",
-		"total":        len(urlTitlePairs),
-		"added":        added,
-		"skipped":      skipped,
-		"invalid":      invalid,
-		"error_count":  len(errorsOut),
-		"error_sample": errorsOut,
-	})
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+	}
+	token := strings.TrimSpace(body.AccessToken)
+	if token == "" && h.settingsRepo != nil && h.cipher != nil && h.cipher.Enabled() {
+		enc, _, _, err := h.settingsRepo.GetInoreaderTokensEncrypted(r.Context(), userID)
+		if err == nil && enc != nil && strings.TrimSpace(*enc) != "" {
+			if dec, decErr := h.cipher.DecryptString(*enc); decErr == nil {
+				token = strings.TrimSpace(dec)
+			}
+		}
+	}
+	if token == "" {
+		http.Error(w, "inoreader access token is not configured", http.StatusBadRequest)
+		return
+	}
+	pairs, err := fetchInoreaderSubscriptions(r.Context(), token)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, importURLTitlePairs(r.Context(), h.repo, userID, pairs))
 }
 
 func (h *SourceHandler) Health(w http.ResponseWriter, r *http.Request) {
@@ -286,6 +277,14 @@ func (h *SourceHandler) Health(w http.ResponseWriter, r *http.Request) {
 type opmlURLTitle struct {
 	URL   string
 	Title *string
+}
+
+type inoreaderSubscriptionListResponse struct {
+	Subscriptions []struct {
+		ID      string `json:"id"`
+		Title   string `json:"title"`
+		HTMLURL string `json:"htmlUrl"`
+	} `json:"subscriptions"`
 }
 
 func flattenOPMLOutlines(outlines []opmlOutline) []opmlURLTitle {
@@ -314,6 +313,115 @@ func flattenOPMLOutlines(outlines []opmlOutline) []opmlURLTitle {
 	}
 	walk(outlines)
 	return out
+}
+
+func importURLTitlePairs(ctx context.Context, repo *repository.SourceRepo, userID string, pairs []opmlURLTitle) map[string]any {
+	added := 0
+	skipped := 0
+	invalid := 0
+	errorsOut := make([]string, 0)
+	for _, pair := range pairs {
+		u := strings.TrimSpace(pair.URL)
+		parsed, err := url.ParseRequestURI(u)
+		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			invalid++
+			continue
+		}
+		title := pair.Title
+		if title != nil {
+			v := strings.TrimSpace(*title)
+			if v == "" {
+				title = nil
+			} else {
+				title = &v
+			}
+		}
+		if _, err := repo.Create(ctx, userID, u, "rss", title); err != nil {
+			if errors.Is(err, repository.ErrConflict) {
+				skipped++
+				continue
+			}
+			errorsOut = append(errorsOut, err.Error())
+			if len(errorsOut) >= 10 {
+				break
+			}
+			continue
+		}
+		added++
+	}
+	return map[string]any{
+		"status":       "ok",
+		"total":        len(pairs),
+		"added":        added,
+		"skipped":      skipped,
+		"invalid":      invalid,
+		"error_count":  len(errorsOut),
+		"error_sample": errorsOut,
+	}
+}
+
+func fetchInoreaderSubscriptions(ctx context.Context, accessToken string) ([]opmlURLTitle, error) {
+	if strings.TrimSpace(accessToken) == "" {
+		return nil, errors.New("access token is required")
+	}
+	client := &http.Client{Timeout: 20 * time.Second}
+	endpoint := "https://www.inoreader.com/reader/api/0/subscription/list?output=json"
+	call := func(authHeader string) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", authHeader)
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("User-Agent", "Sifto/1.0")
+		return client.Do(req)
+	}
+
+	resp, err := call("GoogleLogin auth=" + accessToken)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		_ = resp.Body.Close()
+		resp, err = call("Bearer " + accessToken)
+		if err != nil {
+			return nil, err
+		}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return nil, fmt.Errorf("inoreader api status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var decoded inoreaderSubscriptionListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return nil, fmt.Errorf("decode inoreader subscriptions: %w", err)
+	}
+	out := make([]opmlURLTitle, 0, len(decoded.Subscriptions))
+	seen := map[string]struct{}{}
+	for _, s := range decoded.Subscriptions {
+		raw := strings.TrimSpace(s.ID)
+		if strings.HasPrefix(raw, "feed/") {
+			raw = strings.TrimPrefix(raw, "feed/")
+		}
+		if unescaped, err := url.QueryUnescape(raw); err == nil && strings.TrimSpace(unescaped) != "" {
+			raw = unescaped
+		}
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if _, ok := seen[raw]; ok {
+			continue
+		}
+		seen[raw] = struct{}{}
+		var title *string
+		if v := strings.TrimSpace(s.Title); v != "" {
+			title = &v
+		}
+		out = append(out, opmlURLTitle{URL: raw, Title: title})
+	}
+	return out, nil
 }
 
 func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {

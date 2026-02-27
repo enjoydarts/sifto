@@ -26,6 +26,7 @@ export default function SettingsPage() {
   const [deletingAnthropicKey, setDeletingAnthropicKey] = useState(false);
   const [savingOpenAIKey, setSavingOpenAIKey] = useState(false);
   const [deletingOpenAIKey, setDeletingOpenAIKey] = useState(false);
+  const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [budgetUSD, setBudgetUSD] = useState<string>("");
@@ -84,6 +85,15 @@ export default function SettingsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const inoreaderStatus = new URLSearchParams(window.location.search).get("inoreader");
+    if (inoreaderStatus === "connected") {
+      showToast(t("settings.toast.inoreaderConnected"), "success");
+    } else if (inoreaderStatus === "error") {
+      showToast(t("settings.toast.inoreaderConnectError"), "error");
+    }
+  }, [showToast, t]);
 
   const budgetRemainingTone = useMemo(() => {
     const v = settings?.current_month.remaining_budget_pct;
@@ -263,6 +273,27 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleDeleteInoreaderOAuth() {
+    if (!(await confirm({
+      title: t("settings.inoreaderDeleteTitle"),
+      message: t("settings.inoreaderDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingInoreaderOAuth(true);
+    try {
+      await api.deleteInoreaderOAuth();
+      await load();
+      showToast(t("settings.toast.inoreaderDisconnected"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingInoreaderOAuth(false);
+    }
+  }
+
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!settings) return null;
@@ -419,6 +450,41 @@ export default function SettingsPage() {
             </button>
           </div>
         </form>
+
+        <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+              <KeyRound className="size-4 text-zinc-500" aria-hidden="true" />
+              {t("settings.inoreaderTitle")}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">{t("settings.inoreaderDescription")}</p>
+          </div>
+
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+            {settings.has_inoreader_oauth ? t("settings.inoreaderConnected") : t("settings.inoreaderNotConnected")}
+          </div>
+          {settings.inoreader_token_expires_at && (
+            <p className="mt-2 text-xs text-zinc-500">
+              {t("settings.inoreaderTokenExpiresAt")}: {new Date(settings.inoreader_token_expires_at).toLocaleString()}
+            </p>
+          )}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <a
+              href="/api/settings/inoreader/connect"
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white"
+            >
+              {t("settings.inoreaderConnect")}
+            </a>
+            <button
+              type="button"
+              disabled={deletingInoreaderOAuth || !settings.has_inoreader_oauth}
+              onClick={handleDeleteInoreaderOAuth}
+              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
+            >
+              {deletingInoreaderOAuth ? t("settings.deleting") : t("settings.inoreaderDisconnect")}
+            </button>
+          </div>
+        </section>
 
         <form onSubmit={submitLLMModels} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">

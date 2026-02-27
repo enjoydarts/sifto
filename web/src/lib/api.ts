@@ -299,6 +299,8 @@ export interface UserSettings {
   anthropic_api_key_last4: string | null;
   has_openai_api_key: boolean;
   openai_api_key_last4: string | null;
+  has_inoreader_oauth?: boolean;
+  inoreader_token_expires_at?: string | null;
   monthly_budget_usd: number | null;
   budget_alert_enabled: boolean;
   budget_alert_threshold_pct: number;
@@ -359,6 +361,14 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify({ opml }),
+      }
+    ),
+  importInoreaderSources: (accessToken?: string) =>
+    apiFetch<{ status: string; total: number; added: number; skipped: number; invalid: number; error_count: number; error_sample?: string[] }>(
+      "/sources/inoreader/import",
+      {
+        method: "POST",
+        ...(accessToken ? { body: JSON.stringify({ access_token: accessToken }) } : {}),
       }
     ),
   getSourceSuggestions: (params?: { limit?: number }) => {
@@ -521,6 +531,11 @@ export const api = {
   deleteOpenAIApiKey: () =>
     apiFetch<{ user_id: string; has_openai_api_key: boolean; openai_api_key_last4: string | null }>(
       "/settings/openai-key",
+      { method: "DELETE" }
+    ),
+  deleteInoreaderOAuth: () =>
+    apiFetch<{ user_id: string; has_inoreader_oauth: boolean; inoreader_token_expires: string | null }>(
+      "/settings/inoreader-oauth",
       { method: "DELETE" }
     ),
 

@@ -1,8 +1,13 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -54,6 +59,8 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"anthropic_api_key_last4":    settings.AnthropicAPIKeyLast4,
 		"has_openai_api_key":         settings.HasOpenAIAPIKey,
 		"openai_api_key_last4":       settings.OpenAIAPIKeyLast4,
+		"has_inoreader_oauth":        settings.HasInoreaderOAuth,
+		"inoreader_token_expires_at": settings.InoreaderTokenExpiresAt,
 		"monthly_budget_usd":         settings.MonthlyBudgetUSD,
 		"budget_alert_enabled":       settings.BudgetAlertEnabled,
 		"budget_alert_threshold_pct": settings.BudgetAlertThresholdPct,
@@ -80,6 +87,160 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"remaining_budget_usd": remainingBudgetUSD,
 			"remaining_budget_pct": remainingPct,
 		},
+	})
+}
+
+func oauthRedirectURIFromRequest(r *http.Request) string {
+	if v := strings.TrimSpace(os.Getenv("INOREADER_OAUTH_REDIRECT_URI")); v != "" {
+		return v
+	}
+	scheme := "https"
+	if xf := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); xf != "" {
+		scheme = xf
+	} else if r.TLS == nil {
+		scheme = "http"
+	}
+	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
+	if host == "" {
+		host = r.Host
+	}
+	return fmt.Sprintf("%s://%s/api/settings/inoreader/callback", scheme, host)
+}
+
+func randomOAuthState() (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func (h *SettingsHandler) InoreaderConnect(w http.ResponseWriter, r *http.Request) {
+	if strings.TrimSpace(os.Getenv("INOREADER_CLIENT_ID")) == "" || strings.TrimSpace(os.Getenv("INOREADER_CLIENT_SECRET")) == "" {
+		http.Error(w, "inoreader oauth is not configured", http.StatusInternalServerError)
+		return
+	}
+	state, err := randomOAuthState()
+	if err != nil {
+		http.Error(w, "failed to build oauth state", http.StatusInternalServerError)
+		return
+	}
+	redirectURI := oauthRedirectURIFromRequest(r)
+	q := url.Values{}
+	q.Set("client_id", strings.TrimSpace(os.Getenv("INOREADER_CLIENT_ID")))
+	q.Set("redirect_uri", redirectURI)
+	q.Set("response_type", "code")
+	q.Set("scope", "read")
+	q.Set("state", state)
+	connectURL := "https://www.inoreader.com/oauth2/auth?" + q.Encode()
+	http.SetCookie(w, &http.Cookie{
+		Name:     "inoreader_oauth_state",
+		Value:    state,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   r.TLS != nil || strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https"),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   10 * 60,
+	})
+	http.Redirect(w, r, connectURL, http.StatusFound)
+}
+
+func (h *SettingsHandler) InoreaderCallback(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	state := strings.TrimSpace(r.URL.Query().Get("state"))
+	code := strings.TrimSpace(r.URL.Query().Get("code"))
+	if code == "" {
+		http.Redirect(w, r, "/settings?inoreader=error&reason=missing_code", http.StatusFound)
+		return
+	}
+	stateCookie, err := r.Cookie("inoreader_oauth_state")
+	if err != nil || strings.TrimSpace(stateCookie.Value) == "" || stateCookie.Value != state {
+		http.Redirect(w, r, "/settings?inoreader=error&reason=invalid_state", http.StatusFound)
+		return
+	}
+	redirectURI := oauthRedirectURIFromRequest(r)
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", redirectURI)
+	form.Set("client_id", strings.TrimSpace(os.Getenv("INOREADER_CLIENT_ID")))
+	form.Set("client_secret", strings.TrimSpace(os.Getenv("INOREADER_CLIENT_SECRET")))
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "https://www.inoreader.com/oauth2/token", strings.NewReader(form.Encode()))
+	if err != nil {
+		http.Redirect(w, r, "/settings?inoreader=error&reason=token_request", http.StatusFound)
+		return
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
+	if err != nil {
+		http.Redirect(w, r, "/settings?inoreader=error&reason=token_exchange", http.StatusFound)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		http.Redirect(w, r, "/settings?inoreader=error&reason=token_status", http.StatusFound)
+		return
+	}
+	var tokenResp struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil || strings.TrimSpace(tokenResp.AccessToken) == "" {
+		http.Redirect(w, r, "/settings?inoreader=error&reason=token_parse", http.StatusFound)
+		return
+	}
+	if h.cipher == nil || !h.cipher.Enabled() {
+		http.Redirect(w, r, "/settings?inoreader=error&reason=cipher", http.StatusFound)
+		return
+	}
+	accessEnc, err := h.cipher.EncryptString(tokenResp.AccessToken)
+	if err != nil {
+		http.Redirect(w, r, "/settings?inoreader=error&reason=encrypt_access", http.StatusFound)
+		return
+	}
+	var refreshEnc *string
+	if strings.TrimSpace(tokenResp.RefreshToken) != "" {
+		v, err := h.cipher.EncryptString(tokenResp.RefreshToken)
+		if err != nil {
+			http.Redirect(w, r, "/settings?inoreader=error&reason=encrypt_refresh", http.StatusFound)
+			return
+		}
+		refreshEnc = &v
+	}
+	var expiresAt *time.Time
+	if tokenResp.ExpiresIn > 0 {
+		v := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+		expiresAt = &v
+	}
+	if _, err := h.repo.SetInoreaderOAuthTokens(r.Context(), userID, accessEnc, refreshEnc, expiresAt); err != nil {
+		http.Redirect(w, r, "/settings?inoreader=error&reason=save", http.StatusFound)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "inoreader_oauth_state",
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   r.TLS != nil || strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https"),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+	http.Redirect(w, r, "/settings?inoreader=connected", http.StatusFound)
+}
+
+func (h *SettingsHandler) DeleteInoreaderOAuth(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	settings, err := h.repo.ClearInoreaderOAuthTokens(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"user_id":                 settings.UserID,
+		"has_inoreader_oauth":     settings.HasInoreaderOAuth,
+		"inoreader_token_expires": settings.InoreaderTokenExpiresAt,
 	})
 }
 

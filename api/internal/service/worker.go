@@ -174,17 +174,19 @@ func (w *WorkerClient) ExtractFactsWithModel(ctx context.Context, title *string,
 
 func (w *WorkerClient) Summarize(ctx context.Context, title *string, facts []string, anthropicAPIKey *string) (*SummarizeResponse, error) {
 	return postWithHeaders[SummarizeResponse](ctx, w, "/summarize", map[string]any{
-		"title": title,
-		"facts": facts,
-		"model": nil,
+		"title":             title,
+		"facts":             facts,
+		"model":             nil,
+		"source_text_chars": nil,
 	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, facts []string, anthropicAPIKey *string, model *string) (*SummarizeResponse, error) {
+func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, facts []string, sourceTextChars *int, anthropicAPIKey *string, model *string) (*SummarizeResponse, error) {
 	return postWithHeaders[SummarizeResponse](ctx, w, "/summarize", map[string]any{
-		"title": title,
-		"facts": facts,
-		"model": model,
+		"title":             title,
+		"facts":             facts,
+		"model":             model,
+		"source_text_chars": sourceTextChars,
 	}, workerHeaders(anthropicAPIKey, w.internalSecret))
 }
 

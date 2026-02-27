@@ -97,6 +97,25 @@ def _summary_composite_score(breakdown: dict) -> float:
     return round(total, 4)
 
 
+def _clamp_int(v: int, lo: int, hi: int) -> int:
+    return max(lo, min(hi, int(v)))
+
+
+def _target_summary_chars(source_text_chars: int | None, facts: list[str]) -> int:
+    if isinstance(source_text_chars, int) and source_text_chars > 0:
+        # Article-length aware target: roughly 16% of source chars with safe bounds.
+        return _clamp_int(round(source_text_chars * 0.16), 220, 1200)
+    facts_chars = sum(len(str(f)) for f in (facts or []))
+    if facts_chars > 0:
+        return _clamp_int(round(facts_chars * 0.9), 220, 900)
+    return 300
+
+
+def _summary_max_tokens(target_chars: int) -> int:
+    # Keep enough room for JSON envelope + score fields.
+    return _clamp_int(round(target_chars * 1.2), 700, 2600)
+
+
 def _merge_fact_lists(fact_lists: list[list[str]], max_items: int = 24) -> list[str]:
     # De-dup while preserving coverage across chunks by interleaving.
     normalized_seen: set[str] = set()
@@ -384,9 +403,20 @@ JSON配列として返してください。例: ["事実1", "事実2"]
     }
 
 
-def summarize(title: str | None, facts: list[str], api_key: str | None = None, model: str | None = None) -> dict:
+def summarize(
+    title: str | None,
+    facts: list[str],
+    source_text_chars: int | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
+    target_chars = _target_summary_chars(source_text_chars, facts)
+    min_chars = _clamp_int(round(target_chars * 0.8), 160, 1000)
+    max_chars = _clamp_int(round(target_chars * 1.2), 260, 1400)
+    max_tokens = _summary_max_tokens(target_chars)
+
     if _client_for_api_key(api_key) is None:
-        summary = " / ".join(facts[:5])[:420] if facts else (title or "")
+        summary = " / ".join(facts[:8])[:max_chars] if facts else (title or "")
         score_breakdown = {
             "importance": 0.4,
             "novelty": 0.4,
@@ -416,7 +446,7 @@ def summarize(title: str | None, facts: list[str], api_key: str | None = None, m
     prompt = f"""以下の事実リストをもとに、記事の要約を作成してください。
 以下のJSON形式で返してください:
 {{
-  "summary": "350〜600字程度の要約",
+  "summary": "{min_chars}〜{max_chars}字程度の要約",
   "topics": ["トピック1", "トピック2"],
   "score_breakdown": {{
     "importance": 0.0〜1.0,
@@ -432,7 +462,8 @@ def summarize(title: str | None, facts: list[str], api_key: str | None = None, m
 - 客観的・中立的に書く（意見や煽りを入れない）
 - 読みやすい自然な日本語にする（硬すぎる定型文を避ける）
 - 記事の主題、何が起きたか、重要なポイントを過不足なく含める
-- 箇条書きではなく、1〜2段落の文章でまとめる
+- 箇条書きではなく、2〜4段落の文章でまとめる
+- 要約の目標文字数は約{target_chars}字。短すぎる要約を避ける
 - score_breakdown は以下の観点で付与する
   - importance: 一般読者にとっての重要度
   - novelty: 新規性・変化の大きさ
@@ -446,10 +477,10 @@ def summarize(title: str | None, facts: list[str], api_key: str | None = None, m
 {facts_text}
 """
     message, used_model = _call_with_model_fallback(
-        prompt, str(model or _summary_model), _summary_model_fallback, max_tokens=1800, api_key=api_key
+        prompt, str(model or _summary_model), _summary_model_fallback, max_tokens=max_tokens, api_key=api_key
     )
     if message is None:
-        summary = " / ".join(facts[:5])[:420] if facts else (title or "")
+        summary = " / ".join(facts[:8])[:max_chars] if facts else (title or "")
         score_breakdown = {
             "importance": 0.4,
             "novelty": 0.4,

@@ -641,7 +641,14 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 	if limit > 20 {
 		limit = 20
 	}
-	const minSimilarity = 0.35
+	const minSimilarity = 0.40
+	fetchLimit := limit * 5
+	if fetchLimit < 30 {
+		fetchLimit = 30
+	}
+	if fetchLimit > 120 {
+		fetchLimit = 120
+	}
 
 	rows, err := r.db.Query(ctx, `
 		WITH target AS (
@@ -677,7 +684,7 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 		FROM scored
 		WHERE similarity >= $4
 		ORDER BY is_same_source ASC, similarity DESC, COALESCE(published_at, created_at) DESC
-		LIMIT $3`, id, userID, limit, minSimilarity)
+		LIMIT $3`, id, userID, fetchLimit, minSimilarity)
 	if err != nil {
 		return nil, err
 	}

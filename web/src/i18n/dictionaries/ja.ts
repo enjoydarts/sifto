@@ -252,7 +252,7 @@ export const jaDict: Dict = {
   "itemDetail.sort.similarity": "類似度順",
   "itemDetail.sort.recent": "新しい順",
   "itemDetail.relatedError": "関連記事の取得に失敗しました（本文表示は継続）",
-  "itemDetail.relatedEmpty": "関連記事はまだありません（embedding未生成 or 候補なし）",
+  "itemDetail.relatedEmpty": "関連記事はまだありません",
   "itemDetail.relatedReasonPrefix": "関連理由: ",
   "itemDetail.relatedReason.sharedTopics": "共通トピック",
   "itemDetail.relatedReason.veryHighSemantic": "意味的に非常に近い",

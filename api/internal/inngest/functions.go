@@ -615,7 +615,8 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				if userModelSettings != nil {
 					modelOverride = ptrStringOrNil(userModelSettings.AnthropicSummaryModel)
 				}
-				return worker.SummarizeWithModel(ctx, extracted.Title, factsResp.Facts, userAnthropicKey, modelOverride)
+				sourceChars := len(extracted.Content)
+				return worker.SummarizeWithModel(ctx, extracted.Title, factsResp.Facts, &sourceChars, userAnthropicKey, modelOverride)
 			})
 			if err != nil {
 				log.Printf("process-item summarize failed item_id=%s err=%v", itemID, err)

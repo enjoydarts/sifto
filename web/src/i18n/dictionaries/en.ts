@@ -252,7 +252,7 @@ export const enDict: Dict = {
   "itemDetail.sort.similarity": "Similarity",
   "itemDetail.sort.recent": "Recent",
   "itemDetail.relatedError": "Failed to load related articles (item content is still available).",
-  "itemDetail.relatedEmpty": "No related articles yet (no embeddings or no candidates).",
+  "itemDetail.relatedEmpty": "No related articles yet.",
   "itemDetail.relatedReasonPrefix": "Why related: ",
   "itemDetail.relatedReason.sharedTopics": "Shared topics",
   "itemDetail.relatedReason.veryHighSemantic": "Very high semantic similarity",

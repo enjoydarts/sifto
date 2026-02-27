@@ -246,6 +246,7 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	items = rerankAndFilterRelated(items, targetTopics, limit)
 	annotateRelatedReasons(items, targetTopics)
 	clusters := clusterRelatedItems(items)
 	writeJSON(w, map[string]any{
@@ -254,6 +255,81 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 		"limit":    limit,
 		"item_id":  id,
 	})
+}
+
+func rerankAndFilterRelated(items []model.RelatedItem, targetTopics []string, limit int) []model.RelatedItem {
+	if len(items) == 0 || limit <= 0 {
+		return nil
+	}
+	targetSet := map[string]struct{}{}
+	for _, t := range targetTopics {
+		v := strings.TrimSpace(t)
+		if v == "" {
+			continue
+		}
+		targetSet[v] = struct{}{}
+	}
+	type scoredItem struct {
+		item    model.RelatedItem
+		score   float64
+		overlap int
+	}
+	scored := make([]scoredItem, 0, len(items))
+	for _, it := range items {
+		overlap := 0
+		if len(targetSet) > 0 {
+			for _, topic := range it.Topics {
+				if _, ok := targetSet[strings.TrimSpace(topic)]; ok {
+					overlap++
+				}
+			}
+		}
+		// Hard filter to cut obvious noise.
+		if overlap == 0 && it.Similarity < 0.68 {
+			continue
+		}
+		if overlap > 0 && it.Similarity < 0.50 {
+			continue
+		}
+		overlapBoost := 0.0
+		if overlap > 0 {
+			overlapBoost = float64(overlap)
+			if overlapBoost > 3 {
+				overlapBoost = 3
+			}
+			overlapBoost *= 0.06
+		}
+		score := it.Similarity + overlapBoost
+		scored = append(scored, scoredItem{item: it, score: score, overlap: overlap})
+	}
+	if len(scored) == 0 {
+		// Fallback: keep only high-similarity items.
+		for _, it := range items {
+			if it.Similarity >= 0.75 {
+				scored = append(scored, scoredItem{item: it, score: it.Similarity, overlap: 0})
+			}
+		}
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		if scored[i].overlap != scored[j].overlap {
+			return scored[i].overlap > scored[j].overlap
+		}
+		if scored[i].item.Similarity != scored[j].item.Similarity {
+			return scored[i].item.Similarity > scored[j].item.Similarity
+		}
+		return scored[i].item.CreatedAt.After(scored[j].item.CreatedAt)
+	})
+	if len(scored) > limit {
+		scored = scored[:limit]
+	}
+	out := make([]model.RelatedItem, 0, len(scored))
+	for _, s := range scored {
+		out = append(out, s.item)
+	}
+	return out
 }
 
 func annotateRelatedReasons(items []model.RelatedItem, targetTopics []string) {

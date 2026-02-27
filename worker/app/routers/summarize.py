@@ -9,6 +9,7 @@ class SummarizeRequest(BaseModel):
     title: str | None
     facts: list[str]
     model: str | None = None
+    source_text_chars: int | None = None
 
 
 class SummarizeResponse(BaseModel):
@@ -24,5 +25,11 @@ class SummarizeResponse(BaseModel):
 @router.post("/summarize", response_model=SummarizeResponse)
 def summarize_endpoint(req: SummarizeRequest, request: Request):
     api_key = request.headers.get("x-anthropic-api-key") or None
-    result = summarize(req.title, req.facts, api_key=api_key, model=req.model)
+    result = summarize(
+        req.title,
+        req.facts,
+        source_text_chars=req.source_text_chars,
+        api_key=api_key,
+        model=req.model,
+    )
     return result

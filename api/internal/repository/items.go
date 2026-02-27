@@ -812,6 +812,14 @@ func (r *ItemRepo) ensureOwned(ctx context.Context, userID, itemID string) error
 	return nil
 }
 
+func (r *ItemRepo) Delete(ctx context.Context, itemID, userID string) error {
+	if err := r.ensureOwned(ctx, userID, itemID); err != nil {
+		return err
+	}
+	_, err := r.db.Exec(ctx, `DELETE FROM items WHERE id = $1`, itemID)
+	return err
+}
+
 func itoa(n int) string {
 	return strconv.Itoa(n)
 }

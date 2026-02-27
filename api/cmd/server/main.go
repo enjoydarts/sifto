@@ -101,6 +101,7 @@ func main() {
 			r.Post("/retry-failed", itemH.RetryFailed)
 			r.Get("/reading-plan", itemH.ReadingPlan)
 			r.Get("/{id}/related", itemH.Related)
+			r.Delete("/{id}", itemH.Delete)
 			r.Get("/{id}", itemH.GetDetail)
 			r.Patch("/{id}/feedback", itemH.SetFeedback)
 			r.Post("/{id}/read", itemH.MarkRead)

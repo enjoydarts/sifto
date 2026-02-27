@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlignLeft, FileText, Link2, ListChecks, Sparkles, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, ItemDetail, RelatedItem } from "@/lib/api";
@@ -21,12 +21,14 @@ export default function ItemDetailPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [readUpdating, setReadUpdating] = useState(false);
+  const [deleteUpdating, setDeleteUpdating] = useState(false);
   const [feedbackUpdating, setFeedbackUpdating] = useState(false);
   const [related, setRelated] = useState<RelatedItem[]>([]);
   const [relatedClusters, setRelatedClusters] = useState<
@@ -140,6 +142,60 @@ export default function ItemDetailPage() {
     },
     [queryClient]
   );
+
+  const removeItemFromFeedCaches = useCallback((itemId: string) => {
+    queryClient.setQueriesData({ queryKey: ["items-feed"] }, (prev: unknown) => {
+      if (!prev || typeof prev !== "object") return prev;
+      const data = prev as {
+        items?: Array<Record<string, unknown>>;
+        total?: number;
+        planClusters?: Array<Record<string, unknown>>;
+      };
+      let changed = false;
+      let removedFromItems = false;
+      const next: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+      if (Array.isArray(data.items)) {
+        const filtered = data.items.filter((v) => v.id !== itemId);
+        if (filtered.length !== data.items.length) {
+          next.items = filtered;
+          changed = true;
+          removedFromItems = true;
+        }
+      }
+      if (Array.isArray(data.planClusters)) {
+        const clusters = data.planClusters
+          .map((cluster) => {
+            const c = { ...cluster } as Record<string, unknown>;
+            const items = c.items;
+            if (Array.isArray(items)) {
+              const filtered = items.filter((v) => v && typeof v === "object" && (v as Record<string, unknown>).id !== itemId);
+              if (filtered.length !== items.length) {
+                c.items = filtered;
+                changed = true;
+              }
+              const rep = c.representative;
+              if (rep && typeof rep === "object") {
+                const repID = (rep as Record<string, unknown>).id;
+                if (repID === itemId) {
+                  c.representative = filtered.length > 0 ? filtered[0] : null;
+                }
+              }
+              c.size = filtered.length;
+            }
+            return c;
+          })
+          .filter((c) => {
+            const items = c.items;
+            return Array.isArray(items) ? items.length > 0 : true;
+          });
+        next.planClusters = clusters;
+      }
+      if (typeof data.total === "number" && removedFromItems) {
+        next.total = Math.max(0, data.total - 1);
+      }
+      return changed ? next : prev;
+    });
+  }, [queryClient]);
 
   useEffect(() => {
     setLoading(true);
@@ -277,6 +333,28 @@ export default function ItemDetailPage() {
     }
   };
 
+  const deleteItem = async () => {
+    if (!item || deleteUpdating) return;
+    const ok = window.confirm(
+      locale === "ja"
+        ? "この記事を削除します。よろしいですか？"
+        : "Delete this item? This action cannot be undone."
+    );
+    if (!ok) return;
+    setDeleteUpdating(true);
+    try {
+      await api.deleteItem(item.id);
+      removeItemFromFeedCaches(item.id);
+      showToast(locale === "ja" ? "記事を削除しました" : "Item deleted", "success");
+      router.push(backHref);
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setDeleteUpdating(false);
+    }
+  };
+
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!item) return null;
@@ -319,6 +397,20 @@ export default function ItemDetailPage() {
                 : locale === "ja"
                   ? "既読にする"
                   : "Mark read"}
+          </button>
+          <button
+            type="button"
+            onClick={deleteItem}
+            disabled={deleteUpdating}
+            className="rounded border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deleteUpdating
+              ? locale === "ja"
+                ? "削除中..."
+                : "Deleting..."
+              : locale === "ja"
+                ? "削除"
+                : "Delete"}
           </button>
         </div>
 

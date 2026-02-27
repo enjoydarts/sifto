@@ -175,6 +175,16 @@ func (h *ItemHandler) GetDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, item)
 }
 
+func (h *ItemHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	id := chi.URLParam(r, "id")
+	if err := h.repo.Delete(r.Context(), id, userID); err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	id := chi.URLParam(r, "id")

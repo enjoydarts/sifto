@@ -406,6 +406,8 @@ export const api = {
     apiFetch<ItemReadResult>(`/items/${id}/read`, { method: "POST" }),
   markItemUnread: (id: string) =>
     apiFetch<ItemReadResult>(`/items/${id}/read`, { method: "DELETE" }),
+  deleteItem: (id: string) =>
+    apiFetch<void>(`/items/${id}`, { method: "DELETE" }),
   setItemFeedback: (id: string, body: { rating: number; is_favorite: boolean }) =>
     apiFetch<ItemFeedbackResult>(`/items/${id}/feedback`, {
       method: "PATCH",

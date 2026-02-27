@@ -59,6 +59,7 @@ export default function ItemDetailPage() {
   const [expandedRelatedClusterIds, setExpandedRelatedClusterIds] = useState<Record<string, boolean>>({});
   const [relatedSortMode, setRelatedSortMode] = useState<"similarity" | "recent">("similarity");
   const [relatedError, setRelatedError] = useState<string | null>(null);
+  const [nextItemHref, setNextItemHref] = useState<string | null>(null);
   const autoMarkedRef = useRef<Record<string, true>>({});
 
   const syncItemReadInFeedCaches = useCallback((itemId: string, isRead: boolean) => {
@@ -298,6 +299,30 @@ export default function ItemDetailPage() {
     const from = searchParams.get("from");
     return from && from.startsWith("/items") ? from : "/items";
   }, [searchParams]);
+  const queueStorageKey = useMemo(() => `items-queue:${backHref}`, [backHref]);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(queueStorageKey);
+      if (!raw) {
+        setNextItemHref(null);
+        return;
+      }
+      const ids = JSON.parse(raw) as string[];
+      if (!Array.isArray(ids) || ids.length === 0) {
+        setNextItemHref(null);
+        return;
+      }
+      const idx = ids.findIndex((v) => v === id);
+      if (idx < 0 || idx + 1 >= ids.length) {
+        setNextItemHref(null);
+        return;
+      }
+      const nextID = ids[idx + 1];
+      setNextItemHref(nextID ? `/items/${nextID}?from=${encodeURIComponent(backHref)}` : null);
+    } catch {
+      setNextItemHref(null);
+    }
+  }, [backHref, id, queueStorageKey]);
   const clusteredRelated = useMemo(() => {
     const clusters = relatedClusters.filter((c) => c.size >= 2).map((c) => ({
       ...c,
@@ -410,9 +435,19 @@ export default function ItemDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link href={backHref} className="inline-block text-sm text-zinc-500 hover:text-zinc-900">
-        ← {t("nav.items")}
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href={backHref} className="inline-block text-sm text-zinc-500 hover:text-zinc-900">
+          ← {t("nav.items")}
+        </Link>
+        {nextItemHref && (
+          <Link
+            href={nextItemHref}
+            className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            {t("itemDetail.next")}
+          </Link>
+        )}
+      </div>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center gap-2">

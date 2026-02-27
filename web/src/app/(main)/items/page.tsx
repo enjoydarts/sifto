@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "rea
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image as ImageIcon, Newspaper, Star, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Image as ImageIcon, ListChecks, Newspaper, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, Item, ReadingPlanResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import Pagination from "@/components/pagination";
@@ -218,6 +218,7 @@ function ItemsPageContent() {
 
   const scrollStorageKey = useMemo(() => `items-scroll:${currentItemsHref}`, [currentItemsHref]);
   const lastItemStorageKey = useMemo(() => `items-last-item:${currentItemsHref}`, [currentItemsHref]);
+  const queueStorageKey = useMemo(() => `items-queue:${currentItemsHref}`, [currentItemsHref]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -415,6 +416,10 @@ function ItemsPageContent() {
     sessionStorage.setItem(scrollStorageKey, String(window.scrollY));
     sessionStorage.setItem(lastItemStorageKey, itemId);
   }, [lastItemStorageKey, scrollStorageKey]);
+  const saveReadQueue = useCallback((ids: string[]) => {
+    if (typeof window === "undefined") return;
+    sessionStorage.setItem(queueStorageKey, JSON.stringify(ids));
+  }, [queueStorageKey]);
   const prefetchItemDetail = useCallback((itemId: string) => {
     if (prefetchedDetailIDsRef.current[itemId]) return;
     prefetchedDetailIDsRef.current[itemId] = true;
@@ -436,6 +441,11 @@ function ItemsPageContent() {
     const href = detailHref(item.id);
     const openDetail = () => {
       rememberScroll(item.id);
+      saveReadQueue(
+        focusMode
+          ? displayItems.map((v) => v.id)
+          : sortedItems.map((v) => v.id)
+      );
       router.push(href);
     };
     const reactionPill = item.is_favorite
@@ -590,7 +600,31 @@ function ItemsPageContent() {
         </div>
       </div>
     );
-  }, [detailHref, locale, prefetchItemDetail, readUpdatingIds, rememberScroll, retryItem, retryingIds, router, t, toggleRead]);
+  }, [detailHref, displayItems, focusMode, locale, prefetchItemDetail, readUpdatingIds, rememberScroll, retryItem, retryingIds, router, saveReadQueue, sortedItems, t, toggleRead]);
+
+  const taskTotal = useMemo(() => {
+    if (!focusMode) return 0;
+    return focusCompleted + focusRemaining;
+  }, [focusCompleted, focusMode, focusRemaining]);
+  const taskProgress = useMemo(() => {
+    if (!focusMode || taskTotal <= 0) return 0;
+    return Math.max(0, Math.min(100, Math.round((focusCompleted / taskTotal) * 100)));
+  }, [focusCompleted, focusMode, taskTotal]);
+  const nextFocusItem = useMemo(() => {
+    if (!focusMode) return null;
+    return displayItems.find((v) => !v.is_read) ?? displayItems[0] ?? null;
+  }, [displayItems, focusMode]);
+  const taskEtaMinutes = useMemo(() => {
+    if (!focusMode) return 0;
+    const base = Math.max(1, focusRemaining) * 3;
+    return base;
+  }, [focusMode, focusRemaining]);
+  const startFocusTask = useCallback(() => {
+    if (!nextFocusItem) return;
+    rememberScroll(nextFocusItem.id);
+    saveReadQueue(displayItems.map((v) => v.id));
+    router.push(detailHref(nextFocusItem.id));
+  }, [detailHref, displayItems, nextFocusItem, rememberScroll, router, saveReadQueue]);
 
   return (
     <div className={`space-y-4 ${focusMode ? "pb-8" : ""}`}>
@@ -676,6 +710,47 @@ function ItemsPageContent() {
           </p>
         </div>
       </div>
+
+      {focusMode && nextFocusItem && (
+        <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2.5 py-1 text-[11px] font-semibold text-white">
+                <ListChecks className="size-3.5" aria-hidden="true" />
+                {t("items.task.today")}
+              </div>
+              <p className="mt-2 text-sm font-medium text-zinc-900">
+                {t("items.task.progressLabel")}: {focusCompleted}/{taskTotal}
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">
+                {t("items.task.remainingLabel")}: {focusRemaining} / {t("items.task.etaLabel")}: {taskEtaMinutes}
+                {t("items.task.minute")}
+              </p>
+              <div className="mt-2 h-2 w-64 max-w-full overflow-hidden rounded-full bg-zinc-100">
+                <div
+                  className="h-full rounded-full bg-zinc-900 transition-all"
+                  style={{ width: `${taskProgress}%` }}
+                />
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={startFocusTask}
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
+              >
+                {t("items.task.continue")}
+              </button>
+              <Link
+                href="/settings"
+                className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                {t("items.feed.settings")}
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-2">

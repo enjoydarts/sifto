@@ -330,7 +330,7 @@ export default function LLMUsagePage() {
         </div>
       )}
 
-      <section className="flex w-full gap-3">
+      <section className="flex w-full flex-wrap gap-3 lg:flex-nowrap">
         <MetricCard label={t("llm.totalCost")} value={fmtUSD(totals.cost)} />
         <MetricCard label="OpenAI" value={fmtUSD(providerTotals.openai)} />
         <MetricCard label="Anthropic" value={fmtUSD(providerTotals.anthropic)} />
@@ -781,7 +781,7 @@ export default function LLMUsagePage() {
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-4 py-3">
+    <div className="min-w-0 w-[calc(50%-0.375rem)] rounded-lg border border-zinc-200 bg-white px-4 py-3 sm:w-[calc(33.333%-0.5rem)] lg:w-auto lg:flex-1">
       <div className="text-xs font-medium text-zinc-500">{label}</div>
       <div className="mt-1 truncate text-lg font-semibold text-zinc-900">{value}</div>
     </div>

@@ -6,10 +6,10 @@ import { api, Digest } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 
-function digestStatusBadge(d: Digest, locale: "ja" | "en") {
+function digestStatusBadge(d: Digest, t: (key: string, fallback?: string) => string) {
   if (d.sent_at) {
     return {
-      label: locale === "ja" ? "送信済み" : "Sent",
+      label: t("digest.status.sent"),
       className: "bg-green-50 text-green-700",
     };
   }
@@ -19,32 +19,32 @@ function digestStatusBadge(d: Digest, locale: "ja" | "en") {
     case "fetch_failed":
     case "user_key_failed":
       return {
-        label: locale === "ja" ? "失敗" : "Failed",
+        label: t("digest.status.failed"),
         className: "bg-red-50 text-red-700",
       };
     case "processing":
       return {
-        label: locale === "ja" ? "処理中" : "Processing",
+        label: t("digest.status.processing"),
         className: "bg-blue-50 text-blue-700",
       };
     case "skipped_resend_disabled":
       return {
-        label: locale === "ja" ? "送信無効" : "Resend off",
+        label: t("digest.status.resendDisabled"),
         className: "bg-amber-50 text-amber-700",
       };
     case "skipped_user_disabled":
       return {
-        label: locale === "ja" ? "メール送信OFF" : "Email off",
+        label: t("digest.status.emailDisabled"),
         className: "bg-zinc-100 text-zinc-600",
       };
     case "skipped_no_items":
       return {
-        label: locale === "ja" ? "対象なし" : "No items",
+        label: t("digest.status.noItems"),
         className: "bg-zinc-100 text-zinc-600",
       };
     default:
       return {
-        label: locale === "ja" ? "未送信" : "Pending",
+        label: t("digest.status.pending"),
         className: "bg-zinc-100 text-zinc-500",
       };
   }
@@ -85,7 +85,7 @@ export default function DigestsPage() {
 
       <ul className="space-y-2">
         {paged.map((d) => {
-          const badge = digestStatusBadge(d, locale);
+          const badge = digestStatusBadge(d, t);
           return (
           <li key={d.id}>
             <Link
@@ -96,7 +96,7 @@ export default function DigestsPage() {
                 <div className="font-medium text-zinc-900">{d.digest_date}</div>
                 <div className="mt-0.5 truncate text-sm text-zinc-600">
                   {d.email_subject ??
-                    (locale === "ja" ? "メール件名はまだ生成されていません" : "Email subject not generated yet")}
+                    t("digests.emailSubjectPending")}
                 </div>
                 {!!d.send_error && !d.sent_at && (
                   <div className="mt-0.5 truncate text-xs text-red-600">

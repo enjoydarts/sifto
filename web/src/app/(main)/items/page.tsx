@@ -267,7 +267,7 @@ function ItemsPageContent() {
       setRetryingIds((prev) => ({ ...prev, [itemId]: true }));
       try {
         await api.retryItem(itemId);
-        showToast(locale === "ja" ? "再試行をキュー投入しました" : "Retry queued", "success");
+        showToast(t("items.toast.retryQueued"), "success");
         await queryClient.invalidateQueries({ queryKey: ["items-feed"] });
       } catch (e) {
         setError(String(e));
@@ -280,7 +280,7 @@ function ItemsPageContent() {
         });
       }
     },
-    [locale, queryClient, showToast, t]
+    [queryClient, showToast, t]
   );
 
   const toggleRead = useCallback(
@@ -305,10 +305,10 @@ function ItemsPageContent() {
         );
         if (item.is_read) {
           await api.markItemUnread(item.id);
-          showToast(locale === "ja" ? "未読に戻しました" : "Marked as unread", "success");
+          showToast(t("itemDetail.toast.markUnread"), "success");
         } else {
           await api.markItemRead(item.id);
-          showToast(locale === "ja" ? "既読にしました" : "Marked as read", "success");
+          showToast(t("itemDetail.toast.markRead"), "success");
         }
       } catch (e) {
         queryClient.invalidateQueries({ queryKey: listQueryKey });
@@ -322,7 +322,7 @@ function ItemsPageContent() {
         });
       }
     },
-    [listQueryKey, locale, queryClient, showToast, t]
+    [listQueryKey, queryClient, showToast, t]
   );
 
   const sortedItems = [...items].sort((a, b) => {
@@ -486,38 +486,38 @@ function ItemsPageContent() {
                           : "border-zinc-200 bg-white text-zinc-700"
                       }`}
                     >
-                      {item.is_read ? (locale === "ja" ? "既読" : "Read") : (locale === "ja" ? "未読" : "Unread")}
+                      {item.is_read ? t("items.read.read") : t("items.read.unread")}
                     </span>
                     <span>{new Date(item.published_at ?? item.created_at).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US")}</span>
                     {item.is_favorite && (
                       <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                         <Star className="size-3 fill-current" aria-hidden="true" />
-                        {locale === "ja" ? "お気に入り" : "Favorite"}
+                        {t("items.feedback.favorite")}
                       </span>
                     )}
                     {item.feedback_rating === 1 && (
                       <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700">
                         <ThumbsUp className="size-3" aria-hidden="true" />
-                        {locale === "ja" ? "良い" : "Like"}
+                        {t("items.feedback.like")}
                       </span>
                     )}
                     {item.feedback_rating === -1 && (
                       <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
                         <ThumbsDown className="size-3" aria-hidden="true" />
-                        {locale === "ja" ? "微妙" : "Dislike"}
+                        {t("items.feedback.dislike")}
                       </span>
                     )}
                     {featured &&
                       (item.summary_score != null ? (
                         <span
                           className={`rounded border px-2 py-0.5 text-xs font-semibold ${scoreTone(item.summary_score)}`}
-                          title={locale === "ja" ? "要約スコア" : "Summary score"}
+                          title={t("items.summaryScore")}
                         >
                           {item.summary_score.toFixed(2)}
                         </span>
                       ) : (
                         <span className="rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-400">
-                          {locale === "ja" ? "未採点" : "N/A"}
+                          {t("items.scoreNA")}
                         </span>
                       ))}
                   </div>
@@ -527,13 +527,13 @@ function ItemsPageContent() {
                     {item.summary_score != null ? (
                       <span
                         className={`shrink-0 rounded border px-2 py-0.5 text-xs font-semibold ${scoreTone(item.summary_score)}`}
-                        title={locale === "ja" ? "要約スコア" : "Summary score"}
+                        title={t("items.summaryScore")}
                       >
                         {item.summary_score.toFixed(2)}
                       </span>
                     ) : (
                       <span className="shrink-0 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-400">
-                        {locale === "ja" ? "未採点" : "N/A"}
+                        {t("items.scoreNA")}
                       </span>
                     )}
                   </div>
@@ -554,16 +554,10 @@ function ItemsPageContent() {
                     className="w-full rounded border border-zinc-300 bg-white px-3 py-1 text-center text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                   >
                     {readUpdatingIds[item.id]
-                      ? locale === "ja"
-                        ? "更新中..."
-                        : "Updating..."
+                      ? t("items.action.updating")
                       : item.is_read
-                        ? locale === "ja"
-                          ? "未読に戻す"
-                          : "Mark unread"
-                        : locale === "ja"
-                          ? "既読にする"
-                          : "Mark read"}
+                        ? t("items.action.markUnread")
+                        : t("items.action.markRead")}
                   </button>
                   {item.status === "failed" && (
                     <button
@@ -596,16 +590,10 @@ function ItemsPageContent() {
               }`}
             >
               {readUpdatingIds[item.id]
-                ? locale === "ja"
-                  ? "更新中..."
-                  : "Updating..."
+                ? t("items.action.updating")
                 : item.is_read
-                  ? locale === "ja"
-                    ? "未読に戻す"
-                    : "Mark unread"
-                  : locale === "ja"
-                    ? "既読にする"
-                    : "Mark read"}
+                  ? t("items.action.markUnread")
+                  : t("items.action.markRead")}
             </button>
             {item.status === "failed" ? (
               <button
@@ -647,7 +635,7 @@ function ItemsPageContent() {
                 focusMode ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
               }`}
             >
-              {locale === "ja" ? "おすすめ" : "Recommended"}
+              {t("items.feed.recommended")}
             </button>
             <button
               type="button"
@@ -656,7 +644,7 @@ function ItemsPageContent() {
                 !focusMode ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
               }`}
             >
-              {locale === "ja" ? "すべて" : "All"}
+              {t("items.feed.all")}
             </button>
           </div>
           {focusMode && (
@@ -664,7 +652,7 @@ function ItemsPageContent() {
               href="/settings"
               className="rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
             >
-              {locale === "ja" ? "おすすめ設定" : "Feed settings"}
+              {t("items.feed.settings")}
             </Link>
           )}
         </div>
@@ -679,7 +667,7 @@ function ItemsPageContent() {
                   : "text-zinc-600 hover:bg-zinc-50"
               }`}
             >
-              {locale === "ja" ? "新着順" : "Newest"}
+              {t("items.sort.newest")}
             </button>
             <button
               type="button"
@@ -690,7 +678,7 @@ function ItemsPageContent() {
                   : "text-zinc-600 hover:bg-zinc-50"
               }`}
             >
-              {locale === "ja" ? "スコア順" : "Score"}
+              {t("items.sort.score")}
             </button>
           </div>
         )}
@@ -706,14 +694,14 @@ function ItemsPageContent() {
             {(focusMode ? recommendedRenderedCount : itemsTotal).toLocaleString()} {t("common.rows")}
             {!focusMode && topic && (
               <span className="ml-2 text-zinc-400">
-                {locale === "ja" ? `（トピック: ${topic}）` : `(topic: ${topic})`}
+                {`(${t("items.topic")}: ${topic})`}
               </span>
             )}
             {focusMode && (
               <span className="ml-2 text-zinc-400">
                 {locale === "ja"
-                  ? `（${displayItems.length.toLocaleString()}件を選定 / 対象 ${planPoolCount.toLocaleString()} 件）`
-                  : `(${displayItems.length.toLocaleString()} selected / ${planPoolCount.toLocaleString()} in window)`}
+                  ? `${t("items.recommendedStatOpen")}${displayItems.length.toLocaleString()}${t("common.rows")}${t("items.recommendedStatSelected")}${t("items.recommendedStatTarget")} ${planPoolCount.toLocaleString()} ${t("common.rows")}${t("items.recommendedStatClose")}`
+                  : `(${displayItems.length.toLocaleString()} ${t("items.selected")} / ${planPoolCount.toLocaleString()} ${t("items.inWindow")})`}
               </span>
             )}
           </p>
@@ -725,14 +713,14 @@ function ItemsPageContent() {
         {!focusMode && topic && (
           <div className="inline-flex items-center gap-2 rounded border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-800">
             <span className="font-medium">
-              {locale === "ja" ? "トピック" : "Topic"}: {topic}
+              {t("items.topic")}: {topic}
             </span>
             <button
               type="button"
               onClick={() => replaceItemsQuery({ topic: "", page: 1 })}
               className="rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-100"
             >
-              {locale === "ja" ? "解除" : "Clear"}
+              {t("items.clear")}
             </button>
           </div>
         )}
@@ -744,7 +732,7 @@ function ItemsPageContent() {
               onChange={(e) => replaceItemsQuery({ unread: e.target.checked, page: 1 })}
               className="size-4 rounded border-zinc-300"
             />
-            {locale === "ja" ? "未読のみ" : "Unread only"}
+            {t("items.filter.unreadOnly")}
           </label>
         )}
         {!focusMode && (
@@ -757,7 +745,7 @@ function ItemsPageContent() {
             />
             <span className="inline-flex items-center gap-1">
               <Star className="size-3.5 text-amber-500" aria-hidden="true" />
-              {locale === "ja" ? "お気に入りのみ" : "Favorites only"}
+              {t("items.filter.favoriteOnly")}
             </span>
           </label>
         )}
@@ -776,10 +764,10 @@ function ItemsPageContent() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
-                {locale === "ja" ? "今日のピックアップ" : "Today's Picks"}
+                {t("items.section.todayPicks")}
               </div>
               <div className="text-sm text-zinc-500">
-                {locale === "ja" ? "まず読む価値が高い記事" : "Start here for high-value reads"}
+                {t("items.section.todayPicksDesc")}
               </div>
             </div>
           </div>
@@ -797,10 +785,10 @@ function ItemsPageContent() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                {locale === "ja" ? "話題ごとに読む" : "Read by Topic"}
+                {t("items.section.byTopic")}
               </div>
               <div className="text-sm text-zinc-500">
-                {locale === "ja" ? "関連記事がまとまっている話題" : "Clusters of related stories"}
+                {t("items.section.byTopicDesc")}
               </div>
             </div>
           </div>
@@ -816,7 +804,7 @@ function ItemsPageContent() {
                         {section.topic}
                       </span>
                       <span className="text-xs text-zinc-500">
-                        {locale === "ja" ? `${section.items.length}本` : `${section.items.length} stories`}
+                        {locale === "ja" ? `${section.items.length}${t("items.storyCountJa")}` : `${section.items.length} ${t("items.stories")}`}
                       </span>
                     </div>
                   </div>
@@ -845,10 +833,10 @@ function ItemsPageContent() {
           <div className="mb-2 flex items-center justify-between">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                {locale === "ja" ? "その他のおすすめ" : "More Picks"}
+                {t("items.section.morePicks")}
               </div>
               <div className="text-sm text-zinc-500">
-                {locale === "ja" ? "単発で読んでおきたい記事" : "Good standalone reads"}
+                {t("items.section.morePicksDesc")}
               </div>
             </div>
           </div>

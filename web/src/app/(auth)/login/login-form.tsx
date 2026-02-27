@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
+import { useI18n } from "@/components/i18n-provider";
 
 interface Props {
   showDev: boolean;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function LoginForm({ showDev, showGoogle }: Props) {
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/items";
 
@@ -22,7 +24,7 @@ export default function LoginForm({ showDev, showGoogle }: Props) {
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
             Sifto
           </h1>
-          <p className="text-sm text-zinc-500">サインインして続ける</p>
+          <p className="text-sm text-zinc-500">{t("login.subtitle")}</p>
         </div>
 
         {/* Sign-in buttons */}
@@ -50,7 +52,7 @@ export default function LoginForm({ showDev, showGoogle }: Props) {
                   fill="#EA4335"
                 />
               </svg>
-              Continue with Google
+              {t("login.google")}
             </button>
           )}
 
@@ -59,13 +61,13 @@ export default function LoginForm({ showDev, showGoogle }: Props) {
               onClick={() => signIn("credentials", { callbackUrl })}
               className="w-full rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
             >
-              Dev Login
+              {t("login.dev")}
             </button>
           )}
 
           {!showGoogle && !showDev && (
             <p className="text-center text-sm text-zinc-400">
-              ログイン方法が設定されていません。
+              {t("login.noProvider")}
             </p>
           )}
         </div>

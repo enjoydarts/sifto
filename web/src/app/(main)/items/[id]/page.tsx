@@ -292,13 +292,7 @@ export default function ItemDetailPage() {
       syncItemReadInFeedCaches(item.id, next.is_read);
       setItem({ ...item, is_read: next.is_read });
       showToast(
-        next.is_read
-          ? locale === "ja"
-            ? "既読にしました"
-            : "Marked as read"
-          : locale === "ja"
-            ? "未読に戻しました"
-            : "Marked as unread",
+        next.is_read ? t("itemDetail.toast.markRead") : t("itemDetail.toast.markUnread"),
         "success"
       );
     } catch (e) {
@@ -326,7 +320,7 @@ export default function ItemDetailPage() {
         feedback_rating: next.rating,
       });
       setItem((prev) => (prev ? { ...prev, feedback: next } : prev));
-      showToast(locale === "ja" ? "評価を保存しました" : "Feedback saved", "success");
+      showToast(t("itemDetail.toast.feedbackSaved"), "success");
     } catch (e) {
       setError(String(e));
       showToast(`${t("common.error")}: ${String(e)}`, "error");
@@ -338,21 +332,18 @@ export default function ItemDetailPage() {
   const deleteItem = async () => {
     if (!item || deleteUpdating) return;
     const ok = await confirm({
-      title: locale === "ja" ? "記事を削除しますか？" : "Delete this item?",
-      message:
-        locale === "ja"
-          ? "この操作は取り消せません。"
-          : "This action cannot be undone.",
+      title: t("itemDetail.delete.title"),
+      message: t("itemDetail.delete.message"),
       tone: "danger",
-      confirmLabel: locale === "ja" ? "削除" : "Delete",
-      cancelLabel: locale === "ja" ? "キャンセル" : "Cancel",
+      confirmLabel: t("itemDetail.delete.confirm"),
+      cancelLabel: t("common.cancel"),
     });
     if (!ok) return;
     setDeleteUpdating(true);
     try {
       await api.deleteItem(item.id);
       removeItemFromFeedCaches(item.id);
-      showToast(locale === "ja" ? "記事を削除しました" : "Item deleted", "success");
+      showToast(t("itemDetail.toast.deleted"), "success");
       router.push(backHref);
     } catch (e) {
       setError(String(e));
@@ -394,16 +385,10 @@ export default function ItemDetailPage() {
             className="ml-auto rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {readUpdating
-              ? locale === "ja"
-                ? "更新中..."
-                : "Updating..."
+              ? t("items.action.updating")
               : item.is_read
-                ? locale === "ja"
-                  ? "未読に戻す"
-                  : "Mark unread"
-                : locale === "ja"
-                  ? "既読にする"
-                  : "Mark read"}
+                ? t("items.action.markUnread")
+                : t("items.action.markRead")}
           </button>
           <button
             type="button"
@@ -412,12 +397,8 @@ export default function ItemDetailPage() {
             className="rounded border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {deleteUpdating
-              ? locale === "ja"
-                ? "削除中..."
-                : "Deleting..."
-              : locale === "ja"
-                ? "削除"
-                : "Delete"}
+              ? t("itemDetail.delete.deleting")
+              : t("itemDetail.delete.button")}
           </button>
         </div>
 
@@ -435,7 +416,7 @@ export default function ItemDetailPage() {
             }`}
           >
             <ThumbsUp className="size-3.5" aria-hidden="true" />
-            <span>{locale === "ja" ? "良い" : "Like"}</span>
+            <span>{t("items.feedback.like")}</span>
           </button>
           <button
             type="button"
@@ -450,7 +431,7 @@ export default function ItemDetailPage() {
             }`}
           >
             <ThumbsDown className="size-3.5" aria-hidden="true" />
-            <span>{locale === "ja" ? "微妙" : "Dislike"}</span>
+            <span>{t("items.feedback.dislike")}</span>
           </button>
           <button
             type="button"
@@ -463,14 +444,14 @@ export default function ItemDetailPage() {
             }`}
           >
             <Star className={`size-3.5 ${item.feedback?.is_favorite ? "fill-current" : ""}`} aria-hidden="true" />
-            <span>{locale === "ja" ? "お気に入り" : "Favorite"}</span>
+            <span>{t("items.feedback.favorite")}</span>
           </button>
         </div>
 
         <div className="mb-2 flex items-start gap-2">
           <FileText className="mt-1 size-5 shrink-0 text-zinc-500" aria-hidden="true" />
           <h1 className="text-2xl font-bold leading-snug text-zinc-900">
-            {item.title ?? (locale === "ja" ? "タイトルなし" : "No title")}
+            {item.title ?? t("itemDetail.noTitle")}
           </h1>
         </div>
         <a
@@ -485,7 +466,7 @@ export default function ItemDetailPage() {
         {item.status === "failed" && item.processing_error && (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
             <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-700">
-              {locale === "ja" ? "失敗理由" : "Failure Reason"}
+              {t("itemDetail.failureReason")}
             </div>
             <p className="whitespace-pre-wrap break-words text-sm text-red-900">{item.processing_error}</p>
           </div>
@@ -533,7 +514,7 @@ export default function ItemDetailPage() {
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
               <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
-              {locale === "ja" ? "要約" : "Summary"}
+              {t("itemDetail.summary")}
             </h2>
             {item.summary.score != null && (
               <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
@@ -548,7 +529,7 @@ export default function ItemDetailPage() {
             {item.summary_llm && (
               <span
                 className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
-                title={locale === "ja" ? "要約生成モデル" : "Summary generation model"}
+                title={t("itemDetail.summaryModelTitle")}
               >
                 {item.summary_llm.provider} / {item.summary_llm.model}
               </span>
@@ -558,7 +539,7 @@ export default function ItemDetailPage() {
           {item.summary.score_reason && (
             <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
               <div className="mb-1 text-xs font-semibold text-zinc-500">
-                {locale === "ja" ? "スコア理由" : "Score reason"}
+                {t("itemDetail.scoreReason")}
               </div>
               <p className="text-sm leading-6 text-zinc-700">{item.summary.score_reason}</p>
             </div>
@@ -566,11 +547,11 @@ export default function ItemDetailPage() {
           {item.summary.score_breakdown && (
             <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {[
-                ["importance", locale === "ja" ? "重要度" : "Importance"],
-                ["novelty", locale === "ja" ? "新規性" : "Novelty"],
-                ["actionability", locale === "ja" ? "実用性" : "Actionability"],
-                ["reliability", locale === "ja" ? "確度" : "Reliability"],
-                ["relevance", locale === "ja" ? "汎用関連性" : "Relevance"],
+                ["importance", t("itemDetail.score.importance")],
+                ["novelty", t("itemDetail.score.novelty")],
+                ["actionability", t("itemDetail.score.actionability")],
+                ["reliability", t("itemDetail.score.reliability")],
+                ["relevance", t("itemDetail.score.relevance")],
               ].map(([key, label]) => {
                 const v = item.summary?.score_breakdown?.[key as keyof NonNullable<typeof item.summary.score_breakdown>];
                 if (v == null) return null;
@@ -609,7 +590,7 @@ export default function ItemDetailPage() {
         <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
             <ListChecks className="size-4 text-zinc-500" aria-hidden="true" />
-            {locale === "ja" ? "事実抽出" : "Facts"}
+            {t("itemDetail.facts")}
           </h2>
           <ul className="space-y-2">
             {item.facts.facts.map((f, i) => (
@@ -626,7 +607,7 @@ export default function ItemDetailPage() {
         <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
             <AlignLeft className="size-4 text-zinc-500" aria-hidden="true" />
-            {locale === "ja" ? "本文" : "Content"}
+            {t("itemDetail.content")}
           </h2>
           <div className="-mx-1 max-h-[40rem] overflow-y-auto px-1 text-[15px] leading-8 whitespace-pre-wrap text-zinc-700 sm:mx-0 sm:rounded-lg sm:border sm:border-zinc-200 sm:bg-zinc-50 sm:p-4 sm:text-sm sm:leading-relaxed">
             {item.content_text}
@@ -639,11 +620,11 @@ export default function ItemDetailPage() {
           <div className="flex min-w-0 items-center gap-3">
             <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
               <Link2 className="size-4 text-zinc-500" aria-hidden="true" />
-              {locale === "ja" ? "関連記事" : "Related articles"}
+              {t("itemDetail.related")}
             </h2>
             <span className="text-xs text-zinc-400">
               {clusteredRelated.length > 0
-                ? `${clusteredRelated.length} ${locale === "ja" ? "クラスタ" : "clusters"} / ${related.length}`
+                ? `${clusteredRelated.length} ${t("itemDetail.clusters")} / ${related.length}`
                 : related.length}
             </span>
           </div>
@@ -657,7 +638,7 @@ export default function ItemDetailPage() {
                   : "text-zinc-600 hover:bg-zinc-50"
               }`}
             >
-              {locale === "ja" ? "類似度順" : "Similarity"}
+              {t("itemDetail.sort.similarity")}
             </button>
             <button
               type="button"
@@ -668,19 +649,15 @@ export default function ItemDetailPage() {
                   : "text-zinc-600 hover:bg-zinc-50"
               }`}
             >
-              {locale === "ja" ? "新しい順" : "Recent"}
+              {t("itemDetail.sort.recent")}
             </button>
           </div>
         </div>
         {related.length === 0 ? (
           <p className="text-sm text-zinc-500">
             {relatedError
-              ? locale === "ja"
-                ? "関連記事の取得に失敗しました（本文表示は継続）"
-                : "Failed to load related articles (item content is still available)."
-              : locale === "ja"
-                ? "関連記事はまだありません（embedding未生成 or 候補なし）"
-                : "No related articles yet (no embeddings or no candidates)."}
+              ? t("itemDetail.relatedError")
+              : t("itemDetail.relatedEmpty")}
           </p>
         ) : (
           <div className="space-y-3">
@@ -694,7 +671,7 @@ export default function ItemDetailPage() {
                         {c.label}
                       </span>
                       <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
-                        {c.size} {locale === "ja" ? "件" : "items"}
+                        {c.size} {t("common.rows")}
                       </span>
                       <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
                         sim {c.max_similarity.toFixed(3)}
@@ -707,12 +684,8 @@ export default function ItemDetailPage() {
                         className="ml-auto rounded border border-zinc-200 bg-white px-2 py-0.5 text-zinc-600 hover:bg-zinc-50"
                       >
                         {expanded
-                          ? locale === "ja"
-                            ? "たたむ"
-                            : "Collapse"
-                          : locale === "ja"
-                            ? `+${restItems.length}件を見る`
-                            : `Show +${restItems.length}`}
+                          ? t("itemDetail.relatedCollapse")
+                          : `${t("itemDetail.relatedShowPlus")} +${restItems.length}`}
                       </button>
                     </div>
                     <div className="space-y-3">
@@ -730,7 +703,7 @@ export default function ItemDetailPage() {
                             <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
                           </div>
                           <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-zinc-900 hover:underline">
-                            {r.title ?? (locale === "ja" ? "タイトルなし" : "No title")}
+                            {r.title ?? t("itemDetail.noTitle")}
                           </Link>
                           <a
                             href={r.url}
@@ -773,7 +746,7 @@ export default function ItemDetailPage() {
                     <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
                   </div>
                   <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-zinc-900 hover:underline">
-                    {r.title ?? (locale === "ja" ? "タイトルなし" : "No title")}
+                    {r.title ?? t("itemDetail.noTitle")}
                   </Link>
                   <a
                     href={r.url}

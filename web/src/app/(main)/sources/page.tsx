@@ -72,7 +72,7 @@ export default function SourcesPage() {
       });
       setSuggestions((prev) => prev.filter((v) => v.url !== s.url));
       await load();
-      showToast(locale === "ja" ? "おすすめ候補を追加しました" : "Suggested feed added", "success");
+      showToast(t("sources.toast.suggestedAdded"), "success");
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
@@ -136,13 +136,13 @@ export default function SourcesPage() {
       message: t("sources.confirmDelete"),
       tone: "danger",
       confirmLabel: t("sources.delete"),
-      cancelLabel: locale === "ja" ? "キャンセル" : "Cancel",
+      cancelLabel: t("common.cancel"),
     });
     if (!ok) return;
     try {
       await api.deleteSource(id);
       setSources((prev) => prev.filter((s) => s.id !== id));
-      showToast(locale === "ja" ? "ソースを削除しました" : "Source deleted", "success");
+      showToast(t("sources.toast.deleted"), "success");
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     }
@@ -168,7 +168,7 @@ export default function SourcesPage() {
       setSources((prev) => prev.map((s) => (s.id === next.id ? next : s)));
       setEditingSource(null);
       setEditTitle("");
-      showToast(locale === "ja" ? "ソースを更新しました" : "Source updated", "success");
+      showToast(t("sources.toast.updated"), "success");
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
@@ -298,12 +298,10 @@ export default function SourcesPage() {
           <div>
             <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
               <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
-              {locale === "ja" ? "おすすめフィード候補（試作）" : "Suggested feeds (preview)"}
+              {t("sources.suggest.title")}
             </h2>
             <p className="mt-1 text-xs text-zinc-500">
-              {locale === "ja"
-                ? "登録済みソースの同一サイト/親URLから追加のRSS/Atomを探索します"
-                : "Discover additional RSS/Atom feeds from the same sites or parent URLs of your current sources."}
+              {t("sources.suggest.desc")}
             </p>
           </div>
           <button
@@ -314,17 +312,13 @@ export default function SourcesPage() {
           >
             <Lightbulb className="size-3.5" aria-hidden="true" />
             {loadingSuggestions
-              ? locale === "ja"
-                ? "探索中…"
-                : "Finding…"
-              : locale === "ja"
-                ? "候補を提案"
-                : "Suggest feeds"}
+              ? t("sources.suggest.finding")
+              : t("sources.suggest.button")}
           </button>
         </div>
         {suggestionsLLM && (
           <p className="mt-2 text-xs text-zinc-500">
-            {locale === "ja" ? "AIで候補を並べ替え" : "AI-ranked"}: {suggestionsLLM.provider ?? "unknown"} /{" "}
+            {t("sources.suggest.aiRanked")}: {suggestionsLLM.provider ?? "unknown"} /{" "}
             {suggestionsLLM.model ?? "unknown"}
             {typeof suggestionsLLM.estimated_cost_usd === "number" && (
               <span className="ml-2 text-zinc-400">{`$${suggestionsLLM.estimated_cost_usd.toFixed(6)}`}</span>
@@ -336,9 +330,7 @@ export default function SourcesPage() {
         )}
         {!suggestionsError && !loadingSuggestions && suggestions.length === 0 && (
           <p className="mt-3 text-sm text-zinc-500">
-            {locale === "ja"
-              ? "まだ候補はありません。登録済みソースを増やしてから試すと見つかりやすくなります。"
-              : "No suggestions yet. Try again after adding more sources."}
+            {t("sources.suggest.empty")}
           </p>
         )}
         {suggestions.length > 0 && (
@@ -370,7 +362,7 @@ export default function SourcesPage() {
                           key={`${s.url}-topic-${topic}`}
                           className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700 ring-1 ring-blue-200"
                         >
-                          {locale === "ja" ? `興味トピック: ${topic}` : `Topic: ${topic}`}
+                          {`${t("sources.suggest.topicPrefix")} ${topic}`}
                         </span>
                       ))}
                     </div>
@@ -378,7 +370,7 @@ export default function SourcesPage() {
                   {s.ai_reason && (
                     <p className="mt-1 text-xs leading-5 text-zinc-600">
                       <span className="font-medium text-zinc-700">
-                        {locale === "ja" ? "AI理由" : "AI reason"}:
+                        {t("sources.suggest.aiReason")}:
                       </span>{" "}
                       {s.ai_reason}
                     </p>
@@ -391,12 +383,8 @@ export default function SourcesPage() {
                   className="shrink-0 rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
                 >
                   {addingSuggestedURL === s.url
-                    ? locale === "ja"
-                      ? "追加中…"
-                      : "Adding…"
-                    : locale === "ja"
-                      ? "追加"
-                      : "Add"}
+                    ? t("sources.adding")
+                    : t("sources.add")}
                 </button>
               </li>
             ))}
@@ -457,7 +445,7 @@ export default function SourcesPage() {
                 onClick={() => openEditDialog(src)}
                 className="text-xs text-zinc-500 hover:text-zinc-900"
               >
-                {locale === "ja" ? "編集" : "Edit"}
+                {t("sources.edit")}
               </button>
               <button
                 type="button"
@@ -477,7 +465,7 @@ export default function SourcesPage() {
           <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl">
             <div className="mb-4">
               <h2 className="text-base font-semibold text-zinc-900">
-                {locale === "ja" ? "ソースを編集" : "Edit source"}
+                {t("sources.editModal.title")}
               </h2>
               <p className="mt-1 break-all text-xs text-zinc-500">{editingSource.url}</p>
             </div>
@@ -485,13 +473,13 @@ export default function SourcesPage() {
             <form onSubmit={handleSaveEdit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-zinc-700">
-                  {locale === "ja" ? "表示名" : "Display name"}
+                  {t("sources.editModal.displayName")}
                 </label>
                 <input
                   type="text"
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  placeholder={locale === "ja" ? "未設定時はURLを表示" : "Leave empty to show URL"}
+                  placeholder={t("sources.editModal.placeholder")}
                   className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-400"
                   autoFocus
                 />
@@ -504,14 +492,14 @@ export default function SourcesPage() {
                   disabled={savingEdit}
                   className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
                 >
-                  {locale === "ja" ? "キャンセル" : "Cancel"}
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={savingEdit}
                   className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
                 >
-                  {savingEdit ? (locale === "ja" ? "保存中…" : "Saving…") : (locale === "ja" ? "保存" : "Save")}
+                  {savingEdit ? t("common.saving") : t("common.save")}
                 </button>
               </div>
             </form>

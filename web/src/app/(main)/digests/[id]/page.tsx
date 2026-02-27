@@ -7,26 +7,26 @@ import { FileText, Mail, Newspaper, Send, Sparkles, TriangleAlert } from "lucide
 import { api, DigestDetail } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 
-function digestStatusBadge(d: DigestDetail, locale: "ja" | "en") {
+function digestStatusBadge(d: DigestDetail, t: (key: string, fallback?: string) => string) {
   if (d.sent_at) {
-    return { label: locale === "ja" ? "送信済み" : "Sent", className: "bg-green-50 text-green-700", withSendIcon: true };
+    return { label: t("digest.status.sent"), className: "bg-green-50 text-green-700", withSendIcon: true };
   }
   switch (d.send_status) {
     case "compose_failed":
     case "send_email_failed":
     case "fetch_failed":
     case "user_key_failed":
-      return { label: locale === "ja" ? "失敗" : "Failed", className: "bg-red-50 text-red-700", withSendIcon: false };
+      return { label: t("digest.status.failed"), className: "bg-red-50 text-red-700", withSendIcon: false };
     case "processing":
-      return { label: locale === "ja" ? "処理中" : "Processing", className: "bg-blue-50 text-blue-700", withSendIcon: false };
+      return { label: t("digest.status.processing"), className: "bg-blue-50 text-blue-700", withSendIcon: false };
     case "skipped_resend_disabled":
-      return { label: locale === "ja" ? "送信無効" : "Resend off", className: "bg-amber-50 text-amber-700", withSendIcon: false };
+      return { label: t("digest.status.resendDisabled"), className: "bg-amber-50 text-amber-700", withSendIcon: false };
     case "skipped_user_disabled":
-      return { label: locale === "ja" ? "メール送信OFF" : "Email off", className: "bg-zinc-100 text-zinc-600", withSendIcon: false };
+      return { label: t("digest.status.emailDisabled"), className: "bg-zinc-100 text-zinc-600", withSendIcon: false };
     case "skipped_no_items":
-      return { label: locale === "ja" ? "対象なし" : "No items", className: "bg-zinc-100 text-zinc-600", withSendIcon: false };
+      return { label: t("digest.status.noItems"), className: "bg-zinc-100 text-zinc-600", withSendIcon: false };
     default:
-      return { label: locale === "ja" ? "未送信" : "Pending", className: "bg-zinc-100 text-zinc-500", withSendIcon: false };
+      return { label: t("digest.status.pending"), className: "bg-zinc-100 text-zinc-500", withSendIcon: false };
   }
 }
 
@@ -49,7 +49,7 @@ export default function DigestDetailPage() {
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!digest) return null;
-  const statusBadge = digestStatusBadge(digest, locale);
+  const statusBadge = digestStatusBadge(digest, t);
 
   return (
     <div className="space-y-6">
@@ -67,7 +67,7 @@ export default function DigestDetailPage() {
               </span>
             </h1>
             <p className="mt-1 text-sm text-zinc-500">
-              {locale === "ja" ? "生成されたダイジェスト本文と含まれる記事の確認" : "Review generated digest copy and included items"}
+              {t("digestDetail.subtitle")}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -81,7 +81,7 @@ export default function DigestDetailPage() {
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
             <div className="mb-1 text-xs font-medium text-zinc-500">
-              {locale === "ja" ? "作成日時" : "Created"}
+              {t("digestDetail.createdAt")}
             </div>
             <div className="text-sm text-zinc-800">
               {new Date(digest.created_at).toLocaleString(dateLocale)}
@@ -89,7 +89,7 @@ export default function DigestDetailPage() {
           </div>
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
             <div className="mb-1 text-xs font-medium text-zinc-500">
-              {locale === "ja" ? "送信日時" : "Sent at"}
+              {t("digestDetail.sentAt")}
             </div>
             <div className="text-sm text-zinc-800">
               {digest.sent_at ? new Date(digest.sent_at).toLocaleString(dateLocale) : "—"}
@@ -101,7 +101,7 @@ export default function DigestDetailPage() {
           <div className="mt-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
             <div className="mb-1 flex items-center gap-2 text-xs font-medium text-zinc-500">
               <FileText className="size-3.5" aria-hidden="true" />
-              {locale === "ja" ? "メール件名" : "Email Subject"}
+              {t("digestDetail.emailSubject")}
             </div>
             <div className="text-sm font-medium leading-6 text-zinc-900">{digest.email_subject}</div>
           </div>
@@ -121,7 +121,7 @@ export default function DigestDetailPage() {
         <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <h2 className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
             <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
-            {locale === "ja" ? "生成メール本文" : "Generated Email Body"}
+            {t("digestDetail.emailBody")}
           </h2>
           <div className="whitespace-pre-wrap text-[15px] leading-8 text-zinc-800">
             {digest.email_body}
@@ -134,10 +134,10 @@ export default function DigestDetailPage() {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
               <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
-              {locale === "ja" ? "中間ドラフト（クラスタ別）" : "Intermediate Cluster Drafts"}
+              {t("digestDetail.clusterDrafts")}
             </h2>
             <span className="text-xs text-zinc-400">
-              {digest.cluster_drafts.length} {locale === "ja" ? "クラスタ" : "clusters"}
+              {digest.cluster_drafts.length} {t("digestDetail.clusters")}
             </span>
           </div>
           <div className="space-y-3">
@@ -170,13 +170,13 @@ export default function DigestDetailPage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
             <Newspaper className="size-4 text-zinc-500" aria-hidden="true" />
-            {locale === "ja" ? "含まれる記事" : "Items in Digest"}
+            {t("digestDetail.items")}
           </h2>
           <span className="text-xs text-zinc-400">{digest.items.length} {t("common.rows")}</span>
         </div>
 
         {digest.items.length === 0 ? (
-          <p className="text-sm text-zinc-400">{locale === "ja" ? "このダイジェストに記事はありません。" : "No items in this digest."}</p>
+          <p className="text-sm text-zinc-400">{t("digestDetail.noItems")}</p>
         ) : (
           <div className="space-y-3">
             {digest.items.map((di) => (

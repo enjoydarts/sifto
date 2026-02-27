@@ -303,7 +303,7 @@ export default function LLMUsagePage() {
             >
               {[7, 14, 30, 90].map((d) => (
                 <option key={d} value={d}>
-                  {locale === "ja" ? `${d}日` : `${d}d`}
+                  {`${d}${t("llm.daysSuffix")}`}
                 </option>
               ))}
             </select>
@@ -348,7 +348,7 @@ export default function LLMUsagePage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
             <CalendarDays className="size-4 text-zinc-500" aria-hidden="true" />
-            <span>{locale === "ja" ? "月末着地予測（JST）" : "Month-End Forecast (JST)"}</span>
+            <span>{t("llm.monthEndForecast")}</span>
           </h2>
           <div className="flex items-center gap-2">
             <select
@@ -368,14 +368,14 @@ export default function LLMUsagePage() {
                 onClick={() => setForecastMode("month_avg")}
                 className={`rounded px-2 py-1 ${forecastMode === "month_avg" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}
               >
-                {locale === "ja" ? "月初平均" : "Month avg"}
+                {t("llm.forecast.refMonthAvg")}
               </button>
               <button
                 type="button"
                 onClick={() => setForecastMode("recent_7d")}
                 className={`rounded px-2 py-1 ${forecastMode === "recent_7d" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}
               >
-                {locale === "ja" ? "直近7日" : "Recent 7d"}
+                {t("llm.forecast.refRecent7d")}
               </button>
             </div>
             <span className="text-xs text-zinc-400">{monthlyForecast?.monthLabel ?? "—"}</span>
@@ -386,18 +386,18 @@ export default function LLMUsagePage() {
         ) : (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <MetricCard label={locale === "ja" ? "今月累計" : "Month to Date"} value={fmtUSD(monthlyForecast.actualTotal)} />
+              <MetricCard label={t("llm.monthToDate")} value={fmtUSD(monthlyForecast.actualTotal)} />
               <MetricCard
                 label={
                   monthlyForecast.isCurrentMonth
-                    ? (locale === "ja" ? "月末着地予測" : "Forecast EOM")
-                    : (locale === "ja" ? "月間実績" : "Month Total")
+                    ? t("llm.forecastEom")
+                    : t("llm.monthTotal")
                 }
                 value={fmtUSD(monthlyForecast.forecastTotal)}
               />
-              <MetricCard label={locale === "ja" ? "現在ペース/日" : "Current Pace / day"} value={fmtUSD(monthlyForecast.dailyPace)} />
+              <MetricCard label={t("llm.currentPacePerDay")} value={fmtUSD(monthlyForecast.dailyPace)} />
               <MetricCard
-                label={locale === "ja" ? "予算差分" : "Budget Delta"}
+                label={t("llm.budgetDelta")}
                 value={
                   monthlyForecast.budget == null
                     ? "—"
@@ -408,13 +408,9 @@ export default function LLMUsagePage() {
               />
             </div>
             <p className="text-xs text-zinc-500">
-              {locale === "ja"
-                ? monthlyForecast.isCurrentMonth
-                  ? `予測方式: ${forecastMode === "month_avg" ? "月初からの平均ペース" : "直近7日平均ペース"}（参考: 月初平均 ${fmtUSD(monthlyForecast.monthAvgDailyPace)} / 直近7日 ${fmtUSD(monthlyForecast.recent7dDailyPace)}）`
-                  : "過去月は実績累計のみ表示（予測線なし）"
-                : monthlyForecast.isCurrentMonth
-                  ? `Forecast mode: ${forecastMode === "month_avg" ? "average pace since month start" : "recent 7-day average pace"} (ref: month avg ${fmtUSD(monthlyForecast.monthAvgDailyPace)} / recent 7d ${fmtUSD(monthlyForecast.recent7dDailyPace)})`
-                  : "Past months show actual cumulative only (no forecast line)"}
+              {monthlyForecast.isCurrentMonth
+                ? `${t("llm.forecast.modeLabel")} ${forecastMode === "month_avg" ? t("llm.forecast.monthAvg") : t("llm.forecast.recent7d")}${t("llm.forecast.refOpen")}${t("llm.forecast.refMonthAvg")} ${fmtUSD(monthlyForecast.monthAvgDailyPace)} / ${t("llm.forecast.refRecent7d")} ${fmtUSD(monthlyForecast.recent7dDailyPace)}${t("llm.forecast.refClose")}`
+                : t("llm.forecast.pastMonthsOnly")}
             </p>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -431,8 +427,8 @@ export default function LLMUsagePage() {
                     formatter={(value: number | string | undefined, name?: string) => [
                       fmtUSD(Number(value ?? 0)),
                       name === "actual"
-                        ? (locale === "ja" ? "実績累計" : "Actual cumulative")
-                        : (locale === "ja" ? "月末着地予測" : "Forecast"),
+                        ? t("llm.actualCumulative")
+                        : t("llm.forecastLabel"),
                     ]}
                     labelFormatter={(label) => `${monthlyForecast.monthLabel}-${String(label).padStart(2, "0")}`}
                     contentStyle={{ borderRadius: 10, borderColor: "#e4e4e7" }}
@@ -441,9 +437,9 @@ export default function LLMUsagePage() {
                     wrapperStyle={{ fontSize: 12 }}
                     formatter={(value) =>
                       value === "actual"
-                        ? (locale === "ja" ? "実績累計" : "Actual cumulative")
+                        ? t("llm.actualCumulative")
                         : value === "forecast"
-                          ? (locale === "ja" ? "月末着地予測" : "Forecast")
+                          ? t("llm.forecastLabel")
                           : value
                     }
                   />
@@ -453,7 +449,7 @@ export default function LLMUsagePage() {
                       stroke="#ef4444"
                       strokeDasharray="5 5"
                       label={{
-                        value: locale === "ja" ? `予算 ${fmtUSDShort(monthlyForecast.budget)}` : `Budget ${fmtUSDShort(monthlyForecast.budget)}`,
+                        value: `${t("llm.budget")} ${fmtUSDShort(monthlyForecast.budget)}`,
                         fill: "#ef4444",
                         fontSize: 11,
                         position: "insideTopRight",
@@ -492,7 +488,7 @@ export default function LLMUsagePage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
             <CalendarDays className="size-4 text-zinc-500" aria-hidden="true" />
-            <span>{locale === "ja" ? "日次コスト推移" : "Daily Cost Trend"}</span>
+            <span>{t("llm.dailyCostTrend")}</span>
           </h2>
           <span className="text-xs text-zinc-400">{dailyChartRows.length} days</span>
         </div>
@@ -556,7 +552,7 @@ export default function LLMUsagePage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
             <Brain className="size-4 text-zinc-500" aria-hidden="true" />
-            <span>{locale === "ja" ? "モデル別利用状況" : "Usage by Model"}</span>
+            <span>{t("llm.usageByModel")}</span>
           </h2>
           <span className="text-xs text-zinc-400">{mergedModelRows.length} models</span>
         </div>
@@ -734,7 +730,7 @@ export default function LLMUsagePage() {
             <table className="min-w-full text-sm">
               <thead className="text-xs text-zinc-500">
                 <tr className="border-b border-zinc-100">
-                  <th className="px-3 py-2 text-left font-medium">時刻</th>
+                  <th className="px-3 py-2 text-left font-medium">{t("llm.time")}</th>
                   <th className="px-3 py-2 text-left font-medium">purpose</th>
                   <th className="px-3 py-2 text-left font-medium">model</th>
                   <th className="px-3 py-2 text-left font-medium">pricing</th>

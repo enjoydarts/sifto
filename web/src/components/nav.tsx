@@ -52,17 +52,17 @@ export default function Nav() {
               className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-600"
               aria-label={t("nav.language")}
             >
-              <option value="ja">日本語</option>
-              <option value="en">English</option>
+              <option value="ja">{t("nav.locale.ja")}</option>
+              <option value="en">{t("nav.locale.en")}</option>
             </select>
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
               className="rounded border border-zinc-200 px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 md:hidden"
               aria-expanded={menuOpen}
-              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              aria-label={menuOpen ? t("nav.menu.close") : t("nav.menu.open")}
             >
-              {menuOpen ? "Close" : "Menu"}
+              {menuOpen ? t("nav.menu.closeShort") : t("nav.menu.short")}
             </button>
           </div>
         </div>

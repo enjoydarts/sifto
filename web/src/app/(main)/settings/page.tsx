@@ -14,7 +14,7 @@ type ModelOption = {
 };
 
 export default function SettingsPage() {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
   const [loading, setLoading] = useState(true);
@@ -99,7 +99,7 @@ export default function SettingsPage() {
     try {
       const parsed = budgetUSD.trim() === "" ? null : Number(budgetUSD);
       if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) {
-        throw new Error(locale === "ja" ? "月次予算の値が不正です" : "Invalid monthly budget");
+        throw new Error(t("settings.error.invalidBudget"));
       }
       await api.updateSettings({
         monthly_budget_usd: parsed,
@@ -108,7 +108,7 @@ export default function SettingsPage() {
         digest_email_enabled: digestEmailEnabled,
       });
       await load();
-      showToast(locale === "ja" ? "予算設定を保存しました" : "Budget settings saved", "success");
+      showToast(t("settings.toast.budgetSaved"), "success");
     } catch (e) {
       showToast(String(e), "error");
     } finally {
@@ -133,7 +133,7 @@ export default function SettingsPage() {
         openai_embedding: emptyToNull(openAIEmbeddingModel),
       });
       await load();
-      showToast(locale === "ja" ? "LLMモデル設定を保存しました" : "LLM model settings saved", "success");
+      showToast(t("settings.toast.modelsSaved"), "success");
     } catch (e) {
       showToast(String(e), "error");
     } finally {
@@ -153,7 +153,7 @@ export default function SettingsPage() {
         digest_email_enabled: digestEmailEnabled,
       });
       await load();
-      showToast(locale === "ja" ? "ダイジェスト配信設定を保存しました" : "Digest delivery settings saved", "success");
+      showToast(t("settings.toast.digestSaved"), "success");
     } catch (e) {
       showToast(String(e), "error");
     } finally {
@@ -167,7 +167,7 @@ export default function SettingsPage() {
     try {
       const parsedSize = Number(readingPlanSize);
       if (!(parsedSize === 7 || parsedSize === 15 || parsedSize === 25)) {
-        throw new Error(locale === "ja" ? "件数は 7 / 15 / 25 から選択してください" : "Size must be one of 7 / 15 / 25");
+        throw new Error(t("settings.error.invalidSize"));
       }
       await api.updateReadingPlanSettings({
         window: readingPlanWindow,
@@ -175,7 +175,7 @@ export default function SettingsPage() {
         diversify_topics: readingPlanDiversifyTopics,
       });
       await load();
-      showToast(locale === "ja" ? "おすすめ記事設定を保存しました" : "Reading plan settings saved", "success");
+      showToast(t("settings.toast.readingPlanSaved"), "success");
     } catch (e) {
       showToast(String(e), "error");
     } finally {
@@ -188,12 +188,12 @@ export default function SettingsPage() {
     setSavingAnthropicKey(true);
     try {
       if (!anthropicApiKeyInput.trim()) {
-        throw new Error(locale === "ja" ? "APIキーを入力してください" : "Enter API key");
+        throw new Error(t("settings.error.enterApiKey"));
       }
       await api.setAnthropicApiKey(anthropicApiKeyInput.trim());
       setAnthropicApiKeyInput("");
       await load();
-      showToast(locale === "ja" ? "Anthropic APIキーを保存しました" : "Anthropic API key saved", "success");
+      showToast(t("settings.toast.anthropicSaved"), "success");
     } catch (e) {
       showToast(String(e), "error");
     } finally {
@@ -203,12 +203,10 @@ export default function SettingsPage() {
 
   async function handleDeleteAnthropicApiKey() {
     if (!(await confirm({
-      title: locale === "ja" ? "Anthropic APIキーを削除しますか？" : "Delete Anthropic API key?",
+      title: t("settings.anthropicDeleteTitle"),
       message:
-        locale === "ja"
-          ? "削除後はこのユーザーの要約・ダイジェスト生成が失敗します。再利用するには再設定が必要です。"
-          : "After deletion, facts/summary/digest generation for this user will fail until a new key is configured.",
-      confirmLabel: locale === "ja" ? "削除" : "Delete",
+        t("settings.anthropicDeleteMessage"),
+      confirmLabel: t("settings.delete"),
       tone: "danger",
     }))) {
       return;
@@ -217,7 +215,7 @@ export default function SettingsPage() {
     try {
       await api.deleteAnthropicApiKey();
       await load();
-      showToast(locale === "ja" ? "Anthropic APIキーを削除しました" : "Anthropic API key deleted", "success");
+      showToast(t("settings.toast.anthropicDeleted"), "success");
     } catch (e) {
       showToast(String(e), "error");
     } finally {
@@ -230,12 +228,12 @@ export default function SettingsPage() {
     setSavingOpenAIKey(true);
     try {
       if (!openAIApiKeyInput.trim()) {
-        throw new Error(locale === "ja" ? "APIキーを入力してください" : "Enter API key");
+        throw new Error(t("settings.error.enterApiKey"));
       }
       await api.setOpenAIApiKey(openAIApiKeyInput.trim());
       setOpenAIApiKeyInput("");
       await load();
-      showToast(locale === "ja" ? "OpenAI APIキーを保存しました" : "OpenAI API key saved", "success");
+      showToast(t("settings.toast.openaiSaved"), "success");
     } catch (e) {
       showToast(String(e), "error");
     } finally {
@@ -245,12 +243,10 @@ export default function SettingsPage() {
 
   async function handleDeleteOpenAIApiKey() {
     if (!(await confirm({
-      title: locale === "ja" ? "OpenAI APIキーを削除しますか？" : "Delete OpenAI API key?",
+      title: t("settings.openaiDeleteTitle"),
       message:
-        locale === "ja"
-          ? "削除後はこのユーザーのembedding生成が失敗します。再利用するには再設定が必要です。"
-          : "After deletion, embedding generation for this user will fail until a new key is configured.",
-      confirmLabel: locale === "ja" ? "削除" : "Delete",
+        t("settings.openaiDeleteMessage"),
+      confirmLabel: t("settings.delete"),
       tone: "danger",
     }))) {
       return;
@@ -259,7 +255,7 @@ export default function SettingsPage() {
     try {
       await api.deleteOpenAIApiKey();
       await load();
-      showToast(locale === "ja" ? "OpenAI APIキーを削除しました" : "OpenAI API key deleted", "success");
+      showToast(t("settings.toast.openaiDeleted"), "success");
     } catch (e) {
       showToast(String(e), "error");
     } finally {
@@ -283,15 +279,15 @@ export default function SettingsPage() {
 
       <section className="grid gap-3 md:grid-cols-3">
         <MetricCard
-          label={locale === "ja" ? "今月の推定利用額" : "MTD estimated cost"}
+          label={t("settings.metric.mtdCost")}
           value={`$${settings.current_month.estimated_cost_usd.toFixed(6)}`}
         />
         <MetricCard
-          label={locale === "ja" ? "今月の予算" : "Monthly budget"}
+          label={t("settings.metric.monthlyBudget")}
           value={settings.monthly_budget_usd == null ? "—" : `$${settings.monthly_budget_usd.toFixed(2)}`}
         />
         <MetricCard
-          label={locale === "ja" ? "残予算率" : "Budget remaining"}
+          label={t("settings.metric.budgetRemaining")}
           value={
             settings.current_month.remaining_budget_pct == null
               ? "—"
@@ -306,32 +302,30 @@ export default function SettingsPage() {
           <div className="mb-4">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
               <KeyRound className="size-4 text-zinc-500" aria-hidden="true" />
-              {locale === "ja" ? "Anthropic APIキー（ユーザー別）" : "Anthropic API Key (Per User)"}
+              {t("settings.anthropicTitle")}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              {locale === "ja"
-                ? "このユーザーの記事の事実抽出・要約・ダイジェスト生成に使います。"
-                : "Required for this user's facts extraction, summaries, and digest generation."}
+              {t("settings.anthropicDescription")}
             </p>
           </div>
 
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
             {settings.has_anthropic_api_key ? (
               <>
-                {locale === "ja" ? "設定済み" : "Configured"}{" "}
+                {t("settings.configured")}{" "}
                 <span className="font-mono text-xs text-zinc-500">
                   ••••{settings.anthropic_api_key_last4 ?? "****"}
                 </span>
               </>
             ) : (
               <span className="text-zinc-500">
-                {locale === "ja" ? "未設定（要約・ダイジェスト生成は実行不可）" : "Not set (LLM processing unavailable)"}
+                {t("settings.anthropicNotSet")}
               </span>
             )}
           </div>
 
           <label className="mt-4 block text-sm font-medium text-zinc-700">
-            {locale === "ja" ? "新しいAPIキー" : "New API key"}
+            {t("settings.newApiKey")}
           </label>
           <input
             type="password"
@@ -349,12 +343,8 @@ export default function SettingsPage() {
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
               {savingAnthropicKey
-                ? locale === "ja"
-                  ? "保存中…"
-                  : "Saving…"
-                : locale === "ja"
-                  ? "保存 / 更新"
-                  : "Save / Update"}
+                ? t("common.saving")
+                : t("settings.saveOrUpdate")}
             </button>
             <button
               type="button"
@@ -363,12 +353,8 @@ export default function SettingsPage() {
               className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
             >
               {deletingAnthropicKey
-                ? locale === "ja"
-                  ? "削除中…"
-                  : "Deleting…"
-                : locale === "ja"
-                  ? "キーを削除"
-                  : "Delete key"}
+                ? t("settings.deleting")
+                : t("settings.deleteKey")}
             </button>
           </div>
         </form>
@@ -377,32 +363,30 @@ export default function SettingsPage() {
           <div className="mb-4">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
               <KeyRound className="size-4 text-zinc-500" aria-hidden="true" />
-              {locale === "ja" ? "OpenAI APIキー（ユーザー別）" : "OpenAI API Key (Per User)"}
+              {t("settings.openaiTitle")}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              {locale === "ja"
-                ? "このユーザーの記事 embedding 生成と関連記事判定に使います。"
-                : "Used for this user's embedding generation and related-article retrieval."}
+              {t("settings.openaiDescription")}
             </p>
           </div>
 
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
             {settings.has_openai_api_key ? (
               <>
-                {locale === "ja" ? "設定済み" : "Configured"}{" "}
+                {t("settings.configured")}{" "}
                 <span className="font-mono text-xs text-zinc-500">
                   ••••{settings.openai_api_key_last4 ?? "****"}
                 </span>
               </>
             ) : (
               <span className="text-zinc-500">
-                {locale === "ja" ? "未設定（embedding生成は実行不可）" : "Not set (embedding generation unavailable)"}
+                {t("settings.openaiNotSet")}
               </span>
             )}
           </div>
 
           <label className="mt-4 block text-sm font-medium text-zinc-700">
-            {locale === "ja" ? "新しいAPIキー" : "New API key"}
+            {t("settings.newApiKey")}
           </label>
           <input
             type="password"
@@ -420,12 +404,8 @@ export default function SettingsPage() {
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
               {savingOpenAIKey
-                ? locale === "ja"
-                  ? "保存中…"
-                  : "Saving…"
-                : locale === "ja"
-                  ? "保存 / 更新"
-                  : "Save / Update"}
+                ? t("common.saving")
+                : t("settings.saveOrUpdate")}
             </button>
             <button
               type="button"
@@ -434,12 +414,8 @@ export default function SettingsPage() {
               className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
             >
               {deletingOpenAIKey
-                ? locale === "ja"
-                  ? "削除中…"
-                  : "Deleting…"
-                : locale === "ja"
-                  ? "キーを削除"
-                  : "Delete key"}
+                ? t("settings.deleting")
+                : t("settings.deleteKey")}
             </button>
           </div>
         </form>
@@ -448,52 +424,48 @@ export default function SettingsPage() {
           <div className="mb-4">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
               <Brain className="size-4 text-zinc-500" aria-hidden="true" />
-              {locale === "ja" ? "LLMモデル設定（フェーズ別）" : "LLM Model Settings (Per Phase)"}
+              {t("settings.modelsTitle")}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              {locale === "ja"
-                ? "未設定時はサーバー既定モデルを使います。AnthropicはOpusも選択できます。"
-                : "Uses server defaults when empty. Anthropic Opus is also available."}
+              {t("settings.modelsDescription")}
             </p>
             <p className="mt-1 text-xs text-zinc-400">
-              {locale === "ja"
-                ? "単価はコード内の静的テーブル表示（将来改定時は更新が必要）"
-                : "Prices shown from the app's static pricing table (update required if provider pricing changes)."}
+              {t("settings.pricingDescription")}
             </p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <ModelSelect
-              label={locale === "ja" ? "事実抽出 (Claude)" : "Facts (Claude)"}
+              label={t("settings.model.facts")}
               value={anthropicFactsModel}
               onChange={setAnthropicFactsModel}
               options={anthropicModelOptions}
             />
             <ModelSelect
-              label={locale === "ja" ? "要約 (Claude)" : "Summary (Claude)"}
+              label={t("settings.model.summary")}
               value={anthropicSummaryModel}
               onChange={setAnthropicSummaryModel}
               options={anthropicModelOptions}
             />
             <ModelSelect
-              label={locale === "ja" ? "ダイジェスト前段（クラスタ草稿）(Claude)" : "Digest Cluster Drafts (Claude)"}
+              label={t("settings.model.digestCluster")}
               value={anthropicDigestClusterModel}
               onChange={setAnthropicDigestClusterModel}
               options={anthropicModelOptions}
             />
             <ModelSelect
-              label={locale === "ja" ? "ダイジェスト生成 (Claude)" : "Digest (Claude)"}
+              label={t("settings.model.digest")}
               value={anthropicDigestModel}
               onChange={setAnthropicDigestModel}
               options={anthropicModelOptions}
             />
             <ModelSelect
-              label={locale === "ja" ? "ソース提案 (Claude)" : "Source Suggestions (Claude)"}
+              label={t("settings.model.sourceSuggestion")}
               value={anthropicSourceSuggestionModel}
               onChange={setAnthropicSourceSuggestionModel}
               options={anthropicModelOptions}
             />
             <ModelSelect
-              label={locale === "ja" ? "Embeddings (OpenAI)" : "Embeddings (OpenAI)"}
+              label={t("settings.model.embeddings")}
               value={openAIEmbeddingModel}
               onChange={setOpenAIEmbeddingModel}
               options={openAIEmbeddingModelOptions}
@@ -506,8 +478,8 @@ export default function SettingsPage() {
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
               {savingLLMModels
-                ? locale === "ja" ? "保存中…" : "Saving…"
-                : locale === "ja" ? "モデル設定を保存" : "Save model settings"}
+                ? t("common.saving")
+                : t("settings.saveModels")}
             </button>
           </div>
         </form>
@@ -519,33 +491,31 @@ export default function SettingsPage() {
           <div className="mb-4">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
               <Brain className="size-4 text-zinc-500" aria-hidden="true" />
-              {locale === "ja" ? "おすすめ記事設定" : "Recommended Feed Settings"}
+              {t("settings.recommendedTitle")}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              {locale === "ja"
-                ? "記事一覧の「おすすめ」タブで使う既定の選定条件です。"
-                : "Default selection rules used by the Recommended tab in Items."}
+              {t("settings.recommendedDescription")}
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-zinc-700">
-                {locale === "ja" ? "対象期間" : "Window"}
+                {t("settings.window")}
               </label>
               <select
                 value={readingPlanWindow}
                 onChange={(e) => setReadingPlanWindow(e.target.value as "24h" | "today_jst" | "7d")}
                 className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
               >
-                <option value="24h">{locale === "ja" ? "過去24時間" : "Last 24h"}</option>
-                <option value="today_jst">{locale === "ja" ? "今日 (JST)" : "Today (JST)"}</option>
-                <option value="7d">{locale === "ja" ? "過去7日" : "Last 7d"}</option>
+                <option value="24h">{t("settings.window.24h")}</option>
+                <option value="today_jst">{t("settings.window.today")}</option>
+                <option value="7d">{t("settings.window.7d")}</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-700">
-                {locale === "ja" ? "表示件数" : "Size"}
+                {t("settings.size")}
               </label>
               <select
                 value={readingPlanSize}
@@ -560,7 +530,7 @@ export default function SettingsPage() {
               </select>
             </div>
             <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-              <span>{locale === "ja" ? "トピック分散を有効化" : "Diversify topics"}</span>
+              <span>{t("settings.diversifyTopics")}</span>
               <input
                 type="checkbox"
                 checked={readingPlanDiversifyTopics}
@@ -577,8 +547,8 @@ export default function SettingsPage() {
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
               {savingReadingPlan
-                ? locale === "ja" ? "保存中…" : "Saving…"
-                : locale === "ja" ? "おすすめ設定を保存" : "Save recommended settings"}
+                ? t("common.saving")
+                : t("settings.saveRecommended")}
             </button>
           </div>
         </form>
@@ -587,24 +557,20 @@ export default function SettingsPage() {
           <div className="mb-4">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
               <Mail className="size-4 text-zinc-500" aria-hidden="true" />
-              {locale === "ja" ? "ダイジェスト配信" : "Digest Delivery"}
+              {t("settings.digestTitle")}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              {locale === "ja"
-                ? "ダイジェストは生成したまま、メール送信だけ停止できます。"
-                : "Keep generating digests while disabling email delivery."}
+              {t("settings.digestDescription")}
             </p>
           </div>
 
           <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
             <div>
               <div className="text-sm font-medium text-zinc-800">
-                {locale === "ja" ? "ダイジェストメール送信" : "Digest email sending"}
+                {t("settings.digestEmailSending")}
               </div>
               <div className="text-xs text-zinc-500">
-                {locale === "ja"
-                  ? "無効でもダイジェスト生成とアプリ内表示は継続します"
-                  : "When off, digest generation and in-app viewing continue without email sending"}
+                {t("settings.digestDisabledHint")}
               </div>
             </div>
             <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
@@ -614,7 +580,7 @@ export default function SettingsPage() {
                 onChange={(e) => setDigestEmailEnabled(e.target.checked)}
                 className="size-4 rounded border-zinc-300"
               />
-              {digestEmailEnabled ? (locale === "ja" ? "有効" : "On") : locale === "ja" ? "無効" : "Off"}
+              {digestEmailEnabled ? t("settings.on") : t("settings.off")}
             </label>
           </div>
 
@@ -625,12 +591,8 @@ export default function SettingsPage() {
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
               {savingDigestDelivery
-                ? locale === "ja"
-                  ? "保存中…"
-                  : "Saving…"
-                : locale === "ja"
-                  ? "配信設定を保存"
-                  : "Save delivery settings"}
+                ? t("common.saving")
+                : t("settings.saveDelivery")}
             </button>
           </div>
         </form>
@@ -639,19 +601,17 @@ export default function SettingsPage() {
           <div className="mb-4">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
               <Coins className="size-4 text-zinc-500" aria-hidden="true" />
-              {locale === "ja" ? "月次LLM予算と警告" : "Monthly LLM Budget & Alerts"}
+              {t("settings.budgetTitle")}
             </h2>
             <p className="mt-1 text-sm text-zinc-500">
-              {locale === "ja"
-                ? "残予算率がしきい値を下回ったときにメールで通知します。"
-                : "Send email alerts when remaining budget ratio falls below the threshold."}
+              {t("settings.budgetDescription")}
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-zinc-700">
-                {locale === "ja" ? "月次予算 (USD)" : "Monthly budget (USD)"}
+                {t("settings.monthlyBudgetUsd")}
               </label>
               <input
                 type="number"
@@ -659,7 +619,7 @@ export default function SettingsPage() {
                 step="0.01"
                 value={budgetUSD}
                 onChange={(e) => setBudgetUSD(e.target.value)}
-                placeholder={locale === "ja" ? "未設定で無効" : "Leave empty to disable"}
+                placeholder={t("settings.budgetPlaceholder")}
                 className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-400"
               />
             </div>
@@ -667,10 +627,10 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
               <div>
                 <div className="text-sm font-medium text-zinc-800">
-                  {locale === "ja" ? "予算警告メール" : "Budget alert email"}
+                  {t("settings.budgetAlertEmail")}
                 </div>
                 <div className="text-xs text-zinc-500">
-                  {locale === "ja" ? "Resend が有効な環境で送信されます" : "Sent when Resend is enabled"}
+                  {t("settings.budgetAlertHint")}
                 </div>
               </div>
               <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
@@ -680,13 +640,13 @@ export default function SettingsPage() {
                   onChange={(e) => setAlertEnabled(e.target.checked)}
                   className="size-4 rounded border-zinc-300"
                 />
-                {alertEnabled ? (locale === "ja" ? "有効" : "On") : locale === "ja" ? "無効" : "Off"}
+                {alertEnabled ? t("settings.on") : t("settings.off")}
               </label>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-zinc-700">
-                {locale === "ja" ? "警告しきい値（残予算率 %）" : "Alert threshold (remaining budget %)"}
+                {t("settings.alertThreshold")}
               </label>
               <div className="mt-1 flex items-center gap-3">
                 <input
@@ -709,17 +669,11 @@ export default function SettingsPage() {
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
               {savingBudget
-                ? locale === "ja"
-                  ? "保存中…"
-                  : "Saving…"
-                : locale === "ja"
-                  ? "予算設定を保存"
-                  : "Save budget settings"}
+                ? t("common.saving")
+                : t("settings.saveBudget")}
             </button>
             <span className="text-xs text-zinc-500">
-              {locale === "ja"
-                ? `今月: ${settings.current_month.month_jst}`
-                : `Current month: ${settings.current_month.month_jst}`}
+              {`${t("settings.currentMonth")}: ${settings.current_month.month_jst}`}
             </span>
           </div>
         </form>

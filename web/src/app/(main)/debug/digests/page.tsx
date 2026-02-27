@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { api, BulkRetryFailedResult, DigestDetail } from "@/lib/api";
+import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 
 type GenerateResponse = {
@@ -95,6 +96,7 @@ function todayJstPlusOneDateString() {
 }
 
 export default function DebugDigestsPage() {
+  const { t } = useI18n();
   const { showToast } = useToast();
   const [userId, setUserId] = useState("00000000-0000-0000-0000-000000000001");
   const [digestDate, setDigestDate] = useState(todayJstPlusOneDateString());
@@ -122,8 +124,8 @@ export default function DebugDigestsPage() {
 
   const helperText = useMemo(
     () =>
-      "digest_date は JST の日付です。例: 2026-02-24 を指定すると、2026-02-23 JST に生成された要約が対象になります。",
-    []
+      t("debug.digest.helperText"),
+    [t]
   );
   const cacheWindowRows = useMemo(() => {
     const rows = systemHealth?.data?.cache_stats_by_window ?? {};
@@ -315,7 +317,7 @@ export default function DebugDigestsPage() {
             disabled={busySystemHealth}
             className="rounded border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
           >
-            {busySystemHealth ? "読み込み中…" : "Refresh"}
+            {busySystemHealth ? t("common.loading") : t("common.refresh")}
           </button>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
@@ -332,7 +334,7 @@ export default function DebugDigestsPage() {
                 </pre>
               </div>
             ) : (
-              <p className="text-xs text-zinc-400">未取得</p>
+              <p className="text-xs text-zinc-400">{t("debug.notFetched")}</p>
             )}
           </div>
           <div className="rounded border border-zinc-200 p-3">
@@ -364,7 +366,7 @@ export default function DebugDigestsPage() {
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-zinc-400">未取得</p>
+              <p className="text-xs text-zinc-400">{t("debug.notFetched")}</p>
             )}
           </div>
         </div>
@@ -373,7 +375,7 @@ export default function DebugDigestsPage() {
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold text-zinc-800">Cache Hit Rate (Debug)</h2>
         {!systemHealth ? (
-          <p className="text-xs text-zinc-400">System Health を先に取得してください</p>
+          <p className="text-xs text-zinc-400">{t("debug.systemHealthFirst")}</p>
         ) : (
           <div className="space-y-4">
             <div className="rounded border border-zinc-200 p-3">
@@ -497,14 +499,14 @@ export default function DebugDigestsPage() {
               onChange={(e) => setSkipSend(e.target.checked)}
               className="accent-zinc-900"
             />
-            `skip_send`（作成だけして `digest/created` は送らない）
+            {t("debug.digest.skipSend")}
           </label>
           <button
             type="submit"
             disabled={busyGenerate}
             className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
           >
-            {busyGenerate ? "実行中…" : "Generate Debug"}
+            {busyGenerate ? t("debug.running") : "Generate Debug"}
           </button>
         </form>
 
@@ -532,7 +534,7 @@ export default function DebugDigestsPage() {
             disabled={busySend || !digestId.trim()}
             className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
           >
-            {busySend ? "実行中…" : "Queue Send"}
+            {busySend ? t("debug.running") : "Queue Send"}
           </button>
           <button
             type="button"
@@ -540,7 +542,7 @@ export default function DebugDigestsPage() {
             onClick={inspectDigest}
             className="rounded border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
           >
-            {busyInspect ? "確認中…" : "状態確認"}
+            {busyInspect ? t("debug.inspecting") : t("debug.statusCheck")}
           </button>
         </form>
 
@@ -598,14 +600,14 @@ export default function DebugDigestsPage() {
               onChange={(e) => setBackfillDryRun(e.target.checked)}
               className="accent-zinc-900"
             />
-            `dry_run`（候補確認だけしてキュー投入しない）
+            {t("debug.digest.dryRun")}
           </label>
           <button
             type="submit"
             disabled={busyBackfill}
             className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
           >
-            {busyBackfill ? "実行中…" : backfillDryRun ? "Preview Backfill" : "Queue Backfill"}
+            {busyBackfill ? t("debug.running") : backfillDryRun ? "Preview Backfill" : "Queue Backfill"}
           </button>
         </form>
 
@@ -634,7 +636,7 @@ export default function DebugDigestsPage() {
               disabled={busyRetryFailed}
               className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
             >
-              {busyRetryFailed ? "実行中…" : "Queue Retry Failed"}
+              {busyRetryFailed ? t("debug.running") : "Queue Retry Failed"}
             </button>
           </div>
         </form>

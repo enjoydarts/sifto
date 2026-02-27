@@ -95,7 +95,7 @@ export default function DashboardPage() {
               <span>{t("dashboard.section.itemsStatus")}</span>
             </h2>
             <Link href="/items" className="text-xs text-zinc-500 hover:text-zinc-900">
-              {locale === "ja" ? "記事一覧へ" : "Open Items"}
+              {t("dashboard.openItems")}
             </Link>
           </div>
           <div className="space-y-2">
@@ -124,18 +124,18 @@ export default function DashboardPage() {
             <div className="mt-4 border-t border-zinc-100 pt-3">
               <div className="mb-2 flex items-center justify-between">
                 <div className="text-xs font-medium text-zinc-600">
-                  {locale === "ja" ? "失敗記事（新しい順）" : "Failed Items (Recent)"}
+                  {t("dashboard.failedRecent")}
                 </div>
                 <Link
                   href="/items?feed=all&status=failed"
                   className="text-xs text-zinc-500 hover:text-zinc-900"
                 >
-                  {locale === "ja" ? "一覧を見る" : "View all"}
+                  {t("dashboard.viewAll")}
                 </Link>
               </div>
               {failedPreview.length === 0 ? (
                 <p className="text-xs text-zinc-400">
-                  {locale === "ja" ? "対象記事を読み込み中または未取得" : "No preview available"}
+                  {t("dashboard.noFailedPreview")}
                 </p>
               ) : (
                 <ul className="space-y-1.5">
@@ -163,7 +163,7 @@ export default function DashboardPage() {
               <span>{t("dashboard.section.latestDigests")}</span>
             </h2>
             <Link href="/digests" className="text-xs text-zinc-500 hover:text-zinc-900">
-              {locale === "ja" ? "一覧へ" : "View all"}
+              {t("dashboard.viewAll")}
             </Link>
           </div>
           {latestDigests.length === 0 ? (
@@ -201,10 +201,10 @@ export default function DashboardPage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
             <BarChart3 className="size-4 text-zinc-500" aria-hidden="true" />
-            <span>{locale === "ja" ? "トレンドトピック（24h）" : "Trending Topics (24h)"}</span>
+            <span>{t("dashboard.trending24h")}</span>
           </h2>
           <Link href="/items?feed=all&sort=score" className="text-xs text-zinc-500 hover:text-zinc-900">
-            {locale === "ja" ? "記事一覧へ" : "Open Items"}
+            {t("dashboard.openItems")}
           </Link>
         </div>
         {topicTrends.length === 0 ? (
@@ -233,8 +233,8 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="mt-1 flex items-center gap-3 text-xs text-zinc-500">
-                  <span>{locale === "ja" ? `直近24h ${row.count_24h}` : `24h ${row.count_24h}`}</span>
-                  <span>{locale === "ja" ? `前24h ${row.count_prev_24h}` : `prev ${row.count_prev_24h}`}</span>
+                  <span>{`${t("dashboard.last24h")} ${row.count_24h}`}</span>
+                  <span>{`${t("dashboard.prev24h")} ${row.count_prev_24h}`}</span>
                   {row.max_score_24h != null && <span>{`max score ${row.max_score_24h.toFixed(2)}`}</span>}
                 </div>
               </Link>
@@ -250,7 +250,7 @@ export default function DashboardPage() {
             <span>{t("dashboard.section.llmSummary")}</span>
           </h2>
           <Link href="/llm-usage" className="text-xs text-zinc-500 hover:text-zinc-900">
-            {locale === "ja" ? "LLM利用へ" : "Open LLM Usage"}
+            {t("dashboard.openLlmUsage")}
           </Link>
         </div>
         {latestSummaryDays.length === 0 ? (
@@ -267,7 +267,7 @@ export default function DashboardPage() {
                     <div className="text-xs text-zinc-500">${cost.toFixed(6)}</div>
                   </div>
                   <div className="mb-2 text-xs text-zinc-500">
-                    {locale === "ja" ? `呼び出し ${calls}` : `Calls ${calls}`}
+                    {`${t("dashboard.calls")} ${calls}`}
                   </div>
                   <div className="space-y-1">
                     {rows.slice(0, 4).map((r) => (

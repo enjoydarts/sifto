@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import time
 import anthropic
 
@@ -68,6 +69,67 @@ def _parse_json_string_array(text: str) -> list[str]:
     except Exception:
         return []
     return [str(v) for v in data if isinstance(v, str)]
+
+
+def _strip_code_fence(text: str) -> str:
+    s = (text or "").strip().lstrip("\ufeff")
+    if s.startswith("```"):
+        s = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", s)
+        s = re.sub(r"\n?```$", "", s).strip()
+    return s
+
+
+def _extract_first_json_object(text: str) -> dict | None:
+    s = _strip_code_fence(text)
+    if not s:
+        return None
+    decoder = json.JSONDecoder()
+    idx = s.find("{")
+    while idx >= 0:
+        try:
+            obj, _ = decoder.raw_decode(s[idx:])
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            pass
+        idx = s.find("{", idx + 1)
+    return None
+
+
+def _extract_compose_digest_fields(text: str) -> tuple[str, str]:
+    data = _extract_first_json_object(text) or {}
+    subject = str(data.get("subject") or "").strip()
+    body = str(data.get("body") or "").strip()
+    if subject and body:
+        return subject, body
+
+    s = _strip_code_fence(text)
+    m_subject = re.search(r'"subject"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
+    if not subject and m_subject:
+        subject = bytes(m_subject.group(1), "utf-8").decode("unicode_escape").strip()
+
+    m_body = re.search(r'"body"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
+    if not body and m_body:
+        body = bytes(m_body.group(1), "utf-8").decode("unicode_escape").strip()
+    elif not body:
+        key = '"body"'
+        i = s.find(key)
+        if i >= 0:
+            rest = s[i + len(key):]
+            colon = rest.find(":")
+            if colon >= 0:
+                raw = rest[colon + 1 :].strip()
+                if raw.startswith('"'):
+                    raw = raw[1:]
+                marker_idx = raw.find('",\n  "sections"')
+                if marker_idx < 0:
+                    marker_idx = raw.find('", "sections"')
+                if marker_idx > 0:
+                    raw = raw[:marker_idx]
+                raw = raw.strip().rstrip('"').strip()
+                if raw:
+                    body = raw.replace("\\n", "\n").replace('\\"', '"').strip()
+    return subject, body
 
 
 def _clamp01(v, default: float = 0.5) -> float:
@@ -688,7 +750,7 @@ items:
         prompt,
         str(model or _digest_model),
         _digest_model_fallback,
-        max_tokens=4000,
+        max_tokens=6000,
         api_key=api_key,
     )
     if message is None:
@@ -724,16 +786,7 @@ items:
         }
 
     text = message.content[0].text.strip()
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    try:
-        data = json.loads(text[start:end])
-    except Exception as e:
-        snippet = text[:500].replace("\n", "\\n")
-        raise RuntimeError(f"claude compose_digest json parse failed: {e}; response_snippet={snippet}")
-
-    subject = str(data.get("subject") or "").strip()
-    body = str(data.get("body") or "").strip()
+    subject, body = _extract_compose_digest_fields(text)
     if not subject or not body:
         snippet = text[:500].replace("\n", "\\n")
         raise RuntimeError(f"claude compose_digest missing subject/body; response_snippet={snippet}")

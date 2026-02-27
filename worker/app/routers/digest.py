@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.services.claude_service import compose_digest, compose_digest_cluster_draft
@@ -45,56 +45,62 @@ class ComposeDigestClusterDraftResponse(BaseModel):
 
 @router.post("/compose-digest", response_model=ComposeDigestResponse)
 def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
-    items = [
-        {
-            "rank": i.rank,
-            "title": i.title,
-            "url": i.url,
-            "summary": i.summary,
-            "topics": i.topics,
-            "score": i.score,
-        }
-        for i in req.items
-    ]
-    if is_gemini_model(req.model):
-        google_api_key = request.headers.get("x-google-api-key") or ""
-        result = compose_digest_gemini(
-            req.digest_date,
-            items,
-            model=str(req.model),
-            api_key=google_api_key,
-        )
-    else:
-        api_key = request.headers.get("x-anthropic-api-key") or None
-        result = compose_digest(
-            req.digest_date,
-            items,
-            api_key=api_key,
-            model=req.model,
-        )
-    return ComposeDigestResponse(**result)
+    try:
+        items = [
+            {
+                "rank": i.rank,
+                "title": i.title,
+                "url": i.url,
+                "summary": i.summary,
+                "topics": i.topics,
+                "score": i.score,
+            }
+            for i in req.items
+        ]
+        if is_gemini_model(req.model):
+            google_api_key = request.headers.get("x-google-api-key") or ""
+            result = compose_digest_gemini(
+                req.digest_date,
+                items,
+                model=str(req.model),
+                api_key=google_api_key,
+            )
+        else:
+            api_key = request.headers.get("x-anthropic-api-key") or None
+            result = compose_digest(
+                req.digest_date,
+                items,
+                api_key=api_key,
+                model=req.model,
+            )
+        return ComposeDigestResponse(**result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"compose_digest failed: {e}")
 
 
 @router.post("/compose-digest-cluster-draft", response_model=ComposeDigestClusterDraftResponse)
 def compose_digest_cluster_draft_endpoint(req: ComposeDigestClusterDraftRequest, request: Request):
-    if is_gemini_model(req.model):
-        google_api_key = request.headers.get("x-google-api-key") or ""
-        result = compose_digest_cluster_draft_gemini(
-            cluster_label=req.cluster_label,
-            item_count=req.item_count,
-            topics=req.topics,
-            source_lines=req.source_lines,
-            model=str(req.model),
-            api_key=google_api_key,
-        )
-    else:
-        api_key = request.headers.get("x-anthropic-api-key") or None
-        result = compose_digest_cluster_draft(
-            cluster_label=req.cluster_label,
-            item_count=req.item_count,
-            topics=req.topics,
-            source_lines=req.source_lines,
-            api_key=api_key,
-            model=req.model,
-        )
-    return ComposeDigestClusterDraftResponse(**result)
+    try:
+        if is_gemini_model(req.model):
+            google_api_key = request.headers.get("x-google-api-key") or ""
+            result = compose_digest_cluster_draft_gemini(
+                cluster_label=req.cluster_label,
+                item_count=req.item_count,
+                topics=req.topics,
+                source_lines=req.source_lines,
+                model=str(req.model),
+                api_key=google_api_key,
+            )
+        else:
+            api_key = request.headers.get("x-anthropic-api-key") or None
+            result = compose_digest_cluster_draft(
+                cluster_label=req.cluster_label,
+                item_count=req.item_count,
+                topics=req.topics,
+                source_lines=req.source_lines,
+                api_key=api_key,
+                model=req.model,
+            )
+        return ComposeDigestClusterDraftResponse(**result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"compose_digest_cluster_draft failed: {e}")

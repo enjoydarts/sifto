@@ -654,17 +654,27 @@ def compose_digest(digest_date: str, items: list[dict], api_key: str | None = No
 
 要件:
 - 当日分の全記事要約を踏まえて全体像をまとめる（記事を取りこぼさない）
-- 読みやすく整理されていれば、本文は長めでもよい（目安 800〜2000字、必要なら超えて可）
-- まず全体の流れを1〜2段落で要約
-- 次に「注目ポイント」を箇条書きで5〜10点
+- 読みやすく整理されていれば、本文は長めでもよい（目安 900〜2200字、必要なら超えて可）
+- 本文は次の順序・構成で必ず作る:
+  1) 全体サマリ（1〜3段落）
+  2) 注目ポイント（5〜10個。各ポイントは1〜2文）
+  3) その他のポイント（個数指定なし。箇条書き）
+  4) 明日以降のフォローポイント（1段落）
+  5) 締めの1文
 - 誇張しない。与えられた情報だけで書く
-- 最後に短い締めの一文
 - JSONで返す
 
 形式:
 {{
   "subject": "件名（40字程度）",
-  "body": "メール本文（プレーンテキスト。改行を含めてよい）"
+  "body": "メール本文（プレーンテキスト。改行を含めてよい）",
+  "sections": {{
+    "overall_summary": "1〜3段落",
+    "highlights": ["ポイント1", "ポイント2"],
+    "other_points": ["補足1", "補足2"],
+    "follow_up": "明日以降のフォローポイント（1段落）",
+    "closing": "締めの1文"
+  }}
 }}
 
 digest_date: {digest_date}
@@ -685,13 +695,20 @@ items:
         top_topics = []
         for item in items:
             top_topics.extend(item.get("topics") or [])
-        body = "本日のダイジェスト（当日分の全記事要約ベース）をお届けします。\n\n"
-        body += "\n".join(
+        lines = [
+            "【全体サマリ】",
+            "本日のダイジェスト（当日分の全記事要約ベース）をお届けします。",
+            "",
+            "【注目ポイント】",
+        ]
+        lines += [
             f"- #{item.get('rank')} {item.get('title') or '（タイトルなし）'}"
             for item in items
-        )
+        ]
         if top_topics:
-            body += "\n\n主なトピック: " + ", ".join(dict.fromkeys(top_topics))
+            lines += ["", "【その他のポイント】", "主なトピック: " + ", ".join(dict.fromkeys(top_topics))]
+        lines += ["", "【明日以降のフォローポイント】", "新規更新の続報と追加情報の有無を継続確認してください。", "", "以上です。"]
+        body = "\n".join(lines)
         return {
             "subject": f"Sifto Digest {digest_date}",
             "body": body,
@@ -711,11 +728,17 @@ items:
     end = text.rfind("}") + 1
     try:
         data = json.loads(text[start:end])
-    except Exception:
-        data = {}
+    except Exception as e:
+        snippet = text[:500].replace("\n", "\\n")
+        raise RuntimeError(f"claude compose_digest json parse failed: {e}; response_snippet={snippet}")
 
-    subject = str(data.get("subject") or f"Sifto Digest {digest_date}")
-    body = str(data.get("body") or "本日のダイジェストをお送りします。")
+    subject = str(data.get("subject") or "").strip()
+    body = str(data.get("body") or "").strip()
+    if not subject or not body:
+        snippet = text[:500].replace("\n", "\\n")
+        raise RuntimeError(f"claude compose_digest missing subject/body; response_snippet={snippet}")
+    if len(body) < 80:
+        raise RuntimeError(f"claude compose_digest body too short: len={len(body)}")
     llm = _llm_meta(message, "digest", used_model or _digest_model)
     llm["input_mode"] = input_mode
     llm["items_count"] = len(items)

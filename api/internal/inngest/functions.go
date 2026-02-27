@@ -311,6 +311,46 @@ func minInt(a, b int) int {
 	return b
 }
 
+func buildBroadDigestDraftFromChunk(chunk []model.DigestClusterDraft, key, label string) model.DigestClusterDraft {
+	itemCount := 0
+	var maxScore *float64
+	lines := make([]string, 0, len(chunk))
+	topicsSet := map[string]struct{}{}
+	for _, d := range chunk {
+		itemCount += d.ItemCount
+		if d.MaxScore != nil && (maxScore == nil || *d.MaxScore > *maxScore) {
+			v := *d.MaxScore
+			maxScore = &v
+		}
+		for _, t := range d.Topics {
+			t = strings.TrimSpace(t)
+			if t == "" {
+				continue
+			}
+			topicsSet[t] = struct{}{}
+		}
+		line := strings.TrimSpace(d.DraftSummary)
+		if line == "" {
+			continue
+		}
+		first := strings.Split(line, "\n")[0]
+		lines = append(lines, fmt.Sprintf("- [%s] %s", d.ClusterLabel, first))
+	}
+	topics := make([]string, 0, len(topicsSet))
+	for t := range topicsSet {
+		topics = append(topics, t)
+	}
+	sort.Strings(topics)
+	return model.DigestClusterDraft{
+		ClusterKey:   key,
+		ClusterLabel: label,
+		ItemCount:    itemCount,
+		Topics:       topics,
+		MaxScore:     maxScore,
+		DraftSummary: strings.Join(lines, "\n"),
+	}
+}
+
 func compressDigestClusterDrafts(drafts []model.DigestClusterDraft, target int) []model.DigestClusterDraft {
 	if target <= 0 {
 		target = 20
@@ -329,8 +369,32 @@ func compressDigestClusterDrafts(drafts []model.DigestClusterDraft, target int) 
 		}
 		tail = append(tail, d)
 	}
+	broadCount := 0
+	if len(tail) >= 4 {
+		broadCount = 1
+	}
+	if len(tail) >= 10 {
+		broadCount = 2
+	}
 	if len(keep) >= target {
-		keep = keep[:target]
+		cut := target - broadCount
+		if cut < 1 {
+			cut = target
+			broadCount = 0
+		}
+		keep = keep[:cut]
+		if broadCount > 0 {
+			if broadCount == 1 {
+				keep = append(keep, buildBroadDigestDraftFromChunk(tail, "broad-1", "幅広い話題（横断）"))
+			} else {
+				mid := len(tail) / 2
+				if mid < 1 {
+					mid = 1
+				}
+				keep = append(keep, buildBroadDigestDraftFromChunk(tail[:mid], "broad-1", "幅広い話題（横断）A"))
+				keep = append(keep, buildBroadDigestDraftFromChunk(tail[mid:], "broad-2", "幅広い話題（横断）B"))
+			}
+		}
 		for i := range keep {
 			keep[i].Rank = i + 1
 		}
@@ -360,38 +424,7 @@ func compressDigestClusterDrafts(drafts []model.DigestClusterDraft, target int) 
 			keep = append(keep, chunk[0])
 			continue
 		}
-		itemCount := 0
-		var maxScore *float64
-		lines := make([]string, 0, len(chunk))
-		topicsSet := map[string]struct{}{}
-		for _, d := range chunk {
-			itemCount += d.ItemCount
-			if d.MaxScore != nil && (maxScore == nil || *d.MaxScore > *maxScore) {
-				v := *d.MaxScore
-				maxScore = &v
-			}
-			for _, t := range d.Topics {
-				t = strings.TrimSpace(t)
-				if t == "" {
-					continue
-				}
-				topicsSet[t] = struct{}{}
-			}
-			lines = append(lines, fmt.Sprintf("- [%s] %s", d.ClusterLabel, d.DraftSummary))
-		}
-		topics := make([]string, 0, len(topicsSet))
-		for t := range topicsSet {
-			topics = append(topics, t)
-		}
-		sort.Strings(topics)
-		keep = append(keep, model.DigestClusterDraft{
-			ClusterKey:   fmt.Sprintf("merged-tail-%d", len(keep)+1),
-			ClusterLabel: "その他の話題",
-			ItemCount:    itemCount,
-			Topics:       topics,
-			MaxScore:     maxScore,
-			DraftSummary: strings.Join(lines, "\n"),
-		})
+		keep = append(keep, buildBroadDigestDraftFromChunk(chunk, fmt.Sprintf("merged-tail-%d", len(keep)+1), "その他の話題"))
 	}
 
 	for i := range keep {

@@ -68,6 +68,92 @@ def _summary_max_tokens(target_chars: int) -> int:
     return _clamp_int(round(target_chars * 1.2), 700, 2600)
 
 
+def _digest_primary_topic(item: dict) -> str:
+    topics = item.get("topics") or []
+    if isinstance(topics, list):
+        for t in topics:
+            s = str(t).strip()
+            if s:
+                return s[:40]
+    return "その他"
+
+
+def _digest_item_score(item: dict) -> float:
+    try:
+        return float(item.get("score", 0.0) or 0.0)
+    except Exception:
+        return 0.0
+
+
+def _build_digest_input_sections(items: list[dict]) -> tuple[str, str]:
+    if len(items) <= 80:
+        summary_limit = 450 if len(items) <= 20 else 240 if len(items) <= 50 else 120
+        lines = []
+        for idx, item in enumerate(items, start=1):
+            rank = item.get("rank")
+            title = item.get("title") or "（タイトルなし）"
+            summary = str(item.get("summary") or "")[:summary_limit]
+            topics = ", ".join(item.get("topics") or [])
+            score = item.get("score")
+            lines.append(
+                f"- item={idx} rank={rank} | title={title} | topics={topics} | score={score} | summary={summary}"
+            )
+        return "items", "\n".join(lines)
+
+    sorted_items = sorted(
+        items,
+        key=lambda x: (
+            int(x.get("rank") or 10**9),
+            -_digest_item_score(x),
+        ),
+    )
+    highlights = sorted_items[: min(24, len(sorted_items))]
+
+    groups: dict[str, list[dict]] = {}
+    for item in items:
+        groups.setdefault(_digest_primary_topic(item), []).append(item)
+
+    ordered_groups = sorted(
+        groups.items(),
+        key=lambda kv: (-len(kv[1]), -max((_digest_item_score(i) for i in kv[1]), default=0.0), kv[0]),
+    )
+
+    lines: list[str] = []
+    lines.append("[top_items]")
+    for idx, item in enumerate(highlights, start=1):
+        title = item.get("title") or "（タイトルなし）"
+        summary = str(item.get("summary") or "")[:140]
+        topics = ", ".join(item.get("topics") or [])
+        rank = item.get("rank")
+        score = item.get("score")
+        lines.append(
+            f"- top={idx} rank={rank} | title={title} | topics={topics} | score={score} | summary={summary}"
+        )
+
+    lines.append("")
+    lines.append("[topic_groups]")
+    for topic, topic_items in ordered_groups[:40]:
+        sorted_topic_items = sorted(
+            topic_items,
+            key=lambda x: (
+                int(x.get("rank") or 10**9),
+                -_digest_item_score(x),
+            ),
+        )
+        sample_titles = [str(i.get("title") or "（タイトルなし）")[:60] for i in sorted_topic_items[:4]]
+        sample_summaries = [str(i.get("summary") or "")[:90] for i in sorted_topic_items[:3]]
+        avg_score = round(
+            sum(_digest_item_score(i) for i in topic_items) / max(1, len(topic_items)),
+            3,
+        )
+        lines.append(
+            f"- topic={topic} | count={len(topic_items)} | avg_score={avg_score} | "
+            f"sample_titles={' / '.join(sample_titles)} | sample_summaries={' / '.join(sample_summaries)}"
+        )
+
+    return "topic_grouped", "\n".join(lines)
+
+
 def _normalize_model_name(model: str) -> str:
     m = str(model or "").strip()
     if m.startswith("models/"):
@@ -247,6 +333,19 @@ def summarize(
   "score_reason": "採点理由（1〜2文）"
 }}
 
+要約スタイル:
+- 客観的・中立的に書く（意見や煽りを入れない）
+- 読みやすい自然な日本語にする（硬すぎる定型文を避ける）
+- 記事の主題、何が起きたか、重要なポイントを過不足なく含める
+- 箇条書きではなく、2〜4段落の文章でまとめる
+- 要約の目標文字数は約{target_chars}字。短すぎる要約を避ける
+- score_breakdown は以下の観点で付与する
+  - importance: 一般読者にとっての重要度
+  - novelty: 新規性・変化の大きさ
+  - actionability: 実務で行動に繋がる度合い
+  - reliability: 具体性・確度（数値/固有名詞/条件の明確さ）
+  - relevance: 幅広い読者への関連性（個別ユーザー最適化ではない）
+
 タイトル: {title or "（不明）"}
 事実:
 {facts_text}
@@ -292,32 +391,56 @@ def compose_digest(digest_date: str, items: list[dict], model: str, api_key: str
             "body": "本日のダイジェスト対象記事はありませんでした。",
             "llm": _llm_meta(model, "digest", {"input_tokens": 0, "output_tokens": 0}),
         }
-    lines = []
-    for item in items:
-        lines.append(
-            f"- rank={item.get('rank')} title={item.get('title')} topics={','.join(item.get('topics') or [])} "
-            f"score={item.get('score')} summary={str(item.get('summary') or '')[:300]}"
-        )
-    prompt = f"""以下の記事要約群から、配信用の日本語ダイジェストを作成してください。
-以下のJSON形式で返してください:
+    input_mode, digest_input = _build_digest_input_sections(items)
+    prompt = f"""あなたはニュースダイジェスト編集者です。
+以下の記事一覧をもとに、メール用のダイジェスト本文を日本語で作成してください。
+
+要件:
+- 当日分の全記事要約を踏まえて全体像をまとめる（記事を取りこぼさない）
+- 読みやすく整理されていれば、本文は長めでもよい（目安 900〜2200字、必要なら超えて可）
+- 本文は次の順序・構成で必ず作る:
+  1) 全体サマリ（1〜3段落）
+  2) 注目ポイント（5〜10個。各ポイントは1〜2文）
+  3) その他のポイント（個数指定なし。箇条書き）
+  4) 明日以降のフォローポイント（1段落）
+  5) 締めの1文
+- 誇張しない。与えられた情報だけで書く
+- JSONで返す
+
+形式:
 {{
-  "subject": "件名",
-  "body": "本文（見出しと段落で読みやすく）"
+  "subject": "件名（40字程度）",
+  "body": "メール本文（プレーンテキスト。改行を含めてよい）",
+  "sections": {{
+    "overall_summary": "1〜3段落",
+    "highlights": ["ポイント1", "ポイント2"],
+    "other_points": ["補足1", "補足2"],
+    "follow_up": "明日以降のフォローポイント（1段落）",
+    "closing": "締めの1文"
+  }}
 }}
 
 digest_date: {digest_date}
+items_count: {len(items)}
+input_mode: {input_mode}
 items:
-{chr(10).join(lines)}
+{digest_input}
 """
     text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=2400)
     start = text.find("{")
     end = text.rfind("}") + 1
     try:
         data = json.loads(text[start:end])
-    except Exception:
-        data = {}
-    subject = str(data.get("subject") or "").strip() or f"Sifto Digest - {digest_date}"
-    body = str(data.get("body") or "").strip() or "本日のダイジェスト生成に失敗しました。"
+    except Exception as e:
+        snippet = text[:500].replace("\n", "\\n")
+        raise RuntimeError(f"gemini compose_digest json parse failed: {e}; response_snippet={snippet}")
+    subject = str(data.get("subject") or "").strip()
+    body = str(data.get("body") or "").strip()
+    if not subject or not body:
+        snippet = text[:500].replace("\n", "\\n")
+        raise RuntimeError(f"gemini compose_digest missing subject/body; response_snippet={snippet}")
+    if len(body) < 80:
+        raise RuntimeError(f"gemini compose_digest body too short: len={len(body)}")
     return {
         "subject": subject,
         "body": body,
@@ -333,15 +456,27 @@ def compose_digest_cluster_draft(
     model: str,
     api_key: str,
 ) -> dict:
-    prompt = f"""以下の同一クラスタ記事メモを、重複を除いて要点圧縮してください。
-200〜500字程度、日本語で簡潔にまとめてください。JSONで返答:
-{{"draft_summary":"..." }}
+    prompt = f"""あなたはニュースダイジェストの下書き編集者です。
+以下は同じ話題（クラスタ）に属する複数記事の要点メモです。重複をまとめ、事実ベースで読みやすいクラスタ下書きに整理してください。
+
+要件:
+- 与えられた内容のみ使う（推測しない）
+- 重複をまとめる
+- 重要な相違点があれば残す
+- プレーンテキストで返す
+- 箇条書き 3〜8 行程度
+- JSONのみで返す
+
+返却形式:
+{{
+  "draft_summary": "- ...\\n- ..."
+}}
 
 cluster_label: {cluster_label}
 item_count: {item_count}
-topics: {", ".join(topics or [])}
+topics: {json.dumps(topics or [], ensure_ascii=False)}
 source_lines:
-{chr(10).join(source_lines or [])}
+{json.dumps(source_lines or [], ensure_ascii=False)}
 """
     text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=900)
     start = text.find("{")

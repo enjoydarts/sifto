@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Lightbulb, Sparkles } from "lucide-react";
-import { api, Source, SourceSuggestion } from "@/lib/api";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Activity, Download, Lightbulb, Sparkles, Upload } from "lucide-react";
+import { api, Source, SourceHealth, SourceSuggestion } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -13,6 +13,7 @@ export default function SourcesPage() {
   const { showToast } = useToast();
   const { confirm } = useConfirm();
   const [sources, setSources] = useState<Source[]>([]);
+  const [sourceHealthByID, setSourceHealthByID] = useState<Record<string, SourceHealth>>({});
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,12 +33,22 @@ export default function SourcesPage() {
     { url: string; title: string | null }[]
   >([]);
   const [addError, setAddError] = useState<string | null>(null);
+  const [exportingOPML, setExportingOPML] = useState(false);
+  const [importingOPML, setImportingOPML] = useState(false);
+  const opmlInputRef = useRef<HTMLInputElement | null>(null);
   const pageSize = 10;
+  const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
 
   const load = useCallback(async () => {
     try {
-      const data = await api.getSources();
+      const [data, health] = await Promise.all([
+        api.getSources(),
+        api.getSourceHealth().catch(() => ({ items: [] as SourceHealth[] })),
+      ]);
       setSources(data ?? []);
+      const healthMap: Record<string, SourceHealth> = {};
+      for (const h of health.items ?? []) healthMap[h.source_id] = h;
+      setSourceHealthByID(healthMap);
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -177,14 +188,84 @@ export default function SourcesPage() {
   };
 
   const pagedSources = sources.slice((page - 1) * pageSize, page * pageSize);
+  const handleExportOPML = async () => {
+    setExportingOPML(true);
+    try {
+      const text = await api.exportSourcesOPML();
+      const blob = new Blob([text], { type: "text/x-opml;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `sifto-sources-${new Date().toISOString().slice(0, 10)}.opml`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(locale === "ja" ? "OPMLをエクスポートしました" : "OPML exported", "success");
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setExportingOPML(false);
+    }
+  };
+
+  const handleImportOPMLFile = async (file: File) => {
+    setImportingOPML(true);
+    try {
+      const text = await file.text();
+      const res = await api.importSourcesOPML(text);
+      await load();
+      showToast(
+        locale === "ja"
+          ? `OPML取込完了: 追加 ${res.added} / スキップ ${res.skipped} / 無効 ${res.invalid}`
+          : `OPML imported: added ${res.added} / skipped ${res.skipped} / invalid ${res.invalid}`,
+        "success"
+      );
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setImportingOPML(false);
+      if (opmlInputRef.current) opmlInputRef.current.value = "";
+    }
+  };
 
   return (
     <div className="space-y-4">
-      <div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
         <h1 className="text-2xl font-bold">{t("sources.title")}</h1>
         <p className="mt-1 text-sm text-zinc-500">
           {sources.length.toLocaleString()} {t("common.rows")}
         </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            ref={opmlInputRef}
+            type="file"
+            accept=".opml,.xml,text/xml,application/xml"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void handleImportOPMLFile(f);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => opmlInputRef.current?.click()}
+            disabled={importingOPML}
+            className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            <Upload className="size-3.5" aria-hidden="true" />
+            {importingOPML ? (locale === "ja" ? "取込中…" : "Importing…") : "OPML Import"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleExportOPML()}
+            disabled={exportingOPML}
+            className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            <Download className="size-3.5" aria-hidden="true" />
+            {exportingOPML ? (locale === "ja" ? "出力中…" : "Exporting…") : "OPML Export"}
+          </button>
+        </div>
       </div>
 
       {/* Add form */}
@@ -428,13 +509,32 @@ export default function SourcesPage() {
               <div className="truncate text-sm font-medium text-zinc-900">
                 {src.title ?? src.url}
               </div>
+              {sourceHealthByID[src.id] && (
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${
+                    sourceHealthByID[src.id].status === "ok"
+                      ? "border-green-200 bg-green-50 text-green-700"
+                      : sourceHealthByID[src.id].status === "error"
+                        ? "border-red-200 bg-red-50 text-red-700"
+                        : sourceHealthByID[src.id].status === "stale"
+                          ? "border-amber-200 bg-amber-50 text-amber-700"
+                          : "border-zinc-200 bg-zinc-50 text-zinc-600"
+                  }`}>
+                    <Activity className="size-3" aria-hidden="true" />
+                    {sourceHealthByID[src.id].status}
+                  </span>
+                  <span className="text-zinc-400">
+                    {sourceHealthByID[src.id].failed_items}/{sourceHealthByID[src.id].total_items} failed
+                  </span>
+                </div>
+              )}
               {src.title && (
                 <div className="truncate text-xs text-zinc-400">{src.url}</div>
               )}
               {src.last_fetched_at && (
                 <div className="text-xs text-zinc-400">
                   {t("sources.lastFetched")}:{" "}
-                  {new Date(src.last_fetched_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}
+                  {new Date(src.last_fetched_at).toLocaleString(dateLocale)}
                 </div>
               )}
             </div>

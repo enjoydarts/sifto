@@ -87,6 +87,9 @@ func main() {
 
 		r.Route("/sources", func(r chi.Router) {
 			r.Get("/", sourceH.List)
+			r.Get("/opml", sourceH.ExportOPML)
+			r.Post("/opml/import", sourceH.ImportOPML)
+			r.Get("/health", sourceH.Health)
 			r.Post("/", sourceH.Create)
 			r.Post("/discover", sourceH.Discover)
 			r.Get("/suggestions", sourceH.Suggest)

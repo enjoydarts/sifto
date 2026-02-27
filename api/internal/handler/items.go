@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -236,11 +237,16 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
+	var targetTopics []string
+	if detail, err := h.repo.GetDetail(r.Context(), id, userID); err == nil && detail != nil && detail.Summary != nil {
+		targetTopics = detail.Summary.Topics
+	}
 	items, err := h.repo.ListRelated(r.Context(), id, userID, limit)
 	if err != nil {
 		writeRepoError(w, err)
 		return
 	}
+	annotateRelatedReasons(items, targetTopics)
 	clusters := clusterRelatedItems(items)
 	writeJSON(w, map[string]any{
 		"items":    items,
@@ -248,6 +254,45 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 		"limit":    limit,
 		"item_id":  id,
 	})
+}
+
+func annotateRelatedReasons(items []model.RelatedItem, targetTopics []string) {
+	targetSet := map[string]struct{}{}
+	for _, t := range targetTopics {
+		v := strings.TrimSpace(t)
+		if v == "" {
+			continue
+		}
+		targetSet[v] = struct{}{}
+	}
+	for i := range items {
+		var shared []string
+		for _, t := range items[i].Topics {
+			if _, ok := targetSet[t]; ok {
+				shared = append(shared, t)
+				if len(shared) >= 3 {
+					break
+				}
+			}
+		}
+		items[i].ReasonTopics = shared
+		if len(shared) > 0 {
+			reason := fmt.Sprintf("shared topics: %s", strings.Join(shared, ", "))
+			items[i].Reason = &reason
+			continue
+		}
+		switch {
+		case items[i].Similarity >= 0.8:
+			reason := "very high semantic similarity"
+			items[i].Reason = &reason
+		case items[i].Similarity >= 0.65:
+			reason := "high semantic similarity"
+			items[i].Reason = &reason
+		default:
+			reason := "semantic similarity match"
+			items[i].Reason = &reason
+		}
+	}
 }
 
 type relatedClusterResponse struct {

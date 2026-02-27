@@ -479,6 +479,8 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 				if err != nil {
 					log.Printf("fetch rss %s: %v", src.URL, err)
 					_ = sourceRepo.UpdateLastFetchedAt(ctx, src.ID, timeutil.NowJST())
+					reason := fmt.Sprintf("fetch error: %v", err)
+					_ = sourceRepo.RefreshHealthSnapshot(ctx, src.ID, &reason)
 					continue
 				}
 
@@ -511,6 +513,7 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 					}
 				}
 				_ = sourceRepo.UpdateLastFetchedAt(ctx, src.ID, timeutil.NowJST())
+				_ = sourceRepo.RefreshHealthSnapshot(ctx, src.ID, nil)
 			}
 			return map[string]int{"new_items": newCount}, nil
 		},

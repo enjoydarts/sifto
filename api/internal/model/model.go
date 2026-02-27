@@ -47,6 +47,17 @@ type Source struct {
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
+type SourceHealth struct {
+	SourceID      string     `json:"source_id"`
+	TotalItems    int        `json:"total_items"`
+	FailedItems   int        `json:"failed_items"`
+	Summarized    int        `json:"summarized_items"`
+	FailureRate   float64    `json:"failure_rate"`
+	LastItemAt    *time.Time `json:"last_item_at,omitempty"`
+	LastFetchedAt *time.Time `json:"last_fetched_at,omitempty"`
+	Status        string     `json:"status"` // ok | stale | error | new | disabled
+}
+
 type Item struct {
 	ID             string     `json:"id"`
 	SourceID       string     `json:"source_id"`
@@ -126,6 +137,8 @@ type RelatedItem struct {
 	Topics       []string   `json:"topics,omitempty"`
 	SummaryScore *float64   `json:"summary_score,omitempty"`
 	Similarity   float64    `json:"similarity"`
+	Reason       *string    `json:"reason,omitempty"`
+	ReasonTopics []string   `json:"reason_topics,omitempty"`
 	PublishedAt  *time.Time `json:"published_at,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 }

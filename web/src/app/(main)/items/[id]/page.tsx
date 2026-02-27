@@ -754,6 +754,12 @@ export default function ItemDetailPage() {
                           {r.summary && (
                             <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
                           )}
+                          {r.reason && (
+                            <p className="mt-1 text-xs leading-5 text-zinc-500">
+                              {locale === "ja" ? "関連理由: " : "Why related: "}
+                              {r.reason}
+                            </p>
+                          )}
                           {!!r.topics?.length && (
                             <div className="mt-2 flex flex-wrap gap-1.5">
                               {r.topics.slice(0, 6).map((topic) => (
@@ -796,6 +802,12 @@ export default function ItemDetailPage() {
                   </a>
                   {r.summary && (
                     <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
+                  )}
+                  {r.reason && (
+                    <p className="mt-1 text-xs leading-5 text-zinc-500">
+                      {locale === "ja" ? "関連理由: " : "Why related: "}
+                      {r.reason}
+                    </p>
                   )}
                   {!!r.topics?.length && (
                     <div className="mt-2 flex flex-wrap gap-1.5">

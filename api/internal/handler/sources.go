@@ -3,7 +3,9 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -24,6 +26,31 @@ import (
 type FeedCandidate struct {
 	URL   string  `json:"url"`
 	Title *string `json:"title"`
+}
+
+type opmlDocument struct {
+	XMLName xml.Name `xml:"opml"`
+	Version string   `xml:"version,attr"`
+	Head    opmlHead `xml:"head"`
+	Body    opmlBody `xml:"body"`
+}
+
+type opmlHead struct {
+	Title       string `xml:"title,omitempty"`
+	DateCreated string `xml:"dateCreated,omitempty"`
+}
+
+type opmlBody struct {
+	Outlines []opmlOutline `xml:"outline"`
+}
+
+type opmlOutline struct {
+	Text     string        `xml:"text,attr,omitempty"`
+	Title    string        `xml:"title,attr,omitempty"`
+	Type     string        `xml:"type,attr,omitempty"`
+	XMLURL   string        `xml:"xmlUrl,attr,omitempty"`
+	HTMLURL  string        `xml:"htmlUrl,attr,omitempty"`
+	Outlines []opmlOutline `xml:"outline,omitempty"`
 }
 
 var (
@@ -139,6 +166,154 @@ func (h *SourceHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, sources)
+}
+
+func (h *SourceHandler) ExportOPML(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	sources, err := h.repo.List(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+
+	outlines := make([]opmlOutline, 0, len(sources))
+	for _, s := range sources {
+		label := strings.TrimSpace(s.URL)
+		if s.Title != nil && strings.TrimSpace(*s.Title) != "" {
+			label = strings.TrimSpace(*s.Title)
+		}
+		outlines = append(outlines, opmlOutline{
+			Text:    label,
+			Title:   label,
+			Type:    "rss",
+			XMLURL:  s.URL,
+			HTMLURL: s.URL,
+		})
+	}
+	doc := opmlDocument{
+		Version: "2.0",
+		Head: opmlHead{
+			Title:       "Sifto Sources Export",
+			DateCreated: time.Now().UTC().Format(time.RFC1123Z),
+		},
+		Body: opmlBody{
+			Outlines: outlines,
+		},
+	}
+	payload, err := xml.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		http.Error(w, "failed to export opml", http.StatusInternalServerError)
+		return
+	}
+	filename := fmt.Sprintf("sifto-sources-%s.opml", time.Now().Format("20060102"))
+	w.Header().Set("Content-Type", "text/x-opml; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	_, _ = w.Write([]byte(xml.Header))
+	_, _ = w.Write(payload)
+}
+
+func (h *SourceHandler) ImportOPML(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		OPML string `json:"opml"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.OPML) == "" {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	var doc opmlDocument
+	if err := xml.Unmarshal([]byte(body.OPML), &doc); err != nil {
+		http.Error(w, "invalid opml", http.StatusBadRequest)
+		return
+	}
+	urlTitlePairs := flattenOPMLOutlines(doc.Body.Outlines)
+	added := 0
+	skipped := 0
+	invalid := 0
+	errorsOut := make([]string, 0)
+	for _, pair := range urlTitlePairs {
+		u := strings.TrimSpace(pair.URL)
+		parsed, err := url.ParseRequestURI(u)
+		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			invalid++
+			continue
+		}
+		title := pair.Title
+		if title != nil {
+			v := strings.TrimSpace(*title)
+			if v == "" {
+				title = nil
+			} else {
+				title = &v
+			}
+		}
+		if _, err := h.repo.Create(r.Context(), userID, u, "rss", title); err != nil {
+			if errors.Is(err, repository.ErrConflict) {
+				skipped++
+				continue
+			}
+			errorsOut = append(errorsOut, err.Error())
+			if len(errorsOut) >= 10 {
+				break
+			}
+			continue
+		}
+		added++
+	}
+	writeJSON(w, map[string]any{
+		"status":       "ok",
+		"total":        len(urlTitlePairs),
+		"added":        added,
+		"skipped":      skipped,
+		"invalid":      invalid,
+		"error_count":  len(errorsOut),
+		"error_sample": errorsOut,
+	})
+}
+
+func (h *SourceHandler) Health(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	rows, err := h.repo.HealthByUser(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"items": rows,
+	})
+}
+
+type opmlURLTitle struct {
+	URL   string
+	Title *string
+}
+
+func flattenOPMLOutlines(outlines []opmlOutline) []opmlURLTitle {
+	out := make([]opmlURLTitle, 0)
+	var walk func(rows []opmlOutline)
+	walk = func(rows []opmlOutline) {
+		for _, o := range rows {
+			if strings.TrimSpace(o.XMLURL) != "" {
+				var title *string
+				if strings.TrimSpace(o.Title) != "" {
+					t := strings.TrimSpace(o.Title)
+					title = &t
+				} else if strings.TrimSpace(o.Text) != "" {
+					t := strings.TrimSpace(o.Text)
+					title = &t
+				}
+				out = append(out, opmlURLTitle{
+					URL:   strings.TrimSpace(o.XMLURL),
+					Title: title,
+				})
+			}
+			if len(o.Outlines) > 0 {
+				walk(o.Outlines)
+			}
+		}
+	}
+	walk(outlines)
+	return out
 }
 
 func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {

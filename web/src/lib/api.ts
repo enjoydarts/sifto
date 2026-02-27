@@ -23,6 +23,17 @@ export interface SourceSuggestion {
   seed_source_ids: string[];
 }
 
+export interface SourceHealth {
+  source_id: string;
+  total_items: number;
+  failed_items: number;
+  summarized_items: number;
+  failure_rate: number;
+  last_item_at?: string | null;
+  last_fetched_at?: string | null;
+  status: "ok" | "stale" | "error" | "new" | "disabled" | string;
+}
+
 export interface Item {
   id: string;
   source_id: string;
@@ -99,6 +110,8 @@ export interface RelatedItem {
   topics?: string[];
   summary_score?: number | null;
   similarity: number;
+  reason?: string | null;
+  reason_topics?: string[];
   published_at?: string | null;
   created_at: string;
 }
@@ -331,6 +344,23 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   // Sources
   getSources: () => apiFetch<Source[]>("/sources"),
+  getSourceHealth: () => apiFetch<{ items: SourceHealth[] }>("/sources/health"),
+  exportSourcesOPML: async () => {
+    const res = await fetch("/api/sources/opml");
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`${res.status}: ${text || res.statusText}`);
+    }
+    return res.text();
+  },
+  importSourcesOPML: (opml: string) =>
+    apiFetch<{ status: string; total: number; added: number; skipped: number; invalid: number; error_count: number; error_sample?: string[] }>(
+      "/sources/opml/import",
+      {
+        method: "POST",
+        body: JSON.stringify({ opml }),
+      }
+    ),
   getSourceSuggestions: (params?: { limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));

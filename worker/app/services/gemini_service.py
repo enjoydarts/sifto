@@ -242,18 +242,28 @@ def _llm_meta(model: str, purpose: str, usage: dict) -> dict:
     }
 
 
-def _generate_content(prompt: str, model: str, api_key: str, max_output_tokens: int = 1024) -> tuple[str, dict]:
+def _generate_content(
+    prompt: str,
+    model: str,
+    api_key: str,
+    max_output_tokens: int = 1024,
+    response_schema: dict | None = None,
+) -> tuple[str, dict]:
     if not api_key:
         raise RuntimeError("google api key is required")
     model_name = _normalize_model_name(model)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+    generation_config: dict = {
+        "temperature": 0.2,
+        "maxOutputTokens": max_output_tokens,
+        "responseMimeType": "application/json",
+    }
+    if response_schema:
+        generation_config["responseSchema"] = response_schema
+
     body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": 0.2,
-            "maxOutputTokens": max_output_tokens,
-            "responseMimeType": "application/json",
-        },
+        "generationConfig": generation_config,
     }
     with httpx.Client(timeout=60.0) as client:
         resp = client.post(url, json=body, params={"key": api_key})
@@ -314,6 +324,13 @@ def _extract_first_json_object(text: str) -> dict | None:
     return None
 
 
+def _decode_json_string_fragment(raw: str) -> str:
+    try:
+        return json.loads(f'"{raw}"')
+    except Exception:
+        return raw.replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
+
+
 def _extract_compose_digest_fields(text: str) -> tuple[str, str]:
     data = _extract_first_json_object(text) or {}
     subject = str(data.get("subject") or "").strip()
@@ -324,11 +341,11 @@ def _extract_compose_digest_fields(text: str) -> tuple[str, str]:
     s = _strip_code_fence(text)
     m_subject = re.search(r'"subject"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
     if not subject and m_subject:
-        subject = bytes(m_subject.group(1), "utf-8").decode("unicode_escape").strip()
+        subject = _decode_json_string_fragment(m_subject.group(1)).strip()
 
     m_body = re.search(r'"body"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
     if not body and m_body:
-        body = bytes(m_body.group(1), "utf-8").decode("unicode_escape").strip()
+        body = _decode_json_string_fragment(m_body.group(1)).strip()
     elif not body:
         key = '"body"'
         i = s.find(key)
@@ -488,18 +505,51 @@ input_mode: {input_mode}
 items:
 {digest_input}
 """
-    text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=4000)
-    subject, body = _extract_compose_digest_fields(text)
-    if not subject or not body:
-        snippet = text[:500].replace("\n", "\\n")
-        raise RuntimeError(f"gemini compose_digest missing subject/body; response_snippet={snippet}")
-    if len(body) < 80:
-        raise RuntimeError(f"gemini compose_digest body too short: len={len(body)}")
-    return {
-        "subject": subject,
-        "body": body,
-        "llm": _llm_meta(model, "digest", usage),
+    digest_schema = {
+        "type": "OBJECT",
+        "properties": {
+            "subject": {"type": "STRING"},
+            "body": {"type": "STRING"},
+            "sections": {
+                "type": "OBJECT",
+                "properties": {
+                    "overall_summary": {"type": "STRING"},
+                    "highlights": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    "other_points": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    "follow_up": {"type": "STRING"},
+                    "closing": {"type": "STRING"},
+                },
+            },
+        },
+        "required": ["subject", "body"],
     }
+
+    last_text = ""
+    last_error = "unknown"
+    for max_tokens in (4200, 6000):
+        text, usage = _generate_content(
+            prompt,
+            model=model,
+            api_key=api_key,
+            max_output_tokens=max_tokens,
+            response_schema=digest_schema,
+        )
+        last_text = text
+        subject, body = _extract_compose_digest_fields(text)
+        if not subject or not body:
+            last_error = "missing subject/body"
+            continue
+        if len(body) < 80:
+            last_error = f"body too short: len={len(body)}"
+            continue
+        return {
+            "subject": subject,
+            "body": body,
+            "llm": _llm_meta(model, "digest", usage),
+        }
+
+    snippet = last_text[:500].replace("\n", "\\n")
+    raise RuntimeError(f"gemini compose_digest parse failed: {last_error}; response_snippet={snippet}")
 
 
 def compose_digest_cluster_draft(

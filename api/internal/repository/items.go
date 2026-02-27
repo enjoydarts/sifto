@@ -545,13 +545,13 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 		       EXISTS (
 		           SELECT 1 FROM item_reads ir
 		           WHERE ir.item_id = i.id AND ir.user_id = $2
-		       ) AS is_read,
+		       ) AS is_read, i.processing_error,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
 	).Scan(&d.ID, &d.SourceID, &d.URL, &d.Title, &d.ThumbnailURL, &d.ContentText,
-		&d.Status, &d.IsRead, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
+		&d.Status, &d.IsRead, &d.ProcessingError, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {
 		return nil, mapDBError(err)
 	}

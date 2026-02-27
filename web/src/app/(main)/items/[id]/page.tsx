@@ -383,6 +383,15 @@ export default function ItemDetailPage() {
           {item.url}
         </a>
 
+        {item.status === "failed" && item.processing_error && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-700">
+              {locale === "ja" ? "失敗理由" : "Failure Reason"}
+            </div>
+            <p className="whitespace-pre-wrap break-words text-sm text-red-900">{item.processing_error}</p>
+          </div>
+        )}
+
         {item.thumbnail_url && (
           <div className="mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
             {/* eslint-disable-next-line @next/next/no-img-element */}

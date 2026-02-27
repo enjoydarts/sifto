@@ -35,7 +35,7 @@ func (r *ItemInngestRepo) UpdateAfterExtract(ctx context.Context, id, contentTex
 	_, err := r.db.Exec(ctx, `
 		UPDATE items
 		SET content_text = $1, title = COALESCE($2, title), thumbnail_url = COALESCE($3, thumbnail_url), published_at = $4,
-		    status = 'fetched', fetched_at = NOW(), updated_at = NOW()
+		    status = 'fetched', fetched_at = NOW(), processing_error = NULL, updated_at = NOW()
 		WHERE id = $5`,
 		contentText, title, thumbnailURL, publishedAt, id)
 	return err
@@ -51,7 +51,7 @@ func (r *ItemInngestRepo) InsertFacts(ctx context.Context, itemID string, facts 
 		return err
 	}
 	_, err = r.db.Exec(ctx, `
-		UPDATE items SET status = 'facts_extracted', updated_at = NOW() WHERE id = $1`, itemID)
+		UPDATE items SET status = 'facts_extracted', processing_error = NULL, updated_at = NOW() WHERE id = $1`, itemID)
 	return err
 }
 
@@ -87,13 +87,21 @@ func (r *ItemInngestRepo) InsertSummary(ctx context.Context, itemID, summary str
 		return err
 	}
 	_, err = r.db.Exec(ctx, `
-		UPDATE items SET status = 'summarized', updated_at = NOW() WHERE id = $1`, itemID)
+		UPDATE items SET status = 'summarized', processing_error = NULL, updated_at = NOW() WHERE id = $1`, itemID)
 	return err
 }
 
-func (r *ItemInngestRepo) MarkFailed(ctx context.Context, id string) error {
+func (r *ItemInngestRepo) MarkFailed(ctx context.Context, id string, processingError *string) error {
+	var msg *string
+	if processingError != nil {
+		s := *processingError
+		if len(s) > 4000 {
+			s = s[:4000]
+		}
+		msg = &s
+	}
 	_, err := r.db.Exec(ctx, `
-		UPDATE items SET status = 'failed', updated_at = NOW() WHERE id = $1`, id)
+		UPDATE items SET status = 'failed', processing_error = $2, updated_at = NOW() WHERE id = $1`, id, msg)
 	return err
 }
 

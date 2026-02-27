@@ -549,7 +549,8 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			userAnthropicKey, err := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr)
 			if err != nil {
 				log.Printf("process-item user anthropic key load failed item_id=%s user_id=%v err=%v", itemID, userIDPtr, err)
-				_ = itemRepo.MarkFailed(ctx, itemID)
+				msg := err.Error()
+				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
 				return nil, err
 			}
 			userModelSettings, _ := userSettingsRepo.GetByUserID(ctx, *userIDPtr)
@@ -562,7 +563,8 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			})
 			if err != nil {
 				log.Printf("process-item extract-body failed item_id=%s err=%v", itemID, err)
-				_ = itemRepo.MarkFailed(ctx, itemID)
+				msg := fmt.Sprintf("extract body: %v", err)
+				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
 				return nil, fmt.Errorf("extract body: %w", err)
 			}
 			log.Printf("process-item extract-body done item_id=%s content_len=%d", itemID, len(extracted.Content))
@@ -591,7 +593,8 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			})
 			if err != nil {
 				log.Printf("process-item extract-facts failed item_id=%s err=%v", itemID, err)
-				_ = itemRepo.MarkFailed(ctx, itemID)
+				msg := fmt.Sprintf("extract facts: %v", err)
+				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
 				return nil, fmt.Errorf("extract facts: %w", err)
 			}
 			log.Printf("process-item extract-facts done item_id=%s facts=%d", itemID, len(factsResp.Facts))
@@ -613,7 +616,8 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			})
 			if err != nil {
 				log.Printf("process-item summarize failed item_id=%s err=%v", itemID, err)
-				_ = itemRepo.MarkFailed(ctx, itemID)
+				msg := fmt.Sprintf("summarize: %v", err)
+				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
 				return nil, fmt.Errorf("summarize: %w", err)
 			}
 			log.Printf("process-item summarize done item_id=%s topics=%d score=%.3f", itemID, len(summary.Topics), summary.Score)

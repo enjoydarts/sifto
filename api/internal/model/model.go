@@ -102,10 +102,11 @@ type ItemSummaryScoreBreakdown struct {
 
 type ItemDetail struct {
 	Item
-	Facts      *ItemFacts      `json:"facts,omitempty"`
-	Summary    *ItemSummary    `json:"summary,omitempty"`
-	SummaryLLM *ItemSummaryLLM `json:"summary_llm,omitempty"`
-	Feedback   *ItemFeedback   `json:"feedback,omitempty"`
+	ProcessingError *string         `json:"processing_error,omitempty"`
+	Facts           *ItemFacts      `json:"facts,omitempty"`
+	Summary         *ItemSummary    `json:"summary,omitempty"`
+	SummaryLLM      *ItemSummaryLLM `json:"summary_llm,omitempty"`
+	Feedback        *ItemFeedback   `json:"feedback,omitempty"`
 }
 
 type ItemFeedback struct {

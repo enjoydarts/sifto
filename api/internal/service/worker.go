@@ -130,7 +130,7 @@ type LLMUsage struct {
 }
 
 func (w *WorkerClient) ExtractBody(ctx context.Context, url string) (*ExtractBodyResponse, error) {
-	return postWithHeaders[ExtractBodyResponse](ctx, w, "/extract-body", map[string]any{"url": url}, nil)
+	return postWithHeaders[ExtractBodyResponse](ctx, w, "/extract-body", map[string]any{"url": url}, workerHeaders(nil, w.internalSecret))
 }
 
 func (w *WorkerClient) Health(ctx context.Context) error {

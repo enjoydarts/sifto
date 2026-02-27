@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { api, DigestDetail } from "@/lib/api";
+import { api, BulkRetryFailedResult, DigestDetail } from "@/lib/api";
 import { useToast } from "@/components/toast-provider";
 
 type GenerateResponse = {
@@ -113,6 +113,9 @@ export default function DebugDigestsPage() {
   const [backfillDryRun, setBackfillDryRun] = useState(true);
   const [busyBackfill, setBusyBackfill] = useState(false);
   const [backfillResult, setBackfillResult] = useState<EmbeddingBackfillResponse | null>(null);
+  const [retrySourceId, setRetrySourceId] = useState("");
+  const [busyRetryFailed, setBusyRetryFailed] = useState(false);
+  const [retryFailedResult, setRetryFailedResult] = useState<BulkRetryFailedResult | null>(null);
   const [busySystemHealth, setBusySystemHealth] = useState(false);
   const [systemHealth, setSystemHealth] = useState<DebugSystemStatusResponse | null>(null);
   const [webHealth, setWebHealth] = useState<{ status: number; latency_ms: number; body: unknown } | null>(null);
@@ -234,6 +237,25 @@ export default function DebugDigestsPage() {
       showToast(String(e), "error");
     } finally {
       setBusyBackfill(false);
+    }
+  };
+
+  const onRetryFailedItems = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusyRetryFailed(true);
+    setError(null);
+    setRetryFailedResult(null);
+    try {
+      const res = await api.retryFailedItems(
+        retrySourceId.trim() ? { source_id: retrySourceId.trim() } : undefined
+      );
+      setRetryFailedResult(res);
+      showToast("Failed items retry queued", "success");
+    } catch (e) {
+      setError(String(e));
+      showToast(String(e), "error");
+    } finally {
+      setBusyRetryFailed(false);
     }
   };
 
@@ -590,6 +612,36 @@ export default function DebugDigestsPage() {
         {backfillResult && (
           <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
             {JSON.stringify(backfillResult, null, 2)}
+          </pre>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold text-zinc-800">Retry Failed Items (Debug)</h2>
+        <form onSubmit={onRetryFailedItems} className="space-y-4">
+          <label className="block text-sm">
+            <div className="mb-1 text-xs font-medium text-zinc-600">Source ID (optional)</div>
+            <input
+              value={retrySourceId}
+              onChange={(e) => setRetrySourceId(e.target.value)}
+              className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              placeholder="all failed items if empty"
+            />
+          </label>
+          <div className="pt-1">
+            <button
+              type="submit"
+              disabled={busyRetryFailed}
+              className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+            >
+              {busyRetryFailed ? "実行中…" : "Queue Retry Failed"}
+            </button>
+          </div>
+        </form>
+
+        {retryFailedResult && (
+          <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+            {JSON.stringify(retryFailedResult, null, 2)}
           </pre>
         )}
       </section>

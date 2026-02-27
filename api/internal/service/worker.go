@@ -25,10 +25,17 @@ func NewWorkerClient() *WorkerClient {
 	if url == "" {
 		url = "http://localhost:8000"
 	}
+	composeTimeout := workerComposeDigestTimeout()
+	httpTimeout := 60 * time.Second
+	// Keep client timeout longer than compose timeout; otherwise http.Client.Timeout
+	// can fire before context.WithTimeout in compose calls.
+	if composeTimeout > 0 && composeTimeout+15*time.Second > httpTimeout {
+		httpTimeout = composeTimeout + 15*time.Second
+	}
 	return &WorkerClient{
 		baseURL:              url,
-		http:                 &http.Client{Timeout: 60 * time.Second},
-		composeDigestTimeout: workerComposeDigestTimeout(),
+		http:                 &http.Client{Timeout: httpTimeout},
+		composeDigestTimeout: composeTimeout,
 		internalSecret:       strings.TrimSpace(os.Getenv("INTERNAL_WORKER_SECRET")),
 	}
 }

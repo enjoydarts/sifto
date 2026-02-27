@@ -122,12 +122,44 @@ func loadUserOpenAIAPIKey(ctx context.Context, settingsRepo *repository.UserSett
 	return &plain, nil
 }
 
+func loadUserGoogleAPIKey(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string) (*string, error) {
+	if settingsRepo == nil || userID == nil || *userID == "" {
+		return nil, fmt.Errorf("user google api key is required")
+	}
+	enc, err := settingsRepo.GetGoogleAPIKeyEncrypted(ctx, *userID)
+	if err != nil || enc == nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("user google api key is required")
+	}
+	if cipher == nil || !cipher.Enabled() {
+		return nil, fmt.Errorf("user secret encryption is not configured")
+	}
+	plain, err := cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt user google key: %w", err)
+	}
+	return &plain, nil
+}
+
 func ptrStringOrNil(v *string) *string {
 	if v == nil || *v == "" {
 		return nil
 	}
 	s := *v
 	return &s
+}
+
+func isGeminiModel(model *string) bool {
+	if model == nil {
+		return false
+	}
+	v := strings.ToLower(strings.TrimSpace(*model))
+	if v == "" {
+		return false
+	}
+	return strings.HasPrefix(v, "gemini-") || strings.Contains(v, "/models/gemini-")
 }
 
 func digestTopicKey(topics []string) string {
@@ -549,13 +581,6 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					log.Printf("process-item source owner lookup failed source_id=%s err=%v", data.SourceID, err)
 				}
 			}
-			userAnthropicKey, err := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr)
-			if err != nil {
-				log.Printf("process-item user anthropic key load failed item_id=%s user_id=%v err=%v", itemID, userIDPtr, err)
-				msg := err.Error()
-				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-				return nil, err
-			}
 			userModelSettings, _ := userSettingsRepo.GetByUserID(ctx, *userIDPtr)
 			log.Printf("process-item start item_id=%s url=%s", itemID, url)
 
@@ -592,7 +617,22 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				if userModelSettings != nil {
 					modelOverride = ptrStringOrNil(userModelSettings.AnthropicFactsModel)
 				}
-				return worker.ExtractFactsWithModel(ctx, extracted.Title, extracted.Content, userAnthropicKey, modelOverride)
+				var userAnthropicKey *string
+				var userGoogleKey *string
+				if !isGeminiModel(modelOverride) {
+					key, err := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr)
+					if err != nil {
+						return nil, err
+					}
+					userAnthropicKey = key
+				} else {
+					key, err := loadUserGoogleAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr)
+					if err != nil {
+						return nil, err
+					}
+					userGoogleKey = key
+				}
+				return worker.ExtractFactsWithModel(ctx, extracted.Title, extracted.Content, userAnthropicKey, userGoogleKey, modelOverride)
 			})
 			if err != nil {
 				log.Printf("process-item extract-facts failed item_id=%s err=%v", itemID, err)
@@ -615,8 +655,23 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				if userModelSettings != nil {
 					modelOverride = ptrStringOrNil(userModelSettings.AnthropicSummaryModel)
 				}
+				var userAnthropicKey *string
+				var userGoogleKey *string
+				if !isGeminiModel(modelOverride) {
+					key, err := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr)
+					if err != nil {
+						return nil, err
+					}
+					userAnthropicKey = key
+				} else {
+					key, err := loadUserGoogleAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr)
+					if err != nil {
+						return nil, err
+					}
+					userGoogleKey = key
+				}
 				sourceChars := len(extracted.Content)
-				return worker.SummarizeWithModel(ctx, extracted.Title, factsResp.Facts, &sourceChars, userAnthropicKey, modelOverride)
+				return worker.SummarizeWithModel(ctx, extracted.Title, factsResp.Facts, &sourceChars, userAnthropicKey, userGoogleKey, modelOverride)
 			})
 			if err != nil {
 				log.Printf("process-item summarize failed item_id=%s err=%v", itemID, err)
@@ -828,11 +883,6 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					log.Printf("compose-digest-copy update-status failed digest_id=%s status=%s err=%v", data.DigestID, status, err)
 				}
 			}
-			userAnthropicKey, keyErr := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, &data.UserID)
-			if keyErr != nil {
-				markStatus("user_key_failed", keyErr)
-				return nil, keyErr
-			}
 			userModelSettings, _ := userSettingsRepo.GetByUserID(ctx, data.UserID)
 
 			// Read-only DB fetch does not need step state, and keeping large nested structs
@@ -873,6 +923,21 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					if userModelSettings != nil {
 						clusterDraftModel = ptrStringOrNil(userModelSettings.AnthropicDigestClusterModel)
 					}
+					var clusterDraftAnthropicKey *string
+					var clusterDraftGoogleKey *string
+					if !isGeminiModel(clusterDraftModel) {
+						key, keyErr := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, &data.UserID)
+						if keyErr != nil {
+							return "", keyErr
+						}
+						clusterDraftAnthropicKey = key
+					} else {
+						key, keyErr := loadUserGoogleAPIKey(ctx, userSettingsRepo, secretCipher, &data.UserID)
+						if keyErr != nil {
+							return "", keyErr
+						}
+						clusterDraftGoogleKey = key
+					}
 					for i := range drafts {
 						sourceLines := draftSourceLines(drafts[i].DraftSummary)
 						if len(sourceLines) == 0 {
@@ -884,7 +949,8 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 							drafts[i].ItemCount,
 							drafts[i].Topics,
 							sourceLines,
-							userAnthropicKey,
+							clusterDraftAnthropicKey,
+							clusterDraftGoogleKey,
 							clusterDraftModel,
 						)
 						if err != nil {
@@ -913,7 +979,22 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					if userModelSettings != nil {
 						modelOverride = ptrStringOrNil(userModelSettings.AnthropicDigestModel)
 					}
-					resp, err := worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, userAnthropicKey, modelOverride)
+					var digestAnthropicKey *string
+					var digestGoogleKey *string
+					if !isGeminiModel(modelOverride) {
+						key, keyErr := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, &data.UserID)
+						if keyErr != nil {
+							return "", keyErr
+						}
+						digestAnthropicKey = key
+					} else {
+						key, keyErr := loadUserGoogleAPIKey(ctx, userSettingsRepo, secretCipher, &data.UserID)
+						if keyErr != nil {
+							return "", keyErr
+						}
+						digestGoogleKey = key
+					}
+					resp, err := worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, digestAnthropicKey, digestGoogleKey, modelOverride)
 					if err != nil {
 						return "", err
 					}

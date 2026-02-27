@@ -130,7 +130,7 @@ type LLMUsage struct {
 }
 
 func (w *WorkerClient) ExtractBody(ctx context.Context, url string) (*ExtractBodyResponse, error) {
-	return postWithHeaders[ExtractBodyResponse](ctx, w, "/extract-body", map[string]any{"url": url}, workerHeaders(nil, w.internalSecret))
+	return postWithHeaders[ExtractBodyResponse](ctx, w, "/extract-body", map[string]any{"url": url}, workerHeaders(nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) Health(ctx context.Context) error {
@@ -156,41 +156,41 @@ func (w *WorkerClient) Health(ctx context.Context) error {
 	return nil
 }
 
-func (w *WorkerClient) ExtractFacts(ctx context.Context, title *string, content string, anthropicAPIKey *string) (*ExtractFactsResponse, error) {
+func (w *WorkerClient) ExtractFacts(ctx context.Context, title *string, content string, anthropicAPIKey *string, googleAPIKey *string) (*ExtractFactsResponse, error) {
 	return postWithHeaders[ExtractFactsResponse](ctx, w, "/extract-facts", map[string]any{
 		"title":   title,
 		"content": content,
 		"model":   nil,
-	}, workerHeaders(anthropicAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) ExtractFactsWithModel(ctx context.Context, title *string, content string, anthropicAPIKey *string, model *string) (*ExtractFactsResponse, error) {
+func (w *WorkerClient) ExtractFactsWithModel(ctx context.Context, title *string, content string, anthropicAPIKey *string, googleAPIKey *string, model *string) (*ExtractFactsResponse, error) {
 	return postWithHeaders[ExtractFactsResponse](ctx, w, "/extract-facts", map[string]any{
 		"title":   title,
 		"content": content,
 		"model":   model,
-	}, workerHeaders(anthropicAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) Summarize(ctx context.Context, title *string, facts []string, anthropicAPIKey *string) (*SummarizeResponse, error) {
+func (w *WorkerClient) Summarize(ctx context.Context, title *string, facts []string, anthropicAPIKey *string, googleAPIKey *string) (*SummarizeResponse, error) {
 	return postWithHeaders[SummarizeResponse](ctx, w, "/summarize", map[string]any{
 		"title":             title,
 		"facts":             facts,
 		"model":             nil,
 		"source_text_chars": nil,
-	}, workerHeaders(anthropicAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, facts []string, sourceTextChars *int, anthropicAPIKey *string, model *string) (*SummarizeResponse, error) {
+func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, facts []string, sourceTextChars *int, anthropicAPIKey *string, googleAPIKey *string, model *string) (*SummarizeResponse, error) {
 	return postWithHeaders[SummarizeResponse](ctx, w, "/summarize", map[string]any{
 		"title":             title,
 		"facts":             facts,
 		"model":             model,
 		"source_text_chars": sourceTextChars,
-	}, workerHeaders(anthropicAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string) (*ComposeDigestResponse, error) {
+func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, googleAPIKey *string) (*ComposeDigestResponse, error) {
 	if _, ok := ctx.Deadline(); !ok && w.composeDigestTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, w.composeDigestTimeout)
@@ -200,10 +200,10 @@ func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, ite
 		"digest_date": digestDate,
 		"items":       items,
 		"model":       nil,
-	}, workerHeaders(anthropicAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, model *string) (*ComposeDigestResponse, error) {
+func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, googleAPIKey *string, model *string) (*ComposeDigestResponse, error) {
 	if _, ok := ctx.Deadline(); !ok && w.composeDigestTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, w.composeDigestTimeout)
@@ -213,7 +213,7 @@ func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate st
 		"digest_date": digestDate,
 		"items":       items,
 		"model":       model,
-	}, workerHeaders(anthropicAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) ComposeDigestClusterDraftWithModel(
@@ -223,6 +223,7 @@ func (w *WorkerClient) ComposeDigestClusterDraftWithModel(
 	topics []string,
 	sourceLines []string,
 	anthropicAPIKey *string,
+	googleAPIKey *string,
 	model *string,
 ) (*ComposeDigestClusterDraftResponse, error) {
 	return postWithHeaders[ComposeDigestClusterDraftResponse](ctx, w, "/compose-digest-cluster-draft", map[string]any{
@@ -231,7 +232,7 @@ func (w *WorkerClient) ComposeDigestClusterDraftWithModel(
 		"topics":        topics,
 		"source_lines":  sourceLines,
 		"model":         model,
-	}, workerHeaders(anthropicAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) RankFeedSuggestions(
@@ -246,7 +247,7 @@ func (w *WorkerClient) RankFeedSuggestions(
 		"preferred_topics": preferredTopics,
 		"candidates":       candidates,
 		"model":            nil,
-	}, workerHeaders(anthropicAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) RankFeedSuggestionsWithModel(
@@ -262,7 +263,7 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 		"preferred_topics": preferredTopics,
 		"candidates":       candidates,
 		"model":            model,
-	}, workerHeaders(anthropicAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) SuggestFeedSeedSites(
@@ -275,7 +276,7 @@ func (w *WorkerClient) SuggestFeedSeedSites(
 		"existing_sources": existing,
 		"preferred_topics": preferredTopics,
 		"model":            nil,
-	}, workerHeaders(anthropicAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
@@ -289,16 +290,19 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 		"existing_sources": existing,
 		"preferred_topics": preferredTopics,
 		"model":            model,
-	}, workerHeaders(anthropicAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, nil, w.internalSecret))
 }
 
-func workerHeaders(anthropicAPIKey *string, internalSecret string) map[string]string {
+func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, internalSecret string) map[string]string {
 	headers := map[string]string{}
 	if internalSecret != "" {
 		headers["X-Internal-Worker-Secret"] = internalSecret
 	}
 	if anthropicAPIKey != nil && *anthropicAPIKey != "" {
 		headers["X-Anthropic-Api-Key"] = *anthropicAPIKey
+	}
+	if googleAPIKey != nil && *googleAPIKey != "" {
+		headers["X-Google-Api-Key"] = *googleAPIKey
 	}
 	if len(headers) == 0 {
 		return nil

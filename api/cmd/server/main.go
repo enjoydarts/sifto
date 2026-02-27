@@ -141,6 +141,8 @@ func main() {
 			r.Delete("/anthropic-key", settingsH.DeleteAnthropicAPIKey)
 			r.Post("/openai-key", settingsH.SetOpenAIAPIKey)
 			r.Delete("/openai-key", settingsH.DeleteOpenAIAPIKey)
+			r.Post("/google-key", settingsH.SetGoogleAPIKey)
+			r.Delete("/google-key", settingsH.DeleteGoogleAPIKey)
 		})
 	})
 

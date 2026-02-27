@@ -20,6 +20,7 @@
          [Inngest Cloud] ──→ [Go API] ──→ [Python Worker / Fly.io]
                                                   │
                                          [Anthropic Claude API]
+                                         [Google AI Studio (Gemini API)]
                                          [OpenAI Embeddings API]
                      │
               [Resend（メール送信）]

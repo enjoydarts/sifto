@@ -17,6 +17,8 @@ type UserSettings struct {
 	HasAnthropicAPIKey          bool       `json:"has_anthropic_api_key"`
 	OpenAIAPIKeyLast4           *string    `json:"openai_api_key_last4,omitempty"`
 	HasOpenAIAPIKey             bool       `json:"has_openai_api_key"`
+	GoogleAPIKeyLast4           *string    `json:"google_api_key_last4,omitempty"`
+	HasGoogleAPIKey             bool       `json:"has_google_api_key"`
 	MonthlyBudgetUSD            *float64   `json:"monthly_budget_usd,omitempty"`
 	BudgetAlertEnabled          bool       `json:"budget_alert_enabled"`
 	BudgetAlertThresholdPct     int        `json:"budget_alert_threshold_pct"`

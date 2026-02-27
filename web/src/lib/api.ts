@@ -321,6 +321,8 @@ export interface UserSettings {
   anthropic_api_key_last4: string | null;
   has_openai_api_key: boolean;
   openai_api_key_last4: string | null;
+  has_google_api_key: boolean;
+  google_api_key_last4: string | null;
   has_inoreader_oauth?: boolean;
   inoreader_token_expires_at?: string | null;
   monthly_budget_usd: number | null;
@@ -571,6 +573,16 @@ export const api = {
   deleteOpenAIApiKey: () =>
     apiFetch<{ user_id: string; has_openai_api_key: boolean; openai_api_key_last4: string | null }>(
       "/settings/openai-key",
+      { method: "DELETE" }
+    ),
+  setGoogleApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_google_api_key: boolean; google_api_key_last4: string | null }>(
+      "/settings/google-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteGoogleApiKey: () =>
+    apiFetch<{ user_id: string; has_google_api_key: boolean; google_api_key_last4: string | null }>(
+      "/settings/google-key",
       { method: "DELETE" }
     ),
   deleteInoreaderOAuth: () =>

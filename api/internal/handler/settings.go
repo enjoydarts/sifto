@@ -59,6 +59,8 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"anthropic_api_key_last4":    settings.AnthropicAPIKeyLast4,
 		"has_openai_api_key":         settings.HasOpenAIAPIKey,
 		"openai_api_key_last4":       settings.OpenAIAPIKeyLast4,
+		"has_google_api_key":         settings.HasGoogleAPIKey,
+		"google_api_key_last4":       settings.GoogleAPIKeyLast4,
 		"has_inoreader_oauth":        settings.HasInoreaderOAuth,
 		"inoreader_token_expires_at": settings.InoreaderTokenExpiresAt,
 		"monthly_budget_usd":         settings.MonthlyBudgetUSD,
@@ -471,5 +473,58 @@ func (h *SettingsHandler) DeleteOpenAIAPIKey(w http.ResponseWriter, r *http.Requ
 		"user_id":              settings.UserID,
 		"has_openai_api_key":   settings.HasOpenAIAPIKey,
 		"openai_api_key_last4": settings.OpenAIAPIKeyLast4,
+	})
+}
+
+func (h *SettingsHandler) SetGoogleAPIKey(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	key := strings.TrimSpace(body.APIKey)
+	if key == "" {
+		http.Error(w, "api_key is required", http.StatusBadRequest)
+		return
+	}
+	if h.cipher == nil || !h.cipher.Enabled() {
+		http.Error(w, "user secret encryption is not configured", http.StatusInternalServerError)
+		return
+	}
+	enc, err := h.cipher.EncryptString(key)
+	if err != nil {
+		http.Error(w, "failed to encrypt api key", http.StatusInternalServerError)
+		return
+	}
+	last4 := key
+	if len(last4) > 4 {
+		last4 = last4[len(last4)-4:]
+	}
+	settings, err := h.repo.SetGoogleAPIKey(r.Context(), userID, enc, last4)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"user_id":              settings.UserID,
+		"has_google_api_key":   settings.HasGoogleAPIKey,
+		"google_api_key_last4": settings.GoogleAPIKeyLast4,
+	})
+}
+
+func (h *SettingsHandler) DeleteGoogleAPIKey(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	settings, err := h.repo.ClearGoogleAPIKey(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"user_id":              settings.UserID,
+		"has_google_api_key":   settings.HasGoogleAPIKey,
+		"google_api_key_last4": settings.GoogleAPIKeyLast4,
 	})
 }

@@ -284,11 +284,11 @@ func rerankAndFilterRelated(items []model.RelatedItem, targetTopics []string, li
 				}
 			}
 		}
-		// Hard filter to cut obvious noise.
-		if overlap == 0 && it.Similarity < 0.68 {
+		// Hard filter to cut obvious noise while avoiding "no related items".
+		if overlap == 0 && it.Similarity < 0.58 {
 			continue
 		}
-		if overlap > 0 && it.Similarity < 0.50 {
+		if overlap > 0 && it.Similarity < 0.42 {
 			continue
 		}
 		overlapBoost := 0.0
@@ -303,9 +303,17 @@ func rerankAndFilterRelated(items []model.RelatedItem, targetTopics []string, li
 		scored = append(scored, scoredItem{item: it, score: score, overlap: overlap})
 	}
 	if len(scored) == 0 {
-		// Fallback: keep only high-similarity items.
+		// Fallback 1: keep reasonably high-similarity items.
 		for _, it := range items {
-			if it.Similarity >= 0.75 {
+			if it.Similarity >= 0.62 {
+				scored = append(scored, scoredItem{item: it, score: it.Similarity, overlap: 0})
+			}
+		}
+	}
+	if len(scored) == 0 {
+		// Fallback 2: at least return stronger half of candidates.
+		for _, it := range items {
+			if it.Similarity >= 0.50 {
 				scored = append(scored, scoredItem{item: it, score: it.Similarity, overlap: 0})
 			}
 		}

@@ -641,7 +641,7 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 	if limit > 20 {
 		limit = 20
 	}
-	const minSimilarity = 0.40
+	const minSimilarity = 0.35
 	fetchLimit := limit * 5
 	if fetchLimit < 30 {
 		fetchLimit = 30

@@ -17,15 +17,16 @@ import (
 )
 
 type ItemHandler struct {
-	repo      *repository.ItemRepo
-	publisher *service.EventPublisher
-	cache     service.JSONCache
+	repo       *repository.ItemRepo
+	sourceRepo *repository.SourceRepo
+	publisher  *service.EventPublisher
+	cache      service.JSONCache
 }
 
 const itemsListCacheTTL = 30 * time.Second
 
-func NewItemHandler(repo *repository.ItemRepo, publisher *service.EventPublisher, cache service.JSONCache) *ItemHandler {
-	return &ItemHandler{repo: repo, publisher: publisher, cache: cache}
+func NewItemHandler(repo *repository.ItemRepo, sourceRepo *repository.SourceRepo, publisher *service.EventPublisher, cache service.JSONCache) *ItemHandler {
+	return &ItemHandler{repo: repo, sourceRepo: sourceRepo, publisher: publisher, cache: cache}
 }
 
 func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -206,6 +207,88 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, resp)
+}
+
+func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	q := r.URL.Query()
+	window := q.Get("window")
+	if window == "" {
+		window = "24h"
+	}
+	size := parseIntOrDefault(q.Get("size"), 20)
+	if size < 1 || size > 100 {
+		http.Error(w, "invalid size", http.StatusBadRequest)
+		return
+	}
+	params := repository.ReadingPlanParams{
+		Window:          window,
+		Size:            size,
+		DiversifyTopics: q.Get("diversify_topics") != "false",
+		ExcludeRead:     false,
+	}
+	resp, err := h.repo.ReadingPlan(r.Context(), userID, params)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	if resp == nil {
+		writeJSON(w, map[string]any{
+			"items":       []model.Item{},
+			"size":        size,
+			"window":      window,
+			"completed":   0,
+			"remaining":   0,
+			"total":       0,
+			"source_pool": 0,
+		})
+		return
+	}
+	affinity := map[string]float64{}
+	if h.sourceRepo != nil {
+		if sources, e := h.sourceRepo.RecommendedByUser(r.Context(), userID, 30); e == nil {
+			for _, s := range sources {
+				affinity[s.SourceID] = s.AffinityScore
+			}
+		}
+	}
+	items := make([]model.Item, len(resp.Items))
+	copy(items, resp.Items)
+	sort.SliceStable(items, func(i, j int) bool {
+		ai := affinity[items[i].SourceID]
+		aj := affinity[items[j].SourceID]
+		if ai != aj {
+			return ai > aj
+		}
+		si := 0.0
+		sj := 0.0
+		if items[i].SummaryScore != nil {
+			si = *items[i].SummaryScore
+		}
+		if items[j].SummaryScore != nil {
+			sj = *items[j].SummaryScore
+		}
+		if si != sj {
+			return si > sj
+		}
+		return items[i].CreatedAt.After(items[j].CreatedAt)
+	})
+	completed := 0
+	for _, it := range items {
+		if it.IsRead {
+			completed++
+		}
+	}
+	writeJSON(w, map[string]any{
+		"items":            items,
+		"size":             size,
+		"window":           resp.Window,
+		"completed":        completed,
+		"remaining":        len(items) - completed,
+		"total":            len(items),
+		"source_pool":      resp.SourcePoolCount,
+		"diversify_topics": resp.DiversifyTopics,
+	})
 }
 
 func (h *ItemHandler) GetDetail(w http.ResponseWriter, r *http.Request) {

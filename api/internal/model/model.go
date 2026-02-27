@@ -60,6 +60,17 @@ type SourceHealth struct {
 	Status        string     `json:"status"` // ok | stale | error | new | disabled
 }
 
+type RecommendedSource struct {
+	SourceID         string     `json:"source_id"`
+	URL              string     `json:"url"`
+	Title            *string    `json:"title"`
+	AffinityScore    float64    `json:"affinity_score"`
+	ReadCount30d     int        `json:"read_count_30d"`
+	Feedback30d      int        `json:"feedback_count_30d"`
+	FavoriteCount30d int        `json:"favorite_count_30d"`
+	LastItemAt       *time.Time `json:"last_item_at,omitempty"`
+}
+
 type Item struct {
 	ID             string     `json:"id"`
 	SourceID       string     `json:"source_id"`

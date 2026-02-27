@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Activity, Download, Lightbulb, Sparkles, Upload } from "lucide-react";
-import { api, Source, SourceHealth, SourceSuggestion } from "@/lib/api";
+import { api, RecommendedSource, Source, SourceHealth, SourceSuggestion } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -25,6 +25,7 @@ export default function SourcesPage() {
   const [editTitle, setEditTitle] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [suggestions, setSuggestions] = useState<SourceSuggestion[]>([]);
+  const [recommendedFeeds, setRecommendedFeeds] = useState<RecommendedSource[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const [suggestionsLLM, setSuggestionsLLM] = useState<{ provider?: string; model?: string; estimated_cost_usd?: number } | null>(null);
@@ -42,11 +43,13 @@ export default function SourcesPage() {
 
   const load = useCallback(async () => {
     try {
-      const [data, health] = await Promise.all([
+      const [data, health, recommended] = await Promise.all([
         api.getSources(),
         api.getSourceHealth().catch(() => ({ items: [] as SourceHealth[] })),
+        api.getRecommendedSources({ limit: 8 }).catch(() => ({ items: [] as RecommendedSource[] })),
       ]);
       setSources(data ?? []);
+      setRecommendedFeeds(recommended.items ?? []);
       const healthMap: Record<string, SourceHealth> = {};
       for (const h of health.items ?? []) healthMap[h.source_id] = h;
       setSourceHealthByID(healthMap);
@@ -388,6 +391,31 @@ export default function SourcesPage() {
           </div>
         )}
       </form>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="mb-3">
+          <h2 className="text-sm font-semibold text-zinc-700">{t("sources.recommendedFeeds.title")}</h2>
+          <p className="mt-1 text-xs text-zinc-500">{t("sources.recommendedFeeds.desc")}</p>
+        </div>
+        {recommendedFeeds.length === 0 ? (
+          <p className="text-sm text-zinc-500">{t("sources.recommendedFeeds.empty")}</p>
+        ) : (
+          <ul className="space-y-2">
+            {recommendedFeeds.map((s) => (
+              <li key={s.source_id} className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-zinc-900">{s.title ?? s.url}</div>
+                  {s.title && <div className="truncate text-xs text-zinc-500">{s.url}</div>}
+                </div>
+                <div className="shrink-0 text-right text-xs text-zinc-600">
+                  <div className="font-semibold text-zinc-800">{s.affinity_score.toFixed(2)}</div>
+                  <div>{t("sources.recommendedFeeds.reads")}: {s.read_count_30d}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <h2 className="mb-2 text-sm font-semibold text-zinc-700">{t("sources.inoreader.title")}</h2>

@@ -274,6 +274,24 @@ func (h *SourceHandler) Health(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *SourceHandler) Recommended(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	limit := parseIntOrDefault(r.URL.Query().Get("limit"), 8)
+	if limit < 1 || limit > 30 {
+		http.Error(w, "invalid limit", http.StatusBadRequest)
+		return
+	}
+	rows, err := h.repo.RecommendedByUser(r.Context(), userID, limit)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"items": rows,
+		"limit": limit,
+	})
+}
+
 type opmlURLTitle struct {
 	URL   string
 	Title *string

@@ -23,6 +23,17 @@ export interface SourceSuggestion {
   seed_source_ids: string[];
 }
 
+export interface RecommendedSource {
+  source_id: string;
+  url: string;
+  title: string | null;
+  affinity_score: number;
+  read_count_30d: number;
+  feedback_count_30d: number;
+  favorite_count_30d: number;
+  last_item_at?: string | null;
+}
+
 export interface SourceHealth {
   source_id: string;
   total_items: number;
@@ -169,6 +180,17 @@ export interface ReadingPlanResponse {
     representative: Item;
     items: Item[];
   }[];
+}
+
+export interface FocusQueueResponse {
+  items: Item[];
+  window: "24h" | "today_jst" | "7d" | string;
+  size: number;
+  completed: number;
+  remaining: number;
+  total: number;
+  source_pool: number;
+  diversify_topics: boolean;
 }
 
 export interface ItemStats {
@@ -377,6 +399,12 @@ export const api = {
     const qs = q.toString();
     return apiFetch<{ items: SourceSuggestion[]; limit: number; llm?: { provider?: string; model?: string; estimated_cost_usd?: number } | null }>(`/sources/suggestions${qs ? `?${qs}` : ""}`);
   },
+  getRecommendedSources: (params?: { limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiFetch<{ items: RecommendedSource[]; limit: number }>(`/sources/recommended${qs ? `?${qs}` : ""}`);
+  },
   createSource: (body: { url: string; title?: string; type?: string }) =>
     apiFetch<Source>("/sources", { method: "POST", body: JSON.stringify(body) }),
   updateSource: (id: string, body: { enabled?: boolean; title?: string }) =>
@@ -419,6 +447,18 @@ export const api = {
     if (params?.exclude_read != null) q.set("exclude_read", String(params.exclude_read));
     const qs = q.toString();
     return apiFetch<ReadingPlanResponse>(`/items/reading-plan${qs ? `?${qs}` : ""}`);
+  },
+  getFocusQueue: (params?: {
+    window?: "24h" | "today_jst" | "7d";
+    size?: number;
+    diversify_topics?: boolean;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.window) q.set("window", params.window);
+    if (params?.size) q.set("size", String(params.size));
+    if (params?.diversify_topics != null) q.set("diversify_topics", String(params.diversify_topics));
+    const qs = q.toString();
+    return apiFetch<FocusQueueResponse>(`/items/focus-queue${qs ? `?${qs}` : ""}`);
   },
   getItemStats: () => apiFetch<ItemStats>("/items/stats"),
   getDashboard: (params?: { llm_days?: number; topic_limit?: number; digest_limit?: number }) => {

@@ -20,6 +20,8 @@ type ItemsFeedQueryData = {
   total: number;
   planPoolCount: number;
   planClusters?: ReadingPlanResponse["clusters"];
+  focusCompleted?: number;
+  focusRemaining?: number;
 };
 
 function scoreTone(score: number) {
@@ -101,17 +103,18 @@ function ItemsPageContent() {
     queryKey: listQueryKey,
     queryFn: async () => {
       if (feedMode === "recommended") {
-        const data = await api.getReadingPlan({
+        const data = await api.getFocusQueue({
           window: focusWindow,
           size: focusSize,
           diversify_topics: diversifyTopics,
-          exclude_read: false,
         });
         return {
           items: data?.items ?? [],
           total: data?.items?.length ?? 0,
-          planPoolCount: data?.source_pool_count ?? 0,
-          planClusters: data?.clusters ?? [],
+          planPoolCount: data?.source_pool ?? 0,
+          planClusters: [],
+          focusCompleted: data?.completed ?? 0,
+          focusRemaining: data?.remaining ?? 0,
         };
       }
       const data = await api.getItems({
@@ -136,6 +139,8 @@ function ItemsPageContent() {
   const items = listQuery.data?.items ?? [];
   const itemsTotal = listQuery.data?.total ?? 0;
   const planPoolCount = listQuery.data?.planPoolCount ?? 0;
+  const focusCompleted = listQuery.data?.focusCompleted ?? 0;
+  const focusRemaining = listQuery.data?.focusRemaining ?? 0;
   const loading = !listQuery.data && (listQuery.isLoading || listQuery.isFetching);
   const queryError = listQuery.error ? String(listQuery.error) : null;
   const visibleError = error ?? queryError;
@@ -664,8 +669,8 @@ function ItemsPageContent() {
             {focusMode && (
               <span className="ml-2 text-zinc-400">
                 {locale === "ja"
-                  ? `${t("items.recommendedStatOpen")}${displayItems.length.toLocaleString()}${t("common.rows")}${t("items.recommendedStatSelected")}${t("items.recommendedStatTarget")} ${planPoolCount.toLocaleString()} ${t("common.rows")}${t("items.recommendedStatClose")}`
-                  : `(${displayItems.length.toLocaleString()} ${t("items.selected")} / ${planPoolCount.toLocaleString()} ${t("items.inWindow")})`}
+                  ? `${t("items.recommendedStatOpen")}${displayItems.length.toLocaleString()}${t("common.rows")}${t("items.recommendedStatSelected")}${t("items.recommendedStatTarget")} ${planPoolCount.toLocaleString()} ${t("common.rows")} | ${t("items.focus.completed")} ${focusCompleted.toLocaleString()} / ${t("items.focus.remaining")} ${focusRemaining.toLocaleString()}${t("items.recommendedStatClose")}`
+                  : `(${displayItems.length.toLocaleString()} ${t("items.selected")} / ${planPoolCount.toLocaleString()} ${t("items.inWindow")} | ${t("items.focus.completed")} ${focusCompleted.toLocaleString()} / ${t("items.focus.remaining")} ${focusRemaining.toLocaleString()})`}
               </span>
             )}
           </p>

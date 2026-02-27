@@ -293,6 +293,92 @@ func (r *SourceRepo) RefreshHealthSnapshot(ctx context.Context, sourceID string,
 	return nil
 }
 
+func (r *SourceRepo) RecommendedByUser(ctx context.Context, userID string, limit int) ([]model.RecommendedSource, error) {
+	if limit <= 0 {
+		limit = 8
+	}
+	if limit > 30 {
+		limit = 30
+	}
+	rows, err := r.db.Query(ctx, `
+		WITH base AS (
+			SELECT
+				s.id AS source_id,
+				s.url,
+				s.title,
+				COUNT(i.id)::int AS item_count_30d,
+				COUNT(ir.item_id)::int AS read_count_30d,
+				COUNT(fb.item_id)::int AS feedback_count_30d,
+				COUNT(*) FILTER (WHERE fb.is_favorite = true)::int AS favorite_count_30d,
+				COALESCE(SUM(
+					CASE
+						WHEN fb.is_favorite = true THEN 2.0
+						WHEN fb.rating > 0 THEN 1.0
+						WHEN fb.rating < 0 THEN -1.0
+						ELSE 0.0
+					END
+				), 0)::double precision AS feedback_signal,
+				MAX(COALESCE(i.published_at, i.created_at)) AS last_item_at
+			FROM sources s
+			LEFT JOIN items i
+			       ON i.source_id = s.id
+			      AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '30 days'
+			LEFT JOIN item_reads ir
+			       ON ir.item_id = i.id
+			      AND ir.user_id = $1
+			LEFT JOIN item_feedbacks fb
+			       ON fb.item_id = i.id
+			      AND fb.user_id = $1
+			WHERE s.user_id = $1
+			  AND s.enabled = true
+			GROUP BY s.id, s.url, s.title
+		)
+		SELECT
+			source_id,
+			url,
+			title,
+			(
+				feedback_signal * 0.7
+				+ CASE WHEN item_count_30d > 0 THEN (read_count_30d::double precision / item_count_30d::double precision) * 1.8 ELSE 0 END
+				+ CASE
+					WHEN last_item_at >= NOW() - INTERVAL '24 hours' THEN 0.35
+					WHEN last_item_at >= NOW() - INTERVAL '72 hours' THEN 0.15
+					ELSE 0
+				  END
+			)::double precision AS affinity_score,
+			read_count_30d,
+			feedback_count_30d,
+			favorite_count_30d,
+			last_item_at
+		FROM base
+		WHERE item_count_30d > 0
+		ORDER BY affinity_score DESC, favorite_count_30d DESC, read_count_30d DESC
+		LIMIT $2`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]model.RecommendedSource, 0, limit)
+	for rows.Next() {
+		var v model.RecommendedSource
+		if err := rows.Scan(
+			&v.SourceID,
+			&v.URL,
+			&v.Title,
+			&v.AffinityScore,
+			&v.ReadCount30d,
+			&v.Feedback30d,
+			&v.FavoriteCount30d,
+			&v.LastItemAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 func deriveSourceHealthStatus(enabled bool, totalItems, failedItems int, failureRate float64, lastFetchedAt *time.Time) string {
 	switch {
 	case !enabled:

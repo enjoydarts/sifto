@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlignLeft, FileText, Link2, ListChecks, Sparkles, Star, ThumbsDown, ThumbsUp } from "lucide-react";
+import { AlignLeft, FileText, Info, Link2, ListChecks, Sparkles, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, ItemDetail, RelatedItem } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -26,6 +26,19 @@ type RelatedCluster = {
   representative: RelatedItem;
   items: RelatedItem[];
 };
+
+function localizeRelatedReason(reason: string, t: (key: string, fallback?: string) => string): string {
+  const trimmed = reason.trim();
+  const lower = trimmed.toLowerCase();
+  const sharedPrefix = "shared topics:";
+  if (lower.startsWith(sharedPrefix)) {
+    return `${t("itemDetail.relatedReason.sharedTopics")}: ${trimmed.slice(sharedPrefix.length).trim()}`;
+  }
+  if (lower === "very high semantic similarity") return t("itemDetail.relatedReason.veryHighSemantic");
+  if (lower === "high semantic similarity") return t("itemDetail.relatedReason.highSemantic");
+  if (lower === "semantic similarity match") return t("itemDetail.relatedReason.semanticMatch");
+  return trimmed;
+}
 
 export default function ItemDetailPage() {
   const { t, locale } = useI18n();
@@ -755,10 +768,13 @@ export default function ItemDetailPage() {
                             <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
                           )}
                           {r.reason && (
-                            <p className="mt-1 text-xs leading-5 text-zinc-500">
-                              {t("itemDetail.relatedReasonPrefix")}
-                              {r.reason}
-                            </p>
+                            <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs leading-5 text-zinc-600">
+                              <span className="inline-flex items-center gap-1 align-middle font-medium">
+                                <Info className="size-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
+                                <span>{t("itemDetail.relatedReasonPrefix")}</span>
+                              </span>
+                              <span className="ml-1 align-middle">{localizeRelatedReason(r.reason, t)}</span>
+                            </div>
                           )}
                           {!!r.topics?.length && (
                             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -804,10 +820,13 @@ export default function ItemDetailPage() {
                     <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
                   )}
                   {r.reason && (
-                    <p className="mt-1 text-xs leading-5 text-zinc-500">
-                      {t("itemDetail.relatedReasonPrefix")}
-                      {r.reason}
-                    </p>
+                    <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs leading-5 text-zinc-600">
+                      <span className="inline-flex items-center gap-1 align-middle font-medium">
+                        <Info className="size-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
+                        <span>{t("itemDetail.relatedReasonPrefix")}</span>
+                      </span>
+                      <span className="ml-1 align-middle">{localizeRelatedReason(r.reason, t)}</span>
+                    </div>
                   )}
                   {!!r.topics?.length && (
                     <div className="mt-2 flex flex-wrap gap-1.5">

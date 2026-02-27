@@ -63,6 +63,7 @@ function ItemsPageContent() {
   const [retryingIds, setRetryingIds] = useState<Record<string, boolean>>({});
   const [readUpdatingIds, setReadUpdatingIds] = useState<Record<string, boolean>>({});
   const restoredScrollRef = useRef<string | null>(null);
+  const prefetchedDetailIDsRef = useRef<Record<string, true>>({});
   const settingsQuery = useQuery({
     queryKey: ["settings"],
     queryFn: api.getSettings,
@@ -409,6 +410,20 @@ function ItemsPageContent() {
     sessionStorage.setItem(scrollStorageKey, String(window.scrollY));
     sessionStorage.setItem(lastItemStorageKey, itemId);
   }, [lastItemStorageKey, scrollStorageKey]);
+  const prefetchItemDetail = useCallback((itemId: string) => {
+    if (prefetchedDetailIDsRef.current[itemId]) return;
+    prefetchedDetailIDsRef.current[itemId] = true;
+    void queryClient.prefetchQuery({
+      queryKey: ["item-detail", itemId],
+      queryFn: () => api.getItem(itemId),
+      staleTime: 60_000,
+    });
+    void queryClient.prefetchQuery({
+      queryKey: ["item-related", itemId, 6],
+      queryFn: () => api.getRelatedItems(itemId, { limit: 6 }),
+      staleTime: 60_000,
+    });
+  }, [queryClient]);
 
   const renderItemRow = useCallback((item: Item, opts?: { featured?: boolean; rank?: number }) => {
     const featured = Boolean(opts?.featured);
@@ -449,6 +464,9 @@ function ItemsPageContent() {
               openDetail();
             }
           }}
+          onMouseEnter={() => prefetchItemDetail(item.id)}
+          onFocus={() => prefetchItemDetail(item.id)}
+          onTouchStart={() => prefetchItemDetail(item.id)}
           className={`group ${featured ? "flex w-full flex-col gap-3 md:flex-row md:items-start" : "flex items-stretch gap-3"} rounded-xl px-4 py-3.5 transition-all ${
             featured
               ? item.is_read
@@ -567,7 +585,7 @@ function ItemsPageContent() {
         </div>
       </div>
     );
-  }, [detailHref, locale, readUpdatingIds, rememberScroll, retryItem, retryingIds, router, t, toggleRead]);
+  }, [detailHref, locale, prefetchItemDetail, readUpdatingIds, rememberScroll, retryItem, retryingIds, router, t, toggleRead]);
 
   return (
     <div className={`space-y-4 ${focusMode ? "pb-8" : ""}`}>

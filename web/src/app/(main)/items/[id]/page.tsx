@@ -18,6 +18,15 @@ const STATUS_COLOR: Record<string, string> = {
   failed: "bg-red-50 text-red-600",
 };
 
+type RelatedCluster = {
+  id: string;
+  label: string;
+  size: number;
+  max_similarity: number;
+  representative: RelatedItem;
+  items: RelatedItem[];
+};
+
 export default function ItemDetailPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
@@ -33,9 +42,7 @@ export default function ItemDetailPage() {
   const [deleteUpdating, setDeleteUpdating] = useState(false);
   const [feedbackUpdating, setFeedbackUpdating] = useState(false);
   const [related, setRelated] = useState<RelatedItem[]>([]);
-  const [relatedClusters, setRelatedClusters] = useState<
-    { id: string; label: string; size: number; max_similarity: number; representative: RelatedItem; items: RelatedItem[] }[]
-  >([]);
+  const [relatedClusters, setRelatedClusters] = useState<RelatedCluster[]>([]);
   const [expandedRelatedClusterIds, setExpandedRelatedClusterIds] = useState<Record<string, boolean>>({});
   const [relatedSortMode, setRelatedSortMode] = useState<"similarity" | "recent">("similarity");
   const [relatedError, setRelatedError] = useState<string | null>(null);
@@ -200,30 +207,61 @@ export default function ItemDetailPage() {
   }, [queryClient]);
 
   useEffect(() => {
-    setLoading(true);
+    const cachedItem = queryClient.getQueryData<ItemDetail>(["item-detail", id]);
+    const cachedRelated = queryClient.getQueryData<{ items?: RelatedItem[]; clusters?: RelatedCluster[] }>([
+      "item-related",
+      id,
+      6,
+    ]);
+    if (cachedItem) {
+      setItem(cachedItem);
+      setError(null);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    if (cachedRelated) {
+      setRelated(cachedRelated.items ?? []);
+      setRelatedClusters(cachedRelated.clusters ?? []);
+      setExpandedRelatedClusterIds({});
+      setRelatedError(null);
+    }
+    let cancelled = false;
     Promise.allSettled([api.getItem(id), api.getRelatedItems(id, { limit: 6 })])
       .then((results) => {
+        if (cancelled) return;
         const [detailRes, relatedRes] = results;
         if (detailRes.status === "rejected") {
-          throw detailRes.reason;
+          if (!cachedItem) throw detailRes.reason;
+        } else {
+          queryClient.setQueryData(["item-detail", id], detailRes.value);
+          setItem(detailRes.value);
+          setError(null);
         }
-        setItem(detailRes.value);
 
         if (relatedRes.status === "fulfilled") {
+          queryClient.setQueryData(["item-related", id, 6], relatedRes.value);
           setRelated(relatedRes.value.items ?? []);
           setRelatedClusters(relatedRes.value.clusters ?? []);
           setExpandedRelatedClusterIds({});
           setRelatedError(null);
-        } else {
+        } else if (!cachedRelated) {
           setRelated([]);
           setRelatedClusters([]);
           setExpandedRelatedClusterIds({});
           setRelatedError(String(relatedRes.reason));
         }
       })
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading(false));
-  }, [id]);
+      .catch((e) => {
+        if (!cancelled) setError(String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, queryClient]);
 
   useEffect(() => {
     if (!item || item.is_read || autoMarkedRef.current[item.id]) return;

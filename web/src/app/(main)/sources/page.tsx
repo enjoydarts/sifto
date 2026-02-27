@@ -199,7 +199,7 @@ export default function SourcesPage() {
       a.download = `sifto-sources-${new Date().toISOString().slice(0, 10)}.opml`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast(locale === "ja" ? "OPMLをエクスポートしました" : "OPML exported", "success");
+      showToast(t("sources.toast.opmlExported"), "success");
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
@@ -214,9 +214,7 @@ export default function SourcesPage() {
       const res = await api.importSourcesOPML(text);
       await load();
       showToast(
-        locale === "ja"
-          ? `OPML取込完了: 追加 ${res.added} / スキップ ${res.skipped} / 無効 ${res.invalid}`
-          : `OPML imported: added ${res.added} / skipped ${res.skipped} / invalid ${res.invalid}`,
+        `${t("sources.toast.opmlImportedPrefix")}: ${t("sources.toast.opmlImportedAdded")} ${res.added} / ${t("sources.toast.opmlImportedSkipped")} ${res.skipped} / ${t("sources.toast.opmlImportedInvalid")} ${res.invalid}`,
         "success"
       );
     } catch (e) {
@@ -254,7 +252,7 @@ export default function SourcesPage() {
             className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
           >
             <Upload className="size-3.5" aria-hidden="true" />
-            {importingOPML ? (locale === "ja" ? "取込中…" : "Importing…") : "OPML Import"}
+            {importingOPML ? t("sources.opml.importing") : t("sources.opml.import")}
           </button>
           <button
             type="button"
@@ -263,7 +261,7 @@ export default function SourcesPage() {
             className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
           >
             <Download className="size-3.5" aria-hidden="true" />
-            {exportingOPML ? (locale === "ja" ? "出力中…" : "Exporting…") : "OPML Export"}
+            {exportingOPML ? t("sources.opml.exporting") : t("sources.opml.export")}
           </button>
         </div>
       </div>
@@ -296,8 +294,8 @@ export default function SourcesPage() {
             type="url"
             placeholder={
               type === "rss"
-                ? "https://example.com or https://example.com/feed.rss"
-                : "https://example.com/article"
+                ? t("sources.placeholder.rss")
+                : t("sources.placeholder.manual")
             }
             value={url}
             onChange={(e) => setUrl(e.target.value)}
@@ -306,7 +304,7 @@ export default function SourcesPage() {
           />
           <input
             type="text"
-            placeholder="Name (optional)"
+            placeholder={t("sources.placeholder.nameOptional")}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:w-44"
@@ -325,7 +323,7 @@ export default function SourcesPage() {
         {candidates.length > 1 && (
           <div className="mt-3">
             <p className="mb-2 text-xs font-medium text-zinc-600">
-              Multiple feeds found. Select one to register:
+              {t("sources.discover.multiple")}
             </p>
             <ul className="space-y-1">
               {candidates.map((c) => (
@@ -358,7 +356,7 @@ export default function SourcesPage() {
                     disabled={adding}
                     className="shrink-0 rounded bg-zinc-900 px-3 py-1 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
                   >
-                    Register
+                    {t("sources.discover.register")}
                   </button>
                 </li>
               ))}
@@ -368,7 +366,7 @@ export default function SourcesPage() {
               onClick={() => setCandidates([])}
               className="mt-2 text-xs text-zinc-400 hover:text-zinc-700"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         )}
@@ -399,8 +397,8 @@ export default function SourcesPage() {
         </div>
         {suggestionsLLM && (
           <p className="mt-2 text-xs text-zinc-500">
-            {t("sources.suggest.aiRanked")}: {suggestionsLLM.provider ?? "unknown"} /{" "}
-            {suggestionsLLM.model ?? "unknown"}
+            {t("sources.suggest.aiRanked")}: {suggestionsLLM.provider ?? t("common.unknown")} /{" "}
+            {suggestionsLLM.model ?? t("common.unknown")}
             {typeof suggestionsLLM.estimated_cost_usd === "number" && (
               <span className="ml-2 text-zinc-400">{`$${suggestionsLLM.estimated_cost_usd.toFixed(6)}`}</span>
             )}
@@ -492,7 +490,7 @@ export default function SourcesPage() {
             {/* Toggle */}
             <button
               onClick={() => handleToggle(src.id, src.enabled)}
-              aria-label={src.enabled ? "Disable" : "Enable"}
+              aria-label={src.enabled ? t("sources.toggle.disable") : t("sources.toggle.enable")}
               className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
                 src.enabled ? "bg-blue-500" : "bg-zinc-300"
               }`}
@@ -524,7 +522,7 @@ export default function SourcesPage() {
                     {sourceHealthByID[src.id].status}
                   </span>
                   <span className="text-zinc-400">
-                    {sourceHealthByID[src.id].failed_items}/{sourceHealthByID[src.id].total_items} failed
+                    {sourceHealthByID[src.id].failed_items}/{sourceHealthByID[src.id].total_items} {t("sources.health.failed")}
                   </span>
                 </div>
               )}

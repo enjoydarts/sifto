@@ -756,7 +756,7 @@ export default function ItemDetailPage() {
                           )}
                           {r.reason && (
                             <p className="mt-1 text-xs leading-5 text-zinc-500">
-                              {locale === "ja" ? "関連理由: " : "Why related: "}
+                              {t("itemDetail.relatedReasonPrefix")}
                               {r.reason}
                             </p>
                           )}
@@ -805,7 +805,7 @@ export default function ItemDetailPage() {
                   )}
                   {r.reason && (
                     <p className="mt-1 text-xs leading-5 text-zinc-500">
-                      {locale === "ja" ? "関連理由: " : "Why related: "}
+                      {t("itemDetail.relatedReasonPrefix")}
                       {r.reason}
                     </p>
                   )}

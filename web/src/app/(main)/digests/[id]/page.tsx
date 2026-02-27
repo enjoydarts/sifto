@@ -151,7 +151,7 @@ export default function DigestDetailPage() {
                     {cd.cluster_label}
                   </span>
                   <span className="text-xs text-zinc-500">
-                    {locale === "ja" ? `${cd.item_count}件` : `${cd.item_count} items`}
+                    {cd.item_count} {t("digestDetail.itemsUnit")}
                   </span>
                   {typeof cd.max_score === "number" && (
                     <span className="rounded border border-zinc-200 bg-white px-2 py-0.5 text-xs font-medium text-zinc-600">

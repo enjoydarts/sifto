@@ -8,6 +8,7 @@ import { AlignLeft, FileText, Link2, ListChecks, Sparkles, Star, ThumbsDown, Thu
 import { api, ItemDetail, RelatedItem } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
+import { useConfirm } from "@/components/confirm-provider";
 
 const STATUS_COLOR: Record<string, string> = {
   new: "bg-zinc-100 text-zinc-600",
@@ -20,6 +21,7 @@ const STATUS_COLOR: Record<string, string> = {
 export default function ItemDetailPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
   const queryClient = useQueryClient();
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
@@ -335,11 +337,16 @@ export default function ItemDetailPage() {
 
   const deleteItem = async () => {
     if (!item || deleteUpdating) return;
-    const ok = window.confirm(
-      locale === "ja"
-        ? "この記事を削除します。よろしいですか？"
-        : "Delete this item? This action cannot be undone."
-    );
+    const ok = await confirm({
+      title: locale === "ja" ? "記事を削除しますか？" : "Delete this item?",
+      message:
+        locale === "ja"
+          ? "この操作は取り消せません。"
+          : "This action cannot be undone.",
+      tone: "danger",
+      confirmLabel: locale === "ja" ? "削除" : "Delete",
+      cancelLabel: locale === "ja" ? "キャンセル" : "Cancel",
+    });
     if (!ok) return;
     setDeleteUpdating(true);
     try {

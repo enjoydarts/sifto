@@ -418,6 +418,25 @@ function ItemsPageContent() {
       rememberScroll(item.id);
       router.push(href);
     };
+    const reactionPill = item.is_favorite
+      ? {
+          icon: <Star className="size-3 fill-current" aria-hidden="true" />,
+          label: t("items.feedback.favorite"),
+          className: "border-amber-200 bg-amber-50 text-amber-700",
+        }
+      : item.feedback_rating === 1
+        ? {
+            icon: <ThumbsUp className="size-3" aria-hidden="true" />,
+            label: t("items.feedback.like"),
+            className: "border-green-200 bg-green-50 text-green-700",
+          }
+        : item.feedback_rating === -1
+          ? {
+              icon: <ThumbsDown className="size-3" aria-hidden="true" />,
+              label: t("items.feedback.dislike"),
+              className: "border-rose-200 bg-rose-50 text-rose-700",
+            }
+          : null;
     return (
       <div data-item-row-id={item.id} className="min-w-0">
         <div
@@ -472,8 +491,8 @@ function ItemsPageContent() {
                   <div
                     className={`overflow-hidden font-semibold ${
                       featured
-                        ? item.is_read ? "text-base leading-6 text-zinc-700" : "text-[17px] leading-6 text-zinc-950"
-                        : item.is_read ? "text-[15px] leading-6 text-zinc-600" : "text-[15px] leading-6 text-zinc-900"
+                        ? item.is_read ? "line-clamp-3 text-base leading-6 text-zinc-700" : "line-clamp-3 text-[17px] leading-6 text-zinc-950"
+                        : item.is_read ? "line-clamp-2 text-[15px] leading-6 text-zinc-600" : "line-clamp-2 text-[15px] leading-6 text-zinc-900"
                     }`}
                   >
                     {item.title ?? item.url}
@@ -489,95 +508,29 @@ function ItemsPageContent() {
                       {item.is_read ? t("items.read.read") : t("items.read.unread")}
                     </span>
                     <span>{new Date(item.published_at ?? item.created_at).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US")}</span>
-                    {item.is_favorite && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                        <Star className="size-3 fill-current" aria-hidden="true" />
-                        {t("items.feedback.favorite")}
+                    {reactionPill && (
+                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${reactionPill.className}`}>
+                        {reactionPill.icon}
+                        {reactionPill.label}
                       </span>
                     )}
-                    {item.feedback_rating === 1 && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-[11px] font-semibold text-green-700">
-                        <ThumbsUp className="size-3" aria-hidden="true" />
-                        {t("items.feedback.like")}
-                      </span>
-                    )}
-                    {item.feedback_rating === -1 && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
-                        <ThumbsDown className="size-3" aria-hidden="true" />
-                        {t("items.feedback.dislike")}
-                      </span>
-                    )}
-                    {featured &&
-                      (item.summary_score != null ? (
-                        <span
-                          className={`rounded border px-2 py-0.5 text-xs font-semibold ${scoreTone(item.summary_score)}`}
-                          title={t("items.summaryScore")}
-                        >
-                          {item.summary_score.toFixed(2)}
-                        </span>
-                      ) : (
-                        <span className="rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-400">
-                          {t("items.scoreNA")}
-                        </span>
-                      ))}
+                    <span
+                      className={`rounded border px-2 py-0.5 text-xs font-semibold ${
+                        item.summary_score != null ? scoreTone(item.summary_score) : "border-zinc-200 bg-zinc-50 text-zinc-400"
+                      }`}
+                      title={t("items.summaryScore")}
+                    >
+                      {item.summary_score != null ? item.summary_score.toFixed(2) : t("items.scoreNA")}
+                    </span>
                   </div>
                 </div>
-                {!featured && (
-                  <div>
-                    {item.summary_score != null ? (
-                      <span
-                        className={`shrink-0 rounded border px-2 py-0.5 text-xs font-semibold ${scoreTone(item.summary_score)}`}
-                        title={t("items.summaryScore")}
-                      >
-                        {item.summary_score.toFixed(2)}
-                      </span>
-                    ) : (
-                      <span className="shrink-0 rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-400">
-                        {t("items.scoreNA")}
-                      </span>
-                    )}
-                  </div>
-                )}
               </div>
               <div className={`${featured ? "h-4 w-full truncate text-[12px] text-zinc-500" : "h-4 truncate text-[12px] text-zinc-400"}`}>
                 {item.title ? item.url : "\u00A0"}
               </div>
-              {featured && (
-                <div className="flex w-full flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap sm:items-center">
-                  <button
-                    type="button"
-                    disabled={!!readUpdatingIds[item.id]}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void toggleRead(item);
-                    }}
-                    className="w-full rounded border border-zinc-300 bg-white px-3 py-1 text-center text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                  >
-                    {readUpdatingIds[item.id]
-                      ? t("items.action.updating")
-                      : item.is_read
-                        ? t("items.action.markUnread")
-                        : t("items.action.markRead")}
-                  </button>
-                  {item.status === "failed" && (
-                    <button
-                      type="button"
-                      disabled={!!retryingIds[item.id]}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void retryItem(item.id);
-                      }}
-                      className="w-full rounded border border-zinc-300 bg-white px-3 py-1 text-center text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                    >
-                      {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           </div>
-          {!featured && (
-            <div className="flex min-h-[72px] shrink-0 flex-col items-end justify-between gap-2">
+          <div className={`flex shrink-0 gap-2 ${featured ? "flex-row self-start md:flex-col md:items-end" : "flex-col items-end justify-start"}`}>
             <button
               type="button"
               disabled={!!readUpdatingIds[item.id]}
@@ -586,7 +539,7 @@ function ItemsPageContent() {
                 void toggleRead(item);
               }}
               className={`rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
-                featured ? "flex-1 sm:flex-none" : ""
+                featured ? "h-8 md:min-w-[108px]" : "h-8 min-w-[108px]"
               }`}
             >
               {readUpdatingIds[item.id]
@@ -604,20 +557,13 @@ function ItemsPageContent() {
                   void retryItem(item.id);
                 }}
                 className={`rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
-                  featured ? "flex-1 sm:flex-none" : ""
+                  featured ? "h-8 md:min-w-[108px]" : "h-8 min-w-[108px]"
                 }`}
               >
                 {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
               </button>
-            ) : (
-              !featured && (
-                <span className="invisible rounded border border-zinc-300 px-3 py-1 text-xs font-medium">
-                  _
-                </span>
-              )
-            )}
-            </div>
-          )}
+            ) : null}
+          </div>
         </div>
       </div>
     );

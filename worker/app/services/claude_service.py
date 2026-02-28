@@ -96,6 +96,13 @@ def _extract_first_json_object(text: str) -> dict | None:
     return None
 
 
+def _decode_json_string_fragment(raw: str) -> str:
+    try:
+        return json.loads(f'"{raw}"')
+    except Exception:
+        return raw.replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
+
+
 def _extract_compose_digest_fields(text: str) -> tuple[str, str]:
     data = _extract_first_json_object(text) or {}
     subject = str(data.get("subject") or "").strip()
@@ -106,11 +113,11 @@ def _extract_compose_digest_fields(text: str) -> tuple[str, str]:
     s = _strip_code_fence(text)
     m_subject = re.search(r'"subject"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
     if not subject and m_subject:
-        subject = bytes(m_subject.group(1), "utf-8").decode("unicode_escape").strip()
+        subject = _decode_json_string_fragment(m_subject.group(1)).strip()
 
     m_body = re.search(r'"body"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
     if not body and m_body:
-        body = bytes(m_body.group(1), "utf-8").decode("unicode_escape").strip()
+        body = _decode_json_string_fragment(m_body.group(1)).strip()
     elif not body:
         key = '"body"'
         i = s.find(key)

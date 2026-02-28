@@ -526,7 +526,7 @@ items:
 
     last_text = ""
     last_error = "unknown"
-    for max_tokens in (4200, 6000):
+    for max_tokens in (10000, 15000):
         text, usage = _generate_content(
             prompt,
             model=model,

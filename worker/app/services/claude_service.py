@@ -757,7 +757,7 @@ items:
         prompt,
         str(model or _digest_model),
         _digest_model_fallback,
-        max_tokens=6000,
+        max_tokens=10000,
         api_key=api_key,
     )
     if message is None:

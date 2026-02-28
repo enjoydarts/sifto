@@ -39,6 +39,7 @@ export default function TriagePage() {
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [swipeExit, setSwipeExit] = useState<ActionType | null>(null);
+  const [mobileMetricsOpen, setMobileMetricsOpen] = useState(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const currentShownAtRef = useRef<{ id: string; shownAtMs: number } | null>(null);
 
@@ -304,12 +305,25 @@ export default function TriagePage() {
           <span className="text-zinc-600">
             {done}/{queue.length} {t("triage.done")}
           </span>
-          <span className="text-zinc-500">{progress}%</span>
+          <div className="flex items-center gap-2">
+            <span className="text-zinc-500">{progress}%</span>
+            <button
+              type="button"
+              onClick={() => setMobileMetricsOpen((v) => !v)}
+              className="rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-600 md:hidden"
+            >
+              {mobileMetricsOpen ? t("triage.metrics.hide") : t("triage.metrics.show")}
+            </button>
+          </div>
         </div>
         <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100">
           <div className="h-full rounded-full bg-zinc-900 transition-all" style={{ width: `${progress}%` }} />
         </div>
-        <div className="mt-3 grid gap-2 text-xs text-zinc-600 sm:grid-cols-2 lg:grid-cols-6">
+        <div
+          className={`mt-3 grid gap-2 text-xs text-zinc-600 sm:grid-cols-2 lg:grid-cols-6 ${
+            mobileMetricsOpen ? "grid" : "hidden md:grid"
+          }`}
+        >
           <div className="rounded border border-zinc-200 bg-zinc-50 px-2.5 py-2">
             <span className="text-zinc-500">{t("triage.metrics.avg24h")}</span>
             <div className="mt-0.5 text-sm font-semibold text-zinc-800">

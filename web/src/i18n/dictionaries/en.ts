@@ -102,6 +102,8 @@ export const enDict: Dict = {
   "triage.metrics.within5s24h": "Within 5s (24h)",
   "triage.metrics.within5sRecent": "Within 5s (last 20)",
   "triage.metrics.breakdown": "Breakdown",
+  "triage.metrics.show": "Show details",
+  "triage.metrics.hide": "Hide details",
   "items.title": "Items",
   "items.empty": "No items.",
   "items.retry": "Retry",

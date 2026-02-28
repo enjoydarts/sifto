@@ -116,11 +116,11 @@ export default function BriefingPage() {
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {highlights.slice(0, 6).map((item, idx) => (
-              <article key={item.id} className="rounded-xl border border-zinc-200 p-4">
+              <article key={item.id} className="min-w-0 rounded-xl border border-zinc-200 p-4">
                 <p className="text-xs font-semibold text-blue-600">{`PICK ${idx + 1}`}</p>
                 <Link
                   href={`/items/${item.id}?from=${encodeURIComponent("/items?feed=recommended")}`}
-                  className="mt-2 line-clamp-3 text-base font-semibold text-zinc-900 hover:underline"
+                  className="mt-2 line-clamp-3 block break-words [overflow-wrap:anywhere] text-base font-semibold text-zinc-900 hover:underline"
                 >
                   {item.translated_title || item.title || item.url}
                 </Link>
@@ -162,7 +162,7 @@ export default function BriefingPage() {
                     <li key={item.id}>
                       <Link
                         href={`/items/${item.id}?from=${encodeURIComponent("/items?feed=recommended")}`}
-                        className="block truncate rounded px-2 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
+                        className="block rounded px-2 py-1.5 text-sm text-zinc-700 break-words [overflow-wrap:anywhere] hover:bg-zinc-50"
                         title={item.translated_title || item.title || item.url}
                       >
                         {item.translated_title || item.title || item.url}

@@ -102,6 +102,8 @@ export const jaDict: Dict = {
   "triage.metrics.within5s24h": "5秒以内率(24h)",
   "triage.metrics.within5sRecent": "5秒以内率(直近20件)",
   "triage.metrics.breakdown": "内訳",
+  "triage.metrics.show": "詳細を表示",
+  "triage.metrics.hide": "詳細を隠す",
   "items.title": "記事一覧",
   "items.empty": "記事がありません。",
   "items.retry": "再試行",

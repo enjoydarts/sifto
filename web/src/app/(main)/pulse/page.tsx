@@ -58,6 +58,10 @@ export default function PulsePage() {
   }, [rows]);
 
   const heatmapRows = useMemo(() => rows.slice(0, 10), [rows]);
+  const heatmapMinWidth = useMemo(
+    () => Math.max(640, 220 + heatmapDates.length * 42),
+    [heatmapDates.length]
+  );
 
   const maxHeatCount = useMemo(() => {
     let max = 0;
@@ -156,49 +160,51 @@ export default function PulsePage() {
         {heatmapRows.length === 0 || heatmapDates.length === 0 ? (
           <p className="text-sm text-zinc-400">{t("common.noData")}</p>
         ) : (
-          <div className="space-y-2">
-            <div className="grid grid-cols-[minmax(160px,240px)_1fr] items-center gap-3 px-1">
-              <div className="text-xs font-medium text-zinc-500">{t("pulse.table.topic")}</div>
-              <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${heatmapDates.length}, minmax(0, 1fr))` }}>
-                {heatmapDates.map((date) => (
-                  <div key={date} className="text-center text-[10px] text-zinc-500">
-                    {date.slice(5)}
+          <div className="overflow-x-auto">
+            <div className="space-y-2" style={{ minWidth: `${heatmapMinWidth}px` }}>
+              <div className="grid grid-cols-[minmax(160px,240px)_1fr] items-center gap-3 px-1">
+                <div className="text-xs font-medium text-zinc-500">{t("pulse.table.topic")}</div>
+                <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${heatmapDates.length}, minmax(28px, 1fr))` }}>
+                  {heatmapDates.map((date) => (
+                    <div key={date} className="text-center text-[10px] text-zinc-500">
+                      {date.slice(5)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {heatmapRows.map((row) => (
+                <div key={row.topic} className="grid grid-cols-[minmax(160px,240px)_1fr] items-center gap-3 rounded-lg border border-zinc-100 bg-zinc-50/50 p-2">
+                  <div className="min-w-0">
+                    <a
+                      href={`/items?feed=all&sort=score&topic=${encodeURIComponent(row.topic)}`}
+                      className="block truncate text-sm font-medium text-zinc-900 hover:underline"
+                      title={row.topic}
+                    >
+                      {row.topic}
+                    </a>
+                    <div className="mt-0.5 text-[11px] text-zinc-500">{`${t("pulse.table.total")}: ${row.total}`}</div>
                   </div>
-                ))}
-              </div>
+                  <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${heatmapDates.length}, minmax(28px, 1fr))` }}>
+                    {heatmapDates.map((date) => {
+                      const point = row.points.find((v) => v.date === date);
+                      const count = point?.count ?? 0;
+                      const color = heatColor(count);
+                      const textColor = count > maxHeatCount * 0.4 ? "text-white" : "text-zinc-700";
+                      return (
+                        <div
+                          key={`${row.topic}-${date}`}
+                          className={`rounded-md py-1 text-center text-[11px] font-semibold ${textColor}`}
+                          style={{ backgroundColor: color }}
+                          title={`${row.topic} ${date}: ${count}`}
+                        >
+                          {count}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
-            {heatmapRows.map((row) => (
-              <div key={row.topic} className="grid grid-cols-[minmax(160px,240px)_1fr] items-center gap-3 rounded-lg border border-zinc-100 bg-zinc-50/50 p-2">
-                <div className="min-w-0">
-                  <a
-                    href={`/items?feed=all&sort=score&topic=${encodeURIComponent(row.topic)}`}
-                    className="block truncate text-sm font-medium text-zinc-900 hover:underline"
-                    title={row.topic}
-                  >
-                    {row.topic}
-                  </a>
-                  <div className="mt-0.5 text-[11px] text-zinc-500">{`${t("pulse.table.total")}: ${row.total}`}</div>
-                </div>
-                <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${heatmapDates.length}, minmax(0, 1fr))` }}>
-                  {heatmapDates.map((date) => {
-                    const point = row.points.find((v) => v.date === date);
-                    const count = point?.count ?? 0;
-                    const color = heatColor(count);
-                    const textColor = count > maxHeatCount * 0.4 ? "text-white" : "text-zinc-700";
-                    return (
-                      <div
-                        key={`${row.topic}-${date}`}
-                        className={`rounded-md py-1 text-center text-[11px] font-semibold ${textColor}`}
-                        style={{ backgroundColor: color }}
-                        title={`${row.topic} ${date}: ${count}`}
-                      >
-                        {count}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
           </div>
         )}
       </section>

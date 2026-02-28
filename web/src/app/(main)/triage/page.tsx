@@ -139,7 +139,6 @@ export default function TriagePage() {
           await api.markItemRead(item.id);
           showToast(t("triage.toast.favorited"), "success");
         } else {
-          await api.markItemRead(item.id);
           showToast(t("triage.toast.later"), "success");
         }
         queryClient.setQueriesData(
@@ -150,10 +149,16 @@ export default function TriagePage() {
             if (!Array.isArray(data.items)) return prev;
             return {
               ...data,
-              items: data.items.map((v) => (v.id === item.id ? { ...v, is_read: true } : v)),
+              items: data.items.map((v) =>
+                v.id === item.id ? { ...v, is_read: action === "read" || action === "favorite" } : v
+              ),
             };
           }
         );
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
+          queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
+        ]);
         recordMetric(item.id, action);
         setActioned((prev) => ({ ...prev, [item.id]: true }));
       } catch (e) {
@@ -438,7 +443,12 @@ export default function TriagePage() {
             {currentDetailQuery.isLoading ? (
               <p className="text-sm text-zinc-500">{t("common.loading")}</p>
             ) : currentDetailQuery.data?.summary?.summary ? (
-              <p className="line-clamp-6 whitespace-pre-wrap text-sm leading-7 text-zinc-700">
+              <p
+                className="max-h-40 overflow-y-auto whitespace-pre-wrap text-sm leading-7 text-zinc-700 touch-auto"
+                onPointerDown={(e) => e.stopPropagation()}
+                onPointerMove={(e) => e.stopPropagation()}
+                onPointerUp={(e) => e.stopPropagation()}
+              >
                 {currentDetailQuery.data.summary.summary}
               </p>
             ) : (
@@ -501,6 +511,15 @@ export default function TriagePage() {
             router.push(`/items/${itemId}?from=${encodeURIComponent("/triage")}`);
           }}
           onOpenItem={(itemId) => setInlineItemId(itemId)}
+          autoMarkRead={false}
+          onReadToggled={(itemId, isRead) => {
+            if (!isRead) return;
+            setActioned((prev) => ({ ...prev, [itemId]: true }));
+            void Promise.all([
+              queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
+              queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
+            ]);
+          }}
         />
       )}
     </div>

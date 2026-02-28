@@ -22,6 +22,17 @@ func GreetingByHour(now time.Time) string {
 	return "こんばんは"
 }
 
+func GreetingKeyByHour(now time.Time) string {
+	hour := now.Hour()
+	if hour < 11 {
+		return "morning"
+	}
+	if hour < 18 {
+		return "afternoon"
+	}
+	return "evening"
+}
+
 func BuildBriefingToday(
 	ctx context.Context,
 	itemRepo *repository.ItemRepo,
@@ -57,11 +68,13 @@ func BuildBriefingToday(
 	yRead := 0
 	ySkipped := 0
 	streak := 0
+	yesterdayCompleted := false
 	todayRead := 0
 	yesterday := start.AddDate(0, 0, -1).Format("2006-01-02")
 	if streakRepo != nil {
-		if _, streakDays, _, err := streakRepo.GetByUserAndDate(ctx, userID, yesterday); err == nil {
+		if _, streakDays, isCompleted, err := streakRepo.GetByUserAndDate(ctx, userID, yesterday); err == nil {
 			streak = streakDays
+			yesterdayCompleted = isCompleted
 		}
 		if readCount, _, _, err := streakRepo.GetByUserAndDate(ctx, userID, dateStr); err == nil {
 			todayRead = readCount
@@ -98,14 +111,23 @@ func BuildBriefingToday(
 		highlight = make([]model.Item, 0, highlightCount)
 		highlight = append(highlight, items[:highlightCount]...)
 	}
+	highlightIDs := make(map[string]struct{}, len(highlight))
+	for _, it := range highlight {
+		highlightIDs[it.ID] = struct{}{}
+	}
 
 	summaryItemIDs := make([]string, 0, len(plan.Clusters)*3)
 	for _, c := range plan.Clusters {
-		for i, it := range c.Items {
-			if i >= 3 {
-				break
+		added := 0
+		for _, it := range c.Items {
+			if _, duplicated := highlightIDs[it.ID]; duplicated {
+				continue
 			}
 			summaryItemIDs = append(summaryItemIDs, it.ID)
+			added++
+			if added >= 3 {
+				break
+			}
 		}
 	}
 	summaryMap, err := itemRepo.SummariesByItemIDs(ctx, userID, summaryItemIDs)
@@ -115,30 +137,53 @@ func BuildBriefingToday(
 
 	clusters := make([]model.BriefingCluster, 0, len(plan.Clusters))
 	for _, c := range plan.Clusters {
+		filteredItems := make([]model.Item, 0, len(c.Items))
+		for _, it := range c.Items {
+			if _, duplicated := highlightIDs[it.ID]; duplicated {
+				continue
+			}
+			filteredItems = append(filteredItems, it)
+		}
+		if len(filteredItems) == 0 {
+			continue
+		}
 		var maxScore *float64
-		if c.Representative.SummaryScore != nil {
+		if filteredItems[0].SummaryScore != nil {
+			v := *filteredItems[0].SummaryScore
+			maxScore = &v
+		} else if c.Representative.SummaryScore != nil {
 			v := *c.Representative.SummaryScore
 			maxScore = &v
 		}
 		clusters = append(clusters, model.BriefingCluster{
 			ID:       c.ID,
 			Label:    c.Label,
-			Summary:  buildClusterSummary(c.Items, summaryMap),
+			Summary:  buildClusterSummary(filteredItems, summaryMap),
 			MaxScore: maxScore,
 			Topics:   c.Representative.SummaryTopics,
-			Items:    c.Items,
+			Items:    filteredItems,
 		})
 	}
 
+	streakDisplay := streak
+	if todayRead >= streakTarget {
+		if yesterdayCompleted {
+			streakDisplay = streak + 1
+		} else {
+			streakDisplay = 1
+		}
+	}
 	streakRemaining := streakTarget - todayRead
 	if streakRemaining < 0 {
 		streakRemaining = 0
 	}
-	streakAtRisk := streak > 0 && streakRemaining > 0 && timeutil.NowJST().Hour() >= 18
+	streakAtRisk := streakDisplay > 0 && streakRemaining > 0 && timeutil.NowJST().Hour() >= 18
+	nowJST := timeutil.NowJST()
 
 	return &model.BriefingTodayResponse{
 		Date:           dateStr,
-		Greeting:       GreetingByHour(timeutil.NowJST()),
+		Greeting:       GreetingByHour(nowJST),
+		GreetingKey:    GreetingKeyByHour(nowJST),
 		Status:         "ready",
 		HighlightItems: highlight,
 		Clusters:       clusters,
@@ -147,7 +192,7 @@ func BuildBriefingToday(
 			TodayHighlightCount: len(plan.Items),
 			YesterdayRead:       yRead,
 			YesterdaySkipped:    ySkipped,
-			StreakDays:          streak,
+			StreakDays:          streakDisplay,
 			TodayReadCount:      todayRead,
 			StreakTarget:        streakTarget,
 			StreakRemaining:     streakRemaining,

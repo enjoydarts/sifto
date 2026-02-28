@@ -14,6 +14,8 @@ export function InlineReader({
   onClose,
   onOpenDetail,
   onOpenItem,
+  queueItemIds,
+  autoMarkRead = true,
   onReadToggled,
 }: {
   itemId: string | null;
@@ -22,6 +24,8 @@ export function InlineReader({
   onClose: () => void;
   onOpenDetail: (itemId: string) => void;
   onOpenItem?: (itemId: string) => void;
+  queueItemIds?: string[];
+  autoMarkRead?: boolean;
   onReadToggled?: (itemId: string, isRead: boolean) => void;
 }) {
   const { t } = useI18n();
@@ -47,6 +51,12 @@ export function InlineReader({
 
   const item = detailQuery.data ?? null;
   const related = useMemo(() => relatedQuery.data?.items ?? [], [relatedQuery.data?.items]);
+  const nextQueueItemId = useMemo(() => {
+    if (!itemId || !queueItemIds || queueItemIds.length === 0) return null;
+    const idx = queueItemIds.indexOf(itemId);
+    if (idx < 0 || idx + 1 >= queueItemIds.length) return null;
+    return queueItemIds[idx + 1] ?? null;
+  }, [itemId, queueItemIds]);
   const loading = detailQuery.isLoading || relatedQuery.isLoading;
   const error =
     (detailQuery.error ? String(detailQuery.error) : null) ??
@@ -140,7 +150,7 @@ export function InlineReader({
 
   const autoMarkedRef = useRef<Record<string, true>>({});
   useEffect(() => {
-    if (!open || !item || item.is_read || autoMarkedRef.current[item.id]) return;
+    if (!autoMarkRead || !open || !item || item.is_read || autoMarkedRef.current[item.id]) return;
     autoMarkedRef.current[item.id] = true;
     api
       .markItemRead(item.id)
@@ -153,7 +163,7 @@ export function InlineReader({
       .catch(() => {
         delete autoMarkedRef.current[item.id];
       });
-  }, [item, onReadToggled, open, queryClient]);
+  }, [autoMarkRead, item, onReadToggled, open, queryClient]);
 
   const onHandlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
     startYRef.current = e.clientY;
@@ -272,7 +282,7 @@ export function InlineReader({
               <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
                 {t("items.inline.primaryActions")}
               </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={() => void toggleRead(item)}
@@ -288,6 +298,17 @@ export function InlineReader({
                   <ExternalLink className="size-3.5" aria-hidden="true" />
                   <span>{t("items.action.openDetail")}</span>
                 </button>
+                {nextQueueItemId ? (
+                  <button
+                    type="button"
+                    onClick={() => (onOpenItem ? onOpenItem(nextQueueItemId) : onOpenDetail(nextQueueItemId))}
+                    className="min-h-10 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
+                  >
+                    {t("itemDetail.next")}
+                  </button>
+                ) : (
+                  <div className="hidden sm:block" aria-hidden="true" />
+                )}
               </div>
               <div className="text-xs text-zinc-500">
                 {new Date(item.published_at ?? item.created_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}

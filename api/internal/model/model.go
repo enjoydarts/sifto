@@ -262,6 +262,7 @@ type BriefingStats struct {
 type BriefingTodayResponse struct {
 	Date           string            `json:"date"`
 	Greeting       string            `json:"greeting"`
+	GreetingKey    string            `json:"greeting_key,omitempty"`
 	Status         string            `json:"status"` // pending | ready | stale
 	GeneratedAt    *time.Time        `json:"generated_at,omitempty"`
 	HighlightItems []Item            `json:"highlight_items"`

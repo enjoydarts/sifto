@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, Flame, ListTree, Sparkles, Target } from "lucide-react";
 import { api, BriefingCluster, Item } from "@/lib/api";
 import { InlineReader } from "@/components/inline-reader";
@@ -15,6 +15,7 @@ const EMPTY_CLUSTERS: BriefingCluster[] = [];
 export default function BriefingPage() {
   const { t, locale } = useI18n();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
   const briefingQuery = useQuery({
     queryKey: ["briefing-today", 18] as const,
@@ -39,6 +40,31 @@ export default function BriefingPage() {
         .filter((cluster) => cluster.topItems.length > 0),
     [clusters]
   );
+  const greetingLabel = (() => {
+    const key = data?.greeting_key;
+    if (key === "morning") return t("briefing.greeting.morning");
+    if (key === "afternoon") return t("briefing.greeting.afternoon");
+    if (key === "evening") return t("briefing.greeting.evening");
+    if (data?.greeting) return data.greeting;
+    return t("briefing.greetingFallback");
+  })();
+  const briefingQueueItemIds = useMemo(() => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const item of highlights) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      ids.push(item.id);
+    }
+    for (const cluster of clusterRows) {
+      for (const item of cluster.topItems) {
+        if (seen.has(item.id)) continue;
+        seen.add(item.id);
+        ids.push(item.id);
+      }
+    }
+    return ids;
+  }, [clusterRows, highlights]);
 
   return (
     <div className="space-y-6">
@@ -50,12 +76,21 @@ export default function BriefingPage() {
               <span>{t("briefing.title")}</span>
             </h1>
             <p className="mt-1 text-sm text-zinc-600">
-              {(data?.greeting ?? t("briefing.greetingFallback")) + " · " + (data?.date ?? "")}
+              {`${greetingLabel} · ${data?.date ?? ""}`}
             </p>
           </div>
           <button
             type="button"
-            onClick={() => void briefingQuery.refetch()}
+            onClick={() => {
+              void api
+                .getBriefingToday({ size: 18, cache_bust: true })
+                .then((next) => {
+                  queryClient.setQueryData(["briefing-today", 18], next);
+                })
+                .catch(() => {
+                  // keep current snapshot on refresh failure
+                });
+            }}
             className="rounded border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
           >
             {t("common.refresh")}
@@ -187,6 +222,7 @@ export default function BriefingPage() {
           open={!!inlineItemId}
           itemId={inlineItemId}
           locale={locale}
+          queueItemIds={briefingQueueItemIds}
           onClose={() => setInlineItemId(null)}
           onOpenDetail={(itemId) => {
             router.push(`/items/${itemId}?from=${encodeURIComponent("/items?feed=recommended")}`);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -38,14 +38,27 @@ export default function Nav() {
   const { locale, setLocale, t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const isMoreActive = secondaryLinks.some((v) => isActive(v.href));
-  const showBottomNav = !/^\/items\/[^/]+/.test(pathname ?? "");
+  const showBottomNav = !/^\/items\/[^/]+/.test(pathname ?? "") && pathname !== "/triage";
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      const root = moreMenuRef.current;
+      if (!root) return;
+      if (root.contains(e.target as Node)) return;
+      setMoreOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [moreOpen]);
 
   return (
     <>
-      <header className="z-20 border-b border-zinc-200/80 bg-white/90 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 backdrop-blur">
         <div className="mx-auto max-w-6xl px-4 py-2">
         <div className="flex min-h-12 items-center gap-3">
           <Link href="/" className="flex items-center gap-2">
@@ -96,7 +109,7 @@ export default function Nav() {
                 </Link>
               );
             })}
-            <div className="relative">
+            <div className="relative" ref={moreMenuRef}>
               <button
                 type="button"
                 onClick={() => setMoreOpen((v) => !v)}

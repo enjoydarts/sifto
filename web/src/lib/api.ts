@@ -391,6 +391,7 @@ export interface BriefingCluster {
 export interface BriefingTodayResponse {
   date: string;
   greeting: string;
+  greeting_key?: "morning" | "afternoon" | "evening" | string;
   status: "pending" | "ready" | "stale" | string;
   generated_at?: string | null;
   highlight_items: Item[];
@@ -534,9 +535,10 @@ export const api = {
     const qs = q.toString();
     return apiFetch<DashboardSnapshot>(`/dashboard${qs ? `?${qs}` : ""}`);
   },
-  getBriefingToday: (params?: { size?: number }) => {
+  getBriefingToday: (params?: { size?: number; cache_bust?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.size) q.set("size", String(params.size));
+    if (params?.cache_bust) q.set("cache_bust", "1");
     const qs = q.toString();
     return apiFetch<BriefingTodayResponse>(`/briefing/today${qs ? `?${qs}` : ""}`);
   },

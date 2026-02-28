@@ -4,6 +4,13 @@
   --background: #f5f6f8;
   --foreground: #171717;
   --panel: #ffffff;
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+@supports (padding-top: constant(safe-area-inset-top)) {
+  :root {
+    --safe-top: constant(safe-area-inset-top);
+  }
 }
 
 @theme inline {

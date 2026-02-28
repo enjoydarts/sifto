@@ -14,19 +14,27 @@ import (
 	"github.com/minoru-kitayama/sifto/api/internal/model"
 	"github.com/minoru-kitayama/sifto/api/internal/repository"
 	"github.com/minoru-kitayama/sifto/api/internal/service"
+	"github.com/minoru-kitayama/sifto/api/internal/timeutil"
 )
 
 type ItemHandler struct {
 	repo       *repository.ItemRepo
 	sourceRepo *repository.SourceRepo
+	streakRepo *repository.ReadingStreakRepo
 	publisher  *service.EventPublisher
 	cache      service.JSONCache
 }
 
 const itemsListCacheTTL = 30 * time.Second
 
-func NewItemHandler(repo *repository.ItemRepo, sourceRepo *repository.SourceRepo, publisher *service.EventPublisher, cache service.JSONCache) *ItemHandler {
-	return &ItemHandler{repo: repo, sourceRepo: sourceRepo, publisher: publisher, cache: cache}
+func NewItemHandler(
+	repo *repository.ItemRepo,
+	sourceRepo *repository.SourceRepo,
+	streakRepo *repository.ReadingStreakRepo,
+	publisher *service.EventPublisher,
+	cache service.JSONCache,
+) *ItemHandler {
+	return &ItemHandler{repo: repo, sourceRepo: sourceRepo, streakRepo: streakRepo, publisher: publisher, cache: cache}
 }
 
 func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -145,6 +153,30 @@ func (h *ItemHandler) TopicTrends(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"items": rows,
 		"limit": limit,
+	})
+}
+
+func (h *ItemHandler) TopicPulse(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	days := parseIntOrDefault(r.URL.Query().Get("days"), 7)
+	limit := parseIntOrDefault(r.URL.Query().Get("limit"), 12)
+	if days < 1 || days > 30 {
+		http.Error(w, "invalid days", http.StatusBadRequest)
+		return
+	}
+	if limit < 1 || limit > 50 {
+		http.Error(w, "invalid limit", http.StatusBadRequest)
+		return
+	}
+	rows, err := h.repo.TopicPulse(r.Context(), userID, days, limit)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"days":  days,
+		"limit": limit,
+		"items": rows,
 	})
 }
 
@@ -565,9 +597,13 @@ func clusterLabel(it model.RelatedItem) string {
 func (h *ItemHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	id := chi.URLParam(r, "id")
-	if err := h.repo.MarkRead(r.Context(), userID, id); err != nil {
+	inserted, err := h.repo.MarkRead(r.Context(), userID, id)
+	if err != nil {
 		writeRepoError(w, err)
 		return
+	}
+	if inserted && h.streakRepo != nil {
+		_ = h.streakRepo.IncrementRead(r.Context(), userID, timeutil.NowJST(), 3)
 	}
 	writeJSON(w, map[string]any{"item_id": id, "is_read": true})
 }

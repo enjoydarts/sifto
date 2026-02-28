@@ -210,6 +210,20 @@ export interface TopicTrend {
   max_score_24h?: number | null;
 }
 
+export interface TopicPulsePoint {
+  date: string;
+  count: number;
+  max_score?: number | null;
+}
+
+export interface TopicPulseItem {
+  topic: string;
+  total: number;
+  delta: number;
+  max_score?: number | null;
+  points: TopicPulsePoint[];
+}
+
 export interface BulkRetryFailedResult {
   status: "queued";
   source_id: string | null;
@@ -353,6 +367,35 @@ export interface DashboardSnapshot {
   llm_days: number;
 }
 
+export interface BriefingCluster {
+  id: string;
+  label: string;
+  summary?: string;
+  max_score?: number | null;
+  topics?: string[];
+  items: Item[];
+}
+
+export interface BriefingTodayResponse {
+  date: string;
+  greeting: string;
+  status: "pending" | "ready" | "stale" | string;
+  generated_at?: string | null;
+  highlight_items: Item[];
+  clusters: BriefingCluster[];
+  stats: {
+    total_unread: number;
+    today_highlight_count: number;
+    yesterday_read: number;
+    yesterday_skipped: number;
+    streak_days: number;
+    today_read_count?: number;
+    streak_target?: number;
+    streak_remaining?: number;
+    streak_at_risk?: boolean;
+  };
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...options,
@@ -473,11 +516,24 @@ export const api = {
     const qs = q.toString();
     return apiFetch<DashboardSnapshot>(`/dashboard${qs ? `?${qs}` : ""}`);
   },
+  getBriefingToday: (params?: { size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.size) q.set("size", String(params.size));
+    const qs = q.toString();
+    return apiFetch<BriefingTodayResponse>(`/briefing/today${qs ? `?${qs}` : ""}`);
+  },
   getItemTopicTrends: (params?: { limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString();
     return apiFetch<{ items: TopicTrend[]; limit: number }>(`/items/topic-trends${qs ? `?${qs}` : ""}`);
+  },
+  getTopicPulse: (params?: { days?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.days) q.set("days", String(params.days));
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiFetch<{ days: number; limit: number; items: TopicPulseItem[] }>(`/topics/pulse${qs ? `?${qs}` : ""}`);
   },
   getItem: (id: string) => apiFetch<ItemDetail>(`/items/${id}`),
   getRelatedItems: (id: string, params?: { limit?: number }) => {

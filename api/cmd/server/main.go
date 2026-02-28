@@ -45,14 +45,17 @@ func main() {
 	digestRepo := repository.NewDigestRepo(db)
 	digestInngestRepo := repository.NewDigestInngestRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	briefingSnapshotRepo := repository.NewBriefingSnapshotRepo(db)
+	streakRepo := repository.NewReadingStreakRepo(db)
 	settingsH := handler.NewSettingsHandler(userSettingsRepo, llmUsageRepo, secretCipher)
 
 	internalH := handler.NewInternalHandler(userRepo, itemInngestRepo, digestInngestRepo, eventPublisher, db, cache, worker)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher)
-	itemH := handler.NewItemHandler(itemRepo, sourceRepo, eventPublisher, cache)
+	itemH := handler.NewItemHandler(itemRepo, sourceRepo, streakRepo, eventPublisher, cache)
 	digestH := handler.NewDigestHandler(digestRepo)
 	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo)
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
+	briefingH := handler.NewBriefingHandler(itemRepo, briefingSnapshotRepo, streakRepo, cache)
 
 	inngestHandler := inngestfn.NewHandler(db, worker, resend)
 
@@ -115,6 +118,10 @@ func main() {
 			r.Post("/{id}/retry", itemH.Retry)
 		})
 
+		r.Route("/topics", func(r chi.Router) {
+			r.Get("/pulse", itemH.TopicPulse)
+		})
+
 		r.Route("/digests", func(r chi.Router) {
 			r.Get("/", digestH.List)
 			r.Get("/latest", digestH.GetLatest)
@@ -127,6 +134,7 @@ func main() {
 			r.Get("/by-model", llmUsageH.ModelSummary)
 		})
 
+		r.Get("/briefing/today", briefingH.Today)
 		r.Get("/dashboard", dashboardH.Get)
 
 		r.Route("/settings", func(r chi.Router) {

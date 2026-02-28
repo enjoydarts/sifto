@@ -513,12 +513,58 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(fetchRSSFn(client, db))
 	register(processItemFn(client, db, worker, openAI, secretCipher))
 	register(embedItemFn(client, db, openAI, secretCipher))
+	register(generateBriefingSnapshotsFn(client, db))
 	register(generateDigestFn(client, db))
 	register(composeDigestCopyFn(client, db, worker, secretCipher))
 	register(sendDigestFn(client, db, worker, resend, secretCipher))
 	register(checkBudgetAlertsFn(client, db, resend))
 
 	return client.Serve()
+}
+
+// cron/generate-briefing-snapshots — 30分ごとに当日ブリーフィングのスナップショットを更新
+func generateBriefingSnapshotsFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFunction, error) {
+	userRepo := repository.NewUserRepo(db)
+	itemRepo := repository.NewItemRepo(db)
+	streakRepo := repository.NewReadingStreakRepo(db)
+	snapshotRepo := repository.NewBriefingSnapshotRepo(db)
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "generate-briefing-snapshots", Name: "Generate Briefing Snapshots"},
+		inngestgo.CronTrigger("*/30 * * * *"),
+		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
+			users, err := userRepo.ListAll(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("list users: %w", err)
+			}
+			today := timeutil.StartOfDayJST(timeutil.NowJST())
+			dateStr := today.Format("2006-01-02")
+			updated := 0
+			failed := 0
+			for _, u := range users {
+				payload, err := service.BuildBriefingToday(ctx, itemRepo, streakRepo, u.ID, today, 18)
+				if err != nil {
+					failed++
+					log.Printf("generate-briefing-snapshots build user=%s: %v", u.ID, err)
+					continue
+				}
+				payload.Status = "ready"
+				if err := snapshotRepo.Upsert(ctx, u.ID, dateStr, "ready", payload); err != nil {
+					failed++
+					log.Printf("generate-briefing-snapshots upsert user=%s: %v", u.ID, err)
+					continue
+				}
+				updated++
+			}
+			return map[string]any{
+				"date":    dateStr,
+				"users":   len(users),
+				"updated": updated,
+				"failed":  failed,
+			}, nil
+		},
+	)
 }
 
 // ① cron/fetch-rss — 10分ごとにRSSを取得し新規アイテムを登録
@@ -566,13 +612,17 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 						continue
 					}
 					newCount++
+					payload := map[string]any{
+						"item_id":   itemID,
+						"source_id": src.ID,
+						"url":       entry.Link,
+					}
+					if title != nil && strings.TrimSpace(*title) != "" {
+						payload["title"] = strings.TrimSpace(*title)
+					}
 					if _, err := client.Send(ctx, inngestgo.Event{
 						Name: "item/created",
-						Data: map[string]any{
-							"item_id":   itemID,
-							"source_id": src.ID,
-							"url":       entry.Link,
-						},
+						Data: payload,
 					}); err != nil {
 						log.Printf("send item/created: %v", err)
 					}
@@ -596,6 +646,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 		ItemID   string `json:"item_id"`
 		SourceID string `json:"source_id"`
 		URL      string `json:"url"`
+		Title    string `json:"title"`
 	}
 
 	return inngestgo.CreateFunction(
@@ -614,7 +665,10 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					log.Printf("process-item source owner lookup failed source_id=%s err=%v", data.SourceID, err)
 				}
 			}
-			userModelSettings, _ := userSettingsRepo.GetByUserID(ctx, *userIDPtr)
+			var userModelSettings *model.UserSettings
+			if userIDPtr != nil && *userIDPtr != "" {
+				userModelSettings, _ = userSettingsRepo.GetByUserID(ctx, *userIDPtr)
+			}
 			log.Printf("process-item start item_id=%s url=%s", itemID, url)
 
 			// Step 1: 本文抽出
@@ -642,6 +696,13 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				return nil, fmt.Errorf("update after extract: %w", err)
 			}
 			log.Printf("process-item update-after-extract done item_id=%s", itemID)
+			titleForLLM := extracted.Title
+			if titleForLLM == nil || strings.TrimSpace(*titleForLLM) == "" {
+				eventTitle := strings.TrimSpace(data.Title)
+				if eventTitle != "" {
+					titleForLLM = &eventTitle
+				}
+			}
 
 			// Step 2: 事実抽出
 			factsResp, err := step.Run(ctx, "extract-facts", func(ctx context.Context) (*service.ExtractFactsResponse, error) {
@@ -665,7 +726,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					}
 					userGoogleKey = key
 				}
-				return worker.ExtractFactsWithModel(ctx, extracted.Title, extracted.Content, userAnthropicKey, userGoogleKey, modelOverride)
+				return worker.ExtractFactsWithModel(ctx, titleForLLM, extracted.Content, userAnthropicKey, userGoogleKey, modelOverride)
 			})
 			if err != nil {
 				log.Printf("process-item extract-facts failed item_id=%s err=%v", itemID, err)
@@ -704,7 +765,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					userGoogleKey = key
 				}
 				sourceChars := len(extracted.Content)
-				return worker.SummarizeWithModel(ctx, extracted.Title, factsResp.Facts, &sourceChars, userAnthropicKey, userGoogleKey, modelOverride)
+				return worker.SummarizeWithModel(ctx, titleForLLM, factsResp.Facts, &sourceChars, userAnthropicKey, userGoogleKey, modelOverride)
 			})
 			if err != nil {
 				log.Printf("process-item summarize failed item_id=%s err=%v", itemID, err)
@@ -733,7 +794,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			if userOpenAIKey, err := loadUserOpenAIAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr); err != nil {
 				log.Printf("process-item embedding skip item_id=%s reason=%v", itemID, err)
 			} else {
-				inputText := buildItemEmbeddingInput(extracted.Title, summary.Summary, summary.Topics, factsResp.Facts)
+				inputText := buildItemEmbeddingInput(titleForLLM, summary.Summary, summary.Topics, factsResp.Facts)
 				embModel := service.OpenAIEmbeddingModel()
 				if userModelSettings != nil && userModelSettings.OpenAIEmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*userModelSettings.OpenAIEmbeddingModel) {
 					embModel = *userModelSettings.OpenAIEmbeddingModel

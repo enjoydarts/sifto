@@ -2,11 +2,14 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minoru-kitayama/sifto/api/internal/model"
+	"github.com/minoru-kitayama/sifto/api/internal/timeutil"
 )
 
 type ItemRepo struct{ db *pgxpool.Pool }
@@ -407,6 +410,105 @@ func (r *ItemRepo) Stats(ctx context.Context, userID string) (*model.ItemStatsRe
 	return resp, nil
 }
 
+func (r *ItemRepo) HighlightItems24h(ctx context.Context, userID string, minScore float64, limit int) ([]model.Item, error) {
+	if limit <= 0 {
+		limit = 3
+	}
+	if limit > 30 {
+		limit = 30
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status,
+		       (ir.item_id IS NOT NULL) AS is_read,
+		       COALESCE(fb.is_favorite, false) AS is_favorite,
+		       COALESCE(fb.rating, 0) AS feedback_rating,
+		       sm.score, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
+		       i.published_at, i.fetched_at, i.created_at, i.updated_at
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		JOIN item_summaries sm ON sm.item_id = i.id
+		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
+		WHERE s.user_id = $1
+		  AND i.status = 'summarized'
+		  AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '24 hours'
+		  AND COALESCE(sm.score, 0) >= $2
+		ORDER BY sm.score DESC NULLS LAST, i.created_at DESC
+		LIMIT $3`,
+		userID, minScore, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanItems(rows)
+}
+
+func (r *ItemRepo) SummariesByItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]string, error) {
+	if len(itemIDs) == 0 {
+		return map[string]string{}, nil
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT i.id, sm.summary
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		JOIN item_summaries sm ON sm.item_id = i.id
+		WHERE s.user_id = $1
+		  AND i.id = ANY($2::uuid[])`,
+		userID, itemIDs,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]string, len(itemIDs))
+	for rows.Next() {
+		var itemID string
+		var summary string
+		if err := rows.Scan(&itemID, &summary); err != nil {
+			return nil, err
+		}
+		out[itemID] = summary
+	}
+	return out, rows.Err()
+}
+
+func (r *ItemRepo) CountSummarizedOnDateJST(ctx context.Context, userID, date string) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*)::int
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		WHERE s.user_id = $1
+		  AND i.status = 'summarized'
+		  AND (COALESCE(i.published_at, i.created_at) AT TIME ZONE 'Asia/Tokyo')::date = $2::date`,
+		userID, date,
+	).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *ItemRepo) CountSummarizedReadUnreadOnDateJST(ctx context.Context, userID, date string) (readCount int, unreadCount int, err error) {
+	err = r.db.QueryRow(ctx, `
+		SELECT
+		  COALESCE(SUM(CASE WHEN ir.item_id IS NOT NULL THEN 1 ELSE 0 END), 0)::int AS read_count,
+		  COALESCE(SUM(CASE WHEN ir.item_id IS NULL THEN 1 ELSE 0 END), 0)::int AS unread_count
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+		WHERE s.user_id = $1
+		  AND i.status = 'summarized'
+		  AND (COALESCE(i.published_at, i.created_at) AT TIME ZONE 'Asia/Tokyo')::date = $2::date`,
+		userID, date,
+	).Scan(&readCount, &unreadCount)
+	if err != nil {
+		return 0, 0, err
+	}
+	return readCount, unreadCount, nil
+}
+
 func (r *ItemRepo) TopicTrends(ctx context.Context, userID string, limit int) ([]model.TopicTrend, error) {
 	if limit <= 0 {
 		limit = 10
@@ -460,6 +562,140 @@ func (r *ItemRepo) TopicTrends(ctx context.Context, userID string, limit int) ([
 		out = append(out, v)
 	}
 	return out, rows.Err()
+}
+
+func (r *ItemRepo) TopicPulse(ctx context.Context, userID string, days, limit int) ([]model.TopicPulseItem, error) {
+	if days <= 0 {
+		days = 7
+	}
+	if days > 30 {
+		days = 30
+	}
+	if limit <= 0 {
+		limit = 12
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	type pulseRow struct {
+		TopicKey string
+		Day      *string
+		Count    *int
+		DayMax   *float64
+		Total    int
+		Delta    int
+		TopMax   *float64
+	}
+
+	rows, err := r.db.Query(ctx, `
+		WITH base AS (
+			SELECT COALESCE(NULLIF(BTRIM(t.topic), ''), '__untagged__') AS topic_key,
+			       COALESCE(sm.score, 0)::double precision AS score,
+			       (COALESCE(i.published_at, i.created_at) AT TIME ZONE 'Asia/Tokyo')::date AS day_jst
+			FROM items i
+			JOIN sources s ON s.id = i.source_id
+			JOIN item_summaries sm ON sm.item_id = i.id
+			CROSS JOIN LATERAL unnest(
+				CASE
+					WHEN COALESCE(array_length(sm.topics, 1), 0) = 0 THEN ARRAY['__untagged__']::text[]
+					ELSE sm.topics
+				END
+			) AS t(topic)
+			WHERE s.user_id = $1
+			  AND i.status = 'summarized'
+			  AND COALESCE(i.published_at, i.created_at) >= NOW() - make_interval(days => $2::int)
+		),
+		daily AS (
+			SELECT topic_key, day_jst, COUNT(*)::int AS cnt, MAX(score)::double precision AS max_score
+			FROM base
+			GROUP BY topic_key, day_jst
+		),
+		totals AS (
+			SELECT topic_key,
+			       SUM(cnt)::int AS total,
+			       COALESCE(SUM(cnt) FILTER (WHERE day_jst = (NOW() AT TIME ZONE 'Asia/Tokyo')::date), 0)::int AS today_count,
+			       COALESCE(SUM(cnt) FILTER (WHERE day_jst = (NOW() AT TIME ZONE 'Asia/Tokyo')::date - 1), 0)::int AS prev_count,
+			       MAX(max_score)::double precision AS max_score
+			FROM daily
+			GROUP BY topic_key
+			ORDER BY SUM(cnt) DESC, MAX(max_score) DESC NULLS LAST, topic_key ASC
+			LIMIT $3
+		)
+		SELECT t.topic_key,
+		       d.day_jst::text,
+		       d.cnt,
+		       d.max_score,
+		       t.total,
+		       (t.today_count - t.prev_count)::int AS delta,
+		       t.max_score
+		FROM totals t
+		LEFT JOIN daily d ON d.topic_key = t.topic_key
+		ORDER BY t.total DESC, t.topic_key ASC, d.day_jst ASC`,
+		userID, days, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	bucketByTopic := map[string]*model.TopicPulseItem{}
+	pointMapByTopic := map[string]map[string]model.TopicPulsePoint{}
+	order := make([]string, 0, limit)
+	for rows.Next() {
+		var row pulseRow
+		if err := rows.Scan(&row.TopicKey, &row.Day, &row.Count, &row.DayMax, &row.Total, &row.Delta, &row.TopMax); err != nil {
+			return nil, err
+		}
+		item, ok := bucketByTopic[row.TopicKey]
+		if !ok {
+			item = &model.TopicPulseItem{
+				Topic:    row.TopicKey,
+				Total:    row.Total,
+				Delta:    row.Delta,
+				MaxScore: row.TopMax,
+			}
+			bucketByTopic[row.TopicKey] = item
+			pointMapByTopic[row.TopicKey] = map[string]model.TopicPulsePoint{}
+			order = append(order, row.TopicKey)
+		}
+		if row.Day != nil && row.Count != nil {
+			pointMapByTopic[row.TopicKey][*row.Day] = model.TopicPulsePoint{
+				Date:     *row.Day,
+				Count:    *row.Count,
+				MaxScore: row.DayMax,
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	today := timeutil.StartOfDayJST(timeutil.NowJST())
+	start := today.AddDate(0, 0, -(days - 1))
+	dates := make([]string, 0, days)
+	for d := start; !d.After(today); d = d.AddDate(0, 0, 1) {
+		dates = append(dates, d.Format("2006-01-02"))
+	}
+
+	out := make([]model.TopicPulseItem, 0, len(order))
+	for _, topic := range order {
+		item := bucketByTopic[topic]
+		if item == nil {
+			continue
+		}
+		points := make([]model.TopicPulsePoint, 0, len(dates))
+		for _, date := range dates {
+			p, ok := pointMapByTopic[topic][date]
+			if !ok {
+				p = model.TopicPulsePoint{Date: date, Count: 0}
+			}
+			points = append(points, p)
+		}
+		item.Points = points
+		out = append(out, *item)
+	}
+	return out, nil
 }
 
 func (r *ItemRepo) PositiveFeedbackTopics(ctx context.Context, userID string, limit int) ([]string, error) {
@@ -777,18 +1013,25 @@ func (r *ItemRepo) UpsertFromFeed(ctx context.Context, sourceID, url string, tit
 	return id, true, nil
 }
 
-func (r *ItemRepo) MarkRead(ctx context.Context, userID, itemID string) error {
+func (r *ItemRepo) MarkRead(ctx context.Context, userID, itemID string) (bool, error) {
 	if err := r.ensureOwned(ctx, userID, itemID); err != nil {
-		return err
+		return false, err
 	}
-	_, err := r.db.Exec(ctx, `
+	var inserted int
+	err := r.db.QueryRow(ctx, `
 		INSERT INTO item_reads (user_id, item_id)
 		VALUES ($1, $2)
-		ON CONFLICT (user_id, item_id) DO UPDATE
-		SET read_at = NOW()`,
+		ON CONFLICT (user_id, item_id) DO NOTHING
+		RETURNING 1`,
 		userID, itemID,
-	)
-	return err
+	).Scan(&inserted)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *ItemRepo) MarkUnread(ctx context.Context, userID, itemID string) error {

@@ -543,7 +543,7 @@ export default function ItemDetailPage() {
         <div className="mb-2 flex items-start gap-2">
           <FileText className="mt-1 size-5 shrink-0 text-zinc-500" aria-hidden="true" />
           <h1 className="text-2xl font-bold leading-snug text-zinc-900">
-            {item.title ?? t("itemDetail.noTitle")}
+            {item.translated_title?.trim() || item.title || t("itemDetail.noTitle")}
           </h1>
         </div>
         <a

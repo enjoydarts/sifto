@@ -212,6 +212,51 @@ type TopicTrend struct {
 	MaxScore24h  *float64 `json:"max_score_24h,omitempty"`
 }
 
+type TopicPulsePoint struct {
+	Date     string   `json:"date"`
+	Count    int      `json:"count"`
+	MaxScore *float64 `json:"max_score,omitempty"`
+}
+
+type TopicPulseItem struct {
+	Topic    string            `json:"topic"`
+	Total    int               `json:"total"`
+	Delta    int               `json:"delta"`
+	MaxScore *float64          `json:"max_score,omitempty"`
+	Points   []TopicPulsePoint `json:"points"`
+}
+
+type BriefingCluster struct {
+	ID       string   `json:"id"`
+	Label    string   `json:"label"`
+	Summary  string   `json:"summary,omitempty"`
+	MaxScore *float64 `json:"max_score,omitempty"`
+	Topics   []string `json:"topics,omitempty"`
+	Items    []Item   `json:"items,omitempty"`
+}
+
+type BriefingStats struct {
+	TotalUnread         int  `json:"total_unread"`
+	TodayHighlightCount int  `json:"today_highlight_count"`
+	YesterdayRead       int  `json:"yesterday_read"`
+	YesterdaySkipped    int  `json:"yesterday_skipped"`
+	StreakDays          int  `json:"streak_days"`
+	TodayReadCount      int  `json:"today_read_count"`
+	StreakTarget        int  `json:"streak_target"`
+	StreakRemaining     int  `json:"streak_remaining"`
+	StreakAtRisk        bool `json:"streak_at_risk"`
+}
+
+type BriefingTodayResponse struct {
+	Date           string            `json:"date"`
+	Greeting       string            `json:"greeting"`
+	Status         string            `json:"status"` // pending | ready | stale
+	GeneratedAt    *time.Time        `json:"generated_at,omitempty"`
+	HighlightItems []Item            `json:"highlight_items"`
+	Clusters       []BriefingCluster `json:"clusters"`
+	Stats          BriefingStats     `json:"stats"`
+}
+
 type Digest struct {
 	ID           string     `json:"id"`
 	UserID       string     `json:"user_id"`

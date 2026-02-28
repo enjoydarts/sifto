@@ -138,6 +138,65 @@ func (h *ItemHandler) Stats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
+func (h *ItemHandler) UXMetrics(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	days := parseIntOrDefault(r.URL.Query().Get("days"), 7)
+	if days < 1 || days > 90 {
+		http.Error(w, "invalid days", http.StatusBadRequest)
+		return
+	}
+	today := timeutil.StartOfDayJST(timeutil.NowJST())
+	todayStr := today.Format("2006-01-02")
+	fromStr := today.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
+
+	todayNew, err := h.repo.CountNewOnDateJST(r.Context(), userID, todayStr)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	todayRead, err := h.repo.CountReadOnDateJST(r.Context(), userID, todayStr)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	periodRead, activeDays, err := h.repo.ReadActivityInRangeJST(r.Context(), userID, fromStr, todayStr)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+
+	var todayRate *float64
+	if todayNew > 0 {
+		v := float64(todayRead) / float64(todayNew)
+		todayRate = &v
+	}
+	avgReads := float64(periodRead) / float64(days)
+
+	streak := 0
+	if h.streakRepo != nil {
+		if _, streakDays, _, err := h.streakRepo.GetByUserAndDate(r.Context(), userID, todayStr); err == nil {
+			streak = streakDays
+		} else {
+			yesterdayStr := today.AddDate(0, 0, -1).Format("2006-01-02")
+			if _, streakDays, _, err := h.streakRepo.GetByUserAndDate(r.Context(), userID, yesterdayStr); err == nil {
+				streak = streakDays
+			}
+		}
+	}
+
+	writeJSON(w, &model.ItemUXMetricsResponse{
+		Days:                     days,
+		TodayDate:                todayStr,
+		TodayNewItems:            todayNew,
+		TodayReadItems:           todayRead,
+		TodayConsumptionRate:     todayRate,
+		PeriodReadItems:          periodRead,
+		PeriodActiveReadDays:     activeDays,
+		PeriodAverageReadsPerDay: avgReads,
+		CurrentStreakDays:        streak,
+	})
+}
+
 func (h *ItemHandler) TopicTrends(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	limit := parseIntOrDefault(r.URL.Query().Get("limit"), 8)

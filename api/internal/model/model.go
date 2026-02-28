@@ -204,6 +204,18 @@ type ItemStatsResponse struct {
 	ByStatus map[string]int `json:"by_status"`
 }
 
+type ItemUXMetricsResponse struct {
+	Days                     int      `json:"days"`
+	TodayDate                string   `json:"today_date"`
+	TodayNewItems            int      `json:"today_new_items"`
+	TodayReadItems           int      `json:"today_read_items"`
+	TodayConsumptionRate     *float64 `json:"today_consumption_rate,omitempty"`
+	PeriodReadItems          int      `json:"period_read_items"`
+	PeriodActiveReadDays     int      `json:"period_active_read_days"`
+	PeriodAverageReadsPerDay float64  `json:"period_average_reads_per_day"`
+	CurrentStreakDays        int      `json:"current_streak_days"`
+}
+
 type TopicTrend struct {
 	Topic        string   `json:"topic"`
 	Count24h     int      `json:"count_24h"`

@@ -509,6 +509,60 @@ func (r *ItemRepo) CountSummarizedReadUnreadOnDateJST(ctx context.Context, userI
 	return readCount, unreadCount, nil
 }
 
+func (r *ItemRepo) CountNewOnDateJST(ctx context.Context, userID, date string) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*)::int
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		WHERE s.user_id = $1
+		  AND (COALESCE(i.published_at, i.created_at) AT TIME ZONE 'Asia/Tokyo')::date = $2::date`,
+		userID, date,
+	).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *ItemRepo) CountReadOnDateJST(ctx context.Context, userID, date string) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*)::int
+		FROM item_reads ir
+		JOIN items i ON i.id = ir.item_id
+		JOIN sources s ON s.id = i.source_id
+		WHERE s.user_id = $1
+		  AND (ir.read_at AT TIME ZONE 'Asia/Tokyo')::date = $2::date`,
+		userID, date,
+	).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (r *ItemRepo) ReadActivityInRangeJST(ctx context.Context, userID string, from, to string) (readCount int, activeDays int, err error) {
+	err = r.db.QueryRow(ctx, `
+		WITH reads AS (
+			SELECT (ir.read_at AT TIME ZONE 'Asia/Tokyo')::date AS day_jst
+			FROM item_reads ir
+			JOIN items i ON i.id = ir.item_id
+			JOIN sources s ON s.id = i.source_id
+			WHERE s.user_id = $1
+			  AND (ir.read_at AT TIME ZONE 'Asia/Tokyo')::date >= $2::date
+			  AND (ir.read_at AT TIME ZONE 'Asia/Tokyo')::date <= $3::date
+		)
+		SELECT COUNT(*)::int AS read_count, COUNT(DISTINCT day_jst)::int AS active_days
+		FROM reads`,
+		userID, from, to,
+	).Scan(&readCount, &activeDays)
+	if err != nil {
+		return 0, 0, err
+	}
+	return readCount, activeDays, nil
+}
+
 func (r *ItemRepo) TopicTrends(ctx context.Context, userID string, limit int) ([]model.TopicTrend, error) {
 	if limit <= 0 {
 		limit = 10

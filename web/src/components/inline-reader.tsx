@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { api, ItemDetail } from "@/lib/api";
@@ -28,6 +28,9 @@ export function InlineReader({
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [feedbackUpdating, setFeedbackUpdating] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [dragY, setDragY] = useState(0);
+  const startYRef = useRef<number | null>(null);
   const enabled = open && !!itemId;
   const detailQuery = useQuery({
     queryKey: ["item-detail", itemId ?? ""],
@@ -152,14 +155,52 @@ export function InlineReader({
       });
   }, [item, onReadToggled, open, queryClient]);
 
+  const onHandlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    startYRef.current = e.clientY;
+    setDragging(true);
+  };
+  const onHandlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    if (!dragging || startYRef.current == null) return;
+    const dy = Math.max(0, e.clientY - startYRef.current);
+    setDragY(dy);
+  };
+  const resetDrag = () => {
+    setDragging(false);
+    setDragY(0);
+    startYRef.current = null;
+  };
+  const onHandlePointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    if (!dragging || startYRef.current == null) {
+      resetDrag();
+      return;
+    }
+    const dy = e.clientY - startYRef.current;
+    if (dy > 90) {
+      resetDrag();
+      onClose();
+      return;
+    }
+    resetDrag();
+  };
+
   if (!open || !itemId) return null;
 
   return (
     <div className="fixed inset-0 z-40 bg-black/35" onClick={onClose}>
       <div
-        className="absolute inset-y-0 right-0 w-full max-w-2xl overflow-y-auto border-l border-zinc-200 bg-white p-4 shadow-2xl"
+        className="absolute inset-y-0 right-0 w-full max-w-2xl overflow-y-auto border-l border-zinc-200 bg-white p-4 shadow-2xl transition-transform"
         onClick={(e) => e.stopPropagation()}
+        style={{ transform: `translateY(${dragY}px)` }}
       >
+        <div
+          className="mb-2 flex justify-center py-1 md:hidden"
+          onPointerDown={onHandlePointerDown}
+          onPointerMove={onHandlePointerMove}
+          onPointerUp={onHandlePointerUp}
+          onPointerCancel={resetDrag}
+        >
+          <span className="h-1.5 w-12 rounded-full bg-zinc-300" />
+        </div>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-zinc-800">{t("items.inline.title")}</h2>
           <button

@@ -202,6 +202,18 @@ export interface ItemStats {
   by_status: Record<string, number>;
 }
 
+export interface ItemUXMetrics {
+  days: number;
+  today_date: string;
+  today_new_items: number;
+  today_read_items: number;
+  today_consumption_rate?: number;
+  period_read_items: number;
+  period_active_read_days: number;
+  period_average_reads_per_day: number;
+  current_streak_days: number;
+}
+
 export interface TopicTrend {
   topic: string;
   count_24h: number;
@@ -508,6 +520,12 @@ export const api = {
     return apiFetch<FocusQueueResponse>(`/items/focus-queue${qs ? `?${qs}` : ""}`);
   },
   getItemStats: () => apiFetch<ItemStats>("/items/stats"),
+  getItemUXMetrics: (params?: { days?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.days) q.set("days", String(params.days));
+    const qs = q.toString();
+    return apiFetch<ItemUXMetrics>(`/items/ux-metrics${qs ? `?${qs}` : ""}`);
+  },
   getDashboard: (params?: { llm_days?: number; topic_limit?: number; digest_limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.llm_days) q.set("llm_days", String(params.llm_days));

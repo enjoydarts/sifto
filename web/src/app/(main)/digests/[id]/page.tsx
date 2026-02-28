@@ -52,17 +52,17 @@ export default function DigestDetailPage() {
   const statusBadge = digestStatusBadge(digest, t);
 
   return (
-    <div className="min-w-0 space-y-6 overflow-x-hidden">
+    <div className="min-w-0 space-y-6">
       <Link href="/digests" className="inline-block text-sm text-zinc-500 hover:text-zinc-900">
         ← {t("nav.digests")}
       </Link>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+          <div className="min-w-0">
             <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
               <Mail className="size-6 text-zinc-500" aria-hidden="true" />
-              <span>
+              <span className="min-w-0 break-words">
                 {t("digests.title")} · {digest.digest_date}
               </span>
             </h1>
@@ -147,7 +147,7 @@ export default function DigestDetailPage() {
                   <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-zinc-700 ring-1 ring-zinc-200">
                     #{cd.rank}
                   </span>
-                  <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-semibold text-zinc-800">
+                  <span className="max-w-full break-all rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-semibold text-zinc-800">
                     {cd.cluster_label}
                   </span>
                   <span className="text-xs text-zinc-500">
@@ -159,7 +159,7 @@ export default function DigestDetailPage() {
                     </span>
                   )}
                 </div>
-                <pre className="whitespace-pre-wrap break-words text-xs leading-6 text-zinc-700">{cd.draft_summary}</pre>
+                <pre className="whitespace-pre-wrap break-all text-xs leading-6 text-zinc-700">{cd.draft_summary}</pre>
               </div>
             ))}
           </div>
@@ -191,7 +191,7 @@ export default function DigestDetailPage() {
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/items/${di.item.id}`}
-                      className="block text-sm font-semibold leading-6 text-zinc-900 hover:underline"
+                      className="block min-w-0 break-words text-sm font-semibold leading-6 text-zinc-900 hover:underline"
                     >
                       {di.item.title ?? di.item.url}
                     </Link>

@@ -55,7 +55,15 @@ func (r *ItemInngestRepo) InsertFacts(ctx context.Context, itemID string, facts 
 	return err
 }
 
-func (r *ItemInngestRepo) InsertSummary(ctx context.Context, itemID, summary string, topics []string, score float64, scoreBreakdown map[string]any, scoreReason, scorePolicyVersion string) error {
+func (r *ItemInngestRepo) InsertSummary(
+	ctx context.Context,
+	itemID, summary string,
+	topics []string,
+	translatedTitle string,
+	score float64,
+	scoreBreakdown map[string]any,
+	scoreReason, scorePolicyVersion string,
+) error {
 	var scoreBreakdownJSON []byte
 	if len(scoreBreakdown) > 0 {
 		b, err := json.Marshal(scoreBreakdown)
@@ -72,17 +80,22 @@ func (r *ItemInngestRepo) InsertSummary(ctx context.Context, itemID, summary str
 	if scorePolicyVersion != "" {
 		scorePolicyVersionPtr = &scorePolicyVersion
 	}
+	var translatedTitlePtr *string
+	if translatedTitle != "" {
+		translatedTitlePtr = &translatedTitle
+	}
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO item_summaries (item_id, summary, topics, score, score_breakdown, score_reason, score_policy_version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO item_summaries (item_id, summary, topics, translated_title, score, score_breakdown, score_reason, score_policy_version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (item_id) DO UPDATE SET
 		    summary = EXCLUDED.summary, topics = EXCLUDED.topics,
+		    translated_title = EXCLUDED.translated_title,
 		    score = EXCLUDED.score,
 		    score_breakdown = EXCLUDED.score_breakdown,
 		    score_reason = EXCLUDED.score_reason,
 		    score_policy_version = EXCLUDED.score_policy_version,
 		    summarized_at = NOW()`,
-		itemID, summary, topics, score, scoreBreakdownJSON, scoreReasonPtr, scorePolicyVersionPtr)
+		itemID, summary, topics, translatedTitlePtr, score, scoreBreakdownJSON, scoreReasonPtr, scorePolicyVersionPtr)
 	if err != nil {
 		return err
 	}
@@ -186,7 +199,7 @@ func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID stri
 			       COALESCE(fb.is_favorite, false) AS is_favorite,
 			       COALESCE(fb.rating, 0) AS feedback_rating,
 			       i.published_at, i.fetched_at, i.created_at, i.updated_at,
-			       s.id, s.item_id, s.summary, s.topics, s.score,
+			       s.id, s.item_id, s.summary, s.topics, s.translated_title, s.score,
 			       s.score_breakdown, s.score_reason, s.score_policy_version, s.summarized_at,
 			       COALESCE(f.facts, '[]'::jsonb) AS facts
 			FROM items i
@@ -213,7 +226,7 @@ func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID stri
 			&d.Item.ContentText, &d.Item.Status, &d.Item.IsFavorite, &d.Item.FeedbackRating, &d.Item.PublishedAt,
 			&d.Item.FetchedAt, &d.Item.CreatedAt, &d.Item.UpdatedAt,
 			&d.Summary.ID, &d.Summary.ItemID, &d.Summary.Summary,
-			&d.Summary.Topics, &d.Summary.Score, scoreBreakdownScanner{dst: &d.Summary.ScoreBreakdown},
+			&d.Summary.Topics, &d.Summary.TranslatedTitle, &d.Summary.Score, scoreBreakdownScanner{dst: &d.Summary.ScoreBreakdown},
 			&d.Summary.ScoreReason, &d.Summary.ScorePolicyVersion, &d.Summary.SummarizedAt,
 			jsonStringArrayScanner{dst: &d.Facts},
 		); err != nil {

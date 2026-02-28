@@ -50,6 +50,7 @@ export interface Item {
   source_id: string;
   url: string;
   title: string | null;
+  translated_title?: string | null;
   thumbnail_url?: string | null;
   content_text: string | null;
   status: "new" | "fetched" | "facts_extracted" | "summarized" | "failed";
@@ -76,6 +77,7 @@ export interface ItemSummary {
   item_id: string;
   summary: string;
   topics: string[];
+  translated_title?: string | null;
   score: number | null;
   score_breakdown?: {
     importance?: number;

@@ -714,7 +714,17 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			}
 			log.Printf("process-item summarize done item_id=%s topics=%d score=%.3f", itemID, len(summary.Topics), summary.Score)
 			recordLLMUsage(ctx, llmUsageRepo, "summary", summary.LLM, userIDPtr, &data.SourceID, &itemID, nil)
-			if err := itemRepo.InsertSummary(ctx, itemID, summary.Summary, summary.Topics, summary.Score, summary.ScoreBreakdown, summary.ScoreReason, summary.ScorePolicyVersion); err != nil {
+			if err := itemRepo.InsertSummary(
+				ctx,
+				itemID,
+				summary.Summary,
+				summary.Topics,
+				summary.TranslatedTitle,
+				summary.Score,
+				summary.ScoreBreakdown,
+				summary.ScoreReason,
+				summary.ScorePolicyVersion,
+			); err != nil {
 				log.Printf("process-item insert-summary failed item_id=%s err=%v", itemID, err)
 				return nil, fmt.Errorf("insert summary: %w", err)
 			}

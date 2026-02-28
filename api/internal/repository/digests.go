@@ -59,7 +59,7 @@ func (r *DigestRepo) GetDetail(ctx context.Context, id, userID string) (*model.D
 			SELECT di.rank,
 			       i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 			       i.published_at, i.fetched_at, i.created_at, i.updated_at,
-			       s.id, s.item_id, s.summary, s.topics, s.score,
+			       s.id, s.item_id, s.summary, s.topics, s.translated_title, s.score,
 			       s.score_breakdown, s.score_reason, s.score_policy_version, s.summarized_at,
 			       COALESCE(f.facts, '[]'::jsonb) AS facts
 			FROM digest_items di
@@ -81,7 +81,7 @@ func (r *DigestRepo) GetDetail(ctx context.Context, id, userID string) (*model.D
 			&did.Item.ContentText, &did.Item.Status, &did.Item.PublishedAt,
 			&did.Item.FetchedAt, &did.Item.CreatedAt, &did.Item.UpdatedAt,
 			&did.Summary.ID, &did.Summary.ItemID, &did.Summary.Summary,
-			&did.Summary.Topics, &did.Summary.Score,
+			&did.Summary.Topics, &did.Summary.TranslatedTitle, &did.Summary.Score,
 			scoreBreakdownScanner{dst: &did.Summary.ScoreBreakdown}, &did.Summary.ScoreReason,
 			&did.Summary.ScorePolicyVersion, &did.Summary.SummarizedAt,
 			jsonStringArrayScanner{dst: &did.Facts},

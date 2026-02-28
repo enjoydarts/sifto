@@ -43,7 +43,7 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
-		       sm.score, COALESCE(sm.topics, '{}'::text[]),
+		       sm.score, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
@@ -77,7 +77,7 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 	for rows.Next() {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
-			&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)
@@ -153,7 +153,7 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
-		       sm.score, COALESCE(sm.topics, '{}'::text[]),
+		       sm.score, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
@@ -254,7 +254,7 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
-		       sm.score, COALESCE(sm.topics, '{}'::text[]),
+		       sm.score, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
@@ -530,7 +530,7 @@ func scanItems(rows itemRowScanner) ([]model.Item, error) {
 	for rows.Next() {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
-			&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)
@@ -568,9 +568,9 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 	// summary
 	var s model.ItemSummary
 	err = r.db.QueryRow(ctx, `
-		SELECT id, item_id, summary, topics, score, score_breakdown, score_reason, score_policy_version, summarized_at
+		SELECT id, item_id, summary, topics, translated_title, score, score_breakdown, score_reason, score_policy_version, summarized_at
 		FROM item_summaries WHERE item_id = $1`, id,
-	).Scan(&s.ID, &s.ItemID, &s.Summary, &s.Topics, &s.Score,
+	).Scan(&s.ID, &s.ItemID, &s.Summary, &s.Topics, &s.TranslatedTitle, &s.Score,
 		scoreBreakdownScanner{dst: &s.ScoreBreakdown}, &s.ScoreReason, &s.ScorePolicyVersion, &s.SummarizedAt)
 	if err == nil {
 		d.Summary = &s

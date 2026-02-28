@@ -17,6 +17,7 @@ class SummarizeRequest(BaseModel):
 class SummarizeResponse(BaseModel):
     summary: str
     topics: list[str]
+    translated_title: str = ""
     score: float
     score_breakdown: dict | None = None
     score_reason: str | None = None

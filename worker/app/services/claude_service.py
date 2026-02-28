@@ -553,6 +553,7 @@ def summarize(
         return {
             "summary": summary or "要約を生成できませんでした",
             "topics": ["local-dev"],
+            "translated_title": "",
             "score": _summary_composite_score(score_breakdown),
             "score_breakdown": score_breakdown,
             "score_reason": "ローカルフォールバックのため簡易スコアです。",
@@ -574,6 +575,7 @@ def summarize(
 {{
   "summary": "{min_chars}〜{max_chars}字程度の要約",
   "topics": ["トピック1", "トピック2"],
+  "translated_title": "英語タイトルの場合のみ日本語訳（日本語記事は空文字）",
   "score_breakdown": {{
     "importance": 0.0〜1.0,
     "novelty": 0.0〜1.0,
@@ -596,6 +598,8 @@ def summarize(
   - actionability: 実務で行動に繋がる度合い
   - reliability: 具体性・確度（数値/固有名詞/条件の明確さ）
   - relevance: 幅広い読者への関連性（個別ユーザー最適化ではない）
+- タイトルが主に英語の場合のみ translated_title に自然な日本語訳を入れる
+- タイトルが日本語の場合は translated_title は空文字にする
 
 タイトル: {title or "（不明）"}
 
@@ -617,6 +621,7 @@ def summarize(
         return {
             "summary": summary or "要約を生成できませんでした",
             "topics": ["local-dev"],
+            "translated_title": "",
             "score": _summary_composite_score(score_breakdown),
             "score_breakdown": score_breakdown,
             "score_reason": "Anthropic応答を取得できなかったため簡易スコアです。",
@@ -654,11 +659,13 @@ def summarize(
     score_reason = str(data.get("score_reason") or "").strip()
     if not score_reason:
         score_reason = "総合的な重要度・新規性・実用性を基に採点。"
+    translated_title = str(data.get("translated_title") or "").strip()
     score = _summary_composite_score(score_breakdown)
 
     return {
         "summary": data.get("summary", ""),
         "topics": [str(t) for t in topics],
+        "translated_title": translated_title[:300],
         "score": score,
         "score_breakdown": score_breakdown,
         "score_reason": score_reason[:400],

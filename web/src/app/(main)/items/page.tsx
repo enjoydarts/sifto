@@ -438,6 +438,7 @@ function ItemsPageContent() {
   const renderItemRow = useCallback((item: Item, opts?: { featured?: boolean; rank?: number }) => {
     const featured = Boolean(opts?.featured);
     const rank = opts?.rank ?? 0;
+    const displayTitle = item.translated_title?.trim() ? item.translated_title : item.title;
     const href = detailHref(item.id);
     const openDetail = () => {
       rememberScroll(item.id);
@@ -516,7 +517,7 @@ function ItemsPageContent() {
             <div className={`flex min-w-0 flex-1 flex-col ${featured ? "justify-start gap-2 py-0.5" : "justify-between gap-1.5 py-0.5"}`}>
               <div className={`${featured ? "space-y-2" : "flex items-start gap-2"}`}>
                 <div className="min-w-0 flex-1">
-                  {featured && rank > 0 && (
+                    {featured && rank > 0 && (
                     <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white">
                       {locale === "ja" ? "PICK" : "PICK"} #{rank}
                     </div>
@@ -528,7 +529,7 @@ function ItemsPageContent() {
                         : item.is_read ? "line-clamp-2 text-[15px] leading-6 text-zinc-600" : "line-clamp-2 text-[15px] leading-6 text-zinc-900"
                     }`}
                   >
-                    {item.title ?? item.url}
+                    {displayTitle ?? item.url}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
                     <span
@@ -559,7 +560,7 @@ function ItemsPageContent() {
                 </div>
               </div>
               <div className={`${featured ? "h-4 w-full truncate text-[12px] text-zinc-500" : "h-4 truncate text-[12px] text-zinc-400"}`}>
-                {item.title ? item.url : "\u00A0"}
+                {displayTitle ? item.url : "\u00A0"}
               </div>
             </div>
           </div>

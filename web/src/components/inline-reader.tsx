@@ -1,6 +1,6 @@
 "use client";
 
-import { type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type PointerEvent, type TouchEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { api, ItemDetail } from "@/lib/api";
@@ -182,6 +182,37 @@ export function InlineReader({
     }
     resetDrag();
   };
+  const onHandleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    startYRef.current = touch.clientY;
+    setDragging(true);
+  };
+  const onHandleTouchMove = (e: TouchEvent<HTMLDivElement>) => {
+    if (!dragging || startYRef.current == null) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const dy = touch.clientY - startYRef.current;
+    if (dy > 0) {
+      e.preventDefault();
+      setDragY(dy);
+    }
+  };
+  const onHandleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
+    if (!dragging || startYRef.current == null) {
+      resetDrag();
+      return;
+    }
+    const touch = e.changedTouches[0];
+    const endY = touch ? touch.clientY : startYRef.current;
+    const dy = endY - startYRef.current;
+    if (dy > 90) {
+      resetDrag();
+      onClose();
+      return;
+    }
+    resetDrag();
+  };
 
   if (!open || !itemId) return null;
 
@@ -193,11 +224,15 @@ export function InlineReader({
         style={{ transform: `translateY(${dragY}px)` }}
       >
         <div
-          className="mb-2 flex justify-center py-1 md:hidden"
+          className="mb-2 flex justify-center py-1 touch-none md:hidden"
           onPointerDown={onHandlePointerDown}
           onPointerMove={onHandlePointerMove}
           onPointerUp={onHandlePointerUp}
           onPointerCancel={resetDrag}
+          onTouchStart={onHandleTouchStart}
+          onTouchMove={onHandleTouchMove}
+          onTouchEnd={onHandleTouchEnd}
+          onTouchCancel={resetDrag}
         >
           <span className="h-1.5 w-12 rounded-full bg-zinc-300" />
         </div>

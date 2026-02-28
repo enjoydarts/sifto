@@ -496,6 +496,8 @@ def compose_digest(digest_date: str, items: list[dict], model: str, api_key: str
   3) その他のポイント（個数指定なし。箇条書き）
   4) 明日以降のフォローポイント（1段落）
   5) 締めの1文
+- body は可読性を最優先し、各セクションの間に必ず空行1行（\\n\\n）を入れる
+- 段落同士も必要に応じて空行（\\n\\n）で分ける
 - 誇張しない。与えられた情報だけで書く
 - JSONで返す
 

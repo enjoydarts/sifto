@@ -756,7 +756,7 @@ export default function LLMUsagePage() {
                     </td>
                     <td className="px-3 py-2">{r.purpose}</td>
                     <td className="px-3 py-2">
-                      <div className="max-w-[260px] break-all text-xs text-zinc-700">{r.model}</div>
+                      <div className="whitespace-nowrap text-xs text-zinc-700">{r.model}</div>
                       {r.pricing_model_family && r.pricing_model_family !== r.model && (
                         <div className="text-[11px] text-zinc-400">{r.pricing_model_family}</div>
                       )}

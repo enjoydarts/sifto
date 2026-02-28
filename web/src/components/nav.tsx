@@ -41,6 +41,7 @@ export default function Nav() {
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const isMoreActive = secondaryLinks.some((v) => isActive(v.href));
+  const showBottomNav = !/^\/items\/[^/]+/.test(pathname ?? "");
 
   return (
     <>
@@ -224,7 +225,11 @@ export default function Nav() {
         )}
       </div>
       </header>
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-2 backdrop-blur md:hidden">
+      <nav
+        className={`fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-2 backdrop-blur md:hidden ${
+          showBottomNav ? "" : "hidden"
+        }`}
+      >
         <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
           {primaryLinks.map(({ href, labelKey, icon: Icon }) => {
             const active = isActive(href);

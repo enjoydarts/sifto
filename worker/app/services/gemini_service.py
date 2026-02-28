@@ -537,6 +537,7 @@ items:
         "required": ["subject", "body"],
     }
 
+    compose_timeout = _env_timeout_seconds("GEMINI_COMPOSE_DIGEST_TIMEOUT_SEC", 240.0)
     last_text = ""
     last_error = "unknown"
     for max_tokens in (10000, 15000):
@@ -610,4 +611,3 @@ source_lines:
         "draft_summary": summary,
         "llm": _llm_meta(model, "digest_cluster_draft", usage),
     }
-    compose_timeout = _env_timeout_seconds("GEMINI_COMPOSE_DIGEST_TIMEOUT_SEC", 240.0)

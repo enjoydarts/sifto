@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { type ReactNode, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, Flame, ListTree, Sparkles, Target } from "lucide-react";
 import { api, BriefingCluster, Item } from "@/lib/api";
+import { InlineReader } from "@/components/inline-reader";
 import { useI18n } from "@/components/i18n-provider";
 
 const EMPTY_ITEMS: Item[] = [];
@@ -12,6 +14,8 @@ const EMPTY_CLUSTERS: BriefingCluster[] = [];
 
 export default function BriefingPage() {
   const { t, locale } = useI18n();
+  const router = useRouter();
+  const [inlineItemId, setInlineItemId] = useState<string | null>(null);
   const briefingQuery = useQuery({
     queryKey: ["briefing-today", 18] as const,
     queryFn: () => api.getBriefingToday({ size: 18 }),
@@ -118,12 +122,13 @@ export default function BriefingPage() {
             {highlights.slice(0, 6).map((item, idx) => (
               <article key={item.id} className="min-w-0 rounded-xl border border-zinc-200 p-4">
                 <p className="text-xs font-semibold text-blue-600">{`PICK ${idx + 1}`}</p>
-                <Link
-                  href={`/items/${item.id}?from=${encodeURIComponent("/items?feed=recommended")}`}
-                  className="mt-2 line-clamp-3 block break-words [overflow-wrap:anywhere] text-base font-semibold text-zinc-900 hover:underline"
+                <button
+                  type="button"
+                  onClick={() => setInlineItemId(item.id)}
+                  className="mt-2 line-clamp-3 block text-left break-words [overflow-wrap:anywhere] text-base font-semibold text-zinc-900 hover:underline"
                 >
                   {item.translated_title || item.title || item.url}
-                </Link>
+                </button>
                 <p className="mt-2 truncate text-xs text-zinc-500" title={item.url}>
                   {item.url}
                 </p>
@@ -160,13 +165,14 @@ export default function BriefingPage() {
                 <ul className="mt-2 space-y-1.5">
                   {cluster.topItems.map((item) => (
                     <li key={item.id}>
-                      <Link
-                        href={`/items/${item.id}?from=${encodeURIComponent("/items?feed=recommended")}`}
-                        className="block rounded px-2 py-1.5 text-sm text-zinc-700 break-words [overflow-wrap:anywhere] hover:bg-zinc-50"
+                      <button
+                        type="button"
+                        onClick={() => setInlineItemId(item.id)}
+                        className="block w-full rounded px-2 py-1.5 text-left text-sm text-zinc-700 break-words [overflow-wrap:anywhere] hover:bg-zinc-50"
                         title={item.translated_title || item.title || item.url}
                       >
                         {item.translated_title || item.title || item.url}
-                      </Link>
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -175,6 +181,19 @@ export default function BriefingPage() {
           </div>
         )}
       </section>
+
+      {inlineItemId && (
+        <InlineReader
+          open={!!inlineItemId}
+          itemId={inlineItemId}
+          locale={locale}
+          onClose={() => setInlineItemId(null)}
+          onOpenDetail={(itemId) => {
+            router.push(`/items/${itemId}?from=${encodeURIComponent("/items?feed=recommended")}`);
+          }}
+          onOpenItem={(itemId) => setInlineItemId(itemId)}
+        />
+      )}
     </div>
   );
 }

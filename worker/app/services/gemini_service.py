@@ -492,7 +492,7 @@ def compose_digest(digest_date: str, items: list[dict], model: str, api_key: str
 - 読みやすく整理されていれば、本文は長めでもよい（目安 900〜2200字、必要なら超えて可）
 - 本文は次の順序・構成で必ず作る:
   1) 全体サマリ（1〜3段落）
-  2) 注目ポイント（5〜10個。各ポイントは1〜2文）
+  2) 注目ポイント（5〜10個。各ポイントは1〜2段落）
   3) その他のポイント（個数指定なし。箇条書き）
   4) 明日以降のフォローポイント（1段落）
   5) 締めの1文
@@ -505,7 +505,7 @@ def compose_digest(digest_date: str, items: list[dict], model: str, api_key: str
   "body": "メール本文（プレーンテキスト。改行を含めてよい）",
   "sections": {{
     "overall_summary": "1〜3段落",
-    "highlights": ["ポイント1", "ポイント2"],
+    "highlights": ["注目ポイント1（1〜2段落）", "注目ポイント2（1〜2段落）"],
     "other_points": ["補足1", "補足2"],
     "follow_up": "明日以降のフォローポイント（1段落）",
     "closing": "締めの1文"

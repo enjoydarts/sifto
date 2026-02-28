@@ -40,6 +40,17 @@ _DEFAULT_MODEL_PRICING = {
 }
 
 
+def _env_timeout_seconds(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        v = float(raw)
+        return v if v > 0 else default
+    except Exception:
+        return default
+
+
 def _split_text_chunks(text: str, chunk_chars: int = 8000, overlap_chars: int = 400) -> list[str]:
     text = (text or "").strip()
     if not text:
@@ -339,14 +350,22 @@ def _client_for_api_key(api_key: str | None):
     return None
 
 
-def _messages_create(prompt: str, model: str, max_tokens: int = 1024, api_key: str | None = None):
+def _messages_create(
+    prompt: str,
+    model: str,
+    max_tokens: int = 1024,
+    api_key: str | None = None,
+    timeout_sec: float | None = None,
+):
     client = _client_for_api_key(api_key)
     if client is None:
         return None
+    req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 90.0)
     return client.messages.create(
         model=model,
         max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
+        timeout=req_timeout,
     )
 
 
@@ -355,11 +374,24 @@ def _is_rate_limit_error(err: Exception) -> bool:
     return "429" in s or "rate_limit" in s
 
 
-def _call_with_retries(prompt: str, model: str, max_tokens: int, retries: int = 2, api_key: str | None = None):
+def _call_with_retries(
+    prompt: str,
+    model: str,
+    max_tokens: int,
+    retries: int = 2,
+    api_key: str | None = None,
+    timeout_sec: float | None = None,
+):
     last_err = None
     for attempt in range(retries + 1):
         try:
-            return _messages_create(prompt, model, max_tokens=max_tokens, api_key=api_key)
+            return _messages_create(
+                prompt,
+                model,
+                max_tokens=max_tokens,
+                api_key=api_key,
+                timeout_sec=timeout_sec,
+            )
         except Exception as e:
             last_err = e
             if attempt >= retries or not _is_rate_limit_error(e):
@@ -380,17 +412,40 @@ def _call_with_retries(prompt: str, model: str, max_tokens: int, retries: int = 
 
 
 def _call_with_model_fallback(
-    prompt: str, primary_model: str, fallback_model: str | None, max_tokens: int = 1024, api_key: str | None = None
+    prompt: str,
+    primary_model: str,
+    fallback_model: str | None,
+    max_tokens: int = 1024,
+    api_key: str | None = None,
+    timeout_sec: float | None = None,
 ):
     if _client_for_api_key(api_key) is None:
         return None, None
     try:
-        return _call_with_retries(prompt, primary_model, max_tokens=max_tokens, api_key=api_key), primary_model
+        return (
+            _call_with_retries(
+                prompt,
+                primary_model,
+                max_tokens=max_tokens,
+                api_key=api_key,
+                timeout_sec=timeout_sec,
+            ),
+            primary_model,
+        )
     except Exception as e:
         _log.warning("anthropic call failed model=%s err=%s", primary_model, e)
         if fallback_model and fallback_model != primary_model:
             try:
-                return _call_with_retries(prompt, fallback_model, max_tokens=max_tokens, api_key=api_key), fallback_model
+                return (
+                    _call_with_retries(
+                        prompt,
+                        fallback_model,
+                        max_tokens=max_tokens,
+                        api_key=api_key,
+                        timeout_sec=timeout_sec,
+                    ),
+                    fallback_model,
+                )
             except Exception as e2:
                 _log.warning("anthropic fallback failed model=%s err=%s", fallback_model, e2)
         return None, None
@@ -717,6 +772,7 @@ def compose_digest(digest_date: str, items: list[dict], api_key: str | None = No
         }
 
     input_mode, digest_input = _build_digest_input_sections(items)
+    compose_timeout = _env_timeout_seconds("ANTHROPIC_COMPOSE_DIGEST_TIMEOUT_SEC", 300.0)
 
     prompt = f"""あなたはニュースダイジェスト編集者です。
 以下の記事一覧をもとに、メール用のダイジェスト本文を日本語で作成してください。
@@ -759,6 +815,7 @@ items:
         _digest_model_fallback,
         max_tokens=10000,
         api_key=api_key,
+        timeout_sec=compose_timeout,
     )
     if message is None:
         top_topics = []

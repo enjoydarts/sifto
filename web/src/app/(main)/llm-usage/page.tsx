@@ -382,9 +382,10 @@ export default function LLMUsagePage() {
           <p className="text-sm text-zinc-400">{t("common.loading")}</p>
         ) : (
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <MetricCard label={t("llm.monthToDate")} value={fmtUSD(monthlyForecast.actualTotal)} />
+            <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 lg:grid-cols-4">
+              <MetricCard className="w-full sm:w-full lg:w-full" label={t("llm.monthToDate")} value={fmtUSD(monthlyForecast.actualTotal)} />
               <MetricCard
+                className="w-full sm:w-full lg:w-full"
                 label={
                   monthlyForecast.isCurrentMonth
                     ? t("llm.forecastEom")
@@ -392,8 +393,9 @@ export default function LLMUsagePage() {
                 }
                 value={fmtUSD(monthlyForecast.forecastTotal)}
               />
-              <MetricCard label={t("llm.currentPacePerDay")} value={fmtUSD(monthlyForecast.dailyPace)} />
+              <MetricCard className="w-full sm:w-full lg:w-full" label={t("llm.currentPacePerDay")} value={fmtUSD(monthlyForecast.dailyPace)} />
               <MetricCard
+                className="w-full sm:w-full lg:w-full"
                 label={t("llm.budgetDelta")}
                 value={
                   monthlyForecast.budget == null
@@ -624,7 +626,7 @@ export default function LLMUsagePage() {
                   {mergedModelRows.map((r) => (
                     <tr key={`${r.provider}:${r.model}:${r.pricing_source}`} className="border-b border-zinc-100 last:border-0">
                       <td className="px-3 py-2">{r.provider}</td>
-                      <td className="px-3 py-2 text-xs break-all">{r.model}</td>
+                      <td className="px-3 py-2 text-xs whitespace-nowrap">{r.model}</td>
                       <td className="px-3 py-2 text-xs">
                         <div className="relative inline-flex items-center gap-1">
                           <span>{r.pricing_source}</span>
@@ -755,7 +757,7 @@ export default function LLMUsagePage() {
                     <td className="px-3 py-2">{r.purpose}</td>
                     <td className="px-3 py-2">
                       <div className="max-w-[260px] break-all text-xs text-zinc-700">{r.model}</div>
-                      {r.pricing_model_family && (
+                      {r.pricing_model_family && r.pricing_model_family !== r.model && (
                         <div className="text-[11px] text-zinc-400">{r.pricing_model_family}</div>
                       )}
                     </td>
@@ -779,9 +781,9 @@ export default function LLMUsagePage() {
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function MetricCard({ label, value, className = "" }: { label: string; value: string; className?: string }) {
   return (
-    <div className="min-w-0 w-[calc(50%-0.375rem)] rounded-lg border border-zinc-200 bg-white px-4 py-3 sm:w-[calc(33.333%-0.5rem)] lg:w-auto lg:flex-1">
+    <div className={`min-w-0 w-[calc(50%-0.375rem)] rounded-lg border border-zinc-200 bg-white px-4 py-3 sm:w-[calc(33.333%-0.5rem)] lg:w-auto lg:flex-1 ${className}`.trim()}>
       <div className="text-xs font-medium text-zinc-500">{label}</div>
       <div className="mt-1 truncate text-lg font-semibold text-zinc-900">{value}</div>
     </div>

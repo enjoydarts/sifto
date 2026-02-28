@@ -26,6 +26,17 @@ _DEFAULT_MODEL_PRICING = {
 }
 
 
+def _env_timeout_seconds(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        v = float(raw)
+        return v if v > 0 else default
+    except Exception:
+        return default
+
+
 def _clamp01(v, default: float = 0.5) -> float:
     try:
         x = float(v)
@@ -248,6 +259,7 @@ def _generate_content(
     api_key: str,
     max_output_tokens: int = 1024,
     response_schema: dict | None = None,
+    timeout_sec: float | None = None,
 ) -> tuple[str, dict]:
     if not api_key:
         raise RuntimeError("google api key is required")
@@ -265,7 +277,8 @@ def _generate_content(
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": generation_config,
     }
-    with httpx.Client(timeout=60.0) as client:
+    req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("GEMINI_TIMEOUT_SEC", 90.0)
+    with httpx.Client(timeout=req_timeout) as client:
         resp = client.post(url, json=body, params={"key": api_key})
     if resp.status_code >= 400:
         raise RuntimeError(f"gemini generateContent failed status={resp.status_code} body={resp.text[:1000]}")
@@ -533,6 +546,7 @@ items:
             api_key=api_key,
             max_output_tokens=max_tokens,
             response_schema=digest_schema,
+            timeout_sec=compose_timeout,
         )
         last_text = text
         subject, body = _extract_compose_digest_fields(text)
@@ -596,3 +610,4 @@ source_lines:
         "draft_summary": summary,
         "llm": _llm_meta(model, "digest_cluster_draft", usage),
     }
+    compose_timeout = _env_timeout_seconds("GEMINI_COMPOSE_DIGEST_TIMEOUT_SEC", 240.0)

@@ -46,7 +46,7 @@ func workerComposeDigestTimeout() time.Duration {
 			return time.Duration(sec) * time.Second
 		}
 	}
-	return 180 * time.Second
+	return 420 * time.Second
 }
 
 type ExtractBodyResponse struct {

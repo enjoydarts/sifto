@@ -52,7 +52,7 @@ export default function DigestDetailPage() {
   const statusBadge = digestStatusBadge(digest, t);
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6 overflow-x-hidden">
       <Link href="/digests" className="inline-block text-sm text-zinc-500 hover:text-zinc-900">
         ← {t("nav.digests")}
       </Link>
@@ -103,7 +103,7 @@ export default function DigestDetailPage() {
               <FileText className="size-3.5" aria-hidden="true" />
               {t("digestDetail.emailSubject")}
             </div>
-            <div className="text-sm font-medium leading-6 text-zinc-900">{digest.email_subject}</div>
+            <div className="break-words text-sm font-medium leading-6 text-zinc-900">{digest.email_subject}</div>
           </div>
         )}
         {digest.send_error && (
@@ -123,7 +123,7 @@ export default function DigestDetailPage() {
             <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
             {t("digestDetail.emailBody")}
           </h2>
-          <div className="whitespace-pre-wrap text-[15px] leading-8 text-zinc-800">
+          <div className="whitespace-pre-wrap break-words text-[15px] leading-8 text-zinc-800">
             {digest.email_body}
           </div>
         </section>
@@ -159,7 +159,7 @@ export default function DigestDetailPage() {
                     </span>
                   )}
                 </div>
-                <pre className="whitespace-pre-wrap text-xs leading-6 text-zinc-700">{cd.draft_summary}</pre>
+                <pre className="whitespace-pre-wrap break-words text-xs leading-6 text-zinc-700">{cd.draft_summary}</pre>
               </div>
             ))}
           </div>

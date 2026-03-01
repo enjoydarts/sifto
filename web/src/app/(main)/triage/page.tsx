@@ -76,6 +76,7 @@ export default function TriagePage() {
         window: focusWindow === "today_jst" || focusWindow === "7d" ? focusWindow : "24h",
         size: focusSize,
         diversify_topics: diversifyTopics,
+        exclude_later: true,
       }),
     staleTime: 60_000,
     placeholderData: (prev) => prev,
@@ -139,6 +140,7 @@ export default function TriagePage() {
           await api.markItemRead(item.id);
           showToast(t("triage.toast.favorited"), "success");
         } else {
+          await api.markItemLater(item.id);
           showToast(t("triage.toast.later"), "success");
         }
         queryClient.setQueriesData(

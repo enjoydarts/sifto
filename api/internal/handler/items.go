@@ -70,14 +70,16 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	unreadOnly := q.Get("unread_only") == "true"
 	favoriteOnly := q.Get("favorite_only") == "true"
+	laterOnly := q.Get("later_only") == "true"
 	cacheKey := fmt.Sprintf(
-		"items:list:%s:status=%s:source=%s:topic=%s:unread=%t:fav=%t:sort=%s:page=%d:size=%d",
+		"items:list:%s:status=%s:source=%s:topic=%s:unread=%t:fav=%t:later=%t:sort=%s:page=%d:size=%d",
 		userID,
 		q.Get("status"),
 		q.Get("source_id"),
 		q.Get("topic"),
 		unreadOnly,
 		favoriteOnly,
+		laterOnly,
 		sort,
 		page,
 		pageSize,
@@ -110,6 +112,7 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 		Topic:        topic,
 		UnreadOnly:   unreadOnly,
 		FavoriteOnly: favoriteOnly,
+		LaterOnly:    laterOnly,
 		Sort:         sort,
 		Page:         page,
 		PageSize:     pageSize,
@@ -258,8 +261,9 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 		Size:            size,
 		DiversifyTopics: diversify,
 		ExcludeRead:     excludeRead,
+		ExcludeLater:    q.Get("exclude_later") == "true",
 	}
-	cacheKey := fmt.Sprintf("readingplan:%s:%s:%d:%t:%t", userID, params.Window, params.Size, params.DiversifyTopics, params.ExcludeRead)
+	cacheKey := fmt.Sprintf("readingplan:%s:%s:%d:%t:%t:%t", userID, params.Window, params.Size, params.DiversifyTopics, params.ExcludeRead, params.ExcludeLater)
 	cacheBust := q.Get("cache_bust") == "1"
 	if h.cache != nil && !cacheBust {
 		var cached model.ReadingPlanResponse
@@ -317,6 +321,7 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 		Size:            size,
 		DiversifyTopics: q.Get("diversify_topics") != "false",
 		ExcludeRead:     false,
+		ExcludeLater:    q.Get("exclude_later") != "false",
 	}
 	resp, err := h.repo.ReadingPlan(r.Context(), userID, params)
 	if err != nil {
@@ -675,6 +680,26 @@ func (h *ItemHandler) MarkUnread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"item_id": id, "is_read": false})
+}
+
+func (h *ItemHandler) MarkLater(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	id := chi.URLParam(r, "id")
+	if err := h.repo.MarkLater(r.Context(), userID, id); err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"item_id": id, "is_later": true})
+}
+
+func (h *ItemHandler) UnmarkLater(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	id := chi.URLParam(r, "id")
+	if err := h.repo.UnmarkLater(r.Context(), userID, id); err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"item_id": id, "is_later": false})
 }
 
 func (h *ItemHandler) SetFeedback(w http.ResponseWriter, r *http.Request) {

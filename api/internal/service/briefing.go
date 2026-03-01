@@ -56,6 +56,7 @@ func BuildBriefingToday(
 		Size:            size,
 		DiversifyTopics: true,
 		ExcludeRead:     true,
+		ExcludeLater:    true,
 	})
 	if err != nil {
 		return nil, err

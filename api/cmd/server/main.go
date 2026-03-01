@@ -116,6 +116,8 @@ func main() {
 			r.Patch("/{id}/feedback", itemH.SetFeedback)
 			r.Post("/{id}/read", itemH.MarkRead)
 			r.Delete("/{id}/read", itemH.MarkUnread)
+			r.Post("/{id}/later", itemH.MarkLater)
+			r.Delete("/{id}/later", itemH.UnmarkLater)
 			r.Post("/{id}/retry", itemH.Retry)
 		})
 

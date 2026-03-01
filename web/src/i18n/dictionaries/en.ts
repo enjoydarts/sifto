@@ -376,6 +376,7 @@ export const enDict: Dict = {
   "items.action.openDetail": "Open detail",
   "items.feed.recommended": "Recommended",
   "items.feed.all": "All",
+  "items.feed.later": "Read later",
   "items.sort.newest": "Newest",
   "items.sort.score": "Score",
   "items.topic": "Topic",

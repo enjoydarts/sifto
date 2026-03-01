@@ -153,6 +153,11 @@ export interface ItemReadResult {
   is_read: boolean;
 }
 
+export interface ItemLaterResult {
+  item_id: string;
+  is_later: boolean;
+}
+
 export type ItemFeedbackResult = ItemFeedback;
 
 export interface ItemListResponse {
@@ -481,7 +486,7 @@ export const api = {
     ),
 
   // Items
-  getItems: (params?: { status?: string; source_id?: string; topic?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean; favorite_only?: boolean }) => {
+  getItems: (params?: { status?: string; source_id?: string; topic?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean; favorite_only?: boolean; later_only?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.source_id) q.set("source_id", params.source_id);
@@ -491,6 +496,7 @@ export const api = {
     if (params?.sort) q.set("sort", params.sort);
     if (params?.unread_only != null) q.set("unread_only", String(params.unread_only));
     if (params?.favorite_only != null) q.set("favorite_only", String(params.favorite_only));
+    if (params?.later_only != null) q.set("later_only", String(params.later_only));
     const qs = q.toString();
     return apiFetch<ItemListResponse>(`/items${qs ? `?${qs}` : ""}`);
   },
@@ -512,11 +518,13 @@ export const api = {
     window?: "24h" | "today_jst" | "7d";
     size?: number;
     diversify_topics?: boolean;
+    exclude_later?: boolean;
   }) => {
     const q = new URLSearchParams();
     if (params?.window) q.set("window", params.window);
     if (params?.size) q.set("size", String(params.size));
     if (params?.diversify_topics != null) q.set("diversify_topics", String(params.diversify_topics));
+    if (params?.exclude_later != null) q.set("exclude_later", String(params.exclude_later));
     const qs = q.toString();
     return apiFetch<FocusQueueResponse>(`/items/focus-queue${qs ? `?${qs}` : ""}`);
   },
@@ -566,6 +574,10 @@ export const api = {
     apiFetch<ItemReadResult>(`/items/${id}/read`, { method: "POST" }),
   markItemUnread: (id: string) =>
     apiFetch<ItemReadResult>(`/items/${id}/read`, { method: "DELETE" }),
+  markItemLater: (id: string) =>
+    apiFetch<ItemLaterResult>(`/items/${id}/later`, { method: "POST" }),
+  unmarkItemLater: (id: string) =>
+    apiFetch<ItemLaterResult>(`/items/${id}/later`, { method: "DELETE" }),
   deleteItem: (id: string) =>
     apiFetch<void>(`/items/${id}`, { method: "DELETE" }),
   setItemFeedback: (id: string, body: { rating: number; is_favorite: boolean }) =>

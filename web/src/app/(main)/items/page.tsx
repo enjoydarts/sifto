@@ -14,7 +14,7 @@ const FILTERS = ["", "summarized", "new", "fetched", "facts_extracted", "failed"
 type SortMode = "newest" | "score";
 type FocusSize = 7 | 15 | 25;
 type FocusWindow = "24h" | "today_jst" | "7d";
-type FeedMode = "recommended" | "all";
+type FeedMode = "recommended" | "all" | "later";
 type ItemsFeedQueryData = {
   items: Item[];
   total: number;
@@ -40,7 +40,7 @@ function ItemsPageContent() {
   const searchParams = useSearchParams();
   const queryState = useMemo(() => {
     const qFeed = searchParams.get("feed");
-    const feedMode: FeedMode = qFeed === "all" ? "all" : "recommended";
+    const feedMode: FeedMode = qFeed === "all" ? "all" : qFeed === "later" ? "later" : "recommended";
 
     const qSort = searchParams.get("sort");
     const sortMode: SortMode = qSort === "score" ? "score" : "newest";
@@ -60,6 +60,7 @@ function ItemsPageContent() {
   }, [searchParams]);
   const { feedMode, sortMode, filter, topic, unreadOnly, favoriteOnly, page } = queryState;
   const focusMode = feedMode === "recommended";
+  const laterMode = feedMode === "later";
   const pageSize = 20;
   const [error, setError] = useState<string | null>(null);
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
@@ -108,6 +109,7 @@ function ItemsPageContent() {
           window: focusWindow,
           size: focusSize,
           diversify_topics: diversifyTopics,
+          exclude_later: true,
         });
         return {
           items: data?.items ?? [],
@@ -126,6 +128,7 @@ function ItemsPageContent() {
         sort: sortMode,
         unread_only: unreadOnly,
         favorite_only: favoriteOnly,
+        later_only: laterMode,
       });
       return {
         items: data?.items ?? [],
@@ -168,7 +171,7 @@ function ItemsPageContent() {
       const nextFavorite = patch.favorite ?? favoriteOnly;
       const nextPage = patch.page ?? page;
 
-      if (nextFeed === "all") {
+      if (nextFeed === "all" || nextFeed === "later") {
         if (nextStatus) q.set("status", nextStatus);
         else q.delete("status");
         if (nextTopic) q.set("topic", nextTopic);
@@ -637,10 +640,19 @@ function ItemsPageContent() {
               type="button"
               onClick={() => replaceItemsQuery({ feed: "all", page: 1 })}
               className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-                !focusMode ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
+                feedMode === "all" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
               }`}
             >
               {t("items.feed.all")}
+            </button>
+            <button
+              type="button"
+              onClick={() => replaceItemsQuery({ feed: "later", page: 1 })}
+              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                laterMode ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
+              }`}
+            >
+              {t("items.feed.later")}
             </button>
           </div>
         </div>

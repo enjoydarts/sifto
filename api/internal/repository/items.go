@@ -22,6 +22,7 @@ type ItemListParams struct {
 	Topic        *string
 	UnreadOnly   bool
 	FavoriteOnly bool
+	LaterOnly    bool
 	Sort         string // newest | score
 	Page         int
 	PageSize     int
@@ -32,6 +33,7 @@ type ReadingPlanParams struct {
 	Size            int
 	DiversifyTopics bool
 	ExcludeRead     bool
+	ExcludeLater    bool
 }
 
 func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *string, limit int) ([]model.Item, error) {
@@ -135,6 +137,12 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 			WHERE fb2.item_id = i.id AND fb2.user_id = $1 AND fb2.is_favorite = true
 		)`
 	}
+	if p.LaterOnly {
+		baseWhere += ` AND EXISTS (
+			SELECT 1 FROM item_laters il2
+			WHERE il2.item_id = i.id AND il2.user_id = $1
+		)`
+	}
 
 	var total int
 	if err := r.db.QueryRow(ctx, `SELECT COUNT(*)`+baseWhere, args...).Scan(&total); err != nil {
@@ -189,6 +197,12 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 			if p.FavoriteOnly {
 				q += ` AND COALESCE(fb.is_favorite, false) = true`
 			}
+			if p.LaterOnly {
+				q += ` AND EXISTS (
+					SELECT 1 FROM item_laters il2
+					WHERE il2.item_id = i.id AND il2.user_id = $1
+				)`
+			}
 			return q
 		}()+
 		orderBy+` LIMIT `+limitArg+` OFFSET `+offsetArg,
@@ -239,6 +253,12 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 	}
 	if p.ExcludeRead {
 		filterSQL += ` AND ir.item_id IS NULL`
+	}
+	if p.ExcludeLater {
+		filterSQL += ` AND NOT EXISTS (
+			SELECT 1 FROM item_laters il
+			WHERE il.item_id = i.id AND il.user_id = $1
+		)`
 	}
 
 	var poolCount int
@@ -1081,10 +1101,12 @@ func (r *ItemRepo) MarkRead(ctx context.Context, userID, itemID string) (bool, e
 	).Scan(&inserted)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			_, _ = r.db.Exec(ctx, `DELETE FROM item_laters WHERE user_id = $1 AND item_id = $2`, userID, itemID)
 			return false, nil
 		}
 		return false, err
 	}
+	_, _ = r.db.Exec(ctx, `DELETE FROM item_laters WHERE user_id = $1 AND item_id = $2`, userID, itemID)
 	return true, nil
 }
 
@@ -1093,6 +1115,28 @@ func (r *ItemRepo) MarkUnread(ctx context.Context, userID, itemID string) error 
 		return err
 	}
 	_, err := r.db.Exec(ctx, `DELETE FROM item_reads WHERE user_id = $1 AND item_id = $2`, userID, itemID)
+	return err
+}
+
+func (r *ItemRepo) MarkLater(ctx context.Context, userID, itemID string) error {
+	if err := r.ensureOwned(ctx, userID, itemID); err != nil {
+		return err
+	}
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO item_laters (user_id, item_id)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id, item_id) DO UPDATE
+		SET updated_at = NOW()`,
+		userID, itemID,
+	)
+	return err
+}
+
+func (r *ItemRepo) UnmarkLater(ctx context.Context, userID, itemID string) error {
+	if err := r.ensureOwned(ctx, userID, itemID); err != nil {
+		return err
+	}
+	_, err := r.db.Exec(ctx, `DELETE FROM item_laters WHERE user_id = $1 AND item_id = $2`, userID, itemID)
 	return err
 }
 

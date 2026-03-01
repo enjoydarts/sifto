@@ -376,6 +376,7 @@ export const jaDict: Dict = {
   "items.action.openDetail": "詳細ページ",
   "items.feed.recommended": "おすすめ",
   "items.feed.all": "すべて",
+  "items.feed.later": "あとで読む",
   "items.sort.newest": "新着順",
   "items.sort.score": "スコア順",
   "items.topic": "トピック",

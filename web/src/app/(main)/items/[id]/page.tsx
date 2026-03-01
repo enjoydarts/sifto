@@ -449,7 +449,7 @@ export default function ItemDetailPage() {
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!item) return null;
 
-  const translatedTitle = item.translated_title?.trim() ?? "";
+  const translatedTitle = item.translated_title?.trim() || item.summary?.translated_title?.trim() || "";
   const originalTitle = item.title?.trim() ?? "";
   const displayTitle = translatedTitle || originalTitle || t("itemDetail.noTitle");
   const showOriginalTitle = Boolean(translatedTitle && originalTitle && translatedTitle !== originalTitle);

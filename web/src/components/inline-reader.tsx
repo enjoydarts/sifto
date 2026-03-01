@@ -1,6 +1,6 @@
 "use client";
 
-import { type PointerEvent, type TouchEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { api, ItemDetail } from "@/lib/api";
@@ -166,13 +166,25 @@ export function InlineReader({
   }, [autoMarkRead, item, onReadToggled, open, queryClient]);
 
   const onHandlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
     startYRef.current = e.clientY;
     setDragging(true);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // no-op
+    }
   };
   const onHandlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!dragging || startYRef.current == null) return;
     const dy = Math.max(0, e.clientY - startYRef.current);
-    setDragY(dy);
+    setDragY(dy * 0.94);
+  };
+  const closeBySwipe = () => {
+    setDragging(false);
+    const closeY = typeof window !== "undefined" ? Math.max(window.innerHeight, 720) : 720;
+    setDragY(closeY);
+    window.setTimeout(() => onClose(), 180);
   };
   const resetDrag = () => {
     setDragging(false);
@@ -186,39 +198,8 @@ export function InlineReader({
     }
     const dy = e.clientY - startYRef.current;
     if (dy > 90) {
-      resetDrag();
-      onClose();
-      return;
-    }
-    resetDrag();
-  };
-  const onHandleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
-    const touch = e.touches[0];
-    if (!touch) return;
-    startYRef.current = touch.clientY;
-    setDragging(true);
-  };
-  const onHandleTouchMove = (e: TouchEvent<HTMLDivElement>) => {
-    if (!dragging || startYRef.current == null) return;
-    const touch = e.touches[0];
-    if (!touch) return;
-    const dy = touch.clientY - startYRef.current;
-    if (dy > 0) {
-      e.preventDefault();
-      setDragY(dy);
-    }
-  };
-  const onHandleTouchEnd = (e: TouchEvent<HTMLDivElement>) => {
-    if (!dragging || startYRef.current == null) {
-      resetDrag();
-      return;
-    }
-    const touch = e.changedTouches[0];
-    const endY = touch ? touch.clientY : startYRef.current;
-    const dy = endY - startYRef.current;
-    if (dy > 90) {
-      resetDrag();
-      onClose();
+      startYRef.current = null;
+      closeBySwipe();
       return;
     }
     resetDrag();
@@ -229,22 +210,28 @@ export function InlineReader({
   return (
     <div className="fixed inset-0 z-40 bg-black/35" onClick={onClose}>
       <div
-        className="absolute inset-y-0 right-0 w-full max-w-2xl overflow-y-auto border-l border-zinc-200 bg-white p-4 shadow-2xl transition-transform"
+        className={`absolute inset-y-0 right-0 w-full max-w-2xl overflow-y-auto border-l border-zinc-200 bg-white p-4 shadow-2xl will-change-transform ${
+          dragging ? "transition-none" : "transition-transform duration-200 ease-out"
+        }`}
         onClick={(e) => e.stopPropagation()}
         style={{ transform: `translateY(${dragY}px)` }}
       >
         <div
-          className="mb-2 flex justify-center py-1 touch-none md:hidden"
+          className={`mb-2 flex justify-center py-1 touch-none md:hidden ${
+            dragging ? "bg-zinc-50/80" : ""
+          }`}
           onPointerDown={onHandlePointerDown}
           onPointerMove={onHandlePointerMove}
           onPointerUp={onHandlePointerUp}
           onPointerCancel={resetDrag}
-          onTouchStart={onHandleTouchStart}
-          onTouchMove={onHandleTouchMove}
-          onTouchEnd={onHandleTouchEnd}
-          onTouchCancel={resetDrag}
         >
-          <span className="h-1.5 w-12 rounded-full bg-zinc-300" />
+          <span
+            className={`rounded-full transition-all duration-150 ${
+              dragging
+                ? "h-1.5 w-16 bg-zinc-500 shadow-[0_0_0_4px_rgba(113,113,122,0.12)]"
+                : "h-1.5 w-12 bg-zinc-300"
+            }`}
+          />
         </div>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-zinc-800">{t("items.inline.title")}</h2>

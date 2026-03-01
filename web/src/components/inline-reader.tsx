@@ -35,6 +35,9 @@ export function InlineReader({
   const [dragging, setDragging] = useState(false);
   const [dragY, setDragY] = useState(0);
   const startYRef = useRef<number | null>(null);
+  const startAtRef = useRef<number>(0);
+  const lastMoveAtRef = useRef<number>(0);
+  const lastMoveYRef = useRef<number>(0);
   const enabled = open && !!itemId;
   const detailQuery = useQuery({
     queryKey: ["item-detail", itemId ?? ""],
@@ -167,7 +170,11 @@ export function InlineReader({
 
   const onHandlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
+    const now = Date.now();
     startYRef.current = e.clientY;
+    startAtRef.current = now;
+    lastMoveAtRef.current = now;
+    lastMoveYRef.current = e.clientY;
     setDragging(true);
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -178,7 +185,9 @@ export function InlineReader({
   const onHandlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!dragging || startYRef.current == null) return;
     const dy = Math.max(0, e.clientY - startYRef.current);
-    setDragY(dy * 0.94);
+    lastMoveAtRef.current = Date.now();
+    lastMoveYRef.current = e.clientY;
+    setDragY(dy);
   };
   const closeBySwipe = () => {
     setDragging(false);
@@ -190,6 +199,9 @@ export function InlineReader({
     setDragging(false);
     setDragY(0);
     startYRef.current = null;
+    startAtRef.current = 0;
+    lastMoveAtRef.current = 0;
+    lastMoveYRef.current = 0;
   };
   const onHandlePointerUp = (e: PointerEvent<HTMLDivElement>) => {
     if (!dragging || startYRef.current == null) {
@@ -197,7 +209,11 @@ export function InlineReader({
       return;
     }
     const dy = e.clientY - startYRef.current;
-    if (dy > 90) {
+    const now = Date.now();
+    const elapsedMs = Math.max(1, (lastMoveAtRef.current || now) - (startAtRef.current || now));
+    const velocityY = (lastMoveYRef.current - startYRef.current) / elapsedMs;
+    const shouldClose = dy > 72 || (dy > 32 && velocityY > 0.7);
+    if (shouldClose) {
       startYRef.current = null;
       closeBySwipe();
       return;
@@ -217,10 +233,8 @@ export function InlineReader({
         style={{ transform: `translateY(${dragY}px)`, overscrollBehaviorY: "contain" }}
       >
         <div
-          className={`-mx-2 mb-2 flex min-h-12 items-center justify-center rounded-lg px-2 py-2 touch-none md:hidden ${
-            dragging ? "bg-zinc-100/90" : "bg-zinc-50/50"
-          }`}
-          style={{ touchAction: "pan-x" }}
+          className="-mx-2 mb-2 flex min-h-14 items-center justify-center rounded-lg px-2 py-2 touch-none md:hidden"
+          style={{ touchAction: "none" }}
           onPointerDown={onHandlePointerDown}
           onPointerMove={onHandlePointerMove}
           onPointerUp={onHandlePointerUp}

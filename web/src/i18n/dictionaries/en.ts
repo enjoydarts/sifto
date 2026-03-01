@@ -330,6 +330,7 @@ export const enDict: Dict = {
   "itemDetail.delete.button": "Delete",
   "itemDetail.failureReason": "Failure Reason",
   "itemDetail.noTitle": "No title",
+  "itemDetail.originalTitle": "Original",
   "itemDetail.summary": "Summary",
   "itemDetail.summaryModelTitle": "Summary generation model",
   "itemDetail.scoreReason": "Score reason",

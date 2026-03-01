@@ -449,6 +449,11 @@ export default function ItemDetailPage() {
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!item) return null;
 
+  const translatedTitle = item.translated_title?.trim() ?? "";
+  const originalTitle = item.title?.trim() ?? "";
+  const displayTitle = translatedTitle || originalTitle || t("itemDetail.noTitle");
+  const showOriginalTitle = Boolean(translatedTitle && originalTitle && translatedTitle !== originalTitle);
+
   return (
     <div className="space-y-6">
       <Link href={backHref} className="inline-block text-sm text-zinc-500 hover:text-zinc-900">
@@ -542,9 +547,14 @@ export default function ItemDetailPage() {
 
         <div className="mb-2 flex items-start gap-2">
           <FileText className="mt-1 size-5 shrink-0 text-zinc-500" aria-hidden="true" />
-          <h1 className="text-2xl font-bold leading-snug text-zinc-900">
-            {item.translated_title?.trim() || item.title || t("itemDetail.noTitle")}
-          </h1>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold leading-snug text-zinc-900">{displayTitle}</h1>
+            {showOriginalTitle && (
+              <p className="mt-1 truncate text-sm text-zinc-500" title={originalTitle}>
+                {t("itemDetail.originalTitle")}: {originalTitle}
+              </p>
+            )}
+          </div>
         </div>
         <a
           href={item.url}

@@ -330,6 +330,7 @@ export const jaDict: Dict = {
   "itemDetail.delete.button": "削除",
   "itemDetail.failureReason": "失敗理由",
   "itemDetail.noTitle": "タイトルなし",
+  "itemDetail.originalTitle": "原題",
   "itemDetail.summary": "要約",
   "itemDetail.summaryModelTitle": "要約生成モデル",
   "itemDetail.scoreReason": "スコア理由",

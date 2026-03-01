@@ -36,6 +36,19 @@ type EmbeddingBackfillResponse = {
   targets?: unknown[];
 };
 
+type TitleBackfillResponse = {
+  status: string;
+  dry_run: boolean;
+  user_filter?: string | null;
+  limit: number;
+  matched: number;
+  updated_count: number;
+  empty_count: number;
+  failed_count: number;
+  error_samples?: unknown[];
+  targets?: unknown[];
+};
+
 type DebugSystemStatusResponse = {
   proxy_status: number;
   proxy_latency_ms: number;
@@ -115,6 +128,11 @@ export default function DebugDigestsPage() {
   const [backfillDryRun, setBackfillDryRun] = useState(true);
   const [busyBackfill, setBusyBackfill] = useState(false);
   const [backfillResult, setBackfillResult] = useState<EmbeddingBackfillResponse | null>(null);
+  const [titleBackfillUserId, setTitleBackfillUserId] = useState("");
+  const [titleBackfillLimit, setTitleBackfillLimit] = useState("200");
+  const [titleBackfillDryRun, setTitleBackfillDryRun] = useState(true);
+  const [busyTitleBackfill, setBusyTitleBackfill] = useState(false);
+  const [titleBackfillResult, setTitleBackfillResult] = useState<TitleBackfillResponse | null>(null);
   const [retrySourceId, setRetrySourceId] = useState("");
   const [busyRetryFailed, setBusyRetryFailed] = useState(false);
   const [retryFailedResult, setRetryFailedResult] = useState<BulkRetryFailedResult | null>(null);
@@ -258,6 +276,35 @@ export default function DebugDigestsPage() {
       showToast(String(e), "error");
     } finally {
       setBusyRetryFailed(false);
+    }
+  };
+
+  const onBackfillTranslatedTitles = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusyTitleBackfill(true);
+    setError(null);
+    setTitleBackfillResult(null);
+    try {
+      const parsedLimit = Number(titleBackfillLimit);
+      if (!Number.isFinite(parsedLimit) || parsedLimit < 1 || parsedLimit > 2000) {
+        throw new Error("limit must be between 1 and 2000");
+      }
+      const payload: { user_id?: string; limit: number; dry_run: boolean } = {
+        limit: parsedLimit,
+        dry_run: titleBackfillDryRun,
+      };
+      if (titleBackfillUserId.trim()) payload.user_id = titleBackfillUserId.trim();
+      const res = await postJSON<TitleBackfillResponse>("/api/debug/titles/backfill", payload);
+      setTitleBackfillResult(res);
+      showToast(
+        titleBackfillDryRun ? "Title backfill dry-run completed" : "Title backfill completed",
+        "success"
+      );
+    } catch (e) {
+      setError(String(e));
+      showToast(String(e), "error");
+    } finally {
+      setBusyTitleBackfill(false);
     }
   };
 
@@ -614,6 +661,56 @@ export default function DebugDigestsPage() {
         {backfillResult && (
           <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
             {JSON.stringify(backfillResult, null, 2)}
+          </pre>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold text-zinc-800">Translated Title Backfill (Debug)</h2>
+        <form onSubmit={onBackfillTranslatedTitles} className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="text-sm sm:col-span-2">
+              <div className="mb-1 text-xs font-medium text-zinc-600">User ID (optional)</div>
+              <input
+                value={titleBackfillUserId}
+                onChange={(e) => setTitleBackfillUserId(e.target.value)}
+                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                placeholder="all users if empty"
+              />
+            </label>
+            <label className="text-sm">
+              <div className="mb-1 text-xs font-medium text-zinc-600">Limit (1-2000)</div>
+              <input
+                type="number"
+                min={1}
+                max={2000}
+                value={titleBackfillLimit}
+                onChange={(e) => setTitleBackfillLimit(e.target.value)}
+                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              />
+            </label>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-zinc-700">
+            <input
+              type="checkbox"
+              checked={titleBackfillDryRun}
+              onChange={(e) => setTitleBackfillDryRun(e.target.checked)}
+              className="accent-zinc-900"
+            />
+            {t("debug.digest.dryRun")}
+          </label>
+          <button
+            type="submit"
+            disabled={busyTitleBackfill}
+            className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {busyTitleBackfill ? t("debug.running") : titleBackfillDryRun ? "Preview Backfill" : "Run Backfill"}
+          </button>
+        </form>
+
+        {titleBackfillResult && (
+          <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+            {JSON.stringify(titleBackfillResult, null, 2)}
           </pre>
         )}
       </section>

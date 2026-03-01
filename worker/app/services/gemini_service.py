@@ -407,11 +407,38 @@ JSONで返してください:
 
 タイトル: {title}
 """
-    text, _ = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=200)
+    schema = {
+        "type": "object",
+        "properties": {
+            "translated_title": {"type": "string"},
+        },
+        "required": ["translated_title"],
+    }
+    text, _ = _generate_content(
+        prompt,
+        model=model,
+        api_key=api_key,
+        max_output_tokens=200,
+        response_schema=schema,
+    )
     data = _extract_first_json_object(text) or {}
     candidate = str(data.get("translated_title") or "").strip()
     if not candidate:
         candidate = _strip_code_fence(text).strip().strip('"').strip("'")
+    if not candidate:
+        plain_prompt = f"""次のタイトルを日本語に翻訳してください。
+説明は不要です。翻訳結果のみを1行で返してください。
+
+タイトル: {title}
+"""
+        plain_text, _ = _generate_content(
+            plain_prompt,
+            model=model,
+            api_key=api_key,
+            max_output_tokens=120,
+            response_schema=None,
+        )
+        candidate = _strip_code_fence(plain_text).strip().strip('"').strip("'")
     return candidate[:300]
 
 
@@ -515,6 +542,17 @@ def summarize(
         "score_reason": score_reason[:400],
         "score_policy_version": "v2",
         "llm": _llm_meta(model, "summary", usage),
+    }
+
+
+def translate_title(title: str, model: str = "gemini-2.5-flash", api_key: str = "") -> dict:
+    src = (title or "").strip()
+    if not src:
+        return {"translated_title": "", "llm": None}
+    translated = _translate_title_to_ja(src, model=model, api_key=api_key)
+    return {
+        "translated_title": translated[:300],
+        "llm": None,
     }
 
 

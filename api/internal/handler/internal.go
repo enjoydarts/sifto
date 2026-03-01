@@ -20,6 +20,8 @@ type InternalHandler struct {
 	userRepo   *repository.UserRepo
 	itemRepo   *repository.ItemInngestRepo
 	digestRepo *repository.DigestInngestRepo
+	settings   *repository.UserSettingsRepo
+	cipher     *service.SecretCipher
 	publisher  *service.EventPublisher
 	db         *pgxpool.Pool
 	cache      service.JSONCache
@@ -30,6 +32,8 @@ func NewInternalHandler(
 	userRepo *repository.UserRepo,
 	itemRepo *repository.ItemInngestRepo,
 	digestRepo *repository.DigestInngestRepo,
+	settings *repository.UserSettingsRepo,
+	cipher *service.SecretCipher,
 	publisher *service.EventPublisher,
 	db *pgxpool.Pool,
 	cache service.JSONCache,
@@ -39,6 +43,8 @@ func NewInternalHandler(
 		userRepo:   userRepo,
 		itemRepo:   itemRepo,
 		digestRepo: digestRepo,
+		settings:   settings,
+		cipher:     cipher,
 		publisher:  publisher,
 		db:         db,
 		cache:      cache,
@@ -329,6 +335,178 @@ func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http
 		"send_error_samples": sendErrorSamples,
 		"targets":            preview,
 	})
+}
+
+func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r *http.Request) {
+	if !checkInternalSecret(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.itemRepo == nil || h.worker == nil || h.settings == nil || h.cipher == nil {
+		http.Error(w, "translated-title backfill unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	var body struct {
+		UserID *string `json:"user_id"`
+		Limit  int     `json:"limit"`
+		DryRun bool    `json:"dry_run"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body.Limit <= 0 {
+		body.Limit = 100
+	}
+	if body.Limit > 2000 {
+		http.Error(w, "invalid limit", http.StatusBadRequest)
+		return
+	}
+
+	targets, err := h.itemRepo.ListTranslatedTitleBackfillTargets(r.Context(), body.UserID, body.Limit)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("list translated-title backfill targets: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	updated := 0
+	failed := 0
+	empty := 0
+	errorSamples := make([]map[string]any, 0, 10)
+	if !body.DryRun {
+		for _, t := range targets {
+			cfg, err := h.settings.GetByUserID(r.Context(), t.UserID)
+			if err != nil {
+				failed++
+				if len(errorSamples) < 10 {
+					errorSamples = append(errorSamples, map[string]any{
+						"item_id": t.ItemID,
+						"user_id": t.UserID,
+						"error":   fmt.Sprintf("load user settings: %v", err),
+					})
+				}
+				continue
+			}
+			model := cfg.AnthropicSummaryModel
+			isGemini := isGeminiModel(model)
+			var anthropicKey *string
+			var googleKey *string
+			if isGemini {
+				googleKey, err = h.loadGoogleAPIKey(r.Context(), t.UserID)
+			} else {
+				anthropicKey, err = h.loadAnthropicAPIKey(r.Context(), t.UserID)
+			}
+			if err != nil {
+				failed++
+				if len(errorSamples) < 10 {
+					errorSamples = append(errorSamples, map[string]any{
+						"item_id": t.ItemID,
+						"user_id": t.UserID,
+						"error":   fmt.Sprintf("load api key: %v", err),
+					})
+				}
+				continue
+			}
+			resp, err := h.worker.TranslateTitleWithModel(r.Context(), t.Title, anthropicKey, googleKey, model)
+			if err != nil {
+				failed++
+				if len(errorSamples) < 10 {
+					errorSamples = append(errorSamples, map[string]any{
+						"item_id": t.ItemID,
+						"user_id": t.UserID,
+						"error":   err.Error(),
+					})
+				}
+				continue
+			}
+			title := strings.TrimSpace(resp.TranslatedTitle)
+			if title == "" {
+				empty++
+				continue
+			}
+			if err := h.itemRepo.UpdateTranslatedTitle(r.Context(), t.ItemID, title); err != nil {
+				failed++
+				if len(errorSamples) < 10 {
+					errorSamples = append(errorSamples, map[string]any{
+						"item_id": t.ItemID,
+						"user_id": t.UserID,
+						"error":   fmt.Sprintf("update translated_title: %v", err),
+					})
+				}
+				continue
+			}
+			updated++
+		}
+	}
+
+	preview := make([]map[string]any, 0, len(targets))
+	for _, t := range targets {
+		preview = append(preview, map[string]any{
+			"item_id":   t.ItemID,
+			"source_id": t.SourceID,
+			"user_id":   t.UserID,
+			"title":     t.Title,
+		})
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	writeJSON(w, map[string]any{
+		"status":        "accepted",
+		"dry_run":       body.DryRun,
+		"user_filter":   body.UserID,
+		"limit":         body.Limit,
+		"matched":       len(targets),
+		"updated_count": updated,
+		"empty_count":   empty,
+		"failed_count":  failed,
+		"error_samples": errorSamples,
+		"targets":       preview,
+	})
+}
+
+func (h *InternalHandler) loadAnthropicAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetAnthropicAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("anthropic api key is not set")
+	}
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+func (h *InternalHandler) loadGoogleAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetGoogleAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("google api key is not set")
+	}
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+func isGeminiModel(model *string) bool {
+	if model == nil {
+		return false
+	}
+	v := strings.ToLower(strings.TrimSpace(*model))
+	if v == "" {
+		return false
+	}
+	return strings.HasPrefix(v, "gemini-") || strings.Contains(v, "/models/gemini-")
 }
 
 func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Request) {

@@ -31,6 +31,13 @@ type ItemEmbeddingBackfillTarget struct {
 	URL      string
 }
 
+type ItemTranslatedTitleBackfillTarget struct {
+	ItemID   string
+	SourceID string
+	UserID   string
+	Title    string
+}
+
 func (r *ItemInngestRepo) UpdateAfterExtract(ctx context.Context, id, contentText string, title, thumbnailURL *string, publishedAt *time.Time) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE items
@@ -251,4 +258,56 @@ func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID stri
 		items[i].Rank = i + 1
 	}
 	return items, nil
+}
+
+func (r *ItemInngestRepo) ListTranslatedTitleBackfillTargets(ctx context.Context, userID *string, limit int) ([]ItemTranslatedTitleBackfillTarget, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 2000 {
+		limit = 2000
+	}
+	query := `
+		SELECT i.id, i.source_id, src.user_id, COALESCE(i.title, '') AS title
+		FROM items i
+		JOIN sources src ON src.id = i.source_id
+		JOIN item_summaries sm ON sm.item_id = i.id
+		WHERE i.status = 'summarized'
+		  AND COALESCE(sm.translated_title, '') = ''
+		  AND COALESCE(i.title, '') <> ''
+		  AND COALESCE(i.title, '') ~ '[A-Za-z]'`
+	args := []any{}
+	if userID != nil && *userID != "" {
+		args = append(args, *userID)
+		query += ` AND src.user_id = $1`
+	}
+	args = append(args, limit)
+	query += ` ORDER BY sm.summarized_at DESC LIMIT $` + strconv.Itoa(len(args))
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]ItemTranslatedTitleBackfillTarget, 0, limit)
+	for rows.Next() {
+		var v ItemTranslatedTitleBackfillTarget
+		if err := rows.Scan(&v.ItemID, &v.SourceID, &v.UserID, &v.Title); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+func (r *ItemInngestRepo) UpdateTranslatedTitle(ctx context.Context, itemID, translatedTitle string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE item_summaries
+		SET translated_title = $2,
+		    summarized_at = NOW()
+		WHERE item_id = $1`,
+		itemID, translatedTitle,
+	)
+	return err
 }

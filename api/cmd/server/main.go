@@ -49,7 +49,7 @@ func main() {
 	streakRepo := repository.NewReadingStreakRepo(db)
 	settingsH := handler.NewSettingsHandler(userSettingsRepo, llmUsageRepo, secretCipher)
 
-	internalH := handler.NewInternalHandler(userRepo, itemInngestRepo, digestInngestRepo, eventPublisher, db, cache, worker)
+	internalH := handler.NewInternalHandler(userRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher)
 	itemH := handler.NewItemHandler(itemRepo, sourceRepo, streakRepo, eventPublisher, cache)
 	digestH := handler.NewDigestHandler(digestRepo)
@@ -83,6 +83,7 @@ func main() {
 	r.Post("/api/internal/debug/digests/generate", internalH.DebugGenerateDigest)
 	r.Post("/api/internal/debug/digests/send", internalH.DebugSendDigest)
 	r.Post("/api/internal/debug/embeddings/backfill", internalH.DebugBackfillEmbeddings)
+	r.Post("/api/internal/debug/titles/backfill", internalH.DebugBackfillTranslatedTitles)
 	r.Get("/api/internal/debug/system-status", internalH.DebugSystemStatus)
 
 	r.Route("/api", func(r chi.Router) {

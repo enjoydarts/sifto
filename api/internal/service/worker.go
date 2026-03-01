@@ -72,6 +72,11 @@ type SummarizeResponse struct {
 	LLM                *LLMUsage      `json:"llm,omitempty"`
 }
 
+type TranslateTitleResponse struct {
+	TranslatedTitle string    `json:"translated_title"`
+	LLM             *LLMUsage `json:"llm,omitempty"`
+}
+
 type ComposeDigestItem struct {
 	Rank    int      `json:"rank"`
 	Title   *string  `json:"title"`
@@ -195,6 +200,13 @@ func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, fa
 		"facts":             facts,
 		"model":             model,
 		"source_text_chars": sourceTextChars,
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
+}
+
+func (w *WorkerClient) TranslateTitleWithModel(ctx context.Context, title string, anthropicAPIKey *string, googleAPIKey *string, model *string) (*TranslateTitleResponse, error) {
+	return postWithHeaders[TranslateTitleResponse](ctx, w, "/translate-title", map[string]any{
+		"title": title,
+		"model": model,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 

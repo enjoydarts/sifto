@@ -2,7 +2,7 @@ import os
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from app.routers import digest, extract, facts, feed_seed_suggestions, feed_suggestions, summarize
+from app.routers import digest, extract, facts, feed_seed_suggestions, feed_suggestions, summarize, translate_title
 
 app = FastAPI(title="sifto-worker")
 
@@ -21,6 +21,7 @@ async def require_internal_worker_secret(request: Request, call_next):
 app.include_router(extract.router)
 app.include_router(facts.router)
 app.include_router(summarize.router)
+app.include_router(translate_title.router)
 app.include_router(digest.router)
 app.include_router(feed_suggestions.router)
 app.include_router(feed_seed_suggestions.router)

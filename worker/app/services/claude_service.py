@@ -191,6 +191,22 @@ JSONで返してください:
     candidate = str(data.get("translated_title") or "").strip()
     if not candidate:
         candidate = _strip_code_fence(text).strip().strip('"').strip("'")
+    if not candidate:
+        plain_prompt = f"""次のタイトルを日本語に翻訳してください。
+説明は不要です。翻訳結果のみを1行で返してください。
+
+タイトル: {title}
+"""
+        plain_message, _ = _call_with_model_fallback(
+            plain_prompt,
+            model,
+            _summary_model_fallback,
+            max_tokens=120,
+            api_key=api_key,
+        )
+        if plain_message is not None:
+            plain_text = plain_message.content[0].text.strip()
+            candidate = _strip_code_fence(plain_text).strip().strip('"').strip("'")
     return candidate[:300]
 
 
@@ -716,6 +732,39 @@ def summarize(
         "score_breakdown": score_breakdown,
         "score_reason": score_reason[:400],
         "score_policy_version": "v2",
+        "llm": _llm_meta(message, "summary", used_model or _summary_model),
+    }
+
+
+def translate_title(title: str, api_key: str | None = None, model: str | None = None) -> dict:
+    src = (title or "").strip()
+    if not src:
+        return {"translated_title": "", "llm": None}
+    prompt = f"""次の英語タイトルを自然な日本語に翻訳してください。
+JSONで返してください:
+{{
+  "translated_title": "日本語タイトル"
+}}
+
+タイトル: {src}
+"""
+    message, used_model = _call_with_model_fallback(
+        prompt,
+        str(model or _summary_model),
+        _summary_model_fallback,
+        max_tokens=200,
+        api_key=api_key,
+    )
+    if message is None:
+        return {"translated_title": _translate_title_to_ja(src, str(model or _summary_model), api_key=api_key), "llm": None}
+
+    text = message.content[0].text.strip()
+    data = _extract_first_json_object(text) or {}
+    translated = str(data.get("translated_title") or "").strip()
+    if not translated:
+        translated = _translate_title_to_ja(src, used_model or _summary_model, api_key=api_key)
+    return {
+        "translated_title": translated[:300],
         "llm": _llm_meta(message, "summary", used_model or _summary_model),
     }
 

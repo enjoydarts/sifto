@@ -49,6 +49,7 @@ function ItemsPageContent() {
     const filter =
       qFilter && FILTERS.includes(qFilter as (typeof FILTERS)[number]) ? qFilter : "";
     const topic = (searchParams.get("topic") ?? "").trim();
+    const sourceID = (searchParams.get("source_id") ?? "").trim();
 
     const unreadOnly = searchParams.get("unread") === "1";
     const favoriteOnly = searchParams.get("favorite") === "1";
@@ -56,9 +57,9 @@ function ItemsPageContent() {
     const qPage = Number(searchParams.get("page"));
     const page = Number.isFinite(qPage) && qPage >= 1 ? Math.floor(qPage) : 1;
 
-    return { feedMode, sortMode, filter, topic, unreadOnly, favoriteOnly, page };
+    return { feedMode, sortMode, filter, topic, sourceID, unreadOnly, favoriteOnly, page };
   }, [searchParams]);
-  const { feedMode, sortMode, filter, topic, unreadOnly, favoriteOnly, page } = queryState;
+  const { feedMode, sortMode, filter, topic, sourceID, unreadOnly, favoriteOnly, page } = queryState;
   const focusMode = feedMode === "recommended";
   const laterMode = feedMode === "later";
   const pageSize = 20;
@@ -90,6 +91,7 @@ function ItemsPageContent() {
       feedMode,
       filter,
       topic,
+      sourceID,
       page,
       sortMode,
       unreadOnly ? 1 : 0,
@@ -98,7 +100,7 @@ function ItemsPageContent() {
       focusSize,
       diversifyTopics ? 1 : 0,
     ] as const,
-    [diversifyTopics, favoriteOnly, feedMode, filter, focusSize, focusWindow, page, sortMode, topic, unreadOnly]
+    [diversifyTopics, favoriteOnly, feedMode, filter, focusSize, focusWindow, page, sortMode, sourceID, topic, unreadOnly]
   );
 
   const listQuery = useQuery<ItemsFeedQueryData>({
@@ -122,6 +124,7 @@ function ItemsPageContent() {
       }
       const data = await api.getItems({
         ...(filter ? { status: filter } : {}),
+        ...(sourceID ? { source_id: sourceID } : {}),
         ...(topic ? { topic } : {}),
         page,
         page_size: pageSize,
@@ -154,6 +157,7 @@ function ItemsPageContent() {
           sort: SortMode;
           status: string;
           topic: string;
+          sourceId: string;
           unread: boolean;
           favorite: boolean;
           page: number;
@@ -167,6 +171,7 @@ function ItemsPageContent() {
       const nextSort = patch.sort ?? sortMode;
       const nextStatus = patch.status ?? filter;
       const nextTopic = patch.topic ?? topic;
+      const nextSourceID = patch.sourceId ?? sourceID;
       const nextUnread = patch.unread ?? unreadOnly;
       const nextFavorite = patch.favorite ?? favoriteOnly;
       const nextPage = patch.page ?? page;
@@ -174,6 +179,8 @@ function ItemsPageContent() {
       if (nextFeed === "all" || nextFeed === "later") {
         if (nextStatus) q.set("status", nextStatus);
         else q.delete("status");
+        if (nextSourceID) q.set("source_id", nextSourceID);
+        else q.delete("source_id");
         if (nextTopic) q.set("topic", nextTopic);
         else q.delete("topic");
         q.set("sort", nextSort);
@@ -185,6 +192,7 @@ function ItemsPageContent() {
         else q.delete("page");
       } else {
         q.delete("status");
+        q.delete("source_id");
         q.delete("topic");
         q.delete("sort");
         q.delete("unread");
@@ -196,7 +204,7 @@ function ItemsPageContent() {
       const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
       router.replace(nextUrl, { scroll: false });
     },
-    [favoriteOnly, feedMode, filter, page, pathname, router, searchParams, sortMode, topic, unreadOnly]
+    [favoriteOnly, feedMode, filter, page, pathname, router, searchParams, sortMode, sourceID, topic, unreadOnly]
   );
 
   const itemsQueryString = useMemo(() => {
@@ -204,6 +212,7 @@ function ItemsPageContent() {
     q.set("feed", feedMode);
     if (!focusMode) {
       if (filter) q.set("status", filter);
+      if (sourceID) q.set("source_id", sourceID);
       if (topic) q.set("topic", topic);
       q.set("sort", sortMode);
       if (page > 1) q.set("page", String(page));
@@ -211,7 +220,7 @@ function ItemsPageContent() {
       if (favoriteOnly) q.set("favorite", "1");
     }
     return q.toString();
-  }, [favoriteOnly, feedMode, filter, focusMode, page, sortMode, topic, unreadOnly]);
+  }, [favoriteOnly, feedMode, filter, focusMode, page, sortMode, sourceID, topic, unreadOnly]);
 
   const currentItemsHref = useMemo(
     () => (itemsQueryString ? `${pathname}?${itemsQueryString}` : pathname),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import Link from "next/link";
 import { Activity, Download, Lightbulb, Sparkles, Upload } from "lucide-react";
 import { api, RecommendedSource, Source, SourceHealth, SourceSuggestion } from "@/lib/api";
 import Pagination from "@/components/pagination";
@@ -596,6 +597,12 @@ export default function SourcesPage() {
             </div>
 
             <div className="flex shrink-0 items-center gap-3">
+              <Link
+                href={`/items?feed=all&source_id=${encodeURIComponent(src.id)}`}
+                className="text-xs text-blue-600 hover:text-blue-800"
+              >
+                {t("sources.openItems")}
+              </Link>
               <button
                 type="button"
                 onClick={() => openEditDialog(src)}

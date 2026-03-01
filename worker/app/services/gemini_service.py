@@ -380,6 +380,41 @@ def _extract_compose_digest_fields(text: str) -> tuple[str, str]:
     return subject, body
 
 
+def _contains_japanese(text: str) -> bool:
+    s = (text or "").strip()
+    if not s:
+        return False
+    return re.search(r"[\u3040-\u30ff\u3400-\u9fff]", s) is not None
+
+
+def _needs_title_translation(title: str | None, translated_title: str) -> bool:
+    src = (title or "").strip()
+    if not src:
+        return False
+    if (translated_title or "").strip():
+        return False
+    if _contains_japanese(src):
+        return False
+    return re.search(r"[A-Za-z]", src) is not None
+
+
+def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:
+    prompt = f"""次の英語タイトルを自然な日本語に翻訳してください。
+JSONで返してください:
+{{
+  "translated_title": "日本語タイトル"
+}}
+
+タイトル: {title}
+"""
+    text, _ = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=200)
+    data = _extract_first_json_object(text) or {}
+    candidate = str(data.get("translated_title") or "").strip()
+    if not candidate:
+        candidate = _strip_code_fence(text).strip().strip('"').strip("'")
+    return candidate[:300]
+
+
 def extract_facts(title: str | None, content: str, model: str, api_key: str) -> dict:
     prompt = f"""以下の記事本文から重要な事実を箇条書きで抽出してください。
 事実は客観的かつ具体的に記述してください。
@@ -469,6 +504,8 @@ def summarize(
     if not score_reason:
         score_reason = "総合的な重要度・新規性・実用性を基に採点。"
     translated_title = str(data.get("translated_title") or "").strip()
+    if _needs_title_translation(title, translated_title):
+        translated_title = _translate_title_to_ja(title or "", model=model, api_key=api_key)
     return {
         "summary": str(data.get("summary", "")).strip(),
         "topics": [str(t) for t in topics],

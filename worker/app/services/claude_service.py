@@ -150,6 +150,50 @@ def _extract_compose_digest_fields(text: str) -> tuple[str, str]:
     return subject, body
 
 
+def _contains_japanese(text: str) -> bool:
+    s = (text or "").strip()
+    if not s:
+        return False
+    return re.search(r"[\u3040-\u30ff\u3400-\u9fff]", s) is not None
+
+
+def _needs_title_translation(title: str | None, translated_title: str) -> bool:
+    src = (title or "").strip()
+    if not src:
+        return False
+    if (translated_title or "").strip():
+        return False
+    if _contains_japanese(src):
+        return False
+    return re.search(r"[A-Za-z]", src) is not None
+
+
+def _translate_title_to_ja(title: str, model: str, api_key: str | None = None) -> str:
+    prompt = f"""次の英語タイトルを自然な日本語に翻訳してください。
+JSONで返してください:
+{{
+  "translated_title": "日本語タイトル"
+}}
+
+タイトル: {title}
+"""
+    message, _ = _call_with_model_fallback(
+        prompt,
+        model,
+        _summary_model_fallback,
+        max_tokens=200,
+        api_key=api_key,
+    )
+    if message is None:
+        return ""
+    text = message.content[0].text.strip()
+    data = _extract_first_json_object(text) or {}
+    candidate = str(data.get("translated_title") or "").strip()
+    if not candidate:
+        candidate = _strip_code_fence(text).strip().strip('"').strip("'")
+    return candidate[:300]
+
+
 def _clamp01(v, default: float = 0.5) -> float:
     try:
         x = float(v)
@@ -660,6 +704,8 @@ def summarize(
     if not score_reason:
         score_reason = "総合的な重要度・新規性・実用性を基に採点。"
     translated_title = str(data.get("translated_title") or "").strip()
+    if _needs_title_translation(title, translated_title):
+        translated_title = _translate_title_to_ja(title or "", used_model or _summary_model, api_key=api_key)
     score = _summary_composite_score(score_breakdown)
 
     return {

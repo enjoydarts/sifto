@@ -210,16 +210,17 @@ export function InlineReader({
   return (
     <div className="fixed inset-0 z-40 bg-black/35" onClick={onClose}>
       <div
-        className={`absolute inset-y-0 right-0 w-full max-w-2xl overflow-y-auto border-l border-zinc-200 bg-white p-4 shadow-2xl will-change-transform ${
+        className={`absolute inset-y-0 right-0 w-full max-w-2xl overflow-y-auto overscroll-y-contain border-l border-zinc-200 bg-white p-4 shadow-2xl will-change-transform ${
           dragging ? "transition-none" : "transition-transform duration-200 ease-out"
         }`}
         onClick={(e) => e.stopPropagation()}
-        style={{ transform: `translateY(${dragY}px)` }}
+        style={{ transform: `translateY(${dragY}px)`, overscrollBehaviorY: "contain" }}
       >
         <div
-          className={`mb-2 flex justify-center py-1 touch-none md:hidden ${
-            dragging ? "bg-zinc-50/80" : ""
+          className={`-mx-2 mb-2 flex min-h-12 items-center justify-center rounded-lg px-2 py-2 touch-none md:hidden ${
+            dragging ? "bg-zinc-100/90" : "bg-zinc-50/50"
           }`}
+          style={{ touchAction: "pan-x" }}
           onPointerDown={onHandlePointerDown}
           onPointerMove={onHandlePointerMove}
           onPointerUp={onHandlePointerUp}

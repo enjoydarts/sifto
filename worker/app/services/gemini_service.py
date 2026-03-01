@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import time
 
 import httpx
 
@@ -32,6 +33,17 @@ def _env_timeout_seconds(name: str, default: float) -> float:
         return default
     try:
         v = float(raw)
+        return v if v > 0 else default
+    except Exception:
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        v = int(raw)
         return v if v > 0 else default
     except Exception:
         return default
@@ -278,10 +290,34 @@ def _generate_content(
         "generationConfig": generation_config,
     }
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("GEMINI_TIMEOUT_SEC", 90.0)
-    with httpx.Client(timeout=req_timeout) as client:
-        resp = client.post(url, json=body, params={"key": api_key})
-    if resp.status_code >= 400:
+    attempts = _env_int("GEMINI_RETRY_ATTEMPTS", 3)
+    base_sleep_sec = _env_timeout_seconds("GEMINI_RETRY_BASE_SEC", 0.5)
+    retryable_status = {408, 409, 429, 500, 502, 503, 504}
+    resp: httpx.Response | None = None
+    last_error: Exception | None = None
+    for i in range(attempts):
+        try:
+            with httpx.Client(timeout=req_timeout) as client:
+                resp = client.post(url, json=body, params={"key": api_key})
+        except Exception as e:
+            last_error = e
+            if i < attempts - 1:
+                time.sleep(base_sleep_sec * (2**i))
+                continue
+            raise RuntimeError(f"gemini generateContent request failed: {e}") from e
+
+        if resp.status_code < 400:
+            break
+        if resp.status_code in retryable_status and i < attempts - 1:
+            time.sleep(base_sleep_sec * (2**i))
+            continue
         raise RuntimeError(f"gemini generateContent failed status={resp.status_code} body={resp.text[:1000]}")
+
+    if resp is None:
+        if last_error:
+            raise RuntimeError(f"gemini generateContent request failed: {last_error}") from last_error
+        raise RuntimeError("gemini generateContent failed: no response")
+
     data = resp.json()
     usage_meta = data.get("usageMetadata", {}) if isinstance(data, dict) else {}
     usage = {
@@ -549,7 +585,14 @@ def translate_title(title: str, model: str = "gemini-2.5-flash", api_key: str = 
     src = (title or "").strip()
     if not src:
         return {"translated_title": "", "llm": None}
-    translated = _translate_title_to_ja(src, model=model, api_key=api_key)
+    try:
+        translated = _translate_title_to_ja(src, model=model, api_key=api_key)
+    except Exception as e:
+        fallback_model = "gemini-2.5-flash-lite"
+        if _normalize_model_family(model) == fallback_model:
+            raise
+        _log.warning("gemini translate_title failed with model=%s, fallback=%s, err=%s", model, fallback_model, e)
+        translated = _translate_title_to_ja(src, model=fallback_model, api_key=api_key)
     return {
         "translated_title": translated[:300],
         "llm": None,

@@ -255,7 +255,8 @@ export default function LLMUsagePage() {
           day: d,
           label: String(d),
           actual: cumulative,
-          forecast: isCurrentMonth && d === today ? forecastTotal : null,
+          // Keep forecast as a daily cumulative trajectory; avoid injecting EOM total on "today".
+          forecast: isCurrentMonth ? selectedDailyPace * d : null,
         });
       } else {
         rows.push({

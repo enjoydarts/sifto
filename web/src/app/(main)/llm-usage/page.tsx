@@ -84,6 +84,8 @@ export default function LLMUsagePage() {
       calls: 0,
       input: 0,
       output: 0,
+      cacheWrite: 0,
+      cacheRead: 0,
       cost: 0,
       byProviderCost: new Map<string, number>(),
     };
@@ -91,6 +93,8 @@ export default function LLMUsagePage() {
       t.calls += r.calls;
       t.input += r.input_tokens;
       t.output += r.output_tokens;
+      t.cacheWrite += r.cache_creation_input_tokens;
+      t.cacheRead += r.cache_read_input_tokens;
       t.cost += r.estimated_cost_usd;
       t.byProviderCost.set(r.provider, (t.byProviderCost.get(r.provider) ?? 0) + r.estimated_cost_usd);
     }
@@ -339,6 +343,16 @@ export default function LLMUsagePage() {
         <MetricCard label={t("llm.totalCalls")} value={fmtNum(totals.calls)} />
         <MetricCard label={t("llm.input")} value={fmtNum(totals.input)} />
         <MetricCard label={t("llm.output")} value={fmtNum(totals.output)} />
+      </section>
+
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <MetricCard className="w-full" label="Cache Write Tokens" value={fmtNum(totals.cacheWrite)} />
+        <MetricCard className="w-full" label="Cache Read Tokens" value={fmtNum(totals.cacheRead)} />
+        <MetricCard
+          className="w-full"
+          label="Cache Read Ratio"
+          value={`${totals.input > 0 ? ((totals.cacheRead / totals.input) * 100).toFixed(1) : "0.0"}%`}
+        />
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
@@ -618,6 +632,8 @@ export default function LLMUsagePage() {
                     <th className="px-3 py-2 text-right font-medium">calls</th>
                     <th className="px-3 py-2 text-right font-medium">input</th>
                     <th className="px-3 py-2 text-right font-medium">output</th>
+                    <th className="px-3 py-2 text-right font-medium">cache w</th>
+                    <th className="px-3 py-2 text-right font-medium">cache r</th>
                     <th className="px-3 py-2 text-right font-medium">avg/call</th>
                     <th className="px-3 py-2 text-right font-medium">cost</th>
                   </tr>
@@ -654,6 +670,8 @@ export default function LLMUsagePage() {
                       <td className="px-3 py-2 text-right">{fmtNum(r.calls)}</td>
                       <td className="px-3 py-2 text-right">{fmtNum(r.input_tokens)}</td>
                       <td className="px-3 py-2 text-right">{fmtNum(r.output_tokens)}</td>
+                      <td className="px-3 py-2 text-right">{fmtNum(r.cache_creation_input_tokens)}</td>
+                      <td className="px-3 py-2 text-right">{fmtNum(r.cache_read_input_tokens)}</td>
                       <td className="px-3 py-2 text-right">{fmtUSD(r.calls > 0 ? r.estimated_cost_usd / r.calls : 0)}</td>
                       <td className="px-3 py-2 text-right">{fmtUSD(r.estimated_cost_usd)}</td>
                     </tr>
@@ -698,6 +716,8 @@ export default function LLMUsagePage() {
                           <th className="px-3 py-2 text-right font-medium">calls</th>
                           <th className="px-3 py-2 text-right font-medium">input</th>
                           <th className="px-3 py-2 text-right font-medium">output</th>
+                          <th className="px-3 py-2 text-right font-medium">cache w</th>
+                          <th className="px-3 py-2 text-right font-medium">cache r</th>
                           <th className="px-3 py-2 text-right font-medium">cost</th>
                         </tr>
                       </thead>
@@ -710,6 +730,8 @@ export default function LLMUsagePage() {
                             <td className="px-3 py-2 text-right">{fmtNum(r.calls)}</td>
                             <td className="px-3 py-2 text-right">{fmtNum(r.input_tokens)}</td>
                             <td className="px-3 py-2 text-right">{fmtNum(r.output_tokens)}</td>
+                            <td className="px-3 py-2 text-right">{fmtNum(r.cache_creation_input_tokens)}</td>
+                            <td className="px-3 py-2 text-right">{fmtNum(r.cache_read_input_tokens)}</td>
                             <td className="px-3 py-2 text-right">{fmtUSD(r.estimated_cost_usd)}</td>
                           </tr>
                         ))}
@@ -744,6 +766,8 @@ export default function LLMUsagePage() {
                   <th className="px-3 py-2 text-left font-medium">pricing</th>
                   <th className="px-3 py-2 text-right font-medium">in</th>
                   <th className="px-3 py-2 text-right font-medium">out</th>
+                  <th className="px-3 py-2 text-right font-medium">cache w</th>
+                  <th className="px-3 py-2 text-right font-medium">cache r</th>
                   <th className="px-3 py-2 text-right font-medium">cost</th>
                   <th className="px-3 py-2 text-left font-medium">ref</th>
                 </tr>
@@ -764,6 +788,8 @@ export default function LLMUsagePage() {
                     <td className="px-3 py-2 text-xs">{r.pricing_source}</td>
                     <td className="px-3 py-2 text-right">{fmtNum(r.input_tokens)}</td>
                     <td className="px-3 py-2 text-right">{fmtNum(r.output_tokens)}</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(r.cache_creation_input_tokens)}</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(r.cache_read_input_tokens)}</td>
                     <td className="px-3 py-2 text-right">{fmtUSD(r.estimated_cost_usd)}</td>
                     <td className="px-3 py-2 text-[11px] text-zinc-500">
                       {r.item_id ? `item:${r.item_id.slice(0, 8)}` : ""}

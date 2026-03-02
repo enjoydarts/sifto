@@ -30,6 +30,7 @@ export const enDict: Dict = {
   "common.saving": "Saving…",
   "common.close": "Close",
   "common.unknown": "unknown",
+  "pwa.install": "Install app",
   "dashboard.title": "Dashboard",
   "dashboard.subtitle": "Overview of delivery, processing, and cost",
   "dashboard.card.sources": "Sources",

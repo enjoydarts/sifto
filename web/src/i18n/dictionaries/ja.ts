@@ -30,6 +30,7 @@ export const jaDict: Dict = {
   "common.saving": "保存中…",
   "common.close": "閉じる",
   "common.unknown": "不明",
+  "pwa.install": "アプリを追加",
   "dashboard.title": "ダッシュボード",
   "dashboard.subtitle": "配信状況・処理状況・コストの概要",
   "dashboard.card.sources": "ソース数",

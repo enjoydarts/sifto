@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
+import PWAInstallButton from "@/components/pwa-install";
 
 const primaryLinks = [
   { href: "/", labelKey: "nav.briefing", icon: Sparkles },
@@ -67,6 +68,7 @@ export default function Nav() {
           </Link>
 
           <div className="ml-auto flex items-center gap-2">
+            <PWAInstallButton />
             <label className="sr-only">{t("nav.language")}</label>
             <select
               value={locale}

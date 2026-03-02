@@ -8,6 +8,7 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
 export const metadata: Metadata = {
   title: "Sifto",
   description: "RSS aggregator & daily digest",
+  manifest: "/manifest.webmanifest",
   icons: {
     apple: "/apple-touch-icon.png",
   },

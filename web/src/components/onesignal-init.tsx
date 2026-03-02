@@ -12,7 +12,7 @@ function loadOneSignalSDK() {
   window.__siftoOneSignalScriptError = undefined;
   window.__siftoOneSignalLoading = true;
   const script = document.createElement("script");
-  script.src = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
+  script.src = "/api/onesignal/sdk/page";
   script.defer = true;
   script.onload = () => {
     window.__siftoOneSignalLoading = false;

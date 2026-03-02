@@ -8,15 +8,20 @@ function loadOneSignalSDK() {
   if (typeof window === "undefined") return;
   if (window.__siftoOneSignalLoading) return;
   if (window.OneSignal) return;
+  window.__siftoOneSignalScriptLoaded = false;
+  window.__siftoOneSignalScriptError = undefined;
   window.__siftoOneSignalLoading = true;
   const script = document.createElement("script");
   script.src = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
   script.defer = true;
   script.onload = () => {
     window.__siftoOneSignalLoading = false;
+    window.__siftoOneSignalScriptLoaded = true;
   };
-  script.onerror = () => {
+  script.onerror = (e) => {
     window.__siftoOneSignalLoading = false;
+    window.__siftoOneSignalScriptLoaded = false;
+    window.__siftoOneSignalScriptError = e instanceof ErrorEvent ? e.message : "script load failed";
   };
   document.head.appendChild(script);
 }

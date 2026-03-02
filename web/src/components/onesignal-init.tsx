@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useState } from "react";
 
 function loadOneSignalSDK() {
   if (typeof window === "undefined") return;
@@ -23,6 +24,7 @@ function loadOneSignalSDK() {
 export default function OneSignalInit() {
   const { data: session } = useSession();
   const externalId = session?.user?.email ?? null;
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -41,20 +43,21 @@ export default function OneSignalInit() {
         notifyButton: { enable: false },
       });
       window.__siftoOneSignalReady = true;
+      setReady(true);
     });
     loadOneSignalSDK();
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (!window.__siftoOneSignalReady) return;
+    if (!ready && !window.__siftoOneSignalReady) return;
     if (!externalId) return;
     const OneSignal = window.OneSignal;
     if (!OneSignal?.login) return;
     OneSignal.login(externalId).catch(() => {
       // no-op
     });
-  }, [externalId]);
+  }, [externalId, ready]);
 
   return null;
 }

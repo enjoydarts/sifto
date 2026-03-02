@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { api, BulkRetryFailedResult, DigestDetail } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -85,6 +87,19 @@ type DebugSystemStatusResponse = {
   };
 };
 
+type OneSignalDebugState = {
+  checked_at: string;
+  sdk_ready: boolean;
+  sdk_loaded: boolean;
+  permission: string;
+  opted_in: boolean | null;
+  login_external_id: string | null;
+  subscription_id: string | null;
+  sw_scopes: string[];
+  worker_file_reachable: boolean | null;
+  worker_updater_reachable: boolean | null;
+};
+
 async function postJSON<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
@@ -111,6 +126,7 @@ function todayJstPlusOneDateString() {
 export default function DebugDigestsPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
+  const { data: session } = useSession();
   const [userId, setUserId] = useState("00000000-0000-0000-0000-000000000001");
   const [digestDate, setDigestDate] = useState(todayJstPlusOneDateString());
   const [skipSend, setSkipSend] = useState(true);
@@ -139,6 +155,8 @@ export default function DebugDigestsPage() {
   const [busySystemHealth, setBusySystemHealth] = useState(false);
   const [systemHealth, setSystemHealth] = useState<DebugSystemStatusResponse | null>(null);
   const [webHealth, setWebHealth] = useState<{ status: number; latency_ms: number; body: unknown } | null>(null);
+  const [busyOneSignalDebug, setBusyOneSignalDebug] = useState(false);
+  const [oneSignalDebug, setOneSignalDebug] = useState<OneSignalDebugState | null>(null);
 
   const helperText = useMemo(
     () =>
@@ -166,6 +184,57 @@ export default function DebugDigestsPage() {
         reading_plan_misses: rows[k]?.reading_plan?.misses ?? 0,
       }));
   }, [systemHealth]);
+
+  const loadOneSignalDebug = async () => {
+    setBusyOneSignalDebug(true);
+    try {
+      const permission = typeof Notification !== "undefined" ? Notification.permission : "unsupported";
+      const scopes = "serviceWorker" in navigator
+        ? (await navigator.serviceWorker.getRegistrations()).map((r) => r.scope)
+        : [];
+      const os = typeof window !== "undefined" ? window.OneSignal : undefined;
+      const sub = os?.User?.PushSubscription as unknown as Record<string, unknown> | undefined;
+      const subscriptionIdRaw = sub?.["id"];
+      const subscriptionId = typeof subscriptionIdRaw === "string" && subscriptionIdRaw.length > 0 ? subscriptionIdRaw : null;
+      const optedIn = typeof sub?.["optedIn"] === "boolean" ? (sub?.["optedIn"] as boolean) : null;
+
+      let workerFileReachable: boolean | null = null;
+      let workerUpdaterReachable: boolean | null = null;
+      try {
+        const [w1, w2] = await Promise.all([
+          fetch("/onesignal/OneSignalSDKWorker.js", { cache: "no-store" }),
+          fetch("/onesignal/OneSignalSDKUpdaterWorker.js", { cache: "no-store" }),
+        ]);
+        workerFileReachable = w1.ok;
+        workerUpdaterReachable = w2.ok;
+      } catch {
+        workerFileReachable = false;
+        workerUpdaterReachable = false;
+      }
+
+      setOneSignalDebug({
+        checked_at: new Date().toISOString(),
+        sdk_ready: Boolean(window.__siftoOneSignalReady),
+        sdk_loaded: Boolean(os),
+        permission,
+        opted_in: optedIn,
+        login_external_id: session?.user?.email ?? null,
+        subscription_id: subscriptionId,
+        sw_scopes: scopes,
+        worker_file_reachable: workerFileReachable,
+        worker_updater_reachable: workerUpdaterReachable,
+      });
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setBusyOneSignalDebug(false);
+    }
+  };
+
+  useEffect(() => {
+    loadOneSignalDebug();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.email]);
 
   const onGenerate = async (e: FormEvent) => {
     e.preventDefault();
@@ -417,6 +486,27 @@ export default function DebugDigestsPage() {
             )}
           </div>
         </div>
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-zinc-800">OneSignal Debug</h2>
+          <button
+            type="button"
+            onClick={loadOneSignalDebug}
+            disabled={busyOneSignalDebug}
+            className="rounded border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            {busyOneSignalDebug ? t("common.loading") : t("common.refresh")}
+          </button>
+        </div>
+        {oneSignalDebug ? (
+          <pre className="overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+            {JSON.stringify(oneSignalDebug, null, 2)}
+          </pre>
+        ) : (
+          <p className="text-xs text-zinc-400">{t("debug.notFetched")}</p>
+        )}
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">

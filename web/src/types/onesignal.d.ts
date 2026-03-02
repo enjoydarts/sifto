@@ -23,6 +23,6 @@ declare global {
     OneSignal?: OneSignalLike;
     __siftoOneSignalLoading?: boolean;
     __siftoOneSignalReady?: boolean;
+    __siftoOneSignalInitError?: string;
   }
 }
-

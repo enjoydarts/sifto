@@ -53,16 +53,22 @@ export default function OneSignalInit() {
     window.OneSignalDeferred = window.OneSignalDeferred || [];
     window.OneSignalDeferred.push(async (OneSignal) => {
       if (window.__siftoOneSignalReady) return;
-      await cleanupLegacyOneSignalRootWorker();
-      await OneSignal.init({
-        appId,
-        serviceWorkerPath: "/onesignal/OneSignalSDKWorker.js",
-        serviceWorkerUpdaterPath: "/onesignal/OneSignalSDKUpdaterWorker.js",
-        serviceWorkerParam: { scope: "/onesignal/" },
-        notifyButton: { enable: false },
-      });
-      window.__siftoOneSignalReady = true;
-      setReady(true);
+      try {
+        window.__siftoOneSignalInitError = undefined;
+        await cleanupLegacyOneSignalRootWorker();
+        await OneSignal.init({
+          appId,
+          serviceWorkerPath: "/onesignal/OneSignalSDKWorker.js",
+          serviceWorkerUpdaterPath: "/onesignal/OneSignalSDKUpdaterWorker.js",
+          serviceWorkerParam: { scope: "/onesignal/" },
+          notifyButton: { enable: false },
+        });
+        window.__siftoOneSignalReady = true;
+        setReady(true);
+      } catch (e) {
+        window.__siftoOneSignalReady = false;
+        window.__siftoOneSignalInitError = e instanceof Error ? e.message : String(e);
+      }
     });
     loadOneSignalSDK();
   }, []);

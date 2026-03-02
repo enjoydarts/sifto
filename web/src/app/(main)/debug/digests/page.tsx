@@ -89,8 +89,12 @@ type DebugSystemStatusResponse = {
 
 type OneSignalDebugState = {
   checked_at: string;
+  app_id_configured: boolean;
+  app_id_preview: string | null;
   sdk_ready: boolean;
   sdk_loaded: boolean;
+  deferred_queue_length: number;
+  init_error: string | null;
   permission: string;
   opted_in: boolean | null;
   login_external_id: string | null;
@@ -188,11 +192,13 @@ export default function DebugDigestsPage() {
   const loadOneSignalDebug = async () => {
     setBusyOneSignalDebug(true);
     try {
+      const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID?.trim() ?? "";
       const permission = typeof Notification !== "undefined" ? Notification.permission : "unsupported";
       const scopes = "serviceWorker" in navigator
         ? (await navigator.serviceWorker.getRegistrations()).map((r) => r.scope)
         : [];
       const os = typeof window !== "undefined" ? window.OneSignal : undefined;
+      const deferredQueue = typeof window !== "undefined" ? window.OneSignalDeferred : undefined;
       const sub = os?.User?.PushSubscription as unknown as Record<string, unknown> | undefined;
       const subscriptionIdRaw = sub?.["id"];
       const subscriptionId = typeof subscriptionIdRaw === "string" && subscriptionIdRaw.length > 0 ? subscriptionIdRaw : null;
@@ -214,8 +220,12 @@ export default function DebugDigestsPage() {
 
       setOneSignalDebug({
         checked_at: new Date().toISOString(),
+        app_id_configured: appId.length > 0,
+        app_id_preview: appId ? `${appId.slice(0, 8)}...` : null,
         sdk_ready: Boolean(window.__siftoOneSignalReady),
         sdk_loaded: Boolean(os),
+        deferred_queue_length: Array.isArray(deferredQueue) ? deferredQueue.length : 0,
+        init_error: window.__siftoOneSignalInitError ?? null,
         permission,
         opted_in: optedIn,
         login_external_id: session?.user?.email ?? null,

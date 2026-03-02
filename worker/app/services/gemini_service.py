@@ -7,10 +7,15 @@ import hashlib
 from datetime import datetime, timezone
 
 import httpx
+try:
+    import redis
+except Exception:  # pragma: no cover
+    redis = None
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
 _GEMINI_CONTEXT_CACHE: dict[str, tuple[str, float]] = {}
+_REDIS_CLIENT = None
 
 _DEFAULT_MODEL_PRICING = {
     "gemini-3-flash-preview": {"input_per_mtok_usd": 0.5, "output_per_mtok_usd": 3.0},
@@ -296,6 +301,56 @@ def _cache_key_hash(parts: list[str]) -> str:
     return h.hexdigest()
 
 
+def _redis_client():
+    global _REDIS_CLIENT
+    if _REDIS_CLIENT is not None:
+        return _REDIS_CLIENT
+    if redis is None:
+        return None
+    redis_url = os.getenv("REDIS_URL") or os.getenv("UPSTASH_REDIS_URL") or ""
+    if not redis_url:
+        return None
+    try:
+        _REDIS_CLIENT = redis.Redis.from_url(redis_url, decode_responses=True)
+    except Exception as e:
+        _log.warning("gemini context cache redis init failed: %s", e)
+        _REDIS_CLIENT = None
+    return _REDIS_CLIENT
+
+
+def _redis_cache_get(cache_key: str) -> tuple[str, float] | None:
+    r = _redis_client()
+    if r is None:
+        return None
+    try:
+        raw = r.get(f"gemini:context-cache:{cache_key}")
+    except Exception as e:
+        _log.warning("gemini context cache redis get failed: %s", e)
+        return None
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        name = str(data.get("name") or "").strip()
+        exp = float(data.get("exp_ts", 0) or 0)
+        if not name or exp <= 0:
+            return None
+        return name, exp
+    except Exception:
+        return None
+
+
+def _redis_cache_set(cache_key: str, name: str, exp_ts: float, ttl_sec: int) -> None:
+    r = _redis_client()
+    if r is None:
+        return
+    payload = {"name": name, "exp_ts": exp_ts}
+    try:
+        r.setex(f"gemini:context-cache:{cache_key}", max(60, int(ttl_sec)), json.dumps(payload))
+    except Exception as e:
+        _log.warning("gemini context cache redis set failed: %s", e)
+
+
 def _get_or_create_cached_content(model: str, api_key: str, cache_key: str, system_instruction: str) -> str | None:
     now = time.time()
     cached = _GEMINI_CONTEXT_CACHE.get(cache_key)
@@ -304,6 +359,12 @@ def _get_or_create_cached_content(model: str, api_key: str, cache_key: str, syst
         if exp > now + 10:
             return name
         _GEMINI_CONTEXT_CACHE.pop(cache_key, None)
+    redis_cached = _redis_cache_get(cache_key)
+    if redis_cached is not None:
+        name, exp = redis_cached
+        if exp > now + 10:
+            _GEMINI_CONTEXT_CACHE[cache_key] = (name, exp)
+            return name
 
     ttl_sec = max(60, _summary_context_cache_ttl_sec())
     url = "https://generativelanguage.googleapis.com/v1beta/cachedContents"
@@ -323,6 +384,7 @@ def _get_or_create_cached_content(model: str, api_key: str, cache_key: str, syst
         return None
     expire_ts = _parse_rfc3339_utc(str(data.get("expireTime") or "")) or (now + ttl_sec)
     _GEMINI_CONTEXT_CACHE[cache_key] = (name, expire_ts)
+    _redis_cache_set(cache_key, name, expire_ts, ttl_sec)
     return name
 
 
@@ -349,6 +411,7 @@ def _generate_content(
         generation_config["responseSchema"] = response_schema
 
     body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": generation_config}
+    cached_content_name = ""
     if system_instruction:
         body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
         if context_cache_key and _summary_context_cache_enabled():
@@ -357,6 +420,7 @@ def _generate_content(
                 if cached_name:
                     body.pop("systemInstruction", None)
                     body["cachedContent"] = cached_name
+                    cached_content_name = cached_name
             except Exception as e:
                 _log.warning("gemini context cache unavailable key=%s err=%s", context_cache_key[:16], e)
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("GEMINI_TIMEOUT_SEC", 90.0)
@@ -378,6 +442,14 @@ def _generate_content(
 
         if resp.status_code < 400:
             break
+        if cached_content_name and resp.status_code in (400, 404):
+            # Fallback when cachedContent is expired/invalid server-side.
+            body.pop("cachedContent", None)
+            if system_instruction:
+                body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+            cached_content_name = ""
+            if i < attempts - 1:
+                continue
         if resp.status_code in retryable_status and i < attempts - 1:
             time.sleep(base_sleep_sec * (2**i))
             continue
@@ -610,14 +682,27 @@ def summarize(
   - reliability: 具体性・確度（数値/固有名詞/条件の明確さ）
   - relevance: 幅広い読者への関連性（個別ユーザー最適化ではない）
 - タイトルが主に英語の場合のみ translated_title に自然な日本語訳を入れる
-- タイトルが日本語の場合は translated_title は空文字にする"""
+- タイトルが日本語の場合は translated_title は空文字にする
+
+出力ルール:
+- 必ず有効なJSONオブジェクト1つのみを返す
+- 前置き・後置き・コードフェンス・注釈は出力しない
+- summary は情報密度を保ち、主題・事実・影響を含める
+- topics は重複を避け、粒度を揃える
+- score_reason は採点の根拠を簡潔に述べる
+
+禁止事項:
+- 事実リストにない推測の断定
+- 誇張表現、煽り表現、主観的評価
+- JSON以外のテキスト混在"""
     prompt = f"""summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target_chars}字にしてください。
 
 タイトル: {title or "（不明）"}
 事実:
 {facts_text}
 """
-    cache_key = _cache_key_hash([_normalize_model_name(model), "summary-v1", system_instruction])
+    api_key_hash = hashlib.sha256((api_key or "").encode("utf-8")).hexdigest()[:16]
+    cache_key = _cache_key_hash([_normalize_model_name(model), "summary-v2", api_key_hash, system_instruction])
     text, usage = _generate_content(
         prompt,
         model=model,

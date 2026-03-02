@@ -685,7 +685,19 @@ def summarize(
   - reliability: 具体性・確度（数値/固有名詞/条件の明確さ）
   - relevance: 幅広い読者への関連性（個別ユーザー最適化ではない）
 - タイトルが主に英語の場合のみ translated_title に自然な日本語訳を入れる
-- タイトルが日本語の場合は translated_title は空文字にする"""
+- タイトルが日本語の場合は translated_title は空文字にする
+
+出力ルール:
+- 必ず有効なJSONオブジェクト1つのみを返す
+- 前置き・後置き・コードフェンス・注釈は出力しない
+- summary は情報密度を保ち、主題・事実・影響を含める
+- topics は重複を避け、粒度を揃える
+- score_reason は採点の根拠を簡潔に述べる
+
+禁止事項:
+- 事実リストにない推測の断定
+- 誇張表現、煽り表現、主観的評価
+- JSON以外のテキスト混在"""
     user_prompt = f"""summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target_chars}字にしてください。
 
 タイトル: {title or "（不明）"}

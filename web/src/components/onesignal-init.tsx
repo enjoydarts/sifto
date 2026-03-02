@@ -37,8 +37,8 @@ export default function OneSignalInit() {
       if (window.__siftoOneSignalReady) return;
       await OneSignal.init({
         appId,
-        serviceWorkerPath: "onesignal/OneSignalSDKWorker.js",
-        serviceWorkerUpdaterPath: "onesignal/OneSignalSDKUpdaterWorker.js",
+        serviceWorkerPath: "/onesignal/OneSignalSDKWorker.js",
+        serviceWorkerUpdaterPath: "/onesignal/OneSignalSDKUpdaterWorker.js",
         serviceWorkerParam: { scope: "/onesignal/" },
         notifyButton: { enable: false },
       });

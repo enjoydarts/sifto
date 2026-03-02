@@ -31,6 +31,7 @@ export const jaDict: Dict = {
   "common.close": "閉じる",
   "common.unknown": "不明",
   "pwa.install": "アプリを追加",
+  "pwa.installIosHint": "iPhone/iPadでは、共有メニューから「ホーム画面に追加」を選択してください。",
   "dashboard.title": "ダッシュボード",
   "dashboard.subtitle": "配信状況・処理状況・コストの概要",
   "dashboard.card.sources": "ソース数",

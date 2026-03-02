@@ -15,11 +15,20 @@ function isStandaloneMode(): boolean {
   return window.matchMedia?.("(display-mode: standalone)").matches || Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
 }
 
+function isIosSafari(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = window.navigator.userAgent.toLowerCase();
+  const isIos = /iphone|ipad|ipod/.test(ua);
+  const isSafari = /safari/.test(ua) && !/crios|fxios|edgios|opios|mercury/.test(ua);
+  return isIos && isSafari;
+}
+
 export default function PWAInstallButton() {
   const { t } = useI18n();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [hidden, setHidden] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [iosFallback, setIosFallback] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -27,6 +36,7 @@ export default function PWAInstallButton() {
       setHidden(true);
       return;
     }
+    setIosFallback(isIosSafari());
 
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
@@ -44,7 +54,7 @@ export default function PWAInstallButton() {
     };
   }, []);
 
-  const canInstall = !hidden && deferredPrompt != null;
+  const canInstall = !hidden && (deferredPrompt != null || iosFallback);
   if (!canInstall) return null;
 
   return (
@@ -52,6 +62,10 @@ export default function PWAInstallButton() {
       type="button"
       disabled={installing}
       onClick={async () => {
+        if (iosFallback && !deferredPrompt) {
+          window.alert(t("pwa.installIosHint"));
+          return;
+        }
         if (!deferredPrompt || installing) return;
         setInstalling(true);
         try {

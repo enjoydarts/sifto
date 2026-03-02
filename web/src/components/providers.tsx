@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nProvider } from "@/components/i18n-provider";
 import { ToastProvider } from "@/components/toast-provider";
 import { ConfirmProvider } from "@/components/confirm-provider";
+import PWARegister from "@/components/pwa-register";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -27,7 +28,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <SessionProvider>
         <I18nProvider>
           <ToastProvider>
-            <ConfirmProvider>{children}</ConfirmProvider>
+            <ConfirmProvider>
+              <PWARegister />
+              {children}
+            </ConfirmProvider>
           </ToastProvider>
         </I18nProvider>
       </SessionProvider>

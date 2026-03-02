@@ -46,10 +46,23 @@
   </head>
   <body>
     <section class="wrap">
-      <h1>オフラインです</h1>
-      <p>ネットワークに接続できません。接続後に再読み込みしてください。</p>
-      <button type="button" onclick="location.reload()">再読み込み</button>
+      <h1 id="offline-title">オフラインです</h1>
+      <p id="offline-desc">ネットワークに接続できません。接続後に再読み込みしてください。</p>
+      <button id="offline-reload" type="button" onclick="location.reload()">再読み込み</button>
     </section>
+    <script>
+      (function () {
+        var lang = (navigator.language || "ja").toLowerCase();
+        if (!lang.startsWith("en")) return;
+        document.documentElement.lang = "en";
+        document.title = "Sifto - Offline";
+        var h = document.getElementById("offline-title");
+        var p = document.getElementById("offline-desc");
+        var b = document.getElementById("offline-reload");
+        if (h) h.textContent = "You're offline";
+        if (p) p.textContent = "No network connection. Please reconnect and reload.";
+        if (b) b.textContent = "Reload";
+      })();
+    </script>
   </body>
 </html>
-

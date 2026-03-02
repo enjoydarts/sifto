@@ -1,7 +1,24 @@
-const SW_VERSION = "v1";
+const SW_VERSION = "v2";
 const STATIC_CACHE = `sifto-static-${SW_VERSION}`;
 const PAGE_CACHE = `sifto-pages-${SW_VERSION}`;
-const PRECACHE_URLS = ["/offline.html", "/manifest.webmanifest", "/logo.png", "/apple-touch-icon.png"];
+const MAX_PAGE_CACHE_ENTRIES = 40;
+const PRECACHE_URLS = [
+  "/offline.html",
+  "/manifest.webmanifest",
+  "/logo.png",
+  "/logo-192.png",
+  "/logo-512.png",
+  "/logo-maskable-512.png",
+  "/apple-touch-icon.png",
+];
+
+async function trimPageCache() {
+  const cache = await caches.open(PAGE_CACHE);
+  const keys = await cache.keys();
+  if (keys.length <= MAX_PAGE_CACHE_ENTRIES) return;
+  const deleteCount = keys.length - MAX_PAGE_CACHE_ENTRIES;
+  await Promise.all(keys.slice(0, deleteCount).map((req) => cache.delete(req)));
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -34,7 +51,7 @@ self.addEventListener("fetch", (event) => {
       fetch(req)
         .then((res) => {
           const copy = res.clone();
-          caches.open(PAGE_CACHE).then((cache) => cache.put(req, copy));
+          caches.open(PAGE_CACHE).then((cache) => cache.put(req, copy).then(trimPageCache));
           return res;
         })
         .catch(async () => {
@@ -48,6 +65,18 @@ self.addEventListener("fetch", (event) => {
 
   const destination = req.destination;
   if (["style", "script", "worker", "image", "font"].includes(destination)) {
+    if (destination === "image" && !url.pathname.startsWith("/_next/static/")) {
+      event.respondWith(
+        fetch(req)
+          .then((res) => {
+            const copy = res.clone();
+            caches.open(STATIC_CACHE).then((cache) => cache.put(req, copy));
+            return res;
+          })
+          .catch(() => caches.match(req))
+      );
+      return;
+    }
     event.respondWith(
       caches.match(req).then((cached) => {
         const networkFetch = fetch(req)
@@ -62,4 +91,3 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
-

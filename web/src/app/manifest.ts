@@ -11,10 +11,10 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#fafafa",
     theme_color: "#111827",
     icons: [
-      { src: "/logo.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/logo.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/logo-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/logo-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/logo-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
       { src: "/apple-touch-icon.png", sizes: "180x180", type: "image/png", purpose: "any" },
     ],
   };
 }
-

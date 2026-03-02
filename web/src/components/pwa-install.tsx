@@ -27,14 +27,6 @@ export default function PWAInstallButton() {
       setHidden(true);
       return;
     }
-    if (!("serviceWorker" in navigator)) return;
-
-    const isSecure = window.location.protocol === "https:" || window.location.hostname === "localhost";
-    if (isSecure) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {
-        // no-op
-      });
-    }
 
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
@@ -77,4 +69,3 @@ export default function PWAInstallButton() {
     </button>
   );
 }
-

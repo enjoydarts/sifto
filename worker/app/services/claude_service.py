@@ -416,17 +416,29 @@ def _messages_create(
     max_tokens: int = 1024,
     api_key: str | None = None,
     timeout_sec: float | None = None,
+    system_prompt: str | None = None,
+    user_prompt: str | None = None,
+    enable_prompt_cache: bool = False,
 ):
     client = _client_for_api_key(api_key)
     if client is None:
         return None
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 90.0)
-    return client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-        timeout=req_timeout,
-    )
+    kwargs = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "timeout": req_timeout,
+    }
+    if system_prompt is not None:
+        system_block: dict = {"type": "text", "text": system_prompt}
+        if enable_prompt_cache:
+            system_block["cache_control"] = {"type": "ephemeral"}
+            kwargs["extra_headers"] = {"anthropic-beta": "prompt-caching-2024-07-31"}
+        kwargs["system"] = [system_block]
+        kwargs["messages"] = [{"role": "user", "content": user_prompt or prompt}]
+    else:
+        kwargs["messages"] = [{"role": "user", "content": prompt}]
+    return client.messages.create(**kwargs)
 
 
 def _is_rate_limit_error(err: Exception) -> bool:
@@ -441,6 +453,9 @@ def _call_with_retries(
     retries: int = 2,
     api_key: str | None = None,
     timeout_sec: float | None = None,
+    system_prompt: str | None = None,
+    user_prompt: str | None = None,
+    enable_prompt_cache: bool = False,
 ):
     last_err = None
     for attempt in range(retries + 1):
@@ -451,6 +466,9 @@ def _call_with_retries(
                 max_tokens=max_tokens,
                 api_key=api_key,
                 timeout_sec=timeout_sec,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                enable_prompt_cache=enable_prompt_cache,
             )
         except Exception as e:
             last_err = e
@@ -478,6 +496,9 @@ def _call_with_model_fallback(
     max_tokens: int = 1024,
     api_key: str | None = None,
     timeout_sec: float | None = None,
+    system_prompt: str | None = None,
+    user_prompt: str | None = None,
+    enable_prompt_cache: bool = False,
 ):
     if _client_for_api_key(api_key) is None:
         return None, None
@@ -489,6 +510,9 @@ def _call_with_model_fallback(
                 max_tokens=max_tokens,
                 api_key=api_key,
                 timeout_sec=timeout_sec,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                enable_prompt_cache=enable_prompt_cache,
             ),
             primary_model,
         )
@@ -503,6 +527,9 @@ def _call_with_model_fallback(
                         max_tokens=max_tokens,
                         api_key=api_key,
                         timeout_sec=timeout_sec,
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        enable_prompt_cache=enable_prompt_cache,
                     ),
                     fallback_model,
                 )
@@ -630,28 +657,27 @@ def summarize(
         }
 
     facts_text = "\n".join(f"- {f}" for f in facts)
-    prompt = f"""以下の事実リストをもとに、記事の要約を作成してください。
+    system_prompt = """以下の事実リストをもとに、記事の要約を作成してください。
 以下のJSON形式で返してください:
-{{
-  "summary": "{min_chars}〜{max_chars}字程度の要約",
+{
+  "summary": "要約",
   "topics": ["トピック1", "トピック2"],
   "translated_title": "英語タイトルの場合のみ日本語訳（日本語記事は空文字）",
-  "score_breakdown": {{
+  "score_breakdown": {
     "importance": 0.0〜1.0,
     "novelty": 0.0〜1.0,
     "actionability": 0.0〜1.0,
     "reliability": 0.0〜1.0,
     "relevance": 0.0〜1.0
-  }},
+  },
   "score_reason": "採点理由（1〜2文）"
-}}
+}
 
 要約スタイル:
 - 客観的・中立的に書く（意見や煽りを入れない）
 - 読みやすい自然な日本語にする（硬すぎる定型文を避ける）
 - 記事の主題、何が起きたか、重要なポイントを過不足なく含める
 - 箇条書きではなく、2〜4段落の文章でまとめる
-- 要約の目標文字数は約{target_chars}字。短すぎる要約を避ける
 - score_breakdown は以下の観点で付与する
   - importance: 一般読者にとっての重要度
   - novelty: 新規性・変化の大きさ
@@ -659,15 +685,25 @@ def summarize(
   - reliability: 具体性・確度（数値/固有名詞/条件の明確さ）
   - relevance: 幅広い読者への関連性（個別ユーザー最適化ではない）
 - タイトルが主に英語の場合のみ translated_title に自然な日本語訳を入れる
-- タイトルが日本語の場合は translated_title は空文字にする
+- タイトルが日本語の場合は translated_title は空文字にする"""
+    user_prompt = f"""summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target_chars}字にしてください。
 
 タイトル: {title or "（不明）"}
 
 事実:
 {facts_text}
 """
+    prompt = f"{system_prompt}\n\n{user_prompt}"
+    enable_summary_prompt_cache = os.getenv("ANTHROPIC_SUMMARY_PROMPT_CACHE", "1").strip() not in ("0", "false", "False")
     message, used_model = _call_with_model_fallback(
-        prompt, str(model or _summary_model), _summary_model_fallback, max_tokens=max_tokens, api_key=api_key
+        prompt,
+        str(model or _summary_model),
+        _summary_model_fallback,
+        max_tokens=max_tokens,
+        api_key=api_key,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        enable_prompt_cache=enable_summary_prompt_cache,
     )
     if message is None:
         summary = " / ".join(facts[:8])[:max_chars] if facts else (title or "")

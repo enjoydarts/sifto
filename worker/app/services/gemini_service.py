@@ -3,11 +3,14 @@ import logging
 import os
 import re
 import time
+import hashlib
+from datetime import datetime, timezone
 
 import httpx
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
+_GEMINI_CONTEXT_CACHE: dict[str, tuple[str, float]] = {}
 
 _DEFAULT_MODEL_PRICING = {
     "gemini-3-flash-preview": {"input_per_mtok_usd": 0.5, "output_per_mtok_usd": 3.0},
@@ -259,10 +262,68 @@ def _llm_meta(model: str, purpose: str, usage: dict) -> dict:
         "pricing_source": pricing.get("pricing_source", _GEMINI_PRICING_SOURCE_VERSION),
         "input_tokens": usage.get("input_tokens", 0),
         "output_tokens": usage.get("output_tokens", 0),
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": usage.get("cache_creation_input_tokens", 0),
+        "cache_read_input_tokens": usage.get("cache_read_input_tokens", 0),
         "estimated_cost_usd": _estimate_cost_usd(actual_model, purpose, usage),
     }
+
+
+def _parse_rfc3339_utc(s: str) -> float | None:
+    raw = (s or "").strip()
+    if not raw:
+        return None
+    try:
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        return datetime.fromisoformat(raw).astimezone(timezone.utc).timestamp()
+    except Exception:
+        return None
+
+
+def _summary_context_cache_enabled() -> bool:
+    return os.getenv("GEMINI_SUMMARY_CONTEXT_CACHE", "1").strip() not in ("0", "false", "False")
+
+
+def _summary_context_cache_ttl_sec() -> int:
+    return _env_int("GEMINI_SUMMARY_CONTEXT_CACHE_TTL_SEC", 3600)
+
+
+def _cache_key_hash(parts: list[str]) -> str:
+    h = hashlib.sha256()
+    for p in parts:
+        h.update((p or "").encode("utf-8"))
+        h.update(b"\x00")
+    return h.hexdigest()
+
+
+def _get_or_create_cached_content(model: str, api_key: str, cache_key: str, system_instruction: str) -> str | None:
+    now = time.time()
+    cached = _GEMINI_CONTEXT_CACHE.get(cache_key)
+    if cached is not None:
+        name, exp = cached
+        if exp > now + 10:
+            return name
+        _GEMINI_CONTEXT_CACHE.pop(cache_key, None)
+
+    ttl_sec = max(60, _summary_context_cache_ttl_sec())
+    url = "https://generativelanguage.googleapis.com/v1beta/cachedContents"
+    body = {
+        "model": f"models/{_normalize_model_name(model)}",
+        "systemInstruction": {"parts": [{"text": system_instruction}]},
+        "ttl": f"{ttl_sec}s",
+    }
+    req_timeout = _env_timeout_seconds("GEMINI_TIMEOUT_SEC", 90.0)
+    with httpx.Client(timeout=req_timeout) as client:
+        resp = client.post(url, json=body, params={"key": api_key})
+    if resp.status_code >= 400:
+        raise RuntimeError(f"gemini cachedContents create failed status={resp.status_code} body={resp.text[:1000]}")
+    data = resp.json() if resp.content else {}
+    name = str(data.get("name") or "").strip()
+    if not name:
+        return None
+    expire_ts = _parse_rfc3339_utc(str(data.get("expireTime") or "")) or (now + ttl_sec)
+    _GEMINI_CONTEXT_CACHE[cache_key] = (name, expire_ts)
+    return name
 
 
 def _generate_content(
@@ -272,6 +333,8 @@ def _generate_content(
     max_output_tokens: int = 1024,
     response_schema: dict | None = None,
     timeout_sec: float | None = None,
+    system_instruction: str | None = None,
+    context_cache_key: str | None = None,
 ) -> tuple[str, dict]:
     if not api_key:
         raise RuntimeError("google api key is required")
@@ -285,10 +348,17 @@ def _generate_content(
     if response_schema:
         generation_config["responseSchema"] = response_schema
 
-    body = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": generation_config,
-    }
+    body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": generation_config}
+    if system_instruction:
+        body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+        if context_cache_key and _summary_context_cache_enabled():
+            try:
+                cached_name = _get_or_create_cached_content(model_name, api_key, context_cache_key, system_instruction)
+                if cached_name:
+                    body.pop("systemInstruction", None)
+                    body["cachedContent"] = cached_name
+            except Exception as e:
+                _log.warning("gemini context cache unavailable key=%s err=%s", context_cache_key[:16], e)
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("GEMINI_TIMEOUT_SEC", 90.0)
     attempts = _env_int("GEMINI_RETRY_ATTEMPTS", 3)
     base_sleep_sec = _env_timeout_seconds("GEMINI_RETRY_BASE_SEC", 0.5)
@@ -323,6 +393,10 @@ def _generate_content(
     usage = {
         "input_tokens": int(usage_meta.get("promptTokenCount", 0) or 0),
         "output_tokens": int(usage_meta.get("candidatesTokenCount", 0) or 0),
+        "cache_creation_input_tokens": int(usage_meta.get("cacheTokensDetails", [{}])[0].get("textCount", 0) or 0)
+        if isinstance(usage_meta.get("cacheTokensDetails"), list) and usage_meta.get("cacheTokensDetails")
+        else 0,
+        "cache_read_input_tokens": int(usage_meta.get("cachedContentTokenCount", 0) or 0),
     }
     candidates = data.get("candidates", []) if isinstance(data, dict) else []
     if not candidates:
@@ -508,28 +582,27 @@ def summarize(
     max_chars = _clamp_int(round(target_chars * 1.2), 260, 1400)
     max_tokens = _summary_max_tokens(target_chars)
     facts_text = "\n".join(f"- {f}" for f in facts)
-    prompt = f"""以下の事実リストをもとに、記事の要約を作成してください。
+    system_instruction = """以下の事実リストをもとに、記事の要約を作成してください。
 以下のJSON形式で返してください:
-{{
-  "summary": "{min_chars}〜{max_chars}字程度の要約",
+{
+  "summary": "要約",
   "topics": ["トピック1", "トピック2"],
   "translated_title": "英語タイトルの場合のみ日本語訳（日本語記事は空文字）",
-  "score_breakdown": {{
+  "score_breakdown": {
     "importance": 0.0〜1.0,
     "novelty": 0.0〜1.0,
     "actionability": 0.0〜1.0,
     "reliability": 0.0〜1.0,
     "relevance": 0.0〜1.0
-  }},
+  },
   "score_reason": "採点理由（1〜2文）"
-}}
+}
 
 要約スタイル:
 - 客観的・中立的に書く（意見や煽りを入れない）
 - 読みやすい自然な日本語にする（硬すぎる定型文を避ける）
 - 記事の主題、何が起きたか、重要なポイントを過不足なく含める
 - 箇条書きではなく、2〜4段落の文章でまとめる
-- 要約の目標文字数は約{target_chars}字。短すぎる要約を避ける
 - score_breakdown は以下の観点で付与する
   - importance: 一般読者にとっての重要度
   - novelty: 新規性・変化の大きさ
@@ -537,13 +610,22 @@ def summarize(
   - reliability: 具体性・確度（数値/固有名詞/条件の明確さ）
   - relevance: 幅広い読者への関連性（個別ユーザー最適化ではない）
 - タイトルが主に英語の場合のみ translated_title に自然な日本語訳を入れる
-- タイトルが日本語の場合は translated_title は空文字にする
+- タイトルが日本語の場合は translated_title は空文字にする"""
+    prompt = f"""summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target_chars}字にしてください。
 
 タイトル: {title or "（不明）"}
 事実:
 {facts_text}
 """
-    text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=max_tokens)
+    cache_key = _cache_key_hash([_normalize_model_name(model), "summary-v1", system_instruction])
+    text, usage = _generate_content(
+        prompt,
+        model=model,
+        api_key=api_key,
+        max_output_tokens=max_tokens,
+        system_instruction=system_instruction,
+        context_cache_key=cache_key,
+    )
     start = text.find("{")
     end = text.rfind("}") + 1
     try:

@@ -6,6 +6,7 @@ import { api, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
+import OneSignalSettings from "@/components/onesignal-settings";
 
 type ModelOption = {
   value: string;
@@ -599,6 +600,8 @@ export default function SettingsPage() {
             </button>
           </div>
         </section>
+
+        <OneSignalSettings />
 
         <form onSubmit={submitLLMModels} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">

@@ -7,6 +7,7 @@ import { I18nProvider } from "@/components/i18n-provider";
 import { ToastProvider } from "@/components/toast-provider";
 import { ConfirmProvider } from "@/components/confirm-provider";
 import PWARegister from "@/components/pwa-register";
+import OneSignalInit from "@/components/onesignal-init";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -30,6 +31,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <ToastProvider>
             <ConfirmProvider>
               <PWARegister />
+              <OneSignalInit />
               {children}
             </ConfirmProvider>
           </ToastProvider>

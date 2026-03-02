@@ -21,6 +21,24 @@ function loadOneSignalSDK() {
   document.head.appendChild(script);
 }
 
+async function cleanupLegacyOneSignalRootWorker() {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(
+    registrations.map(async (registration) => {
+      const activeScript = registration.active?.scriptURL ?? "";
+      const waitingScript = registration.waiting?.scriptURL ?? "";
+      const installingScript = registration.installing?.scriptURL ?? "";
+      const scriptUrl = activeScript || waitingScript || installingScript;
+      const isLegacyOneSignalRoot =
+        registration.scope === `${window.location.origin}/` && scriptUrl.includes("OneSignalSDK");
+      if (isLegacyOneSignalRoot) {
+        await registration.unregister();
+      }
+    }),
+  );
+}
+
 export default function OneSignalInit() {
   const { data: session } = useSession();
   const externalId = session?.user?.email ?? null;
@@ -35,6 +53,7 @@ export default function OneSignalInit() {
     window.OneSignalDeferred = window.OneSignalDeferred || [];
     window.OneSignalDeferred.push(async (OneSignal) => {
       if (window.__siftoOneSignalReady) return;
+      await cleanupLegacyOneSignalRootWorker();
       await OneSignal.init({
         appId,
         serviceWorkerPath: "/onesignal/OneSignalSDKWorker.js",

@@ -37,7 +37,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`pointer-events-auto rounded-lg border px-4 py-3 text-base leading-relaxed shadow-lg backdrop-blur ${
+            className={`pointer-events-auto rounded-lg border px-4 py-3 text-base leading-relaxed shadow-lg backdrop-blur motion-safe:animate-[toast-float-fade_3200ms_ease-out_both] motion-reduce:animate-none ${
               toast.kind === "success"
                 ? "border-green-200 bg-green-50/95 text-green-800"
                 : toast.kind === "error"

@@ -26,3 +26,26 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
+
+@keyframes toast-float-fade {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.985);
+    filter: blur(1px);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+  86% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.99);
+    filter: blur(0.6px);
+  }
+}

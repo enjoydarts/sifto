@@ -4,19 +4,23 @@ import { useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useState } from "react";
 
-function loadOneSignalSDK() {
+function loadOneSignalSDK(onLoaded?: () => void) {
   if (typeof window === "undefined") return;
   if (window.__siftoOneSignalLoading) return;
   if (window.OneSignal) return;
+  const existing = document.querySelector<HTMLScriptElement>("script[data-sifto-onesignal='1']");
+  if (existing) return;
   window.__siftoOneSignalScriptLoaded = false;
   window.__siftoOneSignalScriptError = undefined;
   window.__siftoOneSignalLoading = true;
   const script = document.createElement("script");
+  script.dataset.siftoOnesignal = "1";
   script.src = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
   script.defer = true;
   script.onload = () => {
     window.__siftoOneSignalLoading = false;
     window.__siftoOneSignalScriptLoaded = true;
+    onLoaded?.();
   };
   script.onerror = (e) => {
     window.__siftoOneSignalLoading = false;
@@ -44,6 +48,31 @@ async function cleanupLegacyOneSignalRootWorker() {
   );
 }
 
+function enqueueOneSignalInit(appId: string, setReady: (ready: boolean) => void) {
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  window.__siftoOneSignalInitEnqueued = (window.__siftoOneSignalInitEnqueued ?? 0) + 1;
+  window.OneSignalDeferred.push(async (OneSignal) => {
+    if (window.__siftoOneSignalReady) return;
+    window.__siftoOneSignalDeferredExecuted = true;
+    try {
+      window.__siftoOneSignalInitError = undefined;
+      await cleanupLegacyOneSignalRootWorker();
+      await OneSignal.init({
+        appId,
+        serviceWorkerPath: "/onesignal/OneSignalSDKWorker.js",
+        serviceWorkerUpdaterPath: "/onesignal/OneSignalSDKUpdaterWorker.js",
+        serviceWorkerParam: { scope: "/onesignal/" },
+        notifyButton: { enable: false },
+      });
+      window.__siftoOneSignalReady = true;
+      setReady(true);
+    } catch (e) {
+      window.__siftoOneSignalReady = false;
+      window.__siftoOneSignalInitError = e instanceof Error ? e.message : String(e);
+    }
+  });
+}
+
 export default function OneSignalInit() {
   const { data: session } = useSession();
   const externalId = session?.user?.email ?? null;
@@ -54,28 +83,16 @@ export default function OneSignalInit() {
     const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID?.trim();
     if (!appId) return;
     if (window.__siftoOneSignalReady) return;
+    window.__siftoOneSignalDeferredExecuted = false;
+    window.__siftoOneSignalInitEnqueued = 0;
 
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-    window.OneSignalDeferred.push(async (OneSignal) => {
-      if (window.__siftoOneSignalReady) return;
-      try {
-        window.__siftoOneSignalInitError = undefined;
-        await cleanupLegacyOneSignalRootWorker();
-        await OneSignal.init({
-          appId,
-          serviceWorkerPath: "/onesignal/OneSignalSDKWorker.js",
-          serviceWorkerUpdaterPath: "/onesignal/OneSignalSDKUpdaterWorker.js",
-          serviceWorkerParam: { scope: "/onesignal/" },
-          notifyButton: { enable: false },
-        });
-        window.__siftoOneSignalReady = true;
-        setReady(true);
-      } catch (e) {
-        window.__siftoOneSignalReady = false;
-        window.__siftoOneSignalInitError = e instanceof Error ? e.message : String(e);
+    // Enqueue once before SDK load, and once right after load to handle Firefox timing edge cases.
+    enqueueOneSignalInit(appId, setReady);
+    loadOneSignalSDK(() => {
+      if (!window.__siftoOneSignalReady) {
+        enqueueOneSignalInit(appId, setReady);
       }
     });
-    loadOneSignalSDK();
   }, []);
 
   useEffect(() => {

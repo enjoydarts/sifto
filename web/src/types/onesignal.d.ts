@@ -26,5 +26,7 @@ declare global {
     __siftoOneSignalInitError?: string;
     __siftoOneSignalScriptLoaded?: boolean;
     __siftoOneSignalScriptError?: string;
+    __siftoOneSignalDeferredExecuted?: boolean;
+    __siftoOneSignalInitEnqueued?: number;
   }
 }

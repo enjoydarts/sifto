@@ -94,6 +94,8 @@ type OneSignalDebugState = {
   script_loading: boolean;
   script_loaded: boolean;
   script_error: string | null;
+  deferred_executed: boolean;
+  init_enqueued_count: number;
   sdk_ready: boolean;
   sdk_loaded: boolean;
   deferred_queue_length: number;
@@ -228,6 +230,8 @@ export default function DebugDigestsPage() {
         script_loading: Boolean(window.__siftoOneSignalLoading),
         script_loaded: Boolean(window.__siftoOneSignalScriptLoaded),
         script_error: window.__siftoOneSignalScriptError ?? null,
+        deferred_executed: Boolean(window.__siftoOneSignalDeferredExecuted),
+        init_enqueued_count: window.__siftoOneSignalInitEnqueued ?? 0,
         sdk_ready: Boolean(window.__siftoOneSignalReady),
         sdk_loaded: Boolean(os),
         deferred_queue_length: Array.isArray(deferredQueue) ? deferredQueue.length : 0,

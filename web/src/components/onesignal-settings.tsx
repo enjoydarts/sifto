@@ -5,28 +5,6 @@ import { Bell } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 
-type OneSignalPushSubscription = {
-  optedIn?: boolean;
-  optIn?: () => Promise<void>;
-  optOut?: () => Promise<void>;
-};
-
-type OneSignalLike = {
-  Notifications?: {
-    requestPermission?: () => Promise<void>;
-  };
-  User?: {
-    PushSubscription?: OneSignalPushSubscription;
-  };
-};
-
-declare global {
-  interface Window {
-    OneSignal?: OneSignalLike;
-    __siftoOneSignalReady?: boolean;
-  }
-}
-
 export default function OneSignalSettings() {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -94,7 +72,7 @@ export default function OneSignalSettings() {
                 showToast(t("settings.pushDeniedHint"), "info");
                 return;
               }
-              await os.Notifications.requestPermission();
+              await os.Notifications?.requestPermission?.();
               if (os.User?.PushSubscription?.optIn) {
                 await os.User.PushSubscription.optIn();
               }

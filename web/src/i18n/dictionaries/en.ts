@@ -197,6 +197,7 @@ export const enDict: Dict = {
   "sources.suggest.finding": "Finding…",
   "sources.suggest.button": "Suggest feeds",
   "sources.suggest.aiRanked": "AI-ranked",
+  "sources.suggest.noFeedFound": "No feed was detected from this suggested URL. Try another suggestion.",
   "sources.suggest.empty": "No suggestions yet. Try again after adding more sources.",
   "sources.suggest.topicPrefix": "Topic:",
   "sources.suggest.aiReason": "AI reason",

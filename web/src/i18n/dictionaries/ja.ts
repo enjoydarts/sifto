@@ -197,6 +197,7 @@ export const jaDict: Dict = {
   "sources.suggest.finding": "探索中…",
   "sources.suggest.button": "候補を提案",
   "sources.suggest.aiRanked": "AIで候補を並べ替え",
+  "sources.suggest.noFeedFound": "この候補URLからFeedを検出できませんでした。別候補を試してください。",
   "sources.suggest.empty": "まだ候補はありません。登録済みソースを増やしてから試すと見つかりやすくなります。",
   "sources.suggest.topicPrefix": "興味トピック:",
   "sources.suggest.aiReason": "AI理由",

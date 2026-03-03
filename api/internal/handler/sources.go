@@ -1116,7 +1116,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	}
 	h.recordSourceSuggestionLLMUsage(ctx, userID, resp.LLM)
 	for _, seed := range resp.Items {
-		seedURL := strings.TrimSpace(seed.URL)
+		seedURL := coerceHTTPURL(strings.TrimSpace(seed.URL))
 		if seedURL == "" {
 			continue
 		}
@@ -1199,7 +1199,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 }
 
 func aiSeedFeedProbeURLs(raw string) []string {
-	u, err := url.Parse(strings.TrimSpace(raw))
+	u, err := url.Parse(coerceHTTPURL(strings.TrimSpace(raw)))
 	if err != nil || u.Host == "" {
 		return nil
 	}
@@ -1226,6 +1226,25 @@ func aiSeedFeedProbeURLs(raw string) []string {
 		add(c.String())
 	}
 	return out
+}
+
+func coerceHTTPURL(raw string) string {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return ""
+	}
+	u, err := url.Parse(v)
+	if err == nil && u.Host != "" {
+		if u.Scheme == "" {
+			u.Scheme = "https"
+		}
+		return u.String()
+	}
+	// Handle hostname-like text without scheme (e.g. "example.com")
+	if !strings.Contains(v, "://") && strings.Contains(v, ".") && !strings.ContainsAny(v, " \t\r\n") {
+		return "https://" + v
+	}
+	return ""
 }
 
 func minInt(a, b int) int {

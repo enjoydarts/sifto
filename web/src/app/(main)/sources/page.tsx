@@ -90,13 +90,18 @@ export default function SourcesPage() {
     setAddingSuggestedURL(s.url);
     try {
       let targetURL = s.url;
+      let foundFeed = false;
       try {
         const discovered = await api.discoverFeeds(s.url);
         if ((discovered.feeds ?? []).length > 0) {
           targetURL = discovered.feeds[0].url;
+          foundFeed = true;
         }
       } catch {
         // Keep original URL and let createSource validate.
+      }
+      if (!foundFeed) {
+        throw new Error(t("sources.suggest.noFeedFound"));
       }
       await api.createSource({
         url: targetURL,

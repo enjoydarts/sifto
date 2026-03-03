@@ -8,7 +8,9 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -511,7 +513,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	}
 
 	register(fetchRSSFn(client, db))
-	register(processItemFn(client, db, worker, openAI, secretCipher))
+	register(processItemFn(client, db, worker, openAI, oneSignal, secretCipher))
 	register(embedItemFn(client, db, openAI, secretCipher))
 	register(generateBriefingSnapshotsFn(client, db))
 	register(generateDigestFn(client, db))
@@ -520,6 +522,30 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(checkBudgetAlertsFn(client, db, resend, oneSignal))
 
 	return client.Serve()
+}
+
+func envFloat64OrDefault(key string, fallback float64) float64 {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		return fallback
+	}
+	return f
+}
+
+func envIntOrDefault(key string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 // cron/generate-briefing-snapshots — 30分ごとに当日ブリーフィングのスナップショットを更新
@@ -636,11 +662,15 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 }
 
 // ② event/process-item — 本文抽出 → 事実抽出 → 要約（各stepでリトライ可能）
-func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, openAI *service.OpenAIClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
+func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, openAI *service.OpenAIClient, oneSignal *service.OneSignalClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
 	itemRepo := repository.NewItemInngestRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
 	sourceRepo := repository.NewSourceRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
+	userRepo := repository.NewUserRepo(db)
+	pushLogRepo := repository.NewPushNotificationLogRepo(db)
+	pickScoreThreshold := envFloat64OrDefault("ONESIGNAL_PICK_SCORE_THRESHOLD", 0.90)
+	pickMaxPerDay := envIntOrDefault("ONESIGNAL_PICK_MAX_PER_DAY", 2)
 
 	type EventData struct {
 		ItemID   string `json:"item_id"`
@@ -788,6 +818,71 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			); err != nil {
 				log.Printf("process-item insert-summary failed item_id=%s err=%v", itemID, err)
 				return nil, fmt.Errorf("insert summary: %w", err)
+			}
+			if oneSignal != nil && oneSignal.Enabled() && userIDPtr != nil && *userIDPtr != "" && summary.Score >= pickScoreThreshold {
+				alreadyNotified, err := pushLogRepo.ExistsByUserKindItem(ctx, *userIDPtr, "pick_update", itemID)
+				if err != nil {
+					log.Printf("process-item pick-notify exists failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
+				} else if !alreadyNotified {
+					dayJST := timeutil.StartOfDayJST(timeutil.NowJST())
+					countToday, err := pushLogRepo.CountByUserKindDay(ctx, *userIDPtr, "pick_update", dayJST)
+					if err != nil {
+						log.Printf("process-item pick-notify count failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
+					} else if countToday < pickMaxPerDay {
+						u, err := userRepo.GetByID(ctx, *userIDPtr)
+						if err != nil {
+							log.Printf("process-item pick-notify user lookup failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
+						} else {
+							title := "Sifto: 注目記事を追加しました"
+							itemTitle := strings.TrimSpace(summary.TranslatedTitle)
+							if itemTitle == "" {
+								itemTitle = strings.TrimSpace(coalescePtrStr(titleForLLM, url))
+							}
+							message := itemTitle
+							if len(message) > 120 {
+								message = message[:120]
+							}
+							pushRes, err := oneSignal.SendToExternalID(
+								ctx,
+								u.Email,
+								title,
+								message,
+								url,
+								map[string]any{
+									"type":    "pick_update",
+									"item_id": itemID,
+									"url":     url,
+									"score":   summary.Score,
+								},
+							)
+							if err != nil {
+								log.Printf("process-item pick-notify send failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
+							} else {
+								var oneSignalID *string
+								recipients := 0
+								if pushRes != nil {
+									if strings.TrimSpace(pushRes.ID) != "" {
+										id := strings.TrimSpace(pushRes.ID)
+										oneSignalID = &id
+									}
+									recipients = pushRes.Recipients
+								}
+								if err := pushLogRepo.Insert(ctx, repository.PushNotificationLogInput{
+									UserID:                  *userIDPtr,
+									Kind:                    "pick_update",
+									ItemID:                  &itemID,
+									DayJST:                  dayJST,
+									Title:                   title,
+									Message:                 message,
+									OneSignalNotificationID: oneSignalID,
+									Recipients:              recipients,
+								}); err != nil {
+									log.Printf("process-item pick-notify log failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
+								}
+							}
+						}
+					}
+				}
 			}
 
 			// Step 4: Embedding生成（関連記事用）: 失敗しても記事処理全体は成功扱い

@@ -6,23 +6,41 @@ import { useState } from "react";
 
 function loadOneSignalSDK(onLoaded?: () => void) {
   if (typeof window === "undefined") return;
-  if (window.__siftoOneSignalLoading) return;
+  const now = Date.now();
+  if (window.__siftoOneSignalLoading) {
+    const requestedAt = window.__siftoOneSignalScriptRequestedAt ?? 0;
+    if (requestedAt > 0 && now - requestedAt < 12000) return;
+    window.__siftoOneSignalLoading = false;
+    window.__siftoOneSignalScriptError = "script load timeout";
+  }
   if (window.OneSignal) return;
   const existing = document.querySelector<HTMLScriptElement>("script[data-sifto-onesignal='1']");
-  if (existing) return;
+  if (existing) existing.remove();
   window.__siftoOneSignalScriptLoaded = false;
   window.__siftoOneSignalScriptError = undefined;
+  window.__siftoOneSignalScriptRequestedAt = now;
+  window.__siftoOneSignalLoadAttempt = (window.__siftoOneSignalLoadAttempt ?? 0) + 1;
   window.__siftoOneSignalLoading = true;
   const script = document.createElement("script");
   script.dataset.siftoOnesignal = "1";
-  script.src = "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js";
+  script.src = `https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js?attempt=${window.__siftoOneSignalLoadAttempt}`;
   script.defer = true;
+  const timeoutId = window.setTimeout(() => {
+    if (!window.OneSignal) {
+      window.__siftoOneSignalLoading = false;
+      window.__siftoOneSignalScriptLoaded = false;
+      window.__siftoOneSignalScriptError = "script load timeout";
+      script.remove();
+    }
+  }, 12000);
   script.onload = () => {
+    window.clearTimeout(timeoutId);
     window.__siftoOneSignalLoading = false;
     window.__siftoOneSignalScriptLoaded = true;
     onLoaded?.();
   };
   script.onerror = (e) => {
+    window.clearTimeout(timeoutId);
     window.__siftoOneSignalLoading = false;
     window.__siftoOneSignalScriptLoaded = false;
     window.__siftoOneSignalScriptError = e instanceof ErrorEvent ? e.message : "script load failed";

@@ -1296,7 +1296,7 @@ def suggest_feed_seed_sites(
 - 最大30件
 - JSONのみで返す
 
-返却形式:
+返却形式（必須）:
 {{
   "items": [
     {{"url":"https://...", "reason":"..."}}
@@ -1336,24 +1336,51 @@ Few-shot（避けたい傾向の既存Feed例）:
             },
         }
     text = message.content[0].text.strip()
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    try:
-        data = json.loads(text[start:end])
-    except Exception:
-        data = {}
+    data = _extract_first_json_object(text) or {}
     rows = data.get("items", [])
     if not isinstance(rows, list):
         rows = []
+    existing_set = {str(s.get("url") or "").strip().lower().rstrip("/") for s in existing_sources}
     out: list[dict] = []
     for row in rows[:30]:
         if not isinstance(row, dict):
             continue
         url = str(row.get("url") or "").strip()
         reason = str(row.get("reason") or "").strip()[:180]
-        if not url:
+        if not url or url.lower().rstrip("/") in existing_set:
             continue
         out.append({"url": url, "reason": reason})
+    if len(out) == 0:
+        rescue_prompt = f"""既存ソースと重複しないサイトURL候補を必ず10件以上返してください。JSONのみ。
+{{
+  "items": [
+    {{"url":"https://...", "reason":"..."}}
+  ]
+}}
+既存ソース:
+{json.dumps(existing_sources, ensure_ascii=False)}
+興味トピック:
+{json.dumps(preferred_topics, ensure_ascii=False)}
+"""
+        rescue_message, _ = _call_with_model_fallback(
+            rescue_prompt,
+            str(model or _feed_suggest_model),
+            _feed_suggest_model_fallback,
+            max_tokens=1500,
+            api_key=api_key,
+        )
+        if rescue_message is not None:
+            rescue_data = _extract_first_json_object(rescue_message.content[0].text.strip()) or {}
+            rescue_rows = rescue_data.get("items", [])
+            if isinstance(rescue_rows, list):
+                for row in rescue_rows[:30]:
+                    if not isinstance(row, dict):
+                        continue
+                    url = str(row.get("url") or "").strip()
+                    reason = str(row.get("reason") or "").strip()[:180]
+                    if not url or url.lower().rstrip("/") in existing_set:
+                        continue
+                    out.append({"url": url, "reason": reason})
     return {
         "items": out,
         "llm": _llm_meta(message, "source_suggestion", used_model or _feed_suggest_model),

@@ -792,7 +792,7 @@ def suggest_feed_seed_sites(
 - 最大30件
 - JSONのみで返す
 
-返却形式:
+返却形式（必須）:
 {{
   "items": [
     {{"url":"https://...", "reason":"..."}}
@@ -811,26 +811,76 @@ Few-shot（避けたい傾向の既存Feed例）:
 興味トピック:
 {json.dumps(preferred_topics, ensure_ascii=False)}
 """
-    text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=2200)
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    try:
-        data = json.loads(text[start:end])
-    except Exception:
-        data = {}
+    seed_schema = {
+        "type": "OBJECT",
+        "properties": {
+            "items": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "url": {"type": "STRING"},
+                        "reason": {"type": "STRING"},
+                    },
+                    "required": ["url", "reason"],
+                },
+            }
+        },
+        "required": ["items"],
+    }
+    text, usage = _generate_content(
+        prompt,
+        model=model,
+        api_key=api_key,
+        max_output_tokens=2200,
+        response_schema=seed_schema,
+    )
+    data = _extract_first_json_object(text) or {}
     rows = data.get("items", [])
     if not isinstance(rows, list):
         rows = []
-    existing_set = {str(s.get("url") or "").strip() for s in existing_sources}
+    existing_set = {_normalize_url_for_match(str(s.get("url") or "").strip()) for s in existing_sources}
     out: list[dict] = []
     for row in rows[:30]:
         if not isinstance(row, dict):
             continue
         url = str(row.get("url") or "").strip()
         reason = str(row.get("reason") or "").strip()[:180]
-        if not url or url in existing_set:
+        if not url or _normalize_url_for_match(url) in existing_set:
             continue
         out.append({"url": url, "reason": reason})
+    if len(out) == 0:
+        rescue_prompt = f"""既存ソースと重複しないサイトURL候補を必ず10件以上返してください。JSONのみ。
+{{
+  "items": [
+    {{"url":"https://...", "reason":"..."}}
+  ]
+}}
+既存ソース:
+{json.dumps(existing_sources, ensure_ascii=False)}
+興味トピック:
+{json.dumps(preferred_topics, ensure_ascii=False)}
+"""
+        rescue_text, rescue_usage = _generate_content(
+            rescue_prompt,
+            model=model,
+            api_key=api_key,
+            max_output_tokens=1800,
+            response_schema=seed_schema,
+        )
+        rescue_data = _extract_first_json_object(rescue_text) or {}
+        rescue_rows = rescue_data.get("items", [])
+        if isinstance(rescue_rows, list):
+            for row in rescue_rows[:30]:
+                if not isinstance(row, dict):
+                    continue
+                url = str(row.get("url") or "").strip()
+                reason = str(row.get("reason") or "").strip()[:180]
+                if not url or _normalize_url_for_match(url) in existing_set:
+                    continue
+                out.append({"url": url, "reason": reason})
+        usage["input_tokens"] = int(usage.get("input_tokens", 0)) + int(rescue_usage.get("input_tokens", 0))
+        usage["output_tokens"] = int(usage.get("output_tokens", 0)) + int(rescue_usage.get("output_tokens", 0))
     return {"items": out, "llm": _llm_meta(model, "source_suggestion", usage)}
 
 

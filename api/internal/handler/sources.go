@@ -594,56 +594,9 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cands := map[string]*sourceSuggestionAgg{}
-	for _, p := range probes {
-		ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
-		feeds, err := discoverRSSFeeds(ctx, p.ProbeURL)
-		cancel()
-		if err != nil {
-			continue
-		}
-		for _, f := range feeds {
-			key := normalizeFeedURL(f.URL)
-			if key == "" || registered[key] {
-				continue
-			}
-			a := cands[key]
-			if a == nil {
-				a = &sourceSuggestionAgg{
-					URL:           f.URL,
-					Title:         f.Title,
-					Reasons:       map[string]bool{},
-					MatchedTopics: map[string]bool{},
-					SeedSourceIDs: map[string]bool{},
-				}
-				cands[key] = a
-			}
-			if a.Title == nil && f.Title != nil {
-				a.Title = f.Title
-			}
-			if !a.Reasons[p.Reason] {
-				a.Reasons[p.Reason] = true
-				a.Score++
-			}
-			if !a.SeedSourceIDs[p.SourceID] {
-				a.SeedSourceIDs[p.SourceID] = true
-				a.Score += 2
-			}
-			for _, topic := range preferredTopics {
-				if topic == "" {
-					continue
-				}
-				if sourceSuggestionTopicMatch(f, topic) {
-					if !a.MatchedTopics[topic] {
-						a.MatchedTopics[topic] = true
-						a.Score += 3
-					}
-				}
-			}
-		}
-	}
-	// AI主導の候補提案に寄せるため、候補不足時に限定せず常にAIシード拡張を試す。
-	// 既存候補が十分ある場合でも、別ドメインや別カテゴリの探索を混ぜて多様性を確保する。
-	if (anthropicAPIKey != nil || googleAPIKey != nil) && h.worker != nil {
+	aiReady := (anthropicAPIKey != nil || googleAPIKey != nil) && h.worker != nil
+	// AI主導: まずAIシード提案から候補を作る。
+	if aiReady {
 		h.expandSourceSuggestionsWithLLMSeeds(
 			r.Context(),
 			userID,
@@ -657,6 +610,60 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 			googleAPIKey,
 			anthropicSourceSuggestionModel,
 		)
+	}
+	// ルールベース探索は不足時のみ補完として使う。
+	probeFallbackThreshold := limit * 2
+	if probeFallbackThreshold < 12 {
+		probeFallbackThreshold = 12
+	}
+	if !aiReady || len(cands) < probeFallbackThreshold {
+		for _, p := range probes {
+			ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+			feeds, err := discoverRSSFeeds(ctx, p.ProbeURL)
+			cancel()
+			if err != nil {
+				continue
+			}
+			for _, f := range feeds {
+				key := normalizeFeedURL(f.URL)
+				if key == "" || registered[key] {
+					continue
+				}
+				a := cands[key]
+				if a == nil {
+					a = &sourceSuggestionAgg{
+						URL:           f.URL,
+						Title:         f.Title,
+						Reasons:       map[string]bool{},
+						MatchedTopics: map[string]bool{},
+						SeedSourceIDs: map[string]bool{},
+					}
+					cands[key] = a
+				}
+				if a.Title == nil && f.Title != nil {
+					a.Title = f.Title
+				}
+				if !a.Reasons[p.Reason] {
+					a.Reasons[p.Reason] = true
+					a.Score++
+				}
+				if !a.SeedSourceIDs[p.SourceID] {
+					a.SeedSourceIDs[p.SourceID] = true
+					a.Score += 2
+				}
+				for _, topic := range preferredTopics {
+					if topic == "" {
+						continue
+					}
+					if sourceSuggestionTopicMatch(f, topic) {
+						if !a.MatchedTopics[topic] {
+							a.MatchedTopics[topic] = true
+							a.Score += 3
+						}
+					}
+				}
+			}
+		}
 	}
 
 	out := make([]sourceSuggestionResponse, 0, len(cands))
@@ -871,6 +878,8 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 			reason := strings.TrimSpace(it.Reason)
 			if reason != "" {
 				s.AIReason = &reason
+				// 表示理由もAIの説明を主にする。
+				s.Reasons = []string{reason}
 			}
 			conf := it.Confidence
 			s.AIConfidence = &conf
@@ -1101,7 +1110,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 			}
 			if !a.Reasons[reason] {
 				a.Reasons[reason] = true
-				a.Score += 2
+				a.Score += 6
 			}
 			for _, topic := range preferredTopics {
 				if sourceSuggestionTopicMatch(f, topic) && !a.MatchedTopics[topic] {

@@ -19,9 +19,14 @@ export async function POST(req: NextRequest) {
   }
 
   const payload = await req.json().catch(() => ({}));
+  const subscriptionId =
+    payload && typeof payload.subscription_id === "string"
+      ? payload.subscription_id.trim()
+      : "";
   const body = JSON.stringify({
     ...payload,
-    external_id: externalId,
+    external_id: subscriptionId ? undefined : externalId,
+    subscription_id: subscriptionId || undefined,
   });
 
   const res = await fetch(`${apiUrl}/api/internal/debug/push/test`, {

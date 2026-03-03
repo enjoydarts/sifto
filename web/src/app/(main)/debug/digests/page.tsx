@@ -112,7 +112,9 @@ type OneSignalDebugState = {
 
 type PushTestResponse = {
   status: string;
-  external_id: string;
+  target?: string;
+  external_id?: string;
+  subscription_id?: string;
   title: string;
   message: string;
   result?: {
@@ -179,6 +181,7 @@ export default function DebugDigestsPage() {
   const [busyOneSignalDebug, setBusyOneSignalDebug] = useState(false);
   const [oneSignalDebug, setOneSignalDebug] = useState<OneSignalDebugState | null>(null);
   const [busyPushTest, setBusyPushTest] = useState(false);
+  const [pushTestSubscriptionId, setPushTestSubscriptionId] = useState("");
   const [pushTestTitle, setPushTestTitle] = useState("Sifto: テスト通知");
   const [pushTestMessage, setPushTestMessage] = useState("デバッグ画面からのテスト通知です。");
   const [pushTestResult, setPushTestResult] = useState<PushTestResponse | null>(null);
@@ -280,6 +283,11 @@ export default function DebugDigestsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.email]);
 
+  useEffect(() => {
+    if (!oneSignalDebug?.subscription_id) return;
+    setPushTestSubscriptionId(oneSignalDebug.subscription_id);
+  }, [oneSignalDebug?.subscription_id]);
+
   const onGenerate = async (e: FormEvent) => {
     e.preventDefault();
     setBusyGenerate(true);
@@ -335,6 +343,7 @@ export default function DebugDigestsPage() {
     setPushTestResult(null);
     try {
       const res = await postJSON<PushTestResponse>("/api/debug/push/test", {
+        subscription_id: pushTestSubscriptionId.trim() || undefined,
         title: pushTestTitle.trim(),
         message: pushTestMessage.trim(),
       });
@@ -577,6 +586,15 @@ export default function DebugDigestsPage() {
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-semibold text-zinc-800">Push Test (Debug)</h2>
         <form onSubmit={onPushTest} className="space-y-3">
+          <label className="block text-sm">
+            <div className="mb-1 text-xs font-medium text-zinc-600">Subscription ID (optional)</div>
+            <input
+              value={pushTestSubscriptionId}
+              onChange={(e) => setPushTestSubscriptionId(e.target.value)}
+              className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              placeholder="onesignal subscription id"
+            />
+          </label>
           <label className="block text-sm">
             <div className="mb-1 text-xs font-medium text-zinc-600">Title</div>
             <input

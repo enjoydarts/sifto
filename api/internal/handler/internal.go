@@ -350,21 +350,14 @@ func (h *InternalHandler) DebugSendPushTest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	var body struct {
-		ExternalID *string        `json:"external_id"`
-		Title      string         `json:"title"`
-		Message    string         `json:"message"`
-		URL        string         `json:"url"`
-		Data       map[string]any `json:"data"`
+		ExternalID     *string        `json:"external_id"`
+		SubscriptionID *string        `json:"subscription_id"`
+		Title          string         `json:"title"`
+		Message        string         `json:"message"`
+		URL            string         `json:"url"`
+		Data           map[string]any `json:"data"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
-	externalID := ""
-	if body.ExternalID != nil {
-		externalID = strings.TrimSpace(*body.ExternalID)
-	}
-	if externalID == "" {
-		http.Error(w, "external_id is required", http.StatusBadRequest)
-		return
-	}
 	title := strings.TrimSpace(body.Title)
 	if title == "" {
 		title = "Sifto: テスト通知"
@@ -373,17 +366,42 @@ func (h *InternalHandler) DebugSendPushTest(w http.ResponseWriter, r *http.Reque
 	if message == "" {
 		message = "OneSignalテスト通知です。"
 	}
-	res, err := h.oneSignal.SendToExternalID(r.Context(), externalID, title, message, body.URL, body.Data)
+	externalID := ""
+	if body.ExternalID != nil {
+		externalID = strings.TrimSpace(*body.ExternalID)
+	}
+	subscriptionID := ""
+	if body.SubscriptionID != nil {
+		subscriptionID = strings.TrimSpace(*body.SubscriptionID)
+	}
+	if externalID == "" && subscriptionID == "" {
+		http.Error(w, "external_id or subscription_id is required", http.StatusBadRequest)
+		return
+	}
+	var (
+		res    *service.OneSignalSendResult
+		err    error
+		target string
+	)
+	if subscriptionID != "" {
+		target = subscriptionID
+		res, err = h.oneSignal.SendToSubscriptionID(r.Context(), subscriptionID, title, message, body.URL, body.Data)
+	} else {
+		target = externalID
+		res, err = h.oneSignal.SendToExternalID(r.Context(), externalID, title, message, body.URL, body.Data)
+	}
 	if err != nil {
 		http.Error(w, fmt.Sprintf("send push: %v", err), http.StatusBadGateway)
 		return
 	}
 	writeJSON(w, map[string]any{
-		"status":      "sent",
-		"external_id": externalID,
-		"title":       title,
-		"message":     message,
-		"result":      res,
+		"status":          "sent",
+		"target":          target,
+		"external_id":     externalID,
+		"subscription_id": subscriptionID,
+		"title":           title,
+		"message":         message,
+		"result":          res,
 	})
 }
 

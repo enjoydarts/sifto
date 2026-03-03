@@ -13,9 +13,17 @@ class ExistingSource(BaseModel):
     url: str
 
 
+class FeedExample(BaseModel):
+    url: str
+    title: str | None = None
+    reason: str | None = None
+
+
 class FeedSeedSuggestionRequest(BaseModel):
     existing_sources: list[ExistingSource]
     preferred_topics: list[str] = []
+    positive_examples: list[FeedExample] = []
+    negative_examples: list[FeedExample] = []
     model: str | None = None
 
 
@@ -37,6 +45,8 @@ def suggest_feed_seed_sites_endpoint(req: FeedSeedSuggestionRequest, request: Re
         result = suggest_feed_seed_sites_gemini(
             existing_sources=existing_sources,
             preferred_topics=req.preferred_topics,
+            positive_examples=[{"url": e.url, "title": e.title, "reason": e.reason} for e in req.positive_examples],
+            negative_examples=[{"url": e.url, "title": e.title, "reason": e.reason} for e in req.negative_examples],
             model=str(req.model),
             api_key=google_api_key,
         )
@@ -45,6 +55,8 @@ def suggest_feed_seed_sites_endpoint(req: FeedSeedSuggestionRequest, request: Re
         result = suggest_feed_seed_sites(
             existing_sources=existing_sources,
             preferred_topics=req.preferred_topics,
+            positive_examples=[{"url": e.url, "title": e.title, "reason": e.reason} for e in req.positive_examples],
+            negative_examples=[{"url": e.url, "title": e.title, "reason": e.reason} for e in req.negative_examples],
             api_key=api_key,
             model=req.model,
         )

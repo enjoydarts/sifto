@@ -628,12 +628,16 @@ def rank_feed_suggestions(
     existing_sources: list[dict],
     preferred_topics: list[str],
     candidates: list[dict],
+    positive_examples: list[dict] | None,
+    negative_examples: list[dict] | None,
     model: str,
     api_key: str,
 ) -> dict:
     existing_sources = existing_sources[:40]
     preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:20]
     candidates = candidates[:80]
+    positive_examples = (positive_examples or [])[:8]
+    negative_examples = (negative_examples or [])[:5]
     prompt = f"""あなたはRSSフィードの推薦アシスタントです。
 既存の購読ソース・興味トピック・候補フィードを見て、ユーザーに合いそうな候補を順位付けしてください。
 
@@ -650,6 +654,12 @@ def rank_feed_suggestions(
     {{"url":"...", "reason":"...", "confidence":0.0-1.0}}
   ]
 }}
+
+Few-shot（好みの既存Feed例）:
+{json.dumps(positive_examples, ensure_ascii=False)}
+
+Few-shot（避けたい傾向の既存Feed例）:
+{json.dumps(negative_examples, ensure_ascii=False)}
 
 既存ソース:
 {json.dumps(existing_sources, ensure_ascii=False)}
@@ -687,9 +697,18 @@ def rank_feed_suggestions(
     return {"items": out, "llm": _llm_meta(model, "source_suggestion", usage)}
 
 
-def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list[str], model: str, api_key: str) -> dict:
+def suggest_feed_seed_sites(
+    existing_sources: list[dict],
+    preferred_topics: list[str],
+    positive_examples: list[dict] | None,
+    negative_examples: list[dict] | None,
+    model: str,
+    api_key: str,
+) -> dict:
     existing_sources = existing_sources[:40]
     preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:20]
+    positive_examples = (positive_examples or [])[:8]
+    negative_examples = (negative_examples or [])[:5]
     prompt = f"""あなたはRSSフィード探索アシスタントです。
 既存の購読ソースと興味トピックを元に、「まだ登録していない可能性が高い」ニュース/技術メディアのサイトURL（ホームページURL）候補を提案してください。
 
@@ -707,6 +726,12 @@ def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list
     {{"url":"https://...", "reason":"..."}}
   ]
 }}
+
+Few-shot（好みの既存Feed例）:
+{json.dumps(positive_examples, ensure_ascii=False)}
+
+Few-shot（避けたい傾向の既存Feed例）:
+{json.dumps(negative_examples, ensure_ascii=False)}
 
 既存ソース:
 {json.dumps(existing_sources, ensure_ascii=False)}

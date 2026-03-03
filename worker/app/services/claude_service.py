@@ -1117,7 +1117,13 @@ source_lines:
 
 
 def rank_feed_suggestions(
-    existing_sources: list[dict], preferred_topics: list[str], candidates: list[dict], api_key: str | None = None, model: str | None = None
+    existing_sources: list[dict],
+    preferred_topics: list[str],
+    candidates: list[dict],
+    positive_examples: list[dict] | None = None,
+    negative_examples: list[dict] | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
 ) -> dict:
     if not candidates:
         return {
@@ -1137,6 +1143,8 @@ def rank_feed_suggestions(
     existing_sources = existing_sources[:40]
     preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:20]
     candidates = candidates[:80]
+    positive_examples = (positive_examples or [])[:8]
+    negative_examples = (negative_examples or [])[:5]
 
     if _client_for_api_key(api_key) is None:
         # Local/dev fallback: keep order and synthesize simple reasons.
@@ -1181,6 +1189,12 @@ def rank_feed_suggestions(
     {{"url":"...", "reason":"...", "confidence":0.0-1.0}}
   ]
 }}
+
+Few-shot（好みの既存Feed例）:
+{json.dumps(positive_examples, ensure_ascii=False)}
+
+Few-shot（避けたい傾向の既存Feed例）:
+{json.dumps(negative_examples, ensure_ascii=False)}
 
 既存ソース:
 {json.dumps(existing_sources, ensure_ascii=False)}
@@ -1242,9 +1256,18 @@ def rank_feed_suggestions(
     }
 
 
-def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list[str], api_key: str | None = None, model: str | None = None) -> dict:
+def suggest_feed_seed_sites(
+    existing_sources: list[dict],
+    preferred_topics: list[str],
+    positive_examples: list[dict] | None = None,
+    negative_examples: list[dict] | None = None,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
     existing_sources = existing_sources[:40]
     preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:20]
+    positive_examples = (positive_examples or [])[:8]
+    negative_examples = (negative_examples or [])[:5]
 
     if _client_for_api_key(api_key) is None:
         return {
@@ -1277,6 +1300,12 @@ def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list
     {{"url":"https://...", "reason":"..."}}
   ]
 }}
+
+Few-shot（好みの既存Feed例）:
+{json.dumps(positive_examples, ensure_ascii=False)}
+
+Few-shot（避けたい傾向の既存Feed例）:
+{json.dumps(negative_examples, ensure_ascii=False)}
 
 既存ソース:
 {json.dumps(existing_sources, ensure_ascii=False)}

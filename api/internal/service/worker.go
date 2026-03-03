@@ -109,6 +109,12 @@ type RankFeedSuggestionsExistingSource struct {
 	Title *string `json:"title,omitempty"`
 }
 
+type RankFeedSuggestionsExample struct {
+	URL    string  `json:"url"`
+	Title  *string `json:"title,omitempty"`
+	Reason string  `json:"reason,omitempty"`
+}
+
 type RankFeedSuggestionsItem struct {
 	URL        string  `json:"url"`
 	Reason     string  `json:"reason"`
@@ -260,14 +266,18 @@ func (w *WorkerClient) RankFeedSuggestions(
 	existing []RankFeedSuggestionsExistingSource,
 	preferredTopics []string,
 	candidates []RankFeedSuggestionsCandidate,
+	positiveExamples []RankFeedSuggestionsExample,
+	negativeExamples []RankFeedSuggestionsExample,
 	anthropicAPIKey *string,
 	googleAPIKey *string,
 ) (*RankFeedSuggestionsResponse, error) {
 	return postWithHeaders[RankFeedSuggestionsResponse](ctx, w, "/rank-feed-suggestions", map[string]any{
-		"existing_sources": existing,
-		"preferred_topics": preferredTopics,
-		"candidates":       candidates,
-		"model":            nil,
+		"existing_sources":  existing,
+		"preferred_topics":  preferredTopics,
+		"candidates":        candidates,
+		"positive_examples": positiveExamples,
+		"negative_examples": negativeExamples,
+		"model":             nil,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
@@ -276,15 +286,19 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 	existing []RankFeedSuggestionsExistingSource,
 	preferredTopics []string,
 	candidates []RankFeedSuggestionsCandidate,
+	positiveExamples []RankFeedSuggestionsExample,
+	negativeExamples []RankFeedSuggestionsExample,
 	anthropicAPIKey *string,
 	googleAPIKey *string,
 	model *string,
 ) (*RankFeedSuggestionsResponse, error) {
 	return postWithHeaders[RankFeedSuggestionsResponse](ctx, w, "/rank-feed-suggestions", map[string]any{
-		"existing_sources": existing,
-		"preferred_topics": preferredTopics,
-		"candidates":       candidates,
-		"model":            model,
+		"existing_sources":  existing,
+		"preferred_topics":  preferredTopics,
+		"candidates":        candidates,
+		"positive_examples": positiveExamples,
+		"negative_examples": negativeExamples,
+		"model":             model,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
@@ -292,13 +306,17 @@ func (w *WorkerClient) SuggestFeedSeedSites(
 	ctx context.Context,
 	existing []RankFeedSuggestionsExistingSource,
 	preferredTopics []string,
+	positiveExamples []RankFeedSuggestionsExample,
+	negativeExamples []RankFeedSuggestionsExample,
 	anthropicAPIKey *string,
 	googleAPIKey *string,
 ) (*SuggestFeedSeedSitesResponse, error) {
 	return postWithHeaders[SuggestFeedSeedSitesResponse](ctx, w, "/suggest-feed-seed-sites", map[string]any{
-		"existing_sources": existing,
-		"preferred_topics": preferredTopics,
-		"model":            nil,
+		"existing_sources":  existing,
+		"preferred_topics":  preferredTopics,
+		"positive_examples": positiveExamples,
+		"negative_examples": negativeExamples,
+		"model":             nil,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
@@ -306,14 +324,18 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 	ctx context.Context,
 	existing []RankFeedSuggestionsExistingSource,
 	preferredTopics []string,
+	positiveExamples []RankFeedSuggestionsExample,
+	negativeExamples []RankFeedSuggestionsExample,
 	anthropicAPIKey *string,
 	googleAPIKey *string,
 	model *string,
 ) (*SuggestFeedSeedSitesResponse, error) {
 	return postWithHeaders[SuggestFeedSeedSitesResponse](ctx, w, "/suggest-feed-seed-sites", map[string]any{
-		"existing_sources": existing,
-		"preferred_topics": preferredTopics,
-		"model":            model,
+		"existing_sources":  existing,
+		"preferred_topics":  preferredTopics,
+		"positive_examples": positiveExamples,
+		"negative_examples": negativeExamples,
+		"model":             model,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 

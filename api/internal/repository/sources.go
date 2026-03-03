@@ -294,11 +294,23 @@ func (r *SourceRepo) RefreshHealthSnapshot(ctx context.Context, sourceID string,
 }
 
 func (r *SourceRepo) RecommendedByUser(ctx context.Context, userID string, limit int) ([]model.RecommendedSource, error) {
+	return r.affinityByUser(ctx, userID, limit, false)
+}
+
+func (r *SourceRepo) LowAffinityByUser(ctx context.Context, userID string, limit int) ([]model.RecommendedSource, error) {
+	return r.affinityByUser(ctx, userID, limit, true)
+}
+
+func (r *SourceRepo) affinityByUser(ctx context.Context, userID string, limit int, asc bool) ([]model.RecommendedSource, error) {
 	if limit <= 0 {
 		limit = 8
 	}
 	if limit > 30 {
 		limit = 30
+	}
+	order := "DESC"
+	if asc {
+		order = "ASC"
 	}
 	rows, err := r.db.Query(ctx, `
 		WITH base AS (
@@ -352,7 +364,7 @@ func (r *SourceRepo) RecommendedByUser(ctx context.Context, userID string, limit
 			last_item_at
 		FROM base
 		WHERE item_count_30d > 0
-		ORDER BY affinity_score DESC, favorite_count_30d DESC, read_count_30d DESC
+		ORDER BY affinity_score `+order+`, favorite_count_30d `+order+`, read_count_30d `+order+`
 		LIMIT $2`, userID, limit)
 	if err != nil {
 		return nil, err

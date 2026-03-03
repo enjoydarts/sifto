@@ -563,6 +563,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 			preferredTopics = topics
 		}
 	}
+	positiveExamples, negativeExamples := h.buildSourceSuggestionFewShotExamples(r.Context(), userID)
 
 	registered := map[string]bool{}
 	type probeSeed struct {
@@ -643,7 +644,19 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	// AI主導の候補提案に寄せるため、候補不足時に限定せず常にAIシード拡張を試す。
 	// 既存候補が十分ある場合でも、別ドメインや別カテゴリの探索を混ぜて多様性を確保する。
 	if (anthropicAPIKey != nil || googleAPIKey != nil) && h.worker != nil {
-		h.expandSourceSuggestionsWithLLMSeeds(r.Context(), userID, sources, preferredTopics, registered, cands, anthropicAPIKey, googleAPIKey, anthropicSourceSuggestionModel)
+		h.expandSourceSuggestionsWithLLMSeeds(
+			r.Context(),
+			userID,
+			sources,
+			preferredTopics,
+			positiveExamples,
+			negativeExamples,
+			registered,
+			cands,
+			anthropicAPIKey,
+			googleAPIKey,
+			anthropicSourceSuggestionModel,
+		)
 	}
 
 	out := make([]sourceSuggestionResponse, 0, len(cands))
@@ -694,7 +707,18 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	for _, r := range rows {
 		out = append(out, r.row)
 	}
-	llmMeta := h.rankSourceSuggestionsWithLLM(r.Context(), userID, sources, preferredTopics, out, anthropicAPIKey, googleAPIKey, anthropicSourceSuggestionModel)
+	llmMeta := h.rankSourceSuggestionsWithLLM(
+		r.Context(),
+		userID,
+		sources,
+		preferredTopics,
+		positiveExamples,
+		negativeExamples,
+		out,
+		anthropicAPIKey,
+		googleAPIKey,
+		anthropicSourceSuggestionModel,
+	)
 	if len(out) > limit {
 		out = out[:limit]
 	}
@@ -772,6 +796,8 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	userID string,
 	sources []model.Source,
 	preferredTopics []string,
+	positiveExamples []service.RankFeedSuggestionsExample,
+	negativeExamples []service.RankFeedSuggestionsExample,
 	suggestions []sourceSuggestionResponse,
 	anthropicAPIKey *string,
 	googleAPIKey *string,
@@ -801,7 +827,17 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 			MatchedTopics: s.MatchedTopics,
 		})
 	}
-	resp, err := h.worker.RankFeedSuggestionsWithModel(ctx, existing, preferredTopics, cands, anthropicAPIKey, googleAPIKey, model)
+	resp, err := h.worker.RankFeedSuggestionsWithModel(
+		ctx,
+		existing,
+		preferredTopics,
+		cands,
+		positiveExamples,
+		negativeExamples,
+		anthropicAPIKey,
+		googleAPIKey,
+		model,
+	)
 	if err != nil || resp == nil {
 		return nil
 	}
@@ -931,11 +967,46 @@ func isGeminiModelForSuggestions(model *string) bool {
 	return strings.HasPrefix(v, "gemini-") || strings.Contains(v, "/models/gemini-")
 }
 
+func (h *SourceHandler) buildSourceSuggestionFewShotExamples(
+	ctx context.Context,
+	userID string,
+) ([]service.RankFeedSuggestionsExample, []service.RankFeedSuggestionsExample) {
+	positiveRows, err := h.repo.RecommendedByUser(ctx, userID, 5)
+	if err != nil {
+		positiveRows = nil
+	}
+	negativeRows, err := h.repo.LowAffinityByUser(ctx, userID, 3)
+	if err != nil {
+		negativeRows = nil
+	}
+	positive := make([]service.RankFeedSuggestionsExample, 0, len(positiveRows))
+	for _, row := range positiveRows {
+		reason := fmt.Sprintf("読了%d / Fav%d / 直近親和%.2f", row.ReadCount30d, row.FavoriteCount30d, row.AffinityScore)
+		positive = append(positive, service.RankFeedSuggestionsExample{
+			URL:    row.URL,
+			Title:  row.Title,
+			Reason: reason,
+		})
+	}
+	negative := make([]service.RankFeedSuggestionsExample, 0, len(negativeRows))
+	for _, row := range negativeRows {
+		reason := fmt.Sprintf("読了%d / Fav%d / 直近親和%.2f", row.ReadCount30d, row.FavoriteCount30d, row.AffinityScore)
+		negative = append(negative, service.RankFeedSuggestionsExample{
+			URL:    row.URL,
+			Title:  row.Title,
+			Reason: reason,
+		})
+	}
+	return positive, negative
+}
+
 func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	ctx context.Context,
 	userID string,
 	sources []model.Source,
 	preferredTopics []string,
+	positiveExamples []service.RankFeedSuggestionsExample,
+	negativeExamples []service.RankFeedSuggestionsExample,
 	registered map[string]bool,
 	cands map[string]*sourceSuggestionAgg,
 	anthropicAPIKey *string,
@@ -946,7 +1017,16 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	for _, s := range sources {
 		existing = append(existing, service.RankFeedSuggestionsExistingSource{URL: s.URL, Title: s.Title})
 	}
-	resp, err := h.worker.SuggestFeedSeedSitesWithModel(ctx, existing, preferredTopics, anthropicAPIKey, googleAPIKey, model)
+	resp, err := h.worker.SuggestFeedSeedSitesWithModel(
+		ctx,
+		existing,
+		preferredTopics,
+		positiveExamples,
+		negativeExamples,
+		anthropicAPIKey,
+		googleAPIKey,
+		model,
+	)
 	if err != nil || resp == nil {
 		return
 	}

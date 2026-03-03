@@ -552,11 +552,11 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	anthropicAPIKey := h.getUserAnthropicAPIKey(r.Context(), userID)
 	googleAPIKey := h.getUserGoogleAPIKey(r.Context(), userID)
 	anthropicSourceSuggestionModel := h.getUserAnthropicSourceSuggestionModel(r.Context(), userID)
-	if isGeminiModelForSuggestions(anthropicSourceSuggestionModel) {
-		anthropicAPIKey = nil
-	} else {
-		googleAPIKey = nil
-	}
+	anthropicAPIKey, googleAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
+		anthropicAPIKey,
+		googleAPIKey,
+		anthropicSourceSuggestionModel,
+	)
 	var preferredTopics []string
 	if h.itemRepo != nil {
 		if topics, err := h.itemRepo.PositiveFeedbackTopics(r.Context(), userID, 8); err == nil {
@@ -965,6 +965,44 @@ func isGeminiModelForSuggestions(model *string) bool {
 		return false
 	}
 	return strings.HasPrefix(v, "gemini-") || strings.Contains(v, "/models/gemini-")
+}
+
+func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, model *string) (*string, *string, *string) {
+	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
+	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
+
+	// 明示モデルがある場合は基本的にそのプロバイダを優先。
+	// ただし指定プロバイダのキーが無い場合は、利用可能な側へフォールバックして
+	// 「AI提案がまったく動かない」状態を避ける。
+	if model != nil && strings.TrimSpace(*model) != "" {
+		if isGeminiModelForSuggestions(model) {
+			if hasGoogle {
+				return nil, googleAPIKey, model
+			}
+			if hasAnthropic {
+				return anthropicAPIKey, nil, nil
+			}
+			return nil, nil, model
+		}
+		if hasAnthropic {
+			return anthropicAPIKey, nil, model
+		}
+		if hasGoogle {
+			fallback := "gemini-2.5-flash"
+			return nil, googleAPIKey, &fallback
+		}
+		return nil, nil, model
+	}
+
+	// モデル未指定時は、利用可能なキーに合わせて自動選択。
+	if hasAnthropic {
+		return anthropicAPIKey, nil, nil
+	}
+	if hasGoogle {
+		fallback := "gemini-2.5-flash"
+		return nil, googleAPIKey, &fallback
+	}
+	return nil, nil, nil
 }
 
 func (h *SourceHandler) buildSourceSuggestionFewShotExamples(

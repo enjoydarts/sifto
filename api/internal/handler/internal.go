@@ -26,6 +26,7 @@ type InternalHandler struct {
 	db         *pgxpool.Pool
 	cache      service.JSONCache
 	worker     *service.WorkerClient
+	oneSignal  *service.OneSignalClient
 }
 
 func NewInternalHandler(
@@ -38,6 +39,7 @@ func NewInternalHandler(
 	db *pgxpool.Pool,
 	cache service.JSONCache,
 	worker *service.WorkerClient,
+	oneSignal *service.OneSignalClient,
 ) *InternalHandler {
 	return &InternalHandler{
 		userRepo:   userRepo,
@@ -49,6 +51,7 @@ func NewInternalHandler(
 		db:         db,
 		cache:      cache,
 		worker:     worker,
+		oneSignal:  oneSignal,
 	}
 }
 
@@ -334,6 +337,53 @@ func (h *InternalHandler) DebugBackfillEmbeddings(w http.ResponseWriter, r *http
 		"failed_count":       failed,
 		"send_error_samples": sendErrorSamples,
 		"targets":            preview,
+	})
+}
+
+func (h *InternalHandler) DebugSendPushTest(w http.ResponseWriter, r *http.Request) {
+	if !checkInternalSecret(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.oneSignal == nil || !h.oneSignal.Enabled() {
+		http.Error(w, "onesignal is not configured", http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		ExternalID *string        `json:"external_id"`
+		Title      string         `json:"title"`
+		Message    string         `json:"message"`
+		URL        string         `json:"url"`
+		Data       map[string]any `json:"data"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	externalID := ""
+	if body.ExternalID != nil {
+		externalID = strings.TrimSpace(*body.ExternalID)
+	}
+	if externalID == "" {
+		http.Error(w, "external_id is required", http.StatusBadRequest)
+		return
+	}
+	title := strings.TrimSpace(body.Title)
+	if title == "" {
+		title = "Sifto: テスト通知"
+	}
+	message := strings.TrimSpace(body.Message)
+	if message == "" {
+		message = "OneSignalテスト通知です。"
+	}
+	res, err := h.oneSignal.SendToExternalID(r.Context(), externalID, title, message, body.URL, body.Data)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("send push: %v", err), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"status":      "sent",
+		"external_id": externalID,
+		"title":       title,
+		"message":     message,
+		"result":      res,
 	})
 }
 

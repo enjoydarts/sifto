@@ -110,6 +110,17 @@ type OneSignalDebugState = {
   worker_updater_reachable: boolean | null;
 };
 
+type PushTestResponse = {
+  status: string;
+  external_id: string;
+  title: string;
+  message: string;
+  result?: {
+    id?: string;
+    recipients?: number;
+  };
+};
+
 async function postJSON<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
@@ -167,6 +178,10 @@ export default function DebugDigestsPage() {
   const [webHealth, setWebHealth] = useState<{ status: number; latency_ms: number; body: unknown } | null>(null);
   const [busyOneSignalDebug, setBusyOneSignalDebug] = useState(false);
   const [oneSignalDebug, setOneSignalDebug] = useState<OneSignalDebugState | null>(null);
+  const [busyPushTest, setBusyPushTest] = useState(false);
+  const [pushTestTitle, setPushTestTitle] = useState("Sifto: テスト通知");
+  const [pushTestMessage, setPushTestMessage] = useState("デバッグ画面からのテスト通知です。");
+  const [pushTestResult, setPushTestResult] = useState<PushTestResponse | null>(null);
 
   const helperText = useMemo(
     () =>
@@ -310,6 +325,27 @@ export default function DebugDigestsPage() {
       showToast(String(e), "error");
     } finally {
       setBusySend(false);
+    }
+  };
+
+  const onPushTest = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusyPushTest(true);
+    setError(null);
+    setPushTestResult(null);
+    try {
+      const res = await postJSON<PushTestResponse>("/api/debug/push/test", {
+        title: pushTestTitle.trim(),
+        message: pushTestMessage.trim(),
+      });
+      setPushTestResult(res);
+      showToast("Push test sent", "success");
+      await loadOneSignalDebug();
+    } catch (e) {
+      setError(String(e));
+      showToast(String(e), "error");
+    } finally {
+      setBusyPushTest(false);
     }
   };
 
@@ -535,6 +571,42 @@ export default function DebugDigestsPage() {
           </pre>
         ) : (
           <p className="text-xs text-zinc-400">{t("debug.notFetched")}</p>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold text-zinc-800">Push Test (Debug)</h2>
+        <form onSubmit={onPushTest} className="space-y-3">
+          <label className="block text-sm">
+            <div className="mb-1 text-xs font-medium text-zinc-600">Title</div>
+            <input
+              value={pushTestTitle}
+              onChange={(e) => setPushTestTitle(e.target.value)}
+              className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              placeholder="notification title"
+            />
+          </label>
+          <label className="block text-sm">
+            <div className="mb-1 text-xs font-medium text-zinc-600">Message</div>
+            <input
+              value={pushTestMessage}
+              onChange={(e) => setPushTestMessage(e.target.value)}
+              className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              placeholder="notification body"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={busyPushTest}
+            className="rounded bg-zinc-900 px-3 py-2 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
+          >
+            {busyPushTest ? t("debug.running") : "Send Push Test"}
+          </button>
+        </form>
+        {pushTestResult && (
+          <pre className="mt-3 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+            {JSON.stringify(pushTestResult, null, 2)}
+          </pre>
         )}
       </section>
 

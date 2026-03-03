@@ -494,7 +494,7 @@ type DigestCopyComposedData struct {
 }
 
 // NewHandler registers all Inngest functions and returns the HTTP handler.
-func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient) http.Handler {
+func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, oneSignal *service.OneSignalClient) http.Handler {
 	secretCipher := service.NewSecretCipher()
 	openAI := service.NewOpenAIClient()
 	client, err := inngestgo.NewClient(inngestgo.ClientOpts{
@@ -516,8 +516,8 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(generateBriefingSnapshotsFn(client, db))
 	register(generateDigestFn(client, db))
 	register(composeDigestCopyFn(client, db, worker, secretCipher))
-	register(sendDigestFn(client, db, worker, resend, secretCipher))
-	register(checkBudgetAlertsFn(client, db, resend))
+	register(sendDigestFn(client, db, worker, resend, oneSignal, secretCipher))
+	register(checkBudgetAlertsFn(client, db, resend, oneSignal))
 
 	return client.Serve()
 }
@@ -1133,7 +1133,7 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 }
 
 // ⑤ event/send-digest — メール送信（compose完了後）
-func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
+func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, oneSignal *service.OneSignalClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
 	_ = worker
 	_ = secretCipher
 	digestRepo := repository.NewDigestInngestRepo(db)
@@ -1201,13 +1201,29 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 			if err := digestRepo.UpdateSentAt(ctx, data.DigestID); err != nil {
 				log.Printf("update sent_at: %v", err)
 			}
+			if oneSignal != nil && oneSignal.Enabled() {
+				_, pErr := oneSignal.SendToExternalID(
+					ctx,
+					data.To,
+					"Sifto: ダイジェストを配信しました",
+					fmt.Sprintf("%s のダイジェストを配信しました。", digest.DigestDate),
+					"",
+					map[string]any{
+						"type":      "digest_sent",
+						"digest_id": data.DigestID,
+					},
+				)
+				if pErr != nil {
+					log.Printf("send-digest push failed digest_id=%s to=%s: %v", data.DigestID, data.To, pErr)
+				}
+			}
 			log.Printf("send-digest complete digest_id=%s", data.DigestID)
 			return map[string]string{"status": "sent", "to": data.To}, nil
 		},
 	)
 }
 
-func checkBudgetAlertsFn(client inngestgo.Client, db *pgxpool.Pool, resend *service.ResendClient) (inngestgo.ServableFunction, error) {
+func checkBudgetAlertsFn(client inngestgo.Client, db *pgxpool.Pool, resend *service.ResendClient, oneSignal *service.OneSignalClient) (inngestgo.ServableFunction, error) {
 	settingsRepo := repository.NewUserSettingsRepo(db)
 	alertLogRepo := repository.NewBudgetAlertLogRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
@@ -1271,6 +1287,23 @@ func checkBudgetAlertsFn(client inngestgo.Client, db *pgxpool.Pool, resend *serv
 				}); err != nil {
 					log.Printf("check-budget-alerts send user_id=%s email=%s: %v", tgt.UserID, tgt.Email, err)
 					continue
+				}
+				if oneSignal != nil && oneSignal.Enabled() {
+					_, pErr := oneSignal.SendToExternalID(
+						ctx,
+						tgt.Email,
+						"Sifto: 月次LLM予算アラート",
+						fmt.Sprintf("残り予算がしきい値(%d%%)を下回りました。", tgt.BudgetAlertThresholdPct),
+						"",
+						map[string]any{
+							"type":          "budget_alert",
+							"month_jst":     monthStartJST.Format("2006-01"),
+							"threshold_pct": tgt.BudgetAlertThresholdPct,
+						},
+					)
+					if pErr != nil {
+						log.Printf("check-budget-alerts push user_id=%s email=%s: %v", tgt.UserID, tgt.Email, pErr)
+					}
 				}
 				if err := alertLogRepo.Insert(ctx, tgt.UserID, monthStartJST, tgt.BudgetAlertThresholdPct, tgt.MonthlyBudgetUSD, usedCostUSD, remainingRatio); err != nil {
 					log.Printf("check-budget-alerts log user_id=%s: %v", tgt.UserID, err)

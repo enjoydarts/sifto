@@ -651,7 +651,7 @@ def rank_feed_suggestions(
 返却形式:
 {{
   "items": [
-    {{"url":"...", "reason":"...", "confidence":0.0-1.0}}
+    {{"id":"候補id", "url":"...", "reason":"...", "confidence":0.0-1.0}}
   ]
 }}
 
@@ -681,19 +681,24 @@ Few-shot（避けたい傾向の既存Feed例）:
     if not isinstance(rows, list):
         rows = []
     allowed = {str(c.get("url") or "").strip() for c in candidates}
+    allowed_ids = {str(c.get("id") or "").strip() for c in candidates if str(c.get("id") or "").strip()}
     out: list[dict] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
+        cid = str(row.get("id") or "").strip()
         url = str(row.get("url") or "").strip()
-        if not url or url not in allowed:
+        if cid:
+            if cid not in allowed_ids and (not url or url not in allowed):
+                continue
+        elif not url or url not in allowed:
             continue
         reason = str(row.get("reason") or "").strip()[:180]
         try:
             confidence = _clamp01(float(row.get("confidence", 0.5)), 0.5)
         except Exception:
             confidence = 0.5
-        out.append({"url": url, "reason": reason, "confidence": confidence})
+        out.append({"id": cid or None, "url": url, "reason": reason, "confidence": confidence})
     return {"items": out, "llm": _llm_meta(model, "source_suggestion", usage)}
 
 

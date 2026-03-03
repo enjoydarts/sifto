@@ -1155,6 +1155,7 @@ def rank_feed_suggestions(
             reason = " / ".join([*(["高評価トピックに近い"] if matched_topics else []), *[str(r) for r in reasons[:1]]]) or "関連候補"
             out.append(
                 {
+                    "id": c.get("id"),
                     "url": c.get("url"),
                     "reason": reason[:120],
                     "confidence": 0.4 if matched_topics else 0.25,
@@ -1186,7 +1187,7 @@ def rank_feed_suggestions(
 返却形式:
 {{
   "items": [
-    {{"url":"...", "reason":"...", "confidence":0.0-1.0}}
+    {{"id":"候補id", "url":"...", "reason":"...", "confidence":0.0-1.0}}
   ]
 }}
 
@@ -1241,6 +1242,7 @@ Few-shot（避けたい傾向の既存Feed例）:
     for row in rows:
         if not isinstance(row, dict):
             continue
+        cid = str(row.get("id") or "").strip()
         url = str(row.get("url") or "").strip()
         if not url:
             continue
@@ -1249,7 +1251,7 @@ Few-shot（避けたい傾向の既存Feed例）:
             confidence = _clamp01(float(row.get("confidence", 0.5)), 0.5)
         except Exception:
             confidence = 0.5
-        out.append({"url": url, "reason": reason, "confidence": confidence})
+        out.append({"id": cid or None, "url": url, "reason": reason, "confidence": confidence})
     return {
         "items": out,
         "llm": _llm_meta(message, "source_suggestion", used_model or _feed_suggest_model),

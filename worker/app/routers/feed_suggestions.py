@@ -20,6 +20,7 @@ class FeedExample(BaseModel):
 
 
 class CandidateFeed(BaseModel):
+    id: str | None = None
     url: str
     title: str | None = None
     reasons: list[str] = []
@@ -36,6 +37,7 @@ class FeedSuggestionRankRequest(BaseModel):
 
 
 class FeedSuggestionRankItem(BaseModel):
+    id: str | None = None
     url: str
     reason: str
     confidence: float
@@ -51,6 +53,7 @@ def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Requ
     existing_sources = [{"title": s.title, "url": s.url} for s in req.existing_sources]
     candidates = [
         {
+            "id": c.id,
             "url": c.url,
             "title": c.title,
             "reasons": c.reasons,

@@ -98,6 +98,7 @@ type ComposeDigestClusterDraftResponse struct {
 }
 
 type RankFeedSuggestionsCandidate struct {
+	ID            string   `json:"id"`
 	URL           string   `json:"url"`
 	Title         *string  `json:"title,omitempty"`
 	Reasons       []string `json:"reasons,omitempty"`
@@ -116,6 +117,7 @@ type RankFeedSuggestionsExample struct {
 }
 
 type RankFeedSuggestionsItem struct {
+	ID         *string `json:"id,omitempty"`
 	URL        string  `json:"url"`
 	Reason     string  `json:"reason"`
 	Confidence float64 `json:"confidence"`

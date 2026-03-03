@@ -826,13 +826,18 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 		})
 	}
 	cands := make([]service.RankFeedSuggestionsCandidate, 0, len(suggestions))
-	for _, s := range suggestions {
+	byID := map[string]*sourceSuggestionResponse{}
+	for i := range suggestions {
+		s := suggestions[i]
+		id := "cand:" + normalizeFeedURL(s.URL)
 		cands = append(cands, service.RankFeedSuggestionsCandidate{
+			ID:            id,
 			URL:           s.URL,
 			Title:         s.Title,
 			Reasons:       s.Reasons,
 			MatchedTopics: s.MatchedTopics,
 		})
+		byID[id] = &suggestions[i]
 	}
 	resp, err := h.worker.RankFeedSuggestionsWithModel(
 		ctx,
@@ -869,6 +874,19 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	}
 	rank := make(map[string]int, len(resp.Items))
 	for i, it := range resp.Items {
+		if it.ID != nil {
+			if s, ok := byID[strings.TrimSpace(*it.ID)]; ok {
+				reason := strings.TrimSpace(it.Reason)
+				if reason != "" {
+					s.AIReason = &reason
+					s.Reasons = []string{reason}
+				}
+				conf := it.Confidence
+				s.AIConfidence = &conf
+				rank[normalizeFeedURL(s.URL)] = i
+				continue
+			}
+		}
 		k := normalizeFeedURL(it.URL)
 		if k == "" {
 			continue

@@ -1116,9 +1116,14 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	}
 	h.recordSourceSuggestionLLMUsage(ctx, userID, resp.LLM)
 	for _, seed := range resp.Items {
-		probeURLs := aiSeedFeedProbeURLs(strings.TrimSpace(seed.URL))
-		if len(probeURLs) == 0 {
+		seedURL := strings.TrimSpace(seed.URL)
+		if seedURL == "" {
 			continue
+		}
+		addedFromSeed := false
+		probeURLs := aiSeedFeedProbeURLs(seedURL)
+		if len(probeURLs) == 0 {
+			probeURLs = []string{seedURL}
 		}
 		for _, probe := range probeURLs {
 			ctxOne, cancel := context.WithTimeout(ctx, 4*time.Second)
@@ -1160,6 +1165,34 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 						a.Score += 3
 					}
 				}
+				addedFromSeed = true
+			}
+		}
+		// Feed検出に失敗しても、AIシードURL自体を候補として残す。
+		// 登録時に再discoverを試みる前提で、候補ゼロ化を防ぐ。
+		if !addedFromSeed {
+			key := normalizeFeedURL(seedURL)
+			if key == "" || registered[key] {
+				continue
+			}
+			a := cands[key]
+			if a == nil {
+				a = &sourceSuggestionAgg{
+					URL:           seedURL,
+					Title:         nil,
+					Reasons:       map[string]bool{},
+					MatchedTopics: map[string]bool{},
+					SeedSourceIDs: map[string]bool{},
+				}
+				cands[key] = a
+			}
+			reason := "AI提案サイト（登録時にFeed検出）"
+			if strings.TrimSpace(seed.Reason) != "" {
+				reason = "AI候補: " + strings.TrimSpace(seed.Reason)
+			}
+			if !a.Reasons[reason] {
+				a.Reasons[reason] = true
+				a.Score += 4
 			}
 		}
 	}

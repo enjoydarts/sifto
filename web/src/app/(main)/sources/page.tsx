@@ -89,8 +89,17 @@ export default function SourcesPage() {
   const registerSuggestedSource = async (s: SourceSuggestion) => {
     setAddingSuggestedURL(s.url);
     try {
+      let targetURL = s.url;
+      try {
+        const discovered = await api.discoverFeeds(s.url);
+        if ((discovered.feeds ?? []).length > 0) {
+          targetURL = discovered.feeds[0].url;
+        }
+      } catch {
+        // Keep original URL and let createSource validate.
+      }
       await api.createSource({
-        url: s.url,
+        url: targetURL,
         type: "rss",
         title: s.title ?? undefined,
       });

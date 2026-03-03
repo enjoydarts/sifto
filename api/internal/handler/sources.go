@@ -634,7 +634,9 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if len(cands) < minInt(limit, 4) && anthropicAPIKey != nil && h.worker != nil {
+	// AI主導の候補提案に寄せるため、候補不足時に限定せず常にAIシード拡張を試す。
+	// 既存候補が十分ある場合でも、別ドメインや別カテゴリの探索を混ぜて多様性を確保する。
+	if anthropicAPIKey != nil && h.worker != nil {
 		h.expandSourceSuggestionsWithLLMSeeds(r.Context(), userID, sources, preferredTopics, registered, cands, anthropicAPIKey, anthropicSourceSuggestionModel)
 	}
 
@@ -671,13 +673,25 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 		}
 		return rows[i].row.URL < rows[j].row.URL
 	})
-	if len(rows) > limit {
-		rows = rows[:limit]
+	// ルールベースの一次スコアはプール生成までに使い、最終選抜はAIに委ねる。
+	// ただしトークンコストを抑えるため、AIへ渡す候補は最大 N 件に制限する。
+	poolLimit := limit * 4
+	if poolLimit < 24 {
+		poolLimit = 24
+	}
+	if poolLimit > 48 {
+		poolLimit = 48
+	}
+	if len(rows) > poolLimit {
+		rows = rows[:poolLimit]
 	}
 	for _, r := range rows {
 		out = append(out, r.row)
 	}
 	llmMeta := h.rankSourceSuggestionsWithLLM(r.Context(), userID, sources, preferredTopics, out, anthropicAPIKey, anthropicSourceSuggestionModel)
+	if len(out) > limit {
+		out = out[:limit]
+	}
 	writeJSON(w, map[string]any{"items": out, "limit": limit, "llm": llmMeta})
 }
 

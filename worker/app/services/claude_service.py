@@ -1134,9 +1134,9 @@ def rank_feed_suggestions(
         }
 
     # Keep prompt bounded.
-    existing_sources = existing_sources[:20]
-    preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:12]
-    candidates = candidates[:20]
+    existing_sources = existing_sources[:40]
+    preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:20]
+    candidates = candidates[:80]
 
     if _client_for_api_key(api_key) is None:
         # Local/dev fallback: keep order and synthesize simple reasons.
@@ -1196,7 +1196,7 @@ def rank_feed_suggestions(
         prompt,
         str(model or _feed_suggest_model),
         _feed_suggest_model_fallback,
-        max_tokens=1800,
+        max_tokens=2800,
         api_key=api_key,
     )
     if message is None:
@@ -1243,8 +1243,8 @@ def rank_feed_suggestions(
 
 
 def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list[str], api_key: str | None = None, model: str | None = None) -> dict:
-    existing_sources = existing_sources[:20]
-    preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:12]
+    existing_sources = existing_sources[:40]
+    preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:20]
 
     if _client_for_api_key(api_key) is None:
         return {
@@ -1268,7 +1268,7 @@ def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list
 - RSS URLを直接知らない場合はサイトトップURLでよい（後段でRSS探索する）
 - 既存ソースと同じURLは除外
 - 日本語で短い理由を付ける
-- 最大8件
+- 最大30件
 - JSONのみで返す
 
 返却形式:
@@ -1288,7 +1288,7 @@ def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list
         prompt,
         str(model or _feed_suggest_model),
         _feed_suggest_model_fallback,
-        max_tokens=1200,
+        max_tokens=2200,
         api_key=api_key,
     )
     if message is None:
@@ -1315,7 +1315,7 @@ def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list
     if not isinstance(rows, list):
         rows = []
     out: list[dict] = []
-    for row in rows[:12]:
+    for row in rows[:30]:
         if not isinstance(row, dict):
             continue
         url = str(row.get("url") or "").strip()

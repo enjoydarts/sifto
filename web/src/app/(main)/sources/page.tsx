@@ -100,7 +100,7 @@ export default function SourcesPage() {
     setLoadingSuggestions(true);
     setSuggestionsError(null);
     try {
-      const res = await api.getSourceSuggestions({ limit: 12 });
+      const res = await api.getSourceSuggestions({ limit: 24 });
       setSuggestions(res.items ?? []);
       setSuggestionsLLM(res.llm ?? null);
     } catch (e) {

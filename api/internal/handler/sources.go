@@ -534,8 +534,8 @@ type sourceSuggestionAgg struct {
 func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	q := r.URL.Query()
-	limit := parseIntOrDefault(q.Get("limit"), 10)
-	if limit < 1 || limit > 30 {
+	limit := parseIntOrDefault(q.Get("limit"), 24)
+	if limit < 1 || limit > 60 {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
@@ -582,8 +582,8 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Keep response latency predictable.
-	if len(probes) > 16 {
-		probes = probes[:16]
+	if len(probes) > 32 {
+		probes = probes[:32]
 	}
 
 	cands := map[string]*sourceSuggestionAgg{}
@@ -675,12 +675,12 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	})
 	// ルールベースの一次スコアはプール生成までに使い、最終選抜はAIに委ねる。
 	// ただしトークンコストを抑えるため、AIへ渡す候補は最大 N 件に制限する。
-	poolLimit := limit * 4
+	poolLimit := limit * 6
 	if poolLimit < 24 {
 		poolLimit = 24
 	}
-	if poolLimit > 48 {
-		poolLimit = 48
+	if poolLimit > 120 {
+		poolLimit = 120
 	}
 	if len(rows) > poolLimit {
 		rows = rows[:poolLimit]

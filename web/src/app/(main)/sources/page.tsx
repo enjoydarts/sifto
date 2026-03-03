@@ -29,7 +29,15 @@ export default function SourcesPage() {
   const [recommendedFeeds, setRecommendedFeeds] = useState<RecommendedSource[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
-  const [suggestionsLLM, setSuggestionsLLM] = useState<{ provider?: string; model?: string; estimated_cost_usd?: number } | null>(null);
+  const [suggestionsLLM, setSuggestionsLLM] = useState<{
+    provider?: string;
+    model?: string;
+    estimated_cost_usd?: number;
+    warning?: string;
+    error?: string;
+    stage?: string;
+    items_count?: number;
+  } | null>(null);
   const [addingSuggestedURL, setAddingSuggestedURL] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<
     { url: string; title: string | null }[]
@@ -460,6 +468,18 @@ export default function SourcesPage() {
             {suggestionsLLM.model ?? t("common.unknown")}
             {typeof suggestionsLLM.estimated_cost_usd === "number" && (
               <span className="ml-2 text-zinc-400">{`$${suggestionsLLM.estimated_cost_usd.toFixed(6)}`}</span>
+            )}
+            {typeof suggestionsLLM.items_count === "number" && (
+              <span className="ml-2 text-zinc-400">{`items=${suggestionsLLM.items_count}`}</span>
+            )}
+            {suggestionsLLM.stage && (
+              <span className="ml-2 text-zinc-400">{`stage=${suggestionsLLM.stage}`}</span>
+            )}
+            {suggestionsLLM.warning && (
+              <span className="ml-2 text-amber-600">{suggestionsLLM.warning}</span>
+            )}
+            {suggestionsLLM.error && (
+              <span className="ml-2 text-red-600">{suggestionsLLM.error}</span>
             )}
           </p>
         )}

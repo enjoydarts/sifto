@@ -850,22 +850,36 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 		googleAPIKey,
 		model,
 	)
-	if err != nil || resp == nil {
-		return nil
+	if err != nil {
+		return map[string]any{
+			"error": err.Error(),
+			"stage": "rank",
+		}
+	}
+	if resp == nil {
+		return map[string]any{
+			"error": "empty response from rank-feed-suggestions",
+			"stage": "rank",
+		}
 	}
 	h.recordSourceSuggestionLLMUsage(ctx, userID, resp.LLM)
 	if len(resp.Items) == 0 {
-		if resp.LLM == nil {
-			return nil
+		if resp.LLM != nil {
+			return map[string]any{
+				"provider":             resp.LLM.Provider,
+				"model":                resp.LLM.Model,
+				"estimated_cost_usd":   resp.LLM.EstimatedCostUSD,
+				"input_tokens":         resp.LLM.InputTokens,
+				"output_tokens":        resp.LLM.OutputTokens,
+				"pricing_source":       resp.LLM.PricingSource,
+				"pricing_model_family": resp.LLM.PricingModelFamily,
+				"warning":              "rank returned no items",
+				"stage":                "rank",
+			}
 		}
 		return map[string]any{
-			"provider":             resp.LLM.Provider,
-			"model":                resp.LLM.Model,
-			"estimated_cost_usd":   resp.LLM.EstimatedCostUSD,
-			"input_tokens":         resp.LLM.InputTokens,
-			"output_tokens":        resp.LLM.OutputTokens,
-			"pricing_source":       resp.LLM.PricingSource,
-			"pricing_model_family": resp.LLM.PricingModelFamily,
+			"warning": "rank returned no items and no llm meta",
+			"stage":   "rank",
 		}
 	}
 	byURL := map[string]*sourceSuggestionResponse{}
@@ -917,7 +931,10 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 		return suggestions[i].URL < suggestions[j].URL
 	})
 	if resp.LLM == nil {
-		return nil
+		return map[string]any{
+			"warning": "rank succeeded but llm meta is empty",
+			"stage":   "rank",
+		}
 	}
 	return map[string]any{
 		"provider":             resp.LLM.Provider,
@@ -927,6 +944,8 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 		"output_tokens":        resp.LLM.OutputTokens,
 		"pricing_source":       resp.LLM.PricingSource,
 		"pricing_model_family": resp.LLM.PricingModelFamily,
+		"stage":                "rank",
+		"items_count":          len(resp.Items),
 	}
 }
 

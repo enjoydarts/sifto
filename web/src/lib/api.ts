@@ -462,7 +462,7 @@ export const api = {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString();
-    return apiFetch<{ items: SourceSuggestion[]; limit: number; llm?: { provider?: string; model?: string; estimated_cost_usd?: number } | null }>(`/sources/suggestions${qs ? `?${qs}` : ""}`);
+    return apiFetch<{ items: SourceSuggestion[]; limit: number; llm?: { provider?: string; model?: string; estimated_cost_usd?: number; warning?: string; error?: string; stage?: string; items_count?: number } | null }>(`/sources/suggestions${qs ? `?${qs}` : ""}`);
   },
   getRecommendedSources: (params?: { limit?: number }) => {
     const q = new URLSearchParams();

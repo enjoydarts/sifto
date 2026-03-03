@@ -79,6 +79,7 @@ export const enDict: Dict = {
   "pulse.action.later": "Read Later",
   "pulse.action.fav": "Favorite",
   "pulse.action.unfav": "Unfavorite",
+  "pulse.topic.untagged": "Untagged",
   "briefing.title": "Today's Briefing",
   "briefing.greetingFallback": "Today's picks are ready",
   "briefing.greeting.morning": "Good morning",

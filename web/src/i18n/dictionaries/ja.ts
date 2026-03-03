@@ -79,6 +79,7 @@ export const jaDict: Dict = {
   "pulse.action.later": "あとで読む",
   "pulse.action.fav": "お気に入り",
   "pulse.action.unfav": "お気に入り解除",
+  "pulse.topic.untagged": "未分類",
   "briefing.title": "今日のブリーフィング",
   "briefing.greetingFallback": "今日の注目記事です",
   "briefing.greeting.morning": "おはようございます",

@@ -167,6 +167,12 @@ export default function PulsePage() {
     return t("pulse.reason.stable");
   };
 
+  const topicLabel = (topic: string) => (topic === "__untagged__" ? t("pulse.topic.untagged") : topic);
+  const topicHref = (topic: string) =>
+    topic === "__untagged__"
+      ? "/items?feed=all&sort=score&status=summarized"
+      : `/items?feed=all&sort=score&topic=${encodeURIComponent(topic)}`;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -234,11 +240,11 @@ export default function PulsePage() {
               <div key={topic.topic} className="rounded-lg border border-zinc-200 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <a
-                    href={`/items?feed=all&sort=score&topic=${encodeURIComponent(topic.topic)}`}
+                    href={topicHref(topic.topic)}
                     className="truncate text-sm font-semibold text-zinc-900 hover:underline"
-                    title={topic.topic}
+                    title={topicLabel(topic.topic)}
                   >
-                    {topic.topic}
+                    {topicLabel(topic.topic)}
                   </a>
                   <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
                     {t("pulse.queue.unread")} {topic.unread_total}
@@ -310,6 +316,7 @@ export default function PulsePage() {
                     key={topic.topic}
                     type="monotone"
                     dataKey={topic.topic}
+                    name={topicLabel(topic.topic)}
                     stroke={COLORS[idx % COLORS.length]}
                     strokeWidth={2}
                     dot={false}
@@ -349,11 +356,11 @@ export default function PulsePage() {
                 <div key={row.topic} className="grid grid-cols-[minmax(160px,240px)_1fr] items-center gap-3 rounded-lg border border-zinc-100 bg-zinc-50/50 p-2">
                   <div className="min-w-0">
                     <a
-                      href={`/items?feed=all&sort=score&topic=${encodeURIComponent(row.topic)}`}
+                      href={topicHref(row.topic)}
                       className="block truncate text-sm font-medium text-zinc-900 hover:underline"
-                      title={row.topic}
+                      title={topicLabel(row.topic)}
                     >
-                      {row.topic}
+                      {topicLabel(row.topic)}
                     </a>
                     <div className="mt-0.5 text-[11px] text-zinc-500">{`${t("pulse.table.total")}: ${row.total}`}</div>
                   </div>
@@ -368,7 +375,7 @@ export default function PulsePage() {
                           key={`${row.topic}-${date}`}
                           className={`rounded-md py-1 text-center text-[11px] font-semibold ${textColor}`}
                           style={{ backgroundColor: color }}
-                          title={`${row.topic} ${date}: ${count}`}
+                          title={`${topicLabel(row.topic)} ${date}: ${count}`}
                         >
                           {count}
                         </div>
@@ -404,7 +411,7 @@ export default function PulsePage() {
               <tbody>
                 {topicQueues.map((row) => (
                   <tr key={row.topic}>
-                    <td className="border-b border-zinc-100 px-2 py-2 font-medium text-zinc-900">{row.topic}</td>
+                    <td className="border-b border-zinc-100 px-2 py-2 font-medium text-zinc-900">{topicLabel(row.topic)}</td>
                     <td className="border-b border-zinc-100 px-2 py-2 text-zinc-700">{row.total}</td>
                     <td className="border-b border-zinc-100 px-2 py-2 text-zinc-700">{row.unread_total}</td>
                     <td className="border-b border-zinc-100 px-2 py-2 text-zinc-700">
@@ -412,7 +419,7 @@ export default function PulsePage() {
                     </td>
                     <td className="border-b border-zinc-100 px-2 py-2">
                       <a
-                        href={`/items?feed=all&sort=score&topic=${encodeURIComponent(row.topic)}`}
+                        href={topicHref(row.topic)}
                         className="text-xs text-blue-600 hover:underline"
                       >
                         {t("pulse.table.openItems")}

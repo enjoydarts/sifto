@@ -99,7 +99,7 @@ function enqueueOneSignalInit(appId: string, setReady: (ready: boolean) => void)
   window.OneSignalDeferred.push(async (OneSignal) => runInit(OneSignal));
 
   // Fallback for SDK variants that still consume legacy queue (window.OneSignal = []).
-  if (!Array.isArray(window.OneSignal)) {
+  if (typeof window.OneSignal === "undefined") {
     window.OneSignal = [];
   }
   (window.OneSignal as Array<() => void | Promise<void>>).push(async () => {

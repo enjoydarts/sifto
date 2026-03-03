@@ -261,13 +261,14 @@ func (w *WorkerClient) RankFeedSuggestions(
 	preferredTopics []string,
 	candidates []RankFeedSuggestionsCandidate,
 	anthropicAPIKey *string,
+	googleAPIKey *string,
 ) (*RankFeedSuggestionsResponse, error) {
 	return postWithHeaders[RankFeedSuggestionsResponse](ctx, w, "/rank-feed-suggestions", map[string]any{
 		"existing_sources": existing,
 		"preferred_topics": preferredTopics,
 		"candidates":       candidates,
 		"model":            nil,
-	}, workerHeaders(anthropicAPIKey, nil, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) RankFeedSuggestionsWithModel(
@@ -276,6 +277,7 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 	preferredTopics []string,
 	candidates []RankFeedSuggestionsCandidate,
 	anthropicAPIKey *string,
+	googleAPIKey *string,
 	model *string,
 ) (*RankFeedSuggestionsResponse, error) {
 	return postWithHeaders[RankFeedSuggestionsResponse](ctx, w, "/rank-feed-suggestions", map[string]any{
@@ -283,7 +285,7 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 		"preferred_topics": preferredTopics,
 		"candidates":       candidates,
 		"model":            model,
-	}, workerHeaders(anthropicAPIKey, nil, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) SuggestFeedSeedSites(
@@ -291,12 +293,13 @@ func (w *WorkerClient) SuggestFeedSeedSites(
 	existing []RankFeedSuggestionsExistingSource,
 	preferredTopics []string,
 	anthropicAPIKey *string,
+	googleAPIKey *string,
 ) (*SuggestFeedSeedSitesResponse, error) {
 	return postWithHeaders[SuggestFeedSeedSitesResponse](ctx, w, "/suggest-feed-seed-sites", map[string]any{
 		"existing_sources": existing,
 		"preferred_topics": preferredTopics,
 		"model":            nil,
-	}, workerHeaders(anthropicAPIKey, nil, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
@@ -304,13 +307,14 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 	existing []RankFeedSuggestionsExistingSource,
 	preferredTopics []string,
 	anthropicAPIKey *string,
+	googleAPIKey *string,
 	model *string,
 ) (*SuggestFeedSeedSitesResponse, error) {
 	return postWithHeaders[SuggestFeedSeedSitesResponse](ctx, w, "/suggest-feed-seed-sites", map[string]any{
 		"existing_sources": existing,
 		"preferred_topics": preferredTopics,
 		"model":            model,
-	}, workerHeaders(anthropicAPIKey, nil, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 
 func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, internalSecret string) map[string]string {

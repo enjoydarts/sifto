@@ -313,7 +313,7 @@ export const enDict: Dict = {
   "settings.model.summary": "Summary (LLM)",
   "settings.model.digestCluster": "Digest Cluster Drafts (LLM)",
   "settings.model.digest": "Digest (LLM)",
-  "settings.model.sourceSuggestion": "Source Suggestions (Claude)",
+  "settings.model.sourceSuggestion": "Source Suggestions",
   "settings.model.embeddings": "Embeddings (OpenAI)",
   "settings.saveModels": "Save model settings",
   "settings.recommendedTitle": "Recommended Feed Settings",

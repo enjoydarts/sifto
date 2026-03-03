@@ -313,7 +313,7 @@ export const jaDict: Dict = {
   "settings.model.summary": "要約 (LLM)",
   "settings.model.digestCluster": "ダイジェスト前段（クラスタ草稿）(LLM)",
   "settings.model.digest": "ダイジェスト生成 (LLM)",
-  "settings.model.sourceSuggestion": "ソース提案 (Claude)",
+  "settings.model.sourceSuggestion": "ソース提案",
   "settings.model.embeddings": "Embeddings (OpenAI)",
   "settings.saveModels": "モデル設定を保存",
   "settings.recommendedTitle": "おすすめ記事設定",

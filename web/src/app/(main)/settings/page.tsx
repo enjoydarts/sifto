@@ -645,7 +645,7 @@ export default function SettingsPage() {
               label={t("settings.model.sourceSuggestion")}
               value={anthropicSourceSuggestionModel}
               onChange={setAnthropicSourceSuggestionModel}
-              options={anthropicOnlyModelOptions}
+              options={llmModelOptions}
             />
             <ModelSelect
               label={t("settings.model.embeddings")}

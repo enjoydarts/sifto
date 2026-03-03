@@ -2,6 +2,8 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.services.claude_service import rank_feed_suggestions
+from app.services.gemini_service import rank_feed_suggestions as rank_feed_suggestions_gemini
+from app.services.model_router import is_gemini_model
 
 router = APIRouter()
 
@@ -38,20 +40,32 @@ class FeedSuggestionRankResponse(BaseModel):
 
 @router.post("/rank-feed-suggestions", response_model=FeedSuggestionRankResponse)
 def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Request):
-    api_key = request.headers.get("x-anthropic-api-key") or None
-    result = rank_feed_suggestions(
-        existing_sources=[{"title": s.title, "url": s.url} for s in req.existing_sources],
-        preferred_topics=req.preferred_topics,
-        candidates=[
-            {
-                "url": c.url,
-                "title": c.title,
-                "reasons": c.reasons,
-                "matched_topics": c.matched_topics,
-            }
-            for c in req.candidates
-        ],
-        api_key=api_key,
-        model=req.model,
-    )
+    existing_sources = [{"title": s.title, "url": s.url} for s in req.existing_sources]
+    candidates = [
+        {
+            "url": c.url,
+            "title": c.title,
+            "reasons": c.reasons,
+            "matched_topics": c.matched_topics,
+        }
+        for c in req.candidates
+    ]
+    if is_gemini_model(req.model):
+        google_api_key = request.headers.get("x-google-api-key") or ""
+        result = rank_feed_suggestions_gemini(
+            existing_sources=existing_sources,
+            preferred_topics=req.preferred_topics,
+            candidates=candidates,
+            model=str(req.model),
+            api_key=google_api_key,
+        )
+    else:
+        api_key = request.headers.get("x-anthropic-api-key") or None
+        result = rank_feed_suggestions(
+            existing_sources=existing_sources,
+            preferred_topics=req.preferred_topics,
+            candidates=candidates,
+            api_key=api_key,
+            model=req.model,
+        )
     return FeedSuggestionRankResponse(**result)

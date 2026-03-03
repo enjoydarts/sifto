@@ -624,6 +624,119 @@ JSONで返してください:
     return candidate[:300]
 
 
+def rank_feed_suggestions(
+    existing_sources: list[dict],
+    preferred_topics: list[str],
+    candidates: list[dict],
+    model: str,
+    api_key: str,
+) -> dict:
+    existing_sources = existing_sources[:40]
+    preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:20]
+    candidates = candidates[:80]
+    prompt = f"""あなたはRSSフィードの推薦アシスタントです。
+既存の購読ソース・興味トピック・候補フィードを見て、ユーザーに合いそうな候補を順位付けしてください。
+
+要件:
+- URLは入力候補のものだけ使う（新しいURLを作らない）
+- 既存ソースと重複しすぎる候補は下げる
+- 興味トピックに近い候補を優先
+- 理由は日本語で短く（40〜100字）
+- JSONのみで返す
+
+返却形式:
+{{
+  "items": [
+    {{"url":"...", "reason":"...", "confidence":0.0-1.0}}
+  ]
+}}
+
+既存ソース:
+{json.dumps(existing_sources, ensure_ascii=False)}
+
+興味トピック:
+{json.dumps(preferred_topics, ensure_ascii=False)}
+
+候補フィード:
+{json.dumps(candidates, ensure_ascii=False)}
+"""
+    text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=2800)
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    try:
+        data = json.loads(text[start:end])
+    except Exception:
+        data = {}
+    rows = data.get("items", [])
+    if not isinstance(rows, list):
+        rows = []
+    allowed = {str(c.get("url") or "").strip() for c in candidates}
+    out: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        url = str(row.get("url") or "").strip()
+        if not url or url not in allowed:
+            continue
+        reason = str(row.get("reason") or "").strip()[:180]
+        try:
+            confidence = _clamp01(float(row.get("confidence", 0.5)), 0.5)
+        except Exception:
+            confidence = 0.5
+        out.append({"url": url, "reason": reason, "confidence": confidence})
+    return {"items": out, "llm": _llm_meta(model, "source_suggestion", usage)}
+
+
+def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list[str], model: str, api_key: str) -> dict:
+    existing_sources = existing_sources[:40]
+    preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:20]
+    prompt = f"""あなたはRSSフィード探索アシスタントです。
+既存の購読ソースと興味トピックを元に、「まだ登録していない可能性が高い」ニュース/技術メディアのサイトURL（ホームページURL）候補を提案してください。
+
+要件:
+- URLは実在しそうなサイトのトップURLを優先（https://example.com/ 形式）
+- RSS URLを直接知らない場合はサイトトップURLでよい（後段でRSS探索する）
+- 既存ソースと同じURLは除外
+- 日本語で短い理由を付ける
+- 最大30件
+- JSONのみで返す
+
+返却形式:
+{{
+  "items": [
+    {{"url":"https://...", "reason":"..."}}
+  ]
+}}
+
+既存ソース:
+{json.dumps(existing_sources, ensure_ascii=False)}
+
+興味トピック:
+{json.dumps(preferred_topics, ensure_ascii=False)}
+"""
+    text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=2200)
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    try:
+        data = json.loads(text[start:end])
+    except Exception:
+        data = {}
+    rows = data.get("items", [])
+    if not isinstance(rows, list):
+        rows = []
+    existing_set = {str(s.get("url") or "").strip() for s in existing_sources}
+    out: list[dict] = []
+    for row in rows[:30]:
+        if not isinstance(row, dict):
+            continue
+        url = str(row.get("url") or "").strip()
+        reason = str(row.get("reason") or "").strip()[:180]
+        if not url or url in existing_set:
+            continue
+        out.append({"url": url, "reason": reason})
+    return {"items": out, "llm": _llm_meta(model, "source_suggestion", usage)}
+
+
 def extract_facts(title: str | None, content: str, model: str, api_key: str) -> dict:
     prompt = f"""以下の記事本文から重要な事実を箇条書きで抽出してください。
 事実は客観的かつ具体的に記述してください。

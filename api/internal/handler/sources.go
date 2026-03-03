@@ -550,7 +550,13 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	anthropicAPIKey := h.getUserAnthropicAPIKey(r.Context(), userID)
+	googleAPIKey := h.getUserGoogleAPIKey(r.Context(), userID)
 	anthropicSourceSuggestionModel := h.getUserAnthropicSourceSuggestionModel(r.Context(), userID)
+	if isGeminiModelForSuggestions(anthropicSourceSuggestionModel) {
+		anthropicAPIKey = nil
+	} else {
+		googleAPIKey = nil
+	}
 	var preferredTopics []string
 	if h.itemRepo != nil {
 		if topics, err := h.itemRepo.PositiveFeedbackTopics(r.Context(), userID, 8); err == nil {
@@ -636,8 +642,8 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	}
 	// AI主導の候補提案に寄せるため、候補不足時に限定せず常にAIシード拡張を試す。
 	// 既存候補が十分ある場合でも、別ドメインや別カテゴリの探索を混ぜて多様性を確保する。
-	if anthropicAPIKey != nil && h.worker != nil {
-		h.expandSourceSuggestionsWithLLMSeeds(r.Context(), userID, sources, preferredTopics, registered, cands, anthropicAPIKey, anthropicSourceSuggestionModel)
+	if (anthropicAPIKey != nil || googleAPIKey != nil) && h.worker != nil {
+		h.expandSourceSuggestionsWithLLMSeeds(r.Context(), userID, sources, preferredTopics, registered, cands, anthropicAPIKey, googleAPIKey, anthropicSourceSuggestionModel)
 	}
 
 	out := make([]sourceSuggestionResponse, 0, len(cands))
@@ -688,7 +694,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	for _, r := range rows {
 		out = append(out, r.row)
 	}
-	llmMeta := h.rankSourceSuggestionsWithLLM(r.Context(), userID, sources, preferredTopics, out, anthropicAPIKey, anthropicSourceSuggestionModel)
+	llmMeta := h.rankSourceSuggestionsWithLLM(r.Context(), userID, sources, preferredTopics, out, anthropicAPIKey, googleAPIKey, anthropicSourceSuggestionModel)
 	if len(out) > limit {
 		out = out[:limit]
 	}
@@ -768,9 +774,15 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	preferredTopics []string,
 	suggestions []sourceSuggestionResponse,
 	anthropicAPIKey *string,
+	googleAPIKey *string,
 	model *string,
 ) map[string]any {
-	if h.worker == nil || len(suggestions) == 0 || anthropicAPIKey == nil || strings.TrimSpace(*anthropicAPIKey) == "" {
+	if h.worker == nil || len(suggestions) == 0 {
+		return nil
+	}
+	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
+	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
+	if !hasAnthropic && !hasGoogle {
 		return nil
 	}
 	existing := make([]service.RankFeedSuggestionsExistingSource, 0, len(sources))
@@ -789,7 +801,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 			MatchedTopics: s.MatchedTopics,
 		})
 	}
-	resp, err := h.worker.RankFeedSuggestionsWithModel(ctx, existing, preferredTopics, cands, anthropicAPIKey, model)
+	resp, err := h.worker.RankFeedSuggestionsWithModel(ctx, existing, preferredTopics, cands, anthropicAPIKey, googleAPIKey, model)
 	if err != nil || resp == nil {
 		return nil
 	}
@@ -889,6 +901,36 @@ func (h *SourceHandler) getUserAnthropicSourceSuggestionModel(ctx context.Contex
 	return &v
 }
 
+func (h *SourceHandler) getUserGoogleAPIKey(ctx context.Context, userID string) *string {
+	if h.settingsRepo == nil || h.cipher == nil {
+		return nil
+	}
+	enc, err := h.settingsRepo.GetGoogleAPIKeyEncrypted(ctx, userID)
+	if err != nil || enc == nil || *enc == "" {
+		return nil
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil
+	}
+	plain = strings.TrimSpace(plain)
+	if plain == "" {
+		return nil
+	}
+	return &plain
+}
+
+func isGeminiModelForSuggestions(model *string) bool {
+	if model == nil {
+		return false
+	}
+	v := strings.ToLower(strings.TrimSpace(*model))
+	if v == "" {
+		return false
+	}
+	return strings.HasPrefix(v, "gemini-") || strings.Contains(v, "/models/gemini-")
+}
+
 func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	ctx context.Context,
 	userID string,
@@ -897,13 +939,14 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	registered map[string]bool,
 	cands map[string]*sourceSuggestionAgg,
 	anthropicAPIKey *string,
+	googleAPIKey *string,
 	model *string,
 ) {
 	existing := make([]service.RankFeedSuggestionsExistingSource, 0, len(sources))
 	for _, s := range sources {
 		existing = append(existing, service.RankFeedSuggestionsExistingSource{URL: s.URL, Title: s.Title})
 	}
-	resp, err := h.worker.SuggestFeedSeedSitesWithModel(ctx, existing, preferredTopics, anthropicAPIKey, model)
+	resp, err := h.worker.SuggestFeedSeedSitesWithModel(ctx, existing, preferredTopics, anthropicAPIKey, googleAPIKey, model)
 	if err != nil || resp == nil {
 		return
 	}

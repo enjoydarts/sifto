@@ -24,7 +24,11 @@ export default function OneSignalSettings() {
   useEffect(() => {
     if (!supported) return;
     const timer = window.setInterval(() => {
-      const os = window.OneSignal;
+      const rawOs = window.OneSignal;
+      const os =
+        rawOs && !Array.isArray(rawOs) && typeof (rawOs as { init?: unknown }).init === "function"
+          ? rawOs
+          : undefined;
       const optedIn = Boolean(os?.User?.PushSubscription?.optedIn);
       setEnabled(optedIn);
       setReady(Boolean(window.__siftoOneSignalReady));
@@ -64,7 +68,11 @@ export default function OneSignalSettings() {
           type="button"
           disabled={busy || !ready}
           onClick={async () => {
-            const os = window.OneSignal;
+            const rawOs = window.OneSignal;
+            const os =
+              rawOs && !Array.isArray(rawOs) && typeof (rawOs as { init?: unknown }).init === "function"
+                ? rawOs
+                : undefined;
             if (!os) return;
             setBusy(true);
             try {
@@ -93,7 +101,11 @@ export default function OneSignalSettings() {
           type="button"
           disabled={busy || !ready}
           onClick={async () => {
-            const os = window.OneSignal;
+            const rawOs = window.OneSignal;
+            const os =
+              rawOs && !Array.isArray(rawOs) && typeof (rawOs as { init?: unknown }).init === "function"
+                ? rawOs
+                : undefined;
             if (!os) return;
             setBusy(true);
             try {

@@ -4,6 +4,10 @@ import { useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useState } from "react";
 
+function isOneSignalLike(v: unknown): v is { init: (options: Record<string, unknown>) => Promise<void>; login?: (externalId: string) => Promise<void> } {
+  return typeof v === "object" && v !== null && typeof (v as { init?: unknown }).init === "function";
+}
+
 function loadOneSignalSDK(onLoaded?: () => void) {
   if (typeof window === "undefined") return;
   const now = Date.now();
@@ -13,7 +17,7 @@ function loadOneSignalSDK(onLoaded?: () => void) {
     window.__siftoOneSignalLoading = false;
     window.__siftoOneSignalScriptError = "script load timeout";
   }
-  if (window.OneSignal) return;
+  if (isOneSignalLike(window.OneSignal)) return;
   const existing = document.querySelector<HTMLScriptElement>("script[data-sifto-onesignal='1']");
   if (existing) existing.remove();
   window.__siftoOneSignalScriptLoaded = false;
@@ -67,15 +71,15 @@ async function cleanupLegacyOneSignalRootWorker() {
 }
 
 function enqueueOneSignalInit(appId: string, setReady: (ready: boolean) => void) {
-  window.OneSignalDeferred = window.OneSignalDeferred || [];
-  window.__siftoOneSignalInitEnqueued = (window.__siftoOneSignalInitEnqueued ?? 0) + 1;
-  window.OneSignalDeferred.push(async (OneSignal) => {
+  const runInit = async (oneSignalArg?: { init: (options: Record<string, unknown>) => Promise<void> }) => {
+    const oneSignal = oneSignalArg ?? (isOneSignalLike(window.OneSignal) ? window.OneSignal : undefined);
+    if (!oneSignal) return;
     if (window.__siftoOneSignalReady) return;
     window.__siftoOneSignalDeferredExecuted = true;
     try {
       window.__siftoOneSignalInitError = undefined;
       await cleanupLegacyOneSignalRootWorker();
-      await OneSignal.init({
+      await oneSignal.init({
         appId,
         serviceWorkerPath: "/onesignal/OneSignalSDKWorker.js",
         serviceWorkerUpdaterPath: "/onesignal/OneSignalSDKUpdaterWorker.js",
@@ -88,6 +92,18 @@ function enqueueOneSignalInit(appId: string, setReady: (ready: boolean) => void)
       window.__siftoOneSignalReady = false;
       window.__siftoOneSignalInitError = e instanceof Error ? e.message : String(e);
     }
+  };
+
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  window.__siftoOneSignalInitEnqueued = (window.__siftoOneSignalInitEnqueued ?? 0) + 1;
+  window.OneSignalDeferred.push(async (OneSignal) => runInit(OneSignal));
+
+  // Fallback for SDK variants that still consume legacy queue (window.OneSignal = []).
+  if (!Array.isArray(window.OneSignal)) {
+    window.OneSignal = [];
+  }
+  (window.OneSignal as Array<() => void | Promise<void>>).push(async () => {
+    await runInit();
   });
 }
 
@@ -124,7 +140,7 @@ export default function OneSignalInit() {
     if (typeof window === "undefined") return;
     if (!ready && !window.__siftoOneSignalReady) return;
     if (!externalId) return;
-    const OneSignal = window.OneSignal;
+    const OneSignal = isOneSignalLike(window.OneSignal) ? window.OneSignal : undefined;
     if (!OneSignal?.login) return;
     OneSignal.login(externalId).catch(() => {
       // no-op

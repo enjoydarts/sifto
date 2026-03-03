@@ -17,10 +17,12 @@ interface OneSignalLike {
   };
 }
 
+type OneSignalLegacyQueueItem = () => void | Promise<void>;
+
 declare global {
   interface Window {
     OneSignalDeferred?: Array<(OneSignal: OneSignalLike) => void | Promise<void>>;
-    OneSignal?: OneSignalLike;
+    OneSignal?: OneSignalLike | OneSignalLegacyQueueItem[];
     __siftoOneSignalLoading?: boolean;
     __siftoOneSignalReady?: boolean;
     __siftoOneSignalInitError?: string;

@@ -206,7 +206,11 @@ export default function DebugDigestsPage() {
         scope: r.scope,
         script_url: r.active?.scriptURL ?? r.waiting?.scriptURL ?? r.installing?.scriptURL ?? null,
       }));
-      const os = typeof window !== "undefined" ? window.OneSignal : undefined;
+      const rawOs = typeof window !== "undefined" ? window.OneSignal : undefined;
+      const os =
+        rawOs && !Array.isArray(rawOs) && typeof (rawOs as { init?: unknown }).init === "function"
+          ? rawOs
+          : undefined;
       const deferredQueue = typeof window !== "undefined" ? window.OneSignalDeferred : undefined;
       const sub = os?.User?.PushSubscription as unknown as Record<string, unknown> | undefined;
       const subscriptionIdRaw = sub?.["id"];

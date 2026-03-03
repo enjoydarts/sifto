@@ -1116,47 +1116,83 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	}
 	h.recordSourceSuggestionLLMUsage(ctx, userID, resp.LLM)
 	for _, seed := range resp.Items {
-		ctxOne, cancel := context.WithTimeout(ctx, 8*time.Second)
-		feeds, err := discoverRSSFeeds(ctxOne, strings.TrimSpace(seed.URL))
-		cancel()
-		if err != nil {
+		probeURLs := aiSeedFeedProbeURLs(strings.TrimSpace(seed.URL))
+		if len(probeURLs) == 0 {
 			continue
 		}
-		for _, f := range feeds {
-			key := normalizeFeedURL(f.URL)
-			if key == "" || registered[key] {
+		for _, probe := range probeURLs {
+			ctxOne, cancel := context.WithTimeout(ctx, 4*time.Second)
+			feeds, err := discoverRSSFeeds(ctxOne, probe)
+			cancel()
+			if err != nil {
 				continue
 			}
-			a := cands[key]
-			if a == nil {
-				a = &sourceSuggestionAgg{
-					URL:           f.URL,
-					Title:         f.Title,
-					Reasons:       map[string]bool{},
-					MatchedTopics: map[string]bool{},
-					SeedSourceIDs: map[string]bool{},
+			for _, f := range feeds {
+				key := normalizeFeedURL(f.URL)
+				if key == "" || registered[key] {
+					continue
 				}
-				cands[key] = a
-			}
-			if a.Title == nil && f.Title != nil {
-				a.Title = f.Title
-			}
-			reason := "AI提案サイトから発見"
-			if strings.TrimSpace(seed.Reason) != "" {
-				reason = "AI候補: " + strings.TrimSpace(seed.Reason)
-			}
-			if !a.Reasons[reason] {
-				a.Reasons[reason] = true
-				a.Score += 6
-			}
-			for _, topic := range preferredTopics {
-				if sourceSuggestionTopicMatch(f, topic) && !a.MatchedTopics[topic] {
-					a.MatchedTopics[topic] = true
-					a.Score += 3
+				a := cands[key]
+				if a == nil {
+					a = &sourceSuggestionAgg{
+						URL:           f.URL,
+						Title:         f.Title,
+						Reasons:       map[string]bool{},
+						MatchedTopics: map[string]bool{},
+						SeedSourceIDs: map[string]bool{},
+					}
+					cands[key] = a
+				}
+				if a.Title == nil && f.Title != nil {
+					a.Title = f.Title
+				}
+				reason := "AI提案サイトから発見"
+				if strings.TrimSpace(seed.Reason) != "" {
+					reason = "AI候補: " + strings.TrimSpace(seed.Reason)
+				}
+				if !a.Reasons[reason] {
+					a.Reasons[reason] = true
+					a.Score += 6
+				}
+				for _, topic := range preferredTopics {
+					if sourceSuggestionTopicMatch(f, topic) && !a.MatchedTopics[topic] {
+						a.MatchedTopics[topic] = true
+						a.Score += 3
+					}
 				}
 			}
 		}
 	}
+}
+
+func aiSeedFeedProbeURLs(raw string) []string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" {
+		return nil
+	}
+	if u.Scheme == "" {
+		u.Scheme = "https"
+	}
+	base := &url.URL{Scheme: u.Scheme, Host: u.Host}
+	seen := map[string]bool{}
+	var out []string
+	add := func(v string) {
+		v = strings.TrimSpace(v)
+		if v == "" || seen[v] {
+			return
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	// First try the seed itself as-is.
+	add(u.String())
+	// Then try common feed endpoints on root.
+	for _, p := range []string{"/feed", "/rss", "/atom.xml", "/feed.xml", "/rss.xml", "/index.xml"} {
+		c := *base
+		c.Path = p
+		add(c.String())
+	}
+	return out
 }
 
 func minInt(a, b int) int {

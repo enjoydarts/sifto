@@ -657,7 +657,7 @@ def rank_feed_suggestions(
 既存の購読ソース・興味トピック・候補フィードを見て、ユーザーに合いそうな候補を順位付けしてください。
 
 要件:
-- URLは入力候補のものだけ使う（新しいURLを作らない）
+- 候補は必ず id で指定する（urlは補助情報で、新規URLを作らない）
 - 既存ソースと重複しすぎる候補は下げる
 - 興味トピックに近い候補を優先
 - 理由は日本語で短く（40〜100字）
@@ -666,7 +666,7 @@ def rank_feed_suggestions(
 返却形式:
 {{
   "items": [
-    {{"id":"候補id", "url":"...", "reason":"...", "confidence":0.0-1.0}}
+    {{"id":"c001", "reason":"...", "confidence":0.0-1.0}}
   ]
 }}
 
@@ -685,37 +685,55 @@ Few-shot（避けたい傾向の既存Feed例）:
 候補フィード:
 {json.dumps(candidates, ensure_ascii=False)}
 """
-    text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=2800)
+    rank_schema = {
+        "type": "OBJECT",
+        "properties": {
+            "items": {
+                "type": "ARRAY",
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "id": {"type": "STRING"},
+                        "reason": {"type": "STRING"},
+                        "confidence": {"type": "NUMBER"},
+                    },
+                    "required": ["id", "reason", "confidence"],
+                },
+            }
+        },
+        "required": ["items"],
+    }
+    text, usage = _generate_content(
+        prompt,
+        model=model,
+        api_key=api_key,
+        max_output_tokens=2800,
+        response_schema=rank_schema,
+    )
     data = _extract_first_json_object(text) or {}
     rows = data.get("items", [])
     if not isinstance(rows, list):
         rows = []
-    allowed = {_normalize_url_for_match(str(c.get("url") or "").strip()) for c in candidates}
     allowed_ids = {str(c.get("id") or "").strip() for c in candidates if str(c.get("id") or "").strip()}
     out: list[dict] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
         cid = str(row.get("id") or "").strip()
-        url = str(row.get("url") or "").strip()
-        norm_url = _normalize_url_for_match(url)
-        if cid:
-            if cid not in allowed_ids and (not norm_url or norm_url not in allowed):
-                continue
-        elif not norm_url or norm_url not in allowed:
+        if not cid or cid not in allowed_ids:
             continue
         reason = str(row.get("reason") or "").strip()[:180]
         try:
             confidence = _clamp01(float(row.get("confidence", 0.5)), 0.5)
         except Exception:
             confidence = 0.5
-        out.append({"id": cid or None, "url": url, "reason": reason, "confidence": confidence})
+        out.append({"id": cid, "url": "", "reason": reason, "confidence": confidence})
     # Rescue: Gemini が空配列を返した場合は簡易再プロンプトで再取得する。
     if len(out) == 0 and len(candidates) > 0:
         rescue_prompt = f"""候補フィードを優先度順に再提示してください。必ず最低10件は返してください。
 JSONのみ:
 {{
-  "items":[{{"id":"候補id","reason":"短い理由","confidence":0.0-1.0}}]
+  "items":[{{"id":"c001","reason":"短い理由","confidence":0.0-1.0}}]
 }}
 
 興味トピック:
@@ -724,7 +742,13 @@ JSONのみ:
 候補フィード:
 {json.dumps(candidates, ensure_ascii=False)}
 """
-        rescue_text, rescue_usage = _generate_content(rescue_prompt, model=model, api_key=api_key, max_output_tokens=1800)
+        rescue_text, rescue_usage = _generate_content(
+            rescue_prompt,
+            model=model,
+            api_key=api_key,
+            max_output_tokens=1800,
+            response_schema=rank_schema,
+        )
         rescue_data = _extract_first_json_object(rescue_text) or {}
         rescue_rows = rescue_data.get("items", [])
         if isinstance(rescue_rows, list):

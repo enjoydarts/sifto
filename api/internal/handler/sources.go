@@ -829,7 +829,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	byID := map[string]*sourceSuggestionResponse{}
 	for i := range suggestions {
 		s := suggestions[i]
-		id := "cand:" + normalizeFeedURL(s.URL)
+		id := fmt.Sprintf("c%03d", i+1)
 		cands = append(cands, service.RankFeedSuggestionsCandidate{
 			ID:            id,
 			URL:           s.URL,

@@ -1178,7 +1178,7 @@ def rank_feed_suggestions(
 既存の購読ソース・興味トピック・候補フィードを見て、ユーザーに合いそうな候補を順位付けしてください。
 
 要件:
-- URLは入力候補のものだけ使う（新しいURLを作らない）
+- 候補は必ず id で指定する（urlは補助情報で、新規URLを作らない）
 - 既存ソースと重複しすぎる候補は下げる
 - 興味トピックに近い候補を優先
 - 理由は日本語で短く（40〜100字）
@@ -1187,7 +1187,7 @@ def rank_feed_suggestions(
 返却形式:
 {{
   "items": [
-    {{"id":"候補id", "url":"...", "reason":"...", "confidence":0.0-1.0}}
+    {{"id":"c001", "reason":"...", "confidence":0.0-1.0}}
   ]
 }}
 
@@ -1244,7 +1244,7 @@ Few-shot（避けたい傾向の既存Feed例）:
             continue
         cid = str(row.get("id") or "").strip()
         url = str(row.get("url") or "").strip()
-        if not url:
+        if not cid and not url:
             continue
         reason = str(row.get("reason") or "").strip()[:180]
         try:

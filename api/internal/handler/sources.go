@@ -566,6 +566,9 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	positiveExamples, negativeExamples := h.buildSourceSuggestionFewShotExamples(r.Context(), userID)
 
 	registered := map[string]bool{}
+	startAt := time.Now()
+	const suggestionMaxLatency = 12 * time.Second
+	isOverBudget := func() bool { return time.Since(startAt) >= suggestionMaxLatency }
 	type probeSeed struct {
 		SourceID string
 		ProbeURL string
@@ -589,8 +592,8 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Keep response latency predictable.
-	if len(probes) > 32 {
-		probes = probes[:32]
+	if len(probes) > 12 {
+		probes = probes[:12]
 	}
 
 	cands := map[string]*sourceSuggestionAgg{}
@@ -618,13 +621,19 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	}
 	if !aiReady || len(cands) < probeFallbackThreshold {
 		for _, p := range probes {
-			ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+			if isOverBudget() {
+				break
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), 1200*time.Millisecond)
 			feeds, err := discoverRSSFeeds(ctx, p.ProbeURL)
 			cancel()
 			if err != nil {
 				continue
 			}
 			for _, f := range feeds {
+				if isOverBudget() {
+					break
+				}
 				key := normalizeFeedURL(f.URL)
 				if key == "" || registered[key] {
 					continue
@@ -1115,7 +1124,11 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 		return
 	}
 	h.recordSourceSuggestionLLMUsage(ctx, userID, resp.LLM)
-	for _, seed := range resp.Items {
+	seedItems := resp.Items
+	if len(seedItems) > 10 {
+		seedItems = seedItems[:10]
+	}
+	for _, seed := range seedItems {
 		seedURL := coerceHTTPURL(strings.TrimSpace(seed.URL))
 		if seedURL == "" {
 			continue
@@ -1125,8 +1138,11 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 		if len(probeURLs) == 0 {
 			probeURLs = []string{seedURL}
 		}
+		if len(probeURLs) > 4 {
+			probeURLs = probeURLs[:4]
+		}
 		for _, probe := range probeURLs {
-			ctxOne, cancel := context.WithTimeout(ctx, 4*time.Second)
+			ctxOne, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
 			feeds, err := discoverRSSFeeds(ctxOne, probe)
 			cancel()
 			if err != nil {

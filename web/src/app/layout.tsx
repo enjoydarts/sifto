@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
@@ -28,6 +29,11 @@ export default function RootLayout({
   return (
     <html lang="ja" className={geist.variable}>
       <body className="min-h-screen bg-zinc-50 font-sans text-zinc-900 antialiased">
+        <Script
+          id="onesignal-sdk"
+          src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
+          strategy="beforeInteractive"
+        />
         <Providers>{children}</Providers>
       </body>
     </html>

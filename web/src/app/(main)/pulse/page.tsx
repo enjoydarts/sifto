@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Activity, TrendingUp } from "lucide-react";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
+import { Activity, TrendingUp, BookmarkPlus, CheckCircle2, Star } from "lucide-react";
 import {
   CartesianGrid,
   Legend,
@@ -20,8 +20,10 @@ const COLORS = ["#2563eb", "#16a34a", "#ea580c", "#7c3aed", "#0891b2", "#dc2626"
 
 export default function PulsePage() {
   const { t } = useI18n();
+  const queryClient = useQueryClient();
   const [days, setDays] = useState(7);
   const [limit, setLimit] = useState(12);
+  const [busyItemId, setBusyItemId] = useState<string | null>(null);
 
   const pulseQuery = useQuery({
     queryKey: ["topics-pulse", days, limit] as const,
@@ -32,6 +34,47 @@ export default function PulsePage() {
 
   const rows = useMemo(() => pulseQuery.data?.items ?? [], [pulseQuery.data?.items]);
   const topForChart = rows.slice(0, 6);
+  const topTopics = useMemo(() => rows.slice(0, 8), [rows]);
+
+  const statsQuery = useQuery({
+    queryKey: ["items-stats"] as const,
+    queryFn: () => api.getItemStats(),
+    staleTime: 30_000,
+  });
+  const uxQuery = useQuery({
+    queryKey: ["items-ux", 7] as const,
+    queryFn: () => api.getItemUXMetrics({ days: 7 }),
+    staleTime: 30_000,
+  });
+
+  const topicQueueQueries = useQueries({
+    queries: topTopics.map((topic) => ({
+      queryKey: ["pulse-topic-queue", topic.topic, days] as const,
+      queryFn: () =>
+        api.getItems({
+          topic: topic.topic,
+          unread_only: true,
+          sort: "score",
+          page: 1,
+          page_size: 3,
+        }),
+      staleTime: 30_000,
+    })),
+  });
+
+  const topicQueues = useMemo(
+    () =>
+      topTopics.map((topic, idx) => {
+        const q = topicQueueQueries[idx];
+        const data = q?.data;
+        return {
+          ...topic,
+          unread_total: data?.total ?? 0,
+          picks: data?.items ?? [],
+        };
+      }),
+    [topTopics, topicQueueQueries]
+  );
 
   const chartRows = useMemo(() => {
     const dateSet = new Set<string>();
@@ -80,6 +123,50 @@ export default function PulsePage() {
     return `hsl(218 88% ${lightness.toFixed(1)}%)`;
   };
 
+  const onMarkRead = async (itemId: string) => {
+    setBusyItemId(itemId);
+    try {
+      await api.markItemRead(itemId);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["items-stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["topics-pulse"] }),
+        queryClient.invalidateQueries({ queryKey: ["pulse-topic-queue"] }),
+      ]);
+    } finally {
+      setBusyItemId(null);
+    }
+  };
+
+  const onLater = async (itemId: string) => {
+    setBusyItemId(itemId);
+    try {
+      await api.markItemLater(itemId);
+      await queryClient.invalidateQueries({ queryKey: ["pulse-topic-queue"] });
+    } finally {
+      setBusyItemId(null);
+    }
+  };
+
+  const onFav = async (itemId: string, currentRating: number, currentFav: boolean) => {
+    setBusyItemId(itemId);
+    try {
+      await api.setItemFeedback(itemId, {
+        rating: currentRating,
+        is_favorite: !currentFav,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["pulse-topic-queue"] });
+    } finally {
+      setBusyItemId(null);
+    }
+  };
+
+  const reasonText = (delta: number, maxScore?: number | null, unreadTotal?: number) => {
+    if ((unreadTotal ?? 0) >= 8) return t("pulse.reason.backlog");
+    if (typeof maxScore === "number" && maxScore >= 0.9) return t("pulse.reason.highScore");
+    if (delta > 0) return t("pulse.reason.rising");
+    return t("pulse.reason.stable");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -118,6 +205,92 @@ export default function PulsePage() {
 
       {pulseQuery.isLoading && !pulseQuery.data && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
       {pulseQuery.error && <p className="text-sm text-red-500">{String(pulseQuery.error)}</p>}
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="text-xs text-zinc-500">{t("pulse.metric.unread")}</div>
+          <div className="mt-1 text-2xl font-semibold text-zinc-900">{statsQuery.data?.unread ?? "-"}</div>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="text-xs text-zinc-500">{t("pulse.metric.todayRate")}</div>
+          <div className="mt-1 text-2xl font-semibold text-zinc-900">
+            {typeof uxQuery.data?.today_consumption_rate === "number"
+              ? `${Math.round(uxQuery.data.today_consumption_rate)}%`
+              : "-"}
+          </div>
+        </div>
+        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <div className="text-xs text-zinc-500">{t("pulse.metric.streak")}</div>
+          <div className="mt-1 text-2xl font-semibold text-zinc-900">{uxQuery.data?.current_streak_days ?? "-"}</div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 text-sm font-semibold text-zinc-800">{t("pulse.queue.title")}</div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {topicQueues.map((topic) => {
+            const first = topic.picks[0];
+            return (
+              <div key={topic.topic} className="rounded-lg border border-zinc-200 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <a
+                    href={`/items?feed=all&sort=score&topic=${encodeURIComponent(topic.topic)}`}
+                    className="truncate text-sm font-semibold text-zinc-900 hover:underline"
+                    title={topic.topic}
+                  >
+                    {topic.topic}
+                  </a>
+                  <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
+                    {t("pulse.queue.unread")} {topic.unread_total}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-zinc-500">{reasonText(topic.delta, topic.max_score, topic.unread_total)}</p>
+                {!first ? (
+                  <p className="mt-3 text-sm text-zinc-400">{t("common.noData")}</p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    <a
+                      href={`/items/${first.id}?from=${encodeURIComponent("/pulse")}`}
+                      className="line-clamp-2 text-sm font-medium text-zinc-900 hover:underline"
+                    >
+                      {first.translated_title || first.title || first.url}
+                    </a>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onMarkRead(first.id)}
+                        disabled={busyItemId === first.id}
+                        className="inline-flex items-center gap-1 rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-700 disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="size-3.5" />
+                        {t("pulse.action.read")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onLater(first.id)}
+                        disabled={busyItemId === first.id}
+                        className="inline-flex items-center gap-1 rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-700 disabled:opacity-50"
+                      >
+                        <BookmarkPlus className="size-3.5" />
+                        {t("pulse.action.later")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onFav(first.id, Number(first.feedback_rating ?? 0), Boolean(first.is_favorite))}
+                        disabled={busyItemId === first.id}
+                        className="inline-flex items-center gap-1 rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-700 disabled:opacity-50"
+                      >
+                        <Star className="size-3.5" />
+                        {first.is_favorite ? t("pulse.action.unfav") : t("pulse.action.fav")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
         <div className="mb-2 text-sm font-semibold text-zinc-800">{t("pulse.chart.title")}</div>
@@ -223,30 +396,17 @@ export default function PulsePage() {
                 <tr className="text-left text-zinc-500">
                   <th className="border-b border-zinc-200 px-2 py-2">{t("pulse.table.topic")}</th>
                   <th className="border-b border-zinc-200 px-2 py-2">{t("pulse.table.total")}</th>
-                  <th className="border-b border-zinc-200 px-2 py-2">{t("pulse.table.delta")}</th>
+                  <th className="border-b border-zinc-200 px-2 py-2">{t("pulse.table.unread")}</th>
                   <th className="border-b border-zinc-200 px-2 py-2">{t("pulse.table.maxScore")}</th>
                   <th className="border-b border-zinc-200 px-2 py-2">{t("pulse.table.open")}</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {topicQueues.map((row) => (
                   <tr key={row.topic}>
                     <td className="border-b border-zinc-100 px-2 py-2 font-medium text-zinc-900">{row.topic}</td>
                     <td className="border-b border-zinc-100 px-2 py-2 text-zinc-700">{row.total}</td>
-                    <td className="border-b border-zinc-100 px-2 py-2">
-                      <span
-                        className={`rounded px-2 py-0.5 text-xs font-medium ${
-                          row.delta > 0
-                            ? "bg-green-50 text-green-700"
-                            : row.delta < 0
-                              ? "bg-zinc-100 text-zinc-700"
-                              : "bg-blue-50 text-blue-700"
-                        }`}
-                      >
-                        {row.delta > 0 ? "+" : ""}
-                        {row.delta}
-                      </span>
-                    </td>
+                    <td className="border-b border-zinc-100 px-2 py-2 text-zinc-700">{row.unread_total}</td>
                     <td className="border-b border-zinc-100 px-2 py-2 text-zinc-700">
                       {typeof row.max_score === "number" ? row.max_score.toFixed(2) : "-"}
                     </td>

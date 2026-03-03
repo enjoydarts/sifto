@@ -4,6 +4,7 @@ import os
 import re
 import time
 import hashlib
+from urllib.parse import urlparse
 from datetime import datetime, timezone
 
 import httpx
@@ -519,6 +520,20 @@ def _extract_first_json_object(text: str) -> dict | None:
     return None
 
 
+def _normalize_url_for_match(raw: str) -> str:
+    s = (raw or "").strip()
+    if not s:
+        return ""
+    try:
+        u = urlparse(s)
+    except Exception:
+        return s.lower()
+    scheme = (u.scheme or "https").lower()
+    host = (u.netloc or "").lower()
+    path = (u.path or "").rstrip("/")
+    return f"{scheme}://{host}{path}"
+
+
 def _decode_json_string_fragment(raw: str) -> str:
     try:
         return json.loads(f'"{raw}"')
@@ -671,16 +686,11 @@ Few-shot（避けたい傾向の既存Feed例）:
 {json.dumps(candidates, ensure_ascii=False)}
 """
     text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=2800)
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    try:
-        data = json.loads(text[start:end])
-    except Exception:
-        data = {}
+    data = _extract_first_json_object(text) or {}
     rows = data.get("items", [])
     if not isinstance(rows, list):
         rows = []
-    allowed = {str(c.get("url") or "").strip() for c in candidates}
+    allowed = {_normalize_url_for_match(str(c.get("url") or "").strip()) for c in candidates}
     allowed_ids = {str(c.get("id") or "").strip() for c in candidates if str(c.get("id") or "").strip()}
     out: list[dict] = []
     for row in rows:
@@ -688,10 +698,11 @@ Few-shot（避けたい傾向の既存Feed例）:
             continue
         cid = str(row.get("id") or "").strip()
         url = str(row.get("url") or "").strip()
+        norm_url = _normalize_url_for_match(url)
         if cid:
-            if cid not in allowed_ids and (not url or url not in allowed):
+            if cid not in allowed_ids and (not norm_url or norm_url not in allowed):
                 continue
-        elif not url or url not in allowed:
+        elif not norm_url or norm_url not in allowed:
             continue
         reason = str(row.get("reason") or "").strip()[:180]
         try:
@@ -699,6 +710,38 @@ Few-shot（避けたい傾向の既存Feed例）:
         except Exception:
             confidence = 0.5
         out.append({"id": cid or None, "url": url, "reason": reason, "confidence": confidence})
+    # Rescue: Gemini が空配列を返した場合は簡易再プロンプトで再取得する。
+    if len(out) == 0 and len(candidates) > 0:
+        rescue_prompt = f"""候補フィードを優先度順に再提示してください。必ず最低10件は返してください。
+JSONのみ:
+{{
+  "items":[{{"id":"候補id","reason":"短い理由","confidence":0.0-1.0}}]
+}}
+
+興味トピック:
+{json.dumps(preferred_topics, ensure_ascii=False)}
+
+候補フィード:
+{json.dumps(candidates, ensure_ascii=False)}
+"""
+        rescue_text, rescue_usage = _generate_content(rescue_prompt, model=model, api_key=api_key, max_output_tokens=1800)
+        rescue_data = _extract_first_json_object(rescue_text) or {}
+        rescue_rows = rescue_data.get("items", [])
+        if isinstance(rescue_rows, list):
+            for row in rescue_rows:
+                if not isinstance(row, dict):
+                    continue
+                cid = str(row.get("id") or "").strip()
+                if not cid or cid not in allowed_ids:
+                    continue
+                reason = str(row.get("reason") or "").strip()[:180]
+                try:
+                    confidence = _clamp01(float(row.get("confidence", 0.5)), 0.5)
+                except Exception:
+                    confidence = 0.5
+                out.append({"id": cid, "url": "", "reason": reason, "confidence": confidence})
+        usage["input_tokens"] = int(usage.get("input_tokens", 0)) + int(rescue_usage.get("input_tokens", 0))
+        usage["output_tokens"] = int(usage.get("output_tokens", 0)) + int(rescue_usage.get("output_tokens", 0))
     return {"items": out, "llm": _llm_meta(model, "source_suggestion", usage)}
 
 

@@ -2,6 +2,7 @@ import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { SignJWT, jwtVerify } from "jose";
+import { resolveServerAPIURL } from "@/lib/server-api-url";
 
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
@@ -61,8 +62,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       // 初回ログイン時: Go API でユーザーを upsert して内部 UUID を sub にセット
       if (user?.email) {
-        const apiUrl =
-          process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+        const apiUrl = resolveServerAPIURL();
         try {
           const res = await fetch(`${apiUrl}/api/internal/users/upsert`, {
             method: "POST",

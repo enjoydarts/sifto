@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { resolveServerAPIURL } from "@/lib/server-api-url";
 import { authOptions } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -8,7 +9,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+  const apiUrl = resolveServerAPIURL();
   const secret = process.env.NEXTAUTH_SECRET ?? "";
   if (!secret) {
     return NextResponse.json({ error: "NEXTAUTH_SECRET is not set" }, { status: 500 });

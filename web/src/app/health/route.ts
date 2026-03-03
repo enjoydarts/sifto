@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveServerAPIURL } from "@/lib/server-api-url";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ type HealthCheck = {
 };
 
 async function checkAPI(): Promise<HealthCheck> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+  const apiUrl = resolveServerAPIURL();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3000);
   const startedAt = Date.now();

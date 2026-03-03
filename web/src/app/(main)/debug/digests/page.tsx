@@ -105,6 +105,7 @@ type OneSignalDebugState = {
   login_external_id: string | null;
   subscription_id: string | null;
   sw_scopes: string[];
+  sw_registrations: Array<{ scope: string; script_url: string | null }>;
   worker_file_reachable: boolean | null;
   worker_updater_reachable: boolean | null;
 };
@@ -199,9 +200,12 @@ export default function DebugDigestsPage() {
     try {
       const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID?.trim() ?? "";
       const permission = typeof Notification !== "undefined" ? Notification.permission : "unsupported";
-      const scopes = "serviceWorker" in navigator
-        ? (await navigator.serviceWorker.getRegistrations()).map((r) => r.scope)
-        : [];
+      const registrations = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistrations() : [];
+      const scopes = registrations.map((r) => r.scope);
+      const swRegistrations = registrations.map((r) => ({
+        scope: r.scope,
+        script_url: r.active?.scriptURL ?? r.waiting?.scriptURL ?? r.installing?.scriptURL ?? null,
+      }));
       const os = typeof window !== "undefined" ? window.OneSignal : undefined;
       const deferredQueue = typeof window !== "undefined" ? window.OneSignalDeferred : undefined;
       const sub = os?.User?.PushSubscription as unknown as Record<string, unknown> | undefined;
@@ -241,6 +245,7 @@ export default function DebugDigestsPage() {
         login_external_id: session?.user?.email ?? null,
         subscription_id: subscriptionId,
         sw_scopes: scopes,
+        sw_registrations: swRegistrations,
         worker_file_reachable: workerFileReachable,
         worker_updater_reachable: workerUpdaterReachable,
       });

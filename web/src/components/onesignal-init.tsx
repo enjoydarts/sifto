@@ -80,6 +80,13 @@ export default function OneSignalInit() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    cleanupLegacyOneSignalRootWorker().catch(() => {
+      // no-op
+    });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     const appId = process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID?.trim();
     if (!appId) return;
     if (window.__siftoOneSignalReady) return;

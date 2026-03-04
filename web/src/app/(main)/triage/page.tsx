@@ -11,6 +11,7 @@ import { useToast } from "@/components/toast-provider";
 import { InlineReader } from "@/components/inline-reader";
 
 type ActionType = "read" | "favorite" | "later";
+type TriageMode = "quick" | "all";
 type TriageMetricEvent = {
   ts: number;
   item_id: string;
@@ -20,6 +21,8 @@ type TriageMetricEvent = {
 
 const TRIAGE_METRICS_KEY = "triage:metrics:v1";
 const TRIAGE_METRICS_MAX = 300;
+const TRIAGE_ALL_PAGE_SIZE = 200;
+const TRIAGE_ALL_MAX_PAGES = 100;
 
 function rateTone(rate: number) {
   if (rate >= 80) return "text-green-700";
@@ -32,6 +35,7 @@ export default function TriagePage() {
   const { showToast } = useToast();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [triageMode, setTriageMode] = useState<TriageMode>("quick");
   const [actioned, setActioned] = useState<Record<string, true>>({});
   const [updating, setUpdating] = useState(false);
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
@@ -42,6 +46,17 @@ export default function TriagePage() {
   const [mobileMetricsOpen, setMobileMetricsOpen] = useState(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const currentShownAtRef = useRef<{ id: string; shownAtMs: number } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const applyFromUrl = () => {
+      const mode = new URLSearchParams(window.location.search).get("mode");
+      setTriageMode(mode === "all" ? "all" : "quick");
+    };
+    applyFromUrl();
+    window.addEventListener("popstate", applyFromUrl);
+    return () => window.removeEventListener("popstate", applyFromUrl);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -69,15 +84,46 @@ export default function TriagePage() {
   const focusSize = readingPlanPrefs?.size ?? 15;
   const diversifyTopics = Boolean(readingPlanPrefs?.diversify_topics ?? true);
 
+  const loadAllTriageItems = useCallback(async () => {
+    const collected: Item[] = [];
+    let page = 1;
+    let hasNext = true;
+    while (hasNext && page <= TRIAGE_ALL_MAX_PAGES) {
+      const resp = await api.getItems({
+        page,
+        page_size: TRIAGE_ALL_PAGE_SIZE,
+        sort: "newest",
+        unread_only: true,
+      });
+      if (Array.isArray(resp.items) && resp.items.length > 0) {
+        collected.push(...resp.items);
+      }
+      hasNext = Boolean(resp.has_next);
+      page += 1;
+    }
+    return collected;
+  }, []);
+
   const queueQuery = useQuery({
-    queryKey: ["triage-queue", focusWindow, focusSize, diversifyTopics ? 1 : 0] as const,
+    queryKey: ["triage-queue", triageMode, focusWindow, focusSize, diversifyTopics ? 1 : 0] as const,
     queryFn: () =>
-      api.getFocusQueue({
-        window: focusWindow === "today_jst" || focusWindow === "7d" ? focusWindow : "24h",
-        size: focusSize,
-        diversify_topics: diversifyTopics,
-        exclude_later: true,
-      }),
+      triageMode === "all"
+        ? loadAllTriageItems().then((items) => ({
+            items,
+            window: "24h" as const,
+            size: items.length,
+            completed: 0,
+            remaining: items.length,
+            total: items.length,
+            source_pool: 0,
+            diversify_topics: false,
+          }))
+        : api.getFocusQueue({
+            window: focusWindow === "today_jst" || focusWindow === "7d" ? focusWindow : "24h",
+            size: focusSize,
+            diversify_topics: diversifyTopics,
+            exclude_later: true,
+          }),
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
@@ -292,6 +338,17 @@ export default function TriagePage() {
     return `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${(dragOffset.x / 18).toFixed(2)}deg)`;
   }, [dragOffset.x, dragOffset.y, swipeExit]);
 
+  const changeMode = useCallback(
+    (nextMode: TriageMode) => {
+      if (nextMode === triageMode) return;
+      setTriageMode(nextMode);
+      setActioned({});
+      const next = nextMode === "all" ? "/triage?mode=all" : "/triage";
+      router.replace(next, { scroll: false });
+    },
+    [router, triageMode]
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -300,11 +357,34 @@ export default function TriagePage() {
             <Hand className="size-6 text-zinc-600" aria-hidden="true" />
             <span>{t("triage.title")}</span>
           </h1>
-          <p className="mt-1 text-sm text-zinc-500">{t("triage.subtitle")}</p>
+          <p className="mt-1 text-sm text-zinc-500">
+            {triageMode === "all" ? t("triage.subtitleAll") : t("triage.subtitle")}
+          </p>
         </div>
-        <Link href="/items?feed=recommended" className="rounded border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50">
-          {t("triage.backToItems")}
+        <Link href={triageMode === "all" ? "/items?feed=all" : "/items?feed=recommended"} className="rounded border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50">
+          {triageMode === "all" ? t("triage.backToAllItems") : t("triage.backToItems")}
         </Link>
+      </div>
+
+      <div className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
+        <button
+          type="button"
+          onClick={() => changeMode("quick")}
+          className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+            triageMode === "quick" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
+          }`}
+        >
+          {t("triage.mode.quick")}
+        </button>
+        <button
+          type="button"
+          onClick={() => changeMode("all")}
+          className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+            triageMode === "all" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
+          }`}
+        >
+          {t("triage.mode.all")}
+        </button>
       </div>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">

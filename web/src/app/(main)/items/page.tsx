@@ -715,6 +715,13 @@ function ItemsPageContent() {
             )}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => router.push("/triage?mode=all")}
+          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+        >
+          {t("items.openAllTriage")}
+        </button>
       </div>
 
       {/* Filters */}

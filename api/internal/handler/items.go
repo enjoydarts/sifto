@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -74,19 +75,7 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	unreadOnly := q.Get("unread_only") == "true"
 	favoriteOnly := q.Get("favorite_only") == "true"
 	laterOnly := q.Get("later_only") == "true"
-	cacheKey := fmt.Sprintf(
-		"items:list:%s:status=%s:source=%s:topic=%s:unread=%t:fav=%t:later=%t:sort=%s:page=%d:size=%d",
-		userID,
-		q.Get("status"),
-		q.Get("source_id"),
-		q.Get("topic"),
-		unreadOnly,
-		favoriteOnly,
-		laterOnly,
-		sort,
-		page,
-		pageSize,
-	)
+	cacheKey := cacheKeyItemsList(userID, q.Get("status"), q.Get("source_id"), q.Get("topic"), unreadOnly, favoriteOnly, laterOnly, sort, page, pageSize)
 	cacheBust := q.Get("cache_bust") == "1"
 	if h.cache != nil && !cacheBust {
 		var cached model.ItemListResponse
@@ -203,6 +192,17 @@ func (h *ItemHandler) UXMetrics(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *ItemHandler) invalidateUserCaches(ctx context.Context, userID string) {
+	if h.cache == nil || userID == "" {
+		return
+	}
+	for _, prefix := range cacheUserInvalidatePrefixes(userID) {
+		if _, err := h.cache.DeleteByPrefix(ctx, prefix, 5000); err != nil {
+			log.Printf("cache invalidate failed user_id=%s prefix=%s err=%v", userID, prefix, err)
+		}
+	}
+}
+
 func (h *ItemHandler) TopicTrends(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	limit := parseIntOrDefault(r.URL.Query().Get("limit"), 8)
@@ -266,7 +266,7 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 		ExcludeRead:     excludeRead,
 		ExcludeLater:    q.Get("exclude_later") == "true",
 	}
-	cacheKey := fmt.Sprintf("readingplan:%s:%s:%d:%t:%t:%t", userID, params.Window, params.Size, params.DiversifyTopics, params.ExcludeRead, params.ExcludeLater)
+	cacheKey := cacheKeyReadingPlan(userID, params.Window, params.Size, params.DiversifyTopics, params.ExcludeRead, params.ExcludeLater)
 	cacheBust := q.Get("cache_bust") == "1"
 	if h.cache != nil && !cacheBust {
 		var cached model.ReadingPlanResponse
@@ -326,7 +326,7 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 		ExcludeRead:     false,
 		ExcludeLater:    q.Get("exclude_later") != "false",
 	}
-	cacheKey := fmt.Sprintf("focusqueue:%s:%s:%d:%t:%t", userID, params.Window, params.Size, params.DiversifyTopics, params.ExcludeLater)
+	cacheKey := cacheKeyFocusQueue(userID, params.Window, params.Size, params.DiversifyTopics, params.ExcludeLater)
 	cacheBust := q.Get("cache_bust") == "1"
 	if h.cache != nil && !cacheBust {
 		var cached map[string]any
@@ -425,7 +425,7 @@ func (h *ItemHandler) TriageAll(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	q := r.URL.Query()
 	cacheBust := q.Get("cache_bust") == "1"
-	cacheKey := fmt.Sprintf("triageall:%s", userID)
+	cacheKey := cacheKeyTriageAll(userID)
 	if h.cache != nil && !cacheBust {
 		var cached map[string]any
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
@@ -502,6 +502,7 @@ func (h *ItemHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	h.invalidateUserCaches(r.Context(), userID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -513,7 +514,7 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
-	cacheKey := fmt.Sprintf("related:%s:%s:%d", userID, id, limit)
+	cacheKey := cacheKeyRelated(userID, id, limit)
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	if h.cache != nil && !cacheBust {
 		var cached map[string]any
@@ -790,6 +791,7 @@ func (h *ItemHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
 	if inserted && h.streakRepo != nil {
 		_ = h.streakRepo.IncrementRead(r.Context(), userID, timeutil.NowJST(), 3)
 	}
+	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"item_id": id, "is_read": true})
 }
 
@@ -800,6 +802,7 @@ func (h *ItemHandler) MarkUnread(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"item_id": id, "is_read": false})
 }
 
@@ -810,6 +813,7 @@ func (h *ItemHandler) MarkLater(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"item_id": id, "is_later": true})
 }
 
@@ -820,6 +824,7 @@ func (h *ItemHandler) UnmarkLater(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"item_id": id, "is_later": false})
 }
 
@@ -843,6 +848,7 @@ func (h *ItemHandler) SetFeedback(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, fb)
 }
 

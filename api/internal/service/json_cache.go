@@ -15,6 +15,7 @@ import (
 type JSONCache interface {
 	GetJSON(ctx context.Context, key string, dst any) (bool, error)
 	SetJSON(ctx context.Context, key string, value any, ttl time.Duration) error
+	DeleteByPrefix(ctx context.Context, prefix string, limit int64) (int64, error)
 	Ping(ctx context.Context) error
 	IncrMetric(ctx context.Context, namespace, field string, delta int64, now time.Time, ttl time.Duration) error
 	SumMetrics(ctx context.Context, namespace string, from, to time.Time) (map[string]int64, error)
@@ -26,7 +27,8 @@ func (NoopJSONCache) GetJSON(context.Context, string, any) (bool, error) { retur
 func (NoopJSONCache) SetJSON(context.Context, string, any, time.Duration) error {
 	return nil
 }
-func (NoopJSONCache) Ping(context.Context) error { return nil }
+func (NoopJSONCache) DeleteByPrefix(context.Context, string, int64) (int64, error) { return 0, nil }
+func (NoopJSONCache) Ping(context.Context) error                                   { return nil }
 func (NoopJSONCache) IncrMetric(context.Context, string, string, int64, time.Time, time.Duration) error {
 	return nil
 }
@@ -95,6 +97,44 @@ func (c *RedisJSONCache) SetJSON(ctx context.Context, key string, value any, ttl
 		return err
 	}
 	return c.client.Set(ctx, c.key(key), b, ttl).Err()
+}
+
+func (c *RedisJSONCache) DeleteByPrefix(ctx context.Context, prefix string, limit int64) (int64, error) {
+	if c == nil || c.client == nil || strings.TrimSpace(prefix) == "" {
+		return 0, nil
+	}
+	if limit <= 0 {
+		limit = 1000
+	}
+	pattern := c.key(prefix) + "*"
+	var (
+		cursor  uint64
+		deleted int64
+	)
+	for {
+		keys, nextCursor, err := c.client.Scan(ctx, cursor, pattern, 200).Result()
+		if err != nil {
+			return deleted, err
+		}
+		if len(keys) > 0 {
+			pipe := c.client.Pipeline()
+			for _, k := range keys {
+				if deleted >= limit {
+					break
+				}
+				pipe.Del(ctx, k)
+				deleted++
+			}
+			if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+				return deleted, err
+			}
+		}
+		if nextCursor == 0 || deleted >= limit {
+			break
+		}
+		cursor = nextCursor
+	}
+	return deleted, nil
 }
 
 func (c *RedisJSONCache) Ping(ctx context.Context) error {

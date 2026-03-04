@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -49,7 +48,7 @@ func (h *BriefingHandler) Today(w http.ResponseWriter, r *http.Request) {
 	if size > 30 {
 		size = 30
 	}
-	cacheKey := fmt.Sprintf("briefing:today:%s:size=%d", userID, size)
+	cacheKey := cacheKeyBriefingToday(userID, size)
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	if h.cache != nil && !cacheBust {
 		var cached model.BriefingTodayResponse

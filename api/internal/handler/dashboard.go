@@ -51,7 +51,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid digest_limit", http.StatusBadRequest)
 		return
 	}
-	cacheKey := fmt.Sprintf("dashboard:%s:llm%d:topic%d:digest%d", userID, llmDays, topicLimit, digestLimit)
+	cacheKey := cacheKeyDashboard(userID, llmDays, topicLimit, digestLimit)
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	if h.cache != nil && !cacheBust {
 		var cached map[string]any
@@ -134,7 +134,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 	wg.Add(6)
 	go func() {
 		defer wg.Done()
-		partKey := fmt.Sprintf("dashboard:part:sources:%s", userID)
+		partKey := cacheKeyDashboardPart(userID, "sources", 0, 0)
 		loadPart("sources", partKey, func() (any, error) {
 			n, err := h.sourceRepo.CountByUser(r.Context(), userID)
 			if err != nil {
@@ -145,35 +145,35 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}()
 	go func() {
 		defer wg.Done()
-		partKey := fmt.Sprintf("dashboard:part:itemstats:%s", userID)
+		partKey := cacheKeyDashboardPart(userID, "itemstats", 0, 0)
 		loadPart("itemstats", partKey, func() (any, error) {
 			return h.itemRepo.Stats(r.Context(), userID)
 		}, func(v any) { itemStats = v })
 	}()
 	go func() {
 		defer wg.Done()
-		partKey := fmt.Sprintf("dashboard:part:digests:%s:%d", userID, digestLimit)
+		partKey := cacheKeyDashboardPart(userID, "digests", digestLimit, 0)
 		loadPart("digests", partKey, func() (any, error) {
 			return h.digestRepo.ListLimit(r.Context(), userID, digestLimit)
 		}, func(v any) { digests = v })
 	}()
 	go func() {
 		defer wg.Done()
-		partKey := fmt.Sprintf("dashboard:part:llm:%s:%d", userID, llmDays)
+		partKey := cacheKeyDashboardPart(userID, "llm", llmDays, 0)
 		loadPart("llm", partKey, func() (any, error) {
 			return h.llmUsageRepo.DailySummaryByUser(r.Context(), userID, llmDays)
 		}, func(v any) { llmSummary = v })
 	}()
 	go func() {
 		defer wg.Done()
-		partKey := fmt.Sprintf("dashboard:part:topics:%s:%d", userID, topicLimit)
+		partKey := cacheKeyDashboardPart(userID, "topics", topicLimit, 0)
 		loadPart("topics", partKey, func() (any, error) {
 			return h.itemRepo.TopicTrends(r.Context(), userID, topicLimit)
 		}, func(v any) { topics = v })
 	}()
 	go func() {
 		defer wg.Done()
-		partKey := fmt.Sprintf("dashboard:part:failedpreview:%s", userID)
+		partKey := cacheKeyDashboardPart(userID, "failedpreview", 0, 0)
 		loadPart("failedpreview", partKey, func() (any, error) {
 			status := "failed"
 			return h.itemRepo.ListPage(r.Context(), userID, repository.ItemListParams{

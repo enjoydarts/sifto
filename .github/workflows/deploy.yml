@@ -99,7 +99,22 @@ jobs:
       - name: Deploy API
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: flyctl deploy --remote-only --build-arg APP_COMMIT_SHA=${GITHUB_SHA}
+        run: |
+          set -euo pipefail
+          max_attempts=6
+          attempt=1
+          while true; do
+            if flyctl deploy --remote-only --build-arg APP_COMMIT_SHA=${GITHUB_SHA}; then
+              break
+            fi
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "flyctl deploy failed after $attempt attempts"
+              exit 1
+            fi
+            echo "flyctl deploy retry ($attempt/$max_attempts) after transient lease conflict"
+            attempt=$((attempt + 1))
+            sleep 20
+          done
         working-directory: api
 
   deploy-worker:
@@ -179,5 +194,20 @@ jobs:
       - name: Deploy Worker
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: flyctl deploy --remote-only --build-arg APP_COMMIT_SHA=${GITHUB_SHA}
+        run: |
+          set -euo pipefail
+          max_attempts=6
+          attempt=1
+          while true; do
+            if flyctl deploy --remote-only --build-arg APP_COMMIT_SHA=${GITHUB_SHA}; then
+              break
+            fi
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "flyctl deploy failed after $attempt attempts"
+              exit 1
+            fi
+            echo "flyctl deploy retry ($attempt/$max_attempts) after transient lease conflict"
+            attempt=$((attempt + 1))
+            sleep 20
+          done
         working-directory: worker

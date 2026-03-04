@@ -4,10 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Flame, ListTree, Sparkles, Target } from "lucide-react";
+import { Bell, Flame, ListTree, Newspaper, Sparkles, Target } from "lucide-react";
 import { api, BriefingCluster, Item } from "@/lib/api";
 import { InlineReader } from "@/components/inline-reader";
 import { useI18n } from "@/components/i18n-provider";
+import { PageTransition } from "@/components/page-transition";
+import { EmptyState } from "@/components/empty-state";
+import { SkeletonCard, SkeletonKpi } from "@/components/skeleton";
 
 const EMPTY_ITEMS: Item[] = [];
 const EMPTY_CLUSTERS: BriefingCluster[] = [];
@@ -67,170 +70,202 @@ export default function BriefingPage() {
   }, [clusterRows, highlights]);
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="inline-flex items-center gap-2 text-2xl font-bold tracking-tight text-zinc-900">
-              <Sparkles className="size-6 text-blue-600" aria-hidden="true" />
-              <span>{t("briefing.title")}</span>
-            </h1>
-            <p className="mt-1 text-sm text-zinc-600">
-              {`${greetingLabel} · ${data?.date ?? ""}`}
-            </p>
+    <PageTransition>
+      <div className="space-y-6">
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 className="inline-flex items-center gap-2 text-2xl font-bold tracking-tight text-zinc-900">
+                <Sparkles className="size-6 text-blue-600" aria-hidden="true" />
+                <span>{t("briefing.title")}</span>
+              </h1>
+              <p className="mt-1 text-sm text-zinc-600">
+                {`${greetingLabel} · ${data?.date ?? ""}`}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                void api
+                  .getBriefingToday({ size: 18, cache_bust: true })
+                  .then((next) => {
+                    queryClient.setQueryData(["briefing-today", 18], next);
+                  })
+                  .catch(() => {
+                    // keep current snapshot on refresh failure
+                  });
+              }}
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 press focus-ring"
+            >
+              {t("common.refresh")}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              void api
-                .getBriefingToday({ size: 18, cache_bust: true })
-                .then((next) => {
-                  queryClient.setQueryData(["briefing-today", 18], next);
-                })
-                .catch(() => {
-                  // keep current snapshot on refresh failure
-                });
-            }}
-            className="rounded border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
-          >
-            {t("common.refresh")}
-          </button>
-        </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi
-            icon={<Target className="size-4 text-zinc-500" aria-hidden="true" />}
-            label={t("briefing.kpi.today")}
-            value={String(data?.stats.today_highlight_count ?? 0)}
-          />
-          <Kpi
-            icon={<Bell className="size-4 text-zinc-500" aria-hidden="true" />}
-            label={t("briefing.kpi.unread")}
-            value={String(data?.stats.total_unread ?? 0)}
-          />
-          <Kpi
-            icon={<ListTree className="size-4 text-zinc-500" aria-hidden="true" />}
-            label={t("briefing.kpi.yesterdayRead")}
-            value={String(data?.stats.yesterday_read ?? 0)}
-          />
-          <Kpi
-            icon={<Flame className="size-4 text-zinc-500" aria-hidden="true" />}
-            label={t("briefing.kpi.streak")}
-            value={`${data?.stats.streak_days ?? 0}${t("briefing.kpi.streakUnit")}`}
-          />
-        </div>
-        {data?.stats.streak_at_risk ? (
-          <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-            <p className="font-medium">{t("briefing.streakRisk.title")}</p>
-            <p className="mt-0.5 text-xs text-rose-700">
-              {t("briefing.streakRisk.prefix")}
-              {data?.stats.streak_remaining ?? 0}
-              {t("briefing.streakRisk.unit")}
-              {t("briefing.streakRisk.suffix")}
-            </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {loading ? (
+              <>
+                <SkeletonKpi />
+                <SkeletonKpi />
+                <SkeletonKpi />
+                <SkeletonKpi />
+              </>
+            ) : (
+              <>
+                <Kpi
+                  icon={<Target className="size-4 text-zinc-500" aria-hidden="true" />}
+                  label={t("briefing.kpi.today")}
+                  value={String(data?.stats.today_highlight_count ?? 0)}
+                />
+                <Kpi
+                  icon={<Bell className="size-4 text-zinc-500" aria-hidden="true" />}
+                  label={t("briefing.kpi.unread")}
+                  value={String(data?.stats.total_unread ?? 0)}
+                />
+                <Kpi
+                  icon={<ListTree className="size-4 text-zinc-500" aria-hidden="true" />}
+                  label={t("briefing.kpi.yesterdayRead")}
+                  value={String(data?.stats.yesterday_read ?? 0)}
+                />
+                <Kpi
+                  icon={<Flame className="size-4 text-zinc-500" aria-hidden="true" />}
+                  label={t("briefing.kpi.streak")}
+                  value={`${data?.stats.streak_days ?? 0}${t("briefing.kpi.streakUnit")}`}
+                />
+              </>
+            )}
           </div>
-        ) : null}
-        <div className="mt-4">
-          <Link
-            href="/triage"
-            className="inline-flex items-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-          >
-            {t("briefing.openTriage")}
-          </Link>
-        </div>
-      </section>
+          {data?.stats.streak_at_risk ? (
+            <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+              <p className="font-medium">{t("briefing.streakRisk.title")}</p>
+              <p className="mt-0.5 text-xs text-rose-700">
+                {t("briefing.streakRisk.prefix")}
+                {data?.stats.streak_remaining ?? 0}
+                {t("briefing.streakRisk.unit")}
+                {t("briefing.streakRisk.suffix")}
+              </p>
+            </div>
+          ) : null}
+          <div className="mt-4">
+            <Link
+              href="/triage"
+              className="inline-flex items-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring"
+            >
+              {t("briefing.openTriage")}
+            </Link>
+          </div>
+        </section>
 
-      {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
-      {error && <p className="text-sm text-red-500">{error}</p>}
+        {error && <p className="text-sm text-red-500">{error}</p>}
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.highlights")}</h2>
-          <Link href="/items?feed=recommended" className="text-xs text-zinc-500 hover:text-zinc-900">
-            {t("briefing.openRecommended")}
-          </Link>
-        </div>
-        {highlights.length === 0 ? (
-          <p className="text-sm text-zinc-500">{t("briefing.emptyHighlights")}</p>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {highlights.slice(0, 6).map((item, idx) => (
-              <article key={item.id} className="min-w-0 rounded-xl border border-zinc-200 p-4">
-                <p className="text-xs font-semibold text-blue-600">{`PICK ${idx + 1}`}</p>
-                <button
-                  type="button"
-                  onClick={() => setInlineItemId(item.id)}
-                  className="mt-2 line-clamp-3 block text-left break-words [overflow-wrap:anywhere] text-base font-semibold text-zinc-900 hover:underline"
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.highlights")}</h2>
+            <Link href="/items?feed=recommended" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
+              {t("briefing.openRecommended")}
+            </Link>
+          </div>
+          {loading ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          ) : highlights.length === 0 ? (
+            <EmptyState
+              icon={Sparkles}
+              title={t("emptyState.briefing.title")}
+              description={t("emptyState.briefing.desc")}
+            />
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {highlights.slice(0, 6).map((item, idx) => (
+                <article
+                  key={item.id}
+                  className="min-w-0 rounded-xl border border-zinc-200 p-4 hover:shadow-md transition-shadow motion-safe:animate-fade-in-up"
+                  style={{ animationDelay: `${idx * 40}ms` }}
                 >
-                  {item.translated_title || item.title || item.url}
-                </button>
-                <p className="mt-2 truncate text-xs text-zinc-500" title={item.url}>
-                  {item.url}
-                </p>
-                <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
-                  <span>{item.is_read ? t("items.read.read") : t("items.read.unread")}</span>
-                  <span>{fmtDate(item.published_at || item.created_at, locale)}</span>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+                  <p className="text-xs font-semibold text-blue-600">{`PICK ${idx + 1}`}</p>
+                  <button
+                    type="button"
+                    onClick={() => setInlineItemId(item.id)}
+                    className="mt-2 line-clamp-3 block text-left break-words [overflow-wrap:anywhere] text-base font-semibold text-zinc-900 hover:underline press focus-ring w-full"
+                  >
+                    {item.translated_title || item.title || item.url}
+                  </button>
+                  <p className="mt-2 truncate text-xs text-zinc-500" title={item.url}>
+                    {item.url}
+                  </p>
+                  <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
+                    <span>{item.is_read ? t("items.read.read") : t("items.read.unread")}</span>
+                    <span>{fmtDate(item.published_at || item.created_at, locale)}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.clusters")}</h2>
-          <Link href="/items?feed=recommended" className="text-xs text-zinc-500 hover:text-zinc-900">
-            {t("briefing.openRecommended")}
-          </Link>
-        </div>
-        {clusterRows.length === 0 ? (
-          <p className="text-sm text-zinc-500">{t("briefing.emptyClusters")}</p>
-        ) : (
-          <div className="space-y-3">
-            {clusterRows.map((cluster) => (
-              <article key={cluster.id} className="rounded-xl border border-zinc-200 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-zinc-900">{cluster.label || t("briefing.clusterFallback")}</h3>
-                  <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">{`${cluster.topItems.length}${t("common.rows")}`}</span>
-                </div>
-                {cluster.summary ? (
-                  <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{cluster.summary}</p>
-                ) : null}
-                <ul className="mt-2 space-y-1.5">
-                  {cluster.topItems.map((item) => (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        onClick={() => setInlineItemId(item.id)}
-                        className="block w-full rounded px-2 py-1.5 text-left text-sm text-zinc-700 break-words [overflow-wrap:anywhere] hover:bg-zinc-50"
-                        title={item.translated_title || item.title || item.url}
-                      >
-                        {item.translated_title || item.title || item.url}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </article>
-            ))}
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.clusters")}</h2>
+            <Link href="/items?feed=recommended" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
+              {t("briefing.openRecommended")}
+            </Link>
           </div>
-        )}
-      </section>
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          ) : clusterRows.length === 0 ? (
+            <p className="text-sm text-zinc-500">{t("briefing.emptyClusters")}</p>
+          ) : (
+            <div className="space-y-3">
+              {clusterRows.map((cluster) => (
+                <article key={cluster.id} className="rounded-xl border border-zinc-200 p-4 hover:shadow-md transition-shadow">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-zinc-900">{cluster.label || t("briefing.clusterFallback")}</h3>
+                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">{`${cluster.topItems.length}${t("common.rows")}`}</span>
+                  </div>
+                  {cluster.summary ? (
+                    <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{cluster.summary}</p>
+                  ) : null}
+                  <ul className="mt-2 space-y-1.5">
+                    {cluster.topItems.map((item) => (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => setInlineItemId(item.id)}
+                          className="block w-full rounded-lg px-2 py-1.5 text-left text-sm text-zinc-700 break-words [overflow-wrap:anywhere] hover:bg-zinc-50 transition-colors press focus-ring"
+                          title={item.translated_title || item.title || item.url}
+                        >
+                          {item.translated_title || item.title || item.url}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
 
-      {inlineItemId && (
-        <InlineReader
-          open={!!inlineItemId}
-          itemId={inlineItemId}
-          locale={locale}
-          queueItemIds={briefingQueueItemIds}
-          onClose={() => setInlineItemId(null)}
-          onOpenDetail={(itemId) => {
-            router.push(`/items/${itemId}?from=${encodeURIComponent("/items?feed=recommended")}`);
-          }}
-          onOpenItem={(itemId) => setInlineItemId(itemId)}
-        />
-      )}
-    </div>
+        {inlineItemId && (
+          <InlineReader
+            open={!!inlineItemId}
+            itemId={inlineItemId}
+            locale={locale}
+            queueItemIds={briefingQueueItemIds}
+            onClose={() => setInlineItemId(null)}
+            onOpenDetail={(itemId) => {
+              router.push(`/items/${itemId}?from=${encodeURIComponent("/items?feed=recommended")}`);
+            }}
+            onOpenItem={(itemId) => setInlineItemId(itemId)}
+          />
+        )}
+      </div>
+    </PageTransition>
   );
 }
 

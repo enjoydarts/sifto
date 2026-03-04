@@ -3,18 +3,21 @@
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Image as ImageIcon, Newspaper, Star, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Newspaper, Star } from "lucide-react";
 import { api, Item, ReadingPlanResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import Pagination from "@/components/pagination";
 import { useToast } from "@/components/toast-provider";
 import { InlineReader } from "@/components/inline-reader";
+import { PageTransition } from "@/components/page-transition";
+import { EmptyState } from "@/components/empty-state";
+import { SkeletonItemRow } from "@/components/skeleton";
+import { ItemCard } from "@/components/items/item-card";
+import { FeedTabs, type FeedMode, type SortMode } from "@/components/items/feed-tabs";
 
 const FILTERS = ["", "summarized", "new", "fetched", "facts_extracted", "failed"] as const;
-type SortMode = "newest" | "score";
 type FocusSize = 7 | 15 | 25;
 type FocusWindow = "24h" | "today_jst" | "7d";
-type FeedMode = "recommended" | "all" | "later";
 type ItemsFeedQueryData = {
   items: Item[];
   total: number;
@@ -23,13 +26,6 @@ type ItemsFeedQueryData = {
   focusCompleted?: number;
   focusRemaining?: number;
 };
-
-function scoreTone(score: number) {
-  if (score >= 0.8) return "bg-green-50 text-green-700 border-green-200";
-  if (score >= 0.65) return "bg-blue-50 text-blue-700 border-blue-200";
-  if (score >= 0.5) return "bg-zinc-50 text-zinc-700 border-zinc-200";
-  return "bg-amber-50 text-amber-700 border-amber-200";
-}
 
 function ItemsPageContent() {
   const { t, locale } = useI18n();
@@ -446,478 +442,325 @@ function ItemsPageContent() {
     });
   }, [queryClient]);
 
-  const renderItemRow = useCallback((item: Item, opts?: { featured?: boolean; rank?: number }) => {
+  const renderItem = useCallback((item: Item, opts?: { featured?: boolean; rank?: number; animIdx?: number }) => {
     const featured = Boolean(opts?.featured);
-    const rank = opts?.rank ?? 0;
-    const displayTitle = item.translated_title?.trim() ? item.translated_title : item.title;
     const href = detailHref(item.id);
     const openDetail = () => {
       rememberScroll(item.id);
-      saveReadQueue(
-        focusMode
-          ? displayItems.map((v) => v.id)
-          : sortedItems.map((v) => v.id)
-      );
+      saveReadQueue(focusMode ? displayItems.map((v) => v.id) : sortedItems.map((v) => v.id));
       router.push(href);
     };
     const openInlineReader = () => {
       setInlineItemId(item.id);
       prefetchItemDetail(item.id);
     };
-    const reactionPill = item.is_favorite
-      ? {
-          icon: <Star className="size-3 fill-current" aria-hidden="true" />,
-          label: t("items.feedback.favorite"),
-          className: "border-amber-200 bg-amber-50 text-amber-700",
-        }
-      : item.feedback_rating === 1
-        ? {
-            icon: <ThumbsUp className="size-3" aria-hidden="true" />,
-            label: t("items.feedback.like"),
-            className: "border-green-200 bg-green-50 text-green-700",
-          }
-        : item.feedback_rating === -1
-          ? {
-              icon: <ThumbsDown className="size-3" aria-hidden="true" />,
-              label: t("items.feedback.dislike"),
-              className: "border-rose-200 bg-rose-50 text-rose-700",
-            }
-          : null;
     return (
-      <div data-item-row-id={item.id} className="min-w-0">
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={openInlineReader}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              openInlineReader();
-            }
-          }}
-          onMouseEnter={() => prefetchItemDetail(item.id)}
-          onFocus={() => prefetchItemDetail(item.id)}
-          onTouchStart={() => prefetchItemDetail(item.id)}
-          className={`group ${featured ? "flex w-full flex-col gap-3 md:flex-row md:items-start" : "flex items-stretch gap-3"} rounded-xl px-4 py-3.5 transition-all ${
-            featured
-              ? item.is_read
-                ? "cursor-pointer border border-zinc-300 bg-gradient-to-b from-zinc-200 to-zinc-100 shadow-sm hover:border-zinc-400 hover:shadow-md"
-                : "cursor-pointer border border-zinc-200 bg-white shadow-sm hover:border-zinc-300 hover:shadow-md"
-              : item.is_read
-                ? "cursor-pointer border border-zinc-300 bg-zinc-200/80 shadow-sm hover:border-zinc-400"
-                : "cursor-pointer border border-zinc-200 bg-white shadow-sm hover:border-zinc-300"
-          }`}
-        >
-          <div className={`min-w-0 flex-1 transition-colors group-hover:text-zinc-700 ${featured ? "flex min-w-0 flex-col gap-3 md:flex-row md:items-start" : "flex items-stretch gap-3"}`}>
-            <div
-              className={`shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 ${
-                featured ? "flex h-36 w-full md:h-[104px] md:w-[136px] md:shrink-0" : "hidden h-[72px] w-[72px] sm:flex"
-              }`}
-            >
-              {item.thumbnail_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={item.thumbnail_url}
-                  alt=""
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-zinc-300">
-                  <ImageIcon className={featured ? "size-5" : "size-4"} aria-hidden="true" />
-                </div>
-              )}
-            </div>
-            <div className={`flex min-w-0 flex-1 flex-col ${featured ? "justify-start gap-2 py-0.5" : "justify-between gap-1.5 py-0.5"}`}>
-              <div className={`${featured ? "space-y-2" : "flex items-start gap-2"}`}>
-                <div className="min-w-0 flex-1">
-                    {featured && rank > 0 && (
-                    <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white">
-                      {locale === "ja" ? "PICK" : "PICK"} #{rank}
-                    </div>
-                  )}
-                  <div
-                    className={`overflow-hidden font-semibold ${
-                      featured
-                        ? item.is_read ? "line-clamp-3 text-base leading-6 text-zinc-700" : "line-clamp-3 text-[17px] leading-6 text-zinc-950"
-                        : item.is_read ? "line-clamp-2 text-[15px] leading-6 text-zinc-600" : "line-clamp-2 text-[15px] leading-6 text-zinc-900"
-                    }`}
-                  >
-                    {displayTitle ?? item.url}
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
-                    <span
-                      className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                        item.is_read
-                          ? "border-zinc-300 bg-zinc-50 text-zinc-700"
-                          : "border-zinc-200 bg-white text-zinc-700"
-                      }`}
-                    >
-                      {item.is_read ? t("items.read.read") : t("items.read.unread")}
-                    </span>
-                    <span>{new Date(item.published_at ?? item.created_at).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US")}</span>
-                    {reactionPill && (
-                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${reactionPill.className}`}>
-                        {reactionPill.icon}
-                        {reactionPill.label}
-                      </span>
-                    )}
-                    <span
-                      className={`rounded border px-2 py-0.5 text-xs font-semibold ${
-                        item.summary_score != null ? scoreTone(item.summary_score) : "border-zinc-200 bg-zinc-50 text-zinc-400"
-                      }`}
-                      title={t("items.summaryScore")}
-                    >
-                      {item.summary_score != null ? item.summary_score.toFixed(2) : t("items.scoreNA")}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className={`${featured ? "h-4 w-full truncate text-[12px] text-zinc-500" : "h-4 truncate text-[12px] text-zinc-400"}`}>
-                {displayTitle ? item.url : "\u00A0"}
-              </div>
-            </div>
-          </div>
-          <div className={`flex shrink-0 gap-2 ${featured ? "flex-row self-start md:flex-col md:items-end" : "flex-col items-end justify-start"}`}>
-            <button
-              type="button"
-              disabled={!!readUpdatingIds[item.id]}
-              onClick={(e) => {
-                e.stopPropagation();
-                void toggleRead(item);
-              }}
-              className={`rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
-                featured ? "h-8 md:min-w-[108px]" : "h-8 min-w-[108px]"
-              }`}
-            >
-              {readUpdatingIds[item.id]
-                ? t("items.action.updating")
-                : item.is_read
-                  ? t("items.action.markUnread")
-                  : t("items.action.markRead")}
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                openDetail();
-              }}
-              className={`inline-flex items-center gap-1 rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 ${
-                featured ? "h-8 md:min-w-[108px]" : "h-8 min-w-[108px]"
-              }`}
-            >
-              <ExternalLink className="size-3.5" aria-hidden="true" />
-              <span>{t("items.action.openDetail")}</span>
-            </button>
-            {item.status === "failed" ? (
-              <button
-                type="button"
-                disabled={!!retryingIds[item.id]}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void retryItem(item.id);
-                }}
-                className={`rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
-                  featured ? "h-8 md:min-w-[108px]" : "h-8 min-w-[108px]"
-                }`}
-              >
-                {retryingIds[item.id] ? t("items.retrying") : t("items.retry")}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </div>
+      <ItemCard
+        key={item.id}
+        item={item}
+        featured={featured}
+        rank={opts?.rank}
+        locale={locale}
+        readUpdating={!!readUpdatingIds[item.id]}
+        retrying={!!retryingIds[item.id]}
+        onOpen={openInlineReader}
+        onOpenDetail={openDetail}
+        onToggleRead={() => void toggleRead(item)}
+        onRetry={() => void retryItem(item.id)}
+        onPrefetch={() => prefetchItemDetail(item.id)}
+        animationDelay={(opts?.animIdx ?? 0) * 40}
+        t={t}
+      />
     );
   }, [detailHref, displayItems, focusMode, locale, prefetchItemDetail, readUpdatingIds, rememberScroll, retryItem, retryingIds, router, saveReadQueue, sortedItems, t, toggleRead]);
 
   return (
-    <div className={`space-y-4 ${focusMode ? "pb-8" : ""}`}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
+    <PageTransition>
+      <div className={`space-y-4 ${focusMode ? "pb-8" : ""}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <FeedTabs
+            feedMode={feedMode}
+            onSelect={(feed) => replaceItemsQuery({ feed, page: 1 })}
+            t={t}
+          />
+        </div>
+
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="flex items-center gap-2 text-2xl font-bold">
+              <Newspaper className="size-6 text-zinc-500" aria-hidden="true" />
+              <span>{t("items.title")}</span>
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500">
+              {(focusMode ? recommendedRenderedCount : itemsTotal).toLocaleString()} {t("common.rows")}
+              {!focusMode && topic && (
+                <span className="ml-2 text-zinc-400">
+                  {`(${t("items.topic")}: ${topic})`}
+                </span>
+              )}
+              {focusMode && (
+                <span className="ml-2 text-zinc-400">
+                  {locale === "ja"
+                    ? `${t("items.recommendedStatOpen")}${displayItems.length.toLocaleString()}${t("common.rows")}${t("items.recommendedStatSelected")}${t("items.recommendedStatTarget")} ${planPoolCount.toLocaleString()} ${t("common.rows")}${t("items.recommendedStatClose")}`
+                    : `(${displayItems.length.toLocaleString()} ${t("items.selected")} / ${planPoolCount.toLocaleString()} ${t("items.inWindow")})`}
+                </span>
+              )}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {!focusMode && (
+              <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
+                {(["newest", "score"] as SortMode[]).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => replaceItemsQuery({ sort: s, page: 1 })}
+                    className={`rounded px-3 py-1.5 text-xs font-medium transition-colors press focus-ring ${
+                      sortMode === s ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
+                    }`}
+                  >
+                    {t(`items.sort.${s}`)}
+                  </button>
+                ))}
+              </div>
+            )}
             <button
               type="button"
-              onClick={() => replaceItemsQuery({ feed: "recommended" })}
-              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-                focusMode ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
-              }`}
+              onClick={() => router.push("/triage?mode=all")}
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring"
             >
-              {t("items.feed.recommended")}
-            </button>
-            <button
-              type="button"
-              onClick={() => replaceItemsQuery({ feed: "all", page: 1 })}
-              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-                feedMode === "all" ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
-              }`}
-            >
-              {t("items.feed.all")}
-            </button>
-            <button
-              type="button"
-              onClick={() => replaceItemsQuery({ feed: "later", page: 1 })}
-              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-                laterMode ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
-              }`}
-            >
-              {t("items.feed.later")}
+              {t("items.openAllTriage")}
             </button>
           </div>
         </div>
-        {!focusMode && (
-          <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
-            <button
-              type="button"
-              onClick={() => replaceItemsQuery({ sort: "newest", page: 1 })}
-              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-                sortMode === "newest"
-                  ? "bg-zinc-900 text-white"
-                  : "text-zinc-600 hover:bg-zinc-50"
-              }`}
-            >
-              {t("items.sort.newest")}
-            </button>
-            <button
-              type="button"
-              onClick={() => replaceItemsQuery({ sort: "score", page: 1 })}
-              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
-                sortMode === "score"
-                  ? "bg-zinc-900 text-white"
-                  : "text-zinc-600 hover:bg-zinc-50"
-              }`}
-            >
-              {t("items.sort.score")}
-            </button>
-          </div>
-        )}
-      </div>
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <Newspaper className="size-6 text-zinc-500" aria-hidden="true" />
-            <span>{t("items.title")}</span>
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            {(focusMode ? recommendedRenderedCount : itemsTotal).toLocaleString()} {t("common.rows")}
-            {!focusMode && topic && (
-              <span className="ml-2 text-zinc-400">
-                {`(${t("items.topic")}: ${topic})`}
+        {/* Filters */}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {!focusMode && topic && (
+            <div className="inline-flex items-center gap-2 rounded border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-800">
+              <span className="font-medium">
+                {t("items.topic")}: {topic}
               </span>
-            )}
-            {focusMode && (
-              <span className="ml-2 text-zinc-400">
-                {locale === "ja"
-                  ? `${t("items.recommendedStatOpen")}${displayItems.length.toLocaleString()}${t("common.rows")}${t("items.recommendedStatSelected")}${t("items.recommendedStatTarget")} ${planPoolCount.toLocaleString()} ${t("common.rows")}${t("items.recommendedStatClose")}`
-                  : `(${displayItems.length.toLocaleString()} ${t("items.selected")} / ${planPoolCount.toLocaleString()} ${t("items.inWindow")})`}
-              </span>
-            )}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => router.push("/triage?mode=all")}
-          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-        >
-          {t("items.openAllTriage")}
-        </button>
-      </div>
-
-      {/* Filters */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {!focusMode && topic && (
-          <div className="inline-flex items-center gap-2 rounded border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-800">
-            <span className="font-medium">
-              {t("items.topic")}: {topic}
-            </span>
-            <button
-              type="button"
-              onClick={() => replaceItemsQuery({ topic: "", page: 1 })}
-              className="rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-100"
-            >
-              {t("items.clear")}
-            </button>
-          </div>
-        )}
-        {!focusMode && (
-          <label className="inline-flex items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700">
-            <input
-              type="checkbox"
-              checked={unreadOnly}
-              onChange={(e) => replaceItemsQuery({ unread: e.target.checked, page: 1 })}
-              className="size-4 rounded border-zinc-300"
-            />
-            {t("items.filter.unreadOnly")}
-          </label>
-        )}
-        {!focusMode && (
-          <label className="inline-flex items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700">
-            <input
-              type="checkbox"
-              checked={favoriteOnly}
-              onChange={(e) => replaceItemsQuery({ favorite: e.target.checked, page: 1 })}
-              className="size-4 rounded border-zinc-300"
-            />
-            <span className="inline-flex items-center gap-1">
-              <Star className="size-3.5 text-amber-500" aria-hidden="true" />
-              {t("items.filter.favoriteOnly")}
-            </span>
-          </label>
-        )}
-      </div>
-
-      {/* State */}
-      {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
-      {visibleError && <p className="text-sm text-red-500">{visibleError}</p>}
-      {!loading && items.length === 0 && (
-        <p className="text-sm text-zinc-400">{t("items.empty")}</p>
-      )}
-
-      {/* List */}
-      {focusMode && featuredItems.length > 0 && (
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
-                {t("items.section.todayPicks")}
-              </div>
-              <div className="text-sm text-zinc-500">
-                {t("items.section.todayPicksDesc")}
-              </div>
+              <button
+                type="button"
+                onClick={() => replaceItemsQuery({ topic: "", page: 1 })}
+                className="rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-100 press"
+              >
+                {t("items.clear")}
+              </button>
             </div>
-          </div>
-          <ul className="grid list-none gap-3 lg:grid-cols-2">
-            {featuredItems.map((item, idx) => (
-              <li key={item.id} className={`${idx === 0 ? "lg:col-span-2" : ""} min-w-0 list-none`}>
-                {renderItemRow(item, { featured: true, rank: idx + 1 })}
+          )}
+          {!focusMode && (
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors">
+              <input
+                type="checkbox"
+                checked={unreadOnly}
+                onChange={(e) => replaceItemsQuery({ unread: e.target.checked, page: 1 })}
+                className="size-4 rounded border-zinc-300"
+              />
+              {t("items.filter.unreadOnly")}
+            </label>
+          )}
+          {!focusMode && (
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors">
+              <input
+                type="checkbox"
+                checked={favoriteOnly}
+                onChange={(e) => replaceItemsQuery({ favorite: e.target.checked, page: 1 })}
+                className="size-4 rounded border-zinc-300"
+              />
+              <span className="inline-flex items-center gap-1">
+                <Star className="size-3.5 text-amber-500" aria-hidden="true" />
+                {t("items.filter.favoriteOnly")}
+              </span>
+            </label>
+          )}
+        </div>
+
+        {/* State */}
+        {visibleError && <p className="text-sm text-red-500">{visibleError}</p>}
+
+        {loading && (
+          <ul className="list-none space-y-2">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <li key={i} className="list-none">
+                <SkeletonItemRow />
               </li>
             ))}
           </ul>
-        </section>
-      )}
-      {focusMode && visibleClusterSections.length > 0 && (
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                {t("items.section.byTopic")}
-              </div>
-              <div className="text-sm text-zinc-500">
-                {t("items.section.byTopicDesc")}
-              </div>
-            </div>
-          </div>
-          <div className="space-y-4">
-            {visibleClusterSections.map((section) => {
-              const [hero, ...rest] = section.items;
-              if (!hero) return null;
-              return (
-                <section key={section.id} className="space-y-2">
-                  <div className="flex items-center justify-between gap-2 px-1">
-                    <div className="inline-flex items-center gap-2">
-                      <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-800">
-                        {section.topic}
-                      </span>
-                      <span className="text-xs text-zinc-500">
-                        {locale === "ja" ? `${section.items.length}${t("items.storyCountJa")}` : `${section.items.length} ${t("items.stories")}`}
-                      </span>
-                    </div>
-                  </div>
-                  <ul className="list-none space-y-2">
-                    <li className="min-w-0 list-none">{renderItemRow(hero, { featured: true })}</li>
-                    {rest.length > 0 && (
-                      <li className="list-none">
-                        <ul className="list-none space-y-2 pt-1">
-                          {rest.map((item) => (
-                            <li key={item.id} className="min-w-0 list-none">
-                              {renderItemRow(item)}
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    )}
-                  </ul>
-                </section>
-              );
-            })}
-          </div>
-        </section>
-      )}
-      {focusMode && recommendedLooseItems.length > 0 && (
-        <div className={`${featuredItems.length > 0 || visibleClusterSections.length > 0 ? "pt-2" : ""}`}>
-          <div className="mb-2 flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                {t("items.section.morePicks")}
-              </div>
-              <div className="text-sm text-zinc-500">
-                {t("items.section.morePicksDesc")}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      <ul className={`list-none space-y-2 ${focusMode && (featuredItems.length > 0 || visibleClusterSections.length > 0) ? "pt-1" : ""}`}>
-        {recommendedLooseItems.map((item) => (
-          <li key={item.id} className="min-w-0 list-none">
-            {renderItemRow(item)}
-          </li>
-        ))}
-      </ul>
-      {!focusMode && (
-        <Pagination
-          total={itemsTotal}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={(nextPage) => replaceItemsQuery({ page: nextPage })}
-        />
-      )}
+        )}
 
-      {inlineItemId && (
-        <InlineReader
-          open={!!inlineItemId}
-          itemId={inlineItemId}
-          locale={locale}
-          onClose={() => setInlineItemId(null)}
-          onOpenDetail={(itemId) => {
-            setInlineItemId(null);
-            rememberScroll(itemId);
-            saveReadQueue(
-              focusMode
-                ? displayItems.map((v) => v.id)
-                : sortedItems.map((v) => v.id)
-            );
-            router.push(detailHref(itemId));
-          }}
-          onOpenItem={(itemId) => setInlineItemId(itemId)}
-          onReadToggled={(itemId, isRead) => {
-            queryClient.setQueryData<ItemsFeedQueryData>(listQueryKey, (prev) =>
-              prev
-                ? {
-                    ...prev,
-                    items: prev.items.map((v) => (v.id === itemId ? { ...v, is_read: isRead } : v)),
-                    planClusters: (prev.planClusters ?? []).map((c) => ({
-                      ...c,
-                      representative:
-                        c.representative?.id === itemId
-                          ? { ...c.representative, is_read: isRead }
-                          : c.representative,
-                      items: (c.items ?? []).map((v) => (v.id === itemId ? { ...v, is_read: isRead } : v)),
-                    })),
-                  }
-                : prev
-            );
-          }}
-        />
-      )}
-    </div>
+        {!loading && items.length === 0 && (
+          <EmptyState
+            icon={Newspaper}
+            title={t("emptyState.items.title")}
+            description={t("emptyState.items.desc")}
+            action={{ label: t("emptyState.items.action"), href: "/sources" }}
+          />
+        )}
+
+        {/* Featured (Today's Picks) */}
+        {!loading && focusMode && featuredItems.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700">
+                  {t("items.section.todayPicks")}
+                </div>
+                <div className="text-sm text-zinc-500">
+                  {t("items.section.todayPicksDesc")}
+                </div>
+              </div>
+            </div>
+            <ul className="grid list-none gap-3 lg:grid-cols-2">
+              {featuredItems.map((item, idx) => (
+                <li key={item.id} className={`${idx === 0 ? "lg:col-span-2" : ""} min-w-0 list-none`}>
+                  {renderItem(item, { featured: true, rank: idx + 1, animIdx: idx })}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Cluster sections */}
+        {!loading && focusMode && visibleClusterSections.length > 0 && (
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                  {t("items.section.byTopic")}
+                </div>
+                <div className="text-sm text-zinc-500">
+                  {t("items.section.byTopicDesc")}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-4">
+              {visibleClusterSections.map((section) => {
+                const [hero, ...rest] = section.items;
+                if (!hero) return null;
+                return (
+                  <section key={section.id} className="space-y-2">
+                    <div className="flex items-center justify-between gap-2 px-1">
+                      <div className="inline-flex items-center gap-2">
+                        <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-800">
+                          {section.topic}
+                        </span>
+                        <span className="text-xs text-zinc-500">
+                          {locale === "ja" ? `${section.items.length}${t("items.storyCountJa")}` : `${section.items.length} ${t("items.stories")}`}
+                        </span>
+                      </div>
+                    </div>
+                    <ul className="list-none space-y-2">
+                      <li className="min-w-0 list-none">{renderItem(hero, { featured: true })}</li>
+                      {rest.length > 0 && (
+                        <li className="list-none">
+                          <ul className="list-none space-y-2 pt-1">
+                            {rest.map((item, idx) => (
+                              <li key={item.id} className="min-w-0 list-none">
+                                {renderItem(item, { animIdx: idx + 1 })}
+                              </li>
+                            ))}
+                          </ul>
+                        </li>
+                      )}
+                    </ul>
+                  </section>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* More picks header */}
+        {!loading && focusMode && recommendedLooseItems.length > 0 && (
+          <div className={`${featuredItems.length > 0 || visibleClusterSections.length > 0 ? "pt-2" : ""}`}>
+            <div className="mb-2 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                  {t("items.section.morePicks")}
+                </div>
+                <div className="text-sm text-zinc-500">
+                  {t("items.section.morePicksDesc")}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Main list */}
+        {!loading && (
+          <ul className={`list-none space-y-2 ${focusMode && (featuredItems.length > 0 || visibleClusterSections.length > 0) ? "pt-1" : ""}`}>
+            {recommendedLooseItems.map((item, idx) => (
+              <li key={item.id} className="min-w-0 list-none">
+                {renderItem(item, { animIdx: idx })}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!focusMode && (
+          <Pagination
+            total={itemsTotal}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={(nextPage) => replaceItemsQuery({ page: nextPage })}
+          />
+        )}
+
+        {inlineItemId && (
+          <InlineReader
+            open={!!inlineItemId}
+            itemId={inlineItemId}
+            locale={locale}
+            onClose={() => setInlineItemId(null)}
+            onOpenDetail={(itemId) => {
+              setInlineItemId(null);
+              rememberScroll(itemId);
+              saveReadQueue(
+                focusMode
+                  ? displayItems.map((v) => v.id)
+                  : sortedItems.map((v) => v.id)
+              );
+              router.push(detailHref(itemId));
+            }}
+            onOpenItem={(itemId) => setInlineItemId(itemId)}
+            onReadToggled={(itemId, isRead) => {
+              queryClient.setQueryData<ItemsFeedQueryData>(listQueryKey, (prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      items: prev.items.map((v) => (v.id === itemId ? { ...v, is_read: isRead } : v)),
+                      planClusters: (prev.planClusters ?? []).map((c) => ({
+                        ...c,
+                        representative:
+                          c.representative?.id === itemId
+                            ? { ...c.representative, is_read: isRead }
+                            : c.representative,
+                        items: (c.items ?? []).map((v) => (v.id === itemId ? { ...v, is_read: isRead } : v)),
+                      })),
+                    }
+                  : prev
+              );
+            }}
+          />
+        )}
+      </div>
+    </PageTransition>
   );
 }
 
 export default function ItemsPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-zinc-500">Loading...</p>}>
+    <Suspense
+      fallback={
+        <div className="space-y-2">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <SkeletonItemRow key={i} />
+          ))}
+        </div>
+      }
+    >
       <ItemsPageContent />
     </Suspense>
   );

@@ -49,8 +49,8 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     <ConfirmContext.Provider value={value}>
       {children}
       {pending && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/35 p-4">
-          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 motion-safe:animate-fade-in bg-zinc-950/35">
+          <div className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl motion-safe:animate-scale-in">
             <h2 className="text-base font-semibold text-zinc-900">
               {pending.title ?? "Confirm"}
             </h2>
@@ -59,14 +59,14 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => close(false)}
-                className="rounded border border-zinc-300 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 press focus-ring"
               >
                 {pending.cancelLabel ?? "Cancel"}
               </button>
               <button
                 type="button"
                 onClick={() => close(true)}
-                className={`rounded px-3 py-2 text-sm font-medium text-white ${
+                className={`rounded-lg px-3 py-2 text-sm font-medium text-white press focus-ring ${
                   pending.tone === "danger"
                     ? "bg-red-600 hover:bg-red-500"
                     : "bg-zinc-900 hover:bg-zinc-700"

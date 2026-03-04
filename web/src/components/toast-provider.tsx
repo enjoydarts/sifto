@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
+import { CheckCircle, AlertCircle, Info } from "lucide-react";
 
 type ToastKind = "success" | "error" | "info";
 
@@ -15,6 +16,24 @@ type ToastContextValue = {
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
+
+const TOAST_ICONS: Record<ToastKind, typeof CheckCircle> = {
+  success: CheckCircle,
+  error:   AlertCircle,
+  info:    Info,
+};
+
+const TOAST_BORDER_COLORS: Record<ToastKind, string> = {
+  success: "border-l-4 border-l-green-500",
+  error:   "border-l-4 border-l-red-500",
+  info:    "border-l-4 border-l-zinc-400",
+};
+
+const TOAST_ICON_COLORS: Record<ToastKind, string> = {
+  success: "text-green-600",
+  error:   "text-red-600",
+  info:    "text-zinc-500",
+};
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -34,20 +53,24 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       <div className="pointer-events-none fixed top-3 right-3 left-3 z-50 flex w-auto max-w-[440px] flex-col gap-2 sm:top-4 sm:right-4 sm:left-auto sm:w-[min(92vw,440px)]">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={`pointer-events-auto rounded-lg border px-4 py-3 text-base leading-relaxed shadow-lg backdrop-blur motion-safe:animate-[toast-float-fade_3200ms_ease-out_both] motion-reduce:animate-none ${
-              toast.kind === "success"
-                ? "border-green-200 bg-green-50/95 text-green-800"
-                : toast.kind === "error"
-                  ? "border-red-200 bg-red-50/95 text-red-800"
-                  : "border-zinc-200 bg-white/95 text-zinc-800"
-            }`}
-          >
-            {toast.message}
-          </div>
-        ))}
+        {toasts.map((toast) => {
+          const Icon = TOAST_ICONS[toast.kind];
+          return (
+            <div
+              key={toast.id}
+              className={`pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 text-sm leading-relaxed shadow-lg backdrop-blur motion-safe:animate-[toast-float-fade_3200ms_ease-out_both] motion-reduce:animate-none ${TOAST_BORDER_COLORS[toast.kind]} ${
+                toast.kind === "success"
+                  ? "border-green-200 bg-green-50/95 text-green-800"
+                  : toast.kind === "error"
+                    ? "border-red-200 bg-red-50/95 text-red-800"
+                    : "border-zinc-200 bg-white/95 text-zinc-800"
+              }`}
+            >
+              <Icon className={`mt-0.5 size-4 shrink-0 ${TOAST_ICON_COLORS[toast.kind]}`} aria-hidden="true" />
+              <span>{toast.message}</span>
+            </div>
+          );
+        })}
       </div>
     </ToastContext.Provider>
   );

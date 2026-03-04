@@ -27,6 +27,48 @@ body {
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* ── Page / card transitions ── */
+@keyframes fade-in {
+  from { opacity: 0 }
+  to   { opacity: 1 }
+}
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px) }
+  to   { opacity: 1; transform: translateY(0) }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96) }
+  to   { opacity: 1; transform: scale(1) }
+}
+@keyframes slide-in-right {
+  from { transform: translateX(100%) }
+  to   { transform: translateX(0) }
+}
+@keyframes slide-out-right {
+  from { transform: translateX(0) }
+  to   { transform: translateX(100%) }
+}
+@keyframes shimmer {
+  from { background-position: -200% 0 }
+  to   { background-position:  200% 0 }
+}
+
+/* ── Animation utility classes ── */
+.animate-fade-in      { animation: fade-in      200ms ease-out both }
+.animate-fade-in-up   { animation: fade-in-up   250ms ease-out both }
+.animate-scale-in     { animation: scale-in     200ms ease-out both }
+.animate-slide-in-right  { animation: slide-in-right  280ms cubic-bezier(0.22,1,0.36,1) both }
+.animate-slide-out-right { animation: slide-out-right 220ms cubic-bezier(0.55,0,0.8,0.45) both }
+
+/* ── Interaction utilities ── */
+.press {
+  transition: transform 100ms;
+  &:active { transform: scale(0.97); }
+}
+.focus-ring {
+  &:focus-visible { outline: 2px solid #a1a1aa; outline-offset: 2px; }
+}
+
 @keyframes toast-float-fade {
   0% {
     opacity: 0;

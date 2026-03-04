@@ -1,4 +1,5 @@
 import Nav from "@/components/nav";
+import { ScrollToTop } from "@/components/scroll-to-top";
 
 export default function MainLayout({
   children,
@@ -9,6 +10,7 @@ export default function MainLayout({
     <>
       <Nav />
       <main className="mx-auto max-w-6xl px-4 py-6 pb-24 md:pb-6">{children}</main>
+      <ScrollToTop />
     </>
   );
 }

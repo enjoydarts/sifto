@@ -253,7 +253,7 @@ export function InlineReader({
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-zinc-300 bg-white p-1 text-zinc-700 hover:bg-zinc-50"
+            className="rounded border border-zinc-300 bg-white p-1 text-zinc-700 hover:bg-zinc-50 press focus-ring"
             aria-label={t("common.close")}
           >
             <X className="size-4" aria-hidden="true" />

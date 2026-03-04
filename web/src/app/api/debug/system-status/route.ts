@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { resolveServerAPIURL } from "@/lib/server-api-url";
 import { authOptions } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -15,8 +15,13 @@ export async function GET() {
     return NextResponse.json({ error: "NEXTAUTH_SECRET is not set" }, { status: 500 });
   }
 
+  const q = new URLSearchParams();
+  const userID = req.nextUrl.searchParams.get("user_id")?.trim();
+  if (userID) q.set("user_id", userID);
+  const qs = q.toString();
+
   const start = Date.now();
-  const res = await fetch(`${apiUrl}/api/internal/debug/system-status`, {
+  const res = await fetch(`${apiUrl}/api/internal/debug/system-status${qs ? `?${qs}` : ""}`, {
     method: "GET",
     headers: {
       "X-Internal-Secret": secret,
@@ -42,4 +47,3 @@ export async function GET() {
     { status: res.ok ? 200 : res.status }
   );
 }
-

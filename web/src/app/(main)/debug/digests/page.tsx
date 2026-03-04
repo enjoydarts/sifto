@@ -81,6 +81,25 @@ type DebugSystemStatusResponse = {
       {
         dashboard?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
         reading_plan?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        items_list?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        focus_queue?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        triage_all?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        related?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        briefing?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        error?: string;
+      }
+    >;
+    cache_metrics_user_id?: string;
+    cache_stats_by_window_user?: Record<
+      string,
+      {
+        dashboard?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        reading_plan?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        items_list?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        focus_queue?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        triage_all?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        related?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
+        briefing?: { hits?: number; misses?: number; bypass?: number; errors?: number; hit_rate?: number | null };
         error?: string;
       }
     >;
@@ -193,6 +212,27 @@ export default function DebugDigestsPage() {
   );
   const cacheWindowRows = useMemo(() => {
     const rows = systemHealth?.data?.cache_stats_by_window ?? {};
+    const order = ["1h", "3h", "8h", "24h", "3d", "7d"];
+    return order
+      .filter((k) => rows[k])
+      .map((k) => ({
+        window: k,
+        dashboard_hit_rate:
+          typeof rows[k]?.dashboard?.hit_rate === "number"
+            ? Number((rows[k]!.dashboard!.hit_rate! * 100).toFixed(1))
+            : null,
+        reading_plan_hit_rate:
+          typeof rows[k]?.reading_plan?.hit_rate === "number"
+            ? Number((rows[k]!.reading_plan!.hit_rate! * 100).toFixed(1))
+            : null,
+        dashboard_hits: rows[k]?.dashboard?.hits ?? 0,
+        dashboard_misses: rows[k]?.dashboard?.misses ?? 0,
+        reading_plan_hits: rows[k]?.reading_plan?.hits ?? 0,
+        reading_plan_misses: rows[k]?.reading_plan?.misses ?? 0,
+      }));
+  }, [systemHealth]);
+  const cacheWindowRowsUser = useMemo(() => {
+    const rows = systemHealth?.data?.cache_stats_by_window_user ?? {};
     const order = ["1h", "3h", "8h", "24h", "3d", "7d"];
     return order
       .filter((k) => rows[k])
@@ -470,7 +510,11 @@ export default function DebugDigestsPage() {
         body: webBody,
       });
 
-      const res = await fetch("/api/debug/system-status", { cache: "no-store" });
+      const userMetricID = userId.trim();
+      const res = await fetch(
+        `/api/debug/system-status${userMetricID ? `?user_id=${encodeURIComponent(userMetricID)}` : ""}`,
+        { cache: "no-store" }
+      );
       const text = await res.text();
       if (!res.ok) {
         throw new Error(`${res.status}: ${text || res.statusText}`);
@@ -668,6 +712,48 @@ export default function DebugDigestsPage() {
                     <tbody>
                       {cacheWindowRows.map((row) => (
                         <tr key={row.window}>
+                          <td className="border-b border-zinc-100 px-2 py-1.5 font-medium text-zinc-700">
+                            {row.window}
+                          </td>
+                          <td className="border-b border-zinc-100 px-2 py-1.5">
+                            <RateCell value={row.dashboard_hit_rate} />
+                          </td>
+                          <td className="border-b border-zinc-100 px-2 py-1.5 text-right text-zinc-500">
+                            {row.dashboard_hits}/{row.dashboard_misses}
+                          </td>
+                          <td className="border-b border-zinc-100 px-2 py-1.5">
+                            <RateCell value={row.reading_plan_hit_rate} />
+                          </td>
+                          <td className="border-b border-zinc-100 px-2 py-1.5 text-right text-zinc-500">
+                            {row.reading_plan_hits}/{row.reading_plan_misses}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {cacheWindowRowsUser.length > 0 && (
+              <div className="rounded border border-zinc-200 p-3">
+                <div className="mb-2 text-xs font-medium text-zinc-600">
+                  User Windowed Hit Rate ({systemHealth.data?.cache_metrics_user_id ?? "n/a"})
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-separate border-spacing-0 text-[11px]">
+                    <thead>
+                      <tr className="text-zinc-500">
+                        <th className="border-b border-zinc-200 px-2 py-1 text-left font-medium">Window</th>
+                        <th className="border-b border-zinc-200 px-2 py-1 text-left font-medium">dashboard</th>
+                        <th className="border-b border-zinc-200 px-2 py-1 text-right font-medium">h/m</th>
+                        <th className="border-b border-zinc-200 px-2 py-1 text-left font-medium">reading_plan</th>
+                        <th className="border-b border-zinc-200 px-2 py-1 text-right font-medium">h/m</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cacheWindowRowsUser.map((row) => (
+                        <tr key={`user-${row.window}`}>
                           <td className="border-b border-zinc-100 px-2 py-1.5 font-medium text-zinc-700">
                             {row.window}
                           </td>

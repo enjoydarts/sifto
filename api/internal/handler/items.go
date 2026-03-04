@@ -81,20 +81,20 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 		var cached model.ItemListResponse
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
 			itemsListCacheCounter.hits.Add(1)
-			_ = h.cache.IncrMetric(r.Context(), "cache", "items_list.hit", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "items_list.hit")
 			writeJSON(w, &cached)
 			return
 		} else if err != nil {
 			itemsListCacheCounter.errors.Add(1)
-			_ = h.cache.IncrMetric(r.Context(), "cache", "items_list.error", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "items_list.error")
 			log.Printf("items-list cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 		itemsListCacheCounter.misses.Add(1)
-		_ = h.cache.IncrMetric(r.Context(), "cache", "items_list.miss", 1, time.Now(), cacheMetricTTL)
+		incrCacheMetric(r.Context(), h.cache, userID, "items_list.miss")
 	} else if cacheBust {
 		itemsListCacheCounter.bypass.Add(1)
 		if h.cache != nil {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "items_list.bypass", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "items_list.bypass")
 		}
 	}
 
@@ -116,7 +116,7 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h.cache != nil && resp != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, itemsListCacheTTL); err != nil {
 			itemsListCacheCounter.errors.Add(1)
-			_ = h.cache.IncrMetric(r.Context(), "cache", "items_list.error", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "items_list.error")
 			log.Printf("items-list cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 	}
@@ -272,22 +272,22 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 		var cached model.ReadingPlanResponse
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
 			readingPlanCacheCounter.hits.Add(1)
-			_ = h.cache.IncrMetric(r.Context(), "cache", "reading_plan.hit", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "reading_plan.hit")
 			log.Printf("reading-plan cache hit user_id=%s key=%s", userID, cacheKey)
 			writeJSON(w, &cached)
 			return
 		} else if err != nil {
 			readingPlanCacheCounter.errors.Add(1)
-			_ = h.cache.IncrMetric(r.Context(), "cache", "reading_plan.error", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "reading_plan.error")
 			log.Printf("reading-plan cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 		readingPlanCacheCounter.misses.Add(1)
-		_ = h.cache.IncrMetric(r.Context(), "cache", "reading_plan.miss", 1, time.Now(), cacheMetricTTL)
+		incrCacheMetric(r.Context(), h.cache, userID, "reading_plan.miss")
 		log.Printf("reading-plan cache miss user_id=%s key=%s", userID, cacheKey)
 	} else if cacheBust {
 		readingPlanCacheCounter.bypass.Add(1)
 		if h.cache != nil {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "reading_plan.bypass", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "reading_plan.bypass")
 		}
 		log.Printf("reading-plan cache bypass user_id=%s key=%s", userID, cacheKey)
 	}
@@ -300,7 +300,7 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 	if h.cache != nil && resp != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, 120*time.Second); err != nil {
 			readingPlanCacheCounter.errors.Add(1)
-			_ = h.cache.IncrMetric(r.Context(), "cache", "reading_plan.error", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "reading_plan.error")
 			log.Printf("reading-plan cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 	}
@@ -331,16 +331,16 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 	if h.cache != nil && !cacheBust {
 		var cached map[string]any
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "focus_queue.hit", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "focus_queue.hit")
 			writeJSON(w, cached)
 			return
 		} else if err != nil {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "focus_queue.error", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "focus_queue.error")
 			log.Printf("focus-queue cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
-		_ = h.cache.IncrMetric(r.Context(), "cache", "focus_queue.miss", 1, time.Now(), cacheMetricTTL)
+		incrCacheMetric(r.Context(), h.cache, userID, "focus_queue.miss")
 	} else if cacheBust && h.cache != nil {
-		_ = h.cache.IncrMetric(r.Context(), "cache", "focus_queue.bypass", 1, time.Now(), cacheMetricTTL)
+		incrCacheMetric(r.Context(), h.cache, userID, "focus_queue.bypass")
 	}
 
 	resp, err := h.repo.ReadingPlan(r.Context(), userID, params)
@@ -360,7 +360,7 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 		}
 		if h.cache != nil {
 			if err := h.cache.SetJSON(r.Context(), cacheKey, out, focusQueueCacheTTL); err != nil {
-				_ = h.cache.IncrMetric(r.Context(), "cache", "focus_queue.error", 1, time.Now(), cacheMetricTTL)
+				incrCacheMetric(r.Context(), h.cache, userID, "focus_queue.error")
 				log.Printf("focus-queue cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 			}
 		}
@@ -414,7 +414,7 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.cache != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, out, focusQueueCacheTTL); err != nil {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "focus_queue.error", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "focus_queue.error")
 			log.Printf("focus-queue cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 	}
@@ -429,16 +429,16 @@ func (h *ItemHandler) TriageAll(w http.ResponseWriter, r *http.Request) {
 	if h.cache != nil && !cacheBust {
 		var cached map[string]any
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "triage_all.hit", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "triage_all.hit")
 			writeJSON(w, cached)
 			return
 		} else if err != nil {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "triage_all.error", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "triage_all.error")
 			log.Printf("triage-all cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
-		_ = h.cache.IncrMetric(r.Context(), "cache", "triage_all.miss", 1, time.Now(), cacheMetricTTL)
+		incrCacheMetric(r.Context(), h.cache, userID, "triage_all.miss")
 	} else if cacheBust && h.cache != nil {
-		_ = h.cache.IncrMetric(r.Context(), "cache", "triage_all.bypass", 1, time.Now(), cacheMetricTTL)
+		incrCacheMetric(r.Context(), h.cache, userID, "triage_all.bypass")
 	}
 
 	items := make([]model.Item, 0, 200)
@@ -477,7 +477,7 @@ func (h *ItemHandler) TriageAll(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.cache != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, out, triageAllCacheTTL); err != nil {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "triage_all.error", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "triage_all.error")
 			log.Printf("triage-all cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 	}
@@ -519,16 +519,16 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 	if h.cache != nil && !cacheBust {
 		var cached map[string]any
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "related.hit", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "related.hit")
 			writeJSON(w, cached)
 			return
 		} else if err != nil {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "related.error", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "related.error")
 			log.Printf("related cache get failed user_id=%s item_id=%s key=%s err=%v", userID, id, cacheKey, err)
 		}
-		_ = h.cache.IncrMetric(r.Context(), "cache", "related.miss", 1, time.Now(), cacheMetricTTL)
+		incrCacheMetric(r.Context(), h.cache, userID, "related.miss")
 	} else if cacheBust && h.cache != nil {
-		_ = h.cache.IncrMetric(r.Context(), "cache", "related.bypass", 1, time.Now(), cacheMetricTTL)
+		incrCacheMetric(r.Context(), h.cache, userID, "related.bypass")
 	}
 
 	var targetTopics []string
@@ -551,7 +551,7 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.cache != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, out, relatedItemsCacheTTL); err != nil {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "related.error", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "related.error")
 			log.Printf("related cache set failed user_id=%s item_id=%s key=%s err=%v", userID, id, cacheKey, err)
 		}
 	}

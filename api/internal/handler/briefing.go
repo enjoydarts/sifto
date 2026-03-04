@@ -53,16 +53,16 @@ func (h *BriefingHandler) Today(w http.ResponseWriter, r *http.Request) {
 	if h.cache != nil && !cacheBust {
 		var cached model.BriefingTodayResponse
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "briefing.hit", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "briefing.hit")
 			writeJSON(w, cached)
 			return
 		} else if err != nil {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "briefing.error", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "briefing.error")
 			log.Printf("briefing cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
-		_ = h.cache.IncrMetric(r.Context(), "cache", "briefing.miss", 1, time.Now(), cacheMetricTTL)
+		incrCacheMetric(r.Context(), h.cache, userID, "briefing.miss")
 	} else if cacheBust && h.cache != nil {
-		_ = h.cache.IncrMetric(r.Context(), "cache", "briefing.bypass", 1, time.Now(), cacheMetricTTL)
+		incrCacheMetric(r.Context(), h.cache, userID, "briefing.bypass")
 	}
 	now := timeutil.NowJST()
 	today := timeutil.StartOfDayJST(now)
@@ -116,7 +116,7 @@ func (h *BriefingHandler) Today(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.cache != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, payload, 90*time.Second); err != nil {
-			_ = h.cache.IncrMetric(r.Context(), "cache", "briefing.error", 1, time.Now(), cacheMetricTTL)
+			incrCacheMetric(r.Context(), h.cache, userID, "briefing.error")
 			log.Printf("briefing cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 	}

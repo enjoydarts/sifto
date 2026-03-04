@@ -665,6 +665,8 @@ func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	cacheWindows := map[string]any{}
+	cacheWindowsUser := map[string]any{}
+	metricUserID := strings.TrimSpace(r.URL.Query().Get("user_id"))
 	if h.cache != nil {
 		type winDef struct {
 			Label string
@@ -692,14 +694,33 @@ func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Reque
 				"triage_all":   cacheWindowStats(sums, "triage_all"),
 				"related":      cacheWindowStats(sums, "related"),
 			}
+			if metricUserID != "" {
+				userNamespace := fmt.Sprintf("cache_user:%s", metricUserID)
+				userSums, userErr := h.cache.SumMetrics(r.Context(), userNamespace, now.Add(-wd.Dur), now)
+				if userErr != nil {
+					cacheWindowsUser[wd.Label] = map[string]any{"error": userErr.Error()}
+				} else {
+					cacheWindowsUser[wd.Label] = map[string]any{
+						"dashboard":    cacheWindowStats(userSums, "dashboard"),
+						"reading_plan": cacheWindowStats(userSums, "reading_plan"),
+						"items_list":   cacheWindowStats(userSums, "items_list"),
+						"focus_queue":  cacheWindowStats(userSums, "focus_queue"),
+						"triage_all":   cacheWindowStats(userSums, "triage_all"),
+						"related":      cacheWindowStats(userSums, "related"),
+						"briefing":     cacheWindowStats(userSums, "briefing"),
+					}
+				}
+			}
 		}
 	}
 	writeJSON(w, map[string]any{
-		"status":                overall,
-		"checked_at":            now.Format(time.RFC3339Nano),
-		"checks":                checks,
-		"cache_stats":           cacheStatsSnapshotAll(),
-		"cache_stats_by_window": cacheWindows,
+		"status":                     overall,
+		"checked_at":                 now.Format(time.RFC3339Nano),
+		"checks":                     checks,
+		"cache_stats":                cacheStatsSnapshotAll(),
+		"cache_stats_by_window":      cacheWindows,
+		"cache_metrics_user_id":      metricUserID,
+		"cache_stats_by_window_user": cacheWindowsUser,
 	})
 }
 

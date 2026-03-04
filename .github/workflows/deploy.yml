@@ -37,14 +37,54 @@ jobs:
         run: |
           set -euo pipefail
           app="sifto-api"
+          image_key() {
+            jq -r '
+              if (.image_ref | type) == "string" then .image_ref
+              elif (.image_ref | type) == "object" then ((.image_ref.repository // "") + ":" + (.image_ref.tag // ""))
+              elif (.image | type) == "string" then .image
+              else ""
+              end
+            '
+          }
+          destroy_with_retry() {
+            local machine_id="$1"
+            local max_attempts=12
+            local attempt=1
+            while true; do
+              if flyctl machines destroy --force "$machine_id" --app "$app"; then
+                return 0
+              fi
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "Failed to destroy machine $machine_id after $attempt attempts"
+                return 1
+              fi
+              echo "Destroy retry ($attempt/$max_attempts) for $machine_id after lease conflict"
+              attempt=$((attempt + 1))
+              sleep 15
+            done
+          }
           machines="$(flyctl machines list --app "$app" --json)"
-          keep_image="$(echo "$machines" | jq -r 'sort_by(.created_at) | last | .image_ref // empty')"
+          keep_image="$(echo "$machines" | jq -r 'sort_by(.created_at) | last' | image_key)"
           if [ -z "$keep_image" ]; then
             echo "No keep image found for $app; skipping prune."
             exit 0
           fi
           echo "Keeping image: $keep_image"
-          delete_ids="$(echo "$machines" | jq -r --arg keep "$keep_image" '.[] | select((.image_ref // "") != $keep) | .id')"
+          delete_ids="$(
+            echo "$machines" | jq -r --arg keep "$keep_image" '
+              .[]
+              | . as $m
+              | (
+                  if ($m.image_ref | type) == "string" then $m.image_ref
+                  elif ($m.image_ref | type) == "object" then (($m.image_ref.repository // "") + ":" + ($m.image_ref.tag // ""))
+                  elif ($m.image | type) == "string" then $m.image
+                  else ""
+                  end
+                ) as $img
+              | select($img != $keep)
+              | .id
+            '
+          )"
           if [ -z "$delete_ids" ]; then
             echo "No old machines to prune for $app."
             exit 0
@@ -53,7 +93,7 @@ jobs:
           echo "$delete_ids"
           while IFS= read -r id; do
             [ -n "$id" ] || continue
-            flyctl machines destroy --force "$id" --app "$app"
+            destroy_with_retry "$id"
           done <<< "$delete_ids"
 
       - name: Deploy API
@@ -77,14 +117,54 @@ jobs:
         run: |
           set -euo pipefail
           app="sifto-worker"
+          image_key() {
+            jq -r '
+              if (.image_ref | type) == "string" then .image_ref
+              elif (.image_ref | type) == "object" then ((.image_ref.repository // "") + ":" + (.image_ref.tag // ""))
+              elif (.image | type) == "string" then .image
+              else ""
+              end
+            '
+          }
+          destroy_with_retry() {
+            local machine_id="$1"
+            local max_attempts=12
+            local attempt=1
+            while true; do
+              if flyctl machines destroy --force "$machine_id" --app "$app"; then
+                return 0
+              fi
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "Failed to destroy machine $machine_id after $attempt attempts"
+                return 1
+              fi
+              echo "Destroy retry ($attempt/$max_attempts) for $machine_id after lease conflict"
+              attempt=$((attempt + 1))
+              sleep 15
+            done
+          }
           machines="$(flyctl machines list --app "$app" --json)"
-          keep_image="$(echo "$machines" | jq -r 'sort_by(.created_at) | last | .image_ref // empty')"
+          keep_image="$(echo "$machines" | jq -r 'sort_by(.created_at) | last' | image_key)"
           if [ -z "$keep_image" ]; then
             echo "No keep image found for $app; skipping prune."
             exit 0
           fi
           echo "Keeping image: $keep_image"
-          delete_ids="$(echo "$machines" | jq -r --arg keep "$keep_image" '.[] | select((.image_ref // "") != $keep) | .id')"
+          delete_ids="$(
+            echo "$machines" | jq -r --arg keep "$keep_image" '
+              .[]
+              | . as $m
+              | (
+                  if ($m.image_ref | type) == "string" then $m.image_ref
+                  elif ($m.image_ref | type) == "object" then (($m.image_ref.repository // "") + ":" + ($m.image_ref.tag // ""))
+                  elif ($m.image | type) == "string" then $m.image
+                  else ""
+                  end
+                ) as $img
+              | select($img != $keep)
+              | .id
+            '
+          )"
           if [ -z "$delete_ids" ]; then
             echo "No old machines to prune for $app."
             exit 0
@@ -93,7 +173,7 @@ jobs:
           echo "$delete_ids"
           while IFS= read -r id; do
             [ -n "$id" ] || continue
-            flyctl machines destroy --force "$id" --app "$app"
+            destroy_with_retry "$id"
           done <<< "$delete_ids"
 
       - name: Deploy Worker

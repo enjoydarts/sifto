@@ -614,7 +614,7 @@ export default function ItemDetailPage() {
       {nextItemHref && (
         <Link
           href={nextItemHref}
-          className="fixed bottom-5 right-5 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-zinc-900 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-zinc-900/20 transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-400 md:min-h-0 md:px-4 md:py-2 md:text-sm"
+          className="fixed bottom-20 left-4 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-zinc-900 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-zinc-900/20 transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-400 md:bottom-6 md:left-6 md:right-auto md:min-h-0 md:px-4 md:py-2 md:text-sm"
         >
           <span>{t("itemDetail.next")}</span>
           <ArrowRight className="size-5 md:size-4" aria-hidden="true" />

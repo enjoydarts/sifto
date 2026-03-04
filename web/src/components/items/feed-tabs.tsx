@@ -1,4 +1,4 @@
-export type FeedMode = "recommended" | "all" | "later";
+export type FeedMode = "unread" | "later" | "read";
 export type SortMode = "newest" | "score";
 
 export function FeedTabs({
@@ -11,9 +11,9 @@ export function FeedTabs({
   t: (key: string) => string;
 }) {
   const tabs: { value: FeedMode; labelKey: string }[] = [
-    { value: "recommended", labelKey: "items.feed.recommended" },
-    { value: "all",         labelKey: "items.feed.all"         },
-    { value: "later",       labelKey: "items.feed.later"       },
+    { value: "unread", labelKey: "items.feed.unread" },
+    { value: "later",  labelKey: "items.feed.later"  },
+    { value: "read",   labelKey: "items.feed.read"   },
   ];
 
   return (

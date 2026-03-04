@@ -21,6 +21,7 @@ type ItemListParams struct {
 	SourceID     *string
 	Topic        *string
 	UnreadOnly   bool
+	ReadOnly     bool
 	FavoriteOnly bool
 	LaterOnly    bool
 	Sort         string // newest | score
@@ -131,6 +132,12 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 			WHERE ir2.item_id = i.id AND ir2.user_id = $1
 		)`
 	}
+	if p.ReadOnly {
+		baseWhere += ` AND EXISTS (
+			SELECT 1 FROM item_reads ir2
+			WHERE ir2.item_id = i.id AND ir2.user_id = $1
+		)`
+	}
 	if p.FavoriteOnly {
 		baseWhere += ` AND EXISTS (
 			SELECT 1 FROM item_feedbacks fb2
@@ -193,6 +200,9 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 			}
 			if p.UnreadOnly {
 				q += ` AND ir.item_id IS NULL`
+			}
+			if p.ReadOnly {
+				q += ` AND ir.item_id IS NOT NULL`
 			}
 			if p.FavoriteOnly {
 				q += ` AND COALESCE(fb.is_favorite, false) = true`

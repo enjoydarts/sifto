@@ -73,9 +73,14 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	unreadOnly := q.Get("unread_only") == "true"
+	readOnly := q.Get("read_only") == "true"
 	favoriteOnly := q.Get("favorite_only") == "true"
 	laterOnly := q.Get("later_only") == "true"
-	cacheKey := cacheKeyItemsList(userID, q.Get("status"), q.Get("source_id"), q.Get("topic"), unreadOnly, favoriteOnly, laterOnly, sort, page, pageSize)
+	if unreadOnly && readOnly {
+		http.Error(w, "unread_only and read_only cannot both be true", http.StatusBadRequest)
+		return
+	}
+	cacheKey := cacheKeyItemsList(userID, q.Get("status"), q.Get("source_id"), q.Get("topic"), unreadOnly, readOnly, favoriteOnly, laterOnly, sort, page, pageSize)
 	cacheBust := q.Get("cache_bust") == "1"
 	if h.cache != nil && !cacheBust {
 		var cached model.ItemListResponse
@@ -103,6 +108,7 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 		SourceID:     sourceID,
 		Topic:        topic,
 		UnreadOnly:   unreadOnly,
+		ReadOnly:     readOnly,
 		FavoriteOnly: favoriteOnly,
 		LaterOnly:    laterOnly,
 		Sort:         sort,

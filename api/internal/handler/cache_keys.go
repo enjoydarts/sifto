@@ -4,15 +4,16 @@ import "fmt"
 
 const cacheKeyVersion = "v1"
 
-func cacheKeyItemsList(userID, status, sourceID, topic string, unreadOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) string {
+func cacheKeyItemsList(userID, status, sourceID, topic string, unreadOnly, readOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) string {
 	return fmt.Sprintf(
-		"%s:items:list:%s:status=%s:source=%s:topic=%s:unread=%t:fav=%t:later=%t:sort=%s:page=%d:size=%d",
+		"%s:items:list:%s:status=%s:source=%s:topic=%s:unread=%t:read=%t:fav=%t:later=%t:sort=%s:page=%d:size=%d",
 		cacheKeyVersion,
 		userID,
 		status,
 		sourceID,
 		topic,
 		unreadOnly,
+		readOnly,
 		favoriteOnly,
 		laterOnly,
 		sort,

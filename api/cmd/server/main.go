@@ -6,7 +6,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/minoru-kitayama/sifto/api/internal/handler"
@@ -18,6 +21,18 @@ import (
 
 func main() {
 	ctx := context.Background()
+	if dsn := os.Getenv("SENTRY_DSN"); dsn != "" {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:              dsn,
+			Environment:      os.Getenv("SENTRY_ENVIRONMENT"),
+			Release:          os.Getenv("APP_COMMIT_SHA"),
+			AttachStacktrace: true,
+		}); err != nil {
+			log.Printf("sentry init error: %v", err)
+		} else {
+			defer sentry.Flush(2 * time.Second)
+		}
+	}
 
 	db, err := repository.NewPool(ctx)
 	if err != nil {
@@ -172,7 +187,8 @@ func main() {
 
 	log.Printf("api listening on :%s", port)
 	log.Printf("api build commit=%s", commitSHA)
-	if err := http.ListenAndServe(":"+port, r); err != nil {
+	sentryHandler := sentryhttp.New(sentryhttp.Options{})
+	if err := http.ListenAndServe(":"+port, sentryHandler.Handle(r)); err != nil {
 		log.Fatal(err)
 	}
 }

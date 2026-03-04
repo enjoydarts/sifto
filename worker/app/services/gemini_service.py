@@ -16,6 +16,7 @@ except Exception:  # pragma: no cover
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
 _GEMINI_CONTEXT_CACHE: dict[str, tuple[str, float]] = {}
+_GEMINI_CONTEXT_CACHE_SKIP: dict[str, float] = {}
 _REDIS_CLIENT = None
 
 _DEFAULT_MODEL_PRICING = {
@@ -352,8 +353,23 @@ def _redis_cache_set(cache_key: str, name: str, exp_ts: float, ttl_sec: int) -> 
         _log.warning("gemini context cache redis set failed: %s", e)
 
 
+def _is_cached_content_too_small_error(status_code: int, body_text: str) -> bool:
+    if status_code != 400:
+        return False
+    s = (body_text or "").lower()
+    return (
+        "cached content is too small" in s
+        or "min_total_token_count" in s
+    )
+
+
 def _get_or_create_cached_content(model: str, api_key: str, cache_key: str, system_instruction: str) -> str | None:
     now = time.time()
+    skip_until = _GEMINI_CONTEXT_CACHE_SKIP.get(cache_key)
+    if skip_until and skip_until > now:
+        return None
+    if skip_until and skip_until <= now:
+        _GEMINI_CONTEXT_CACHE_SKIP.pop(cache_key, None)
     cached = _GEMINI_CONTEXT_CACHE.get(cache_key)
     if cached is not None:
         name, exp = cached
@@ -378,6 +394,11 @@ def _get_or_create_cached_content(model: str, api_key: str, cache_key: str, syst
     with httpx.Client(timeout=req_timeout) as client:
         resp = client.post(url, json=body, params={"key": api_key})
     if resp.status_code >= 400:
+        if _is_cached_content_too_small_error(resp.status_code, resp.text):
+            # Do not fail summary generation; skip cache create for this key for a while.
+            _GEMINI_CONTEXT_CACHE_SKIP[cache_key] = now + 1800
+            _log.info("gemini context cache skipped (too small) key=%s", cache_key[:16])
+            return None
         raise RuntimeError(f"gemini cachedContents create failed status={resp.status_code} body={resp.text[:1000]}")
     data = resp.json() if resp.content else {}
     name = str(data.get("name") or "").strip()

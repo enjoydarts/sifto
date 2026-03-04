@@ -2,7 +2,19 @@ import os
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
 from app.routers import digest, extract, facts, feed_seed_suggestions, feed_suggestions, summarize, translate_title
+
+_SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
+if _SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        environment=os.getenv("SENTRY_ENVIRONMENT", "").strip() or None,
+        release=os.getenv("APP_COMMIT_SHA", "").strip() or None,
+        integrations=[FastApiIntegration()],
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0")),
+    )
 
 app = FastAPI(title="sifto-worker")
 

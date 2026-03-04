@@ -31,6 +31,31 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
+      - name: Prune old API machines for bluegreen
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          app="sifto-api"
+          machines="$(flyctl machines list --app "$app" --json)"
+          keep_image="$(echo "$machines" | jq -r 'sort_by(.created_at) | last | .image_ref // empty')"
+          if [ -z "$keep_image" ]; then
+            echo "No keep image found for $app; skipping prune."
+            exit 0
+          fi
+          echo "Keeping image: $keep_image"
+          delete_ids="$(echo "$machines" | jq -r --arg keep "$keep_image" '.[] | select((.image_ref // "") != $keep) | .id')"
+          if [ -z "$delete_ids" ]; then
+            echo "No old machines to prune for $app."
+            exit 0
+          fi
+          echo "Pruning old machine IDs:"
+          echo "$delete_ids"
+          while IFS= read -r id; do
+            [ -n "$id" ] || continue
+            flyctl machines destroy --force "$id" --app "$app"
+          done <<< "$delete_ids"
+
       - name: Deploy API
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -45,6 +70,31 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Prune old Worker machines for bluegreen
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          app="sifto-worker"
+          machines="$(flyctl machines list --app "$app" --json)"
+          keep_image="$(echo "$machines" | jq -r 'sort_by(.created_at) | last | .image_ref // empty')"
+          if [ -z "$keep_image" ]; then
+            echo "No keep image found for $app; skipping prune."
+            exit 0
+          fi
+          echo "Keeping image: $keep_image"
+          delete_ids="$(echo "$machines" | jq -r --arg keep "$keep_image" '.[] | select((.image_ref // "") != $keep) | .id')"
+          if [ -z "$delete_ids" ]; then
+            echo "No old machines to prune for $app."
+            exit 0
+          fi
+          echo "Pruning old machine IDs:"
+          echo "$delete_ids"
+          while IFS= read -r id; do
+            [ -n "$id" ] || continue
+            flyctl machines destroy --force "$id" --app "$app"
+          done <<< "$delete_ids"
 
       - name: Deploy Worker
         env:

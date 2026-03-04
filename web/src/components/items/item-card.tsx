@@ -70,8 +70,8 @@ export function ItemCard({
           "group",
           featured
             ? "flex w-full flex-col gap-3 md:flex-row md:items-start"
-            : "flex items-stretch gap-3",
-          "rounded-xl px-4 py-3.5 transition-all duration-200",
+            : "flex items-stretch gap-4",
+          "rounded-xl px-4 py-4 transition-all duration-200",
           featured
             ? isRead
               ? "cursor-pointer border border-zinc-300 bg-zinc-200 hover:border-zinc-400"
@@ -90,7 +90,7 @@ export function ItemCard({
           {/* Thumbnail */}
           <div
             className={`shrink-0 ${
-              featured ? "flex h-36 w-full md:h-[104px] md:w-[136px] md:shrink-0" : "flex h-12 w-12 sm:h-[72px] sm:w-[72px]"
+              featured ? "flex h-36 w-full md:h-[104px] md:w-[136px] md:shrink-0" : "flex h-14 w-14 sm:h-[84px] sm:w-[84px]"
             }`}
           >
             <Thumbnail
@@ -104,7 +104,7 @@ export function ItemCard({
           {/* Text */}
           <div
             className={`flex min-w-0 flex-1 flex-col ${
-              featured ? "justify-start gap-2 py-0.5" : "justify-between gap-1.5 py-0.5"
+              featured ? "justify-start gap-2 py-0.5" : "justify-between gap-2 py-0.5"
             }`}
           >
             <div className={featured ? "space-y-2" : "flex items-start gap-2"}>
@@ -121,8 +121,8 @@ export function ItemCard({
                         ? "line-clamp-3 text-base leading-6 text-zinc-400 font-medium"
                         : "line-clamp-3 text-[17px] leading-6 text-zinc-950 font-semibold"
                       : isRead
-                        ? "line-clamp-2 text-[15px] leading-6 text-zinc-400 font-medium"
-                        : "line-clamp-2 text-[15px] leading-6 text-zinc-900 font-semibold"
+                        ? "line-clamp-3 text-[16px] leading-6 text-zinc-400 font-medium"
+                        : "line-clamp-3 text-[16px] leading-6 text-zinc-900 font-semibold"
                   }`}
                 >
                   {displayTitle ?? item.url}
@@ -172,7 +172,7 @@ export function ItemCard({
             disabled={readUpdating}
             onClick={(e) => { e.stopPropagation(); onToggleRead(); }}
             className={`rounded-lg border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 press focus-ring ${
-              featured ? "h-8 md:min-w-[108px]" : "h-8 min-w-[108px]"
+              featured ? "h-9 md:min-w-[116px]" : "h-9 min-w-[116px]"
             }`}
           >
             {readUpdating
@@ -185,7 +185,7 @@ export function ItemCard({
             type="button"
             onClick={(e) => { e.stopPropagation(); onOpenDetail(); }}
             className={`inline-flex items-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 press focus-ring ${
-              featured ? "h-8 md:min-w-[108px]" : "h-8 min-w-[108px]"
+              featured ? "h-9 md:min-w-[116px]" : "h-9 min-w-[116px]"
             }`}
           >
             <ExternalLink className="size-3.5" aria-hidden="true" />
@@ -197,7 +197,7 @@ export function ItemCard({
               disabled={retrying}
               onClick={(e) => { e.stopPropagation(); onRetry(); }}
               className={`rounded-lg border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 press focus-ring ${
-                featured ? "h-8 md:min-w-[108px]" : "h-8 min-w-[108px]"
+                featured ? "h-9 md:min-w-[116px]" : "h-9 min-w-[116px]"
               }`}
             >
               {retrying ? t("items.retrying") : t("items.retry")}

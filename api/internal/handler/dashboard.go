@@ -14,6 +14,7 @@ import (
 
 const cacheMetricTTL = 8 * 24 * time.Hour
 const dashboardCacheTTL = 120 * time.Second
+const dashboardPartCacheTTL = 5 * time.Minute
 
 type DashboardHandler struct {
 	sourceRepo   *repository.SourceRepo
@@ -80,7 +81,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 		wg          sync.WaitGroup
 		mu          sync.Mutex
 		firstErr    error
-		sourceCnt   int
+		sourceCnt   any
 		itemStats   any
 		digests     any
 		llmSummary  any
@@ -97,79 +98,91 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 			firstErr = err
 		}
 	}
+	loadPart := func(part, key string, fetch func() (any, error), assign func(any)) {
+		if h.cache != nil && !cacheBust {
+			var cached any
+			if ok, err := h.cache.GetJSON(r.Context(), key, &cached); err == nil && ok {
+				_ = h.cache.IncrMetric(r.Context(), "cache", fmt.Sprintf("dashboard_part.%s.hit", part), 1, time.Now(), cacheMetricTTL)
+				mu.Lock()
+				assign(cached)
+				mu.Unlock()
+				return
+			} else if err != nil {
+				_ = h.cache.IncrMetric(r.Context(), "cache", fmt.Sprintf("dashboard_part.%s.error", part), 1, time.Now(), cacheMetricTTL)
+				log.Printf("dashboard-part cache get failed user_id=%s part=%s key=%s err=%v", userID, part, key, err)
+			}
+			_ = h.cache.IncrMetric(r.Context(), "cache", fmt.Sprintf("dashboard_part.%s.miss", part), 1, time.Now(), cacheMetricTTL)
+		} else if cacheBust && h.cache != nil {
+			_ = h.cache.IncrMetric(r.Context(), "cache", fmt.Sprintf("dashboard_part.%s.bypass", part), 1, time.Now(), cacheMetricTTL)
+		}
+		v, err := fetch()
+		if err != nil {
+			setErr(err)
+			return
+		}
+		mu.Lock()
+		assign(v)
+		mu.Unlock()
+		if h.cache != nil {
+			if err := h.cache.SetJSON(r.Context(), key, v, dashboardPartCacheTTL); err != nil {
+				_ = h.cache.IncrMetric(r.Context(), "cache", fmt.Sprintf("dashboard_part.%s.error", part), 1, time.Now(), cacheMetricTTL)
+				log.Printf("dashboard-part cache set failed user_id=%s part=%s key=%s err=%v", userID, part, key, err)
+			}
+		}
+	}
 
 	wg.Add(6)
 	go func() {
 		defer wg.Done()
-		n, err := h.sourceRepo.CountByUser(r.Context(), userID)
-		if err != nil {
-			setErr(err)
-			return
-		}
-		mu.Lock()
-		sourceCnt = n
-		mu.Unlock()
+		partKey := fmt.Sprintf("dashboard:part:sources:%s", userID)
+		loadPart("sources", partKey, func() (any, error) {
+			n, err := h.sourceRepo.CountByUser(r.Context(), userID)
+			if err != nil {
+				return nil, err
+			}
+			return n, nil
+		}, func(v any) { sourceCnt = v })
 	}()
 	go func() {
 		defer wg.Done()
-		v, err := h.itemRepo.Stats(r.Context(), userID)
-		if err != nil {
-			setErr(err)
-			return
-		}
-		mu.Lock()
-		itemStats = v
-		mu.Unlock()
+		partKey := fmt.Sprintf("dashboard:part:itemstats:%s", userID)
+		loadPart("itemstats", partKey, func() (any, error) {
+			return h.itemRepo.Stats(r.Context(), userID)
+		}, func(v any) { itemStats = v })
 	}()
 	go func() {
 		defer wg.Done()
-		v, err := h.digestRepo.ListLimit(r.Context(), userID, digestLimit)
-		if err != nil {
-			setErr(err)
-			return
-		}
-		mu.Lock()
-		digests = v
-		mu.Unlock()
+		partKey := fmt.Sprintf("dashboard:part:digests:%s:%d", userID, digestLimit)
+		loadPart("digests", partKey, func() (any, error) {
+			return h.digestRepo.ListLimit(r.Context(), userID, digestLimit)
+		}, func(v any) { digests = v })
 	}()
 	go func() {
 		defer wg.Done()
-		v, err := h.llmUsageRepo.DailySummaryByUser(r.Context(), userID, llmDays)
-		if err != nil {
-			setErr(err)
-			return
-		}
-		mu.Lock()
-		llmSummary = v
-		mu.Unlock()
+		partKey := fmt.Sprintf("dashboard:part:llm:%s:%d", userID, llmDays)
+		loadPart("llm", partKey, func() (any, error) {
+			return h.llmUsageRepo.DailySummaryByUser(r.Context(), userID, llmDays)
+		}, func(v any) { llmSummary = v })
 	}()
 	go func() {
 		defer wg.Done()
-		v, err := h.itemRepo.TopicTrends(r.Context(), userID, topicLimit)
-		if err != nil {
-			setErr(err)
-			return
-		}
-		mu.Lock()
-		topics = v
-		mu.Unlock()
+		partKey := fmt.Sprintf("dashboard:part:topics:%s:%d", userID, topicLimit)
+		loadPart("topics", partKey, func() (any, error) {
+			return h.itemRepo.TopicTrends(r.Context(), userID, topicLimit)
+		}, func(v any) { topics = v })
 	}()
 	go func() {
 		defer wg.Done()
-		status := "failed"
-		v, err := h.itemRepo.ListPage(r.Context(), userID, repository.ItemListParams{
-			Status:   &status,
-			Sort:     "newest",
-			Page:     1,
-			PageSize: 5,
-		})
-		if err != nil {
-			setErr(err)
-			return
-		}
-		mu.Lock()
-		failedItems = v
-		mu.Unlock()
+		partKey := fmt.Sprintf("dashboard:part:failedpreview:%s", userID)
+		loadPart("failedpreview", partKey, func() (any, error) {
+			status := "failed"
+			return h.itemRepo.ListPage(r.Context(), userID, repository.ItemListParams{
+				Status:   &status,
+				Sort:     "newest",
+				Page:     1,
+				PageSize: 5,
+			})
+		}, func(v any) { failedItems = v })
 	}()
 	wg.Wait()
 	if firstErr != nil {

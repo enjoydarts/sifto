@@ -688,6 +688,8 @@ func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Reque
 				"dashboard":    cacheWindowStats(sums, "dashboard"),
 				"reading_plan": cacheWindowStats(sums, "reading_plan"),
 				"items_list":   cacheWindowStats(sums, "items_list"),
+				"focus_queue":  cacheWindowStats(sums, "focus_queue"),
+				"triage_all":   cacheWindowStats(sums, "triage_all"),
 			}
 		}
 	}

@@ -113,6 +113,7 @@ func main() {
 			r.Post("/retry-failed", itemH.RetryFailed)
 			r.Get("/reading-plan", itemH.ReadingPlan)
 			r.Get("/focus-queue", itemH.FocusQueue)
+			r.Get("/triage-all", itemH.TriageAll)
 			r.Get("/{id}/related", itemH.Related)
 			r.Delete("/{id}", itemH.Delete)
 			r.Get("/{id}", itemH.GetDetail)

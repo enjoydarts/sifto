@@ -26,6 +26,8 @@ type ItemHandler struct {
 }
 
 const itemsListCacheTTL = 30 * time.Second
+const focusQueueCacheTTL = 60 * time.Second
+const triageAllCacheTTL = 90 * time.Second
 
 func NewItemHandler(
 	repo *repository.ItemRepo,
@@ -323,13 +325,30 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 		ExcludeRead:     false,
 		ExcludeLater:    q.Get("exclude_later") != "false",
 	}
+	cacheKey := fmt.Sprintf("focusqueue:%s:%s:%d:%t:%t", userID, params.Window, params.Size, params.DiversifyTopics, params.ExcludeLater)
+	cacheBust := q.Get("cache_bust") == "1"
+	if h.cache != nil && !cacheBust {
+		var cached map[string]any
+		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
+			_ = h.cache.IncrMetric(r.Context(), "cache", "focus_queue.hit", 1, time.Now(), cacheMetricTTL)
+			writeJSON(w, cached)
+			return
+		} else if err != nil {
+			_ = h.cache.IncrMetric(r.Context(), "cache", "focus_queue.error", 1, time.Now(), cacheMetricTTL)
+			log.Printf("focus-queue cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
+		_ = h.cache.IncrMetric(r.Context(), "cache", "focus_queue.miss", 1, time.Now(), cacheMetricTTL)
+	} else if cacheBust && h.cache != nil {
+		_ = h.cache.IncrMetric(r.Context(), "cache", "focus_queue.bypass", 1, time.Now(), cacheMetricTTL)
+	}
+
 	resp, err := h.repo.ReadingPlan(r.Context(), userID, params)
 	if err != nil {
 		writeRepoError(w, err)
 		return
 	}
 	if resp == nil {
-		writeJSON(w, map[string]any{
+		out := map[string]any{
 			"items":       []model.Item{},
 			"size":        size,
 			"window":      window,
@@ -337,7 +356,14 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 			"remaining":   0,
 			"total":       0,
 			"source_pool": 0,
-		})
+		}
+		if h.cache != nil {
+			if err := h.cache.SetJSON(r.Context(), cacheKey, out, focusQueueCacheTTL); err != nil {
+				_ = h.cache.IncrMetric(r.Context(), "cache", "focus_queue.error", 1, time.Now(), cacheMetricTTL)
+				log.Printf("focus-queue cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+			}
+		}
+		writeJSON(w, out)
 		return
 	}
 	affinity := map[string]float64{}
@@ -375,7 +401,7 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 			completed++
 		}
 	}
-	writeJSON(w, map[string]any{
+	out := map[string]any{
 		"items":            items,
 		"size":             size,
 		"window":           resp.Window,
@@ -384,7 +410,77 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 		"total":            len(items),
 		"source_pool":      resp.SourcePoolCount,
 		"diversify_topics": resp.DiversifyTopics,
-	})
+	}
+	if h.cache != nil {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, out, focusQueueCacheTTL); err != nil {
+			_ = h.cache.IncrMetric(r.Context(), "cache", "focus_queue.error", 1, time.Now(), cacheMetricTTL)
+			log.Printf("focus-queue cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
+	}
+	writeJSON(w, out)
+}
+
+func (h *ItemHandler) TriageAll(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	q := r.URL.Query()
+	cacheBust := q.Get("cache_bust") == "1"
+	cacheKey := fmt.Sprintf("triageall:%s", userID)
+	if h.cache != nil && !cacheBust {
+		var cached map[string]any
+		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
+			_ = h.cache.IncrMetric(r.Context(), "cache", "triage_all.hit", 1, time.Now(), cacheMetricTTL)
+			writeJSON(w, cached)
+			return
+		} else if err != nil {
+			_ = h.cache.IncrMetric(r.Context(), "cache", "triage_all.error", 1, time.Now(), cacheMetricTTL)
+			log.Printf("triage-all cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
+		_ = h.cache.IncrMetric(r.Context(), "cache", "triage_all.miss", 1, time.Now(), cacheMetricTTL)
+	} else if cacheBust && h.cache != nil {
+		_ = h.cache.IncrMetric(r.Context(), "cache", "triage_all.bypass", 1, time.Now(), cacheMetricTTL)
+	}
+
+	items := make([]model.Item, 0, 200)
+	page := 1
+	for page <= 100 {
+		resp, err := h.repo.ListPage(r.Context(), userID, repository.ItemListParams{
+			Page:         page,
+			PageSize:     200,
+			Sort:         "newest",
+			UnreadOnly:   true,
+			FavoriteOnly: false,
+			LaterOnly:    false,
+		})
+		if err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		if resp == nil || len(resp.Items) == 0 {
+			break
+		}
+		items = append(items, resp.Items...)
+		if !resp.HasNext {
+			break
+		}
+		page++
+	}
+	out := map[string]any{
+		"items":            items,
+		"size":             len(items),
+		"window":           "all",
+		"completed":        0,
+		"remaining":        len(items),
+		"total":            len(items),
+		"source_pool":      0,
+		"diversify_topics": false,
+	}
+	if h.cache != nil {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, out, triageAllCacheTTL); err != nil {
+			_ = h.cache.IncrMetric(r.Context(), "cache", "triage_all.error", 1, time.Now(), cacheMetricTTL)
+			log.Printf("triage-all cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
+	}
+	writeJSON(w, out)
 }
 
 func (h *ItemHandler) GetDetail(w http.ResponseWriter, r *http.Request) {

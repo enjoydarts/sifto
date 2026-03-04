@@ -528,6 +528,7 @@ export const api = {
     const qs = q.toString();
     return apiFetch<FocusQueueResponse>(`/items/focus-queue${qs ? `?${qs}` : ""}`);
   },
+  getTriageAll: () => apiFetch<FocusQueueResponse>("/items/triage-all"),
   getItemStats: () => apiFetch<ItemStats>("/items/stats"),
   getItemUXMetrics: (params?: { days?: number }) => {
     const q = new URLSearchParams();

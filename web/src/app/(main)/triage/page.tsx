@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Hand } from "lucide-react";
-import { api, Item } from "@/lib/api";
+import { api, Item, FocusQueueResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { InlineReader } from "@/components/inline-reader";
@@ -21,8 +21,6 @@ type TriageMetricEvent = {
 
 const TRIAGE_METRICS_KEY = "triage:metrics:v1";
 const TRIAGE_METRICS_MAX = 300;
-const TRIAGE_ALL_PAGE_SIZE = 200;
-const TRIAGE_ALL_MAX_PAGES = 100;
 
 function rateTone(rate: number) {
   if (rate >= 80) return "text-green-700";
@@ -84,40 +82,11 @@ export default function TriagePage() {
   const focusSize = readingPlanPrefs?.size ?? 15;
   const diversifyTopics = Boolean(readingPlanPrefs?.diversify_topics ?? true);
 
-  const loadAllTriageItems = useCallback(async () => {
-    const collected: Item[] = [];
-    let page = 1;
-    let hasNext = true;
-    while (hasNext && page <= TRIAGE_ALL_MAX_PAGES) {
-      const resp = await api.getItems({
-        page,
-        page_size: TRIAGE_ALL_PAGE_SIZE,
-        sort: "newest",
-        unread_only: true,
-      });
-      if (Array.isArray(resp.items) && resp.items.length > 0) {
-        collected.push(...resp.items);
-      }
-      hasNext = Boolean(resp.has_next);
-      page += 1;
-    }
-    return collected;
-  }, []);
-
-  const queueQuery = useQuery({
+  const queueQuery = useQuery<FocusQueueResponse>({
     queryKey: ["triage-queue", triageMode, focusWindow, focusSize, diversifyTopics ? 1 : 0] as const,
     queryFn: () =>
       triageMode === "all"
-        ? loadAllTriageItems().then((items) => ({
-            items,
-            window: "24h" as const,
-            size: items.length,
-            completed: 0,
-            remaining: items.length,
-            total: items.length,
-            source_pool: 0,
-            diversify_topics: false,
-          }))
+        ? api.getTriageAll()
         : api.getFocusQueue({
             window: focusWindow === "today_jst" || focusWindow === "7d" ? focusWindow : "24h",
             size: focusSize,

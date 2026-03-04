@@ -28,6 +28,7 @@ type ItemHandler struct {
 const itemsListCacheTTL = 30 * time.Second
 const focusQueueCacheTTL = 60 * time.Second
 const triageAllCacheTTL = 90 * time.Second
+const relatedItemsCacheTTL = 5 * time.Minute
 
 func NewItemHandler(
 	repo *repository.ItemRepo,
@@ -512,6 +513,23 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
+	cacheKey := fmt.Sprintf("related:%s:%s:%d", userID, id, limit)
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
+	if h.cache != nil && !cacheBust {
+		var cached map[string]any
+		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
+			_ = h.cache.IncrMetric(r.Context(), "cache", "related.hit", 1, time.Now(), cacheMetricTTL)
+			writeJSON(w, cached)
+			return
+		} else if err != nil {
+			_ = h.cache.IncrMetric(r.Context(), "cache", "related.error", 1, time.Now(), cacheMetricTTL)
+			log.Printf("related cache get failed user_id=%s item_id=%s key=%s err=%v", userID, id, cacheKey, err)
+		}
+		_ = h.cache.IncrMetric(r.Context(), "cache", "related.miss", 1, time.Now(), cacheMetricTTL)
+	} else if cacheBust && h.cache != nil {
+		_ = h.cache.IncrMetric(r.Context(), "cache", "related.bypass", 1, time.Now(), cacheMetricTTL)
+	}
+
 	var targetTopics []string
 	if detail, err := h.repo.GetDetail(r.Context(), id, userID); err == nil && detail != nil && detail.Summary != nil {
 		targetTopics = detail.Summary.Topics
@@ -524,12 +542,19 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 	items = rerankAndFilterRelated(items, targetTopics, limit)
 	annotateRelatedReasons(items, targetTopics)
 	clusters := clusterRelatedItems(items)
-	writeJSON(w, map[string]any{
+	out := map[string]any{
 		"items":    items,
 		"clusters": clusters,
 		"limit":    limit,
 		"item_id":  id,
-	})
+	}
+	if h.cache != nil {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, out, relatedItemsCacheTTL); err != nil {
+			_ = h.cache.IncrMetric(r.Context(), "cache", "related.error", 1, time.Now(), cacheMetricTTL)
+			log.Printf("related cache set failed user_id=%s item_id=%s key=%s err=%v", userID, id, cacheKey, err)
+		}
+	}
+	writeJSON(w, out)
 }
 
 func rerankAndFilterRelated(items []model.RelatedItem, targetTopics []string, limit int) []model.RelatedItem {

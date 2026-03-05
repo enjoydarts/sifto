@@ -20,20 +20,20 @@ _GEMINI_CONTEXT_CACHE_SKIP: dict[str, float] = {}
 _REDIS_CLIENT = None
 
 _DEFAULT_MODEL_PRICING = {
-    "gemini-3-flash-preview": {"input_per_mtok_usd": 0.5, "output_per_mtok_usd": 3.0},
+    "gemini-3-flash-preview": {"input_per_mtok_usd": 0.5, "output_per_mtok_usd": 3.0, "cache_read_per_mtok_usd": 0.05},
     # <=200k prompt tokens. >200k tier is handled in _estimate_cost_usd.
-    "gemini-3.1-pro-preview": {"input_per_mtok_usd": 2.0, "output_per_mtok_usd": 12.0},
+    "gemini-3.1-pro-preview": {"input_per_mtok_usd": 2.0, "output_per_mtok_usd": 12.0, "cache_read_per_mtok_usd": 0.20},
     # Deprecated model kept for backward-compat pricing on existing user settings.
-    "gemini-3-pro-preview": {"input_per_mtok_usd": 2.0, "output_per_mtok_usd": 12.0},
+    "gemini-3-pro-preview": {"input_per_mtok_usd": 2.0, "output_per_mtok_usd": 12.0, "cache_read_per_mtok_usd": 0.20},
     # USD per 1M tokens (input/output).
-    "gemini-2.5-flash": {"input_per_mtok_usd": 0.3, "output_per_mtok_usd": 2.5},
-    "gemini-2.5-flash-lite": {"input_per_mtok_usd": 0.1, "output_per_mtok_usd": 0.4},
-    "gemini-2.5-pro": {"input_per_mtok_usd": 1.25, "output_per_mtok_usd": 10.0},
+    "gemini-2.5-flash": {"input_per_mtok_usd": 0.3, "output_per_mtok_usd": 2.5, "cache_read_per_mtok_usd": 0.03},
+    "gemini-2.5-flash-lite": {"input_per_mtok_usd": 0.1, "output_per_mtok_usd": 0.4, "cache_read_per_mtok_usd": 0.01},
+    "gemini-2.5-pro": {"input_per_mtok_usd": 1.25, "output_per_mtok_usd": 10.0, "cache_read_per_mtok_usd": 0.125},
     # Legacy/deprecated families kept for backward compatibility in historical logs/user settings.
-    "gemini-2.0-flash": {"input_per_mtok_usd": 0.1, "output_per_mtok_usd": 0.4},
-    "gemini-2.0-flash-lite": {"input_per_mtok_usd": 0.075, "output_per_mtok_usd": 0.3},
-    "gemini-1.5-flash": {"input_per_mtok_usd": 0.075, "output_per_mtok_usd": 0.3},
-    "gemini-1.5-pro": {"input_per_mtok_usd": 1.25, "output_per_mtok_usd": 5.0},
+    "gemini-2.0-flash": {"input_per_mtok_usd": 0.1, "output_per_mtok_usd": 0.4, "cache_read_per_mtok_usd": 0.0},
+    "gemini-2.0-flash-lite": {"input_per_mtok_usd": 0.075, "output_per_mtok_usd": 0.3, "cache_read_per_mtok_usd": 0.0},
+    "gemini-1.5-flash": {"input_per_mtok_usd": 0.075, "output_per_mtok_usd": 0.3, "cache_read_per_mtok_usd": 0.0},
+    "gemini-1.5-pro": {"input_per_mtok_usd": 1.25, "output_per_mtok_usd": 5.0, "cache_read_per_mtok_usd": 0.0},
 }
 
 
@@ -223,6 +223,7 @@ def _pricing_for_model(model: str, purpose: str) -> dict:
             {
                 "input_per_mtok_usd": 0.0,
                 "output_per_mtok_usd": 0.0,
+                "cache_read_per_mtok_usd": 0.0,
             },
         )
     )
@@ -231,6 +232,7 @@ def _pricing_for_model(model: str, purpose: str) -> dict:
     override_map = {
         "input_per_mtok_usd": _env_optional_float(prefix + "INPUT_PER_MTOK_USD"),
         "output_per_mtok_usd": _env_optional_float(prefix + "OUTPUT_PER_MTOK_USD"),
+        "cache_read_per_mtok_usd": _env_optional_float(prefix + "CACHE_READ_PER_MTOK_USD"),
     }
     for k, v in override_map.items():
         if v is not None:
@@ -246,16 +248,22 @@ def _estimate_cost_usd(model: str, purpose: str, usage: dict) -> float:
     family = _normalize_model_family(model)
     input_rate = p["input_per_mtok_usd"]
     output_rate = p["output_per_mtok_usd"]
+    cache_read_rate = p.get("cache_read_per_mtok_usd", 0.0)
     # Gemini Pro preview families have two pricing tiers by prompt length.
-    if family in ("gemini-3.1-pro-preview", "gemini-3-pro-preview") and usage.get("input_tokens", 0) > 200_000:
+    prompt_size_for_tier = usage.get("prompt_tokens_raw", usage.get("input_tokens", 0))
+    if family in ("gemini-3.1-pro-preview", "gemini-3-pro-preview") and prompt_size_for_tier > 200_000:
         input_rate = 4.0
         output_rate = 18.0
-    if family == "gemini-2.5-pro" and usage.get("input_tokens", 0) > 200_000:
+        cache_read_rate = 0.40
+    if family == "gemini-2.5-pro" and prompt_size_for_tier > 200_000:
         input_rate = 2.5
         output_rate = 15.0
+        cache_read_rate = 0.25
+    non_cached_input_tokens = max(0, int(usage.get("input_tokens", 0) or 0) - int(usage.get("cache_read_input_tokens", 0) or 0))
     total = 0.0
-    total += usage.get("input_tokens", 0) / 1_000_000 * input_rate
+    total += non_cached_input_tokens / 1_000_000 * input_rate
     total += usage.get("output_tokens", 0) / 1_000_000 * output_rate
+    total += usage.get("cache_read_input_tokens", 0) / 1_000_000 * cache_read_rate
     return round(total, 8)
 
 
@@ -484,13 +492,22 @@ def _generate_content(
 
     data = resp.json()
     usage_meta = data.get("usageMetadata", {}) if isinstance(data, dict) else {}
+    prompt_token_count = int(usage_meta.get("promptTokenCount", 0) or 0)
+    cached_content_token_count = int(usage_meta.get("cachedContentTokenCount", 0) or 0)
+    tool_use_prompt_token_count = int(usage_meta.get("toolUsePromptTokenCount", 0) or 0)
+    thoughts_token_count = int(usage_meta.get("thoughtsTokenCount", 0) or 0)
+    candidates_token_count = int(usage_meta.get("candidatesTokenCount", 0) or 0)
+    # Google pricing: output pricing includes thinking tokens.
+    output_tokens_billed = candidates_token_count + thoughts_token_count
+    # promptTokenCount includes cached content when cachedContent is used.
+    # Keep raw prompt for tier selection and add tool-use prompt tokens as billable input.
+    input_tokens_billed = prompt_token_count + tool_use_prompt_token_count
     usage = {
-        "input_tokens": int(usage_meta.get("promptTokenCount", 0) or 0),
-        "output_tokens": int(usage_meta.get("candidatesTokenCount", 0) or 0),
-        "cache_creation_input_tokens": int(usage_meta.get("cacheTokensDetails", [{}])[0].get("textCount", 0) or 0)
-        if isinstance(usage_meta.get("cacheTokensDetails"), list) and usage_meta.get("cacheTokensDetails")
-        else 0,
-        "cache_read_input_tokens": int(usage_meta.get("cachedContentTokenCount", 0) or 0),
+        "input_tokens": input_tokens_billed,
+        "output_tokens": output_tokens_billed,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": cached_content_token_count,
+        "prompt_tokens_raw": prompt_token_count,
     }
     candidates = data.get("candidates", []) if isinstance(data, dict) else []
     if not candidates:

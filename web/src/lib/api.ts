@@ -59,6 +59,7 @@ export interface Item {
   feedback_rating: -1 | 0 | 1 | number;
   summary_score?: number | null;
   summary_topics?: string[];
+  recommendation_reason?: string | null;
   published_at: string | null;
   fetched_at: string | null;
   created_at: string;

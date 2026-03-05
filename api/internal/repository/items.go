@@ -325,6 +325,10 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 	}
 
 	selected := selectItemsByMMR(candidates, p.Size, p.DiversifyTopics, profile, embeddingBiasByItemID, candidateEmbByItemID)
+	for i := range selected {
+		reason := itemRecommendationReason(selected[i], embeddingBiasByItemID)
+		selected[i].RecommendationReason = &reason
+	}
 	topics, err := r.readingPlanTopics(ctx, userID, p)
 	if err != nil {
 		return nil, err

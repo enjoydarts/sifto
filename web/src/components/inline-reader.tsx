@@ -17,6 +17,7 @@ export function InlineReader({
   queueItemIds,
   autoMarkRead = true,
   onReadToggled,
+  onFeedbackUpdated,
 }: {
   itemId: string | null;
   open: boolean;
@@ -27,6 +28,7 @@ export function InlineReader({
   queueItemIds?: string[];
   autoMarkRead?: boolean;
   onReadToggled?: (itemId: string, isRead: boolean) => void;
+  onFeedbackUpdated?: (itemId: string) => void;
 }) {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -143,6 +145,7 @@ export function InlineReader({
           : prev
       );
       syncFeedbackInFeeds(current.id, next.is_favorite, next.rating);
+      if (onFeedbackUpdated) onFeedbackUpdated(current.id);
       showToast(t("itemDetail.toast.feedbackSaved"), "success");
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");

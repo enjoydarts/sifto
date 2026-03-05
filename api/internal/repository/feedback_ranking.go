@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 	"time"
@@ -109,6 +110,30 @@ func itemPreferenceAdjustedScoreWithEmbedding(item model.Item, profile *feedback
 		}
 	}
 	return adj
+}
+
+func itemRecommendationReason(item model.Item, embeddingBiasByItemID map[string]float64) string {
+	reasons := make([]string, 0, 3)
+	if item.IsFavorite {
+		reasons = append(reasons, "お気に入りに近い傾向")
+	}
+	if item.FeedbackRating > 0 {
+		reasons = append(reasons, "高評価した記事と近い傾向")
+	}
+	if embeddingBiasByItemID != nil {
+		if v, ok := embeddingBiasByItemID[item.ID]; ok {
+			if v >= 0.35 {
+				reasons = append(reasons, "過去のGood/Fav記事と埋め込み類似")
+			}
+		}
+	}
+	if item.SummaryScore != nil && *item.SummaryScore >= 0.78 {
+		reasons = append(reasons, fmt.Sprintf("重要度スコア %.2f", *item.SummaryScore))
+	}
+	if len(reasons) == 0 {
+		return "直近の注目記事"
+	}
+	return reasons[0]
 }
 
 func sortItemsByPreference(items []model.Item, profile *feedbackPreferenceProfile, embeddingBiasByItemID map[string]float64) {

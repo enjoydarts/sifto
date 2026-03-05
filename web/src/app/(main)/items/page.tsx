@@ -20,6 +20,9 @@ type ItemsFeedQueryData = {
   items: Item[];
   total: number;
 };
+type FocusQueueData = {
+  items: Item[];
+};
 
 function ItemsPageContent() {
   const { t, locale } = useI18n();
@@ -103,6 +106,12 @@ function ItemsPageContent() {
       };
     },
     placeholderData: (prev) => prev,
+  });
+  const focusQueueQuery = useQuery<FocusQueueData>({
+    queryKey: ["focus-queue", "24h", 20],
+    queryFn: () => api.getFocusQueue({ window: "24h", size: 20, diversify_topics: true, exclude_later: true }),
+    enabled: unreadMode,
+    staleTime: 30_000,
   });
   const cachedItemsLength = listQuery.data?.items?.length ?? 0;
   const items = listQuery.data?.items ?? [];
@@ -292,7 +301,11 @@ function ItemsPageContent() {
     }
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
-  const unreadSuggestion = useMemo(() => sortedItems.find((item) => !item.is_read) ?? null, [sortedItems]);
+  const unreadSuggestion = useMemo(() => {
+    const fromQueue = (focusQueueQuery.data?.items ?? []).find((item) => !item.is_read) ?? null;
+    if (fromQueue) return fromQueue;
+    return sortedItems.find((item) => !item.is_read) ?? null;
+  }, [focusQueueQuery.data?.items, sortedItems]);
   const dateSections = useMemo(() => {
     const map = new Map<string, Item[]>();
     for (const item of sortedItems) {
@@ -486,6 +499,12 @@ function ItemsPageContent() {
                 <span>{new Date(unreadSuggestion.published_at ?? unreadSuggestion.created_at).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US")}</span>
                 <ArrowRight className="size-3.5" />
               </div>
+              {unreadSuggestion.recommendation_reason && (
+                <div className="mt-2 text-xs text-zinc-600">
+                  {locale === "ja" ? "推薦理由: " : "Why: "}
+                  {unreadSuggestion.recommendation_reason}
+                </div>
+              )}
             </button>
           </section>
         )}
@@ -521,6 +540,7 @@ function ItemsPageContent() {
             open={!!inlineItemId}
             itemId={inlineItemId}
             locale={locale}
+            queueItemIds={sortedItems.map((v) => v.id)}
             onClose={() => setInlineItemId(null)}
             onOpenDetail={(itemId) => {
               setInlineItemId(null);
@@ -538,6 +558,10 @@ function ItemsPageContent() {
                     }
                   : prev
               );
+            }}
+            onFeedbackUpdated={() => {
+              void queryClient.invalidateQueries({ queryKey: ["items-feed"] });
+              void queryClient.invalidateQueries({ queryKey: ["focus-queue"] });
             }}
           />
         )}

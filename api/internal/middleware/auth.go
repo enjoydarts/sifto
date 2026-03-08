@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -12,6 +13,8 @@ import (
 type contextKey string
 
 const UserIDKey contextKey = "userID"
+
+var uuidPattern = regexp.MustCompile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
 
 func Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +51,7 @@ func Auth(next http.Handler) http.Handler {
 		}
 
 		userID, _ := claims["sub"].(string)
-		if userID == "" {
+		if userID == "" || !uuidPattern.MatchString(userID) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

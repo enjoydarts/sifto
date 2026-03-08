@@ -4,6 +4,11 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { SignJWT, jwtVerify } from "jose";
 import { resolveServerAPIURL } from "@/lib/server-api-url";
 
+function isUUID(value: string | undefined | null): boolean {
+  if (!value) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   session: { strategy: "jwt" },
@@ -60,28 +65,35 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async jwt({ token, user }) {
+      if (user?.id && isUUID(user.id)) {
+        token.sub = user.id;
+        return token;
+      }
       // 初回ログイン時: Go API でユーザーを upsert して内部 UUID を sub にセット
       if (user?.email) {
         const apiUrl = resolveServerAPIURL();
-        try {
-          const res = await fetch(`${apiUrl}/api/internal/users/upsert`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Internal-Secret": process.env.NEXTAUTH_SECRET ?? "",
-            },
-            body: JSON.stringify({
-              email: user.email,
-              name: user.name ?? null,
-            }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            token.sub = data.id;
-          }
-        } catch (e) {
-          console.error("upsert user failed:", e);
+        const res = await fetch(`${apiUrl}/api/internal/users/upsert`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Internal-Secret": process.env.NEXTAUTH_SECRET ?? "",
+          },
+          body: JSON.stringify({
+            email: user.email,
+            name: user.name ?? null,
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`upsert user failed: ${res.status}`);
         }
+        const data = (await res.json()) as { id?: string };
+        if (!isUUID(data.id)) {
+          throw new Error("upsert user returned invalid internal user id");
+        }
+        token.sub = data.id;
+      }
+      if (!isUUID(token.sub)) {
+        throw new Error("session token does not contain a valid internal user id");
       }
       return token;
     },

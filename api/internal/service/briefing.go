@@ -52,7 +52,7 @@ func BuildBriefingToday(
 	dateStr := start.Format("2006-01-02")
 
 	plan, err := itemRepo.ReadingPlan(ctx, userID, repository.ReadingPlanParams{
-		Window:          "today_jst",
+		Window:          "24h",
 		Size:            size,
 		DiversifyTopics: true,
 		ExcludeRead:     true,

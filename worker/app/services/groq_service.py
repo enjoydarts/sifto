@@ -473,12 +473,12 @@ candidates:
                         "item_id": {"type": "string"},
                         "reason": {"type": "string"},
                     },
-                    "required": ["item_id"],
+                    "required": ["item_id", "reason"],
                     "additionalProperties": False,
                 },
             },
         },
-        "required": ["answer", "citations"],
+        "required": ["answer", "bullets", "citations"],
         "additionalProperties": False,
     }
     text, usage = _chat_json(prompt, model, api_key, system_instruction=system_instruction, max_output_tokens=3200, response_schema=schema, schema_name="ask")

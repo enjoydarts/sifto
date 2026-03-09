@@ -25,6 +25,9 @@ _GROQ_PRICING_SOURCE_VERSION = "groq_static_2026_03"
 _DEFAULT_MODEL_PRICING = {
     "openai/gpt-oss-20b": {"input_per_mtok_usd": 0.075, "output_per_mtok_usd": 0.30, "cache_read_per_mtok_usd": 0.0375},
     "openai/gpt-oss-120b": {"input_per_mtok_usd": 0.15, "output_per_mtok_usd": 0.60, "cache_read_per_mtok_usd": 0.075},
+    "llama-3.1-8b-instant": {"input_per_mtok_usd": 0.05, "output_per_mtok_usd": 0.08, "cache_read_per_mtok_usd": 0.0},
+    "llama-3.3-70b-versatile": {"input_per_mtok_usd": 0.59, "output_per_mtok_usd": 0.79, "cache_read_per_mtok_usd": 0.0},
+    "meta-llama/llama-4-scout-17b-16e-instruct": {"input_per_mtok_usd": 0.11, "output_per_mtok_usd": 0.34, "cache_read_per_mtok_usd": 0.0},
     "qwen/qwen3-32b": {"input_per_mtok_usd": 0.29, "output_per_mtok_usd": 0.59, "cache_read_per_mtok_usd": 0.0},
 }
 

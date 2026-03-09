@@ -65,6 +65,9 @@ export default function SettingsPage() {
     { value: "gemini-2.5-pro", label: "gemini-2.5-pro", note: "Google AI Studio / in $1.25 ($2.50 >200k) / out $10.00 ($15.00 >200k) / 1M tok" },
     { value: "openai/gpt-oss-20b", label: "openai/gpt-oss-20b", note: "Groq / in $0.075 / out $0.30 / cached in $0.0375 / 1M tok" },
     { value: "openai/gpt-oss-120b", label: "openai/gpt-oss-120b", note: "Groq / in $0.15 / out $0.60 / cached in $0.075 / 1M tok" },
+    { value: "llama-3.1-8b-instant", label: "llama-3.1-8b-instant", note: "Groq / in $0.05 / out $0.08 / 1M tok" },
+    { value: "llama-3.3-70b-versatile", label: "llama-3.3-70b-versatile", note: "Groq / in $0.59 / out $0.79 / 1M tok" },
+    { value: "meta-llama/llama-4-scout-17b-16e-instruct", label: "meta-llama/llama-4-scout-17b-16e-instruct", note: "Groq Preview / in $0.11 / out $0.34 / 1M tok" },
     { value: "qwen/qwen3-32b", label: "qwen/qwen3-32b", note: "Groq / in $0.29 / out $0.59 / 1M tok" },
   ];
   const anthropicOnlyModelOptions: ModelOption[] = [

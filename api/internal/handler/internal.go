@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -79,7 +80,8 @@ func (h *InternalHandler) UpsertUser(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.userRepo.Upsert(r.Context(), body.Email, body.Name)
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		log.Printf("internal users upsert failed: email=%s err=%v", body.Email, err)
+		http.Error(w, fmt.Sprintf("upsert user failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 

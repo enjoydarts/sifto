@@ -84,7 +84,8 @@ export const authOptions: NextAuthOptions = {
           }),
         });
         if (!res.ok) {
-          throw new Error(`upsert user failed: ${res.status}`);
+          const errorText = await res.text();
+          throw new Error(`upsert user failed: ${res.status} ${errorText}`.trim());
         }
         const data = (await res.json()) as { id?: string };
         if (!isUUID(data.id)) {

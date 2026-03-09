@@ -148,12 +148,19 @@ export default function AskPage() {
             <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">{t("ask.citationsLabel")}</p>
               <div className="mt-3 space-y-3">
-                {citations.map((citation) => (
+                {citations.map((citation, index) => (
                   <div key={citation.item_id} className="rounded-2xl border border-zinc-200 p-4">
-                    <Link href={`/items/${citation.item_id}`} className="line-clamp-2 text-sm font-semibold text-zinc-900 hover:text-zinc-700">
-                      {citation.title}
-                    </Link>
-                    {citation.reason ? <p className="mt-2 text-sm text-zinc-600">{citation.reason}</p> : null}
+                    <div className="flex items-start gap-3">
+                      <span className="inline-flex min-w-8 items-center justify-center rounded-full bg-zinc-900 px-2 py-1 text-xs font-semibold text-white">
+                        [{index + 1}]
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <Link href={`/items/${citation.item_id}`} className="line-clamp-2 text-sm font-semibold text-zinc-900 hover:text-zinc-700">
+                          {citation.title}
+                        </Link>
+                        {citation.reason ? <p className="mt-2 text-sm text-zinc-600">{citation.reason}</p> : null}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

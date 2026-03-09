@@ -78,6 +78,7 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"anthropic_summary":           settings.AnthropicSummaryModel,
 			"anthropic_digest_cluster":    settings.AnthropicDigestClusterModel,
 			"anthropic_digest":            settings.AnthropicDigestModel,
+			"anthropic_ask":               settings.AnthropicAskModel,
 			"anthropic_source_suggestion": settings.AnthropicSourceSuggestModel,
 			"openai_embedding":            settings.OpenAIEmbeddingModel,
 		},
@@ -253,6 +254,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		AnthropicSummary          *string `json:"anthropic_summary"`
 		AnthropicDigestCluster    *string `json:"anthropic_digest_cluster"`
 		AnthropicDigest           *string `json:"anthropic_digest"`
+		AnthropicAsk              *string `json:"anthropic_ask"`
 		AnthropicSourceSuggestion *string `json:"anthropic_source_suggestion"`
 		OpenAIEmbedding           *string `json:"openai_embedding"`
 	}
@@ -282,6 +284,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		norm(body.AnthropicSummary),
 		norm(body.AnthropicDigestCluster),
 		norm(body.AnthropicDigest),
+		norm(body.AnthropicAsk),
 		norm(body.AnthropicSourceSuggestion),
 		openAIEmbedding,
 	)
@@ -296,6 +299,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 			"anthropic_summary":           settings.AnthropicSummaryModel,
 			"anthropic_digest_cluster":    settings.AnthropicDigestClusterModel,
 			"anthropic_digest":            settings.AnthropicDigestModel,
+			"anthropic_ask":               settings.AnthropicAskModel,
 			"anthropic_source_suggestion": settings.AnthropicSourceSuggestModel,
 			"openai_embedding":            settings.OpenAIEmbeddingModel,
 		},

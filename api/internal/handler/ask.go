@@ -205,6 +205,16 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 }
 
 func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle bool) *string {
+	if settings != nil && settings.AnthropicAskModel != nil && strings.TrimSpace(*settings.AnthropicAskModel) != "" {
+		v := strings.TrimSpace(*settings.AnthropicAskModel)
+		if strings.HasPrefix(strings.ToLower(v), "gemini-") {
+			if hasGoogle {
+				return &v
+			}
+		} else if hasAnthropic {
+			return &v
+		}
+	}
 	if settings != nil && settings.AnthropicDigestModel != nil && strings.TrimSpace(*settings.AnthropicDigestModel) != "" {
 		v := strings.TrimSpace(*settings.AnthropicDigestModel)
 		if strings.HasPrefix(strings.ToLower(v), "gemini-") {

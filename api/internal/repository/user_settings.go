@@ -47,6 +47,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       anthropic_summary_model,
 		       anthropic_digest_cluster_model,
 		       anthropic_digest_model,
+		       anthropic_ask_model,
 		       anthropic_source_suggestion_model,
 		       openai_embedding_model,
 		       inoreader_access_token_enc,
@@ -76,6 +77,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.AnthropicSummaryModel,
 		&v.AnthropicDigestClusterModel,
 		&v.AnthropicDigestModel,
+		&v.AnthropicAskModel,
 		&v.AnthropicSourceSuggestModel,
 		&v.OpenAIEmbeddingModel,
 		&inoreaderAccessTokenEnc,
@@ -190,7 +192,7 @@ func (r *UserSettingsRepo) UpsertReadingPlanConfig(ctx context.Context, userID, 
 func (r *UserSettingsRepo) UpsertLLMModelConfig(
 	ctx context.Context,
 	userID string,
-	anthropicFactsModel, anthropicSummaryModel, anthropicDigestClusterModel, anthropicDigestModel, anthropicSourceSuggestionModel, openAIEmbeddingModel *string,
+	anthropicFactsModel, anthropicSummaryModel, anthropicDigestClusterModel, anthropicDigestModel, anthropicAskModel, anthropicSourceSuggestionModel, openAIEmbeddingModel *string,
 ) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (
@@ -199,14 +201,16 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 				anthropic_summary_model,
 				anthropic_digest_cluster_model,
 				anthropic_digest_model,
+				anthropic_ask_model,
 				anthropic_source_suggestion_model,
 				openai_embedding_model
-			) VALUES ($1,$2,$3,$4,$5,$6,$7)
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 			ON CONFLICT (user_id) DO UPDATE
 			SET anthropic_facts_model = EXCLUDED.anthropic_facts_model,
 			    anthropic_summary_model = EXCLUDED.anthropic_summary_model,
 			    anthropic_digest_cluster_model = EXCLUDED.anthropic_digest_cluster_model,
 			    anthropic_digest_model = EXCLUDED.anthropic_digest_model,
+			    anthropic_ask_model = EXCLUDED.anthropic_ask_model,
 			    anthropic_source_suggestion_model = EXCLUDED.anthropic_source_suggestion_model,
 			    openai_embedding_model = EXCLUDED.openai_embedding_model,
 			    updated_at = NOW()`,
@@ -215,6 +219,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 		anthropicSummaryModel,
 		anthropicDigestClusterModel,
 		anthropicDigestModel,
+		anthropicAskModel,
 		anthropicSourceSuggestionModel,
 		openAIEmbeddingModel,
 	)

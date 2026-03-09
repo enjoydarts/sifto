@@ -46,6 +46,7 @@ export default function SettingsPage() {
   const [anthropicSummaryModel, setAnthropicSummaryModel] = useState("");
   const [anthropicDigestClusterModel, setAnthropicDigestClusterModel] = useState("");
   const [anthropicDigestModel, setAnthropicDigestModel] = useState("");
+  const [anthropicAskModel, setAnthropicAskModel] = useState("");
   const [anthropicSourceSuggestionModel, setAnthropicSourceSuggestionModel] = useState("");
   const [openAIEmbeddingModel, setOpenAIEmbeddingModel] = useState("");
 
@@ -86,6 +87,7 @@ export default function SettingsPage() {
       setAnthropicSummaryModel(data.llm_models?.anthropic_summary ?? "");
       setAnthropicDigestClusterModel(data.llm_models?.anthropic_digest_cluster ?? "");
       setAnthropicDigestModel(data.llm_models?.anthropic_digest ?? "");
+      setAnthropicAskModel(data.llm_models?.anthropic_ask ?? "");
       setAnthropicSourceSuggestionModel(data.llm_models?.anthropic_source_suggestion ?? "");
       setOpenAIEmbeddingModel(data.llm_models?.openai_embedding ?? "");
       setError(null);
@@ -153,6 +155,7 @@ export default function SettingsPage() {
         anthropic_summary: emptyToNull(anthropicSummaryModel),
         anthropic_digest_cluster: emptyToNull(anthropicDigestClusterModel),
         anthropic_digest: emptyToNull(anthropicDigestModel),
+        anthropic_ask: emptyToNull(anthropicAskModel),
         anthropic_source_suggestion: emptyToNull(anthropicSourceSuggestionModel),
         openai_embedding: emptyToNull(openAIEmbeddingModel),
       });
@@ -639,6 +642,12 @@ export default function SettingsPage() {
               label={t("settings.model.digest")}
               value={anthropicDigestModel}
               onChange={setAnthropicDigestModel}
+              options={llmModelOptions}
+            />
+            <ModelSelect
+              label={t("settings.model.ask")}
+              value={anthropicAskModel}
+              onChange={setAnthropicAskModel}
               options={llmModelOptions}
             />
             <ModelSelect

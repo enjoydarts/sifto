@@ -415,6 +415,29 @@ export interface BriefingTodayResponse {
   };
 }
 
+export interface AskCitation {
+  item_id: string;
+  title: string;
+  url: string;
+  reason?: string;
+  published_at?: string | null;
+  topics?: string[];
+}
+
+export interface AskCandidate extends Item {
+  summary: string;
+  facts?: string[];
+  similarity: number;
+}
+
+export interface AskResponse {
+  query: string;
+  answer: string;
+  bullets: string[];
+  citations: AskCitation[];
+  related_items: AskCandidate[];
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...options,
@@ -553,6 +576,17 @@ export const api = {
     const qs = q.toString();
     return apiFetch<BriefingTodayResponse>(`/briefing/today${qs ? `?${qs}` : ""}`);
   },
+  ask: (body: {
+    query: string;
+    days?: number;
+    unread_only?: boolean;
+    limit?: number;
+    source_ids?: string[];
+  }) =>
+    apiFetch<AskResponse>("/ask", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   getItemTopicTrends: (params?: { limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));

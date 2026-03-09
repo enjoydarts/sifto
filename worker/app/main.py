@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
-from app.routers import digest, extract, facts, feed_seed_suggestions, feed_suggestions, summarize, translate_title
+from app.routers import ask, digest, extract, facts, feed_seed_suggestions, feed_suggestions, summarize, translate_title
 
 _SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
 if _SENTRY_DSN:
@@ -34,6 +34,7 @@ app.include_router(extract.router)
 app.include_router(facts.router)
 app.include_router(summarize.router)
 app.include_router(translate_title.router)
+app.include_router(ask.router)
 app.include_router(digest.router)
 app.include_router(feed_suggestions.router)
 app.include_router(feed_seed_suggestions.router)

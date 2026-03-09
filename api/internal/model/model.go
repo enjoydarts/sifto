@@ -161,6 +161,30 @@ type RelatedItem struct {
 	CreatedAt    time.Time  `json:"created_at"`
 }
 
+type AskCandidate struct {
+	Item
+	Summary    string   `json:"summary"`
+	Facts      []string `json:"facts,omitempty"`
+	Similarity float64  `json:"similarity"`
+}
+
+type AskCitation struct {
+	ItemID      string   `json:"item_id"`
+	Title       string   `json:"title"`
+	URL         string   `json:"url"`
+	Reason      string   `json:"reason,omitempty"`
+	PublishedAt *string  `json:"published_at,omitempty"`
+	Topics      []string `json:"topics,omitempty"`
+}
+
+type AskResponse struct {
+	Query        string         `json:"query"`
+	Answer       string         `json:"answer"`
+	Bullets      []string       `json:"bullets,omitempty"`
+	Citations    []AskCitation  `json:"citations"`
+	RelatedItems []AskCandidate `json:"related_items"`
+}
+
 type ItemListResponse struct {
 	Items    []Item  `json:"items"`
 	Page     int     `json:"page"`

@@ -12,6 +12,7 @@ import {
   Rss,
   Mail,
   Brain,
+  Search,
   Settings as SettingsIcon,
   Bug,
   type LucideIcon,
@@ -28,6 +29,7 @@ const primaryLinks = [
 const secondaryLinks = [
   { href: "/sources", labelKey: "nav.sources", icon: Rss },
   { href: "/digests", labelKey: "nav.digests", icon: Mail },
+  { href: "/ask", labelKey: "nav.ask", icon: Search },
   { href: "/llm-usage", labelKey: "nav.llmUsage", icon: Brain },
   { href: "/settings", labelKey: "nav.settings", icon: SettingsIcon },
   { href: "/debug/digests", labelKey: "nav.debug", icon: Bug },

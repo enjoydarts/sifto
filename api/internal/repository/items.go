@@ -1031,6 +1031,121 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 	return out, rows.Err()
 }
 
+func (r *ItemRepo) AskCandidatesByEmbedding(
+	ctx context.Context,
+	userID string,
+	queryEmbedding []float64,
+	days int,
+	unreadOnly bool,
+	sourceIDs []string,
+	limit int,
+) ([]model.AskCandidate, error) {
+	if len(queryEmbedding) == 0 {
+		return nil, nil
+	}
+	if days <= 0 {
+		days = 30
+	}
+	if days > 365 {
+		days = 365
+	}
+	if limit <= 0 {
+		limit = 8
+	}
+	if limit > 20 {
+		limit = 20
+	}
+	fetchLimit := limit * 4
+	if fetchLimit < 24 {
+		fetchLimit = 24
+	}
+	if fetchLimit > 80 {
+		fetchLimit = 80
+	}
+
+	query := `
+		WITH q AS (
+			SELECT $2::double precision[] AS emb, array_length($2::double precision[], 1) AS dims
+		), scored AS (
+			SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.status,
+			       (ir.item_id IS NOT NULL) AS is_read,
+			       COALESCE(fb.is_favorite, false) AS is_favorite,
+			       COALESCE(fb.rating, 0) AS feedback_rating,
+			       sm.score, COALESCE(sm.topics, '{}'::text[]) AS topics, sm.translated_title,
+			       i.published_at, i.fetched_at, i.created_at, i.updated_at,
+			       sm.summary,
+			       COALESCE(f.facts, '[]'::jsonb) AS facts,
+			       COALESCE(
+			         (
+			           SELECT SUM(qv * cv)
+			           FROM unnest(q.emb) WITH ORDINALITY AS qvals(qv, idx)
+			           JOIN unnest(ie.embedding) WITH ORDINALITY AS cvals(cv, idx) USING (idx)
+			         ),
+			         0
+			       )::double precision AS similarity
+			FROM q
+			JOIN item_embeddings ie ON ie.dimensions = q.dims
+			JOIN items i ON i.id = ie.item_id
+			JOIN sources s ON s.id = i.source_id
+			JOIN item_summaries sm ON sm.item_id = i.id
+			LEFT JOIN item_facts f ON f.item_id = i.id
+			LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
+			WHERE s.user_id = $1
+			  AND i.status = 'summarized'
+			  AND COALESCE(i.published_at, i.created_at) >= NOW() - make_interval(days => $3::int)
+	`
+	args := []any{userID, queryEmbedding, days}
+	if unreadOnly {
+		query += ` AND ir.item_id IS NULL`
+	}
+	if len(sourceIDs) > 0 {
+		args = append(args, sourceIDs)
+		query += ` AND i.source_id = ANY($4::uuid[])`
+	}
+	query += `
+		)
+		SELECT id, source_id, url, title, thumbnail_url, status,
+		       is_read, is_favorite, feedback_rating,
+		       score, topics, translated_title,
+		       published_at, fetched_at, created_at, updated_at,
+		       summary, facts, similarity
+		FROM scored
+		WHERE similarity > 0.15
+		ORDER BY similarity DESC, score DESC NULLS LAST, COALESCE(published_at, created_at) DESC
+		LIMIT $`
+	args = append(args, fetchLimit)
+	query += strconv.Itoa(len(args))
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]model.AskCandidate, 0, fetchLimit)
+	for rows.Next() {
+		var v model.AskCandidate
+		if err := rows.Scan(
+			&v.ID, &v.SourceID, &v.URL, &v.Title, &v.ThumbnailURL, &v.Status,
+			&v.IsRead, &v.IsFavorite, &v.FeedbackRating,
+			&v.SummaryScore, &v.SummaryTopics, &v.TranslatedTitle,
+			&v.PublishedAt, &v.FetchedAt, &v.CreatedAt, &v.UpdatedAt,
+			&v.Summary, jsonStringArrayScanner{dst: &v.Facts}, &v.Similarity,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
 func (r *ItemRepo) GetForRetry(ctx context.Context, id, userID string) (*model.Item, error) {
 	var it model.Item
 	err := r.db.QueryRow(ctx, `

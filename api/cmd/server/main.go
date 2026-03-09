@@ -41,6 +41,7 @@ func main() {
 	defer db.Close()
 
 	worker := service.NewWorkerClient()
+	openAI := service.NewOpenAIClient()
 	resend := service.NewResendClient()
 	oneSignal := service.NewOneSignalClient()
 	secretCipher := service.NewSecretCipher()
@@ -72,6 +73,7 @@ func main() {
 	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo)
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
 	briefingH := handler.NewBriefingHandler(itemRepo, briefingSnapshotRepo, streakRepo, cache)
+	askH := handler.NewAskHandler(itemRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, openAI)
 
 	inngestHandler := inngestfn.NewHandler(db, worker, resend, oneSignal)
 
@@ -143,6 +145,8 @@ func main() {
 		r.Route("/topics", func(r chi.Router) {
 			r.Get("/pulse", itemH.TopicPulse)
 		})
+
+		r.Post("/ask", askH.Ask)
 
 		r.Route("/digests", func(r chi.Router) {
 			r.Get("/", digestH.List)

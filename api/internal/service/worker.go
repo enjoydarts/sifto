@@ -128,6 +128,30 @@ type RankFeedSuggestionsResponse struct {
 	LLM   *LLMUsage                 `json:"llm,omitempty"`
 }
 
+type AskCandidate struct {
+	ItemID          string   `json:"item_id"`
+	Title           *string  `json:"title,omitempty"`
+	TranslatedTitle *string  `json:"translated_title,omitempty"`
+	URL             string   `json:"url"`
+	Summary         string   `json:"summary"`
+	Facts           []string `json:"facts,omitempty"`
+	Topics          []string `json:"topics,omitempty"`
+	PublishedAt     *string  `json:"published_at,omitempty"`
+	Similarity      float64  `json:"similarity"`
+}
+
+type AskCitation struct {
+	ItemID string `json:"item_id"`
+	Reason string `json:"reason"`
+}
+
+type AskResponse struct {
+	Answer    string        `json:"answer"`
+	Bullets   []string      `json:"bullets"`
+	Citations []AskCitation `json:"citations"`
+	LLM       *LLMUsage     `json:"llm,omitempty"`
+}
+
 type SuggestFeedSeedSitesItem struct {
 	URL    string `json:"url"`
 	Reason string `json:"reason"`
@@ -260,6 +284,21 @@ func (w *WorkerClient) ComposeDigestClusterDraftWithModel(
 		"topics":        topics,
 		"source_lines":  sourceLines,
 		"model":         model,
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
+}
+
+func (w *WorkerClient) AskWithModel(
+	ctx context.Context,
+	query string,
+	candidates []AskCandidate,
+	anthropicAPIKey *string,
+	googleAPIKey *string,
+	model *string,
+) (*AskResponse, error) {
+	return postWithHeaders[AskResponse](ctx, w, "/ask", map[string]any{
+		"query":      query,
+		"candidates": candidates,
+		"model":      model,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, w.internalSecret))
 }
 

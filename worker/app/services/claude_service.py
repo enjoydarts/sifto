@@ -1018,6 +1018,116 @@ items:
     }
 
 
+def ask_question(query: str, candidates: list[dict], api_key: str | None = None, model: str | None = None) -> dict:
+    if not candidates:
+        return {
+            "answer": "該当する記事は見つかりませんでした。",
+            "bullets": [],
+            "citations": [],
+            "llm": {
+                "provider": "none",
+                "model": "none",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+
+    lines: list[str] = []
+    for idx, item in enumerate(candidates, start=1):
+        title = item.get("translated_title") or item.get("title") or "（タイトルなし）"
+        facts = [str(v).strip() for v in (item.get("facts") or []) if str(v).strip()]
+        lines.append(
+            f"- item_id={item.get('item_id')} | rank={idx} | title={title} | published_at={item.get('published_at') or ''} | "
+            f"topics={', '.join(item.get('topics') or [])} | similarity={item.get('similarity')} | "
+            f"summary={str(item.get('summary') or '')[:500]} | facts={' / '.join(facts[:4])[:400]}"
+        )
+
+    prompt = f"""あなたはRSSキュレーションアシスタントです。
+与えられた候補記事だけを根拠に、日本語で質問へ回答してください。
+
+必須要件:
+- 与えられた候補記事だけを根拠にする
+- 分からないことは「候補記事からは判断できない」と明記する
+- 回答は簡潔だが情報密度は高くする
+- JSONのみを返す
+
+形式:
+{{
+  "answer": "2〜6文の回答",
+  "bullets": ["補足ポイント1", "補足ポイント2"],
+  "citations": [
+    {{"item_id": "uuid", "reason": "この観点の根拠"}}
+  ]
+}}
+
+question: {query}
+candidates:
+{chr(10).join(lines)}
+"""
+    message, used_model = _call_with_model_fallback(
+        prompt,
+        str(model or _digest_model),
+        _digest_model_fallback,
+        max_tokens=2200,
+        api_key=api_key,
+        timeout_sec=_env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 90.0),
+    )
+    if message is None:
+        return {
+            "answer": "候補記事から回答を生成できませんでした。",
+            "bullets": [],
+            "citations": [],
+            "llm": {
+                "provider": "none",
+                "model": used_model or _digest_model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+    text = message.content[0].text.strip()
+    data = _extract_first_json_object(text) or {}
+    answer = str(data.get("answer") or "").strip()
+    if not answer:
+        s = _strip_code_fence(text)
+        m_answer = re.search(r'"answer"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
+        if m_answer:
+            answer = _decode_json_string_fragment(m_answer.group(1)).strip()
+    bullets = [str(v).strip() for v in (data.get("bullets") or []) if str(v).strip()]
+    citations = []
+    for raw in data.get("citations") or []:
+        if not isinstance(raw, dict):
+            continue
+        item_id = str(raw.get("item_id") or "").strip()
+        if not item_id:
+            continue
+        citations.append({
+            "item_id": item_id,
+            "reason": str(raw.get("reason") or "").strip(),
+        })
+    if not citations:
+        s = _strip_code_fence(text)
+        for match in re.finditer(r'"item_id"\s*:\s*"([^"]+)"(?:[^}]*"reason"\s*:\s*"((?:\\.|[^"\\])*)")?', s, re.S):
+            citations.append({
+                "item_id": match.group(1).strip(),
+                "reason": _decode_json_string_fragment(match.group(2)).strip() if match.group(2) else "",
+            })
+    if not answer:
+        snippet = text[:500].replace("\n", "\\n")
+        raise RuntimeError(f"claude ask missing answer; response_snippet={snippet}")
+    return {
+        "answer": answer,
+        "bullets": bullets[:6],
+        "citations": citations[:6],
+        "llm": _llm_meta(message, "digest", used_model or _digest_model),
+    }
+
+
 def compose_digest_cluster_draft(
     cluster_label: str,
     item_count: int,

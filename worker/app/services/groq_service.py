@@ -149,8 +149,9 @@ def _chat_json(
     if system_instruction:
         body["messages"].append({"role": "system", "content": system_instruction})
     body["messages"].append({"role": "user", "content": prompt})
+    use_strict_schema = response_schema is not None and _supports_strict_schema(model)
     if response_schema is not None:
-        if _supports_strict_schema(model):
+        if use_strict_schema:
             body["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
@@ -169,6 +170,14 @@ def _chat_json(
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("GROQ_TIMEOUT_SEC", 90.0)
     with httpx.Client(timeout=req_timeout) as client:
         resp = client.post(url, headers=headers, json=body)
+        if (
+            resp.status_code == 400
+            and use_strict_schema
+            and "json_validate_failed" in (resp.text or "")
+        ):
+            fallback_body = dict(body)
+            fallback_body["response_format"] = {"type": "json_object"}
+            resp = client.post(url, headers=headers, json=fallback_body)
     if resp.status_code >= 400:
         raise RuntimeError(f"groq chat.completions failed status={resp.status_code} body={resp.text[:1000]}")
     data = resp.json() if resp.content else {}

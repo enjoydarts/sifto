@@ -434,9 +434,9 @@ export interface AskCandidate extends Item {
 export interface AskResponse {
   query: string;
   answer: string;
-  bullets: string[];
-  citations: AskCitation[];
-  related_items: AskCandidate[];
+  bullets?: string[];
+  citations?: AskCitation[];
+  related_items?: AskCandidate[];
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -587,7 +587,12 @@ export const api = {
     apiFetch<AskResponse>("/ask", {
       method: "POST",
       body: JSON.stringify(body),
-    }),
+    }).then((resp) => ({
+      ...resp,
+      bullets: Array.isArray(resp?.bullets) ? resp.bullets : [],
+      citations: Array.isArray(resp?.citations) ? resp.citations : [],
+      related_items: Array.isArray(resp?.related_items) ? resp.related_items : [],
+    })),
   getItemTopicTrends: (params?: { limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));

@@ -19,6 +19,8 @@ export default function AskPage() {
 
   const canSubmit = query.trim().length > 1 && !loading;
   const relatedItems = useMemo(() => result?.related_items ?? [], [result]);
+  const bullets = useMemo(() => result?.bullets ?? [], [result]);
+  const citations = useMemo(() => result?.citations ?? [], [result]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -105,9 +107,9 @@ export default function AskPage() {
           <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">{t("ask.answerLabel")}</p>
             <p className="mt-3 whitespace-pre-wrap text-[15px] leading-7 text-zinc-900">{result.answer}</p>
-            {result.bullets.length > 0 ? (
+            {bullets.length > 0 ? (
               <ul className="mt-4 space-y-2">
-                {result.bullets.map((bullet, idx) => (
+                {bullets.map((bullet, idx) => (
                   <li key={`${idx}-${bullet}`} className="rounded-2xl bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
                     {bullet}
                   </li>
@@ -120,7 +122,7 @@ export default function AskPage() {
             <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">{t("ask.citationsLabel")}</p>
               <div className="mt-3 space-y-3">
-                {result.citations.map((citation) => (
+                {citations.map((citation) => (
                   <div key={citation.item_id} className="rounded-2xl border border-zinc-200 p-4">
                     <Link href={`/items/${citation.item_id}`} className="line-clamp-2 text-sm font-semibold text-zinc-900 hover:text-zinc-700">
                       {citation.title}

@@ -177,6 +177,25 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
+	if len(citations) < minAskInt(3, len(candidates)) {
+		for _, item := range candidates {
+			if _, dup := seen[item.ID]; dup {
+				continue
+			}
+			seen[item.ID] = struct{}{}
+			citations = append(citations, model.AskCitation{
+				ItemID:      item.ID,
+				Title:       askCitationTitle(item),
+				URL:         item.URL,
+				Reason:      "関連候補として補完",
+				PublishedAt: askCitationPublishedAt(item),
+				Topics:      item.SummaryTopics,
+			})
+			if len(citations) >= minAskInt(5, len(candidates)) {
+				break
+			}
+		}
+	}
 	writeJSON(w, model.AskResponse{
 		Query:        query,
 		Answer:       strings.TrimSpace(askResp.Answer),

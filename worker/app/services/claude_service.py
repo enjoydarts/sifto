@@ -1063,6 +1063,11 @@ def ask_question(query: str, candidates: list[dict], api_key: str | None = None,
   ]
 }}
 
+追加要件:
+- citations はできるだけ3〜5件入れる
+- 同じ話題に偏らせず、回答の主要な論点を支える記事を優先する
+- bullets は回答を分解した要点を2〜5件にする
+
 question: {query}
 candidates:
 {chr(10).join(lines)}
@@ -1120,6 +1125,19 @@ candidates:
     if not answer:
         snippet = text[:500].replace("\n", "\\n")
         raise RuntimeError(f"claude ask missing answer; response_snippet={snippet}")
+    if len(citations) < min(3, len(candidates)):
+        seen = {str(c.get("item_id") or "").strip() for c in citations}
+        for item in candidates:
+            item_id = str(item.get("item_id") or "").strip()
+            if not item_id or item_id in seen:
+                continue
+            citations.append({
+                "item_id": item_id,
+                "reason": "回答に関連する候補記事",
+            })
+            seen.add(item_id)
+            if len(citations) >= min(5, len(candidates)):
+                break
     return {
         "answer": answer,
         "bullets": bullets[:6],

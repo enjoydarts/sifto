@@ -7,6 +7,12 @@ import { api, AskResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 
 const EMPTY: AskResponse | null = null;
+const PRESET_KEYS = [
+  "ask.preset.topics",
+  "ask.preset.unread",
+  "ask.preset.ai",
+  "ask.preset.followups",
+] as const;
 
 export default function AskPage() {
   const { t } = useI18n();
@@ -21,6 +27,11 @@ export default function AskPage() {
   const relatedItems = useMemo(() => result?.related_items ?? [], [result]);
   const bullets = useMemo(() => result?.bullets ?? [], [result]);
   const citations = useMemo(() => result?.citations ?? [], [result]);
+  const presets = useMemo(() => PRESET_KEYS.map((key) => t(key)), [t]);
+  const scopeLabel = useMemo(
+    () => `${days}d / ${unreadOnly ? t("ask.unreadOnly") : t("ask.allItems")} / top 8`,
+    [days, unreadOnly, t]
+  );
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -56,6 +67,18 @@ export default function AskPage() {
         </div>
 
         <form onSubmit={onSubmit} className="mt-5 space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {presets.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setQuery(preset)}
+                className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-700 transition hover:border-zinc-300 hover:bg-white"
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
           <textarea
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -105,7 +128,10 @@ export default function AskPage() {
       {result ? (
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
           <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">{t("ask.answerLabel")}</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">{t("ask.answerLabel")}</p>
+              <p className="text-xs text-zinc-400">{scopeLabel}</p>
+            </div>
             <p className="mt-3 whitespace-pre-wrap text-[15px] leading-7 text-zinc-900">{result.answer}</p>
             {bullets.length > 0 ? (
               <ul className="mt-4 space-y-2">

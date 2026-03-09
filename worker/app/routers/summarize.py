@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from app.services.claude_service import summarize
 from app.services.gemini_service import summarize as summarize_gemini
@@ -28,31 +28,34 @@ class SummarizeResponse(BaseModel):
 
 @router.post("/summarize", response_model=SummarizeResponse)
 def summarize_endpoint(req: SummarizeRequest, request: Request):
-    if is_gemini_model(req.model):
-        google_api_key = request.headers.get("x-google-api-key") or ""
-        result = summarize_gemini(
-            req.title,
-            req.facts,
-            source_text_chars=req.source_text_chars,
-            model=str(req.model),
-            api_key=google_api_key,
-        )
-    elif is_groq_model(req.model):
-        groq_api_key = request.headers.get("x-groq-api-key") or ""
-        result = summarize_groq(
-            req.title,
-            req.facts,
-            source_text_chars=req.source_text_chars,
-            model=str(req.model),
-            api_key=groq_api_key,
-        )
-    else:
-        api_key = request.headers.get("x-anthropic-api-key") or None
-        result = summarize(
-            req.title,
-            req.facts,
-            source_text_chars=req.source_text_chars,
-            api_key=api_key,
-            model=req.model,
-        )
-    return result
+    try:
+        if is_gemini_model(req.model):
+            google_api_key = request.headers.get("x-google-api-key") or ""
+            result = summarize_gemini(
+                req.title,
+                req.facts,
+                source_text_chars=req.source_text_chars,
+                model=str(req.model),
+                api_key=google_api_key,
+            )
+        elif is_groq_model(req.model):
+            groq_api_key = request.headers.get("x-groq-api-key") or ""
+            result = summarize_groq(
+                req.title,
+                req.facts,
+                source_text_chars=req.source_text_chars,
+                model=str(req.model),
+                api_key=groq_api_key,
+            )
+        else:
+            api_key = request.headers.get("x-anthropic-api-key") or None
+            result = summarize(
+                req.title,
+                req.facts,
+                source_text_chars=req.source_text_chars,
+                api_key=api_key,
+                model=req.model,
+            )
+        return SummarizeResponse(**result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"summarize failed: {e}")

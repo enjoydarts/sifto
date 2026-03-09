@@ -14,6 +14,15 @@ type ModelOption = {
   note?: string;
 };
 
+type ModelComparisonEntry = {
+  model: string;
+  provider: "anthropic" | "google" | "groq" | "openai";
+  pricing: string;
+  recommendation: "recommended" | "strong" | "experimental";
+  bestFor: "facts" | "summary" | "ask" | "digest" | "embedding" | "balanced";
+  status?: "preview";
+};
+
 export default function SettingsPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -42,6 +51,7 @@ export default function SettingsPage() {
   const [openAIApiKeyInput, setOpenAIApiKeyInput] = useState("");
   const [googleApiKeyInput, setGoogleApiKeyInput] = useState("");
   const [groqApiKeyInput, setGroqApiKeyInput] = useState("");
+  const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
   const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
   const [readingPlanDiversifyTopics, setReadingPlanDiversifyTopics] = useState(true);
@@ -78,6 +88,25 @@ export default function SettingsPage() {
   const openAIEmbeddingModelOptions: ModelOption[] = [
     { value: "text-embedding-3-small", label: "text-embedding-3-small", note: "$0.02 / 1M tok" },
     { value: "text-embedding-3-large", label: "text-embedding-3-large", note: "$0.13 / 1M tok" },
+  ];
+  const modelComparisonEntries: ModelComparisonEntry[] = [
+    { model: "claude-haiku-4-5", provider: "anthropic", pricing: "$1 / $5", recommendation: "strong", bestFor: "facts" },
+    { model: "claude-sonnet-4-6", provider: "anthropic", pricing: "$3 / $15", recommendation: "recommended", bestFor: "balanced" },
+    { model: "claude-opus-4-6", provider: "anthropic", pricing: "$5 / $25", recommendation: "strong", bestFor: "digest" },
+    { model: "gemini-3.1-pro-preview", provider: "google", pricing: "$2 / $12", recommendation: "strong", bestFor: "digest", status: "preview" },
+    { model: "gemini-3.1-flash-lite-preview", provider: "google", pricing: "$0.25 / $1.50", recommendation: "recommended", bestFor: "facts", status: "preview" },
+    { model: "gemini-3-flash-preview", provider: "google", pricing: "$0.50 / $3.00", recommendation: "strong", bestFor: "summary", status: "preview" },
+    { model: "gemini-2.5-flash", provider: "google", pricing: "$0.30 / $2.50", recommendation: "recommended", bestFor: "ask" },
+    { model: "gemini-2.5-flash-lite", provider: "google", pricing: "$0.10 / $0.40", recommendation: "strong", bestFor: "facts" },
+    { model: "gemini-2.5-pro", provider: "google", pricing: "$1.25 / $10", recommendation: "strong", bestFor: "digest" },
+    { model: "openai/gpt-oss-20b", provider: "groq", pricing: "$0.075 / $0.30", recommendation: "recommended", bestFor: "ask" },
+    { model: "openai/gpt-oss-120b", provider: "groq", pricing: "$0.15 / $0.60", recommendation: "recommended", bestFor: "summary" },
+    { model: "llama-3.1-8b-instant", provider: "groq", pricing: "$0.05 / $0.08", recommendation: "strong", bestFor: "facts" },
+    { model: "llama-3.3-70b-versatile", provider: "groq", pricing: "$0.59 / $0.79", recommendation: "strong", bestFor: "summary" },
+    { model: "meta-llama/llama-4-scout-17b-16e-instruct", provider: "groq", pricing: "$0.11 / $0.34", recommendation: "experimental", bestFor: "summary", status: "preview" },
+    { model: "qwen/qwen3-32b", provider: "groq", pricing: "$0.29 / $0.59", recommendation: "experimental", bestFor: "summary" },
+    { model: "text-embedding-3-small", provider: "openai", pricing: "$0.02", recommendation: "recommended", bestFor: "embedding" },
+    { model: "text-embedding-3-large", provider: "openai", pricing: "$0.13", recommendation: "strong", bestFor: "embedding" },
   ];
 
   const load = useCallback(async () => {
@@ -724,6 +753,15 @@ export default function SettingsPage() {
             <p className="mt-1 text-xs text-zinc-400">
               {t("settings.pricingDescription")}
             </p>
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={() => setIsModelGuideOpen(true)}
+                className="inline-flex items-center rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
+              >
+                {t("settings.modelGuide.open")}
+              </button>
+            </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <ModelSelect
@@ -976,6 +1014,74 @@ export default function SettingsPage() {
           </div>
         </form>
       </section>
+
+      {isModelGuideOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 py-6">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
+              <div>
+                <h2 className="text-base font-semibold text-zinc-900">
+                  {t("settings.modelGuide.title")}
+                </h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  {t("settings.modelGuide.description")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsModelGuideOpen(false)}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
+              >
+                {t("common.close")}
+              </button>
+            </div>
+            <div className="overflow-auto px-5 py-4">
+              <div className="min-w-[840px]">
+                <div className="grid grid-cols-[minmax(250px,2fr)_120px_150px_120px_minmax(180px,1.4fr)] gap-3 border-b border-zinc-200 pb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <div>{t("settings.modelGuide.columns.model")}</div>
+                  <div>{t("settings.modelGuide.columns.provider")}</div>
+                  <div>{t("settings.modelGuide.columns.price")}</div>
+                  <div>{t("settings.modelGuide.columns.recommendation")}</div>
+                  <div>{t("settings.modelGuide.columns.bestFor")}</div>
+                </div>
+                <div className="divide-y divide-zinc-100">
+                  {modelComparisonEntries.map((entry) => (
+                    <div
+                      key={entry.model}
+                      className="grid grid-cols-[minmax(250px,2fr)_120px_150px_120px_minmax(180px,1.4fr)] gap-3 py-3 text-sm text-zinc-700"
+                    >
+                      <div className="min-w-0">
+                        <div className="break-all font-medium text-zinc-900">{entry.model}</div>
+                        {entry.status && (
+                          <div className="mt-1 text-xs text-zinc-500">
+                            {t(`settings.modelGuide.status.${entry.status}`)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-zinc-600">{t(`settings.modelGuide.provider.${entry.provider}`)}</div>
+                      <div className="text-zinc-600">{entry.pricing}</div>
+                      <div>
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+                            entry.recommendation === "recommended"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : entry.recommendation === "strong"
+                                ? "bg-blue-50 text-blue-700"
+                                : "bg-zinc-100 text-zinc-700"
+                          }`}
+                        >
+                          {t(`settings.modelGuide.recommendation.${entry.recommendation}`)}
+                        </span>
+                      </div>
+                      <div className="text-zinc-600">{t(`settings.modelGuide.bestFor.${entry.bestFor}`)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

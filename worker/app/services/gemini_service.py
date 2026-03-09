@@ -579,6 +579,37 @@ def _decode_json_string_fragment(raw: str) -> str:
         return raw.replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
 
 
+def _extract_json_string_value_loose(text: str, field: str) -> str:
+    s = _strip_code_fence(text)
+    key = f'"{field}"'
+    i = s.find(key)
+    if i < 0:
+        return ""
+    rest = s[i + len(key):]
+    colon = rest.find(":")
+    if colon < 0:
+        return ""
+    raw = rest[colon + 1 :].lstrip()
+    if not raw.startswith('"'):
+        return ""
+    raw = raw[1:]
+    out: list[str] = []
+    escaped = False
+    for ch in raw:
+        if escaped:
+            out.append(ch)
+            escaped = False
+            continue
+        if ch == "\\":
+            out.append(ch)
+            escaped = True
+            continue
+        if ch == '"':
+            break
+        out.append(ch)
+    return _decode_json_string_fragment("".join(out)).strip()
+
+
 def _extract_compose_digest_fields(text: str) -> tuple[str, str]:
     data = _extract_first_json_object(text) or {}
     subject = str(data.get("subject") or "").strip()
@@ -923,19 +954,27 @@ Few-shot（避けたい傾向の既存Feed例）:
 
 
 def extract_facts(title: str | None, content: str, model: str, api_key: str) -> dict:
-    prompt = f"""以下の記事本文から重要な事実を箇条書きで抽出してください。
-事実は客観的かつ具体的に記述してください。
-8〜18個程度にまとめてください。
-記事本文が英語でも、出力は必ず自然な日本語にしてください。
-固有名詞・製品名・会社名・API名は原文を尊重して必要に応じて英字のまま残して構いません。
-JSON配列として返してください。例: ["事実1", "事実2"]
+    system_instruction = """# Role
+あなたは正確かつ客観的なニュース要約の専門家です。
 
+# Task
+提供される記事から重要な事実を8〜18個の箇条書きで抽出してください。
+
+# Rules
+- 出力は必ず ["事実1", "事実2", ...] のJSON形式の配列のみとしてください。
+- 余計な挨拶や解説は一切不要です。
+- 事実は客観的かつ具体的に記述してください。
+- 記事が英語の場合も、出力は自然な日本語にしてください。
+- 固有名詞は原文を尊重し、適宜英字を維持してください。
+"""
+
+    prompt = f"""# Input
 タイトル: {title or "（不明）"}
 
 本文:
 {content}
 """
-    text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=1500)
+    text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=1500, system_instruction=system_instruction)
     facts = _parse_json_string_array(text)
     return {"facts": facts, "llm": _llm_meta(model, "facts", usage)}
 
@@ -952,8 +991,25 @@ def summarize(
     max_chars = _clamp_int(round(target_chars * 1.2), 260, 1400)
     max_tokens = _summary_max_tokens(target_chars)
     facts_text = "\n".join(f"- {f}" for f in facts)
-    system_instruction = """以下の事実リストをもとに、記事の要約を作成してください。
-以下のJSON形式で返してください:
+    system_instruction = """# Role
+あなたは正確かつ客観的なニュース要約の専門家です。
+
+# Task
+与えられた事実リストから記事要約を作成してください。
+
+# Rules
+- 出力は必ず有効なJSONオブジェクト1つのみにしてください。
+- 前置き・後置き・コードフェンス・注釈は不要です。
+- 要約は客観的・中立的な自然な日本語で書いてください。
+- 記事の主題、何が起きたか、重要なポイントを過不足なく含めてください。
+- 箇条書きではなく2〜4段落の文章でまとめてください。
+- タイトルが主に英語の場合のみ translated_title に自然な日本語訳を入れてください。
+- タイトルが日本語の場合は translated_title を空文字にしてください。
+- 事実リストにない推測の断定、誇張表現、主観的評価は禁止です。
+- topics は重複を避け、粒度を揃えてください。
+- score_reason は採点の根拠を1〜2文で簡潔に述べてください。
+
+# Output
 {
   "summary": "要約",
   "topics": ["トピック1", "トピック2"],
@@ -966,34 +1022,9 @@ def summarize(
     "relevance": 0.0〜1.0
   },
   "score_reason": "採点理由（1〜2文）"
-}
-
-要約スタイル:
-- 客観的・中立的に書く（意見や煽りを入れない）
-- 読みやすい自然な日本語にする（硬すぎる定型文を避ける）
-- 記事の主題、何が起きたか、重要なポイントを過不足なく含める
-- 箇条書きではなく、2〜4段落の文章でまとめる
-- score_breakdown は以下の観点で付与する
-  - importance: 一般読者にとっての重要度
-  - novelty: 新規性・変化の大きさ
-  - actionability: 実務で行動に繋がる度合い
-  - reliability: 具体性・確度（数値/固有名詞/条件の明確さ）
-  - relevance: 幅広い読者への関連性（個別ユーザー最適化ではない）
-- タイトルが主に英語の場合のみ translated_title に自然な日本語訳を入れる
-- タイトルが日本語の場合は translated_title は空文字にする
-
-出力ルール:
-- 必ず有効なJSONオブジェクト1つのみを返す
-- 前置き・後置き・コードフェンス・注釈は出力しない
-- summary は情報密度を保ち、主題・事実・影響を含める
-- topics は重複を避け、粒度を揃える
-- score_reason は採点の根拠を簡潔に述べる
-
-禁止事項:
-- 事実リストにない推測の断定
-- 誇張表現、煽り表現、主観的評価
-- JSON以外のテキスト混在"""
-    prompt = f"""summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target_chars}字にしてください。
+}"""
+    prompt = f"""# Input
+summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target_chars}字にしてください。
 
 タイトル: {title or "（不明）"}
 事実:
@@ -1072,24 +1103,28 @@ def compose_digest(digest_date: str, items: list[dict], model: str, api_key: str
             "llm": _llm_meta(model, "digest", {"input_tokens": 0, "output_tokens": 0}),
         }
     input_mode, digest_input = _build_digest_input_sections(items)
-    prompt = f"""あなたはニュースダイジェスト編集者です。
-以下の記事一覧をもとに、メール用のダイジェスト本文を日本語で作成してください。
+    system_instruction = """# Role
+あなたはニュースダイジェスト編集者です。
 
-要件:
-- 当日分の全記事要約を踏まえて全体像をまとめる（記事を取りこぼさない）
-- 読みやすく整理されていれば、本文は長めでもよい（目安 900〜2200字、必要なら超えて可）
-- 本文は次の順序・構成で必ず作る:
+# Task
+与えられた記事一覧をもとに、メール用のダイジェスト本文を日本語で作成してください。
+
+# Rules
+- 当日分の全記事要約を踏まえて全体像をまとめてください。記事を取りこぼさないでください。
+- 本文は900〜2200字程度を目安とし、必要なら超えて構いません。
+- 本文は必ず次の順序で構成してください:
   1) 全体サマリ（1〜3段落）
   2) 注目ポイント（5〜10個。各ポイントは1〜2段落）
   3) その他のポイント（個数指定なし。箇条書き）
   4) 明日以降のフォローポイント（1段落）
   5) 締めの1文
-- body は可読性を最優先し、各セクションの間に必ず空行1行（\\n\\n）を入れる
-- 段落同士も必要に応じて空行（\\n\\n）で分ける
-- 誇張しない。与えられた情報だけで書く
-- JSONで返す
+- body は可読性を最優先し、各セクションの間に必ず空行1行（\\n\\n）を入れてください。
+- 段落同士も必要に応じて空行（\\n\\n）で分けてください。
+- 誇張せず、与えられた情報だけで書いてください。
+- 出力はJSONオブジェクトのみとしてください。
+"""
 
-形式:
+    prompt = f"""# Output
 {{
   "subject": "件名（40字程度）",
   "body": "メール本文（プレーンテキスト。改行を含めてよい）",
@@ -1102,6 +1137,7 @@ def compose_digest(digest_date: str, items: list[dict], model: str, api_key: str
   }}
 }}
 
+# Input
 digest_date: {digest_date}
 items_count: {len(items)}
 input_mode: {input_mode}
@@ -1138,6 +1174,7 @@ items:
             max_output_tokens=max_tokens,
             response_schema=digest_schema,
             timeout_sec=compose_timeout,
+            system_instruction=system_instruction,
         )
         last_text = text
         subject, body = _extract_compose_digest_fields(text)
@@ -1176,33 +1213,36 @@ def ask_question(query: str, candidates: list[dict], model: str, api_key: str) -
             f"summary={str(item.get('summary') or '')[:500]} | facts={' / '.join(facts[:4])[:400]}"
         )
 
-    prompt = f"""あなたはRSSキュレーションアシスタントです。
+    system_instruction = """# Role
+あなたはRSSキュレーションアシスタントです。
+
+# Task
 与えられた候補記事だけを根拠に、日本語で質問へ回答してください。
 
-必須要件:
-- 与えられた候補記事だけを根拠にする
-- 分からないことは「候補記事からは判断できない」と明記する
-- 回答は簡潔だが情報密度は高くする
-- JSONのみを返す
+# Rules
+- 根拠は候補記事だけに限定してください。
+- 候補記事から判断できないことは「候補記事からは判断できない」と明記してください。
+- 出力はJSONオブジェクトのみとし、余計な説明文は書かないでください。
+- answer は2〜3文にしてください。
+- bullets は2〜3件にしてください。
+- citations は2〜3件に絞ってください。
+- citations は同じ話題に偏らせず、回答の主要な論点を支える記事を優先してください。
+- answer の各文末には対応する item_id を [[item_id]] 形式で付けてください。
+- bullets には citation マーカーを付けないでください。
+- answer で使う [[item_id]] は citations に含まれる item_id だけを使ってください。
+- [[item_id]] を付けられない文は書かないでください。
+"""
 
-形式:
+    prompt = f"""# Output
 {{
-  "answer": "2〜3文の回答。根拠を示した文末に [[item_id]] を付ける",
+  "answer": "2〜3文の回答 [[item_id]]",
   "bullets": ["補足ポイント1", "補足ポイント2"],
   "citations": [
     {{"item_id": "uuid", "reason": "この観点の根拠"}}
   ]
 }}
 
-追加要件:
-- citations は2〜3件に絞る
-- 同じ話題に偏らせず、回答の主要な論点を支える記事を優先する
-- bullets は回答を分解した要点を2〜3件にする
-- answer の各文には、対応する根拠記事の item_id を [[item_id]] 形式で末尾に付ける
-- bullets には citation マーカーを付けない
-- citations に含めた item_id だけを使う
-- [[item_id]] が1つも付けられない文は書かない
-
+# Input
 question: {query}
 candidates:
 {chr(10).join(lines)}
@@ -1233,6 +1273,7 @@ candidates:
         max_output_tokens=3200,
         response_schema=ask_schema,
         timeout_sec=_env_timeout_seconds("GEMINI_TIMEOUT_SEC", 90.0),
+        system_instruction=system_instruction,
     )
     data = _extract_first_json_object(text) or {}
     answer = str(data.get("answer") or "").strip()
@@ -1241,6 +1282,8 @@ candidates:
         m_answer = re.search(r'"answer"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
         if m_answer:
             answer = _decode_json_string_fragment(m_answer.group(1)).strip()
+    if not answer:
+        answer = _extract_json_string_value_loose(text, "answer")
     bullets = [str(v).strip() for v in (data.get("bullets") or []) if str(v).strip()]
     citations = []
     for raw in data.get("citations") or []:

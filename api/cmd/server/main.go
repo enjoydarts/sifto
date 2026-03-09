@@ -177,6 +177,8 @@ func main() {
 			r.Delete("/openai-key", settingsH.DeleteOpenAIAPIKey)
 			r.Post("/google-key", settingsH.SetGoogleAPIKey)
 			r.Delete("/google-key", settingsH.DeleteGoogleAPIKey)
+			r.Post("/groq-key", settingsH.SetGroqAPIKey)
+			r.Delete("/groq-key", settingsH.DeleteGroqAPIKey)
 		})
 	})
 

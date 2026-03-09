@@ -3,7 +3,8 @@ from pydantic import BaseModel
 
 from app.services.claude_service import rank_feed_suggestions
 from app.services.gemini_service import rank_feed_suggestions as rank_feed_suggestions_gemini
-from app.services.model_router import is_gemini_model
+from app.services.groq_service import rank_feed_suggestions as rank_feed_suggestions_groq
+from app.services.model_router import is_gemini_model, is_groq_model
 
 router = APIRouter()
 
@@ -71,6 +72,17 @@ def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Requ
             negative_examples=[{"url": e.url, "title": e.title, "reason": e.reason} for e in req.negative_examples],
             model=str(req.model),
             api_key=google_api_key,
+        )
+    elif is_groq_model(req.model):
+        groq_api_key = request.headers.get("x-groq-api-key") or ""
+        result = rank_feed_suggestions_groq(
+            existing_sources=existing_sources,
+            preferred_topics=req.preferred_topics,
+            candidates=candidates,
+            positive_examples=[{"url": e.url, "title": e.title, "reason": e.reason} for e in req.positive_examples],
+            negative_examples=[{"url": e.url, "title": e.title, "reason": e.reason} for e in req.negative_examples],
+            model=str(req.model),
+            api_key=groq_api_key,
         )
     else:
         api_key = request.headers.get("x-anthropic-api-key") or None

@@ -105,10 +105,11 @@ export default function LLMUsagePage() {
     const openai = totals.byProviderCost.get("openai") ?? 0;
     const anthropic = totals.byProviderCost.get("anthropic") ?? 0;
     const google = totals.byProviderCost.get("google") ?? 0;
+    const groq = totals.byProviderCost.get("groq") ?? 0;
     const others = [...totals.byProviderCost.entries()]
-      .filter(([k]) => k !== "openai" && k !== "anthropic" && k !== "google")
+      .filter(([k]) => k !== "openai" && k !== "anthropic" && k !== "google" && k !== "groq")
       .reduce((acc, [, v]) => acc + v, 0);
-    return { openai, anthropic, google, others };
+    return { openai, anthropic, google, groq, others };
   }, [totals]);
 
   const groupedByDate = useMemo(() => {
@@ -123,13 +124,14 @@ export default function LLMUsagePage() {
   }, [summaryRows]);
 
   const dailyChartRows = useMemo(() => {
-    const m = new Map<string, { date: string; total: number; openai: number; anthropic: number; google: number; other: number }>();
+    const m = new Map<string, { date: string; total: number; openai: number; anthropic: number; google: number; groq: number; other: number }>();
     for (const row of summaryRows) {
-      const cur = m.get(row.date_jst) ?? { date: row.date_jst, total: 0, openai: 0, anthropic: 0, google: 0, other: 0 };
+      const cur = m.get(row.date_jst) ?? { date: row.date_jst, total: 0, openai: 0, anthropic: 0, google: 0, groq: 0, other: 0 };
       cur.total += row.estimated_cost_usd;
       if (row.provider === "openai") cur.openai += row.estimated_cost_usd;
       else if (row.provider === "anthropic") cur.anthropic += row.estimated_cost_usd;
       else if (row.provider === "google") cur.google += row.estimated_cost_usd;
+      else if (row.provider === "groq") cur.groq += row.estimated_cost_usd;
       else cur.other += row.estimated_cost_usd;
       m.set(row.date_jst, cur);
     }
@@ -340,6 +342,7 @@ export default function LLMUsagePage() {
         <MetricCard label="OpenAI" value={fmtUSD(providerTotals.openai)} />
         <MetricCard label="Anthropic" value={fmtUSD(providerTotals.anthropic)} />
         <MetricCard label="Google" value={fmtUSD(providerTotals.google)} />
+        <MetricCard label="Groq" value={fmtUSD(providerTotals.groq)} />
         {providerTotals.others > 0 && <MetricCard label="Other" value={fmtUSD(providerTotals.others)} />}
         <MetricCard label={t("llm.totalCalls")} value={fmtNum(totals.calls)} />
         <MetricCard label={t("llm.input")} value={fmtNum(totals.input)} />
@@ -555,6 +558,15 @@ export default function LLMUsagePage() {
                   stroke="#f59e0b"
                   fill="#fbbf24"
                   fillOpacity={0.6}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="groq"
+                  name="Groq"
+                  stackId="cost"
+                  stroke="#8b5cf6"
+                  fill="#a78bfa"
+                  fillOpacity={0.55}
                 />
                 <Area
                   type="monotone"

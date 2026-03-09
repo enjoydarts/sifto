@@ -551,10 +551,12 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	}
 	anthropicAPIKey := h.getUserAnthropicAPIKey(r.Context(), userID)
 	googleAPIKey := h.getUserGoogleAPIKey(r.Context(), userID)
+	groqAPIKey := h.getUserGroqAPIKey(r.Context(), userID)
 	anthropicSourceSuggestionModel := h.getUserAnthropicSourceSuggestionModel(r.Context(), userID)
-	anthropicAPIKey, googleAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
+	anthropicAPIKey, googleAPIKey, groqAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
 		anthropicAPIKey,
 		googleAPIKey,
+		groqAPIKey,
 		anthropicSourceSuggestionModel,
 	)
 	var preferredTopics []string
@@ -597,7 +599,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cands := map[string]*sourceSuggestionAgg{}
-	aiReady := (anthropicAPIKey != nil || googleAPIKey != nil) && h.worker != nil
+	aiReady := (anthropicAPIKey != nil || googleAPIKey != nil || groqAPIKey != nil) && h.worker != nil
 	// AI主導: まずAIシード提案から候補を作る。
 	if aiReady {
 		h.expandSourceSuggestionsWithLLMSeeds(
@@ -611,6 +613,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 			cands,
 			anthropicAPIKey,
 			googleAPIKey,
+			groqAPIKey,
 			anthropicSourceSuggestionModel,
 		)
 	}
@@ -733,6 +736,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 		out,
 		anthropicAPIKey,
 		googleAPIKey,
+		groqAPIKey,
 		anthropicSourceSuggestionModel,
 	)
 	if len(out) > limit {
@@ -817,6 +821,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	suggestions []sourceSuggestionResponse,
 	anthropicAPIKey *string,
 	googleAPIKey *string,
+	groqAPIKey *string,
 	model *string,
 ) map[string]any {
 	if h.worker == nil || len(suggestions) == 0 {
@@ -824,7 +829,8 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	}
 	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
 	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
-	if !hasAnthropic && !hasGoogle {
+	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
+	if !hasAnthropic && !hasGoogle && !hasGroq {
 		return nil
 	}
 	existing := make([]service.RankFeedSuggestionsExistingSource, 0, len(sources))
@@ -857,6 +863,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 		negativeExamples,
 		anthropicAPIKey,
 		googleAPIKey,
+		groqAPIKey,
 		model,
 	)
 	if err != nil {
@@ -1011,53 +1018,88 @@ func (h *SourceHandler) getUserGoogleAPIKey(ctx context.Context, userID string) 
 	return &plain
 }
 
-func isGeminiModelForSuggestions(model *string) bool {
-	if model == nil {
-		return false
+func (h *SourceHandler) getUserGroqAPIKey(ctx context.Context, userID string) *string {
+	if h.settingsRepo == nil || h.cipher == nil {
+		return nil
 	}
-	v := strings.ToLower(strings.TrimSpace(*model))
-	if v == "" {
-		return false
+	enc, err := h.settingsRepo.GetGroqAPIKeyEncrypted(ctx, userID)
+	if err != nil || enc == nil || *enc == "" {
+		return nil
 	}
-	return strings.HasPrefix(v, "gemini-") || strings.Contains(v, "/models/gemini-")
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil
+	}
+	plain = strings.TrimSpace(plain)
+	if plain == "" {
+		return nil
+	}
+	return &plain
 }
 
-func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, model *string) (*string, *string, *string) {
+func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, model *string) (*string, *string, *string, *string) {
 	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
 	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
+	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
 
 	// 明示モデルがある場合は基本的にそのプロバイダを優先。
 	// ただし指定プロバイダのキーが無い場合は、利用可能な側へフォールバックして
 	// 「AI提案がまったく動かない」状態を避ける。
 	if model != nil && strings.TrimSpace(*model) != "" {
-		if isGeminiModelForSuggestions(model) {
+		switch service.LLMProviderForModel(model) {
+		case "google":
 			if hasGoogle {
-				return nil, googleAPIKey, model
+				return nil, googleAPIKey, nil, model
 			}
 			if hasAnthropic {
-				return anthropicAPIKey, nil, nil
+				return anthropicAPIKey, nil, nil, nil
 			}
-			return nil, nil, model
+			if hasGroq {
+				fallback := "openai/gpt-oss-20b"
+				return nil, nil, groqAPIKey, &fallback
+			}
+			return nil, nil, nil, model
+		case "groq":
+			if hasGroq {
+				return nil, nil, groqAPIKey, model
+			}
+			if hasAnthropic {
+				return anthropicAPIKey, nil, nil, nil
+			}
+			if hasGoogle {
+				fallback := "gemini-2.5-flash"
+				return nil, googleAPIKey, nil, &fallback
+			}
+			return nil, nil, nil, model
+		default:
+			if hasAnthropic {
+				return anthropicAPIKey, nil, nil, model
+			}
+			if hasGoogle {
+				fallback := "gemini-2.5-flash"
+				return nil, googleAPIKey, nil, &fallback
+			}
+			if hasGroq {
+				fallback := "openai/gpt-oss-20b"
+				return nil, nil, groqAPIKey, &fallback
+			}
+			return nil, nil, nil, model
 		}
-		if hasAnthropic {
-			return anthropicAPIKey, nil, model
-		}
-		if hasGoogle {
-			fallback := "gemini-2.5-flash"
-			return nil, googleAPIKey, &fallback
-		}
-		return nil, nil, model
 	}
 
 	// モデル未指定時は、利用可能なキーに合わせて自動選択。
 	if hasAnthropic {
-		return anthropicAPIKey, nil, nil
+		return anthropicAPIKey, nil, nil, nil
 	}
 	if hasGoogle {
 		fallback := "gemini-2.5-flash"
-		return nil, googleAPIKey, &fallback
+		return nil, googleAPIKey, nil, &fallback
 	}
-	return nil, nil, nil
+	if hasGroq {
+		fallback := "openai/gpt-oss-20b"
+		return nil, nil, groqAPIKey, &fallback
+	}
+	return nil, nil, nil, nil
 }
 
 func (h *SourceHandler) buildSourceSuggestionFewShotExamples(
@@ -1104,6 +1146,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	cands map[string]*sourceSuggestionAgg,
 	anthropicAPIKey *string,
 	googleAPIKey *string,
+	groqAPIKey *string,
 	model *string,
 ) {
 	existing := make([]service.RankFeedSuggestionsExistingSource, 0, len(sources))
@@ -1118,6 +1161,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 		negativeExamples,
 		anthropicAPIKey,
 		googleAPIKey,
+		groqAPIKey,
 		model,
 	)
 	if err != nil || resp == nil {

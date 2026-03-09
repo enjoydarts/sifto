@@ -456,12 +456,15 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				continue
 			}
 			model := cfg.AnthropicSummaryModel
-			isGemini := isGeminiModel(model)
 			var anthropicKey *string
 			var googleKey *string
-			if isGemini {
+			var groqKey *string
+			switch service.LLMProviderForModel(model) {
+			case "google":
 				googleKey, err = h.loadGoogleAPIKey(r.Context(), t.UserID)
-			} else {
+			case "groq":
+				groqKey, err = h.loadGroqAPIKey(r.Context(), t.UserID)
+			default:
 				anthropicKey, err = h.loadAnthropicAPIKey(r.Context(), t.UserID)
 			}
 			if err != nil {
@@ -475,7 +478,7 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				}
 				continue
 			}
-			resp, err := h.worker.TranslateTitleWithModel(r.Context(), t.Title, anthropicKey, googleKey, model)
+			resp, err := h.worker.TranslateTitleWithModel(r.Context(), t.Title, anthropicKey, googleKey, groqKey, model)
 			if err != nil {
 				failed++
 				if len(errorSamples) < 10 {
@@ -568,15 +571,22 @@ func (h *InternalHandler) loadGoogleAPIKey(ctx context.Context, userID string) (
 	return &plain, nil
 }
 
-func isGeminiModel(model *string) bool {
-	if model == nil {
-		return false
+func (h *InternalHandler) loadGroqAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetGroqAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
 	}
-	v := strings.ToLower(strings.TrimSpace(*model))
-	if v == "" {
-		return false
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("groq api key is not set")
 	}
-	return strings.HasPrefix(v, "gemini-") || strings.Contains(v, "/models/gemini-")
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
 }
 
 func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Request) {

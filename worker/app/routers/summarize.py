@@ -2,7 +2,8 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from app.services.claude_service import summarize
 from app.services.gemini_service import summarize as summarize_gemini
-from app.services.model_router import is_gemini_model
+from app.services.groq_service import summarize as summarize_groq
+from app.services.model_router import is_gemini_model, is_groq_model
 
 router = APIRouter()
 
@@ -35,6 +36,15 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
             source_text_chars=req.source_text_chars,
             model=str(req.model),
             api_key=google_api_key,
+        )
+    elif is_groq_model(req.model):
+        groq_api_key = request.headers.get("x-groq-api-key") or ""
+        result = summarize_groq(
+            req.title,
+            req.facts,
+            source_text_chars=req.source_text_chars,
+            model=str(req.model),
+            api_key=groq_api_key,
         )
     else:
         api_key = request.headers.get("x-anthropic-api-key") or None

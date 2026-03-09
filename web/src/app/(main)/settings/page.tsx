@@ -29,6 +29,8 @@ export default function SettingsPage() {
   const [deletingOpenAIKey, setDeletingOpenAIKey] = useState(false);
   const [savingGoogleKey, setSavingGoogleKey] = useState(false);
   const [deletingGoogleKey, setDeletingGoogleKey] = useState(false);
+  const [savingGroqKey, setSavingGroqKey] = useState(false);
+  const [deletingGroqKey, setDeletingGroqKey] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -39,6 +41,7 @@ export default function SettingsPage() {
   const [anthropicApiKeyInput, setAnthropicApiKeyInput] = useState("");
   const [openAIApiKeyInput, setOpenAIApiKeyInput] = useState("");
   const [googleApiKeyInput, setGoogleApiKeyInput] = useState("");
+  const [groqApiKeyInput, setGroqApiKeyInput] = useState("");
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
   const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
   const [readingPlanDiversifyTopics, setReadingPlanDiversifyTopics] = useState(true);
@@ -60,6 +63,9 @@ export default function SettingsPage() {
     { value: "gemini-2.5-flash", label: "gemini-2.5-flash", note: "Google AI Studio / in $0.30 / out $2.50 / 1M tok" },
     { value: "gemini-2.5-flash-lite", label: "gemini-2.5-flash-lite", note: "Google AI Studio / in $0.10 / out $0.40 / 1M tok" },
     { value: "gemini-2.5-pro", label: "gemini-2.5-pro", note: "Google AI Studio / in $1.25 ($2.50 >200k) / out $10.00 ($15.00 >200k) / 1M tok" },
+    { value: "openai/gpt-oss-20b", label: "openai/gpt-oss-20b", note: "Groq / in $0.075 / out $0.30 / cached in $0.0375 / 1M tok" },
+    { value: "openai/gpt-oss-120b", label: "openai/gpt-oss-120b", note: "Groq / in $0.15 / out $0.60 / cached in $0.075 / 1M tok" },
+    { value: "qwen/qwen3-32b", label: "qwen/qwen3-32b", note: "Groq / in $0.29 / out $0.59 / 1M tok" },
   ];
   const anthropicOnlyModelOptions: ModelOption[] = [
     { value: "claude-haiku-4-5", label: "claude-haiku-4-5", note: "in $1 / out $5 / 1M tok" },
@@ -331,6 +337,45 @@ export default function SettingsPage() {
     }
   }
 
+  async function submitGroqApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingGroqKey(true);
+    try {
+      if (!groqApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setGroqApiKey(groqApiKeyInput.trim());
+      setGroqApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.groqSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingGroqKey(false);
+    }
+  }
+
+  async function handleDeleteGroqApiKey() {
+    if (!(await confirm({
+      title: t("settings.groqDeleteTitle"),
+      message: t("settings.groqDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingGroqKey(true);
+    try {
+      await api.deleteGroqApiKey();
+      await load();
+      showToast(t("settings.toast.groqDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingGroqKey(false);
+    }
+  }
+
   async function handleDeleteInoreaderOAuth() {
     if (!(await confirm({
       title: t("settings.inoreaderDeleteTitle"),
@@ -566,6 +611,63 @@ export default function SettingsPage() {
               {deletingGoogleKey
                 ? t("settings.deleting")
                 : t("settings.deleteKey")}
+            </button>
+          </div>
+        </form>
+
+        <form onSubmit={submitGroqApiKey} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+              <KeyRound className="size-4 text-zinc-500" aria-hidden="true" />
+              {t("settings.groqTitle")}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              {t("settings.groqDescription")}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+            {settings.has_groq_api_key ? (
+              <>
+                {t("settings.configured")}{" "}
+                <span className="font-mono text-xs text-zinc-500">
+                  ••••{settings.groq_api_key_last4 ?? "****"}
+                </span>
+              </>
+            ) : (
+              <span className="text-zinc-500">
+                {t("settings.groqNotSet")}
+              </span>
+            )}
+          </div>
+
+          <label className="mt-4 block text-sm font-medium text-zinc-700">
+            {t("settings.newApiKey")}
+          </label>
+          <input
+            type="password"
+            autoComplete="off"
+            value={groqApiKeyInput}
+            onChange={(e) => setGroqApiKeyInput(e.target.value)}
+            placeholder="gsk_..."
+            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-400"
+          />
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={savingGroqKey}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {savingGroqKey ? t("common.saving") : t("settings.saveOrUpdate")}
+            </button>
+            <button
+              type="button"
+              disabled={deletingGroqKey || !settings.has_groq_api_key}
+              onClick={handleDeleteGroqApiKey}
+              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
+            >
+              {deletingGroqKey ? t("settings.deleting") : t("settings.deleteKey")}
             </button>
           </div>
         </form>

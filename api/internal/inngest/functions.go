@@ -145,6 +145,27 @@ func loadUserGoogleAPIKey(ctx context.Context, settingsRepo *repository.UserSett
 	return &plain, nil
 }
 
+func loadUserGroqAPIKey(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string) (*string, error) {
+	if settingsRepo == nil || userID == nil || *userID == "" {
+		return nil, fmt.Errorf("user groq api key is required")
+	}
+	enc, err := settingsRepo.GetGroqAPIKeyEncrypted(ctx, *userID)
+	if err != nil || enc == nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("user groq api key is required")
+	}
+	if cipher == nil || !cipher.Enabled() {
+		return nil, fmt.Errorf("user secret encryption is not configured")
+	}
+	plain, err := cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt user groq key: %w", err)
+	}
+	return &plain, nil
+}
+
 func ptrStringOrNil(v *string) *string {
 	if v == nil || *v == "" {
 		return nil
@@ -153,15 +174,36 @@ func ptrStringOrNil(v *string) *string {
 	return &s
 }
 
-func isGeminiModel(model *string) bool {
-	if model == nil {
-		return false
+func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string, model *string, purpose string) (*string, *string, *string, *string, error) {
+	provider := service.LLMProviderForModel(model)
+	resolvedModel := model
+	if resolvedModel == nil || strings.TrimSpace(*resolvedModel) == "" {
+		switch {
+		case userID != nil && *userID != "" && settingsRepo != nil:
+			if key, err := loadUserAnthropicAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+				return key, nil, nil, nil, nil
+			}
+			if key, err := loadUserGoogleAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+				fallback := service.DefaultLLMModelForPurpose("google", purpose)
+				return nil, key, nil, &fallback, nil
+			}
+			if key, err := loadUserGroqAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+				fallback := service.DefaultLLMModelForPurpose("groq", purpose)
+				return nil, nil, key, &fallback, nil
+			}
+		}
 	}
-	v := strings.ToLower(strings.TrimSpace(*model))
-	if v == "" {
-		return false
+	switch provider {
+	case "google":
+		key, err := loadUserGoogleAPIKey(ctx, settingsRepo, cipher, userID)
+		return nil, key, nil, model, err
+	case "groq":
+		key, err := loadUserGroqAPIKey(ctx, settingsRepo, cipher, userID)
+		return nil, nil, key, model, err
+	default:
+		key, err := loadUserAnthropicAPIKey(ctx, settingsRepo, cipher, userID)
+		return key, nil, nil, model, err
 	}
-	return strings.HasPrefix(v, "gemini-") || strings.Contains(v, "/models/gemini-")
 }
 
 func digestTopicKey(topics []string) string {
@@ -741,22 +783,11 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				if userModelSettings != nil {
 					modelOverride = ptrStringOrNil(userModelSettings.AnthropicFactsModel)
 				}
-				var userAnthropicKey *string
-				var userGoogleKey *string
-				if !isGeminiModel(modelOverride) {
-					key, err := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr)
-					if err != nil {
-						return nil, err
-					}
-					userAnthropicKey = key
-				} else {
-					key, err := loadUserGoogleAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr)
-					if err != nil {
-						return nil, err
-					}
-					userGoogleKey = key
+				userAnthropicKey, userGoogleKey, userGroqKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "facts")
+				if err != nil {
+					return nil, err
 				}
-				return worker.ExtractFactsWithModel(ctx, titleForLLM, extracted.Content, userAnthropicKey, userGoogleKey, modelOverride)
+				return worker.ExtractFactsWithModel(ctx, titleForLLM, extracted.Content, userAnthropicKey, userGoogleKey, userGroqKey, resolvedModel)
 			})
 			if err != nil {
 				log.Printf("process-item extract-facts failed item_id=%s err=%v", itemID, err)
@@ -779,23 +810,12 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				if userModelSettings != nil {
 					modelOverride = ptrStringOrNil(userModelSettings.AnthropicSummaryModel)
 				}
-				var userAnthropicKey *string
-				var userGoogleKey *string
-				if !isGeminiModel(modelOverride) {
-					key, err := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr)
-					if err != nil {
-						return nil, err
-					}
-					userAnthropicKey = key
-				} else {
-					key, err := loadUserGoogleAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr)
-					if err != nil {
-						return nil, err
-					}
-					userGoogleKey = key
+				userAnthropicKey, userGoogleKey, userGroqKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "summary")
+				if err != nil {
+					return nil, err
 				}
 				sourceChars := len(extracted.Content)
-				return worker.SummarizeWithModel(ctx, titleForLLM, factsResp.Facts, &sourceChars, userAnthropicKey, userGoogleKey, modelOverride)
+				return worker.SummarizeWithModel(ctx, titleForLLM, factsResp.Facts, &sourceChars, userAnthropicKey, userGoogleKey, userGroqKey, resolvedModel)
 			})
 			if err != nil {
 				log.Printf("process-item summarize failed item_id=%s err=%v", itemID, err)
@@ -1122,20 +1142,9 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					if userModelSettings != nil {
 						clusterDraftModel = ptrStringOrNil(userModelSettings.AnthropicDigestClusterModel)
 					}
-					var clusterDraftAnthropicKey *string
-					var clusterDraftGoogleKey *string
-					if !isGeminiModel(clusterDraftModel) {
-						key, keyErr := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, &data.UserID)
-						if keyErr != nil {
-							return "", keyErr
-						}
-						clusterDraftAnthropicKey = key
-					} else {
-						key, keyErr := loadUserGoogleAPIKey(ctx, userSettingsRepo, secretCipher, &data.UserID)
-						if keyErr != nil {
-							return "", keyErr
-						}
-						clusterDraftGoogleKey = key
+					clusterDraftAnthropicKey, clusterDraftGoogleKey, clusterDraftGroqKey, resolvedClusterDraftModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, &data.UserID, clusterDraftModel, "digest_cluster_draft")
+					if keyErr != nil {
+						return "", keyErr
 					}
 					for i := range drafts {
 						sourceLines := draftSourceLines(drafts[i].DraftSummary)
@@ -1150,7 +1159,8 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 							sourceLines,
 							clusterDraftAnthropicKey,
 							clusterDraftGoogleKey,
-							clusterDraftModel,
+							clusterDraftGroqKey,
+							resolvedClusterDraftModel,
 						)
 						if err != nil {
 							return "", fmt.Errorf("compose digest cluster draft rank=%d: %w", drafts[i].Rank, err)
@@ -1178,22 +1188,11 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					if userModelSettings != nil {
 						modelOverride = ptrStringOrNil(userModelSettings.AnthropicDigestModel)
 					}
-					var digestAnthropicKey *string
-					var digestGoogleKey *string
-					if !isGeminiModel(modelOverride) {
-						key, keyErr := loadUserAnthropicAPIKey(ctx, userSettingsRepo, secretCipher, &data.UserID)
-						if keyErr != nil {
-							return "", keyErr
-						}
-						digestAnthropicKey = key
-					} else {
-						key, keyErr := loadUserGoogleAPIKey(ctx, userSettingsRepo, secretCipher, &data.UserID)
-						if keyErr != nil {
-							return "", keyErr
-						}
-						digestGoogleKey = key
+					digestAnthropicKey, digestGoogleKey, digestGroqKey, resolvedDigestModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, &data.UserID, modelOverride, "digest")
+					if keyErr != nil {
+						return "", keyErr
 					}
-					resp, err := worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, digestAnthropicKey, digestGoogleKey, modelOverride)
+					resp, err := worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, digestAnthropicKey, digestGoogleKey, digestGroqKey, resolvedDigestModel)
 					if err != nil {
 						return "", err
 					}

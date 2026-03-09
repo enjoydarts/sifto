@@ -87,9 +87,9 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	if settings.OpenAIEmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*settings.OpenAIEmbeddingModel) {
 		embeddingModel = *settings.OpenAIEmbeddingModel
 	}
-	modelName := chooseAskModel(settings, settings.HasAnthropicAPIKey, settings.HasGoogleAPIKey)
+	modelName := chooseAskModel(settings, settings.HasAnthropicAPIKey, settings.HasGoogleAPIKey, settings.HasGroqAPIKey)
 	if modelName == nil {
-		http.Error(w, "anthropic or google api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or groq api key is required", http.StatusBadRequest)
 		return
 	}
 	cacheKey := cacheKeyAsk(userID, query, *modelName, embeddingModel, body.Days, body.UnreadOnly, body.Limit, body.SourceIDs)
@@ -140,9 +140,10 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 
 	anthropicKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAnthropicAPIKeyEncrypted, h.cipher, userID, "")
 	googleKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGoogleAPIKeyEncrypted, h.cipher, userID, "")
-	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil)
+	groqKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGroqAPIKeyEncrypted, h.cipher, userID, "")
+	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, groqKey != nil)
 	if modelName == nil {
-		http.Error(w, "anthropic or google api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or groq api key is required", http.StatusBadRequest)
 		return
 	}
 
@@ -165,7 +166,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 			Similarity:      c.Similarity,
 		})
 	}
-	askResp, err := h.worker.AskWithModel(r.Context(), query, workerCandidates, anthropicKey, googleKey, modelName)
+	askResp, err := h.worker.AskWithModel(r.Context(), query, workerCandidates, anthropicKey, googleKey, groqKey, modelName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("ask worker: %v", err), http.StatusBadGateway)
 		return
@@ -273,35 +274,56 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 	return &v
 }
 
-func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle bool) *string {
+func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGroq bool) *string {
 	if settings != nil && settings.AnthropicAskModel != nil && strings.TrimSpace(*settings.AnthropicAskModel) != "" {
 		v := strings.TrimSpace(*settings.AnthropicAskModel)
-		if strings.HasPrefix(strings.ToLower(v), "gemini-") {
+		switch service.LLMProviderForModel(&v) {
+		case "google":
 			if hasGoogle {
 				return &v
 			}
-		} else if hasAnthropic {
-			return &v
+		case "groq":
+			if hasGroq {
+				return &v
+			}
+		default:
+			if hasAnthropic {
+				return &v
+			}
 		}
 	}
 	if settings != nil && settings.AnthropicDigestModel != nil && strings.TrimSpace(*settings.AnthropicDigestModel) != "" {
 		v := strings.TrimSpace(*settings.AnthropicDigestModel)
-		if strings.HasPrefix(strings.ToLower(v), "gemini-") {
+		switch service.LLMProviderForModel(&v) {
+		case "google":
 			if hasGoogle {
 				return &v
 			}
-		} else if hasAnthropic {
-			return &v
+		case "groq":
+			if hasGroq {
+				return &v
+			}
+		default:
+			if hasAnthropic {
+				return &v
+			}
 		}
 	}
 	if settings != nil && settings.AnthropicSummaryModel != nil && strings.TrimSpace(*settings.AnthropicSummaryModel) != "" {
 		v := strings.TrimSpace(*settings.AnthropicSummaryModel)
-		if strings.HasPrefix(strings.ToLower(v), "gemini-") {
+		switch service.LLMProviderForModel(&v) {
+		case "google":
 			if hasGoogle {
 				return &v
 			}
-		} else if hasAnthropic {
-			return &v
+		case "groq":
+			if hasGroq {
+				return &v
+			}
+		default:
+			if hasAnthropic {
+				return &v
+			}
 		}
 	}
 	if hasAnthropic {
@@ -310,6 +332,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle bool) 
 	}
 	if hasGoogle {
 		v := "gemini-2.5-flash"
+		return &v
+	}
+	if hasGroq {
+		v := "openai/gpt-oss-20b"
 		return &v
 	}
 	return nil

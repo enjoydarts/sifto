@@ -21,6 +21,9 @@ _REDIS_CLIENT = None
 
 _DEFAULT_MODEL_PRICING = {
     "gemini-3-flash-preview": {"input_per_mtok_usd": 0.5, "output_per_mtok_usd": 3.0, "cache_read_per_mtok_usd": 0.05},
+    "gemini-3.1-flash-lite-preview": {"input_per_mtok_usd": 0.25, "output_per_mtok_usd": 1.5, "cache_read_per_mtok_usd": 0.025},
+    # Alias kept for forward compatibility if/when preview suffix is removed.
+    "gemini-3.1-flash-lite": {"input_per_mtok_usd": 0.25, "output_per_mtok_usd": 1.5, "cache_read_per_mtok_usd": 0.025},
     # <=200k prompt tokens. >200k tier is handled in _estimate_cost_usd.
     "gemini-3.1-pro-preview": {"input_per_mtok_usd": 2.0, "output_per_mtok_usd": 12.0, "cache_read_per_mtok_usd": 0.20},
     # Deprecated model kept for backward-compat pricing on existing user settings.

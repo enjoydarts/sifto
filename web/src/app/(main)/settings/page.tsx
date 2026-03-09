@@ -55,6 +55,7 @@ export default function SettingsPage() {
     { value: "claude-sonnet-4-6", label: "claude-sonnet-4-6", note: "in $3 / out $15 / 1M tok" },
     { value: "claude-opus-4-6", label: "claude-opus-4-6", note: "in $5 / out $25 / 1M tok" },
     { value: "gemini-3.1-pro-preview", label: "gemini-3.1-pro-preview", note: "Google AI Studio / in $2.00 ($4.00 >200k) / out $12.00 ($18.00 >200k) / 1M tok" },
+    { value: "gemini-3.1-flash-lite-preview", label: "gemini-3.1-flash-lite-preview", note: "Google AI Studio / in $0.25 / out $1.50 / 1M tok" },
     { value: "gemini-3-flash-preview", label: "gemini-3-flash-preview", note: "Google AI Studio / in $0.50 / out $3.00 / 1M tok" },
     { value: "gemini-2.5-flash", label: "gemini-2.5-flash", note: "Google AI Studio / in $0.30 / out $2.50 / 1M tok" },
     { value: "gemini-2.5-flash-lite", label: "gemini-2.5-flash-lite", note: "Google AI Studio / in $0.10 / out $0.40 / 1M tok" },

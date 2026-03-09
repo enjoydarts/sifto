@@ -1056,18 +1056,19 @@ def ask_question(query: str, candidates: list[dict], api_key: str | None = None,
 
 形式:
 {{
-  "answer": "2〜6文の回答。根拠を示した文末に [[item_id]] を付ける",
-  "bullets": ["補足ポイント1 [[item_id]]", "補足ポイント2 [[item_id]][[item_id]]"],
+  "answer": "2〜3文の回答。根拠を示した文末に [[item_id]] を付ける",
+  "bullets": ["補足ポイント1", "補足ポイント2"],
   "citations": [
     {{"item_id": "uuid", "reason": "この観点の根拠"}}
   ]
 }}
 
 追加要件:
-- citations はできるだけ3〜5件入れる
+- citations は2〜3件に絞る
 - 同じ話題に偏らせず、回答の主要な論点を支える記事を優先する
-- bullets は回答を分解した要点を2〜5件にする
-- answer と bullets の各主張には、対応する根拠記事の item_id を [[item_id]] 形式で末尾に付ける
+- bullets は回答を分解した要点を2〜3件にする
+- answer の各文には、対応する根拠記事の item_id を [[item_id]] 形式で末尾に付ける
+- bullets には citation マーカーを付けない
 - citations に含めた item_id だけを使う
 - [[item_id]] が1つも付けられない文は書かない
 
@@ -1079,7 +1080,7 @@ candidates:
         prompt,
         str(model or _digest_model),
         _digest_model_fallback,
-        max_tokens=2200,
+        max_tokens=3200,
         api_key=api_key,
         timeout_sec=_env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 90.0),
     )
@@ -1143,8 +1144,8 @@ candidates:
                 break
     return {
         "answer": answer,
-        "bullets": bullets[:6],
-        "citations": citations[:6],
+        "bullets": bullets[:3],
+        "citations": citations[:3],
         "llm": _llm_meta(message, "digest", used_model or _digest_model),
     }
 

@@ -216,9 +216,10 @@ func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID stri
 			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 		WHERE src.user_id = $1
 		  AND i.status = 'summarized'
-		  AND s.summarized_at >= $2
-		  AND s.summarized_at < $3
-		ORDER BY s.score DESC NULLS LAST`,
+		  AND i.published_at IS NOT NULL
+		  AND i.published_at >= $2
+		  AND i.published_at < $3
+		ORDER BY s.score DESC NULLS LAST, i.published_at DESC NULLS LAST`,
 		userID, since, until)
 	if err != nil {
 		return nil, err

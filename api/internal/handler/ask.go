@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/minoru-kitayama/sifto/api/internal/middleware"
 	"github.com/minoru-kitayama/sifto/api/internal/model"
@@ -23,6 +24,7 @@ type AskHandler struct {
 	cipher       *service.SecretCipher
 	worker       *service.WorkerClient
 	openAI       *service.OpenAIClient
+	cache        service.JSONCache
 }
 
 func NewAskHandler(
@@ -32,6 +34,7 @@ func NewAskHandler(
 	cipher *service.SecretCipher,
 	worker *service.WorkerClient,
 	openAI *service.OpenAIClient,
+	cache service.JSONCache,
 ) *AskHandler {
 	return &AskHandler{
 		itemRepo:     itemRepo,
@@ -40,8 +43,11 @@ func NewAskHandler(
 		cipher:       cipher,
 		worker:       worker,
 		openAI:       openAI,
+		cache:        cache,
 	}
 }
+
+const askCacheTTL = 2 * time.Minute
 
 func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
@@ -76,14 +82,38 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	embeddingModel := service.OpenAIEmbeddingModel()
+	if settings.OpenAIEmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*settings.OpenAIEmbeddingModel) {
+		embeddingModel = *settings.OpenAIEmbeddingModel
+	}
+	modelName := chooseAskModel(settings, settings.HasAnthropicAPIKey, settings.HasGoogleAPIKey)
+	if modelName == nil {
+		http.Error(w, "anthropic or google api key is required", http.StatusBadRequest)
+		return
+	}
+	cacheKey := cacheKeyAsk(userID, query, *modelName, embeddingModel, body.Days, body.UnreadOnly, body.Limit, body.SourceIDs)
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
+	if h.cache != nil && !cacheBust {
+		var cached model.AskResponse
+		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
+			askCacheCounter.hits.Add(1)
+			incrCacheMetric(r.Context(), h.cache, userID, "ask.hit")
+			writeJSON(w, cached)
+			return
+		} else if err != nil {
+			askCacheCounter.errors.Add(1)
+			incrCacheMetric(r.Context(), h.cache, userID, "ask.error")
+		}
+		askCacheCounter.misses.Add(1)
+		incrCacheMetric(r.Context(), h.cache, userID, "ask.miss")
+	} else if cacheBust && h.cache != nil {
+		askCacheCounter.bypass.Add(1)
+		incrCacheMetric(r.Context(), h.cache, userID, "ask.bypass")
+	}
 	openAIKey, err := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "user openai api key is required")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
-	}
-	embeddingModel := service.OpenAIEmbeddingModel()
-	if settings.OpenAIEmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*settings.OpenAIEmbeddingModel) {
-		embeddingModel = *settings.OpenAIEmbeddingModel
 	}
 	embResp, err := h.openAI.CreateEmbedding(r.Context(), *openAIKey, embeddingModel, query)
 	if err != nil {
@@ -109,7 +139,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 
 	anthropicKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAnthropicAPIKeyEncrypted, h.cipher, userID, "")
 	googleKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGoogleAPIKeyEncrypted, h.cipher, userID, "")
-	modelName := chooseAskModel(settings, anthropicKey != nil, googleKey != nil)
+	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil)
 	if modelName == nil {
 		http.Error(w, "anthropic or google api key is required", http.StatusBadRequest)
 		return
@@ -196,13 +226,20 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	writeJSON(w, model.AskResponse{
+	resp := model.AskResponse{
 		Query:        query,
 		Answer:       strings.TrimSpace(askResp.Answer),
 		Bullets:      askResp.Bullets,
 		Citations:    citations,
 		RelatedItems: candidates,
-	})
+	}
+	if h.cache != nil {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, askCacheTTL); err != nil {
+			askCacheCounter.errors.Add(1)
+			incrCacheMetric(r.Context(), h.cache, userID, "ask.error")
+		}
+	}
+	writeJSON(w, resp)
 }
 
 func askCitationTitle(item model.AskCandidate) string {

@@ -73,7 +73,7 @@ func main() {
 	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo)
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
 	briefingH := handler.NewBriefingHandler(itemRepo, briefingSnapshotRepo, streakRepo, cache)
-	askH := handler.NewAskHandler(itemRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, openAI)
+	askH := handler.NewAskHandler(itemRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, openAI, cache)
 
 	inngestHandler := inngestfn.NewHandler(db, worker, resend, oneSignal)
 

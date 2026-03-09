@@ -20,6 +20,7 @@ var (
 	dashboardCacheCounter   cacheCounter
 	readingPlanCacheCounter cacheCounter
 	itemsListCacheCounter   cacheCounter
+	askCacheCounter         cacheCounter
 )
 
 func cacheStatsSnapshotAll() map[string]cacheStatsSnapshot {
@@ -41,6 +42,12 @@ func cacheStatsSnapshotAll() map[string]cacheStatsSnapshot {
 			Misses: itemsListCacheCounter.misses.Load(),
 			Bypass: itemsListCacheCounter.bypass.Load(),
 			Errors: itemsListCacheCounter.errors.Load(),
+		},
+		"ask": {
+			Hits:   askCacheCounter.hits.Load(),
+			Misses: askCacheCounter.misses.Load(),
+			Bypass: askCacheCounter.bypass.Load(),
+			Errors: askCacheCounter.errors.Load(),
 		},
 	}
 }

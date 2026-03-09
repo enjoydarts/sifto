@@ -1,6 +1,12 @@
 package handler
 
-import "fmt"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"sort"
+	"strings"
+)
 
 const cacheKeyVersion = "v1"
 
@@ -61,6 +67,30 @@ func cacheKeyDashboardPart(userID, part string, p1, p2 int) string {
 	}
 }
 
+func cacheKeyAsk(userID, query, answerModel, embeddingModel string, days int, unreadOnly bool, limit int, sourceIDs []string) string {
+	normalizedSourceIDs := make([]string, 0, len(sourceIDs))
+	for _, sourceID := range sourceIDs {
+		v := strings.TrimSpace(sourceID)
+		if v != "" {
+			normalizedSourceIDs = append(normalizedSourceIDs, v)
+		}
+	}
+	sort.Strings(normalizedSourceIDs)
+	sum := sha256.Sum256([]byte(strings.TrimSpace(query)))
+	return fmt.Sprintf(
+		"%s:ask:%s:q=%s:model=%s:emb=%s:days=%d:unread=%t:limit=%d:sources=%s",
+		cacheKeyVersion,
+		userID,
+		hex.EncodeToString(sum[:8]),
+		answerModel,
+		embeddingModel,
+		days,
+		unreadOnly,
+		limit,
+		strings.Join(normalizedSourceIDs, ","),
+	)
+}
+
 func cacheUserInvalidatePrefixes(userID string) []string {
 	return []string{
 		fmt.Sprintf("%s:items:list:%s:", cacheKeyVersion, userID),
@@ -70,5 +100,6 @@ func cacheUserInvalidatePrefixes(userID string) []string {
 		fmt.Sprintf("%s:briefing:today:%s:", cacheKeyVersion, userID),
 		fmt.Sprintf("%s:dashboard:snapshot:%s:", cacheKeyVersion, userID),
 		fmt.Sprintf("%s:dashboard:part:%s:", cacheKeyVersion, userID),
+		fmt.Sprintf("%s:ask:%s:", cacheKeyVersion, userID),
 	}
 }

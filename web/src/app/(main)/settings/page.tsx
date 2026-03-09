@@ -21,6 +21,7 @@ type ModelComparisonEntry = {
   outputPrice: string;
   recommendation: "recommended" | "strong" | "experimental";
   bestFor: "facts" | "summary" | "ask" | "digest" | "embedding" | "balanced";
+  highlights: Array<"lowestCost" | "fast" | "jsonStable">;
   status?: "preview";
 };
 
@@ -91,23 +92,23 @@ export default function SettingsPage() {
     { value: "text-embedding-3-large", label: "text-embedding-3-large", note: "$0.13 / 1M tok" },
   ];
   const modelComparisonEntries: ModelComparisonEntry[] = [
-    { model: "claude-haiku-4-5", provider: "anthropic", inputPrice: "$1", outputPrice: "$5", recommendation: "strong", bestFor: "facts" },
-    { model: "claude-sonnet-4-6", provider: "anthropic", inputPrice: "$3", outputPrice: "$15", recommendation: "recommended", bestFor: "balanced" },
-    { model: "claude-opus-4-6", provider: "anthropic", inputPrice: "$5", outputPrice: "$25", recommendation: "strong", bestFor: "digest" },
-    { model: "gemini-3.1-pro-preview", provider: "google", inputPrice: "$2", outputPrice: "$12", recommendation: "strong", bestFor: "digest", status: "preview" },
-    { model: "gemini-3.1-flash-lite-preview", provider: "google", inputPrice: "$0.25", outputPrice: "$1.50", recommendation: "recommended", bestFor: "facts", status: "preview" },
-    { model: "gemini-3-flash-preview", provider: "google", inputPrice: "$0.50", outputPrice: "$3.00", recommendation: "strong", bestFor: "summary", status: "preview" },
-    { model: "gemini-2.5-flash", provider: "google", inputPrice: "$0.30", outputPrice: "$2.50", recommendation: "recommended", bestFor: "ask" },
-    { model: "gemini-2.5-flash-lite", provider: "google", inputPrice: "$0.10", outputPrice: "$0.40", recommendation: "strong", bestFor: "facts" },
-    { model: "gemini-2.5-pro", provider: "google", inputPrice: "$1.25", outputPrice: "$10", recommendation: "strong", bestFor: "digest" },
-    { model: "openai/gpt-oss-20b", provider: "groq", inputPrice: "$0.075", outputPrice: "$0.30", recommendation: "recommended", bestFor: "ask" },
-    { model: "openai/gpt-oss-120b", provider: "groq", inputPrice: "$0.15", outputPrice: "$0.60", recommendation: "recommended", bestFor: "summary" },
-    { model: "llama-3.1-8b-instant", provider: "groq", inputPrice: "$0.05", outputPrice: "$0.08", recommendation: "strong", bestFor: "facts" },
-    { model: "llama-3.3-70b-versatile", provider: "groq", inputPrice: "$0.59", outputPrice: "$0.79", recommendation: "strong", bestFor: "summary" },
-    { model: "meta-llama/llama-4-scout-17b-16e-instruct", provider: "groq", inputPrice: "$0.11", outputPrice: "$0.34", recommendation: "experimental", bestFor: "summary", status: "preview" },
-    { model: "qwen/qwen3-32b", provider: "groq", inputPrice: "$0.29", outputPrice: "$0.59", recommendation: "experimental", bestFor: "summary" },
-    { model: "text-embedding-3-small", provider: "openai", inputPrice: "$0.02", outputPrice: "-", recommendation: "recommended", bestFor: "embedding" },
-    { model: "text-embedding-3-large", provider: "openai", inputPrice: "$0.13", outputPrice: "-", recommendation: "strong", bestFor: "embedding" },
+    { model: "claude-haiku-4-5", provider: "anthropic", inputPrice: "$1", outputPrice: "$5", recommendation: "strong", bestFor: "facts", highlights: [] },
+    { model: "claude-sonnet-4-6", provider: "anthropic", inputPrice: "$3", outputPrice: "$15", recommendation: "recommended", bestFor: "balanced", highlights: ["jsonStable"] },
+    { model: "claude-opus-4-6", provider: "anthropic", inputPrice: "$5", outputPrice: "$25", recommendation: "strong", bestFor: "digest", highlights: [] },
+    { model: "gemini-3.1-pro-preview", provider: "google", inputPrice: "$2", outputPrice: "$12", recommendation: "strong", bestFor: "digest", highlights: [], status: "preview" },
+    { model: "gemini-3.1-flash-lite-preview", provider: "google", inputPrice: "$0.25", outputPrice: "$1.50", recommendation: "recommended", bestFor: "facts", highlights: ["lowestCost", "fast"], status: "preview" },
+    { model: "gemini-3-flash-preview", provider: "google", inputPrice: "$0.50", outputPrice: "$3.00", recommendation: "strong", bestFor: "summary", highlights: ["fast"], status: "preview" },
+    { model: "gemini-2.5-flash", provider: "google", inputPrice: "$0.30", outputPrice: "$2.50", recommendation: "recommended", bestFor: "ask", highlights: ["fast"] },
+    { model: "gemini-2.5-flash-lite", provider: "google", inputPrice: "$0.10", outputPrice: "$0.40", recommendation: "strong", bestFor: "facts", highlights: ["lowestCost", "fast"] },
+    { model: "gemini-2.5-pro", provider: "google", inputPrice: "$1.25", outputPrice: "$10", recommendation: "strong", bestFor: "digest", highlights: [] },
+    { model: "openai/gpt-oss-20b", provider: "groq", inputPrice: "$0.075", outputPrice: "$0.30", recommendation: "recommended", bestFor: "ask", highlights: ["jsonStable", "fast"] },
+    { model: "openai/gpt-oss-120b", provider: "groq", inputPrice: "$0.15", outputPrice: "$0.60", recommendation: "recommended", bestFor: "summary", highlights: ["jsonStable", "fast"] },
+    { model: "llama-3.1-8b-instant", provider: "groq", inputPrice: "$0.05", outputPrice: "$0.08", recommendation: "strong", bestFor: "facts", highlights: ["lowestCost", "fast"] },
+    { model: "llama-3.3-70b-versatile", provider: "groq", inputPrice: "$0.59", outputPrice: "$0.79", recommendation: "strong", bestFor: "summary", highlights: ["fast"] },
+    { model: "meta-llama/llama-4-scout-17b-16e-instruct", provider: "groq", inputPrice: "$0.11", outputPrice: "$0.34", recommendation: "experimental", bestFor: "summary", highlights: ["fast"], status: "preview" },
+    { model: "qwen/qwen3-32b", provider: "groq", inputPrice: "$0.29", outputPrice: "$0.59", recommendation: "experimental", bestFor: "summary", highlights: [] },
+    { model: "text-embedding-3-small", provider: "openai", inputPrice: "$0.02", outputPrice: "-", recommendation: "recommended", bestFor: "embedding", highlights: ["lowestCost"] },
+    { model: "text-embedding-3-large", provider: "openai", inputPrice: "$0.13", outputPrice: "-", recommendation: "strong", bestFor: "embedding", highlights: [] },
   ];
 
   const load = useCallback(async () => {
@@ -1038,19 +1039,20 @@ export default function SettingsPage() {
             </div>
             <div className="overflow-auto px-5 py-4">
               <div className="min-w-[840px]">
-                <div className="grid grid-cols-[minmax(250px,2fr)_120px_120px_120px_120px_minmax(180px,1.4fr)] gap-3 border-b border-zinc-200 pb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                <div className="grid grid-cols-[minmax(250px,2fr)_120px_120px_120px_120px_150px_minmax(180px,1.4fr)] gap-3 border-b border-zinc-200 pb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   <div>{t("settings.modelGuide.columns.model")}</div>
                   <div>{t("settings.modelGuide.columns.provider")}</div>
                   <div>{t("settings.modelGuide.columns.inputPrice")}</div>
                   <div>{t("settings.modelGuide.columns.outputPrice")}</div>
                   <div>{t("settings.modelGuide.columns.recommendation")}</div>
+                  <div>{t("settings.modelGuide.columns.highlights")}</div>
                   <div>{t("settings.modelGuide.columns.bestFor")}</div>
                 </div>
                 <div className="divide-y divide-zinc-100">
                   {modelComparisonEntries.map((entry) => (
                     <div
                       key={entry.model}
-                      className="grid grid-cols-[minmax(250px,2fr)_120px_120px_120px_120px_minmax(180px,1.4fr)] gap-3 py-3 text-sm text-zinc-700"
+                      className="grid grid-cols-[minmax(250px,2fr)_120px_120px_120px_120px_150px_minmax(180px,1.4fr)] gap-3 py-3 text-sm text-zinc-700"
                     >
                       <div className="min-w-0">
                         <div className="break-all font-medium text-zinc-900">{entry.model}</div>
@@ -1075,6 +1077,18 @@ export default function SettingsPage() {
                         >
                           {t(`settings.modelGuide.recommendation.${entry.recommendation}`)}
                         </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {entry.highlights.length > 0 ? entry.highlights.map((highlight) => (
+                          <span
+                            key={highlight}
+                            className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700"
+                          >
+                            {t(`settings.modelGuide.highlights.${highlight}`)}
+                          </span>
+                        )) : (
+                          <span className="text-zinc-400">-</span>
+                        )}
                       </div>
                       <div className="text-zinc-600">{t(`settings.modelGuide.bestFor.${entry.bestFor}`)}</div>
                     </div>

@@ -1056,8 +1056,8 @@ def ask_question(query: str, candidates: list[dict], api_key: str | None = None,
 
 形式:
 {{
-  "answer": "2〜6文の回答",
-  "bullets": ["補足ポイント1", "補足ポイント2"],
+  "answer": "2〜6文の回答。根拠を示した文末に [[item_id]] を付ける",
+  "bullets": ["補足ポイント1 [[item_id]]", "補足ポイント2 [[item_id]][[item_id]]"],
   "citations": [
     {{"item_id": "uuid", "reason": "この観点の根拠"}}
   ]
@@ -1067,6 +1067,9 @@ def ask_question(query: str, candidates: list[dict], api_key: str | None = None,
 - citations はできるだけ3〜5件入れる
 - 同じ話題に偏らせず、回答の主要な論点を支える記事を優先する
 - bullets は回答を分解した要点を2〜5件にする
+- answer と bullets の各主張には、対応する根拠記事の item_id を [[item_id]] 形式で末尾に付ける
+- citations に含めた item_id だけを使う
+- [[item_id]] が1つも付けられない文は書かない
 
 question: {query}
 candidates:

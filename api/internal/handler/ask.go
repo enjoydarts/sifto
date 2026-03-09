@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -226,10 +227,22 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	citationIndexByItemID := make(map[string]int, len(citations))
+	for i, citation := range citations {
+		citationIndexByItemID[citation.ItemID] = i + 1
+	}
+	answer := formatAskCitationMarkers(strings.TrimSpace(askResp.Answer), citationIndexByItemID)
+	bullets := make([]string, 0, len(askResp.Bullets))
+	for _, bullet := range askResp.Bullets {
+		formatted := formatAskCitationMarkers(strings.TrimSpace(bullet), citationIndexByItemID)
+		if formatted != "" {
+			bullets = append(bullets, formatted)
+		}
+	}
 	resp := model.AskResponse{
 		Query:        query,
-		Answer:       strings.TrimSpace(askResp.Answer),
-		Bullets:      askResp.Bullets,
+		Answer:       answer,
+		Bullets:      bullets,
 		Citations:    citations,
 		RelatedItems: candidates,
 	}
@@ -363,4 +376,35 @@ func minAskInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+var askCitationMarkerPattern = regexp.MustCompile(`\[\[([a-zA-Z0-9-]+)\]\]`)
+
+func formatAskCitationMarkers(text string, citationIndexByItemID map[string]int) string {
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	if len(citationIndexByItemID) == 0 {
+		return askCitationMarkerPattern.ReplaceAllString(text, "")
+	}
+	used := map[int]struct{}{}
+	out := askCitationMarkerPattern.ReplaceAllStringFunc(text, func(match string) string {
+		groups := askCitationMarkerPattern.FindStringSubmatch(match)
+		if len(groups) != 2 {
+			return ""
+		}
+		n, ok := citationIndexByItemID[strings.TrimSpace(groups[1])]
+		if !ok {
+			return ""
+		}
+		if _, dup := used[n]; dup {
+			return ""
+		}
+		used[n] = struct{}{}
+		return fmt.Sprintf("[%d]", n)
+	})
+	out = strings.Join(strings.Fields(out), " ")
+	out = strings.ReplaceAll(out, " 。", "。")
+	out = strings.ReplaceAll(out, " 、", "、")
+	return strings.TrimSpace(out)
 }

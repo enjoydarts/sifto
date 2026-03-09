@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"errors"
+	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -1140,10 +1142,120 @@ func (r *ItemRepo) AskCandidatesByEmbedding(
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if len(out) > limit {
-		out = out[:limit]
+	return selectAskCandidatesByMMR(out, limit), nil
+}
+
+func selectAskCandidatesByMMR(candidates []model.AskCandidate, limit int) []model.AskCandidate {
+	if limit <= 0 || len(candidates) == 0 {
+		return nil
 	}
-	return out, nil
+	if len(candidates) <= limit {
+		return candidates
+	}
+
+	remaining := make([]model.AskCandidate, len(candidates))
+	copy(remaining, candidates)
+	selected := make([]model.AskCandidate, 0, limit)
+	sourceCounts := map[string]int{}
+	topicCounts := map[string]int{}
+
+	bestIdx := 0
+	bestScore := -1e9
+	for i, item := range remaining {
+		score := askCandidateBaseScore(item)
+		if score > bestScore {
+			bestScore = score
+			bestIdx = i
+		}
+	}
+	first := remaining[bestIdx]
+	selected = append(selected, first)
+	sourceCounts[first.SourceID]++
+	topicCounts[firstTopicKey(first.SummaryTopics)]++
+	remaining = append(remaining[:bestIdx], remaining[bestIdx+1:]...)
+
+	for len(selected) < limit && len(remaining) > 0 {
+		bestIdx = 0
+		bestScore = -1e9
+		for i, item := range remaining {
+			base := askCandidateBaseScore(item)
+			sourcePenalty := math.Min(0.16, 0.06*float64(sourceCounts[item.SourceID]))
+			topicPenalty := math.Min(0.20, 0.08*float64(topicCounts[firstTopicKey(item.SummaryTopics)]))
+			dupPenalty := maxAskTopicOverlap(item, selected)
+			score := base - sourcePenalty - topicPenalty - 0.18*dupPenalty
+			if score > bestScore {
+				bestScore = score
+				bestIdx = i
+			}
+		}
+		chosen := remaining[bestIdx]
+		selected = append(selected, chosen)
+		sourceCounts[chosen.SourceID]++
+		topicCounts[firstTopicKey(chosen.SummaryTopics)]++
+		remaining = append(remaining[:bestIdx], remaining[bestIdx+1:]...)
+	}
+
+	return selected
+}
+
+func askCandidateBaseScore(item model.AskCandidate) float64 {
+	score := item.Similarity * 0.68
+	if item.SummaryScore != nil {
+		score += *item.SummaryScore * 0.22
+	}
+	score += askCandidateRecencyBoost(item) * 0.10
+	return score
+}
+
+func askCandidateRecencyBoost(item model.AskCandidate) float64 {
+	ref := item.CreatedAt
+	if item.PublishedAt != nil {
+		ref = *item.PublishedAt
+	}
+	if ref.IsZero() {
+		return 0
+	}
+	hours := time.Since(ref).Hours()
+	switch {
+	case hours <= 24:
+		return 1.0
+	case hours <= 72:
+		return 0.7
+	case hours <= 7*24:
+		return 0.4
+	default:
+		return 0.1
+	}
+}
+
+func maxAskTopicOverlap(item model.AskCandidate, selected []model.AskCandidate) float64 {
+	if len(selected) == 0 {
+		return 0
+	}
+	current := make(map[string]struct{}, len(item.SummaryTopics))
+	for _, topic := range item.SummaryTopics {
+		t := strings.TrimSpace(strings.ToLower(topic))
+		if t != "" {
+			current[t] = struct{}{}
+		}
+	}
+	if len(current) == 0 {
+		return 0
+	}
+	maxOverlap := 0.0
+	for _, selectedItem := range selected {
+		count := 0
+		for _, topic := range selectedItem.SummaryTopics {
+			if _, ok := current[strings.TrimSpace(strings.ToLower(topic))]; ok {
+				count++
+			}
+		}
+		overlap := float64(count) / math.Max(1, float64(len(current)))
+		if overlap > maxOverlap {
+			maxOverlap = overlap
+		}
+	}
+	return maxOverlap
 }
 
 func (r *ItemRepo) GetForRetry(ctx context.Context, id, userID string) (*model.Item, error) {

@@ -434,9 +434,9 @@ user_settings
   reading_plan_window, reading_plan_size,
   reading_plan_diversify_topics, reading_plan_exclude_read,
   digest_email_enabled,
-  anthropic_facts_model, anthropic_summary_model, anthropic_digest_model,
-  anthropic_digest_cluster_model, anthropic_source_suggestion_model,
-  openai_embedding_model,
+  facts_model, summary_model, digest_model,
+  digest_cluster_model, source_suggestion_model,
+  embedding_model,
   created_at, updated_at
 
 budget_alert_logs

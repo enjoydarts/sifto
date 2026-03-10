@@ -455,7 +455,7 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				}
 				continue
 			}
-			model := cfg.AnthropicSummaryModel
+			model := cfg.SummaryModel
 			var anthropicKey *string
 			var googleKey *string
 			var groqKey *string

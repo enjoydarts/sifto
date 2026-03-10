@@ -78,13 +78,13 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"exclude_read":     settings.ReadingPlanExcludeRead,
 		},
 		"llm_models": map[string]any{
-			"anthropic_facts":             settings.AnthropicFactsModel,
-			"anthropic_summary":           settings.AnthropicSummaryModel,
-			"anthropic_digest_cluster":    settings.AnthropicDigestClusterModel,
-			"anthropic_digest":            settings.AnthropicDigestModel,
-			"anthropic_ask":               settings.AnthropicAskModel,
-			"anthropic_source_suggestion": settings.AnthropicSourceSuggestModel,
-			"openai_embedding":            settings.OpenAIEmbeddingModel,
+			"facts":             settings.FactsModel,
+			"summary":           settings.SummaryModel,
+			"digest_cluster":    settings.DigestClusterModel,
+			"digest":            settings.DigestModel,
+			"ask":               settings.AskModel,
+			"source_suggestion": settings.SourceSuggestionModel,
+			"embedding":         settings.EmbeddingModel,
 		},
 		"current_month": map[string]any{
 			"month_jst":            monthStart.Format("2006-01"),
@@ -258,13 +258,13 @@ func (h *SettingsHandler) DeleteInoreaderOAuth(w http.ResponseWriter, r *http.Re
 func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	var body struct {
-		AnthropicFacts            *string `json:"anthropic_facts"`
-		AnthropicSummary          *string `json:"anthropic_summary"`
-		AnthropicDigestCluster    *string `json:"anthropic_digest_cluster"`
-		AnthropicDigest           *string `json:"anthropic_digest"`
-		AnthropicAsk              *string `json:"anthropic_ask"`
-		AnthropicSourceSuggestion *string `json:"anthropic_source_suggestion"`
-		OpenAIEmbedding           *string `json:"openai_embedding"`
+		Facts            *string `json:"facts"`
+		Summary          *string `json:"summary"`
+		DigestCluster    *string `json:"digest_cluster"`
+		Digest           *string `json:"digest"`
+		Ask              *string `json:"ask"`
+		SourceSuggestion *string `json:"source_suggestion"`
+		Embedding        *string `json:"embedding"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -280,21 +280,21 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		}
 		return &s
 	}
-	openAIEmbedding := norm(body.OpenAIEmbedding)
-	if openAIEmbedding != nil && !service.IsSupportedOpenAIEmbeddingModel(*openAIEmbedding) {
-		http.Error(w, "invalid openai_embedding model", http.StatusBadRequest)
+	embeddingModel := norm(body.Embedding)
+	if embeddingModel != nil && !service.IsSupportedOpenAIEmbeddingModel(*embeddingModel) {
+		http.Error(w, "invalid embedding model", http.StatusBadRequest)
 		return
 	}
 	settings, err := h.repo.UpsertLLMModelConfig(
 		r.Context(),
 		userID,
-		norm(body.AnthropicFacts),
-		norm(body.AnthropicSummary),
-		norm(body.AnthropicDigestCluster),
-		norm(body.AnthropicDigest),
-		norm(body.AnthropicAsk),
-		norm(body.AnthropicSourceSuggestion),
-		openAIEmbedding,
+		norm(body.Facts),
+		norm(body.Summary),
+		norm(body.DigestCluster),
+		norm(body.Digest),
+		norm(body.Ask),
+		norm(body.SourceSuggestion),
+		embeddingModel,
 	)
 	if err != nil {
 		writeRepoError(w, err)
@@ -303,13 +303,13 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 	writeJSON(w, map[string]any{
 		"user_id": settings.UserID,
 		"llm_models": map[string]any{
-			"anthropic_facts":             settings.AnthropicFactsModel,
-			"anthropic_summary":           settings.AnthropicSummaryModel,
-			"anthropic_digest_cluster":    settings.AnthropicDigestClusterModel,
-			"anthropic_digest":            settings.AnthropicDigestModel,
-			"anthropic_ask":               settings.AnthropicAskModel,
-			"anthropic_source_suggestion": settings.AnthropicSourceSuggestModel,
-			"openai_embedding":            settings.OpenAIEmbeddingModel,
+			"facts":             settings.FactsModel,
+			"summary":           settings.SummaryModel,
+			"digest_cluster":    settings.DigestClusterModel,
+			"digest":            settings.DigestModel,
+			"ask":               settings.AskModel,
+			"source_suggestion": settings.SourceSuggestionModel,
+			"embedding":         settings.EmbeddingModel,
 		},
 	})
 }

@@ -875,7 +875,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				log.Printf("process-item extract-facts start item_id=%s", itemID)
 				var modelOverride *string
 				if userModelSettings != nil {
-					modelOverride = ptrStringOrNil(userModelSettings.AnthropicFactsModel)
+					modelOverride = ptrStringOrNil(userModelSettings.FactsModel)
 				}
 				userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "facts")
 				if err != nil {
@@ -902,7 +902,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				log.Printf("process-item summarize start item_id=%s", itemID)
 				var modelOverride *string
 				if userModelSettings != nil {
-					modelOverride = ptrStringOrNil(userModelSettings.AnthropicSummaryModel)
+					modelOverride = ptrStringOrNil(userModelSettings.SummaryModel)
 				}
 				userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "summary")
 				if err != nil {
@@ -1014,8 +1014,8 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			} else {
 				inputText := buildItemEmbeddingInput(titleForLLM, summary.Summary, summary.Topics, factsResp.Facts)
 				embModel := service.OpenAIEmbeddingModel()
-				if userModelSettings != nil && userModelSettings.OpenAIEmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*userModelSettings.OpenAIEmbeddingModel) {
-					embModel = *userModelSettings.OpenAIEmbeddingModel
+				if userModelSettings != nil && userModelSettings.EmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*userModelSettings.EmbeddingModel) {
+					embModel = *userModelSettings.EmbeddingModel
 				}
 				embResp, err := step.Run(ctx, "create-embedding", func(ctx context.Context) (*service.CreateEmbeddingResponse, error) {
 					log.Printf("process-item create-embedding start item_id=%s model=%s", itemID, embModel)
@@ -1072,8 +1072,8 @@ func embedItemFn(client inngestgo.Client, db *pgxpool.Pool, openAI *service.Open
 
 			inputText := buildItemEmbeddingInput(candidate.Title, candidate.Summary, candidate.Topics, candidate.Facts)
 			embModel := service.OpenAIEmbeddingModel()
-			if userModelSettings != nil && userModelSettings.OpenAIEmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*userModelSettings.OpenAIEmbeddingModel) {
-				embModel = *userModelSettings.OpenAIEmbeddingModel
+			if userModelSettings != nil && userModelSettings.EmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*userModelSettings.EmbeddingModel) {
+				embModel = *userModelSettings.EmbeddingModel
 			}
 			embResp, err := step.Run(ctx, "create-embedding", func(ctx context.Context) (*service.CreateEmbeddingResponse, error) {
 				return openAI.CreateEmbedding(ctx, *userOpenAIKey, embModel, inputText)
@@ -1243,7 +1243,7 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					drafts = compressDigestClusterDrafts(drafts, 20)
 					var clusterDraftModel *string
 					if userModelSettings != nil {
-						clusterDraftModel = ptrStringOrNil(userModelSettings.AnthropicDigestClusterModel)
+						clusterDraftModel = ptrStringOrNil(userModelSettings.DigestClusterModel)
 					}
 					clusterDraftAnthropicKey, clusterDraftGoogleKey, clusterDraftGroqKey, clusterDraftDeepSeekKey, clusterDraftOpenAIKey, resolvedClusterDraftModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, &data.UserID, clusterDraftModel, "digest_cluster_draft")
 					if keyErr != nil {
@@ -1291,7 +1291,7 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					)
 					var modelOverride *string
 					if userModelSettings != nil {
-						modelOverride = ptrStringOrNil(userModelSettings.AnthropicDigestModel)
+						modelOverride = ptrStringOrNil(userModelSettings.DigestModel)
 					}
 					digestAnthropicKey, digestGoogleKey, digestGroqKey, digestDeepSeekKey, digestOpenAIKey, resolvedDigestModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, &data.UserID, modelOverride, "digest")
 					if keyErr != nil {

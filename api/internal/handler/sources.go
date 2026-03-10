@@ -554,7 +554,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	groqAPIKey := h.getUserGroqAPIKey(r.Context(), userID)
 	deepseekAPIKey := h.getUserDeepSeekAPIKey(r.Context(), userID)
 	openAIAPIKey := h.getUserOpenAIAPIKey(r.Context(), userID)
-	anthropicSourceSuggestionModel := h.getUserAnthropicSourceSuggestionModel(r.Context(), userID)
+	anthropicSourceSuggestionModel := h.getUserSourceSuggestionModel(r.Context(), userID)
 	anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, openAIAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
 		anthropicAPIKey,
 		googleAPIKey,
@@ -998,7 +998,7 @@ func (h *SourceHandler) getUserAnthropicAPIKey(ctx context.Context, userID strin
 	return &plain
 }
 
-func (h *SourceHandler) getUserAnthropicSourceSuggestionModel(ctx context.Context, userID string) *string {
+func (h *SourceHandler) getUserSourceSuggestionModel(ctx context.Context, userID string) *string {
 	if h.settingsRepo == nil {
 		return nil
 	}
@@ -1006,10 +1006,10 @@ func (h *SourceHandler) getUserAnthropicSourceSuggestionModel(ctx context.Contex
 	if err != nil {
 		return nil
 	}
-	if settings.AnthropicSourceSuggestModel == nil || strings.TrimSpace(*settings.AnthropicSourceSuggestModel) == "" {
+	if settings.SourceSuggestionModel == nil || strings.TrimSpace(*settings.SourceSuggestionModel) == "" {
 		return nil
 	}
-	v := strings.TrimSpace(*settings.AnthropicSourceSuggestModel)
+	v := strings.TrimSpace(*settings.SourceSuggestionModel)
 	return &v
 }
 

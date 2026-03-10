@@ -439,13 +439,13 @@ export interface UserSettings {
   digest_email_enabled: boolean;
   reading_plan: UserReadingPlanSettings;
   llm_models?: {
-    anthropic_facts?: string | null;
-    anthropic_summary?: string | null;
-    anthropic_digest_cluster?: string | null;
-    anthropic_digest?: string | null;
-    anthropic_ask?: string | null;
-    anthropic_source_suggestion?: string | null;
-    openai_embedding?: string | null;
+    facts?: string | null;
+    summary?: string | null;
+    digest_cluster?: string | null;
+    digest?: string | null;
+    ask?: string | null;
+    source_suggestion?: string | null;
+    embedding?: string | null;
   };
   current_month: UserSettingsCurrentMonth;
 }
@@ -772,13 +772,13 @@ export const api = {
       body: JSON.stringify(body),
     }),
   updateLLMModelSettings: (body: {
-    anthropic_facts?: string | null;
-    anthropic_summary?: string | null;
-    anthropic_digest_cluster?: string | null;
-    anthropic_digest?: string | null;
-    anthropic_ask?: string | null;
-    anthropic_source_suggestion?: string | null;
-    openai_embedding?: string | null;
+    facts?: string | null;
+    summary?: string | null;
+    digest_cluster?: string | null;
+    digest?: string | null;
+    ask?: string | null;
+    source_suggestion?: string | null;
+    embedding?: string | null;
   }) =>
     apiFetch<{ user_id: string; llm_models: UserSettings["llm_models"] }>("/settings/llm-models", {
       method: "PATCH",

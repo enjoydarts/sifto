@@ -84,8 +84,8 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	embeddingModel := service.OpenAIEmbeddingModel()
-	if settings.OpenAIEmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*settings.OpenAIEmbeddingModel) {
-		embeddingModel = *settings.OpenAIEmbeddingModel
+	if settings.EmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*settings.EmbeddingModel) {
+		embeddingModel = *settings.EmbeddingModel
 	}
 	modelName := chooseAskModel(settings, settings.HasAnthropicAPIKey, settings.HasGoogleAPIKey, settings.HasGroqAPIKey, settings.HasDeepSeekAPIKey, settings.HasOpenAIAPIKey)
 	if modelName == nil {
@@ -277,8 +277,8 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 }
 
 func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGroq, hasDeepSeek, hasOpenAI bool) *string {
-	if settings != nil && settings.AnthropicAskModel != nil && strings.TrimSpace(*settings.AnthropicAskModel) != "" {
-		v := strings.TrimSpace(*settings.AnthropicAskModel)
+	if settings != nil && settings.AskModel != nil && strings.TrimSpace(*settings.AskModel) != "" {
+		v := strings.TrimSpace(*settings.AskModel)
 		switch service.LLMProviderForModel(&v) {
 		case "google":
 			if hasGoogle {
@@ -302,8 +302,8 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			}
 		}
 	}
-	if settings != nil && settings.AnthropicDigestModel != nil && strings.TrimSpace(*settings.AnthropicDigestModel) != "" {
-		v := strings.TrimSpace(*settings.AnthropicDigestModel)
+	if settings != nil && settings.DigestModel != nil && strings.TrimSpace(*settings.DigestModel) != "" {
+		v := strings.TrimSpace(*settings.DigestModel)
 		switch service.LLMProviderForModel(&v) {
 		case "google":
 			if hasGoogle {
@@ -327,8 +327,8 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			}
 		}
 	}
-	if settings != nil && settings.AnthropicSummaryModel != nil && strings.TrimSpace(*settings.AnthropicSummaryModel) != "" {
-		v := strings.TrimSpace(*settings.AnthropicSummaryModel)
+	if settings != nil && settings.SummaryModel != nil && strings.TrimSpace(*settings.SummaryModel) != "" {
+		v := strings.TrimSpace(*settings.SummaryModel)
 		switch service.LLMProviderForModel(&v) {
 		case "google":
 			if hasGoogle {

@@ -90,13 +90,13 @@ export default function SettingsPage() {
   const llmModelsDirtyRef = useRef(false);
 
   const syncLLMModelForm = useCallback((llmModels?: UserSettings["llm_models"] | null) => {
-    setAnthropicFactsModel(llmModels?.anthropic_facts ?? "");
-    setAnthropicSummaryModel(llmModels?.anthropic_summary ?? "");
-    setAnthropicDigestClusterModel(llmModels?.anthropic_digest_cluster ?? "");
-    setAnthropicDigestModel(llmModels?.anthropic_digest ?? "");
-    setAnthropicAskModel(llmModels?.anthropic_ask ?? "");
-    setAnthropicSourceSuggestionModel(llmModels?.anthropic_source_suggestion ?? "");
-    setOpenAIEmbeddingModel(llmModels?.openai_embedding ?? "");
+    setAnthropicFactsModel(llmModels?.facts ?? "");
+    setAnthropicSummaryModel(llmModels?.summary ?? "");
+    setAnthropicDigestClusterModel(llmModels?.digest_cluster ?? "");
+    setAnthropicDigestModel(llmModels?.digest ?? "");
+    setAnthropicAskModel(llmModels?.ask ?? "");
+    setAnthropicSourceSuggestionModel(llmModels?.source_suggestion ?? "");
+    setOpenAIEmbeddingModel(llmModels?.embedding ?? "");
   }, []);
 
   const onChangeLLMModel = useCallback((setter: (value: string) => void, value: string) => {
@@ -211,13 +211,13 @@ export default function SettingsPage() {
         return s === "" ? null : s;
       };
       const nextModels = {
-        anthropic_facts: emptyToNull(anthropicFactsModel),
-        anthropic_summary: emptyToNull(anthropicSummaryModel),
-        anthropic_digest_cluster: emptyToNull(anthropicDigestClusterModel),
-        anthropic_digest: emptyToNull(anthropicDigestModel),
-        anthropic_ask: emptyToNull(anthropicAskModel),
-        anthropic_source_suggestion: emptyToNull(anthropicSourceSuggestionModel),
-        openai_embedding: emptyToNull(openAIEmbeddingModel),
+        facts: emptyToNull(anthropicFactsModel),
+        summary: emptyToNull(anthropicSummaryModel),
+        digest_cluster: emptyToNull(anthropicDigestClusterModel),
+        digest: emptyToNull(anthropicDigestModel),
+        ask: emptyToNull(anthropicAskModel),
+        source_suggestion: emptyToNull(anthropicSourceSuggestionModel),
+        embedding: emptyToNull(openAIEmbeddingModel),
       };
       const resp = await api.updateLLMModelSettings(nextModels);
       setSettings((prev) => {

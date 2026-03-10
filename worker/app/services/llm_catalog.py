@@ -6,6 +6,7 @@ from pathlib import Path
 def _catalog_path() -> Path:
     here = Path(__file__).resolve()
     candidates = [
+        here.parents[1] / "llm_catalog.json",
         here.parents[2] / "api" / "internal" / "service" / "llm_catalog.json",
         here.parents[3] / "api" / "internal" / "service" / "llm_catalog.json",
         Path.cwd() / "api" / "internal" / "service" / "llm_catalog.json",

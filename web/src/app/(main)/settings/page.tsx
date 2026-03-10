@@ -87,6 +87,22 @@ export default function SettingsPage() {
   const [anthropicSourceSuggestionModel, setAnthropicSourceSuggestionModel] = useState("");
   const [openAIEmbeddingModel, setOpenAIEmbeddingModel] = useState("");
   const loadSeqRef = useRef(0);
+  const llmModelsDirtyRef = useRef(false);
+
+  const syncLLMModelForm = useCallback((llmModels?: UserSettings["llm_models"] | null) => {
+    setAnthropicFactsModel(llmModels?.anthropic_facts ?? "");
+    setAnthropicSummaryModel(llmModels?.anthropic_summary ?? "");
+    setAnthropicDigestClusterModel(llmModels?.anthropic_digest_cluster ?? "");
+    setAnthropicDigestModel(llmModels?.anthropic_digest ?? "");
+    setAnthropicAskModel(llmModels?.anthropic_ask ?? "");
+    setAnthropicSourceSuggestionModel(llmModels?.anthropic_source_suggestion ?? "");
+    setOpenAIEmbeddingModel(llmModels?.openai_embedding ?? "");
+  }, []);
+
+  const onChangeLLMModel = useCallback((setter: (value: string) => void, value: string) => {
+    llmModelsDirtyRef.current = true;
+    setter(value);
+  }, []);
 
   const load = useCallback(async () => {
     const seq = ++loadSeqRef.current;
@@ -104,13 +120,9 @@ export default function SettingsPage() {
       const rpSize = data.reading_plan?.size;
       setReadingPlanSize(String(rpSize === 7 || rpSize === 15 || rpSize === 25 ? rpSize : 15));
       setReadingPlanDiversifyTopics(Boolean(data.reading_plan?.diversify_topics ?? true));
-      setAnthropicFactsModel(data.llm_models?.anthropic_facts ?? "");
-      setAnthropicSummaryModel(data.llm_models?.anthropic_summary ?? "");
-      setAnthropicDigestClusterModel(data.llm_models?.anthropic_digest_cluster ?? "");
-      setAnthropicDigestModel(data.llm_models?.anthropic_digest ?? "");
-      setAnthropicAskModel(data.llm_models?.anthropic_ask ?? "");
-      setAnthropicSourceSuggestionModel(data.llm_models?.anthropic_source_suggestion ?? "");
-      setOpenAIEmbeddingModel(data.llm_models?.openai_embedding ?? "");
+      if (!llmModelsDirtyRef.current) {
+        syncLLMModelForm(data.llm_models);
+      }
       setError(null);
     } catch (e) {
       if (seq !== loadSeqRef.current) return;
@@ -120,7 +132,7 @@ export default function SettingsPage() {
         setLoading(false);
       }
     }
-  }, []);
+  }, [syncLLMModelForm]);
 
   useEffect(() => {
     load();
@@ -218,6 +230,8 @@ export default function SettingsPage() {
           },
         };
       });
+      syncLLMModelForm(resp.llm_models);
+      llmModelsDirtyRef.current = false;
       showToast(t("settings.toast.modelsSaved"), "success");
     } catch (e) {
       showToast(String(e), "error");
@@ -882,43 +896,43 @@ export default function SettingsPage() {
             <ModelSelect
               label={t("settings.model.facts")}
               value={anthropicFactsModel}
-              onChange={setAnthropicFactsModel}
+              onChange={(value) => onChangeLLMModel(setAnthropicFactsModel, value)}
               options={optionsForPurpose("facts")}
             />
             <ModelSelect
               label={t("settings.model.summary")}
               value={anthropicSummaryModel}
-              onChange={setAnthropicSummaryModel}
+              onChange={(value) => onChangeLLMModel(setAnthropicSummaryModel, value)}
               options={optionsForPurpose("summary")}
             />
             <ModelSelect
               label={t("settings.model.digestCluster")}
               value={anthropicDigestClusterModel}
-              onChange={setAnthropicDigestClusterModel}
+              onChange={(value) => onChangeLLMModel(setAnthropicDigestClusterModel, value)}
               options={optionsForPurpose("digest_cluster_draft")}
             />
             <ModelSelect
               label={t("settings.model.digest")}
               value={anthropicDigestModel}
-              onChange={setAnthropicDigestModel}
+              onChange={(value) => onChangeLLMModel(setAnthropicDigestModel, value)}
               options={optionsForPurpose("digest")}
             />
             <ModelSelect
               label={t("settings.model.ask")}
               value={anthropicAskModel}
-              onChange={setAnthropicAskModel}
+              onChange={(value) => onChangeLLMModel(setAnthropicAskModel, value)}
               options={optionsForPurpose("ask")}
             />
             <ModelSelect
               label={t("settings.model.sourceSuggestion")}
               value={anthropicSourceSuggestionModel}
-              onChange={setAnthropicSourceSuggestionModel}
+              onChange={(value) => onChangeLLMModel(setAnthropicSourceSuggestionModel, value)}
               options={sourceSuggestionModelOptions}
             />
             <ModelSelect
               label={t("settings.model.embeddings")}
               value={openAIEmbeddingModel}
-              onChange={setOpenAIEmbeddingModel}
+              onChange={(value) => onChangeLLMModel(setOpenAIEmbeddingModel, value)}
               options={openAIEmbeddingModelOptions}
             />
           </div>

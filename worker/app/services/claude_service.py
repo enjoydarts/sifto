@@ -15,12 +15,10 @@ from app.services.summary_faithfulness_common import (
 )
 from app.services.facts_check_common import (
     FACTS_CHECK_SCHEMA,
-    extract_first_json_object as _facts_check_extract_first_json_object,
     facts_check_prompt,
     facts_check_system_instruction,
-    normalize_facts_check_result,
-    require_facts_check_comment,
 )
+from app.services.facts_check_runner import run_facts_check
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -890,24 +888,25 @@ def check_facts(title: str | None, content: str, facts: list[str], api_key: str 
         user_prompt=prompt,
     )
     if message is None:
-        result = normalize_facts_check_result({"verdict": "warn", "short_comment": "判定モデル応答を取得できなかったため簡易扱いです。"})
-        result["llm"] = {
-            "provider": "local-fallback",
-            "model": used_model or _summary_model,
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
-            "estimated_cost_usd": 0.0,
+        return {
+            "verdict": "warn",
+            "short_comment": "判定モデル応答を取得できなかったため簡易扱いです。",
+            "llm": {
+                "provider": "local-fallback",
+                "model": used_model or _summary_model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
         }
-        return result
-    raw_text = message.content[0].text.strip()
-    result = require_facts_check_comment(
-        normalize_facts_check_result(_facts_check_extract_first_json_object(raw_text)),
-        raw_text,
+    return run_facts_check(
+        lambda: (
+            message.content[0].text.strip(),
+            _llm_meta(message, "facts_check", used_model or _summary_model),
+        )
     )
-    result["llm"] = _llm_meta(message, "facts_check", used_model or _summary_model)
-    return result
 
 
 def translate_title(title: str, api_key: str | None = None, model: str | None = None) -> dict:

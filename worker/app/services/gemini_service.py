@@ -23,12 +23,10 @@ from app.services.summary_faithfulness_common import (
 from app.services.facts_check_common import (
     FACTS_CHECK_SCHEMA,
     facts_check_prompt,
-    parse_facts_check_line,
     facts_check_retry_prompt,
     facts_check_system_instruction,
-    normalize_facts_check_result,
-    require_facts_check_comment,
 )
+from app.services.facts_check_runner import run_facts_check
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
@@ -1137,36 +1135,33 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
 
 
 def check_facts(title: str | None, content: str, facts: list[str], model: str, api_key: str) -> dict:
-    text, usage = _generate_content(
-        facts_check_prompt(title, content, facts),
-        model=model,
-        api_key=api_key,
-        max_output_tokens=320,
-        system_instruction=facts_check_system_instruction(),
-        response_schema=FACTS_CHECK_SCHEMA,
+    return run_facts_check(
+        lambda: (
+            lambda text, usage: (text, _llm_meta(model, "facts_check", usage))
+        )(
+            *_generate_content(
+                facts_check_prompt(title, content, facts),
+                model=model,
+                api_key=api_key,
+                max_output_tokens=320,
+                system_instruction=facts_check_system_instruction(),
+                response_schema=FACTS_CHECK_SCHEMA,
+            )
+        ),
+        retry_call=lambda: (
+            lambda text, usage: (text, _llm_meta(model, "facts_check", usage))
+        )(
+            *_generate_content(
+                facts_check_retry_prompt(title, content, facts),
+                model=model,
+                api_key=api_key,
+                max_output_tokens=120,
+                system_instruction="pass / warn / fail のいずれか1語のみを返す。",
+                response_schema=None,
+                response_mime_type="text/plain",
+            )
+        ),
     )
-    try:
-        result = require_facts_check_comment(
-            normalize_facts_check_result(_extract_first_json_object(text)),
-            text,
-        )
-    except RuntimeError:
-        retry_text, retry_usage = _generate_content(
-            facts_check_retry_prompt(title, content, facts),
-            model=model,
-            api_key=api_key,
-            max_output_tokens=120,
-            system_instruction="pass / warn / fail のいずれか1語のみを返す。",
-            response_schema=None,
-            response_mime_type="text/plain",
-        )
-        usage = retry_usage
-        result = require_facts_check_comment(
-            normalize_facts_check_result(parse_facts_check_line(retry_text) or _extract_first_json_object(retry_text)),
-            retry_text,
-        )
-    result["llm"] = _llm_meta(model, "facts_check", usage)
-    return result
 
 
 def translate_title(title: str, model: str = "gemini-2.5-flash", api_key: str = "") -> dict:

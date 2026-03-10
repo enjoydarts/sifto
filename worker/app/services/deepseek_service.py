@@ -32,9 +32,8 @@ from app.services.facts_check_common import (
     FACTS_CHECK_SCHEMA,
     facts_check_prompt,
     facts_check_system_instruction,
-    normalize_facts_check_result,
-    require_facts_check_comment,
 )
+from app.services.facts_check_runner import run_facts_check
 
 _log = logging.getLogger(__name__)
 _DEEPSEEK_PRICING_SOURCE_VERSION = "deepseek_static_2026_03"
@@ -484,21 +483,21 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
 
 
 def check_facts(title: str | None, content: str, facts: list[str], model: str, api_key: str) -> dict:
-    text, usage = _chat_json(
-        facts_check_prompt(title, content, facts),
-        model,
-        api_key,
-        system_instruction=facts_check_system_instruction(),
-        max_output_tokens=320,
-        response_schema=FACTS_CHECK_SCHEMA,
-        schema_name="facts_check",
+    return run_facts_check(
+        lambda: (
+            lambda text, usage: (text, _llm_meta(model, "facts_check", usage))
+        )(
+            *_chat_json(
+                facts_check_prompt(title, content, facts),
+                model,
+                api_key,
+                system_instruction=facts_check_system_instruction(),
+                max_output_tokens=320,
+                response_schema=FACTS_CHECK_SCHEMA,
+                schema_name="facts_check",
+            )
+        )
     )
-    result = require_facts_check_comment(
-        normalize_facts_check_result(_extract_first_json_object(text)),
-        text,
-    )
-    result["llm"] = _llm_meta(model, "facts_check", usage)
-    return result
 
 
 def translate_title(title: str, model: str = "openai/gpt-oss-20b", api_key: str = "") -> dict:

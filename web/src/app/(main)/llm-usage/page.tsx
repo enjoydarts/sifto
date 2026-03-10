@@ -62,7 +62,7 @@ export default function LLMUsagePage() {
   const { t, locale } = useI18n();
   const [forecastMode, setForecastMode] = useState<"month_avg" | "recent_7d">("month_avg");
   const [forecastMonth, setForecastMonth] = useState<string | null>(null);
-  const [daysFilter, setDaysFilter] = useState<"7" | "14" | "30" | "90" | "mtd">("14");
+  const [daysFilter, setDaysFilter] = useState<"7" | "14" | "30" | "90" | "mtd">("mtd");
   const [limit, setLimit] = useState(100);
   const [logPage, setLogPage] = useState(1);
   const [loading, setLoading] = useState(true);

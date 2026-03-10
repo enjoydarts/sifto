@@ -978,7 +978,7 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 	).Scan(&f.ID, &f.ItemID, &f.Facts, &f.ExtractedAt)
 	if err == nil {
 		d.Facts = &f
-		var llm model.ItemSummaryLLM
+		var factsLLM model.ItemSummaryLLM
 		err = r.db.QueryRow(ctx, `
 			SELECT provider, model, pricing_source, created_at
 			FROM llm_usage_logs
@@ -986,9 +986,9 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 			  AND purpose = 'facts'
 			ORDER BY created_at DESC
 			LIMIT 1`, id,
-		).Scan(&llm.Provider, &llm.Model, &llm.PricingSource, &llm.CreatedAt)
+		).Scan(&factsLLM.Provider, &factsLLM.Model, &factsLLM.PricingSource, &factsLLM.CreatedAt)
 		if err == nil {
-			d.FactsLLM = &llm
+			d.FactsLLM = &factsLLM
 		}
 
 		var factsCheck model.FactsCheck
@@ -999,6 +999,7 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 		).Scan(&factsCheck.ID, &factsCheck.ItemID, &factsCheck.FinalResult, &factsCheck.RetryCount, &factsCheck.ShortComment, &factsCheck.CreatedAt, &factsCheck.UpdatedAt)
 		if err == nil {
 			d.FactsCheck = &factsCheck
+			var factsCheckLLM model.ItemSummaryLLM
 			err = r.db.QueryRow(ctx, `
 				SELECT provider, model, pricing_source, created_at
 				FROM llm_usage_logs
@@ -1006,9 +1007,9 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 				  AND purpose = 'facts_check'
 				ORDER BY created_at DESC
 				LIMIT 1`, id,
-			).Scan(&llm.Provider, &llm.Model, &llm.PricingSource, &llm.CreatedAt)
+			).Scan(&factsCheckLLM.Provider, &factsCheckLLM.Model, &factsCheckLLM.PricingSource, &factsCheckLLM.CreatedAt)
 			if err == nil {
-				d.FactsCheckLLM = &llm
+				d.FactsCheckLLM = &factsCheckLLM
 			}
 		}
 	}

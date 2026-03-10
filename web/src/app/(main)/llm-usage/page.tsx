@@ -62,7 +62,7 @@ export default function LLMUsagePage() {
   const { t, locale } = useI18n();
   const [forecastMode, setForecastMode] = useState<"month_avg" | "recent_7d">("month_avg");
   const [forecastMonth, setForecastMonth] = useState<string | null>(null);
-  const [days, setDays] = useState(14);
+  const [daysFilter, setDaysFilter] = useState<"7" | "14" | "30" | "90" | "mtd">("14");
   const [limit, setLimit] = useState(100);
   const [logPage, setLogPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -72,6 +72,15 @@ export default function LLMUsagePage() {
   const [currentMonthProviderRows, setCurrentMonthProviderRows] = useState<LLMUsageProviderMonthSummary[]>([]);
   const [logs, setLogs] = useState<LLMUsageLog[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
+
+  const selectedDays = useMemo(() => {
+    if (daysFilter !== "mtd") {
+      return Number(daysFilter);
+    }
+    const now = new Date();
+    const jstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+    return jstNow.getDate();
+  }, [daysFilter]);
 
   const load = useCallback(async (daysParam: number, limitParam: number) => {
     setLoading(true);
@@ -98,8 +107,8 @@ export default function LLMUsagePage() {
 
   useEffect(() => {
     setLogPage(1);
-    load(days, limit);
-  }, [days, limit, load]);
+    load(selectedDays, limit);
+  }, [limit, load, selectedDays]);
 
   const totals = useMemo(() => {
     const t = {
@@ -366,15 +375,16 @@ export default function LLMUsagePage() {
           <label className="text-sm">
             <span className="mb-1 block text-xs font-medium text-zinc-600">{t("llm.days")}</span>
             <select
-              value={days}
-              onChange={(e) => setDays(Number(e.target.value))}
+              value={daysFilter}
+              onChange={(e) => setDaysFilter(e.target.value as "7" | "14" | "30" | "90" | "mtd")}
               className="rounded border border-zinc-300 bg-white px-3 py-2 text-sm"
             >
-              {[7, 14, 30, 90].map((d) => (
+              {(["7", "14", "30", "90"] as const).map((d) => (
                 <option key={d} value={d}>
                   {`${d}${t("llm.daysSuffix")}`}
                 </option>
               ))}
+              <option value="mtd">{t("llm.currentMonth")}</option>
             </select>
           </label>
           <label className="text-sm">

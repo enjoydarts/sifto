@@ -227,6 +227,7 @@ export const enDict: Dict = {
   "llm.title": "LLM Usage",
   "llm.subtitle": "Cost and token usage (JST daily summary + recent logs)",
   "llm.days": "Days",
+  "llm.currentMonth": "Current month",
   "llm.limit": "Rows",
   "llm.totalCost": "Total Cost",
   "llm.totalCalls": "Calls",

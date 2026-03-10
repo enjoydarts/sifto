@@ -227,6 +227,7 @@ export const jaDict: Dict = {
   "llm.title": "LLM利用状況",
   "llm.subtitle": "コスト・トークン利用履歴（JST日次集計 + 最新実行ログ）",
   "llm.days": "集計日数",
+  "llm.currentMonth": "当月",
   "llm.limit": "履歴件数",
   "llm.totalCost": "合計コスト",
   "llm.totalCalls": "呼び出し回数",

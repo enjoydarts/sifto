@@ -1,13 +1,45 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SessionProvider } from "next-auth/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { I18nProvider } from "@/components/i18n-provider";
 import { ToastProvider } from "@/components/toast-provider";
 import { ConfirmProvider } from "@/components/confirm-provider";
 import PWARegister from "@/components/pwa-register";
 import OneSignalInit from "@/components/onesignal-init";
+
+function QueryRefreshOnResume() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    let lastRefreshAt = 0;
+    const refreshActiveQueries = () => {
+      const now = Date.now();
+      if (now - lastRefreshAt < 5000) return;
+      lastRefreshAt = now;
+      void queryClient.refetchQueries({ type: "active" });
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshActiveQueries();
+      }
+    };
+    const onPageShow = () => refreshActiveQueries();
+    const onOnline = () => refreshActiveQueries();
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onOnline);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [queryClient]);
+
+  return null;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -15,9 +47,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 30_000,
+            staleTime: 5_000,
             gcTime: 10 * 60_000,
-            refetchOnWindowFocus: false,
+            refetchOnWindowFocus: true,
+            refetchOnReconnect: true,
+            refetchOnMount: true,
             retry: 1,
           },
         },
@@ -30,6 +64,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <I18nProvider>
           <ToastProvider>
             <ConfirmProvider>
+              <QueryRefreshOnResume />
               <PWARegister />
               <OneSignalInit />
               {children}

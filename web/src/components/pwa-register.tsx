@@ -9,11 +9,43 @@ export default function PWARegister() {
     const isSecure = window.location.protocol === "https:" || window.location.hostname === "localhost";
     if (!isSecure) return;
 
-    navigator.serviceWorker.register("/sw.js").catch(() => {
-      // no-op
-    });
+    let refreshing = false;
+    const onControllerChange = () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    };
+    const activateWaitingWorker = (registration: ServiceWorkerRegistration) => {
+      registration.waiting?.postMessage({ type: "SKIP_WAITING" });
+    };
+
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((registration) => {
+        void registration.update();
+        if (registration.waiting) {
+          activateWaitingWorker(registration);
+        }
+        registration.addEventListener("updatefound", () => {
+          const installing = registration.installing;
+          if (!installing) return;
+          installing.addEventListener("statechange", () => {
+            if (installing.state === "installed" && navigator.serviceWorker.controller) {
+              activateWaitingWorker(registration);
+            }
+          });
+        });
+      })
+      .catch(() => {
+        // no-op
+      });
+
+    return () => {
+      navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+    };
   }, []);
 
   return null;
 }
-

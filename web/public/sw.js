@@ -1,4 +1,4 @@
-const SW_VERSION = "v3";
+const SW_VERSION = "v4";
 const STATIC_CACHE = `sifto-static-${SW_VERSION}`;
 const PAGE_CACHE = `sifto-pages-${SW_VERSION}`;
 const API_CACHE = `sifto-api-${SW_VERSION}`;
@@ -48,20 +48,24 @@ function shouldCacheAPI(url) {
   ].some((prefix) => url.pathname.startsWith(prefix));
 }
 
-async function staleWhileRevalidateAPI(req) {
+async function networkFirstAPI(req, timeoutMs = 8000) {
   const cache = await caches.open(API_CACHE);
-  const cached = await cache.match(req);
-  const networkFetch = fetch(req)
-    .then((res) => {
-      if (res && res.ok) {
-        const copy = res.clone();
-        cache.put(req, copy).then(trimApiCache);
-      }
-      return res;
-    })
-    .catch(() => cached);
-
-  return cached || networkFetch;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(req, { signal: controller.signal });
+    clearTimeout(timer);
+    if (res && res.ok) {
+      const copy = res.clone();
+      cache.put(req, copy).then(trimApiCache);
+    }
+    return res;
+  } catch {
+    clearTimeout(timer);
+    const cached = await cache.match(req);
+    if (cached) return cached;
+    throw new Error("network and cache unavailable");
+  }
 }
 
 self.addEventListener("install", (event) => {
@@ -87,6 +91,12 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    event.waitUntil(self.skipWaiting());
+  }
+});
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
@@ -95,7 +105,7 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/_next/webpack-hmr")) return;
 
   if (shouldCacheAPI(url)) {
-    event.respondWith(staleWhileRevalidateAPI(req));
+    event.respondWith(networkFirstAPI(req));
     return;
   }
 

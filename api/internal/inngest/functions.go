@@ -967,9 +967,10 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					if userModelSettings != nil {
 						modelOverride = ptrStringOrNil(userModelSettings.FaithfulnessCheckModel)
 					}
+					var resp *service.SummaryFaithfulnessResponse
 					if modelOverride == nil || strings.TrimSpace(*modelOverride) == "" {
 						modelOverride = summaryAttempt.ResolvedModel
-						return worker.CheckSummaryFaithfulnessWithModel(
+						resp, err = worker.CheckSummaryFaithfulnessWithModel(
 							ctx,
 							titleForLLM,
 							factsResp.Facts,
@@ -981,12 +982,18 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 							summaryAttempt.OpenAIKey,
 							modelOverride,
 						)
+					} else {
+						userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "summary")
+						if err != nil {
+							return nil, err
+						}
+						resp, err = worker.CheckSummaryFaithfulnessWithModel(ctx, titleForLLM, factsResp.Facts, summary.Summary, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
 					}
-					userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "summary")
 					if err != nil {
 						return nil, err
 					}
-					return worker.CheckSummaryFaithfulnessWithModel(ctx, titleForLLM, factsResp.Facts, summary.Summary, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
+					recordLLMUsage(ctx, llmUsageRepo, "faithfulness_check", resp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
+					return resp, nil
 				})
 				if err != nil {
 					log.Printf("process-item faithfulness failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
@@ -995,7 +1002,6 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					return nil, fmt.Errorf("faithfulness check: %w", err)
 				}
 				finalFaithfulness = faithfulness
-				recordLLMUsage(ctx, llmUsageRepo, "faithfulness_check", faithfulness.LLM, userIDPtr, &data.SourceID, &itemID, nil)
 				if faithfulness.Verdict != "fail" {
 					summaryRetryCount = attempt
 					break

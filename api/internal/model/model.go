@@ -38,6 +38,7 @@ type UserSettings struct {
 	AskModel                   *string    `json:"ask_model,omitempty"`
 	SourceSuggestionModel      *string    `json:"source_suggestion_model,omitempty"`
 	EmbeddingModel             *string    `json:"embedding_model,omitempty"`
+	FactsCheckModel            *string    `json:"facts_check_model,omitempty"`
 	FaithfulnessCheckModel     *string    `json:"faithfulness_check_model,omitempty"`
 	HasInoreaderOAuth          bool       `json:"has_inoreader_oauth"`
 	InoreaderTokenExpiresAt    *time.Time `json:"inoreader_token_expires_at,omitempty"`
@@ -138,6 +139,16 @@ type SummaryFaithfulnessCheck struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+type FactsCheck struct {
+	ID           string    `json:"id"`
+	ItemID       string    `json:"item_id"`
+	FinalResult  string    `json:"final_result"`
+	RetryCount   int       `json:"retry_count"`
+	ShortComment *string   `json:"short_comment,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
 type ItemSummaryScoreBreakdown struct {
 	Importance    *float64 `json:"importance,omitempty"`
 	Novelty       *float64 `json:"novelty,omitempty"`
@@ -151,6 +162,8 @@ type ItemDetail struct {
 	ProcessingError *string                   `json:"processing_error,omitempty"`
 	Facts           *ItemFacts                `json:"facts,omitempty"`
 	FactsLLM        *ItemSummaryLLM           `json:"facts_llm,omitempty"`
+	FactsCheck      *FactsCheck               `json:"facts_check,omitempty"`
+	FactsCheckLLM   *ItemSummaryLLM           `json:"facts_check_llm,omitempty"`
 	Summary         *ItemSummary              `json:"summary,omitempty"`
 	SummaryLLM      *ItemSummaryLLM           `json:"summary_llm,omitempty"`
 	Faithfulness    *SummaryFaithfulnessCheck `json:"faithfulness,omitempty"`

@@ -56,6 +56,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       ask_model,
 		       source_suggestion_model,
 		       embedding_model,
+		       facts_check_model,
 		       faithfulness_check_model,
 		       inoreader_access_token_enc,
 		       inoreader_token_expires_at,
@@ -91,6 +92,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.AskModel,
 		&v.SourceSuggestionModel,
 		&v.EmbeddingModel,
+		&v.FactsCheckModel,
 		&v.FaithfulnessCheckModel,
 		&inoreaderAccessTokenEnc,
 		&v.InoreaderTokenExpiresAt,
@@ -206,7 +208,7 @@ func (r *UserSettingsRepo) UpsertReadingPlanConfig(ctx context.Context, userID, 
 func (r *UserSettingsRepo) UpsertLLMModelConfig(
 	ctx context.Context,
 	userID string,
-	factsModel, summaryModel, digestClusterModel, digestModel, askModel, sourceSuggestionModel, embeddingModel, faithfulnessCheckModel *string,
+	factsModel, summaryModel, digestClusterModel, digestModel, askModel, sourceSuggestionModel, embeddingModel, factsCheckModel, faithfulnessCheckModel *string,
 ) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (
@@ -218,8 +220,9 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 				ask_model,
 				source_suggestion_model,
 				embedding_model,
+				facts_check_model,
 				faithfulness_check_model
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 			ON CONFLICT (user_id) DO UPDATE
 			SET facts_model = EXCLUDED.facts_model,
 			    summary_model = EXCLUDED.summary_model,
@@ -228,6 +231,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 			    ask_model = EXCLUDED.ask_model,
 			    source_suggestion_model = EXCLUDED.source_suggestion_model,
 			    embedding_model = EXCLUDED.embedding_model,
+			    facts_check_model = EXCLUDED.facts_check_model,
 			    faithfulness_check_model = EXCLUDED.faithfulness_check_model,
 			    updated_at = NOW()`,
 		userID,
@@ -238,6 +242,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 		askModel,
 		sourceSuggestionModel,
 		embeddingModel,
+		factsCheckModel,
 		faithfulnessCheckModel,
 	)
 	if err != nil {

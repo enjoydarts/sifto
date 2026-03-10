@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
-from app.routers import ask, digest, extract, facts, feed_seed_suggestions, feed_suggestions, summarize, summary_faithfulness, translate_title
+from app.routers import ask, digest, extract, facts, facts_check, feed_seed_suggestions, feed_suggestions, summarize, summary_faithfulness, translate_title
 
 _SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
 if _SENTRY_DSN:
@@ -32,6 +32,7 @@ async def require_internal_worker_secret(request: Request, call_next):
 
 app.include_router(extract.router)
 app.include_router(facts.router)
+app.include_router(facts_check.router)
 app.include_router(summarize.router)
 app.include_router(summary_faithfulness.router)
 app.include_router(translate_title.router)

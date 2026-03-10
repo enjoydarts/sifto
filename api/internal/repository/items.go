@@ -974,6 +974,27 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 		if err == nil {
 			d.FactsLLM = &llm
 		}
+
+		var factsCheck model.FactsCheck
+		err = r.db.QueryRow(ctx, `
+			SELECT id, item_id, final_result, retry_count, short_comment, created_at, updated_at
+			FROM item_facts_checks
+			WHERE item_id = $1`, id,
+		).Scan(&factsCheck.ID, &factsCheck.ItemID, &factsCheck.FinalResult, &factsCheck.RetryCount, &factsCheck.ShortComment, &factsCheck.CreatedAt, &factsCheck.UpdatedAt)
+		if err == nil {
+			d.FactsCheck = &factsCheck
+			err = r.db.QueryRow(ctx, `
+				SELECT provider, model, pricing_source, created_at
+				FROM llm_usage_logs
+				WHERE item_id = $1
+				  AND purpose = 'facts_check'
+				ORDER BY created_at DESC
+				LIMIT 1`, id,
+			).Scan(&llm.Provider, &llm.Model, &llm.PricingSource, &llm.CreatedAt)
+			if err == nil {
+				d.FactsCheckLLM = &llm
+			}
+		}
 	}
 
 	// summary

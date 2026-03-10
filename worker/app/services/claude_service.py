@@ -13,6 +13,14 @@ from app.services.summary_faithfulness_common import (
     summary_faithfulness_prompt,
     summary_faithfulness_system_instruction,
 )
+from app.services.facts_check_common import (
+    FACTS_CHECK_SCHEMA,
+    extract_first_json_object as _facts_check_extract_first_json_object,
+    facts_check_prompt,
+    facts_check_system_instruction,
+    normalize_facts_check_result,
+    require_facts_check_comment,
+)
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -867,6 +875,38 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
         raw_text,
     )
     result["llm"] = _llm_meta(message, "faithfulness_check", used_model or _summary_model)
+    return result
+
+
+def check_facts(title: str | None, content: str, facts: list[str], api_key: str | None = None, model: str | None = None) -> dict:
+    prompt = facts_check_prompt(title, content, facts)
+    message, used_model = _call_with_model_fallback(
+        prompt,
+        str(model or _summary_model),
+        _summary_model_fallback,
+        max_tokens=320,
+        api_key=api_key,
+        system_prompt=facts_check_system_instruction(),
+        user_prompt=prompt,
+    )
+    if message is None:
+        result = normalize_facts_check_result({"verdict": "warn", "short_comment": "判定モデル応答を取得できなかったため簡易扱いです。"})
+        result["llm"] = {
+            "provider": "local-fallback",
+            "model": used_model or _summary_model,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "estimated_cost_usd": 0.0,
+        }
+        return result
+    raw_text = message.content[0].text.strip()
+    result = require_facts_check_comment(
+        normalize_facts_check_result(_facts_check_extract_first_json_object(raw_text)),
+        raw_text,
+    )
+    result["llm"] = _llm_meta(message, "facts_check", used_model or _summary_model)
     return result
 
 

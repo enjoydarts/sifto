@@ -132,6 +132,27 @@ func (r *ItemInngestRepo) UpsertSummaryFaithfulnessCheck(
 	return err
 }
 
+func (r *ItemInngestRepo) UpsertFactsCheck(
+	ctx context.Context,
+	itemID, finalResult string,
+	retryCount int,
+	shortComment *string,
+) error {
+	if retryCount < 0 {
+		retryCount = 0
+	}
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO item_facts_checks (item_id, final_result, retry_count, short_comment)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (item_id) DO UPDATE SET
+		    final_result = EXCLUDED.final_result,
+		    retry_count = EXCLUDED.retry_count,
+		    short_comment = EXCLUDED.short_comment,
+		    updated_at = NOW()`,
+		itemID, finalResult, retryCount, shortComment)
+	return err
+}
+
 func (r *ItemInngestRepo) MarkFailed(ctx context.Context, id string, processingError *string) error {
 	var msg *string
 	if processingError != nil {

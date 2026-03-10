@@ -765,6 +765,32 @@ export default function ItemDetailPage() {
               </span>
             )}
           </div>
+          {item.facts_check && (
+            <div className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-500">
+                <span>{t("itemDetail.factsCheck")}</span>
+                {item.facts_check_llm && (
+                  <span
+                    className="rounded bg-white px-2 py-1 text-zinc-600 ring-1 ring-zinc-200"
+                    title={t("itemDetail.factsCheckModelTitle")}
+                  >
+                    {item.facts_check_llm.provider} / {item.facts_check_llm.model}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="rounded bg-white px-2 py-1 text-zinc-700 ring-1 ring-zinc-200">
+                  {t(`itemDetail.factsCheck.${item.facts_check.final_result}`, item.facts_check.final_result)}
+                </span>
+                <span className="text-zinc-500">
+                  {t("itemDetail.factsCheck.retryCount")}: {item.facts_check.retry_count}
+                </span>
+              </div>
+              {item.facts_check.short_comment && (
+                <p className="mt-2 text-sm leading-6 text-zinc-700">{item.facts_check.short_comment}</p>
+              )}
+            </div>
+          )}
           <ul className="space-y-2">
             {item.facts.facts.map((f, i) => (
               <li key={i} className="flex gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700">

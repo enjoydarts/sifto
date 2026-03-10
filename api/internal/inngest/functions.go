@@ -1038,32 +1038,149 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				}
 			}
 
-			// Step 2: 事実抽出
-			factsResp, err := step.Run(ctx, "extract-facts", func(ctx context.Context) (*service.ExtractFactsResponse, error) {
-				log.Printf("process-item extract-facts start item_id=%s", itemID)
-				var modelOverride *string
-				if userModelSettings != nil {
-					modelOverride = ptrStringOrNil(userModelSettings.FactsModel)
+			// Step 2: 事実抽出 + facts check
+			const maxFactsCheckRetries = 2
+			var factsResp *service.ExtractFactsResponse
+			var finalFactsCheck *service.FactsCheckResponse
+			var factsRetryCount int
+			for attempt := 0; attempt <= maxFactsCheckRetries; attempt++ {
+				stepLabel := "extract-facts"
+				if attempt > 0 {
+					stepLabel = fmt.Sprintf("extract-facts-%d", attempt+1)
 				}
-				userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "facts")
+				type factsAttemptResult struct {
+					Facts         *service.ExtractFactsResponse
+					ResolvedModel *string
+					AnthropicKey  *string
+					GoogleKey     *string
+					GroqKey       *string
+					DeepSeekKey   *string
+					OpenAIKey     *string
+				}
+				factsAttempt, err := step.Run(ctx, stepLabel, func(ctx context.Context) (*factsAttemptResult, error) {
+					log.Printf("process-item extract-facts start item_id=%s attempt=%d", itemID, attempt+1)
+					var modelOverride *string
+					if userModelSettings != nil {
+						modelOverride = ptrStringOrNil(userModelSettings.FactsModel)
+					}
+					userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "facts")
+					if err != nil {
+						return nil, err
+					}
+					resp, err := worker.ExtractFactsWithModel(ctx, titleForLLM, extracted.Content, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
+					if err != nil {
+						return nil, err
+					}
+					return &factsAttemptResult{
+						Facts:         resp,
+						ResolvedModel: resolvedModel,
+						AnthropicKey:  userAnthropicKey,
+						GoogleKey:     userGoogleKey,
+						GroqKey:       userGroqKey,
+						DeepSeekKey:   userDeepSeekKey,
+						OpenAIKey:     userOpenAIKey,
+					}, nil
+				})
 				if err != nil {
-					return nil, err
+					log.Printf("process-item extract-facts failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
+					msg := fmt.Sprintf("extract facts: %v", err)
+					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+					return nil, fmt.Errorf("extract facts: %w", err)
 				}
-				return worker.ExtractFactsWithModel(ctx, titleForLLM, extracted.Content, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
-			})
-			if err != nil {
-				log.Printf("process-item extract-facts failed item_id=%s err=%v", itemID, err)
+				factsResp = factsAttempt.Facts
+				recordLLMUsage(ctx, llmUsageRepo, "facts", factsResp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
+				if len(factsResp.Facts) == 0 {
+					err := fmt.Errorf("empty facts returned from worker")
+					log.Printf("process-item extract-facts empty item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
+					msg := fmt.Sprintf("extract facts: %v", err)
+					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+					return nil, fmt.Errorf("extract facts: %w", err)
+				}
+				log.Printf("process-item extract-facts done item_id=%s facts=%d attempt=%d", itemID, len(factsResp.Facts), attempt+1)
+
+				checkStep := "check-facts"
+				if attempt > 0 {
+					checkStep = fmt.Sprintf("check-facts-%d", attempt+1)
+				}
+				factsCheck, err := step.Run(ctx, checkStep, func(ctx context.Context) (*service.FactsCheckResponse, error) {
+					var modelOverride *string
+					if userModelSettings != nil {
+						modelOverride = ptrStringOrNil(userModelSettings.FactsCheckModel)
+					}
+					var resp *service.FactsCheckResponse
+					if modelOverride == nil || strings.TrimSpace(*modelOverride) == "" {
+						modelOverride = factsAttempt.ResolvedModel
+						resp, err = worker.CheckFactsWithModel(
+							ctx,
+							titleForLLM,
+							extracted.Content,
+							factsResp.Facts,
+							factsAttempt.AnthropicKey,
+							factsAttempt.GoogleKey,
+							factsAttempt.GroqKey,
+							factsAttempt.DeepSeekKey,
+							factsAttempt.OpenAIKey,
+							modelOverride,
+						)
+					} else {
+						userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "facts")
+						if err != nil {
+							return nil, err
+						}
+						resp, err = worker.CheckFactsWithModel(ctx, titleForLLM, extracted.Content, factsResp.Facts, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
+					}
+					if err != nil {
+						return nil, err
+					}
+					recordLLMUsage(ctx, llmUsageRepo, "facts_check", resp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
+					return resp, nil
+				})
+				if err != nil {
+					log.Printf("process-item facts_check failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
+					msg := fmt.Sprintf("facts check: %v", err)
+					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+					return nil, fmt.Errorf("facts check: %w", err)
+				}
+				finalFactsCheck = factsCheck
+				if factsCheck.Verdict != "fail" {
+					factsRetryCount = attempt
+					break
+				}
+				if attempt >= maxFactsCheckRetries {
+					factsRetryCount = attempt
+					break
+				}
+				log.Printf("process-item facts_check retry item_id=%s attempt=%d verdict=%s comment=%s", itemID, attempt+1, factsCheck.Verdict, factsCheck.ShortComment)
+			}
+			if factsResp == nil {
+				err := fmt.Errorf("facts extraction produced no result")
 				msg := fmt.Sprintf("extract facts: %v", err)
 				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-				return nil, fmt.Errorf("extract facts: %w", err)
+				return nil, err
 			}
-			log.Printf("process-item extract-facts done item_id=%s facts=%d", itemID, len(factsResp.Facts))
-			recordLLMUsage(ctx, llmUsageRepo, "facts", factsResp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
+			if finalFactsCheck == nil {
+				err := fmt.Errorf("facts check produced no result")
+				msg := fmt.Sprintf("facts check: %v", err)
+				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+				return nil, err
+			}
 			if err := itemRepo.InsertFacts(ctx, itemID, factsResp.Facts); err != nil {
 				log.Printf("process-item insert-facts failed item_id=%s err=%v", itemID, err)
 				return nil, fmt.Errorf("insert facts: %w", err)
 			}
-			log.Printf("process-item insert-facts done item_id=%s", itemID)
+			var factsCheckComment *string
+			if comment := strings.TrimSpace(finalFactsCheck.ShortComment); comment != "" {
+				factsCheckComment = &comment
+			}
+			if err := itemRepo.UpsertFactsCheck(ctx, itemID, finalFactsCheck.Verdict, factsRetryCount, factsCheckComment); err != nil {
+				return nil, fmt.Errorf("upsert facts check: %w", err)
+			}
+			if finalFactsCheck.Verdict == "fail" {
+				msg := fmt.Sprintf("facts check failed after %d retries: %s", factsRetryCount, finalFactsCheck.ShortComment)
+				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+				return nil, fmt.Errorf("facts check: %s", finalFactsCheck.ShortComment)
+			}
+			log.Printf("process-item insert-facts done item_id=%s retries=%d facts_check=%s", itemID, factsRetryCount, finalFactsCheck.Verdict)
 
 			// Step 3: 要約 + faithfulness check
 			const maxSummaryFaithfulnessRetries = 2

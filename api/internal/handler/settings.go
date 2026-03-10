@@ -85,6 +85,7 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"ask":                settings.AskModel,
 			"source_suggestion":  settings.SourceSuggestionModel,
 			"embedding":          settings.EmbeddingModel,
+			"facts_check":        settings.FactsCheckModel,
 			"faithfulness_check": settings.FaithfulnessCheckModel,
 		},
 		"current_month": map[string]any{
@@ -266,6 +267,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		Ask               *string `json:"ask"`
 		SourceSuggestion  *string `json:"source_suggestion"`
 		Embedding         *string `json:"embedding"`
+		FactsCheck        *string `json:"facts_check"`
 		FaithfulnessCheck *string `json:"faithfulness_check"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -297,6 +299,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		norm(body.Ask),
 		norm(body.SourceSuggestion),
 		embeddingModel,
+		norm(body.FactsCheck),
 		norm(body.FaithfulnessCheck),
 	)
 	if err != nil {
@@ -313,6 +316,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 			"ask":                settings.AskModel,
 			"source_suggestion":  settings.SourceSuggestionModel,
 			"embedding":          settings.EmbeddingModel,
+			"facts_check":        settings.FactsCheckModel,
 			"faithfulness_check": settings.FaithfulnessCheckModel,
 		},
 	})

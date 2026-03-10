@@ -109,6 +109,16 @@ export interface SummaryFaithfulnessCheck {
   updated_at: string;
 }
 
+export interface FactsCheck {
+  id: string;
+  item_id: string;
+  final_result: "pass" | "warn" | "fail" | string;
+  retry_count: number;
+  short_comment?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ItemFeedback {
   user_id: string;
   item_id: string;
@@ -121,6 +131,8 @@ export interface ItemDetail extends Item {
   processing_error?: string | null;
   facts: ItemFacts | null;
   facts_llm?: ItemSummaryLLM | null;
+  facts_check?: FactsCheck | null;
+  facts_check_llm?: ItemSummaryLLM | null;
   summary: ItemSummary | null;
   summary_llm?: ItemSummaryLLM | null;
   faithfulness?: SummaryFaithfulnessCheck | null;
@@ -472,6 +484,7 @@ export interface UserSettings {
     ask?: string | null;
     source_suggestion?: string | null;
     embedding?: string | null;
+    facts_check?: string | null;
     faithfulness_check?: string | null;
   };
   current_month: UserSettingsCurrentMonth;
@@ -814,6 +827,7 @@ export const api = {
     ask?: string | null;
     source_suggestion?: string | null;
     embedding?: string | null;
+    facts_check?: string | null;
     faithfulness_check?: string | null;
   }) =>
     apiFetch<{ user_id: string; llm_models: UserSettings["llm_models"] }>("/settings/llm-models", {

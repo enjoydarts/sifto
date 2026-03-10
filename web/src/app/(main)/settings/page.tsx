@@ -87,6 +87,7 @@ export default function SettingsPage() {
   const [anthropicAskModel, setAnthropicAskModel] = useState("");
   const [anthropicSourceSuggestionModel, setAnthropicSourceSuggestionModel] = useState("");
   const [openAIEmbeddingModel, setOpenAIEmbeddingModel] = useState("");
+  const [factsCheckModel, setFactsCheckModel] = useState("");
   const [faithfulnessCheckModel, setFaithfulnessCheckModel] = useState("");
   const loadSeqRef = useRef(0);
   const llmModelsDirtyRef = useRef(false);
@@ -99,6 +100,7 @@ export default function SettingsPage() {
     setAnthropicAskModel(llmModels?.ask ?? "");
     setAnthropicSourceSuggestionModel(llmModels?.source_suggestion ?? "");
     setOpenAIEmbeddingModel(llmModels?.embedding ?? "");
+    setFactsCheckModel(llmModels?.facts_check ?? "");
     setFaithfulnessCheckModel(llmModels?.faithfulness_check ?? "");
   }, []);
 
@@ -226,6 +228,7 @@ export default function SettingsPage() {
         ask: emptyToNull(anthropicAskModel),
         source_suggestion: emptyToNull(anthropicSourceSuggestionModel),
         embedding: emptyToNull(openAIEmbeddingModel),
+        facts_check: emptyToNull(factsCheckModel),
         faithfulness_check: emptyToNull(faithfulnessCheckModel),
       };
       const resp = await api.updateLLMModelSettings(nextModels);
@@ -967,6 +970,12 @@ export default function SettingsPage() {
               value={anthropicAskModel}
               onChange={(value) => onChangeLLMModel(setAnthropicAskModel, value)}
               options={optionsForPurpose("ask")}
+            />
+            <ModelSelect
+              label={t("settings.model.factsCheck")}
+              value={factsCheckModel}
+              onChange={(value) => onChangeLLMModel(setFactsCheckModel, value)}
+              options={optionsForPurpose("facts")}
             />
             <ModelSelect
               label={t("settings.model.faithfulnessCheck")}

@@ -234,6 +234,43 @@ def _chat_json(
     return text.strip(), _usage_from_response(data)
 
 
+def _extract_bulletish_lines(text: str) -> list[str]:
+    lines = [_strip_code_fence(text or "")]
+    out: list[str] = []
+    for block in lines:
+        for raw in block.splitlines():
+            s = raw.strip()
+            if not s:
+                continue
+            s = re.sub(r"^[\-\*\u2022\d\.\)\s]+", "", s).strip()
+            if len(s) >= 6:
+                out.append(s)
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for item in out:
+        if item in seen:
+            continue
+        seen.add(item)
+        deduped.append(item)
+    return deduped
+
+
+def _is_placeholder_fact(text: str) -> bool:
+    s = str(text or "").strip()
+    if not s:
+        return True
+    return re.fullmatch(r"事実\s*\d+[\.\:]?", s) is not None
+
+
+def _sanitize_facts(raw: list[str]) -> list[str]:
+    facts = [str(v).strip() for v in raw if str(v).strip()]
+    if not facts:
+        return []
+    if all(_is_placeholder_fact(v) for v in facts):
+        return []
+    return [v for v in facts if not _is_placeholder_fact(v)]
+
+
 def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:
     system_instruction = """# Role
 あなたは見出し翻訳の専門家です。
@@ -281,7 +318,7 @@ def extract_facts(title: str | None, content: str, model: str, api_key: str) -> 
 提供される記事から重要な事実を8〜18個の箇条書きで抽出してください。
 
 # Rules
-- 出力は必ず [\"事実1\", \"事実2\", ...] のJSON形式の配列のみとしてください。
+- 出力は必ず {"facts": ["...", "..."]} のJSONオブジェクト1つのみにしてください。
 - 余計な挨拶や解説は一切不要です。
 - 事実は客観的かつ具体的に記述してください。
 - 記事が英語の場合も、出力は自然な日本語にしてください。
@@ -292,8 +329,39 @@ def extract_facts(title: str | None, content: str, model: str, api_key: str) -> 
 本文:
 {content}
 """
-    text, usage = _chat_json(prompt, model, api_key, system_instruction=system_instruction, max_output_tokens=1500)
-    return {"facts": _parse_json_string_array(text), "llm": _llm_meta(model, "facts", usage)}
+    schema = {
+        "type": "object",
+        "properties": {
+            "facts": {
+                "type": "array",
+                "items": {"type": "string"},
+            }
+        },
+        "required": ["facts"],
+        "additionalProperties": False,
+    }
+    text, usage = _chat_json(
+        prompt,
+        model,
+        api_key,
+        system_instruction=system_instruction,
+        max_output_tokens=1500,
+        response_schema=schema,
+        schema_name="facts",
+    )
+    obj = _extract_first_json_object(text) or {}
+    raw = obj.get("facts")
+    facts = _sanitize_facts(raw if isinstance(raw, list) else [])
+    if not facts:
+        facts = _sanitize_facts(_parse_json_string_array(text))
+    if not facts:
+        matches = re.findall(r'"((?:\\.|[^"\\])*)"', _strip_code_fence(text), re.S)
+        facts = _sanitize_facts([_decode_json_string_fragment(m).strip() for m in matches if _decode_json_string_fragment(m).strip()])
+    if not facts:
+        facts = _sanitize_facts(_extract_bulletish_lines(text))
+    if not facts:
+        raise RuntimeError(f"deepseek extract_facts parse failed: response_snippet={text[:500]}")
+    return {"facts": facts[:18], "llm": _llm_meta(model, "facts", usage)}
 
 
 def summarize(title: str | None, facts: list[str], source_text_chars: int | None = None, model: str = "openai/gpt-oss-120b", api_key: str = "") -> dict:

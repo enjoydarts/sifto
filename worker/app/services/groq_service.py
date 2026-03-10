@@ -168,16 +168,21 @@ def _chat_json(
         "Content-Type": "application/json",
     }
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("GROQ_TIMEOUT_SEC", 90.0)
+
+    def _is_json_validation_error(resp: httpx.Response) -> bool:
+        return resp.status_code == 400 and "json_validate_failed" in (resp.text or "")
+
     with httpx.Client(timeout=req_timeout) as client:
         resp = client.post(url, headers=headers, json=body)
-        if (
-            resp.status_code == 400
-            and use_strict_schema
-            and "json_validate_failed" in (resp.text or "")
-        ):
-            fallback_body = dict(body)
-            fallback_body["response_format"] = {"type": "json_object"}
-            resp = client.post(url, headers=headers, json=fallback_body)
+        if _is_json_validation_error(resp) and response_schema is not None:
+            if use_strict_schema:
+                fallback_body = dict(body)
+                fallback_body["response_format"] = {"type": "json_object"}
+                resp = client.post(url, headers=headers, json=fallback_body)
+            if _is_json_validation_error(resp):
+                fallback_body = dict(body)
+                fallback_body.pop("response_format", None)
+                resp = client.post(url, headers=headers, json=fallback_body)
     if resp.status_code >= 400:
         raise RuntimeError(f"groq chat.completions failed status={resp.status_code} body={resp.text[:1000]}")
     data = resp.json() if resp.content else {}
@@ -521,6 +526,12 @@ candidates:
 
 
 def compose_digest_cluster_draft(cluster_label: str, item_count: int, topics: list[str], source_lines: list[str], model: str, api_key: str) -> dict:
+    cluster_label = str(cluster_label or "話題").strip() or "話題"
+    topics = [str(t).strip() for t in topics if str(t).strip()][:8]
+    source_lines = [str(x).strip()[:500] for x in source_lines if str(x).strip()][:16]
+    if not source_lines:
+        return {"draft_summary": "", "llm": _llm_meta(model, "digest_cluster_draft", {"input_tokens": 0, "output_tokens": 0})}
+
     system_instruction = """# Role
 あなたはニュースダイジェストの下書き編集者です。
 
@@ -532,6 +543,7 @@ def compose_digest_cluster_draft(cluster_label: str, item_count: int, topics: li
 - 重複をまとめる
 - 重要な相違点があれば残す
 - プレーンテキストの箇条書き 3〜8 行程度
+- draft_summary 以外のキーを出さない
 - JSONのみで返す"""
     prompt = f"""# Output
 {{
@@ -541,9 +553,9 @@ def compose_digest_cluster_draft(cluster_label: str, item_count: int, topics: li
 # Input
 cluster_label: {cluster_label}
 item_count: {item_count}
-topics: {json.dumps(topics or [], ensure_ascii=False)}
+topics: {json.dumps(topics, ensure_ascii=False)}
 source_lines:
-{json.dumps(source_lines or [], ensure_ascii=False)}
+{json.dumps(source_lines, ensure_ascii=False)}
 """
     schema = {
         "type": "object",
@@ -551,11 +563,40 @@ source_lines:
         "required": ["draft_summary"],
         "additionalProperties": False,
     }
-    text, usage = _chat_json(prompt, model, api_key, system_instruction=system_instruction, max_output_tokens=1200, response_schema=schema, schema_name="digest_cluster_draft")
+    fallback_prompt = f"""次の要点メモだけを使って、重複をまとめたクラスタ下書きを作成してください。
+
+要件:
+- 推測しない
+- 箇条書き 3〜8 行
+- JSONのみで返す
+- キーは draft_summary のみ
+
+返却形式:
+{{"draft_summary":"- ...\\n- ..."}}
+
+cluster_label: {cluster_label}
+item_count: {item_count}
+topics: {json.dumps(topics, ensure_ascii=False)}
+source_lines:
+{json.dumps(source_lines[:10], ensure_ascii=False)}
+"""
+    try:
+        text, usage = _chat_json(prompt, model, api_key, system_instruction=system_instruction, max_output_tokens=900, response_schema=schema, schema_name="digest_cluster_draft")
+    except Exception as exc:
+        _log.warning("groq compose_digest_cluster_draft primary attempt failed: %s", exc)
+        try:
+            text, usage = _chat_json(fallback_prompt, model, api_key, max_output_tokens=500, response_schema=None)
+        except Exception as retry_exc:
+            _log.warning("groq compose_digest_cluster_draft fallback failed: %s", retry_exc)
+            return {"draft_summary": "\n".join(source_lines[:5]), "llm": _llm_meta(model, "digest_cluster_draft", {"input_tokens": 0, "output_tokens": 0})}
+
     data = _extract_first_json_object(text) or {}
     draft = str(data.get("draft_summary") or "").strip()
     if not draft:
-        raise RuntimeError(f"groq compose_digest_cluster_draft parse failed: response_snippet={text[:500]}")
+        draft = _extract_json_string_value_loose(text, "draft_summary")
+    draft = str(draft or "").strip()
+    if not draft:
+        draft = "\n".join(source_lines[:5])
     return {"draft_summary": draft, "llm": _llm_meta(model, "digest_cluster_draft", usage)}
 
 

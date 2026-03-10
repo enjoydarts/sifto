@@ -430,6 +430,7 @@ export const jaDict: Dict = {
   "itemDetail.score.reliability": "確度",
   "itemDetail.score.relevance": "汎用関連性",
   "itemDetail.facts": "事実抽出",
+  "itemDetail.factsModelTitle": "事実抽出モデル",
   "itemDetail.content": "本文",
   "itemDetail.related": "関連記事",
   "itemDetail.clusters": "クラスタ",

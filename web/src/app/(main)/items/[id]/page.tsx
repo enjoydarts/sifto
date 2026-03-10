@@ -741,10 +741,20 @@ export default function ItemDetailPage() {
 
       {item.facts && item.facts.facts.length > 0 && (
         <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
-            <ListChecks className="size-4 text-zinc-500" aria-hidden="true" />
-            {t("itemDetail.facts")}
-          </h2>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
+              <ListChecks className="size-4 text-zinc-500" aria-hidden="true" />
+              {t("itemDetail.facts")}
+            </h2>
+            {item.facts_llm && (
+              <span
+                className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
+                title={t("itemDetail.factsModelTitle")}
+              >
+                {item.facts_llm.provider} / {item.facts_llm.model}
+              </span>
+            )}
+          </div>
           <ul className="space-y-2">
             {item.facts.facts.map((f, i) => (
               <li key={i} className="flex gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700">

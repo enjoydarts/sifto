@@ -962,6 +962,18 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 	).Scan(&f.ID, &f.ItemID, &f.Facts, &f.ExtractedAt)
 	if err == nil {
 		d.Facts = &f
+		var llm model.ItemSummaryLLM
+		err = r.db.QueryRow(ctx, `
+			SELECT provider, model, pricing_source, created_at
+			FROM llm_usage_logs
+			WHERE item_id = $1
+			  AND purpose = 'facts'
+			ORDER BY created_at DESC
+			LIMIT 1`, id,
+		).Scan(&llm.Provider, &llm.Model, &llm.PricingSource, &llm.CreatedAt)
+		if err == nil {
+			d.FactsLLM = &llm
+		}
 	}
 
 	// summary

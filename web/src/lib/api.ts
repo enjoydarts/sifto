@@ -120,6 +120,7 @@ export interface ItemFeedback {
 export interface ItemDetail extends Item {
   processing_error?: string | null;
   facts: ItemFacts | null;
+  facts_llm?: ItemSummaryLLM | null;
   summary: ItemSummary | null;
   summary_llm?: ItemSummaryLLM | null;
   faithfulness?: SummaryFaithfulnessCheck | null;

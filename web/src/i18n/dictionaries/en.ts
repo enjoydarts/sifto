@@ -430,6 +430,7 @@ export const enDict: Dict = {
   "itemDetail.score.reliability": "Reliability",
   "itemDetail.score.relevance": "Relevance",
   "itemDetail.facts": "Facts",
+  "itemDetail.factsModelTitle": "Fact extraction model",
   "itemDetail.content": "Content",
   "itemDetail.related": "Related articles",
   "itemDetail.clusters": "clusters",

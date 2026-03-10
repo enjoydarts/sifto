@@ -150,6 +150,7 @@ type ItemDetail struct {
 	Item
 	ProcessingError *string                   `json:"processing_error,omitempty"`
 	Facts           *ItemFacts                `json:"facts,omitempty"`
+	FactsLLM        *ItemSummaryLLM           `json:"facts_llm,omitempty"`
 	Summary         *ItemSummary              `json:"summary,omitempty"`
 	SummaryLLM      *ItemSummaryLLM           `json:"summary_llm,omitempty"`
 	Faithfulness    *SummaryFaithfulnessCheck `json:"faithfulness,omitempty"`

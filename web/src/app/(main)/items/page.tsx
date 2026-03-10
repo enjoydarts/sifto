@@ -8,6 +8,7 @@ import { api, Item } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import Pagination from "@/components/pagination";
 import { useToast } from "@/components/toast-provider";
+import { useConfirm } from "@/components/confirm-provider";
 import { InlineReader } from "@/components/inline-reader";
 import { PageTransition } from "@/components/page-transition";
 import { EmptyState } from "@/components/empty-state";
@@ -27,6 +28,7 @@ type FocusQueueData = {
 function ItemsPageContent() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
   const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -66,6 +68,7 @@ function ItemsPageContent() {
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
   const [retryingIds, setRetryingIds] = useState<Record<string, boolean>>({});
   const [readUpdatingIds, setReadUpdatingIds] = useState<Record<string, boolean>>({});
+  const [bulkMarkingRead, setBulkMarkingRead] = useState(false);
   const restoredScrollRef = useRef<string | null>(null);
   const prefetchedDetailIDsRef = useRef<Record<string, true>>({});
 
@@ -293,6 +296,41 @@ function ItemsPageContent() {
     [listQueryKey, queryClient, showToast, t]
   );
 
+  const bulkMarkRead = useCallback(
+    async (mode: "filtered" | "older_than_7d") => {
+      const ok = await confirm({
+        title: mode === "filtered" ? t("items.bulkRead.filteredTitle") : t("items.bulkRead.olderTitle"),
+        message: mode === "filtered" ? t("items.bulkRead.filteredMessage") : t("items.bulkRead.olderMessage"),
+        confirmLabel: t("items.bulkRead.confirm"),
+        tone: "danger",
+      });
+      if (!ok) return;
+      setBulkMarkingRead(true);
+      try {
+        const result = await api.markItemsReadBulk({
+          status: filter || null,
+          source_id: sourceID || null,
+          topic: topic || null,
+          unread_only: unreadMode || unreadOnly || mode === "older_than_7d",
+          read_only: readMode,
+          favorite_only: favoriteOnly,
+          later_only: laterMode,
+          older_than_days: mode === "older_than_7d" ? 7 : null,
+        });
+        showToast(`${result.updated_count}${t("items.bulkRead.doneSuffix")}`, "success");
+        await queryClient.invalidateQueries({ queryKey: ["items-feed"] });
+        await queryClient.invalidateQueries({ queryKey: ["focus-queue"] });
+        await queryClient.invalidateQueries({ queryKey: ["briefing-today"] });
+      } catch (e) {
+        setError(String(e));
+        showToast(`${t("common.error")}: ${String(e)}`, "error");
+      } finally {
+        setBulkMarkingRead(false);
+      }
+    },
+    [confirm, favoriteOnly, filter, laterMode, queryClient, readMode, showToast, sourceID, t, topic, unreadMode, unreadOnly]
+  );
+
   const sortedItems = [...items].sort((a, b) => {
     if (sortMode === "score") {
       const as = a.summary_score ?? -1;
@@ -426,6 +464,22 @@ function ItemsPageContent() {
               className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring"
             >
               {t("items.openAllTriage")}
+            </button>
+            <button
+              type="button"
+              disabled={bulkMarkingRead}
+              onClick={() => void bulkMarkRead("filtered")}
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring disabled:opacity-60"
+            >
+              {bulkMarkingRead ? t("common.saving") : t("items.bulkRead.filtered")}
+            </button>
+            <button
+              type="button"
+              disabled={bulkMarkingRead}
+              onClick={() => void bulkMarkRead("older_than_7d")}
+              className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 press focus-ring disabled:opacity-60"
+            >
+              {bulkMarkingRead ? t("common.saving") : t("items.bulkRead.olderThan7d")}
             </button>
           </div>
         </div>

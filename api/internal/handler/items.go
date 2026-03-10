@@ -812,6 +812,44 @@ func (h *ItemHandler) MarkUnread(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"item_id": id, "is_read": false})
 }
 
+func (h *ItemHandler) MarkReadBulk(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		Status        *string `json:"status"`
+		SourceID      *string `json:"source_id"`
+		Topic         *string `json:"topic"`
+		UnreadOnly    bool    `json:"unread_only"`
+		ReadOnly      bool    `json:"read_only"`
+		FavoriteOnly  bool    `json:"favorite_only"`
+		LaterOnly     bool    `json:"later_only"`
+		OlderThanDays *int    `json:"older_than_days"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if body.UnreadOnly && body.ReadOnly {
+		http.Error(w, "unread_only and read_only cannot both be true", http.StatusBadRequest)
+		return
+	}
+	updated, err := h.repo.MarkReadBulk(r.Context(), userID, repository.BulkMarkReadParams{
+		Status:        body.Status,
+		SourceID:      body.SourceID,
+		Topic:         body.Topic,
+		UnreadOnly:    body.UnreadOnly,
+		ReadOnly:      body.ReadOnly,
+		FavoriteOnly:  body.FavoriteOnly,
+		LaterOnly:     body.LaterOnly,
+		OlderThanDays: body.OlderThanDays,
+	})
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	h.invalidateUserCaches(r.Context(), userID)
+	writeJSON(w, map[string]any{"status": "ok", "updated_count": updated})
+}
+
 func (h *ItemHandler) MarkLater(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	id := chi.URLParam(r, "id")

@@ -31,6 +31,17 @@ type ItemListParams struct {
 	PageSize     int
 }
 
+type BulkMarkReadParams struct {
+	Status        *string
+	SourceID      *string
+	Topic         *string
+	UnreadOnly    bool
+	ReadOnly      bool
+	FavoriteOnly  bool
+	LaterOnly     bool
+	OlderThanDays *int
+}
+
 type ReadingPlanParams struct {
 	Window          string // 24h | today_jst | 7d
 	Size            int
@@ -239,6 +250,66 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 		Status:   p.Status,
 		SourceID: p.SourceID,
 	}, nil
+}
+
+func (r *ItemRepo) MarkReadBulk(ctx context.Context, userID string, p BulkMarkReadParams) (int, error) {
+	where := ` FROM items i
+		JOIN sources s ON s.id = i.source_id
+		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
+		WHERE s.user_id = $1`
+	args := []any{userID}
+	if p.Status != nil {
+		args = append(args, *p.Status)
+		where += ` AND i.status = $` + itoa(len(args))
+	}
+	if p.SourceID != nil {
+		args = append(args, *p.SourceID)
+		where += ` AND i.source_id = $` + itoa(len(args))
+	}
+	if p.Topic != nil && *p.Topic != "" {
+		args = append(args, *p.Topic)
+		where += ` AND EXISTS (
+			SELECT 1 FROM item_summaries smt
+			WHERE smt.item_id = i.id
+			  AND $` + itoa(len(args)) + `::text = ANY(COALESCE(smt.topics, '{}'::text[]))
+		)`
+	}
+	if p.UnreadOnly {
+		where += ` AND ir.item_id IS NULL`
+	}
+	if p.ReadOnly {
+		where += ` AND ir.item_id IS NOT NULL`
+	}
+	if p.FavoriteOnly {
+		where += ` AND COALESCE(fb.is_favorite, false) = true`
+	}
+	if p.LaterOnly {
+		where += ` AND EXISTS (
+			SELECT 1 FROM item_laters il2
+			WHERE il2.item_id = i.id AND il2.user_id = $1
+		)`
+	}
+	if p.OlderThanDays != nil && *p.OlderThanDays > 0 {
+		args = append(args, *p.OlderThanDays)
+		where += ` AND COALESCE(i.published_at, i.created_at) < (NOW() - ($` + itoa(len(args)) + `::int * INTERVAL '1 day'))`
+	}
+
+	var inserted int
+	err := r.db.QueryRow(ctx, `
+		WITH target_items AS (
+			SELECT i.id
+			`+where+`
+		), inserted_rows AS (
+			INSERT INTO item_reads (user_id, item_id, read_at)
+			SELECT $1, t.id, NOW()
+			FROM target_items t
+			ON CONFLICT (user_id, item_id) DO NOTHING
+			RETURNING 1
+		)
+		SELECT COUNT(*)::int FROM inserted_rows
+	`, args...).Scan(&inserted)
+	return inserted, err
 }
 
 func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlanParams) (*model.ReadingPlanResponse, error) {

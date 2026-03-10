@@ -154,6 +154,11 @@ export interface ItemReadResult {
   is_read: boolean;
 }
 
+export interface BulkMarkReadResult {
+  status: "ok";
+  updated_count: number;
+}
+
 export interface ItemLaterResult {
   item_id: string;
   is_later: boolean;
@@ -632,6 +637,20 @@ export const api = {
     apiFetch<ItemReadResult>(`/items/${id}/read`, { method: "POST" }),
   markItemUnread: (id: string) =>
     apiFetch<ItemReadResult>(`/items/${id}/read`, { method: "DELETE" }),
+  markItemsReadBulk: (body: {
+    status?: string | null;
+    source_id?: string | null;
+    topic?: string | null;
+    unread_only?: boolean;
+    read_only?: boolean;
+    favorite_only?: boolean;
+    later_only?: boolean;
+    older_than_days?: number | null;
+  }) =>
+    apiFetch<BulkMarkReadResult>("/items/mark-read-bulk", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   markItemLater: (id: string) =>
     apiFetch<ItemLaterResult>(`/items/${id}/later`, { method: "POST" }),
   unmarkItemLater: (id: string) =>

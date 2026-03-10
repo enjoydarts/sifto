@@ -823,6 +823,14 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
 				return nil, fmt.Errorf("summarize: %w", err)
 			}
+			summary.Summary = strings.TrimSpace(summary.Summary)
+			if summary.Summary == "" {
+				err := fmt.Errorf("empty summary returned from worker")
+				log.Printf("process-item summarize empty item_id=%s err=%v", itemID, err)
+				msg := fmt.Sprintf("summarize: %v", err)
+				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+				return nil, fmt.Errorf("summarize: %w", err)
+			}
 			log.Printf("process-item summarize done item_id=%s topics=%d score=%.3f", itemID, len(summary.Topics), summary.Score)
 			recordLLMUsage(ctx, llmUsageRepo, "summary", summary.LLM, userIDPtr, &data.SourceID, &itemID, nil)
 			if err := itemRepo.InsertSummary(

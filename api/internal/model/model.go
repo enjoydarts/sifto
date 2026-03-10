@@ -83,6 +83,7 @@ type Item struct {
 	Title                *string    `json:"title"`
 	ThumbnailURL         *string    `json:"thumbnail_url,omitempty"`
 	ContentText          *string    `json:"content_text,omitempty"`
+	Summary              *string    `json:"summary,omitempty"`
 	Status               string     `json:"status"` // new | fetched | facts_extracted | summarized | failed
 	IsRead               bool       `json:"is_read"`
 	IsFavorite           bool       `json:"is_favorite"`

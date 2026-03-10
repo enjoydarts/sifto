@@ -1261,15 +1261,16 @@ func maxAskTopicOverlap(item model.AskCandidate, selected []model.AskCandidate) 
 func (r *ItemRepo) GetForRetry(ctx context.Context, id, userID string) (*model.Item, error) {
 	var it model.Item
 	err := r.db.QueryRow(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, sm.summary, i.status,
 		       FALSE AS is_read,
 		       FALSE AS is_favorite,
 		       0 AS feedback_rating,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
+		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		JOIN sources s ON s.id = i.source_id
 		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
-	).Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
+	).Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText, &it.Summary,
 		&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt)
 	if err != nil {
 		return nil, mapDBError(err)
@@ -1279,14 +1280,19 @@ func (r *ItemRepo) GetForRetry(ctx context.Context, id, userID string) (*model.I
 
 func (r *ItemRepo) ListFailedForRetry(ctx context.Context, userID string, sourceID *string) ([]model.Item, error) {
 	query := `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, sm.summary, i.status,
 		       FALSE AS is_read,
 		       FALSE AS is_favorite,
 		       0 AS feedback_rating,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
+		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		JOIN sources s ON s.id = i.source_id
-		WHERE s.user_id = $1 AND i.status = 'failed'`
+		WHERE s.user_id = $1
+		  AND (
+		    i.status = 'failed'
+		    OR (i.status = 'summarized' AND NULLIF(BTRIM(sm.summary), '') IS NULL)
+		  )`
 	args := []any{userID}
 	if sourceID != nil {
 		args = append(args, *sourceID)
@@ -1303,7 +1309,7 @@ func (r *ItemRepo) ListFailedForRetry(ctx context.Context, userID string, source
 	var items []model.Item
 	for rows.Next() {
 		var it model.Item
-		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
+		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText, &it.Summary,
 			&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}

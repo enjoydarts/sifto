@@ -866,8 +866,9 @@ func (h *ItemHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
-	if item.Status != "failed" {
-		http.Error(w, "item is not failed", http.StatusConflict)
+	summaryEmpty := item.Summary == nil || strings.TrimSpace(*item.Summary) == ""
+	if item.Status != "failed" && !(item.Status == "summarized" && summaryEmpty) {
+		http.Error(w, "item is not retryable", http.StatusConflict)
 		return
 	}
 	if h.publisher == nil {

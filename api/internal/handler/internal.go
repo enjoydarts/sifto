@@ -460,6 +460,7 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 			var googleKey *string
 			var groqKey *string
 			var deepseekKey *string
+			var openAIKey *string
 			switch service.LLMProviderForModel(model) {
 			case "google":
 				googleKey, err = h.loadGoogleAPIKey(r.Context(), t.UserID)
@@ -467,6 +468,8 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				groqKey, err = h.loadGroqAPIKey(r.Context(), t.UserID)
 			case "deepseek":
 				deepseekKey, err = h.loadDeepSeekAPIKey(r.Context(), t.UserID)
+			case "openai":
+				openAIKey, err = h.loadOpenAIAPIKey(r.Context(), t.UserID)
 			default:
 				anthropicKey, err = h.loadAnthropicAPIKey(r.Context(), t.UserID)
 			}
@@ -481,7 +484,7 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				}
 				continue
 			}
-			resp, err := h.worker.TranslateTitleWithModel(r.Context(), t.Title, anthropicKey, googleKey, groqKey, deepseekKey, model)
+			resp, err := h.worker.TranslateTitleWithModel(r.Context(), t.Title, anthropicKey, googleKey, groqKey, deepseekKey, openAIKey, model)
 			if err != nil {
 				failed++
 				if len(errorSamples) < 10 {
@@ -599,6 +602,24 @@ func (h *InternalHandler) loadDeepSeekAPIKey(ctx context.Context, userID string)
 	}
 	if enc == nil || *enc == "" {
 		return nil, fmt.Errorf("deepseek api key is not set")
+	}
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+func (h *InternalHandler) loadOpenAIAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetOpenAIAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("openai api key is not set")
 	}
 	if !h.cipher.Enabled() {
 		return nil, fmt.Errorf("secret cipher is not configured")

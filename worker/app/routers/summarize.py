@@ -4,7 +4,8 @@ from app.services.claude_service import summarize
 from app.services.deepseek_service import summarize as summarize_deepseek
 from app.services.gemini_service import summarize as summarize_gemini
 from app.services.groq_service import summarize as summarize_groq
-from app.services.model_router import is_deepseek_model, is_gemini_model, is_groq_model
+from app.services.model_router import is_deepseek_model, is_gemini_model, is_groq_model, is_openai_model
+from app.services.openai_service import summarize as summarize_openai
 
 router = APIRouter()
 
@@ -56,6 +57,15 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
                 source_text_chars=req.source_text_chars,
                 model=str(req.model),
                 api_key=groq_api_key,
+            )
+        elif is_openai_model(req.model):
+            openai_api_key = request.headers.get("x-openai-api-key") or ""
+            result = summarize_openai(
+                req.title,
+                req.facts,
+                source_text_chars=req.source_text_chars,
+                model=str(req.model),
+                api_key=openai_api_key,
             )
         else:
             api_key = request.headers.get("x-anthropic-api-key") or None

@@ -87,11 +87,15 @@ export default function SettingsPage() {
     { value: "qwen/qwen3-32b", label: "qwen/qwen3-32b", note: "Groq / in $0.29 / out $0.59 / 1M tok" },
     { value: "deepseek-chat", label: "deepseek-chat", note: "DeepSeek / cached in $0.028 / in $0.28 / out $0.42 / 1M tok" },
     { value: "deepseek-reasoner", label: "deepseek-reasoner", note: "DeepSeek / cached in $0.028 / in $0.28 / out $0.42 / 1M tok" },
-  ];
-  const anthropicOnlyModelOptions: ModelOption[] = [
-    { value: "claude-haiku-4-5", label: "claude-haiku-4-5", note: "in $1 / out $5 / 1M tok" },
-    { value: "claude-sonnet-4-6", label: "claude-sonnet-4-6", note: "in $3 / out $15 / 1M tok" },
-    { value: "claude-opus-4-6", label: "claude-opus-4-6", note: "in $5 / out $25 / 1M tok" },
+    { value: "gpt-5-nano", label: "gpt-5-nano", note: "OpenAI / cached in $0.005 / in $0.05 / out $0.40 / 1M tok" },
+    { value: "gpt-5-mini", label: "gpt-5-mini", note: "OpenAI / cached in $0.025 / in $0.25 / out $2.00 / 1M tok" },
+    { value: "gpt-5", label: "gpt-5", note: "OpenAI / cached in $0.125 / in $1.25 / out $10.00 / 1M tok" },
+    { value: "gpt-5-pro", label: "gpt-5-pro", note: "OpenAI / in $15.00 / out $120.00 / 1M tok" },
+    { value: "gpt-5.1", label: "gpt-5.1", note: "OpenAI / cached in $0.125 / in $1.25 / out $10.00 / 1M tok" },
+    { value: "gpt-5.2", label: "gpt-5.2", note: "OpenAI / cached in $0.175 / in $1.75 / out $14.00 / 1M tok" },
+    { value: "gpt-5.2-pro", label: "gpt-5.2-pro", note: "OpenAI / in $21.00 / out $168.00 / 1M tok" },
+    { value: "gpt-5.4", label: "gpt-5.4", note: "OpenAI / cached in $0.25 / in $2.50 / out $15.00 / 1M tok" },
+    { value: "gpt-5.4-pro", label: "gpt-5.4-pro", note: "OpenAI / in $30.00 / out $180.00 / 1M tok" },
   ];
   const openAIEmbeddingModelOptions: ModelOption[] = [
     { value: "text-embedding-3-small", label: "text-embedding-3-small", note: "$0.02 / 1M tok" },
@@ -115,6 +119,15 @@ export default function SettingsPage() {
     { model: "qwen/qwen3-32b", provider: "groq", inputPrice: "$0.29", outputPrice: "$0.59", recommendation: "experimental", bestFor: "summary", highlights: [], comment: "日本語と多言語の安定感が高く、混在記事の忠実要約やRAGで特に強い。" },
     { model: "deepseek-chat", provider: "deepseek", inputPrice: "$0.28", outputPrice: "$0.42", recommendation: "strong", bestFor: "facts", highlights: ["fast"], comment: "低価格で扱いやすく、事実抽出や通常要約のコストを抑えたい時の有力候補。" },
     { model: "deepseek-reasoner", provider: "deepseek", inputPrice: "$0.28", outputPrice: "$0.42", recommendation: "strong", bestFor: "digest", highlights: [], comment: "推論寄りの長文整理に向くが、応答の重さを許容する高難度タスク向け。" },
+    { model: "gpt-5-nano", provider: "openai", inputPrice: "$0.05", outputPrice: "$0.40", recommendation: "strong", bestFor: "facts", highlights: ["lowestCost", "jsonStable"], comment: "OpenAI系の最安枠。軽い抽出や比較用途で試しやすいが、長文生成の主力には向かない。" },
+    { model: "gpt-5-mini", provider: "openai", inputPrice: "$0.25", outputPrice: "$2.00", recommendation: "recommended", bestFor: "facts", highlights: ["fast", "jsonStable"], comment: "OpenAI系の実用最小構成。事実抽出や短めの要約でコストと安定性のバランスが良い。" },
+    { model: "gpt-5", provider: "openai", inputPrice: "$1.25", outputPrice: "$10", recommendation: "strong", bestFor: "summary", highlights: ["jsonStable"], comment: "通常要約や質問応答の本命候補。コストは上がるが、JSON整形と長文品質は期待しやすい。" },
+    { model: "gpt-5-pro", provider: "openai", inputPrice: "$15", outputPrice: "$120", recommendation: "experimental", bestFor: "digest", highlights: [], comment: "高価だが比較検証用の上限。日常運用向きではなく、難しいダイジェスト生成の比較対象。" },
+    { model: "gpt-5.1", provider: "openai", inputPrice: "$1.25", outputPrice: "$10", recommendation: "strong", bestFor: "summary", highlights: ["jsonStable"], comment: "gpt-5 系の安定比較枠。標準的な要約品質を見たい時に選びやすい。" },
+    { model: "gpt-5.2", provider: "openai", inputPrice: "$1.75", outputPrice: "$14", recommendation: "strong", bestFor: "ask", highlights: ["jsonStable"], comment: "gpt-5 より一段強めの比較候補。RAG質問応答や少し難しい整理で試す価値がある。" },
+    { model: "gpt-5.2-pro", provider: "openai", inputPrice: "$21", outputPrice: "$168", recommendation: "experimental", bestFor: "digest", highlights: [], comment: "高額な上位比較用。構造化出力制約もあるため、常用ではなく精度比較に限定したい。" },
+    { model: "gpt-5.4", provider: "openai", inputPrice: "$2.50", outputPrice: "$15", recommendation: "recommended", bestFor: "digest", highlights: ["jsonStable"], comment: "OpenAI 5系の上位比較候補。ダイジェストやクラスタ草稿の品質確認に向く。" },
+    { model: "gpt-5.4-pro", provider: "openai", inputPrice: "$30", outputPrice: "$180", recommendation: "experimental", bestFor: "digest", highlights: [], comment: "現行の最上位比較枠。価格は極端に高いので、常用ではなくベンチマーク専用。" },
     { model: "text-embedding-3-small", provider: "openai", inputPrice: "$0.02", outputPrice: "-", recommendation: "recommended", bestFor: "embedding", highlights: ["lowestCost"] },
     { model: "text-embedding-3-large", provider: "openai", inputPrice: "$0.13", outputPrice: "-", recommendation: "strong", bestFor: "embedding", highlights: [] },
   ];

@@ -205,42 +205,49 @@ func ptrStringOrNil(v *string) *string {
 	return &s
 }
 
-func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string, model *string, purpose string) (*string, *string, *string, *string, *string, error) {
+func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string, model *string, purpose string) (*string, *string, *string, *string, *string, *string, error) {
 	provider := service.LLMProviderForModel(model)
 	resolvedModel := model
 	if resolvedModel == nil || strings.TrimSpace(*resolvedModel) == "" {
 		switch {
 		case userID != nil && *userID != "" && settingsRepo != nil:
 			if key, err := loadUserAnthropicAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
-				return key, nil, nil, nil, nil, nil
+				return key, nil, nil, nil, nil, nil, nil
 			}
 			if key, err := loadUserGoogleAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 				fallback := service.DefaultLLMModelForPurpose("google", purpose)
-				return nil, key, nil, nil, &fallback, nil
+				return nil, key, nil, nil, nil, &fallback, nil
 			}
 			if key, err := loadUserGroqAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 				fallback := service.DefaultLLMModelForPurpose("groq", purpose)
-				return nil, nil, key, nil, &fallback, nil
+				return nil, nil, key, nil, nil, &fallback, nil
 			}
 			if key, err := loadUserDeepSeekAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 				fallback := service.DefaultLLMModelForPurpose("deepseek", purpose)
-				return nil, nil, nil, key, &fallback, nil
+				return nil, nil, nil, key, nil, &fallback, nil
+			}
+			if key, err := loadUserOpenAIAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+				fallback := service.DefaultLLMModelForPurpose("openai", purpose)
+				return nil, nil, nil, nil, key, &fallback, nil
 			}
 		}
 	}
 	switch provider {
 	case "google":
 		key, err := loadUserGoogleAPIKey(ctx, settingsRepo, cipher, userID)
-		return nil, key, nil, nil, model, err
+		return nil, key, nil, nil, nil, model, err
 	case "groq":
 		key, err := loadUserGroqAPIKey(ctx, settingsRepo, cipher, userID)
-		return nil, nil, key, nil, model, err
+		return nil, nil, key, nil, nil, model, err
 	case "deepseek":
 		key, err := loadUserDeepSeekAPIKey(ctx, settingsRepo, cipher, userID)
-		return nil, nil, nil, key, model, err
+		return nil, nil, nil, key, nil, model, err
+	case "openai":
+		key, err := loadUserOpenAIAPIKey(ctx, settingsRepo, cipher, userID)
+		return nil, nil, nil, nil, key, model, err
 	default:
 		key, err := loadUserAnthropicAPIKey(ctx, settingsRepo, cipher, userID)
-		return key, nil, nil, nil, model, err
+		return key, nil, nil, nil, nil, model, err
 	}
 }
 
@@ -870,11 +877,11 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				if userModelSettings != nil {
 					modelOverride = ptrStringOrNil(userModelSettings.AnthropicFactsModel)
 				}
-				userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "facts")
+				userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "facts")
 				if err != nil {
 					return nil, err
 				}
-				return worker.ExtractFactsWithModel(ctx, titleForLLM, extracted.Content, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, resolvedModel)
+				return worker.ExtractFactsWithModel(ctx, titleForLLM, extracted.Content, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
 			})
 			if err != nil {
 				log.Printf("process-item extract-facts failed item_id=%s err=%v", itemID, err)
@@ -897,12 +904,12 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				if userModelSettings != nil {
 					modelOverride = ptrStringOrNil(userModelSettings.AnthropicSummaryModel)
 				}
-				userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "summary")
+				userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "summary")
 				if err != nil {
 					return nil, err
 				}
 				sourceChars := len(extracted.Content)
-				return worker.SummarizeWithModel(ctx, titleForLLM, factsResp.Facts, &sourceChars, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, resolvedModel)
+				return worker.SummarizeWithModel(ctx, titleForLLM, factsResp.Facts, &sourceChars, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
 			})
 			if err != nil {
 				log.Printf("process-item summarize failed item_id=%s err=%v", itemID, err)
@@ -1238,7 +1245,7 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					if userModelSettings != nil {
 						clusterDraftModel = ptrStringOrNil(userModelSettings.AnthropicDigestClusterModel)
 					}
-					clusterDraftAnthropicKey, clusterDraftGoogleKey, clusterDraftGroqKey, clusterDraftDeepSeekKey, resolvedClusterDraftModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, &data.UserID, clusterDraftModel, "digest_cluster_draft")
+					clusterDraftAnthropicKey, clusterDraftGoogleKey, clusterDraftGroqKey, clusterDraftDeepSeekKey, clusterDraftOpenAIKey, resolvedClusterDraftModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, &data.UserID, clusterDraftModel, "digest_cluster_draft")
 					if keyErr != nil {
 						return "", keyErr
 					}
@@ -1257,6 +1264,7 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 							clusterDraftGoogleKey,
 							clusterDraftGroqKey,
 							clusterDraftDeepSeekKey,
+							clusterDraftOpenAIKey,
 							resolvedClusterDraftModel,
 						)
 						if err != nil {
@@ -1285,11 +1293,11 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					if userModelSettings != nil {
 						modelOverride = ptrStringOrNil(userModelSettings.AnthropicDigestModel)
 					}
-					digestAnthropicKey, digestGoogleKey, digestGroqKey, digestDeepSeekKey, resolvedDigestModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, &data.UserID, modelOverride, "digest")
+					digestAnthropicKey, digestGoogleKey, digestGroqKey, digestDeepSeekKey, digestOpenAIKey, resolvedDigestModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, &data.UserID, modelOverride, "digest")
 					if keyErr != nil {
 						return "", keyErr
 					}
-					resp, err := worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, digestAnthropicKey, digestGoogleKey, digestGroqKey, digestDeepSeekKey, resolvedDigestModel)
+					resp, err := worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, digestAnthropicKey, digestGoogleKey, digestGroqKey, digestDeepSeekKey, digestOpenAIKey, resolvedDigestModel)
 					if err != nil {
 						return "", err
 					}

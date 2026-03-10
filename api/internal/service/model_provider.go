@@ -35,6 +35,17 @@ func IsDeepSeekModel(model *string) bool {
 	return v == "deepseek-chat" || v == "deepseek-reasoner"
 }
 
+func IsOpenAIModel(model *string) bool {
+	if model == nil {
+		return false
+	}
+	v := strings.ToLower(strings.TrimSpace(*model))
+	if v == "" {
+		return false
+	}
+	return strings.HasPrefix(v, "gpt-5")
+}
+
 func LLMProviderForModel(model *string) string {
 	switch {
 	case IsGeminiModel(model):
@@ -43,6 +54,8 @@ func LLMProviderForModel(model *string) string {
 		return "groq"
 	case IsDeepSeekModel(model):
 		return "deepseek"
+	case IsOpenAIModel(model):
+		return "openai"
 	default:
 		return "anthropic"
 	}
@@ -70,6 +83,17 @@ func DefaultLLMModelForPurpose(provider, purpose string) string {
 			return "deepseek-reasoner"
 		default:
 			return "deepseek-chat"
+		}
+	case "openai":
+		switch purpose {
+		case "facts", "source_suggestion":
+			return "gpt-5-mini"
+		case "summary", "ask":
+			return "gpt-5"
+		case "digest_cluster_draft", "digest":
+			return "gpt-5.4"
+		default:
+			return "gpt-5-mini"
 		}
 	default:
 		switch purpose {

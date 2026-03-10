@@ -8,7 +8,9 @@ from app.services.gemini_service import compose_digest as compose_digest_gemini
 from app.services.gemini_service import compose_digest_cluster_draft as compose_digest_cluster_draft_gemini
 from app.services.groq_service import compose_digest as compose_digest_groq
 from app.services.groq_service import compose_digest_cluster_draft as compose_digest_cluster_draft_groq
-from app.services.model_router import is_deepseek_model, is_gemini_model, is_groq_model
+from app.services.model_router import is_deepseek_model, is_gemini_model, is_groq_model, is_openai_model
+from app.services.openai_service import compose_digest as compose_digest_openai
+from app.services.openai_service import compose_digest_cluster_draft as compose_digest_cluster_draft_openai
 
 router = APIRouter()
 
@@ -85,6 +87,14 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
                 model=str(req.model),
                 api_key=groq_api_key,
             )
+        elif is_openai_model(req.model):
+            openai_api_key = request.headers.get("x-openai-api-key") or ""
+            result = compose_digest_openai(
+                req.digest_date,
+                items,
+                model=str(req.model),
+                api_key=openai_api_key,
+            )
         else:
             api_key = request.headers.get("x-anthropic-api-key") or None
             result = compose_digest(
@@ -130,6 +140,16 @@ def compose_digest_cluster_draft_endpoint(req: ComposeDigestClusterDraftRequest,
                 source_lines=req.source_lines,
                 model=str(req.model),
                 api_key=groq_api_key,
+            )
+        elif is_openai_model(req.model):
+            openai_api_key = request.headers.get("x-openai-api-key") or ""
+            result = compose_digest_cluster_draft_openai(
+                cluster_label=req.cluster_label,
+                item_count=req.item_count,
+                topics=req.topics,
+                source_lines=req.source_lines,
+                model=str(req.model),
+                api_key=openai_api_key,
             )
         else:
             api_key = request.headers.get("x-anthropic-api-key") or None

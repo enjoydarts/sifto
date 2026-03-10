@@ -504,6 +504,16 @@ export default function ItemDetailPage() {
           </button>
           <button
             type="button"
+            onClick={retryItem}
+            disabled={retryUpdating}
+            className={`rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+              item.status === "new" ? "hidden" : ""
+            }`}
+          >
+            {retryUpdating ? t("common.saving") : t("itemDetail.retrySummary")}
+          </button>
+          <button
+            type="button"
             onClick={deleteItem}
             disabled={deleteUpdating}
             className="rounded border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -512,16 +522,6 @@ export default function ItemDetailPage() {
               ? t("itemDetail.delete.deleting")
               : t("itemDetail.delete.button")}
           </button>
-          {item.status !== "new" && (
-            <button
-              type="button"
-              onClick={retryItem}
-              disabled={retryUpdating}
-              className="rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {retryUpdating ? t("common.saving") : t("itemDetail.retrySummary")}
-            </button>
-          )}
         </div>
 
         <div className="mb-3 flex flex-wrap items-center gap-2">

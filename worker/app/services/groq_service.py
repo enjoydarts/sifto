@@ -446,9 +446,21 @@ items:
         "properties": {
             "subject": {"type": "string"},
             "body": {"type": "string"},
+            "sections": {
+                "type": "object",
+                "properties": {
+                    "overall_summary": {"type": "string"},
+                    "highlights": {"type": "array", "items": {"type": "string"}},
+                    "other_points": {"type": "array", "items": {"type": "string"}},
+                    "follow_up": {"type": "string"},
+                    "closing": {"type": "string"},
+                },
+                "required": ["overall_summary", "highlights", "other_points", "follow_up", "closing"],
+                "additionalProperties": False,
+            },
         },
-        "required": ["subject", "body"],
-        "additionalProperties": True,
+        "required": ["subject", "body", "sections"],
+        "additionalProperties": False,
     }
     text, usage = _chat_json(prompt, model, api_key, system_instruction=system_instruction, max_output_tokens=8000, response_schema=schema, schema_name="digest", timeout_sec=_env_timeout_seconds("GROQ_COMPOSE_DIGEST_TIMEOUT_SEC", 240.0))
     subject, body = _extract_compose_digest_fields(text)

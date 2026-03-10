@@ -33,6 +33,7 @@ from app.services.summary_faithfulness_common import (
 from app.services.facts_check_common import (
     FACTS_CHECK_SCHEMA,
     facts_check_prompt,
+    facts_check_retry_prompt,
     facts_check_system_instruction,
 )
 from app.services.facts_check_runner import run_facts_check
@@ -679,7 +680,19 @@ def check_facts(title: str | None, content: str, facts: list[str], model: str, a
                 response_schema=FACTS_CHECK_SCHEMA,
                 schema_name="facts_check",
             )
-        )
+        ),
+        retry_call=lambda: (
+            lambda text, usage: (text, _llm_meta(model, "facts_check", usage))
+        )(
+            *_chat_json(
+                facts_check_retry_prompt(title, content, facts),
+                model,
+                api_key,
+                system_instruction="pass / warn / fail のいずれか1語のみを返す。",
+                max_output_tokens=120,
+                response_schema=None,
+            )
+        ),
     )
 
 

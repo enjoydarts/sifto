@@ -16,6 +16,7 @@ from app.services.summary_faithfulness_common import (
 from app.services.facts_check_common import (
     FACTS_CHECK_SCHEMA,
     facts_check_prompt,
+    facts_check_retry_prompt,
     facts_check_system_instruction,
 )
 from app.services.facts_check_runner import run_facts_check
@@ -901,11 +902,41 @@ def check_facts(title: str | None, content: str, facts: list[str], api_key: str 
                 "estimated_cost_usd": 0.0,
             },
         }
+    retry_prompt = facts_check_retry_prompt(title, content, facts)
     return run_facts_check(
         lambda: (
             message.content[0].text.strip(),
             _llm_meta(message, "facts_check", used_model or _summary_model),
-        )
+        ),
+        retry_call=lambda: (
+            lambda retry_message, retry_model: (
+                (retry_message.content[0].text.strip() if retry_message is not None else ""),
+                _llm_meta(retry_message, "facts_check", retry_model or used_model or _summary_model)
+                if retry_message is not None
+                else {
+                    "provider": "anthropic",
+                    "model": retry_model or used_model or _summary_model,
+                    "pricing_model_family": retry_model or used_model or _summary_model,
+                    "pricing_source": _ANTHROPIC_PRICING_SOURCE_VERSION,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "estimated_cost_usd": 0.0,
+                },
+            )
+        )(
+            *_call_with_model_fallback(
+                retry_prompt,
+                str(model or _summary_model),
+                _summary_model_fallback,
+                max_tokens=120,
+                api_key=api_key,
+                system_prompt="pass / warn / fail のいずれか1語のみを返す。",
+                user_prompt=retry_prompt,
+                enable_prompt_cache=False,
+            )
+        ),
     )
 
 

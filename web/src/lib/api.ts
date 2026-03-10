@@ -54,6 +54,8 @@ export interface Item {
   thumbnail_url?: string | null;
   content_text: string | null;
   status: "new" | "fetched" | "facts_extracted" | "summarized" | "failed";
+  facts_check_result?: "pass" | "warn" | "fail" | string | null;
+  faithfulness_result?: "pass" | "warn" | "fail" | string | null;
   is_read: boolean;
   is_favorite: boolean;
   feedback_rating: -1 | 0 | 1 | number;

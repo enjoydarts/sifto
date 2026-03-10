@@ -4,6 +4,7 @@ import { ExternalLink, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { type Item } from "@/lib/api";
 import { Thumbnail } from "@/components/thumbnail";
 import { ScoreIndicator } from "@/components/score-indicator";
+import { CheckStatusBadges } from "@/components/items/check-status-badges";
 
 export function ItemCard({
   item,
@@ -145,6 +146,12 @@ export function ItemCard({
                     </span>
                   )}
                 </div>
+                <CheckStatusBadges
+                  factsCheckResult={item.facts_check_result}
+                  faithfulnessResult={item.faithfulness_result}
+                  t={t}
+                  compact
+                />
               </div>
               {!featured && (
                 <ScoreIndicator score={item.summary_score} size="sm" />

@@ -6,6 +6,7 @@ import { ExternalLink, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { api, ItemDetail } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
+import { CheckStatusBadges } from "@/components/items/check-status-badges";
 
 export function InlineReader({
   itemId,
@@ -273,6 +274,11 @@ export function InlineReader({
               <h3 className="text-xl font-semibold leading-snug text-zinc-900">
                 {item.translated_title || item.title || item.url}
               </h3>
+              <CheckStatusBadges
+                factsCheckResult={item.facts_check?.final_result}
+                faithfulnessResult={item.faithfulness?.final_result}
+                t={t}
+              />
               <a
                 href={item.url}
                 target="_blank"

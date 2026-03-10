@@ -59,6 +59,8 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 	}
 	query := `
 		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status,
+		       fc.final_result AS facts_check_result,
+		       sfc.final_result AS faithfulness_result,
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
@@ -69,6 +71,8 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
 		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
+		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
+		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
 		WHERE s.user_id = $1`
 	args := []any{userID}
 
@@ -96,7 +100,7 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 	for rows.Next() {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
-			&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.Status, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)
@@ -181,6 +185,8 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 
 	rows, err := r.db.Query(ctx, `
 		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status,
+		       fc.final_result AS facts_check_result,
+		       sfc.final_result AS faithfulness_result,
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
@@ -191,6 +197,8 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
 		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
+		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
+		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
 		WHERE s.user_id = $1`+
 		func() string {
 			q := ""
@@ -357,6 +365,8 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 
 	rows, err := r.db.Query(ctx, `
 		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status,
+		       fc.final_result AS facts_check_result,
+		       sfc.final_result AS faithfulness_result,
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
@@ -367,6 +377,8 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
 		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
+		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
+		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
 		WHERE s.user_id = $1
 		  AND i.status = 'summarized'`+filterSQL+`
 		ORDER BY sm.score DESC NULLS LAST, i.created_at DESC
@@ -526,6 +538,8 @@ func (r *ItemRepo) HighlightItems24h(ctx context.Context, userID string, minScor
 	}
 	rows, err := r.db.Query(ctx, `
 		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status,
+		       fc.final_result AS facts_check_result,
+		       sfc.final_result AS faithfulness_result,
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
@@ -536,6 +550,8 @@ func (r *ItemRepo) HighlightItems24h(ctx context.Context, userID string, minScor
 		JOIN item_summaries sm ON sm.item_id = i.id
 		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
 		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
+		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
+		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
 		WHERE s.user_id = $1
 		  AND i.status = 'summarized'
 		  AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '24 hours'
@@ -927,7 +943,7 @@ func scanItems(rows itemRowScanner) ([]model.Item, error) {
 	for rows.Next() {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
-			&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.Status, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)

@@ -89,6 +89,8 @@ type Item struct {
 	ContentText          *string    `json:"content_text,omitempty"`
 	Summary              *string    `json:"summary,omitempty"`
 	Status               string     `json:"status"` // new | fetched | facts_extracted | summarized | failed
+	FactsCheckResult     *string    `json:"facts_check_result,omitempty"`
+	FaithfulnessResult   *string    `json:"faithfulness_result,omitempty"`
 	IsRead               bool       `json:"is_read"`
 	IsFavorite           bool       `json:"is_favorite"`
 	FeedbackRating       int        `json:"feedback_rating"` // -1 | 0 | 1

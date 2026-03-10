@@ -1123,9 +1123,9 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 							modelOverride,
 						)
 					} else {
-						userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "facts")
-						if err != nil {
-							return nil, err
+						userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "facts")
+						if keyErr != nil {
+							return nil, keyErr
 						}
 						resp, err = worker.CheckFactsWithModel(ctx, titleForLLM, extracted.Content, factsResp.Facts, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
 					}

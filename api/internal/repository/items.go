@@ -1009,6 +1009,18 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 	).Scan(&faithfulness.ID, &faithfulness.ItemID, &faithfulness.FinalResult, &faithfulness.RetryCount, &faithfulness.ShortComment, &faithfulness.CreatedAt, &faithfulness.UpdatedAt)
 	if err == nil {
 		d.Faithfulness = &faithfulness
+		var llm model.ItemSummaryLLM
+		err = r.db.QueryRow(ctx, `
+			SELECT provider, model, pricing_source, created_at
+			FROM llm_usage_logs
+			WHERE item_id = $1
+			  AND purpose = 'faithfulness_check'
+			ORDER BY created_at DESC
+			LIMIT 1`, id,
+		).Scan(&llm.Provider, &llm.Model, &llm.PricingSource, &llm.CreatedAt)
+		if err == nil {
+			d.FaithfulnessLLM = &llm
+		}
 	}
 
 	// feedback (optional)

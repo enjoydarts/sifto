@@ -24,6 +24,7 @@ func (r *DigestRepo) ListLimit(ctx context.Context, userID string, limit int) ([
 	}
 	rows, err := r.db.Query(ctx, `
 		SELECT id, user_id, digest_date::text, email_subject, email_body,
+		       digest_retry_count, cluster_draft_retry_count,
 		       send_status, send_error, send_tried_at, sent_at, created_at
 		FROM digests WHERE user_id = $1 ORDER BY digest_date DESC LIMIT $2`, userID, limit)
 	if err != nil {
@@ -35,6 +36,7 @@ func (r *DigestRepo) ListLimit(ctx context.Context, userID string, limit int) ([
 	for rows.Next() {
 		var d model.Digest
 		if err := rows.Scan(&d.ID, &d.UserID, &d.DigestDate, &d.EmailSubject, &d.EmailBody,
+			&d.DigestRetryCount, &d.ClusterDraftRetryCount,
 			&d.SendStatus, &d.SendError, &d.SendTriedAt, &d.SentAt, &d.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -47,12 +49,40 @@ func (r *DigestRepo) GetDetail(ctx context.Context, id, userID string) (*model.D
 	var d model.DigestDetail
 	err := r.db.QueryRow(ctx, `
 		SELECT id, user_id, digest_date::text, email_subject, email_body,
+		       digest_retry_count, cluster_draft_retry_count,
 		       send_status, send_error, send_tried_at, sent_at, created_at
 		FROM digests WHERE id = $1 AND user_id = $2`, id, userID,
 	).Scan(&d.ID, &d.UserID, &d.DigestDate, &d.EmailSubject, &d.EmailBody,
+		&d.DigestRetryCount, &d.ClusterDraftRetryCount,
 		&d.SendStatus, &d.SendError, &d.SendTriedAt, &d.SentAt, &d.CreatedAt)
 	if err != nil {
 		return nil, mapDBError(err)
+	}
+
+	var digestLLM model.ItemSummaryLLM
+	err = r.db.QueryRow(ctx, `
+		SELECT provider, model, pricing_source, created_at
+		FROM llm_usage_logs
+		WHERE digest_id = $1
+		  AND purpose = 'digest'
+		ORDER BY created_at DESC
+		LIMIT 1`, id,
+	).Scan(&digestLLM.Provider, &digestLLM.Model, &digestLLM.PricingSource, &digestLLM.CreatedAt)
+	if err == nil {
+		d.DigestLLM = &digestLLM
+	}
+
+	var clusterDraftLLM model.ItemSummaryLLM
+	err = r.db.QueryRow(ctx, `
+		SELECT provider, model, pricing_source, created_at
+		FROM llm_usage_logs
+		WHERE digest_id = $1
+		  AND purpose = 'digest_cluster_draft'
+		ORDER BY created_at DESC
+		LIMIT 1`, id,
+	).Scan(&clusterDraftLLM.Provider, &clusterDraftLLM.Model, &clusterDraftLLM.PricingSource, &clusterDraftLLM.CreatedAt)
+	if err == nil {
+		d.ClusterDraftLLM = &clusterDraftLLM
 	}
 
 	rows, err := r.db.Query(ctx, `

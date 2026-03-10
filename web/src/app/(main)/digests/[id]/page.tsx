@@ -95,6 +95,22 @@ export default function DigestDetailPage() {
               {digest.sent_at ? new Date(digest.sent_at).toLocaleString(dateLocale) : "—"}
             </div>
           </div>
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+            <div className="mb-1 text-xs font-medium text-zinc-500">
+              {t("digestDetail.digestRetryCount")}
+            </div>
+            <div className="text-sm text-zinc-800">
+              {digest.digest_retry_count}
+            </div>
+          </div>
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+            <div className="mb-1 text-xs font-medium text-zinc-500">
+              {t("digestDetail.clusterDraftRetryCount")}
+            </div>
+            <div className="text-sm text-zinc-800">
+              {digest.cluster_draft_retry_count}
+            </div>
+          </div>
         </div>
 
         {digest.email_subject && (
@@ -119,10 +135,20 @@ export default function DigestDetailPage() {
 
       {digest.email_body && (
         <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
-            <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
-            {t("digestDetail.emailBody")}
-          </h2>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+              <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
+              {t("digestDetail.emailBody")}
+            </h2>
+            {digest.digest_llm && (
+              <span
+                className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
+                title={t("digestDetail.digestModelTitle")}
+              >
+                {digest.digest_llm.provider} / {digest.digest_llm.model}
+              </span>
+            )}
+          </div>
           <div className="whitespace-pre-wrap break-words text-[15px] leading-8 text-zinc-800">
             {digest.email_body}
           </div>
@@ -131,11 +157,21 @@ export default function DigestDetailPage() {
 
       {digest.cluster_drafts && digest.cluster_drafts.length > 0 && (
         <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
-              <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
-              {t("digestDetail.clusterDrafts")}
-            </h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+                <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
+                {t("digestDetail.clusterDrafts")}
+              </h2>
+              {digest.cluster_draft_llm && (
+                <span
+                  className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
+                  title={t("digestDetail.clusterDraftModelTitle")}
+                >
+                  {digest.cluster_draft_llm.provider} / {digest.cluster_draft_llm.model}
+                </span>
+              )}
+            </div>
             <span className="text-xs text-zinc-400">
               {digest.cluster_drafts.length} {t("digestDetail.clusters")}
             </span>

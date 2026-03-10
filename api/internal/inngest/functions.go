@@ -82,6 +82,40 @@ func llmUsageIdempotencyKey(purpose string, usage *service.LLMUsage, userID, sou
 	return hex.EncodeToString(sum[:])
 }
 
+func digestTextLooksComplete(text string, minLen int) bool {
+	s := strings.TrimSpace(text)
+	if len([]rune(s)) < minLen {
+		return false
+	}
+	if strings.Count(s, "```")%2 != 0 {
+		return false
+	}
+	last := []rune(s)[len([]rune(s))-1]
+	switch last {
+	case '。', '！', '？', '.', '!', '?', '」', '』':
+		return true
+	default:
+		return false
+	}
+}
+
+func validateDigestClusterDraftCompletion(text string) error {
+	if !digestTextLooksComplete(text, 80) {
+		return fmt.Errorf("cluster draft looks truncated")
+	}
+	return nil
+}
+
+func validateDigestCompletion(subject, body string) error {
+	if strings.TrimSpace(subject) == "" {
+		return fmt.Errorf("digest subject is empty")
+	}
+	if !digestTextLooksComplete(body, 220) {
+		return fmt.Errorf("digest body looks truncated")
+	}
+	return nil
+}
+
 func appPageURL(path string) string {
 	base := strings.TrimSpace(os.Getenv("NEXTAUTH_URL"))
 	if base == "" {
@@ -1337,6 +1371,8 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 				log.Printf("compose-digest-copy reuse-copy digest_id=%s", data.DigestID)
 			} else {
 				_, err := step.Run(ctx, "compose-digest-copy", func(ctx context.Context) (string, error) {
+					const maxDigestClusterDraftRetries = 2
+					const maxDigestRetries = 2
 					log.Printf("compose-digest-copy step-exec digest_id=%s", data.DigestID)
 					clusterItems := make([]model.Item, 0, len(digest.Items))
 					for _, di := range digest.Items {
@@ -1359,32 +1395,49 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					if keyErr != nil {
 						return "", keyErr
 					}
+					totalClusterDraftRetryCount := 0
 					for i := range drafts {
 						sourceLines := draftSourceLines(drafts[i].DraftSummary)
 						if len(sourceLines) == 0 {
 							continue
 						}
-						resp, err := worker.ComposeDigestClusterDraftWithModel(
-							ctx,
-							drafts[i].ClusterLabel,
-							drafts[i].ItemCount,
-							drafts[i].Topics,
-							sourceLines,
-							clusterDraftAnthropicKey,
-							clusterDraftGoogleKey,
-							clusterDraftGroqKey,
-							clusterDraftDeepSeekKey,
-							clusterDraftOpenAIKey,
-							resolvedClusterDraftModel,
-						)
-						if err != nil {
-							return "", fmt.Errorf("compose digest cluster draft rank=%d: %w", drafts[i].Rank, err)
+						valid := false
+						for attempt := 0; attempt <= maxDigestClusterDraftRetries; attempt++ {
+							resp, err := worker.ComposeDigestClusterDraftWithModel(
+								ctx,
+								drafts[i].ClusterLabel,
+								drafts[i].ItemCount,
+								drafts[i].Topics,
+								sourceLines,
+								clusterDraftAnthropicKey,
+								clusterDraftGoogleKey,
+								clusterDraftGroqKey,
+								clusterDraftDeepSeekKey,
+								clusterDraftOpenAIKey,
+								resolvedClusterDraftModel,
+							)
+							if err != nil {
+								return "", fmt.Errorf("compose digest cluster draft rank=%d attempt=%d: %w", drafts[i].Rank, attempt+1, err)
+							}
+							if resp != nil {
+								recordLLMUsage(ctx, llmUsageRepo, "digest_cluster_draft", resp.LLM, &data.UserID, nil, nil, &data.DigestID)
+							}
+							candidate := drafts[i].DraftSummary
+							if resp != nil && strings.TrimSpace(resp.DraftSummary) != "" {
+								candidate = resp.DraftSummary
+							}
+							if err := validateDigestClusterDraftCompletion(candidate); err == nil {
+								drafts[i].DraftSummary = candidate
+								totalClusterDraftRetryCount += attempt
+								valid = true
+								break
+							} else if attempt >= maxDigestClusterDraftRetries {
+								return "", fmt.Errorf("compose digest cluster draft rank=%d incomplete after %d retries: %w", drafts[i].Rank, attempt, err)
+							}
+							log.Printf("compose-digest-copy cluster-draft retry digest_id=%s rank=%d attempt=%d err=%v", data.DigestID, drafts[i].Rank, attempt+1, err)
 						}
-						if resp != nil && strings.TrimSpace(resp.DraftSummary) != "" {
-							drafts[i].DraftSummary = resp.DraftSummary
-						}
-						if resp != nil {
-							recordLLMUsage(ctx, llmUsageRepo, "digest_cluster_draft", resp.LLM, &data.UserID, nil, nil, &data.DigestID)
+						if !valid {
+							return "", fmt.Errorf("compose digest cluster draft rank=%d produced no valid draft", drafts[i].Rank)
 						}
 					}
 					if err := digestRepo.ReplaceClusterDrafts(ctx, data.DigestID, drafts); err != nil {
@@ -1407,11 +1460,28 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					if keyErr != nil {
 						return "", keyErr
 					}
-					resp, err := worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, digestAnthropicKey, digestGoogleKey, digestGroqKey, digestDeepSeekKey, digestOpenAIKey, resolvedDigestModel)
-					if err != nil {
-						return "", err
+					var resp *service.ComposeDigestResponse
+					digestRetryCount := 0
+					for attempt := 0; attempt <= maxDigestRetries; attempt++ {
+						resp, err = worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, digestAnthropicKey, digestGoogleKey, digestGroqKey, digestDeepSeekKey, digestOpenAIKey, resolvedDigestModel)
+						if err != nil {
+							return "", err
+						}
+						recordLLMUsage(ctx, llmUsageRepo, "digest", resp.LLM, &data.UserID, nil, nil, &data.DigestID)
+						if err := validateDigestCompletion(resp.Subject, resp.Body); err == nil {
+							digestRetryCount = attempt
+							break
+						} else if attempt >= maxDigestRetries {
+							return "", fmt.Errorf("compose digest incomplete after %d retries: %w", attempt, err)
+						}
+						log.Printf("compose-digest-copy digest retry digest_id=%s attempt=%d err=%v", data.DigestID, attempt+1, err)
 					}
-					recordLLMUsage(ctx, llmUsageRepo, "digest", resp.LLM, &data.UserID, nil, nil, &data.DigestID)
+					if resp == nil {
+						return "", fmt.Errorf("compose digest returned no response")
+					}
+					if err := digestRepo.UpdateComposeRetryCounts(ctx, data.DigestID, digestRetryCount, totalClusterDraftRetryCount); err != nil {
+						return "", fmt.Errorf("update digest retry counts: %w", err)
+					}
 					log.Printf("compose-digest-copy worker-done digest_id=%s subject_len=%d body_len=%d", data.DigestID, len(resp.Subject), len(resp.Body))
 					if err := digestRepo.UpdateEmailCopy(ctx, data.DigestID, resp.Subject, resp.Body); err != nil {
 						return "", err

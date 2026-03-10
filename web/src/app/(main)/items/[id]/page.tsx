@@ -722,7 +722,17 @@ export default function ItemDetailPage() {
           )}
           {item.faithfulness && (
             <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-              <div className="mb-2 text-xs font-semibold text-zinc-500">{t("itemDetail.faithfulness")}</div>
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-500">
+                <span>{t("itemDetail.faithfulness")}</span>
+                {item.faithfulness_llm && (
+                  <span
+                    className="rounded bg-white px-2 py-1 text-zinc-600 ring-1 ring-zinc-200"
+                    title={t("itemDetail.faithfulnessModelTitle")}
+                  >
+                    {item.faithfulness_llm.provider} / {item.faithfulness_llm.model}
+                  </span>
+                )}
+              </div>
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="rounded bg-white px-2 py-1 text-zinc-700 ring-1 ring-zinc-200">
                   {t(`itemDetail.faithfulness.${item.faithfulness.final_result}`, item.faithfulness.final_result)}

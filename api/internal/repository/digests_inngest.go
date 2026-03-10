@@ -77,6 +77,16 @@ func (r *DigestInngestRepo) UpdateEmailCopy(ctx context.Context, digestID string
 	return err
 }
 
+func (r *DigestInngestRepo) UpdateComposeRetryCounts(ctx context.Context, digestID string, digestRetryCount int, clusterDraftRetryCount int) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE digests
+		SET digest_retry_count = $1,
+		    cluster_draft_retry_count = $2
+		WHERE id = $3`,
+		digestRetryCount, clusterDraftRetryCount, digestID)
+	return err
+}
+
 func (r *DigestInngestRepo) ReplaceClusterDrafts(ctx context.Context, digestID string, drafts []model.DigestClusterDraft) error {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {

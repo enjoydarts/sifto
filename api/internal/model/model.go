@@ -154,6 +154,7 @@ type ItemDetail struct {
 	Summary         *ItemSummary              `json:"summary,omitempty"`
 	SummaryLLM      *ItemSummaryLLM           `json:"summary_llm,omitempty"`
 	Faithfulness    *SummaryFaithfulnessCheck `json:"faithfulness,omitempty"`
+	FaithfulnessLLM *ItemSummaryLLM           `json:"faithfulness_llm,omitempty"`
 	Feedback        *ItemFeedback             `json:"feedback,omitempty"`
 }
 
@@ -315,16 +316,18 @@ type BriefingTodayResponse struct {
 }
 
 type Digest struct {
-	ID           string     `json:"id"`
-	UserID       string     `json:"user_id"`
-	DigestDate   string     `json:"digest_date"` // YYYY-MM-DD
-	EmailSubject *string    `json:"email_subject,omitempty"`
-	EmailBody    *string    `json:"email_body,omitempty"`
-	SendStatus   *string    `json:"send_status,omitempty"`
-	SendError    *string    `json:"send_error,omitempty"`
-	SendTriedAt  *time.Time `json:"send_tried_at,omitempty"`
-	SentAt       *time.Time `json:"sent_at,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
+	ID                     string     `json:"id"`
+	UserID                 string     `json:"user_id"`
+	DigestDate             string     `json:"digest_date"` // YYYY-MM-DD
+	EmailSubject           *string    `json:"email_subject,omitempty"`
+	EmailBody              *string    `json:"email_body,omitempty"`
+	DigestRetryCount       int        `json:"digest_retry_count"`
+	ClusterDraftRetryCount int        `json:"cluster_draft_retry_count"`
+	SendStatus             *string    `json:"send_status,omitempty"`
+	SendError              *string    `json:"send_error,omitempty"`
+	SendTriedAt            *time.Time `json:"send_tried_at,omitempty"`
+	SentAt                 *time.Time `json:"sent_at,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
 }
 
 type DigestItem struct {
@@ -336,8 +339,10 @@ type DigestItem struct {
 
 type DigestDetail struct {
 	Digest
-	Items         []DigestItemDetail   `json:"items"`
-	ClusterDrafts []DigestClusterDraft `json:"cluster_drafts,omitempty"`
+	DigestLLM       *ItemSummaryLLM      `json:"digest_llm,omitempty"`
+	ClusterDraftLLM *ItemSummaryLLM      `json:"cluster_draft_llm,omitempty"`
+	Items           []DigestItemDetail   `json:"items"`
+	ClusterDrafts   []DigestClusterDraft `json:"cluster_drafts,omitempty"`
 }
 
 type DigestItemDetail struct {

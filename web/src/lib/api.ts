@@ -124,6 +124,7 @@ export interface ItemDetail extends Item {
   summary: ItemSummary | null;
   summary_llm?: ItemSummaryLLM | null;
   faithfulness?: SummaryFaithfulnessCheck | null;
+  faithfulness_llm?: ItemSummaryLLM | null;
   feedback?: ItemFeedback | null;
 }
 
@@ -273,6 +274,8 @@ export interface Digest {
   digest_date: string;
   email_subject: string | null;
   email_body: string | null;
+  digest_retry_count: number;
+  cluster_draft_retry_count: number;
   send_status?: string | null;
   send_error?: string | null;
   send_tried_at?: string | null;
@@ -302,6 +305,8 @@ export interface DigestClusterDraft {
 }
 
 export interface DigestDetail extends Digest {
+  digest_llm?: ItemSummaryLLM | null;
+  cluster_draft_llm?: ItemSummaryLLM | null;
   items: DigestItemDetail[];
   cluster_drafts?: DigestClusterDraft[];
 }

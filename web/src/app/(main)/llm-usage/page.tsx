@@ -39,6 +39,25 @@ type SummaryRow = LLMUsageDailySummary & {
   key: string;
 };
 
+const PROVIDER_COLORS: Record<string, { stroke: string; fill: string; fillOpacity: number; label: string }> = {
+  openai: { stroke: "#10b981", fill: "#34d399", fillOpacity: 0.65, label: "OpenAI" },
+  anthropic: { stroke: "#3b82f6", fill: "#60a5fa", fillOpacity: 0.6, label: "Anthropic" },
+  google: { stroke: "#f59e0b", fill: "#fbbf24", fillOpacity: 0.6, label: "Google" },
+  groq: { stroke: "#8b5cf6", fill: "#a78bfa", fillOpacity: 0.55, label: "Groq" },
+  deepseek: { stroke: "#ef4444", fill: "#f87171", fillOpacity: 0.55, label: "DeepSeek" },
+};
+
+const FALLBACK_PROVIDER_COLORS = [
+  { stroke: "#0f766e", fill: "#14b8a6", fillOpacity: 0.55 },
+  { stroke: "#be123c", fill: "#fb7185", fillOpacity: 0.55 },
+  { stroke: "#4338ca", fill: "#818cf8", fillOpacity: 0.55 },
+  { stroke: "#a16207", fill: "#facc15", fillOpacity: 0.55 },
+];
+
+function providerLabel(provider: string) {
+  return PROVIDER_COLORS[provider]?.label ?? provider;
+}
+
 export default function LLMUsagePage() {
   const { t, locale } = useI18n();
   const [forecastMode, setForecastMode] = useState<"month_avg" | "recent_7d">("month_avg");
@@ -105,15 +124,30 @@ export default function LLMUsagePage() {
   }, [summaryRows]);
 
   const providerTotals = useMemo(() => {
-    const openai = totals.byProviderCost.get("openai") ?? 0;
-    const anthropic = totals.byProviderCost.get("anthropic") ?? 0;
-    const google = totals.byProviderCost.get("google") ?? 0;
-    const groq = totals.byProviderCost.get("groq") ?? 0;
-    const others = [...totals.byProviderCost.entries()]
-      .filter(([k]) => k !== "openai" && k !== "anthropic" && k !== "google" && k !== "groq")
-      .reduce((acc, [, v]) => acc + v, 0);
-    return { openai, anthropic, google, groq, others };
+    return Array.from(totals.byProviderCost.entries())
+      .map(([provider, cost]) => ({ provider, cost }))
+      .sort((a, b) => {
+        if (b.cost !== a.cost) return b.cost - a.cost;
+        return a.provider.localeCompare(b.provider);
+      });
   }, [totals]);
+
+  const providerCardRows = useMemo(() => {
+    const monthProviders = new Set(currentMonthProviderRows.map((row) => row.provider));
+    const selectedProviders = new Set(providerTotals.map((row) => row.provider));
+    const allProviders = new Set<string>([...monthProviders, ...selectedProviders]);
+    return Array.from(allProviders)
+      .map((provider) => ({
+        provider,
+        selectedCost: totals.byProviderCost.get(provider) ?? 0,
+        monthCost: currentMonthProviderRows.find((row) => row.provider === provider)?.estimated_cost_usd ?? 0,
+      }))
+      .sort((a, b) => {
+        if (b.selectedCost !== a.selectedCost) return b.selectedCost - a.selectedCost;
+        if (b.monthCost !== a.monthCost) return b.monthCost - a.monthCost;
+        return a.provider.localeCompare(b.provider);
+      });
+  }, [currentMonthProviderRows, providerTotals, totals]);
 
   const currentMonthProviderTableRows = useMemo(() => {
     const total = settings?.current_month?.estimated_cost_usd ?? currentMonthProviderRows.reduce((acc, row) => acc + row.estimated_cost_usd, 0);
@@ -135,19 +169,39 @@ export default function LLMUsagePage() {
   }, [summaryRows]);
 
   const dailyChartRows = useMemo(() => {
-    const m = new Map<string, { date: string; total: number; openai: number; anthropic: number; google: number; groq: number; other: number }>();
+    const m = new Map<string, { date: string; total: number; [provider: string]: string | number }>();
     for (const row of summaryRows) {
-      const cur = m.get(row.date_jst) ?? { date: row.date_jst, total: 0, openai: 0, anthropic: 0, google: 0, groq: 0, other: 0 };
-      cur.total += row.estimated_cost_usd;
-      if (row.provider === "openai") cur.openai += row.estimated_cost_usd;
-      else if (row.provider === "anthropic") cur.anthropic += row.estimated_cost_usd;
-      else if (row.provider === "google") cur.google += row.estimated_cost_usd;
-      else if (row.provider === "groq") cur.groq += row.estimated_cost_usd;
-      else cur.other += row.estimated_cost_usd;
+      const cur = m.get(row.date_jst) ?? { date: row.date_jst, total: 0 };
+      cur.total = Number(cur.total ?? 0) + row.estimated_cost_usd;
+      cur[row.provider] = Number(cur[row.provider] ?? 0) + row.estimated_cost_usd;
       m.set(row.date_jst, cur);
     }
     return Array.from(m.values()).sort((a, b) => a.date.localeCompare(b.date));
   }, [summaryRows]);
+
+  const chartProviders = useMemo(() => {
+    return Array.from(totals.byProviderCost.keys()).sort((a, b) => {
+      const costDiff = (totals.byProviderCost.get(b) ?? 0) - (totals.byProviderCost.get(a) ?? 0);
+      if (costDiff !== 0) return costDiff;
+      return a.localeCompare(b);
+    });
+  }, [totals]);
+
+  const providerColorMap = useMemo(() => {
+    const map = new Map<string, { stroke: string; fill: string; fillOpacity: number; label: string }>();
+    let fallbackIndex = 0;
+    for (const provider of chartProviders) {
+      const preset = PROVIDER_COLORS[provider];
+      if (preset) {
+        map.set(provider, preset);
+        continue;
+      }
+      const fallback = FALLBACK_PROVIDER_COLORS[fallbackIndex % FALLBACK_PROVIDER_COLORS.length];
+      fallbackIndex += 1;
+      map.set(provider, { ...fallback, label: provider });
+    }
+    return map;
+  }, [chartProviders]);
 
   const visibleModelRows = useMemo(
     () => modelRows.filter((r) => r.estimated_cost_usd > 0),
@@ -348,26 +402,46 @@ export default function LLMUsagePage() {
         </div>
       )}
 
-      <section className="flex w-full flex-wrap gap-3 lg:flex-nowrap">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label={t("llm.totalCost")} value={fmtUSD(totals.cost)} />
-        <MetricCard label="OpenAI" value={fmtUSD(providerTotals.openai)} />
-        <MetricCard label="Anthropic" value={fmtUSD(providerTotals.anthropic)} />
-        <MetricCard label="Google" value={fmtUSD(providerTotals.google)} />
-        <MetricCard label="Groq" value={fmtUSD(providerTotals.groq)} />
-        {providerTotals.others > 0 && <MetricCard label="Other" value={fmtUSD(providerTotals.others)} />}
         <MetricCard label={t("llm.totalCalls")} value={fmtNum(totals.calls)} />
         <MetricCard label={t("llm.input")} value={fmtNum(totals.input)} />
         <MetricCard label={t("llm.output")} value={fmtNum(totals.output)} />
       </section>
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <MetricCard className="w-full" label="Cache Write Tokens" value={fmtNum(totals.cacheWrite)} />
-        <MetricCard className="w-full" label="Cache Read Tokens" value={fmtNum(totals.cacheRead)} />
-        <MetricCard
-          className="w-full"
-          label="Cache Read Ratio"
-          value={`${totals.input > 0 ? ((totals.cacheRead / totals.input) * 100).toFixed(1) : "0.0"}%`}
-        />
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)]">
+        <div className="rounded-lg border border-zinc-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-zinc-800">Provider Cost</h2>
+            <span className="text-xs text-zinc-400">{providerCardRows.length} providers</span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+            {providerCardRows.map((row) => (
+              <MetricCard
+                key={row.provider}
+                className="w-full"
+                label={`${providerLabel(row.provider)}${row.selectedCost <= 0 && row.monthCost > 0 ? " (MTD)" : ""}`}
+                value={fmtUSD(row.selectedCost > 0 ? row.selectedCost : row.monthCost)}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-zinc-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-zinc-800">Cache</h2>
+            <span className="text-xs text-zinc-400">{totals.input > 0 ? ((totals.cacheRead / totals.input) * 100).toFixed(1) : "0.0"}% read</span>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+            <MetricCard className="w-full" label="Cache Write Tokens" value={fmtNum(totals.cacheWrite)} />
+            <MetricCard className="w-full" label="Cache Read Tokens" value={fmtNum(totals.cacheRead)} />
+            <MetricCard
+              className="w-full"
+              label="Cache Read Ratio"
+              value={`${totals.input > 0 ? ((totals.cacheRead / totals.input) * 100).toFixed(1) : "0.0"}%`}
+            />
+          </div>
+        </div>
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
@@ -581,57 +655,28 @@ export default function LLMUsagePage() {
                 <Tooltip
                   formatter={(value: number | string | undefined, name?: string) => [
                     fmtUSD(Number(value ?? 0)),
-                    name ?? "",
+                    providerLabel(name ?? ""),
                   ]}
                   labelFormatter={(label) => `${label}`}
                   contentStyle={{ borderRadius: 10, borderColor: "#e4e4e7" }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area
-                  type="monotone"
-                  dataKey="openai"
-                  name="OpenAI"
-                  stackId="cost"
-                  stroke="#10b981"
-                  fill="#34d399"
-                  fillOpacity={0.65}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="anthropic"
-                  name="Anthropic"
-                  stackId="cost"
-                  stroke="#3b82f6"
-                  fill="#60a5fa"
-                  fillOpacity={0.6}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="google"
-                  name="Google"
-                  stackId="cost"
-                  stroke="#f59e0b"
-                  fill="#fbbf24"
-                  fillOpacity={0.6}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="groq"
-                  name="Groq"
-                  stackId="cost"
-                  stroke="#8b5cf6"
-                  fill="#a78bfa"
-                  fillOpacity={0.55}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="other"
-                  name="Other"
-                  stackId="cost"
-                  stroke="#71717a"
-                  fill="#a1a1aa"
-                  fillOpacity={0.45}
-                />
+                {chartProviders.map((provider) => {
+                  const colors = providerColorMap.get(provider);
+                  if (!colors) return null;
+                  return (
+                    <Area
+                      key={provider}
+                      type="monotone"
+                      dataKey={provider}
+                      name={providerLabel(provider)}
+                      stackId="cost"
+                      stroke={colors.stroke}
+                      fill={colors.fill}
+                      fillOpacity={colors.fillOpacity}
+                    />
+                  );
+                })}
               </AreaChart>
             </ResponsiveContainer>
           </div>

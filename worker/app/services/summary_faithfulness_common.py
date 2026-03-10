@@ -15,7 +15,7 @@ SUMMARY_FAITHFULNESS_SCHEMA = {
 
 def summary_faithfulness_system_instruction() -> str:
     return """# Role
-あなたはニュース要約の faithfuleness を検査するレビュアーです。
+あなたはニュース要約の faithfulness を検査するレビュアーです。
 
 # Task
 summary が facts に忠実かを判定してください。
@@ -26,7 +26,9 @@ summary が facts に忠実かを判定してください。
 - 軽微な言い換えや自然な圧縮は許容する
 - 出力は必ず JSON オブジェクト 1 つのみ
 - verdict は pass / warn / fail のいずれか
-- short_comment は日本語で 1〜2 文、120 文字以内"""
+- short_comment は日本語で 1〜2 文、120 文字以内
+- short_comment は今回の summary と facts を踏まえた具体的な寸評を書く
+- 汎用的な定型文だけで済ませない"""
 
 
 def summary_faithfulness_prompt(title: str | None, facts: list[str], summary: str) -> str:
@@ -77,13 +79,14 @@ def normalize_summary_faithfulness_result(data: dict | None) -> dict:
     if verdict not in {"pass", "warn", "fail"}:
         verdict = "warn"
     short_comment = str(payload.get("short_comment") or "").strip()
-    if not short_comment:
-        short_comment = {
-            "pass": "facts に沿った要約です。",
-            "warn": "概ね要点は合っていますが、表現の強さや欠落に注意が必要です。",
-            "fail": "facts にない断定または重要な欠落があり、再生成が必要です。",
-        }[verdict]
     return {
         "verdict": verdict,
         "short_comment": short_comment[:240],
     }
+
+
+def require_summary_faithfulness_comment(result: dict, raw_text: str) -> dict:
+    if str(result.get("short_comment") or "").strip():
+        return result
+    snippet = (raw_text or "").strip().replace("\n", " ")
+    raise RuntimeError(f"faithfulness short_comment missing: response_snippet={snippet[:500]}")

@@ -24,6 +24,7 @@ from app.services.llm_catalog import model_pricing, model_supports
 from app.services.summary_faithfulness_common import (
     SUMMARY_FAITHFULNESS_SCHEMA,
     extract_first_json_object as _faithfulness_extract_first_json_object,
+    require_summary_faithfulness_comment,
     normalize_summary_faithfulness_result,
     summary_faithfulness_prompt,
     summary_faithfulness_system_instruction,
@@ -607,7 +608,10 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
         response_schema=SUMMARY_FAITHFULNESS_SCHEMA,
         schema_name="summary_faithfulness",
     )
-    result = normalize_summary_faithfulness_result(_faithfulness_extract_first_json_object(text))
+    result = require_summary_faithfulness_comment(
+        normalize_summary_faithfulness_result(_faithfulness_extract_first_json_object(text)),
+        text,
+    )
     result["llm"] = _llm_meta(model, "faithfulness_check", usage)
     return result
 

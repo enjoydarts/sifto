@@ -15,6 +15,7 @@ except Exception:  # pragma: no cover
 from app.services.llm_catalog import model_pricing
 from app.services.summary_faithfulness_common import (
     SUMMARY_FAITHFULNESS_SCHEMA,
+    require_summary_faithfulness_comment,
     normalize_summary_faithfulness_result,
     summary_faithfulness_prompt,
     summary_faithfulness_system_instruction,
@@ -1100,7 +1101,10 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
         system_instruction=summary_faithfulness_system_instruction(),
         response_schema=SUMMARY_FAITHFULNESS_SCHEMA,
     )
-    result = normalize_summary_faithfulness_result(_extract_first_json_object(text))
+    result = require_summary_faithfulness_comment(
+        normalize_summary_faithfulness_result(_extract_first_json_object(text)),
+        text,
+    )
     result["llm"] = _llm_meta(model, "faithfulness_check", usage)
     return result
 

@@ -283,6 +283,7 @@ export const jaDict: Dict = {
   "settings.modelGuide.columns.recommendation": "おすすめ度",
   "settings.modelGuide.columns.highlights": "特徴",
   "settings.modelGuide.columns.bestFor": "向いている用途",
+  "settings.modelGuide.columns.comment": "寸評",
   "settings.modelGuide.provider.anthropic": "Anthropic",
   "settings.modelGuide.provider.google": "Google",
   "settings.modelGuide.provider.groq": "Groq",

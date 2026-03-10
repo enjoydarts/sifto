@@ -283,6 +283,7 @@ export const enDict: Dict = {
   "settings.modelGuide.columns.recommendation": "Recommendation",
   "settings.modelGuide.columns.highlights": "Traits",
   "settings.modelGuide.columns.bestFor": "Best for",
+  "settings.modelGuide.columns.comment": "Comment",
   "settings.modelGuide.provider.anthropic": "Anthropic",
   "settings.modelGuide.provider.google": "Google",
   "settings.modelGuide.provider.groq": "Groq",

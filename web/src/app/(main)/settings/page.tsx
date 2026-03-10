@@ -23,6 +23,7 @@ type ModelComparisonEntry = {
   bestFor: "facts" | "summary" | "ask" | "digest" | "embedding" | "balanced";
   highlights: Array<"lowestCost" | "fast" | "jsonStable">;
   status?: "preview";
+  comment?: string;
 };
 
 export default function SettingsPage() {
@@ -101,12 +102,12 @@ export default function SettingsPage() {
     { model: "gemini-2.5-flash", provider: "google", inputPrice: "$0.30", outputPrice: "$2.50", recommendation: "recommended", bestFor: "ask", highlights: ["fast"] },
     { model: "gemini-2.5-flash-lite", provider: "google", inputPrice: "$0.10", outputPrice: "$0.40", recommendation: "strong", bestFor: "facts", highlights: ["lowestCost", "fast"] },
     { model: "gemini-2.5-pro", provider: "google", inputPrice: "$1.25", outputPrice: "$10", recommendation: "strong", bestFor: "digest", highlights: [] },
-    { model: "openai/gpt-oss-20b", provider: "groq", inputPrice: "$0.075", outputPrice: "$0.30", recommendation: "recommended", bestFor: "ask", highlights: ["jsonStable", "fast"] },
-    { model: "openai/gpt-oss-120b", provider: "groq", inputPrice: "$0.15", outputPrice: "$0.60", recommendation: "recommended", bestFor: "summary", highlights: ["jsonStable", "fast"] },
-    { model: "llama-3.1-8b-instant", provider: "groq", inputPrice: "$0.05", outputPrice: "$0.08", recommendation: "strong", bestFor: "facts", highlights: ["lowestCost", "fast"] },
-    { model: "llama-3.3-70b-versatile", provider: "groq", inputPrice: "$0.59", outputPrice: "$0.79", recommendation: "strong", bestFor: "summary", highlights: ["fast"] },
-    { model: "meta-llama/llama-4-scout-17b-16e-instruct", provider: "groq", inputPrice: "$0.11", outputPrice: "$0.34", recommendation: "experimental", bestFor: "summary", highlights: ["fast"], status: "preview" },
-    { model: "qwen/qwen3-32b", provider: "groq", inputPrice: "$0.29", outputPrice: "$0.59", recommendation: "experimental", bestFor: "summary", highlights: [] },
+    { model: "openai/gpt-oss-20b", provider: "groq", inputPrice: "$0.075", outputPrice: "$0.30", recommendation: "recommended", bestFor: "ask", highlights: ["jsonStable", "fast"], comment: "超高速でコスパ抜群。ツール利用に強く、抽出段階の定番候補。" },
+    { model: "openai/gpt-oss-120b", provider: "groq", inputPrice: "$0.15", outputPrice: "$0.60", recommendation: "recommended", bestFor: "summary", highlights: ["jsonStable", "fast"], comment: "長文処理と推論のバランスが良く、検索結果を混ぜる要約で扱いやすい。" },
+    { model: "llama-3.1-8b-instant", provider: "groq", inputPrice: "$0.05", outputPrice: "$0.08", recommendation: "strong", bestFor: "facts", highlights: ["lowestCost", "fast"], comment: "最安かつ爆速で日常タスク向き。複雑推論は弱いが低予算運用の第一候補。" },
+    { model: "llama-3.3-70b-versatile", provider: "groq", inputPrice: "$0.59", outputPrice: "$0.79", recommendation: "strong", bestFor: "summary", highlights: ["fast"], comment: "知能は非常に高いが、速度とコストは重めで大量処理では負担が出やすい。" },
+    { model: "meta-llama/llama-4-scout-17b-16e-instruct", provider: "groq", inputPrice: "$0.11", outputPrice: "$0.34", recommendation: "experimental", bestFor: "summary", highlights: ["fast"], status: "preview", comment: "MoEで賢さと価格のバランスが良く、要約やRAGを安く回したい時に有力。" },
+    { model: "qwen/qwen3-32b", provider: "groq", inputPrice: "$0.29", outputPrice: "$0.59", recommendation: "experimental", bestFor: "summary", highlights: [], comment: "日本語と多言語の安定感が高く、混在記事の忠実要約やRAGで特に強い。" },
     { model: "text-embedding-3-small", provider: "openai", inputPrice: "$0.02", outputPrice: "-", recommendation: "recommended", bestFor: "embedding", highlights: ["lowestCost"] },
     { model: "text-embedding-3-large", provider: "openai", inputPrice: "$0.13", outputPrice: "-", recommendation: "strong", bestFor: "embedding", highlights: [] },
   ];
@@ -1038,8 +1039,8 @@ export default function SettingsPage() {
               </button>
             </div>
             <div className="overflow-auto px-5 py-4">
-              <div className="min-w-[840px]">
-                <div className="grid grid-cols-[minmax(250px,2fr)_120px_120px_120px_120px_150px_minmax(180px,1.4fr)] gap-3 border-b border-zinc-200 pb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              <div className="min-w-[1120px]">
+                <div className="grid grid-cols-[minmax(250px,2fr)_120px_120px_120px_120px_150px_minmax(160px,1.1fr)_minmax(280px,2fr)] gap-3 border-b border-zinc-200 pb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   <div>{t("settings.modelGuide.columns.model")}</div>
                   <div>{t("settings.modelGuide.columns.provider")}</div>
                   <div>{t("settings.modelGuide.columns.inputPrice")}</div>
@@ -1047,12 +1048,13 @@ export default function SettingsPage() {
                   <div>{t("settings.modelGuide.columns.recommendation")}</div>
                   <div>{t("settings.modelGuide.columns.highlights")}</div>
                   <div>{t("settings.modelGuide.columns.bestFor")}</div>
+                  <div>{t("settings.modelGuide.columns.comment")}</div>
                 </div>
                 <div className="divide-y divide-zinc-100">
                   {modelComparisonEntries.map((entry) => (
                     <div
                       key={entry.model}
-                      className="grid grid-cols-[minmax(250px,2fr)_120px_120px_120px_120px_150px_minmax(180px,1.4fr)] gap-3 py-3 text-sm text-zinc-700"
+                      className="grid grid-cols-[minmax(250px,2fr)_120px_120px_120px_120px_150px_minmax(160px,1.1fr)_minmax(280px,2fr)] gap-3 py-3 text-sm text-zinc-700"
                     >
                       <div className="min-w-0">
                         <div className="break-all font-medium text-zinc-900">{entry.model}</div>
@@ -1091,6 +1093,7 @@ export default function SettingsPage() {
                         )}
                       </div>
                       <div className="text-zinc-600">{t(`settings.modelGuide.bestFor.${entry.bestFor}`)}</div>
+                      <div className="text-xs leading-5 text-zinc-600">{entry.comment ?? "-"}</div>
                     </div>
                   ))}
                 </div>

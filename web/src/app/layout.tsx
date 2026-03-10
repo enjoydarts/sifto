@@ -32,7 +32,7 @@ export default function RootLayout({
         <Script
           id="onesignal-sdk"
           src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
-          strategy="beforeInteractive"
+          strategy="lazyOnload"
         />
         <Providers>{children}</Providers>
       </body>

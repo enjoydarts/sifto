@@ -440,6 +440,19 @@ def _get_or_create_cached_content(model: str, api_key: str, cache_key: str, syst
     return name
 
 
+def _normalize_response_schema(value):
+    if isinstance(value, dict):
+        normalized = {}
+        for key, item in value.items():
+            if key == "additionalProperties":
+                continue
+            normalized[key] = _normalize_response_schema(item)
+        return normalized
+    if isinstance(value, list):
+        return [_normalize_response_schema(item) for item in value]
+    return value
+
+
 def _generate_content(
     prompt: str,
     model: str,
@@ -460,7 +473,7 @@ def _generate_content(
         "responseMimeType": "application/json",
     }
     if response_schema:
-        generation_config["responseSchema"] = response_schema
+        generation_config["responseSchema"] = _normalize_response_schema(response_schema)
 
     body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": generation_config}
     cached_content_name = ""

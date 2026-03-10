@@ -113,6 +113,11 @@ def _supports_strict_schema(model: str) -> bool:
     return model_supports(family, "supports_strict_json_schema") or model_supports(model, "supports_strict_json_schema")
 
 
+def _supports_custom_temperature(model: str) -> bool:
+    family = _normalize_model_family(model)
+    return not family.startswith("gpt-5")
+
+
 def _usage_from_response(data: dict) -> dict:
     usage = data.get("usage") or {}
     prompt_details = usage.get("prompt_tokens_details") or {}
@@ -149,8 +154,9 @@ def _chat_json(
         "model": _normalize_model_name(model),
         "messages": [],
         "max_completion_tokens": max_output_tokens,
-        "temperature": 0.2,
     }
+    if _supports_custom_temperature(model):
+        body["temperature"] = 0.2
     if system_instruction:
         body["messages"].append({"role": "system", "content": system_instruction})
     body["messages"].append({"role": "user", "content": prompt})

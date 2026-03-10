@@ -1132,6 +1132,9 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					if err != nil {
 						return nil, err
 					}
+					if resp == nil {
+						return nil, fmt.Errorf("facts check returned nil response")
+					}
 					recordLLMUsage(ctx, llmUsageRepo, "facts_check", resp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
 					return resp, nil
 				})

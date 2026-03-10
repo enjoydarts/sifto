@@ -619,6 +619,8 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
             topics = [str(v).strip() for v in _parse_json_string_array("[" + topic_matches[0] + "]") if str(v).strip()]
     score_reason = str(data.get("score_reason") or "").strip() or _extract_json_string_value_loose(text, "score_reason") or "総合的な重要度・新規性・実用性を基に採点。"
     translated_title = str(data.get("translated_title") or "").strip() or _extract_json_string_value_loose(text, "translated_title")
+    if _contains_japanese(title or ""):
+        translated_title = ""
     if _needs_title_translation(title, ""):
         normalized_title = _strip_code_fence(translated_title).strip().strip('"').strip("'")
         if not normalized_title or (not _contains_japanese(normalized_title) and normalized_title.casefold() == (title or "").strip().casefold()):

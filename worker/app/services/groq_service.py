@@ -380,6 +380,8 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
     }
     score_reason = str(data.get("score_reason") or "").strip() or "総合的な重要度・新規性・実用性を基に採点。"
     translated_title = str(data.get("translated_title") or "").strip()
+    if _contains_japanese(title or ""):
+        translated_title = ""
     if _needs_title_translation(title, translated_title):
         translated_title = _translate_title_to_ja(title or "", model, api_key)
     return {

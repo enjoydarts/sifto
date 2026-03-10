@@ -143,19 +143,26 @@ func (r *LLMUsageLogRepo) DailySummaryByUser(ctx context.Context, userID string,
 		days = 14
 	}
 	rows, err := r.db.Query(ctx, `
-		SELECT (created_at AT TIME ZONE 'Asia/Tokyo')::date::text AS date_jst,
-		       provider,
-		       purpose,
-		       pricing_source,
+		WITH bounds AS (
+			SELECT
+				date_trunc('day', NOW() AT TIME ZONE 'Asia/Tokyo') - (($2::int - 1) * INTERVAL '1 day') AS since_jst,
+				date_trunc('day', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 day' AS until_jst
+		)
+		SELECT (l.created_at AT TIME ZONE 'Asia/Tokyo')::date::text AS date_jst,
+		       l.provider,
+		       l.purpose,
+		       l.pricing_source,
 		       COUNT(*)::int AS calls,
-		       COALESCE(SUM(input_tokens),0)::bigint AS input_tokens,
-		       COALESCE(SUM(output_tokens),0)::bigint AS output_tokens,
-		       COALESCE(SUM(cache_creation_input_tokens),0)::bigint AS cache_creation_input_tokens,
-		       COALESCE(SUM(cache_read_input_tokens),0)::bigint AS cache_read_input_tokens,
-		       COALESCE(SUM(estimated_cost_usd),0)::double precision AS estimated_cost_usd
-		FROM llm_usage_logs
-		WHERE user_id = $1
-		  AND created_at >= (NOW() AT TIME ZONE 'UTC') - ($2::int * INTERVAL '1 day')
+		       COALESCE(SUM(l.input_tokens),0)::bigint AS input_tokens,
+		       COALESCE(SUM(l.output_tokens),0)::bigint AS output_tokens,
+		       COALESCE(SUM(l.cache_creation_input_tokens),0)::bigint AS cache_creation_input_tokens,
+		       COALESCE(SUM(l.cache_read_input_tokens),0)::bigint AS cache_read_input_tokens,
+		       COALESCE(SUM(l.estimated_cost_usd),0)::double precision AS estimated_cost_usd
+		FROM llm_usage_logs l
+		CROSS JOIN bounds b
+		WHERE l.user_id = $1
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.since_jst
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.until_jst
 		GROUP BY 1,2,3,4
 		ORDER BY date_jst DESC, provider ASC, purpose ASC, pricing_source ASC`, userID, days)
 	if err != nil {
@@ -183,19 +190,26 @@ func (r *LLMUsageLogRepo) ModelSummaryByUser(ctx context.Context, userID string,
 		days = 14
 	}
 	rows, err := r.db.Query(ctx, `
-		SELECT provider,
-		       model,
-		       pricing_source,
+		WITH bounds AS (
+			SELECT
+				date_trunc('day', NOW() AT TIME ZONE 'Asia/Tokyo') - (($2::int - 1) * INTERVAL '1 day') AS since_jst,
+				date_trunc('day', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 day' AS until_jst
+		)
+		SELECT l.provider,
+		       l.model,
+		       l.pricing_source,
 		       COUNT(*)::int AS calls,
-		       COALESCE(SUM(input_tokens),0)::bigint AS input_tokens,
-		       COALESCE(SUM(output_tokens),0)::bigint AS output_tokens,
-		       COALESCE(SUM(cache_creation_input_tokens),0)::bigint AS cache_creation_input_tokens,
-		       COALESCE(SUM(cache_read_input_tokens),0)::bigint AS cache_read_input_tokens,
-		       COALESCE(SUM(estimated_cost_usd),0)::double precision AS estimated_cost_usd
-		FROM llm_usage_logs
-		WHERE user_id = $1
-		  AND created_at >= (NOW() AT TIME ZONE 'UTC') - ($2::int * INTERVAL '1 day')
-		GROUP BY provider, model, pricing_source
+		       COALESCE(SUM(l.input_tokens),0)::bigint AS input_tokens,
+		       COALESCE(SUM(l.output_tokens),0)::bigint AS output_tokens,
+		       COALESCE(SUM(l.cache_creation_input_tokens),0)::bigint AS cache_creation_input_tokens,
+		       COALESCE(SUM(l.cache_read_input_tokens),0)::bigint AS cache_read_input_tokens,
+		       COALESCE(SUM(l.estimated_cost_usd),0)::double precision AS estimated_cost_usd
+		FROM llm_usage_logs l
+		CROSS JOIN bounds b
+		WHERE l.user_id = $1
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.since_jst
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.until_jst
+		GROUP BY l.provider, l.model, l.pricing_source
 		ORDER BY estimated_cost_usd DESC, calls DESC, provider ASC, model ASC`, userID, days)
 	if err != nil {
 		return nil, err

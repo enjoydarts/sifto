@@ -82,6 +82,10 @@ export default function LLMUsagePage() {
     return jstNow.getDate();
   }, [daysFilter]);
 
+  const totalCostLabel = useMemo(() => {
+    return daysFilter === "mtd" ? t("llm.monthToDate") : t("llm.totalCost");
+  }, [daysFilter, t]);
+
   const load = useCallback(async (daysParam: number, limitParam: number) => {
     setLoading(true);
     try {
@@ -412,7 +416,7 @@ export default function LLMUsagePage() {
       )}
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label={t("llm.totalCost")} value={fmtUSD(totals.cost)} />
+        <MetricCard label={totalCostLabel} value={fmtUSD(totals.cost)} />
         <MetricCard label={t("llm.totalCalls")} value={fmtNum(totals.calls)} />
         <MetricCard label={t("llm.input")} value={fmtNum(totals.input)} />
         <MetricCard label={t("llm.output")} value={fmtNum(totals.output)} />

@@ -48,23 +48,28 @@ function shouldCacheAPI(url) {
   ].some((prefix) => url.pathname.startsWith(prefix));
 }
 
-async function networkFirstAPI(req, timeoutMs = 8000) {
+async function networkFirstAPI(req) {
   const cache = await caches.open(API_CACHE);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(req, { signal: controller.signal });
-    clearTimeout(timer);
+    const res = await fetch(req);
     if (res && res.ok) {
       const copy = res.clone();
       cache.put(req, copy).then(trimApiCache);
     }
     return res;
   } catch {
-    clearTimeout(timer);
     const cached = await cache.match(req);
     if (cached) return cached;
-    throw new Error("network and cache unavailable");
+    return new Response(
+      JSON.stringify({ detail: "network unavailable" }),
+      {
+        status: 503,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
+      }
+    );
   }
 }
 

@@ -256,10 +256,9 @@ export default function LLMUsagePage() {
     }
   }, [availableForecastMonths, forecastMonth]);
 
-  const topModelRows = useMemo(() => mergedModelRows.slice(0, 10), [mergedModelRows]);
-  const topModelChartRows = useMemo(
+  const modelChartRows = useMemo(
     () =>
-      topModelRows
+      mergedModelRows
         .slice()
         .reverse()
         .map((r) => ({
@@ -270,7 +269,7 @@ export default function LLMUsagePage() {
           calls: r.calls,
           pricingSource: r.pricing_source,
         })),
-    [topModelRows]
+    [mergedModelRows]
   );
 
   const logsPageSize = 20;
@@ -698,7 +697,7 @@ export default function LLMUsagePage() {
             <div className="h-80 w-full rounded border border-zinc-100 p-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={topModelChartRows}
+                  data={modelChartRows}
                   layout="vertical"
                   margin={{ top: 8, right: 24, left: 8, bottom: 8 }}
                 >

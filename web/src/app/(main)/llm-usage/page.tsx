@@ -17,7 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary, LLMUsageProviderMonthSummary, UserSettings } from "@/lib/api";
+import { api, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary, LLMUsageProviderMonthSummary, LLMUsagePurposeMonthSummary, UserSettings } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 
@@ -70,6 +70,7 @@ export default function LLMUsagePage() {
   const [summaryRows, setSummaryRows] = useState<LLMUsageDailySummary[]>([]);
   const [modelRows, setModelRows] = useState<LLMUsageModelSummary[]>([]);
   const [currentMonthProviderRows, setCurrentMonthProviderRows] = useState<LLMUsageProviderMonthSummary[]>([]);
+  const [currentMonthPurposeRows, setCurrentMonthPurposeRows] = useState<LLMUsagePurposeMonthSummary[]>([]);
   const [logs, setLogs] = useState<LLMUsageLog[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
 
@@ -89,16 +90,18 @@ export default function LLMUsagePage() {
   const load = useCallback(async (daysParam: number, limitParam: number) => {
     setLoading(true);
     try {
-      const [summary, byModel, byProviderCurrentMonth, recent, userSettings] = await Promise.all([
+      const [summary, byModel, byProviderCurrentMonth, byPurposeCurrentMonth, recent, userSettings] = await Promise.all([
         api.getLLMUsageSummary({ days: daysParam }),
         api.getLLMUsageByModel({ days: daysParam }),
         api.getLLMUsageCurrentMonthByProvider(),
+        api.getLLMUsageCurrentMonthByPurpose(),
         api.getLLMUsage({ limit: limitParam }),
         api.getSettings(),
       ]);
       setSummaryRows(summary ?? []);
       setModelRows(byModel ?? []);
       setCurrentMonthProviderRows(byProviderCurrentMonth ?? []);
+      setCurrentMonthPurposeRows(byPurposeCurrentMonth ?? []);
       setLogs(recent ?? []);
       setSettings(userSettings);
       setError(null);
@@ -172,6 +175,17 @@ export default function LLMUsagePage() {
       avg_cost_per_call_usd: row.calls > 0 ? row.estimated_cost_usd / row.calls : 0,
     }));
   }, [currentMonthProviderRows, settings]);
+
+  const currentMonthPurposeTableRows = useMemo(() => {
+    const totalCost = currentMonthPurposeRows.reduce((acc, row) => acc + row.estimated_cost_usd, 0);
+    const totalCalls = currentMonthPurposeRows.reduce((acc, row) => acc + row.calls, 0);
+    return currentMonthPurposeRows.map((row) => ({
+      ...row,
+      call_share_pct: totalCalls > 0 ? (row.calls / totalCalls) * 100 : 0,
+      share_pct: totalCost > 0 ? (row.estimated_cost_usd / totalCost) * 100 : 0,
+      avg_cost_per_call_usd: row.calls > 0 ? row.estimated_cost_usd / row.calls : 0,
+    }));
+  }, [currentMonthPurposeRows]);
 
   const groupedByDate = useMemo(() => {
     const m = new Map<string, SummaryRow[]>();
@@ -492,6 +506,54 @@ export default function LLMUsagePage() {
                 {currentMonthProviderTableRows.map((row) => (
                   <tr key={`${row.month_jst}:${row.provider}`} className="border-b border-zinc-100 last:border-0">
                     <td className="px-3 py-2 font-medium text-zinc-800">{row.provider}</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(row.calls)}</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(row.input_tokens)}</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(row.output_tokens)}</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(row.cache_read_input_tokens)}</td>
+                    <td className="px-3 py-2 text-right">{row.call_share_pct.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-right">{row.share_pct.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-right">{fmtUSD(row.avg_cost_per_call_usd)}</td>
+                    <td className="px-3 py-2 text-right">{fmtUSD(row.estimated_cost_usd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+            <ReceiptText className="size-4 text-zinc-500" aria-hidden="true" />
+            <span>{t("llm.currentMonthByPurpose")}</span>
+          </h2>
+          <span className="text-xs text-zinc-400">
+            {settings?.current_month?.month_jst ?? currentMonthPurposeRows[0]?.month_jst ?? "—"}
+          </span>
+        </div>
+        {currentMonthPurposeTableRows.length === 0 ? (
+          <p className="text-sm text-zinc-400">{t("llm.noSummary")}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="text-xs text-zinc-500">
+                <tr className="border-b border-zinc-100">
+                  <th className="px-3 py-2 text-left font-medium">purpose</th>
+                  <th className="px-3 py-2 text-right font-medium">calls</th>
+                  <th className="px-3 py-2 text-right font-medium">input</th>
+                  <th className="px-3 py-2 text-right font-medium">output</th>
+                  <th className="px-3 py-2 text-right font-medium">cache r</th>
+                  <th className="px-3 py-2 text-right font-medium">call share</th>
+                  <th className="px-3 py-2 text-right font-medium">share</th>
+                  <th className="px-3 py-2 text-right font-medium">avg/call</th>
+                  <th className="px-3 py-2 text-right font-medium">cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentMonthPurposeTableRows.map((row) => (
+                  <tr key={`${row.month_jst}:${row.purpose}`} className="border-b border-zinc-100 last:border-0">
+                    <td className="px-3 py-2 font-medium text-zinc-800">{row.purpose}</td>
                     <td className="px-3 py-2 text-right">{fmtNum(row.calls)}</td>
                     <td className="px-3 py-2 text-right">{fmtNum(row.input_tokens)}</td>
                     <td className="px-3 py-2 text-right">{fmtNum(row.output_tokens)}</td>

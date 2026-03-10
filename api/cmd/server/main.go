@@ -160,6 +160,7 @@ func main() {
 			r.Get("/summary", llmUsageH.DailySummary)
 			r.Get("/by-model", llmUsageH.ModelSummary)
 			r.Get("/current-month/by-provider", llmUsageH.ProviderSummaryCurrentMonth)
+			r.Get("/current-month/by-purpose", llmUsageH.PurposeSummaryCurrentMonth)
 		})
 
 		r.Get("/briefing/today", briefingH.Today)

@@ -249,6 +249,7 @@ export const jaDict: Dict = {
   "llm.budget": "予算",
   "llm.dailyCostTrend": "日次コスト推移",
   "llm.currentMonthByProvider": "当月のプロバイダー別利用料金",
+  "llm.currentMonthByPurpose": "当月の種別別利用料金",
   "llm.usageByModel": "モデル別利用状況",
   "llm.time": "時刻",
   "llm.forecast.monthAvg": "月初からの平均ペース",

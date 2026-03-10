@@ -84,6 +84,17 @@ type LLMUsageProviderMonthSummary struct {
 	EstimatedCostUSD         float64 `json:"estimated_cost_usd"`
 }
 
+type LLMUsagePurposeMonthSummary struct {
+	MonthJST                 string  `json:"month_jst"`
+	Purpose                  string  `json:"purpose"`
+	Calls                    int     `json:"calls"`
+	InputTokens              int64   `json:"input_tokens"`
+	OutputTokens             int64   `json:"output_tokens"`
+	CacheCreationInputTokens int64   `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int64   `json:"cache_read_input_tokens"`
+	EstimatedCostUSD         float64 `json:"estimated_cost_usd"`
+}
+
 func (r *LLMUsageLogRepo) Insert(ctx context.Context, in LLMUsageLogInput) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO llm_usage_logs (
@@ -276,6 +287,48 @@ func (r *LLMUsageLogRepo) ProviderSummaryCurrentMonthByUser(ctx context.Context,
 		var v LLMUsageProviderMonthSummary
 		if err := rows.Scan(
 			&v.MonthJST, &v.Provider, &v.Calls,
+			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens,
+			&v.CacheReadInputTokens, &v.EstimatedCostUSD,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+func (r *LLMUsageLogRepo) PurposeSummaryCurrentMonthByUser(ctx context.Context, userID string) ([]LLMUsagePurposeMonthSummary, error) {
+	rows, err := r.db.Query(ctx, `
+		WITH bounds AS (
+			SELECT
+				date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo') AS month_start_jst,
+				date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 month' AS next_month_start_jst
+		)
+		SELECT TO_CHAR(b.month_start_jst, 'YYYY-MM') AS month_jst,
+		       l.purpose,
+		       COUNT(*)::int AS calls,
+		       COALESCE(SUM(l.input_tokens),0)::bigint AS input_tokens,
+		       COALESCE(SUM(l.output_tokens),0)::bigint AS output_tokens,
+		       COALESCE(SUM(l.cache_creation_input_tokens),0)::bigint AS cache_creation_input_tokens,
+		       COALESCE(SUM(l.cache_read_input_tokens),0)::bigint AS cache_read_input_tokens,
+		       COALESCE(SUM(l.estimated_cost_usd),0)::double precision AS estimated_cost_usd
+		FROM llm_usage_logs l
+		CROSS JOIN bounds b
+		WHERE l.user_id = $1
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
+		GROUP BY 1,2
+		ORDER BY estimated_cost_usd DESC, calls DESC, purpose ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []LLMUsagePurposeMonthSummary
+	for rows.Next() {
+		var v LLMUsagePurposeMonthSummary
+		if err := rows.Scan(
+			&v.MonthJST, &v.Purpose, &v.Calls,
 			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens,
 			&v.CacheReadInputTokens, &v.EstimatedCostUSD,
 		); err != nil {

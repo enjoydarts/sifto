@@ -905,7 +905,8 @@ func (h *ItemHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	summaryEmpty := item.Summary == nil || strings.TrimSpace(*item.Summary) == ""
-	if item.Status != "failed" && !(item.Status == "summarized" && summaryEmpty) {
+	retryable := item.Status == "failed" || item.Status == "fetched" || item.Status == "facts_extracted" || item.Status == "summarized"
+	if !retryable && !(item.Status == "summarized" && summaryEmpty) {
 		http.Error(w, "item is not retryable", http.StatusConflict)
 		return
 	}

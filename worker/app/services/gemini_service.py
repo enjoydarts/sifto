@@ -13,6 +13,12 @@ try:
 except Exception:  # pragma: no cover
     redis = None
 from app.services.llm_catalog import model_pricing
+from app.services.summary_faithfulness_common import (
+    SUMMARY_FAITHFULNESS_SCHEMA,
+    normalize_summary_faithfulness_result,
+    summary_faithfulness_prompt,
+    summary_faithfulness_system_instruction,
+)
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
@@ -1083,6 +1089,20 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
         "score_policy_version": "v2",
         "llm": _llm_meta(model, "summary", usage),
     }
+
+
+def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, model: str, api_key: str) -> dict:
+    text, usage = _generate_content(
+        summary_faithfulness_prompt(title, facts, summary),
+        model=model,
+        api_key=api_key,
+        max_output_tokens=320,
+        system_instruction=summary_faithfulness_system_instruction(),
+        response_schema=SUMMARY_FAITHFULNESS_SCHEMA,
+    )
+    result = normalize_summary_faithfulness_result(_extract_first_json_object(text))
+    result["llm"] = _llm_meta(model, "faithfulness_check", usage)
+    return result
 
 
 def translate_title(title: str, model: str = "gemini-2.5-flash", api_key: str = "") -> dict:

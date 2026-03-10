@@ -99,6 +99,16 @@ export interface ItemSummaryLLM {
   created_at: string;
 }
 
+export interface SummaryFaithfulnessCheck {
+  id: string;
+  item_id: string;
+  final_result: "pass" | "warn" | "fail" | string;
+  retry_count: number;
+  short_comment?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ItemFeedback {
   user_id: string;
   item_id: string;
@@ -112,6 +122,7 @@ export interface ItemDetail extends Item {
   facts: ItemFacts | null;
   summary: ItemSummary | null;
   summary_llm?: ItemSummaryLLM | null;
+  faithfulness?: SummaryFaithfulnessCheck | null;
   feedback?: ItemFeedback | null;
 }
 
@@ -446,6 +457,7 @@ export interface UserSettings {
     ask?: string | null;
     source_suggestion?: string | null;
     embedding?: string | null;
+    faithfulness_check?: string | null;
   };
   current_month: UserSettingsCurrentMonth;
 }
@@ -779,6 +791,7 @@ export const api = {
     ask?: string | null;
     source_suggestion?: string | null;
     embedding?: string | null;
+    faithfulness_check?: string | null;
   }) =>
     apiFetch<{ user_id: string; llm_models: UserSettings["llm_models"] }>("/settings/llm-models", {
       method: "PATCH",

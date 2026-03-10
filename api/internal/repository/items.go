@@ -989,6 +989,16 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 		}
 	}
 
+	var faithfulness model.SummaryFaithfulnessCheck
+	err = r.db.QueryRow(ctx, `
+		SELECT id, item_id, final_result, retry_count, short_comment, created_at, updated_at
+		FROM summary_faithfulness_checks
+		WHERE item_id = $1`, id,
+	).Scan(&faithfulness.ID, &faithfulness.ItemID, &faithfulness.FinalResult, &faithfulness.RetryCount, &faithfulness.ShortComment, &faithfulness.CreatedAt, &faithfulness.UpdatedAt)
+	if err == nil {
+		d.Faithfulness = &faithfulness
+	}
+
 	// feedback (optional)
 	fb, err := r.GetFeedback(ctx, userID, id)
 	if err == nil {

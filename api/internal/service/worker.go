@@ -72,6 +72,12 @@ type SummarizeResponse struct {
 	LLM                *LLMUsage      `json:"llm,omitempty"`
 }
 
+type SummaryFaithfulnessResponse struct {
+	Verdict      string    `json:"verdict"`
+	ShortComment string    `json:"short_comment"`
+	LLM          *LLMUsage `json:"llm,omitempty"`
+}
+
 type TranslateTitleResponse struct {
 	TranslatedTitle string    `json:"translated_title"`
 	LLM             *LLMUsage `json:"llm,omitempty"`
@@ -232,6 +238,15 @@ func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, fa
 		"facts":             facts,
 		"model":             model,
 		"source_text_chars": sourceTextChars,
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, openAIAPIKey, w.internalSecret))
+}
+
+func (w *WorkerClient) CheckSummaryFaithfulnessWithModel(ctx context.Context, title *string, facts []string, summary string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, openAIAPIKey *string, model *string) (*SummaryFaithfulnessResponse, error) {
+	return postWithHeaders[SummaryFaithfulnessResponse](ctx, w, "/check-summary-faithfulness", map[string]any{
+		"title":   title,
+		"facts":   facts,
+		"summary": summary,
+		"model":   model,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, openAIAPIKey, w.internalSecret))
 }
 

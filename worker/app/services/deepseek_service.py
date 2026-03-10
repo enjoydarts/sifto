@@ -21,6 +21,12 @@ from app.services.gemini_service import (
     _target_summary_chars,
     _decode_json_string_fragment,
 )
+from app.services.summary_faithfulness_common import (
+    SUMMARY_FAITHFULNESS_SCHEMA,
+    normalize_summary_faithfulness_result,
+    summary_faithfulness_prompt,
+    summary_faithfulness_system_instruction,
+)
 
 _log = logging.getLogger(__name__)
 _DEEPSEEK_PRICING_SOURCE_VERSION = "deepseek_static_2026_03"
@@ -381,6 +387,21 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
         "score_policy_version": "v2",
         "llm": _llm_meta(model, "summary", usage),
     }
+
+
+def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, model: str, api_key: str) -> dict:
+    text, usage = _chat_json(
+        summary_faithfulness_prompt(title, facts, summary),
+        model,
+        api_key,
+        system_instruction=summary_faithfulness_system_instruction(),
+        max_output_tokens=320,
+        response_schema=SUMMARY_FAITHFULNESS_SCHEMA,
+        schema_name="summary_faithfulness",
+    )
+    result = normalize_summary_faithfulness_result(_extract_first_json_object(text))
+    result["llm"] = _llm_meta(model, "faithfulness_check", usage)
+    return result
 
 
 def translate_title(title: str, model: str = "openai/gpt-oss-20b", api_key: str = "") -> dict:

@@ -54,6 +54,7 @@ export default function ItemDetailPage() {
   const [readUpdating, setReadUpdating] = useState(false);
   const [deleteUpdating, setDeleteUpdating] = useState(false);
   const [feedbackUpdating, setFeedbackUpdating] = useState(false);
+  const [retryUpdating, setRetryUpdating] = useState(false);
   const [related, setRelated] = useState<RelatedItem[]>([]);
   const [relatedClusters, setRelatedClusters] = useState<RelatedCluster[]>([]);
   const [expandedRelatedClusterIds, setExpandedRelatedClusterIds] = useState<Record<string, boolean>>({});
@@ -445,6 +446,20 @@ export default function ItemDetailPage() {
     }
   };
 
+  const retryItem = async () => {
+    if (!item || retryUpdating) return;
+    setRetryUpdating(true);
+    try {
+      await api.retryItem(item.id);
+      showToast(t("itemDetail.toast.retryQueued"), "success");
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setRetryUpdating(false);
+    }
+  };
+
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!item) return null;
@@ -497,6 +512,16 @@ export default function ItemDetailPage() {
               ? t("itemDetail.delete.deleting")
               : t("itemDetail.delete.button")}
           </button>
+          {item.status !== "new" && (
+            <button
+              type="button"
+              onClick={retryItem}
+              disabled={retryUpdating}
+              className="rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {retryUpdating ? t("common.saving") : t("itemDetail.retrySummary")}
+            </button>
+          )}
         </div>
 
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -621,19 +646,19 @@ export default function ItemDetailPage() {
         </Link>
       )}
 
-      {item.summary && (
+      {(item.summary || item.faithfulness) && (
         <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
               <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
               {t("itemDetail.summary")}
             </h2>
-            {item.summary.score != null && (
+            {item.summary?.score != null && (
               <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
                 score {item.summary.score.toFixed(2)}
               </span>
             )}
-            {item.summary.score_policy_version && (
+            {item.summary?.score_policy_version && (
               <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500">
                 {item.summary.score_policy_version}
               </span>
@@ -647,8 +672,8 @@ export default function ItemDetailPage() {
               </span>
             )}
           </div>
-          <p className="text-base leading-8 text-zinc-900">{item.summary.summary}</p>
-          {item.summary.score_reason && (
+          {item.summary && <p className="text-base leading-8 text-zinc-900">{item.summary.summary}</p>}
+          {item.summary?.score_reason && (
             <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
               <div className="mb-1 text-xs font-semibold text-zinc-500">
                 {t("itemDetail.scoreReason")}
@@ -656,7 +681,7 @@ export default function ItemDetailPage() {
               <p className="text-sm leading-6 text-zinc-700">{item.summary.score_reason}</p>
             </div>
           )}
-          {item.summary.score_breakdown && (
+          {item.summary?.score_breakdown && (
             <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {[
                 ["importance", t("itemDetail.score.importance")],
@@ -683,7 +708,7 @@ export default function ItemDetailPage() {
               })}
             </div>
           )}
-          {item.summary.topics.length > 0 && (
+          {item.summary && item.summary.topics.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-1.5">
               {item.summary.topics.map((topic) => (
                 <span
@@ -693,6 +718,22 @@ export default function ItemDetailPage() {
                   {topic}
                 </span>
               ))}
+            </div>
+          )}
+          {item.faithfulness && (
+            <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
+              <div className="mb-2 text-xs font-semibold text-zinc-500">{t("itemDetail.faithfulness")}</div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="rounded bg-white px-2 py-1 text-zinc-700 ring-1 ring-zinc-200">
+                  {t(`itemDetail.faithfulness.${item.faithfulness.final_result}`, item.faithfulness.final_result)}
+                </span>
+                <span className="text-zinc-500">
+                  {t("itemDetail.faithfulness.retryCount")}: {item.faithfulness.retry_count}
+                </span>
+              </div>
+              {item.faithfulness.short_comment && (
+                <p className="mt-2 text-sm leading-6 text-zinc-700">{item.faithfulness.short_comment}</p>
+              )}
             </div>
           )}
         </section>

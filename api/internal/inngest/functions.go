@@ -897,36 +897,140 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			}
 			log.Printf("process-item insert-facts done item_id=%s", itemID)
 
-			// Step 3: 要約
-			summary, err := step.Run(ctx, "summarize", func(ctx context.Context) (*service.SummarizeResponse, error) {
-				log.Printf("process-item summarize start item_id=%s", itemID)
-				var modelOverride *string
-				if userModelSettings != nil {
-					modelOverride = ptrStringOrNil(userModelSettings.SummaryModel)
+			// Step 3: 要約 + faithfulness check
+			const maxSummaryFaithfulnessRetries = 2
+			var summary *service.SummarizeResponse
+			var finalFaithfulness *service.SummaryFaithfulnessResponse
+			var summaryRetryCount int
+			for attempt := 0; attempt <= maxSummaryFaithfulnessRetries; attempt++ {
+				stepLabel := "summarize"
+				if attempt > 0 {
+					stepLabel = fmt.Sprintf("summarize-%d", attempt+1)
 				}
-				userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "summary")
+				type summaryAttemptResult struct {
+					Summary       *service.SummarizeResponse
+					ResolvedModel *string
+					AnthropicKey  *string
+					GoogleKey     *string
+					GroqKey       *string
+					DeepSeekKey   *string
+					OpenAIKey     *string
+				}
+				summaryAttempt, err := step.Run(ctx, stepLabel, func(ctx context.Context) (*summaryAttemptResult, error) {
+					log.Printf("process-item summarize start item_id=%s attempt=%d", itemID, attempt+1)
+					var modelOverride *string
+					if userModelSettings != nil {
+						modelOverride = ptrStringOrNil(userModelSettings.SummaryModel)
+					}
+					userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "summary")
+					if err != nil {
+						return nil, err
+					}
+					sourceChars := len(extracted.Content)
+					resp, err := worker.SummarizeWithModel(ctx, titleForLLM, factsResp.Facts, &sourceChars, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
+					if err != nil {
+						return nil, err
+					}
+					return &summaryAttemptResult{
+						Summary:       resp,
+						ResolvedModel: resolvedModel,
+						AnthropicKey:  userAnthropicKey,
+						GoogleKey:     userGoogleKey,
+						GroqKey:       userGroqKey,
+						DeepSeekKey:   userDeepSeekKey,
+						OpenAIKey:     userOpenAIKey,
+					}, nil
+				})
 				if err != nil {
-					return nil, err
+					log.Printf("process-item summarize failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
+					msg := fmt.Sprintf("summarize: %v", err)
+					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+					return nil, fmt.Errorf("summarize: %w", err)
 				}
-				sourceChars := len(extracted.Content)
-				return worker.SummarizeWithModel(ctx, titleForLLM, factsResp.Facts, &sourceChars, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
-			})
-			if err != nil {
-				log.Printf("process-item summarize failed item_id=%s err=%v", itemID, err)
+				summary = summaryAttempt.Summary
+				summary.Summary = strings.TrimSpace(summary.Summary)
+				recordLLMUsage(ctx, llmUsageRepo, "summary", summary.LLM, userIDPtr, &data.SourceID, &itemID, nil)
+				if summary.Summary == "" {
+					err := fmt.Errorf("empty summary returned from worker")
+					log.Printf("process-item summarize empty item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
+					msg := fmt.Sprintf("summarize: %v", err)
+					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+					return nil, fmt.Errorf("summarize: %w", err)
+				}
+
+				faithfulnessStep := "check-summary-faithfulness"
+				if attempt > 0 {
+					faithfulnessStep = fmt.Sprintf("check-summary-faithfulness-%d", attempt+1)
+				}
+				faithfulness, err := step.Run(ctx, faithfulnessStep, func(ctx context.Context) (*service.SummaryFaithfulnessResponse, error) {
+					var modelOverride *string
+					if userModelSettings != nil {
+						modelOverride = ptrStringOrNil(userModelSettings.FaithfulnessCheckModel)
+					}
+					if modelOverride == nil || strings.TrimSpace(*modelOverride) == "" {
+						modelOverride = summaryAttempt.ResolvedModel
+						return worker.CheckSummaryFaithfulnessWithModel(
+							ctx,
+							titleForLLM,
+							factsResp.Facts,
+							summary.Summary,
+							summaryAttempt.AnthropicKey,
+							summaryAttempt.GoogleKey,
+							summaryAttempt.GroqKey,
+							summaryAttempt.DeepSeekKey,
+							summaryAttempt.OpenAIKey,
+							modelOverride,
+						)
+					}
+					userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "summary")
+					if err != nil {
+						return nil, err
+					}
+					return worker.CheckSummaryFaithfulnessWithModel(ctx, titleForLLM, factsResp.Facts, summary.Summary, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
+				})
+				if err != nil {
+					log.Printf("process-item faithfulness failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
+					msg := fmt.Sprintf("faithfulness check: %v", err)
+					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+					return nil, fmt.Errorf("faithfulness check: %w", err)
+				}
+				finalFaithfulness = faithfulness
+				recordLLMUsage(ctx, llmUsageRepo, "faithfulness_check", faithfulness.LLM, userIDPtr, &data.SourceID, &itemID, nil)
+				if faithfulness.Verdict != "fail" {
+					summaryRetryCount = attempt
+					break
+				}
+				if attempt >= maxSummaryFaithfulnessRetries {
+					summaryRetryCount = attempt
+					break
+				}
+				log.Printf("process-item faithfulness retry item_id=%s attempt=%d verdict=%s comment=%s", itemID, attempt+1, faithfulness.Verdict, faithfulness.ShortComment)
+			}
+			if summary == nil {
+				err := fmt.Errorf("summary generation produced no result")
 				msg := fmt.Sprintf("summarize: %v", err)
 				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-				return nil, fmt.Errorf("summarize: %w", err)
+				return nil, err
 			}
-			summary.Summary = strings.TrimSpace(summary.Summary)
-			if summary.Summary == "" {
-				err := fmt.Errorf("empty summary returned from worker")
-				log.Printf("process-item summarize empty item_id=%s err=%v", itemID, err)
-				msg := fmt.Sprintf("summarize: %v", err)
+			if finalFaithfulness == nil {
+				err := fmt.Errorf("faithfulness check produced no result")
+				msg := fmt.Sprintf("faithfulness check: %v", err)
 				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-				return nil, fmt.Errorf("summarize: %w", err)
+				return nil, err
 			}
-			log.Printf("process-item summarize done item_id=%s topics=%d score=%.3f", itemID, len(summary.Topics), summary.Score)
-			recordLLMUsage(ctx, llmUsageRepo, "summary", summary.LLM, userIDPtr, &data.SourceID, &itemID, nil)
+			var faithfulnessComment *string
+			if comment := strings.TrimSpace(finalFaithfulness.ShortComment); comment != "" {
+				faithfulnessComment = &comment
+			}
+			if err := itemRepo.UpsertSummaryFaithfulnessCheck(ctx, itemID, finalFaithfulness.Verdict, summaryRetryCount, faithfulnessComment); err != nil {
+				return nil, fmt.Errorf("upsert summary faithfulness check: %w", err)
+			}
+			if finalFaithfulness.Verdict == "fail" {
+				msg := fmt.Sprintf("faithfulness check failed after %d retries: %s", summaryRetryCount, finalFaithfulness.ShortComment)
+				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+				return nil, fmt.Errorf("faithfulness check: %s", finalFaithfulness.ShortComment)
+			}
+			log.Printf("process-item summarize done item_id=%s topics=%d score=%.3f retries=%d faithfulness=%s", itemID, len(summary.Topics), summary.Score, summaryRetryCount, finalFaithfulness.Verdict)
 			if err := itemRepo.InsertSummary(
 				ctx,
 				itemID,

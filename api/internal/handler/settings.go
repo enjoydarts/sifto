@@ -78,13 +78,14 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"exclude_read":     settings.ReadingPlanExcludeRead,
 		},
 		"llm_models": map[string]any{
-			"facts":             settings.FactsModel,
-			"summary":           settings.SummaryModel,
-			"digest_cluster":    settings.DigestClusterModel,
-			"digest":            settings.DigestModel,
-			"ask":               settings.AskModel,
-			"source_suggestion": settings.SourceSuggestionModel,
-			"embedding":         settings.EmbeddingModel,
+			"facts":              settings.FactsModel,
+			"summary":            settings.SummaryModel,
+			"digest_cluster":     settings.DigestClusterModel,
+			"digest":             settings.DigestModel,
+			"ask":                settings.AskModel,
+			"source_suggestion":  settings.SourceSuggestionModel,
+			"embedding":          settings.EmbeddingModel,
+			"faithfulness_check": settings.FaithfulnessCheckModel,
 		},
 		"current_month": map[string]any{
 			"month_jst":            monthStart.Format("2006-01"),
@@ -258,13 +259,14 @@ func (h *SettingsHandler) DeleteInoreaderOAuth(w http.ResponseWriter, r *http.Re
 func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	var body struct {
-		Facts            *string `json:"facts"`
-		Summary          *string `json:"summary"`
-		DigestCluster    *string `json:"digest_cluster"`
-		Digest           *string `json:"digest"`
-		Ask              *string `json:"ask"`
-		SourceSuggestion *string `json:"source_suggestion"`
-		Embedding        *string `json:"embedding"`
+		Facts             *string `json:"facts"`
+		Summary           *string `json:"summary"`
+		DigestCluster     *string `json:"digest_cluster"`
+		Digest            *string `json:"digest"`
+		Ask               *string `json:"ask"`
+		SourceSuggestion  *string `json:"source_suggestion"`
+		Embedding         *string `json:"embedding"`
+		FaithfulnessCheck *string `json:"faithfulness_check"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -295,6 +297,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		norm(body.Ask),
 		norm(body.SourceSuggestion),
 		embeddingModel,
+		norm(body.FaithfulnessCheck),
 	)
 	if err != nil {
 		writeRepoError(w, err)
@@ -303,13 +306,14 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 	writeJSON(w, map[string]any{
 		"user_id": settings.UserID,
 		"llm_models": map[string]any{
-			"facts":             settings.FactsModel,
-			"summary":           settings.SummaryModel,
-			"digest_cluster":    settings.DigestClusterModel,
-			"digest":            settings.DigestModel,
-			"ask":               settings.AskModel,
-			"source_suggestion": settings.SourceSuggestionModel,
-			"embedding":         settings.EmbeddingModel,
+			"facts":              settings.FactsModel,
+			"summary":            settings.SummaryModel,
+			"digest_cluster":     settings.DigestClusterModel,
+			"digest":             settings.DigestModel,
+			"ask":                settings.AskModel,
+			"source_suggestion":  settings.SourceSuggestionModel,
+			"embedding":          settings.EmbeddingModel,
+			"faithfulness_check": settings.FaithfulnessCheckModel,
 		},
 	})
 }

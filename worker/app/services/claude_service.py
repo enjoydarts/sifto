@@ -5,6 +5,13 @@ import re
 import time
 import anthropic
 from app.services.llm_catalog import model_pricing
+from app.services.summary_faithfulness_common import (
+    SUMMARY_FAITHFULNESS_SCHEMA,
+    extract_first_json_object as _faithfulness_extract_first_json_object,
+    normalize_summary_faithfulness_result,
+    summary_faithfulness_prompt,
+    summary_faithfulness_system_instruction,
+)
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -824,6 +831,34 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
         "score_policy_version": "v2",
         "llm": _llm_meta(message, "summary", used_model or _summary_model),
     }
+
+
+def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, api_key: str | None = None, model: str | None = None) -> dict:
+    prompt = summary_faithfulness_prompt(title, facts, summary)
+    message, used_model = _call_with_model_fallback(
+        prompt,
+        str(model or _summary_model),
+        _summary_model_fallback,
+        max_tokens=320,
+        api_key=api_key,
+        system_prompt=summary_faithfulness_system_instruction(),
+        user_prompt=prompt,
+    )
+    if message is None:
+        result = normalize_summary_faithfulness_result({"verdict": "warn", "short_comment": "判定モデル応答を取得できなかったため簡易扱いです。"})
+        result["llm"] = {
+            "provider": "local-fallback",
+            "model": used_model or _summary_model,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "estimated_cost_usd": 0.0,
+        }
+        return result
+    result = normalize_summary_faithfulness_result(_faithfulness_extract_first_json_object(message.content[0].text.strip()))
+    result["llm"] = _llm_meta(message, "faithfulness_check", used_model or _summary_model)
+    return result
 
 
 def translate_title(title: str, api_key: str | None = None, model: str | None = None) -> dict:

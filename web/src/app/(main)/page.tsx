@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Bell, BookOpen, Flame, ListTree, Sparkles, Target } from "lucide-react";
-import { api, BriefingCluster, Item } from "@/lib/api";
+import { api, BriefingCluster, Item, ProviderModelChangeEvent } from "@/lib/api";
 import { InlineReader } from "@/components/inline-reader";
 import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
@@ -14,6 +14,7 @@ import { SkeletonCard, SkeletonKpi } from "@/components/skeleton";
 
 const EMPTY_ITEMS: Item[] = [];
 const EMPTY_CLUSTERS: BriefingCluster[] = [];
+const EMPTY_MODEL_UPDATES: ProviderModelChangeEvent[] = [];
 
 export default function BriefingPage() {
   const { t, locale } = useI18n();
@@ -26,10 +27,17 @@ export default function BriefingPage() {
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
+  const modelUpdatesQuery = useQuery({
+    queryKey: ["provider-model-updates", 7] as const,
+    queryFn: () => api.getProviderModelUpdates({ days: 7, limit: 6 }),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
 
   const loading = !briefingQuery.data && (briefingQuery.isLoading || briefingQuery.isFetching);
   const error = briefingQuery.error ? String(briefingQuery.error) : null;
   const data = briefingQuery.data;
+  const modelUpdates = modelUpdatesQuery.data ?? EMPTY_MODEL_UPDATES;
   const highlights = data?.highlight_items ?? EMPTY_ITEMS;
   const clusters = data?.clusters ?? EMPTY_CLUSTERS;
   const unreadHighlights = useMemo(() => highlights.filter((item) => !item.is_read), [highlights]);
@@ -92,6 +100,30 @@ export default function BriefingPage() {
   return (
     <PageTransition>
       <div className="space-y-6">
+        <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <Bell className="size-4 shrink-0 text-amber-700" aria-hidden="true" />
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-amber-900">{t("briefing.providerModelUpdates")}</h2>
+                {modelUpdates.length === 0 ? (
+                  <p className="text-sm text-amber-800">{t("briefing.providerModelUpdatesEmpty")}</p>
+                ) : (
+                  <p className="text-sm text-amber-800">
+                    {modelUpdates.slice(0, 3).map((event) => `${event.provider} ${event.change_type === "added" ? "+" : "-"} ${event.model_id}`).join(" / ")}
+                  </p>
+                )}
+              </div>
+            </div>
+            <Link
+              href="/settings"
+              className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 press focus-ring"
+            >
+              {t("briefing.providerModelUpdatesOpen")}
+            </Link>
+          </div>
+        </section>
+
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>

@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brain, Coins, KeyRound, Mail, Settings as SettingsIcon } from "lucide-react";
-import { api, LLMCatalog, LLMCatalogModel, UserSettings } from "@/lib/api";
+import { api, LLMCatalog, LLMCatalogModel, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -66,6 +66,7 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [catalog, setCatalog] = useState<LLMCatalog | null>(null);
+  const [providerModelUpdates, setProviderModelUpdates] = useState<ProviderModelChangeEvent[]>([]);
   const [budgetUSD, setBudgetUSD] = useState<string>("");
   const [alertEnabled, setAlertEnabled] = useState(false);
   const [thresholdPct, setThresholdPct] = useState<number>(20);
@@ -110,10 +111,15 @@ export default function SettingsPage() {
     const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
-      const [data, nextCatalog] = await Promise.all([api.getSettings(), api.getLLMCatalog()]);
+      const [data, nextCatalog, modelUpdates] = await Promise.all([
+        api.getSettings(),
+        api.getLLMCatalog(),
+        api.getProviderModelUpdates({ days: 14, limit: 20 }),
+      ]);
       if (seq !== loadSeqRef.current) return;
       setSettings(data);
       setCatalog(nextCatalog);
+      setProviderModelUpdates(modelUpdates ?? []);
       setBudgetUSD(data.monthly_budget_usd == null ? "" : String(data.monthly_budget_usd));
       setAlertEnabled(Boolean(data.budget_alert_enabled));
       setThresholdPct(data.budget_alert_threshold_pct ?? 20);
@@ -872,6 +878,42 @@ export default function SettingsPage() {
         </section>
 
         <OneSignalSettings />
+
+        <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+              <Brain className="size-4 text-zinc-500" aria-hidden="true" />
+              {t("settings.providerModelUpdates")}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              {t("settings.providerModelUpdatesDescription")}
+            </p>
+          </div>
+          {providerModelUpdates.length === 0 ? (
+            <p className="text-sm text-zinc-500">{t("settings.providerModelUpdate.empty")}</p>
+          ) : (
+            <div className="space-y-2">
+              {providerModelUpdates.map((event) => (
+                <div key={event.id} className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded bg-white px-2 py-0.5 text-xs font-medium text-zinc-700 ring-1 ring-zinc-200">
+                      {event.provider}
+                    </span>
+                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${
+                      event.change_type === "added" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                    }`}>
+                      {t(`settings.providerModelUpdate.${event.change_type}`, event.change_type)}
+                    </span>
+                    <span className="break-all text-zinc-800">{event.model_id}</span>
+                    <span className="ml-auto text-xs text-zinc-400">
+                      {new Date(event.detected_at).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         <form onSubmit={submitLLMModels} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">

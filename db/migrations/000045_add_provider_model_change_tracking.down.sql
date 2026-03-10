@@ -1,0 +1,4 @@
+DROP INDEX IF EXISTS idx_provider_model_change_events_provider_detected_at;
+DROP INDEX IF EXISTS idx_provider_model_change_events_detected_at;
+DROP TABLE IF EXISTS provider_model_change_events;
+DROP TABLE IF EXISTS provider_model_snapshots;

@@ -62,9 +62,11 @@ func main() {
 	digestRepo := repository.NewDigestRepo(db)
 	digestInngestRepo := repository.NewDigestInngestRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	providerModelUpdateRepo := repository.NewProviderModelUpdateRepo(db)
 	briefingSnapshotRepo := repository.NewBriefingSnapshotRepo(db)
 	streakRepo := repository.NewReadingStreakRepo(db)
 	settingsH := handler.NewSettingsHandler(userSettingsRepo, llmUsageRepo, secretCipher)
+	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo)
 
 	internalH := handler.NewInternalHandler(userRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher)
@@ -161,6 +163,10 @@ func main() {
 			r.Get("/by-model", llmUsageH.ModelSummary)
 			r.Get("/current-month/by-provider", llmUsageH.ProviderSummaryCurrentMonth)
 			r.Get("/current-month/by-purpose", llmUsageH.PurposeSummaryCurrentMonth)
+		})
+
+		r.Route("/provider-model-updates", func(r chi.Router) {
+			r.Get("/", providerModelUpdateH.ListRecent)
 		})
 
 		r.Get("/briefing/today", briefingH.Today)

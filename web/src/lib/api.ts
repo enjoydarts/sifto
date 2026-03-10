@@ -377,6 +377,15 @@ export interface LLMUsagePurposeMonthSummary {
   estimated_cost_usd: number;
 }
 
+export interface ProviderModelChangeEvent {
+  id: string;
+  provider: string;
+  change_type: "added" | "removed" | string;
+  model_id: string;
+  detected_at: string;
+  metadata?: Record<string, unknown> | null;
+}
+
 export interface UserSettingsCurrentMonth {
   month_jst: string;
   period_start_jst: string;
@@ -770,6 +779,13 @@ export const api = {
   },
   getLLMUsageCurrentMonthByPurpose: () => {
     return apiFetch<LLMUsagePurposeMonthSummary[]>("/llm-usage/current-month/by-purpose");
+  },
+  getProviderModelUpdates: (params?: { days?: number; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.days) q.set("days", String(params.days));
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiFetch<ProviderModelChangeEvent[]>(`/provider-model-updates${qs ? `?${qs}` : ""}`);
   },
 
   // Settings

@@ -8,6 +8,7 @@ import httpx
 
 from app.services.gemini_service import (
     _clamp01,
+    _contains_japanese,
     _extract_compose_digest_fields,
     _extract_first_json_object,
     _extract_json_string_value_loose,
@@ -405,6 +406,26 @@ def _chat_json(
 
 
 def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:
+    src = (title or "").strip()
+    if not _needs_title_translation(src, ""):
+        return ""
+
+    def _normalize_title_candidate(value: str) -> str:
+        text = _strip_code_fence(str(value or "")).strip().strip('"').strip("'")
+        text = re.sub(r"\s+", " ", text)
+        return text.strip()
+
+    def _is_untranslated_title(candidate: str) -> bool:
+        normalized = _normalize_title_candidate(candidate)
+        if not normalized:
+            return True
+        if _contains_japanese(normalized):
+            return False
+        source_normalized = _normalize_title_candidate(src)
+        if normalized.casefold() == source_normalized.casefold():
+            return True
+        return re.search(r"[A-Za-z]", normalized) is not None
+
     system_instruction = """# Role
 あなたは見出し翻訳の専門家です。
 
@@ -422,7 +443,7 @@ def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:
 }}
 
 # Input
-タイトル: {title}
+タイトル: {src}
 """
     text, _ = _chat_json(prompt, model, api_key, system_instruction=system_instruction, max_output_tokens=180, response_schema={
         "type": "object",
@@ -431,16 +452,32 @@ def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:
         "additionalProperties": False,
     }, schema_name="translated_title")
     data = _extract_first_json_object(text) or {}
-    translated = str(data.get("translated_title") or "").strip()
-    if translated:
+    translated = _normalize_title_candidate(str(data.get("translated_title") or ""))
+    if not _is_untranslated_title(translated):
         return translated[:300]
     plain_prompt = f"""# Input
-次のタイトルが外国語なら自然な日本語に翻訳し、日本語なら空文字を返してください。
-タイトル: {title}
+次のタイトルが外国語なら自然な日本語に翻訳してください。
+説明・JSON・引用符は不要です。翻訳結果のみを1行で返してください。
+原文をそのまま繰り返さず、日本語の文字を必ず含めてください。
+
+タイトル: {src}
 """
     plain_text, _ = _chat_json(plain_prompt, model, api_key, max_output_tokens=120)
-    candidate = _strip_code_fence(plain_text).strip().strip('"').strip("'")
-    return candidate[:300]
+    candidate = _normalize_title_candidate(plain_text)
+    if not _is_untranslated_title(candidate):
+        return candidate[:300]
+
+    retry_prompt = f"""あなたはニュース見出し翻訳者です。
+次の英語タイトルを、日本のニュースアプリに載せる自然な日本語見出しへ翻訳してください。
+出力は翻訳後タイトル1行のみです。説明、引用符、原文の反復は禁止です。
+
+タイトル: {src}
+"""
+    retry_text, _ = _chat_json(retry_prompt, model, api_key, system_instruction="出力は自然な日本語タイトル1行のみ。", max_output_tokens=120)
+    retry_candidate = _normalize_title_candidate(retry_text)
+    if _is_untranslated_title(retry_candidate):
+        return ""
+    return retry_candidate[:300]
 
 
 def extract_facts(title: str | None, content: str, model: str, api_key: str) -> dict:
@@ -582,6 +619,10 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
             topics = [str(v).strip() for v in _parse_json_string_array("[" + topic_matches[0] + "]") if str(v).strip()]
     score_reason = str(data.get("score_reason") or "").strip() or _extract_json_string_value_loose(text, "score_reason") or "総合的な重要度・新規性・実用性を基に採点。"
     translated_title = str(data.get("translated_title") or "").strip() or _extract_json_string_value_loose(text, "translated_title")
+    if _needs_title_translation(title, ""):
+        normalized_title = _strip_code_fence(translated_title).strip().strip('"').strip("'")
+        if not normalized_title or (not _contains_japanese(normalized_title) and normalized_title.casefold() == (title or "").strip().casefold()):
+            translated_title = ""
     if _needs_title_translation(title, translated_title):
         translated_title = _translate_title_to_ja(title or "", model, api_key)
     if not summary_text:

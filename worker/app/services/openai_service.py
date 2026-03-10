@@ -294,8 +294,31 @@ def extract_facts(title: str | None, content: str, model: str, api_key: str) -> 
 本文:
 {content}
 """
-    text, usage = _chat_json(prompt, model, api_key, system_instruction=system_instruction, max_output_tokens=1500)
-    return {"facts": _parse_json_string_array(text), "llm": _llm_meta(model, "facts", usage)}
+    schema = {
+        "type": "array",
+        "items": {"type": "string"},
+    }
+    text, usage = _chat_json(
+        prompt,
+        model,
+        api_key,
+        system_instruction=system_instruction,
+        max_output_tokens=1500,
+        response_schema=schema if _supports_strict_schema(model) else None,
+        schema_name="facts",
+    )
+    facts = _parse_json_string_array(text)
+    if not facts:
+        obj = _extract_first_json_object(text) or {}
+        raw = obj.get("facts")
+        if isinstance(raw, list):
+            facts = [str(v).strip() for v in raw if str(v).strip()]
+    if not facts:
+        matches = re.findall(r'"((?:\\.|[^"\\])*)"', _strip_code_fence(text), re.S)
+        facts = [_decode_json_string_fragment(m).strip() for m in matches if _decode_json_string_fragment(m).strip()]
+    if not facts:
+        raise RuntimeError(f"openai extract_facts parse failed: response_snippet={text[:500]}")
+    return {"facts": facts[:18], "llm": _llm_meta(model, "facts", usage)}
 
 
 def summarize(title: str | None, facts: list[str], source_text_chars: int | None = None, model: str = "gpt-5", api_key: str = "") -> dict:
@@ -376,12 +399,19 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
         "reliability": _clamp01(raw_breakdown.get("reliability", 0.5)),
         "relevance": _clamp01(raw_breakdown.get("relevance", 0.5)),
     }
-    score_reason = str(data.get("score_reason") or "").strip() or "総合的な重要度・新規性・実用性を基に採点。"
-    translated_title = str(data.get("translated_title") or "").strip()
+    summary_text = str(data.get("summary") or "").strip() or _extract_json_string_value_loose(text, "summary")
+    if not topics:
+        topic_matches = re.findall(r'"topics"\s*:\s*\[((?:.|\n)*?)\]', _strip_code_fence(text), re.S)
+        if topic_matches:
+            topics = [str(v).strip() for v in _parse_json_string_array("[" + topic_matches[0] + "]") if str(v).strip()]
+    score_reason = str(data.get("score_reason") or "").strip() or _extract_json_string_value_loose(text, "score_reason") or "総合的な重要度・新規性・実用性を基に採点。"
+    translated_title = str(data.get("translated_title") or "").strip() or _extract_json_string_value_loose(text, "translated_title")
     if _needs_title_translation(title, translated_title):
         translated_title = _translate_title_to_ja(title or "", model, api_key)
+    if not summary_text:
+        raise RuntimeError(f"openai summarize parse failed: response_snippet={text[:500]}")
     return {
-        "summary": str(data.get("summary") or "").strip(),
+        "summary": summary_text,
         "topics": [str(t) for t in topics if str(t).strip()],
         "translated_title": translated_title[:300],
         "score": _summary_composite_score(score_breakdown),

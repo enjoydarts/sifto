@@ -1098,9 +1098,9 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				}
 				log.Printf("process-item extract-facts done item_id=%s facts=%d attempt=%d", itemID, len(factsResp.Facts), attempt+1)
 
-				checkStep := "check-facts-v2"
+				checkStep := "check-facts"
 				if attempt > 0 {
-					checkStep = fmt.Sprintf("check-facts-v2-%d", attempt+1)
+					checkStep = fmt.Sprintf("check-facts-%d", attempt+1)
 				}
 				factsCheck, err := step.Run(ctx, checkStep, func(ctx context.Context) (*service.FactsCheckResponse, error) {
 					var modelOverride *string

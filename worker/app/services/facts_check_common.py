@@ -72,6 +72,66 @@ facts:
 """
 
 
+def facts_check_retry_prompt(title: str | None, content: str, facts: list[str]) -> str:
+    facts_text = "\n".join(f"- {f}" for f in facts)
+    return f"""1行のみで返してください。
+形式は verdict のみです。
+
+条件:
+- verdict は pass / warn / fail のいずれか
+- 前置き、後置き、コードフェンス禁止
+- 例: pass
+
+タイトル: {title or "（不明）"}
+article:
+{content}
+
+facts:
+{facts_text}
+"""
+
+
+def facts_check_comment_for_verdict(verdict: str) -> str:
+    mapping = {
+        "pass": "本文で裏付けられた事実抽出です。",
+        "warn": "一部に本文根拠が弱い記述があります。",
+        "fail": "本文にない断定または重大な欠落があります。",
+    }
+    return mapping.get(str(verdict or "").strip().lower(), "事実抽出の判定結果を確認してください。")
+
+
+def _is_valid_short_comment(text: str) -> bool:
+    s = str(text or "").strip()
+    if len(s) < 8:
+        return False
+    if re.search(r"[\u3040-\u30ff\u3400-\u9fff]", s) is None:
+        return False
+    if re.search(r"(は|が|を|に|で|と|や|の|も|へ|から|より|について|として)$", s):
+        return False
+    if s.endswith(("記事の内容は", "本文では", "事実として", "一部で", "ただし", "なお")):
+        return False
+    return True
+
+
+def parse_facts_check_line(text: str) -> dict | None:
+    s = (text or "").strip()
+    if not s:
+        return None
+    if s.startswith("```"):
+        s = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", s)
+        s = re.sub(r"\n?```$", "", s).strip()
+    first = s.splitlines()[0].strip()
+    if not first:
+        return None
+    verdict = first.strip().lower()
+    m = re.search(r"\b(pass|warn|fail)\b", verdict)
+    if m:
+        verdict = m.group(1)
+    if verdict not in {"pass", "warn", "fail"}:
+        return None
+    return {"verdict": verdict, "short_comment": facts_check_comment_for_verdict(verdict)}
+
+
 def extract_first_json_object(text: str) -> dict | None:
     s = (text or "").strip().lstrip("\ufeff")
     if s.startswith("```"):
@@ -103,7 +163,7 @@ def normalize_facts_check_result(data: dict | None) -> dict:
 
 
 def require_facts_check_comment(result: dict, raw_text: str) -> dict:
-    if str(result.get("short_comment") or "").strip():
+    if _is_valid_short_comment(str(result.get("short_comment") or "").strip()):
         return result
     snippet = (raw_text or "").strip().replace("\n", " ")
     raise RuntimeError(f"facts check short_comment missing: response_snippet={snippet[:500]}")

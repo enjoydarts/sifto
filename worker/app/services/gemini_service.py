@@ -23,6 +23,8 @@ from app.services.summary_faithfulness_common import (
 from app.services.facts_check_common import (
     FACTS_CHECK_SCHEMA,
     facts_check_prompt,
+    parse_facts_check_line,
+    facts_check_retry_prompt,
     facts_check_system_instruction,
     normalize_facts_check_result,
     require_facts_check_comment,
@@ -462,6 +464,7 @@ def _generate_content(
     timeout_sec: float | None = None,
     system_instruction: str | None = None,
     context_cache_key: str | None = None,
+    response_mime_type: str = "application/json",
 ) -> tuple[str, dict]:
     if not api_key:
         raise RuntimeError("google api key is required")
@@ -470,7 +473,7 @@ def _generate_content(
     generation_config: dict = {
         "temperature": 0.2,
         "maxOutputTokens": max_output_tokens,
-        "responseMimeType": "application/json",
+        "responseMimeType": response_mime_type,
     }
     if response_schema:
         generation_config["responseSchema"] = _normalize_response_schema(response_schema)
@@ -1142,10 +1145,26 @@ def check_facts(title: str | None, content: str, facts: list[str], model: str, a
         system_instruction=facts_check_system_instruction(),
         response_schema=FACTS_CHECK_SCHEMA,
     )
-    result = require_facts_check_comment(
-        normalize_facts_check_result(_extract_first_json_object(text)),
-        text,
-    )
+    try:
+        result = require_facts_check_comment(
+            normalize_facts_check_result(_extract_first_json_object(text)),
+            text,
+        )
+    except RuntimeError:
+        retry_text, retry_usage = _generate_content(
+            facts_check_retry_prompt(title, content, facts),
+            model=model,
+            api_key=api_key,
+            max_output_tokens=120,
+            system_instruction="pass / warn / fail のいずれか1語のみを返す。",
+            response_schema=None,
+            response_mime_type="text/plain",
+        )
+        usage = retry_usage
+        result = require_facts_check_comment(
+            normalize_facts_check_result(parse_facts_check_line(retry_text) or _extract_first_json_object(retry_text)),
+            retry_text,
+        )
     result["llm"] = _llm_meta(model, "facts_check", usage)
     return result
 

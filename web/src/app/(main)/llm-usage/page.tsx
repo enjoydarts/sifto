@@ -164,9 +164,12 @@ export default function LLMUsagePage() {
 
   const currentMonthProviderTableRows = useMemo(() => {
     const total = settings?.current_month?.estimated_cost_usd ?? currentMonthProviderRows.reduce((acc, row) => acc + row.estimated_cost_usd, 0);
+    const totalCalls = currentMonthProviderRows.reduce((acc, row) => acc + row.calls, 0);
     return currentMonthProviderRows.map((row) => ({
       ...row,
       share_pct: total > 0 ? (row.estimated_cost_usd / total) * 100 : 0,
+      call_share_pct: totalCalls > 0 ? (row.calls / totalCalls) * 100 : 0,
+      avg_cost_per_call_usd: row.calls > 0 ? row.estimated_cost_usd / row.calls : 0,
     }));
   }, [currentMonthProviderRows, settings]);
 
@@ -479,7 +482,9 @@ export default function LLMUsagePage() {
                   <th className="px-3 py-2 text-right font-medium">input</th>
                   <th className="px-3 py-2 text-right font-medium">output</th>
                   <th className="px-3 py-2 text-right font-medium">cache r</th>
+                  <th className="px-3 py-2 text-right font-medium">call share</th>
                   <th className="px-3 py-2 text-right font-medium">share</th>
+                  <th className="px-3 py-2 text-right font-medium">avg/call</th>
                   <th className="px-3 py-2 text-right font-medium">cost</th>
                 </tr>
               </thead>
@@ -491,7 +496,9 @@ export default function LLMUsagePage() {
                     <td className="px-3 py-2 text-right">{fmtNum(row.input_tokens)}</td>
                     <td className="px-3 py-2 text-right">{fmtNum(row.output_tokens)}</td>
                     <td className="px-3 py-2 text-right">{fmtNum(row.cache_read_input_tokens)}</td>
+                    <td className="px-3 py-2 text-right">{row.call_share_pct.toFixed(1)}%</td>
                     <td className="px-3 py-2 text-right">{row.share_pct.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-right">{fmtUSD(row.avg_cost_per_call_usd)}</td>
                     <td className="px-3 py-2 text-right">{fmtUSD(row.estimated_cost_usd)}</td>
                   </tr>
                 ))}

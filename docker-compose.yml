@@ -19,7 +19,8 @@ services:
 
   api:
     build:
-      context: ./api
+      context: .
+      dockerfile: api/Dockerfile
       target: dev
     ports:
       - "8081:8080"
@@ -42,13 +43,17 @@ services:
       INNGEST_BASE_URL: ${DOCKER_INNGEST_BASE_URL}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       USER_SECRET_ENCRYPTION_KEY: ${USER_SECRET_ENCRYPTION_KEY}
+      LLM_CATALOG_PATH: /shared/llm_catalog.json
     env_file:
       - .env
     volumes:
       - ./api:/app
+      - ./shared:/shared:ro
 
   worker:
-    build: ./worker
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
     ports:
       - "8000:8000"
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
@@ -62,10 +67,12 @@ services:
       INTERNAL_WORKER_SECRET: ${INTERNAL_WORKER_SECRET}
       TZ: ${TZ}
       ALLOW_DEV_EXTRACT_PLACEHOLDER: ${ALLOW_DEV_EXTRACT_PLACEHOLDER}
+      LLM_CATALOG_PATH: /shared/llm_catalog.json
     env_file:
       - .env
     volumes:
       - ./worker:/app
+      - ./shared:/shared:ro
 
   redis:
     image: redis:7-alpine

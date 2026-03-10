@@ -2,10 +2,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY worker/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app/ ./app/
+COPY worker/app/ ./app/
+COPY shared/ ./shared/
+
+ENV LLM_CATALOG_PATH=/app/shared/llm_catalog.json
 
 EXPOSE 8000
 

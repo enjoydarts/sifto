@@ -1,10 +1,11 @@
 FROM golang:alpine AS builder
 ARG APP_COMMIT_SHA=unknown
 
-WORKDIR /app
+WORKDIR /src
 
-# Copy all sources first, then get deps (so go.mod is updated in-place)
-COPY . .
+COPY api/ ./api/
+COPY shared/ ./shared/
+WORKDIR /src/api
 RUN go get \
     github.com/go-chi/chi/v5@latest \
     github.com/golang-jwt/jwt/v5@latest \
@@ -12,13 +13,13 @@ RUN go get \
     github.com/jackc/pgx/v5@latest \
     github.com/mmcdole/gofeed@latest && \
     go mod tidy && \
-    go build -o bin/server ./cmd/server
+    go build -o /out/server ./cmd/server
 
 FROM golang:alpine AS dev
 
 WORKDIR /app
 
-COPY . .
+COPY api/ ./
 
 RUN go get \
     github.com/go-chi/chi/v5@latest \
@@ -28,6 +29,8 @@ RUN go get \
     github.com/mmcdole/gofeed@latest && \
     go install github.com/air-verse/air@latest && \
     go mod tidy
+
+ENV LLM_CATALOG_PATH=/shared/llm_catalog.json
 
 EXPOSE 8080
 
@@ -40,8 +43,10 @@ RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 ENV APP_COMMIT_SHA=${APP_COMMIT_SHA}
+ENV LLM_CATALOG_PATH=/app/shared/llm_catalog.json
 
-COPY --from=builder /app/bin/server .
+COPY --from=builder /out/server .
+COPY --from=builder /src/shared ./shared
 
 EXPOSE 8080
 

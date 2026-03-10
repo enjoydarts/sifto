@@ -2,6 +2,7 @@ app = "sifto-worker"
 primary_region = "nrt"
 
 [build]
+  dockerfile = "worker/Dockerfile"
 
 [deploy]
   strategy = "bluegreen"

@@ -2,6 +2,7 @@ app = "sifto-api"
 primary_region = "nrt"
 
 [build]
+  dockerfile = "api/Dockerfile"
 
 [deploy]
   strategy = "bluegreen"

@@ -1,15 +1,19 @@
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 
 
 def _catalog_path() -> Path:
+    env_path = str(os.getenv("LLM_CATALOG_PATH") or "").strip()
+    if env_path:
+        return Path(env_path)
     here = Path(__file__).resolve()
     candidates = [
-        here.parents[1] / "llm_catalog.json",
-        here.parents[2] / "api" / "internal" / "service" / "llm_catalog.json",
-        here.parents[3] / "api" / "internal" / "service" / "llm_catalog.json",
-        Path.cwd() / "api" / "internal" / "service" / "llm_catalog.json",
+        Path("/app/shared/llm_catalog.json"),
+        Path("/shared/llm_catalog.json"),
+        Path.cwd() / "shared" / "llm_catalog.json",
+        here.parents[3] / "shared" / "llm_catalog.json",
     ]
     for path in candidates:
         if path.exists():

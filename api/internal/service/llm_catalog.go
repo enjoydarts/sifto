@@ -1,15 +1,13 @@
 package service
 
 import (
-	_ "embed"
 	"encoding/json"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
-
-//go:embed llm_catalog.json
-var llmCatalogJSON []byte
 
 type LLMCatalog struct {
 	Providers       []LLMProviderCatalog `json:"providers"`
@@ -61,12 +59,38 @@ var (
 
 func LLMCatalogData() *LLMCatalog {
 	llmCatalogOnce.Do(func() {
-		if err := json.Unmarshal(llmCatalogJSON, &llmCatalogData); err != nil {
+		raw, err := os.ReadFile(catalogPath())
+		if err != nil {
+			log.Printf("load llm catalog failed: %v", err)
+			llmCatalogData = LLMCatalog{}
+			return
+		}
+		if err := json.Unmarshal(raw, &llmCatalogData); err != nil {
 			log.Printf("load llm catalog failed: %v", err)
 			llmCatalogData = LLMCatalog{}
 		}
 	})
 	return &llmCatalogData
+}
+
+func catalogPath() string {
+	if v := strings.TrimSpace(os.Getenv("LLM_CATALOG_PATH")); v != "" {
+		return v
+	}
+	candidates := []string{
+		"/app/shared/llm_catalog.json",
+		"/shared/llm_catalog.json",
+		filepath.Join("shared", "llm_catalog.json"),
+		filepath.Join("..", "shared", "llm_catalog.json"),
+		filepath.Join("..", "..", "shared", "llm_catalog.json"),
+		filepath.Join("..", "..", "..", "shared", "llm_catalog.json"),
+	}
+	for _, path := range candidates {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return candidates[0]
 }
 
 func findModelCatalog(model string) *LLMModelCatalog {

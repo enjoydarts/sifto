@@ -247,6 +247,7 @@ export const enDict: Dict = {
   "llm.forecastLabel": "Forecast",
   "llm.budget": "Budget",
   "llm.dailyCostTrend": "Daily Cost Trend",
+  "llm.currentMonthByProvider": "Current Month by Provider",
   "llm.usageByModel": "Usage by Model",
   "llm.time": "Time",
   "llm.forecast.monthAvg": "average pace since month start",

@@ -302,7 +302,7 @@ export default function LLMUsagePage() {
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold">
             <Brain className="size-6 text-zinc-500" aria-hidden="true" />
-            <span>LLM Usage</span>
+            <span>{t("llm.title")}</span>
           </h1>
           <p className="mt-1 text-sm text-zinc-500">
             {t("llm.subtitle")}
@@ -374,7 +374,7 @@ export default function LLMUsagePage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
             <ReceiptText className="size-4 text-zinc-500" aria-hidden="true" />
-            <span>Current Month by Provider</span>
+            <span>{t("llm.currentMonthByProvider")}</span>
           </h2>
           <span className="text-xs text-zinc-400">
             {settings?.current_month?.month_jst ?? currentMonthProviderRows[0]?.month_jst ?? "—"} / total {fmtUSD(settings?.current_month?.estimated_cost_usd ?? 0)}

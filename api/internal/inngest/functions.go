@@ -82,6 +82,16 @@ func llmUsageIdempotencyKey(purpose string, usage *service.LLMUsage, userID, sou
 	return hex.EncodeToString(sum[:])
 }
 
+func appPageURL(path string) string {
+	base := strings.TrimSpace(os.Getenv("NEXTAUTH_URL"))
+	if base == "" {
+		return ""
+	}
+	base = strings.TrimRight(base, "/")
+	path = "/" + strings.TrimLeft(strings.TrimSpace(path), "/")
+	return base + path
+}
+
 func loadUserAnthropicAPIKey(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string) (*string, error) {
 	if settingsRepo == nil || userID == nil || *userID == "" {
 		return nil, fmt.Errorf("user anthropic api key is required")
@@ -585,7 +595,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(fetchRSSFn(client, db))
 	register(processItemFn(client, db, worker, openAI, oneSignal, secretCipher))
 	register(embedItemFn(client, db, openAI, secretCipher))
-	register(generateBriefingSnapshotsFn(client, db))
+	register(generateBriefingSnapshotsFn(client, db, oneSignal))
 	register(generateDigestFn(client, db))
 	register(composeDigestCopyFn(client, db, worker, secretCipher))
 	register(sendDigestFn(client, db, worker, resend, oneSignal, secretCipher))
@@ -619,11 +629,12 @@ func envIntOrDefault(key string, fallback int) int {
 }
 
 // cron/generate-briefing-snapshots — 30分ごとに当日ブリーフィングのスナップショットを更新
-func generateBriefingSnapshotsFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFunction, error) {
+func generateBriefingSnapshotsFn(client inngestgo.Client, db *pgxpool.Pool, oneSignal *service.OneSignalClient) (inngestgo.ServableFunction, error) {
 	userRepo := repository.NewUserRepo(db)
 	itemRepo := repository.NewItemRepo(db)
 	streakRepo := repository.NewReadingStreakRepo(db)
 	snapshotRepo := repository.NewBriefingSnapshotRepo(db)
+	pushLogRepo := repository.NewPushNotificationLogRepo(db)
 
 	return inngestgo.CreateFunction(
 		client,
@@ -650,6 +661,54 @@ func generateBriefingSnapshotsFn(client inngestgo.Client, db *pgxpool.Pool) (inn
 					failed++
 					log.Printf("generate-briefing-snapshots upsert user=%s: %v", u.ID, err)
 					continue
+				}
+				if oneSignal != nil && oneSignal.Enabled() && (len(payload.HighlightItems) > 0 || len(payload.Clusters) > 0) {
+					alreadyNotified, err := pushLogRepo.CountByUserKindDay(ctx, u.ID, "briefing_ready", today)
+					if err != nil {
+						log.Printf("generate-briefing-snapshots push count user=%s: %v", u.ID, err)
+					} else if alreadyNotified == 0 {
+						title := "Sifto: 今日のブリーフィングを更新しました"
+						message := fmt.Sprintf("注目%d件・クラスタ%d件を確認できます。", len(payload.HighlightItems), len(payload.Clusters))
+						pushRes, pErr := oneSignal.SendToExternalID(
+							ctx,
+							u.Email,
+							title,
+							message,
+							appPageURL("/"),
+							map[string]any{
+								"type":         "briefing_ready",
+								"briefing_url": appPageURL("/"),
+								"date":         dateStr,
+								"highlights":   len(payload.HighlightItems),
+								"clusters":     len(payload.Clusters),
+							},
+						)
+						if pErr != nil {
+							log.Printf("generate-briefing-snapshots push send user=%s: %v", u.ID, pErr)
+						} else {
+							var oneSignalID *string
+							recipients := 0
+							if pushRes != nil {
+								if strings.TrimSpace(pushRes.ID) != "" {
+									id := strings.TrimSpace(pushRes.ID)
+									oneSignalID = &id
+								}
+								recipients = pushRes.Recipients
+							}
+							if err := pushLogRepo.Insert(ctx, repository.PushNotificationLogInput{
+								UserID:                  u.ID,
+								Kind:                    "briefing_ready",
+								ItemID:                  nil,
+								DayJST:                  today,
+								Title:                   title,
+								Message:                 message,
+								OneSignalNotificationID: oneSignalID,
+								Recipients:              recipients,
+							}); err != nil {
+								log.Printf("generate-briefing-snapshots push log user=%s: %v", u.ID, err)
+							}
+						}
+					}
 				}
 				updated++
 			}
@@ -903,12 +962,13 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 								u.Email,
 								title,
 								message,
-								url,
+								appPageURL("/items/"+itemID),
 								map[string]any{
-									"type":    "pick_update",
-									"item_id": itemID,
-									"url":     url,
-									"score":   summary.Score,
+									"type":     "pick_update",
+									"item_id":  itemID,
+									"item_url": appPageURL("/items/" + itemID),
+									"url":      url,
+									"score":    summary.Score,
 								},
 							)
 							if err != nil {
@@ -1338,10 +1398,11 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 					data.To,
 					"Sifto: ダイジェストを配信しました",
 					fmt.Sprintf("%s のダイジェストを配信しました。", digest.DigestDate),
-					"",
+					appPageURL("/digests/"+data.DigestID),
 					map[string]any{
-						"type":      "digest_sent",
-						"digest_id": data.DigestID,
+						"type":       "digest_sent",
+						"digest_id":  data.DigestID,
+						"digest_url": appPageURL("/digests/" + data.DigestID),
 					},
 				)
 				if pErr != nil {
@@ -1425,11 +1486,12 @@ func checkBudgetAlertsFn(client inngestgo.Client, db *pgxpool.Pool, resend *serv
 						tgt.Email,
 						"Sifto: 月次LLM予算アラート",
 						fmt.Sprintf("残り予算がしきい値(%d%%)を下回りました。", tgt.BudgetAlertThresholdPct),
-						"",
+						appPageURL("/llm-usage"),
 						map[string]any{
 							"type":          "budget_alert",
 							"month_jst":     monthStartJST.Format("2006-01"),
 							"threshold_pct": tgt.BudgetAlertThresholdPct,
+							"target_url":    appPageURL("/llm-usage"),
 						},
 					)
 					if pErr != nil {

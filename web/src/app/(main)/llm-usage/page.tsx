@@ -206,7 +206,22 @@ export default function LLMUsagePage() {
       cur[row.provider] = Number(cur[row.provider] ?? 0) + row.estimated_cost_usd;
       m.set(row.date_jst, cur);
     }
-    return Array.from(m.values()).sort((a, b) => a.date.localeCompare(b.date));
+    const providers = Array.from(
+      summaryRows.reduce((acc, row) => {
+        acc.add(row.provider);
+        return acc;
+      }, new Set<string>())
+    );
+    return Array.from(m.values())
+      .map((row) => {
+        for (const provider of providers) {
+          if (row[provider] == null) {
+            row[provider] = 0;
+          }
+        }
+        return row;
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
   }, [summaryRows]);
 
   const chartProviders = useMemo(() => {

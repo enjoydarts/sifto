@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import time
 
 import httpx
 
@@ -168,21 +169,49 @@ def _chat_json(
         "Content-Type": "application/json",
     }
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("GROQ_TIMEOUT_SEC", 90.0)
+    attempts = max(1, int(os.getenv("GROQ_RETRY_ATTEMPTS", "3") or "3"))
+    base_sleep_sec = _env_timeout_seconds("GROQ_RETRY_BASE_SEC", 0.5)
+    retryable_status = {408, 409, 429, 500, 502, 503, 504}
 
     def _is_json_validation_error(resp: httpx.Response) -> bool:
         return resp.status_code == 400 and "json_validate_failed" in (resp.text or "")
 
+    resp: httpx.Response | None = None
+    last_error: Exception | None = None
     with httpx.Client(timeout=req_timeout) as client:
-        resp = client.post(url, headers=headers, json=body)
-        if _is_json_validation_error(resp) and response_schema is not None:
-            if use_strict_schema:
-                fallback_body = dict(body)
-                fallback_body["response_format"] = {"type": "json_object"}
-                resp = client.post(url, headers=headers, json=fallback_body)
-            if _is_json_validation_error(resp):
-                fallback_body = dict(body)
-                fallback_body.pop("response_format", None)
-                resp = client.post(url, headers=headers, json=fallback_body)
+        for i in range(attempts):
+            try:
+                resp = client.post(url, headers=headers, json=body)
+                if _is_json_validation_error(resp) and response_schema is not None:
+                    if use_strict_schema:
+                        fallback_body = dict(body)
+                        fallback_body["response_format"] = {"type": "json_object"}
+                        resp = client.post(url, headers=headers, json=fallback_body)
+                    if _is_json_validation_error(resp):
+                        fallback_body = dict(body)
+                        fallback_body.pop("response_format", None)
+                        resp = client.post(url, headers=headers, json=fallback_body)
+            except Exception as e:
+                last_error = e
+                if i < attempts - 1:
+                    sleep_sec = base_sleep_sec * (2**i)
+                    _log.warning("groq chat.completions request failed model=%s retry_in=%.1fs attempt=%d/%d err=%s", _normalize_model_name(model), sleep_sec, i + 1, attempts, e)
+                    time.sleep(sleep_sec)
+                    continue
+                raise RuntimeError(f"groq chat.completions request failed: {e}") from e
+
+            if resp.status_code < 400:
+                break
+            if resp.status_code in retryable_status and i < attempts - 1:
+                sleep_sec = base_sleep_sec * (2**i)
+                _log.warning("groq chat.completions retrying model=%s status=%d retry_in=%.1fs attempt=%d/%d", _normalize_model_name(model), resp.status_code, sleep_sec, i + 1, attempts)
+                time.sleep(sleep_sec)
+                continue
+            break
+    if resp is None:
+        if last_error is not None:
+            raise RuntimeError(f"groq chat.completions request failed: {last_error}") from last_error
+        raise RuntimeError("groq chat.completions failed: no response")
     if resp.status_code >= 400:
         raise RuntimeError(f"groq chat.completions failed status={resp.status_code} body={resp.text[:1000]}")
     data = resp.json() if resp.content else {}
@@ -542,6 +571,8 @@ def compose_digest_cluster_draft(cluster_label: str, item_count: int, topics: li
 - 与えられた内容のみ使う
 - 重複をまとめる
 - 重要な相違点があれば残す
+- 出力は必ず自然な日本語にする
+- 原文が英語でも日本語で要約する
 - プレーンテキストの箇条書き 3〜8 行程度
 - draft_summary 以外のキーを出さない
 - JSONのみで返す"""
@@ -567,6 +598,8 @@ source_lines:
 
 要件:
 - 推測しない
+- 出力は必ず自然な日本語にする
+- 原文が英語でも日本語で要約する
 - 箇条書き 3〜8 行
 - JSONのみで返す
 - キーは draft_summary のみ

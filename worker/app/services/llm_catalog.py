@@ -4,7 +4,17 @@ from pathlib import Path
 
 
 def _catalog_path() -> Path:
-    return Path(__file__).resolve().parents[3] / "api" / "internal" / "service" / "llm_catalog.json"
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[2] / "api" / "internal" / "service" / "llm_catalog.json",
+        here.parents[3] / "api" / "internal" / "service" / "llm_catalog.json",
+        Path.cwd() / "api" / "internal" / "service" / "llm_catalog.json",
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    candidate_list = ", ".join(str(path) for path in candidates)
+    raise FileNotFoundError(f"llm_catalog.json not found; tried: {candidate_list}")
 
 
 @lru_cache(maxsize=1)

@@ -2,6 +2,7 @@
   "providers": [
     {
       "id": "anthropic",
+      "api_key_header": "x-anthropic-api-key",
       "match_prefixes": ["claude-"],
       "default_models": {
         "facts": "claude-haiku-4-5",
@@ -14,6 +15,7 @@
     },
     {
       "id": "google",
+      "api_key_header": "x-google-api-key",
       "match_prefixes": ["gemini-", "models/gemini-"],
       "default_models": {
         "facts": "gemini-2.5-flash",
@@ -26,6 +28,7 @@
     },
     {
       "id": "groq",
+      "api_key_header": "x-groq-api-key",
       "match_prefixes": ["openai/gpt-oss-", "qwen/", "meta-llama/", "llama-"],
       "default_models": {
         "facts": "openai/gpt-oss-20b",
@@ -38,6 +41,7 @@
     },
     {
       "id": "deepseek",
+      "api_key_header": "x-deepseek-api-key",
       "match_exact": ["deepseek-chat", "deepseek-reasoner"],
       "default_models": {
         "facts": "deepseek-chat",
@@ -50,6 +54,7 @@
     },
     {
       "id": "openai",
+      "api_key_header": "x-openai-api-key",
       "match_prefixes": ["gpt-5"],
       "default_models": {
         "facts": "gpt-5-mini",
@@ -70,6 +75,14 @@
       "best_for": "facts",
       "highlights": [],
       "comment": "軽量で扱いやすく、事実抽出や短い整形タスクを低コストで回したい時の堅実な候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
       "pricing": {
         "pricing_source": "anthropic_static_2026_03",
         "input_per_mtok_usd": 1.0,
@@ -86,6 +99,14 @@
       "best_for": "balanced",
       "highlights": ["jsonStable"],
       "comment": "全体の標準構成に向く安定枠。要約・質問・ダイジェストまで広く無難に任せやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
       "pricing": {
         "pricing_source": "anthropic_static_2026_03",
         "input_per_mtok_usd": 3.0,
@@ -102,6 +123,14 @@
       "best_for": "digest",
       "highlights": [],
       "comment": "高品質寄りの上位候補。コストは高いが、難しい整理や重めのダイジェスト生成で比較価値がある。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
       "pricing": {
         "pricing_source": "anthropic_static_2026_03",
         "input_per_mtok_usd": 5.0,
@@ -118,6 +147,14 @@
       "best_for": "digest",
       "highlights": [],
       "comment": "Gemini 上位の比較候補。長めの整理やダイジェストで品質を見たい時に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "google_ai_studio_base_2026_03",
         "input_per_mtok_usd": 2.0,
@@ -133,6 +170,14 @@
       "best_for": "facts",
       "highlights": ["lowestCost", "fast"],
       "comment": "Gemini 系の軽量高速枠。事実抽出や軽い分類を安く回したい時に使いやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "google_ai_studio_base_2026_03",
         "input_per_mtok_usd": 0.25,
@@ -148,6 +193,14 @@
       "best_for": "summary",
       "highlights": ["fast"],
       "comment": "速度と要約品質のバランスが良く、通常要約の比較候補として扱いやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "google_ai_studio_base_2026_03",
         "input_per_mtok_usd": 0.5,
@@ -163,6 +216,14 @@
       "best_for": "ask",
       "highlights": ["fast"],
       "comment": "RAG質問応答や日常利用で軽快に使える実用枠。応答速度を重視する場面に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "google_ai_studio_base_2026_03",
         "input_per_mtok_usd": 0.3,
@@ -178,6 +239,14 @@
       "best_for": "facts",
       "highlights": ["lowestCost", "fast"],
       "comment": "Gemini 系の最安寄り候補。大量の抽出や軽作業を低予算で回す用途に向いている。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "google_ai_studio_base_2026_03",
         "input_per_mtok_usd": 0.1,
@@ -193,6 +262,14 @@
       "best_for": "digest",
       "highlights": [],
       "comment": "Gemini の上位安定枠。要約やダイジェストで品質を少し引き上げたい時の有力候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "google_ai_studio_base_2026_03",
         "input_per_mtok_usd": 1.25,
@@ -208,6 +285,14 @@
       "best_for": "ask",
       "highlights": ["jsonStable", "fast"],
       "comment": "超高速でコスパ抜群。ツール利用に強く、抽出段階の定番候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "groq_static_2026_03",
         "input_per_mtok_usd": 0.075,
@@ -223,6 +308,14 @@
       "best_for": "summary",
       "highlights": ["jsonStable", "fast"],
       "comment": "長文処理と推論のバランスが良く、検索結果を混ぜる要約で扱いやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "groq_static_2026_03",
         "input_per_mtok_usd": 0.15,
@@ -238,6 +331,14 @@
       "best_for": "facts",
       "highlights": ["lowestCost", "fast"],
       "comment": "最安かつ爆速で日常タスク向き。複雑推論は弱いが低予算運用の第一候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "groq_static_2026_03",
         "input_per_mtok_usd": 0.05,
@@ -253,6 +354,14 @@
       "best_for": "summary",
       "highlights": ["fast"],
       "comment": "知能は非常に高いが、速度とコストは重めで大量処理では負担が出やすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "groq_static_2026_03",
         "input_per_mtok_usd": 0.59,
@@ -268,6 +377,14 @@
       "best_for": "summary",
       "highlights": ["fast"],
       "comment": "MoEで賢さと価格のバランスが良く、要約やRAGを安く回したい時に有力。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "groq_static_2026_03",
         "input_per_mtok_usd": 0.11,
@@ -283,6 +400,14 @@
       "best_for": "summary",
       "highlights": [],
       "comment": "日本語と多言語の安定感が高く、混在記事の忠実要約やRAGで特に強い。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "groq_static_2026_03",
         "input_per_mtok_usd": 0.29,
@@ -298,6 +423,14 @@
       "best_for": "facts",
       "highlights": ["fast"],
       "comment": "低価格で扱いやすく、事実抽出や通常要約のコストを抑えたい時の有力候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "deepseek_static_2026_03",
         "input_per_mtok_usd": 0.28,
@@ -313,6 +446,14 @@
       "best_for": "digest",
       "highlights": [],
       "comment": "推論寄りの長文整理に向くが、応答の重さを許容する高難度タスク向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "deepseek_static_2026_03",
         "input_per_mtok_usd": 0.28,
@@ -328,6 +469,14 @@
       "best_for": "facts",
       "highlights": ["lowestCost", "jsonStable"],
       "comment": "OpenAI系の最安枠。軽い抽出や比較用途で試しやすいが、長文生成の主力には向かない。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "openai_standard_2026_03",
         "input_per_mtok_usd": 0.05,
@@ -343,6 +492,14 @@
       "best_for": "facts",
       "highlights": ["fast", "jsonStable"],
       "comment": "OpenAI系の実用最小構成。事実抽出や短めの要約でコストと安定性のバランスが良い。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "openai_standard_2026_03",
         "input_per_mtok_usd": 0.25,
@@ -358,6 +515,14 @@
       "best_for": "summary",
       "highlights": ["jsonStable"],
       "comment": "通常要約や質問応答の本命候補。コストは上がるが、JSON整形と長文品質は期待しやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "openai_standard_2026_03",
         "input_per_mtok_usd": 1.25,
@@ -373,6 +538,14 @@
       "best_for": "digest",
       "highlights": [],
       "comment": "高価だが比較検証用の上限。日常運用向きではなく、難しいダイジェスト生成の比較対象。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "openai_standard_2026_03",
         "input_per_mtok_usd": 15.0,
@@ -388,6 +561,14 @@
       "best_for": "summary",
       "highlights": ["jsonStable"],
       "comment": "gpt-5 系の安定比較枠。標準的な要約品質を見たい時に選びやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "openai_standard_2026_03",
         "input_per_mtok_usd": 1.25,
@@ -403,6 +584,14 @@
       "best_for": "ask",
       "highlights": ["jsonStable"],
       "comment": "gpt-5 より一段強めの比較候補。RAG質問応答や少し難しい整理で試す価値がある。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "openai_standard_2026_03",
         "input_per_mtok_usd": 1.75,
@@ -418,6 +607,14 @@
       "best_for": "digest",
       "highlights": [],
       "comment": "高額な上位比較用。構造化出力制約もあるため、常用ではなく精度比較に限定したい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "openai_standard_2026_03",
         "input_per_mtok_usd": 21.0,
@@ -433,6 +630,14 @@
       "best_for": "digest",
       "highlights": ["jsonStable"],
       "comment": "OpenAI 5系の上位比較候補。ダイジェストやクラスタ草稿の品質確認に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "openai_standard_2026_03",
         "input_per_mtok_usd": 2.5,
@@ -448,6 +653,14 @@
       "best_for": "digest",
       "highlights": [],
       "comment": "現行の最上位比較枠。価格は極端に高いので、常用ではなくベンチマーク専用。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
       "pricing": {
         "pricing_source": "openai_standard_2026_03",
         "input_per_mtok_usd": 30.0,

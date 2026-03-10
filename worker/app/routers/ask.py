@@ -48,11 +48,13 @@ def ask_endpoint(req: AskRequest, request: Request):
         result = dispatch_by_model(
             request,
             req.model,
-            anthropic=lambda api_key: ask_question(req.query, candidates, api_key=api_key, model=req.model),
-            google=lambda api_key: ask_question_gemini(req.query, candidates, model=str(req.model), api_key=api_key),
-            groq=lambda api_key: ask_question_groq(req.query, candidates, model=str(req.model), api_key=api_key),
-            deepseek=lambda api_key: ask_question_deepseek(req.query, candidates, model=str(req.model), api_key=api_key),
-            openai=lambda api_key: ask_question_openai(req.query, candidates, model=str(req.model), api_key=api_key),
+            handlers={
+                "anthropic": lambda api_key: ask_question(req.query, candidates, api_key=api_key, model=req.model),
+                "google": lambda api_key: ask_question_gemini(req.query, candidates, model=str(req.model), api_key=api_key or ""),
+                "groq": lambda api_key: ask_question_groq(req.query, candidates, model=str(req.model), api_key=api_key or ""),
+                "deepseek": lambda api_key: ask_question_deepseek(req.query, candidates, model=str(req.model), api_key=api_key or ""),
+                "openai": lambda api_key: ask_question_openai(req.query, candidates, model=str(req.model), api_key=api_key or ""),
+            },
         )
         return AskResponse(**result)
     except Exception as e:

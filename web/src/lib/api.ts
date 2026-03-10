@@ -378,9 +378,19 @@ export interface UserReadingPlanSettings {
 
 export interface LLMCatalogProvider {
   id: string;
+  api_key_header?: string;
   match_exact?: string[];
   match_prefixes?: string[];
   default_models?: Record<string, string>;
+}
+
+export interface LLMCatalogModelCapabilities {
+  supports_structured_output: boolean;
+  supports_strict_json_schema: boolean;
+  supports_reasoning: boolean;
+  supports_tool_calling: boolean;
+  supports_cache_read_pricing: boolean;
+  supports_cache_write_pricing: boolean;
 }
 
 export interface LLMCatalogModelPricing {
@@ -399,6 +409,7 @@ export interface LLMCatalogModel {
   best_for?: "facts" | "summary" | "ask" | "digest" | "embedding" | "balanced" | string;
   highlights?: Array<"lowestCost" | "fast" | "jsonStable" | string>;
   comment?: string;
+  capabilities?: LLMCatalogModelCapabilities | null;
   pricing?: LLMCatalogModelPricing | null;
 }
 

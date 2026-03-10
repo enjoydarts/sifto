@@ -35,6 +35,17 @@ def provider_for_model(model: str | None) -> str:
     return ""
 
 
+def provider_config(provider_id: str | None) -> dict | None:
+    pid = str(provider_id or "").strip()
+    if not pid:
+        return None
+    catalog = load_llm_catalog()
+    for provider in catalog.get("providers", []):
+        if str(provider.get("id") or "").strip() == pid:
+            return dict(provider)
+    return None
+
+
 def model_pricing(model: str | None) -> dict | None:
     m = str(model or "").strip()
     if not m:
@@ -46,3 +57,26 @@ def model_pricing(model: str | None) -> dict | None:
                 pricing = item.get("pricing")
                 return dict(pricing) if isinstance(pricing, dict) else None
     return None
+
+
+def model_capabilities(model: str | None) -> dict | None:
+    m = str(model or "").strip()
+    if not m:
+        return None
+    catalog = load_llm_catalog()
+    for group in ("chat_models", "embedding_models"):
+        for item in catalog.get(group, []):
+            if str(item.get("id") or "").strip() == m:
+                capabilities = item.get("capabilities")
+                return dict(capabilities) if isinstance(capabilities, dict) else None
+    return None
+
+
+def model_supports(model: str | None, capability: str) -> bool:
+    capabilities = model_capabilities(model) or {}
+    return bool(capabilities.get(capability))
+
+
+def provider_api_key_header(provider_id: str | None) -> str:
+    provider = provider_config(provider_id) or {}
+    return str(provider.get("api_key_header") or "").strip()

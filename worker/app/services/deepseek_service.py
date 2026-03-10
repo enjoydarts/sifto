@@ -6,7 +6,7 @@ import time
 
 import httpx
 
-from app.services.llm_catalog import model_pricing
+from app.services.llm_catalog import model_pricing, model_supports
 from app.services.gemini_service import (
     _clamp01,
     _extract_compose_digest_fields,
@@ -105,7 +105,7 @@ def _llm_meta(model: str, purpose: str, usage: dict) -> dict:
 
 
 def _supports_strict_schema(model: str) -> bool:
-    return False
+    return model_supports(_normalize_model_family(model), "supports_strict_json_schema") or model_supports(model, "supports_strict_json_schema")
 
 
 def _usage_from_response(data: dict) -> dict:

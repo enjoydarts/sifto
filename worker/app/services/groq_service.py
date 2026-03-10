@@ -20,7 +20,7 @@ from app.services.gemini_service import (
     _target_summary_chars,
     _decode_json_string_fragment,
 )
-from app.services.llm_catalog import model_pricing
+from app.services.llm_catalog import model_pricing, model_supports
 
 _log = logging.getLogger(__name__)
 _GROQ_PRICING_SOURCE_VERSION = "groq_static_2026_03"
@@ -117,7 +117,7 @@ def _llm_meta(model: str, purpose: str, usage: dict) -> dict:
 
 def _supports_strict_schema(model: str) -> bool:
     family = _normalize_model_family(model)
-    return family in ("openai/gpt-oss-20b", "openai/gpt-oss-120b")
+    return model_supports(family, "supports_strict_json_schema") or model_supports(model, "supports_strict_json_schema")
 
 
 def _usage_from_response(data: dict) -> dict:

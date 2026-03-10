@@ -26,10 +26,12 @@ def extract_facts_endpoint(req: FactsRequest, request: Request):
     result = dispatch_by_model(
         request,
         req.model,
-        anthropic=lambda api_key: extract_facts(req.title, req.content, api_key=api_key, model=req.model),
-        google=lambda api_key: extract_facts_gemini(req.title, req.content, model=str(req.model), api_key=api_key),
-        groq=lambda api_key: extract_facts_groq(req.title, req.content, model=str(req.model), api_key=api_key),
-        deepseek=lambda api_key: extract_facts_deepseek(req.title, req.content, model=str(req.model), api_key=api_key),
-        openai=lambda api_key: extract_facts_openai(req.title, req.content, model=str(req.model), api_key=api_key),
+        handlers={
+            "anthropic": lambda api_key: extract_facts(req.title, req.content, api_key=api_key, model=req.model),
+            "google": lambda api_key: extract_facts_gemini(req.title, req.content, model=str(req.model), api_key=api_key or ""),
+            "groq": lambda api_key: extract_facts_groq(req.title, req.content, model=str(req.model), api_key=api_key or ""),
+            "deepseek": lambda api_key: extract_facts_deepseek(req.title, req.content, model=str(req.model), api_key=api_key or ""),
+            "openai": lambda api_key: extract_facts_openai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
+        },
     )
     return FactsResponse(**result)

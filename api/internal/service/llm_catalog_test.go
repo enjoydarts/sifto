@@ -79,3 +79,17 @@ func TestLLMCatalogPricingIsFilled(t *testing.T) {
 		}
 	}
 }
+
+func TestLLMCatalogProvidersAndCapabilitiesAreFilled(t *testing.T) {
+	catalog := LLMCatalogData()
+	for _, provider := range catalog.Providers {
+		if provider.APIKeyHeader == "" {
+			t.Fatalf("provider %q has empty api_key_header", provider.ID)
+		}
+	}
+	for _, item := range catalog.ChatModels {
+		if item.Capabilities == nil {
+			t.Fatalf("chat model %q has nil capabilities", item.ID)
+		}
+	}
+}

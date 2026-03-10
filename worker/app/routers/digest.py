@@ -66,16 +66,18 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
         result = dispatch_by_model(
             request,
             req.model,
-            anthropic=lambda api_key: compose_digest(
-                req.digest_date,
-                items,
-                api_key=api_key,
-                model=req.model,
-            ),
-            google=lambda api_key: compose_digest_gemini(req.digest_date, items, model=str(req.model), api_key=api_key),
-            groq=lambda api_key: compose_digest_groq(req.digest_date, items, model=str(req.model), api_key=api_key),
-            deepseek=lambda api_key: compose_digest_deepseek(req.digest_date, items, model=str(req.model), api_key=api_key),
-            openai=lambda api_key: compose_digest_openai(req.digest_date, items, model=str(req.model), api_key=api_key),
+            handlers={
+                "anthropic": lambda api_key: compose_digest(
+                    req.digest_date,
+                    items,
+                    api_key=api_key,
+                    model=req.model,
+                ),
+                "google": lambda api_key: compose_digest_gemini(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
+                "groq": lambda api_key: compose_digest_groq(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
+                "deepseek": lambda api_key: compose_digest_deepseek(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
+                "openai": lambda api_key: compose_digest_openai(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
+            },
         )
         return ComposeDigestResponse(**result)
     except Exception as e:
@@ -88,46 +90,48 @@ def compose_digest_cluster_draft_endpoint(req: ComposeDigestClusterDraftRequest,
         result = dispatch_by_model(
             request,
             req.model,
-            anthropic=lambda api_key: compose_digest_cluster_draft(
-                cluster_label=req.cluster_label,
-                item_count=req.item_count,
-                topics=req.topics,
-                source_lines=req.source_lines,
-                api_key=api_key,
-                model=req.model,
-            ),
-            google=lambda api_key: compose_digest_cluster_draft_gemini(
-                cluster_label=req.cluster_label,
-                item_count=req.item_count,
-                topics=req.topics,
-                source_lines=req.source_lines,
-                model=str(req.model),
-                api_key=api_key,
-            ),
-            groq=lambda api_key: compose_digest_cluster_draft_groq(
-                cluster_label=req.cluster_label,
-                item_count=req.item_count,
-                topics=req.topics,
-                source_lines=req.source_lines,
-                model=str(req.model),
-                api_key=api_key,
-            ),
-            deepseek=lambda api_key: compose_digest_cluster_draft_deepseek(
-                cluster_label=req.cluster_label,
-                item_count=req.item_count,
-                topics=req.topics,
-                source_lines=req.source_lines,
-                model=str(req.model),
-                api_key=api_key,
-            ),
-            openai=lambda api_key: compose_digest_cluster_draft_openai(
-                cluster_label=req.cluster_label,
-                item_count=req.item_count,
-                topics=req.topics,
-                source_lines=req.source_lines,
-                model=str(req.model),
-                api_key=api_key,
-            ),
+            handlers={
+                "anthropic": lambda api_key: compose_digest_cluster_draft(
+                    cluster_label=req.cluster_label,
+                    item_count=req.item_count,
+                    topics=req.topics,
+                    source_lines=req.source_lines,
+                    api_key=api_key,
+                    model=req.model,
+                ),
+                "google": lambda api_key: compose_digest_cluster_draft_gemini(
+                    cluster_label=req.cluster_label,
+                    item_count=req.item_count,
+                    topics=req.topics,
+                    source_lines=req.source_lines,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "groq": lambda api_key: compose_digest_cluster_draft_groq(
+                    cluster_label=req.cluster_label,
+                    item_count=req.item_count,
+                    topics=req.topics,
+                    source_lines=req.source_lines,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "deepseek": lambda api_key: compose_digest_cluster_draft_deepseek(
+                    cluster_label=req.cluster_label,
+                    item_count=req.item_count,
+                    topics=req.topics,
+                    source_lines=req.source_lines,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "openai": lambda api_key: compose_digest_cluster_draft_openai(
+                    cluster_label=req.cluster_label,
+                    item_count=req.item_count,
+                    topics=req.topics,
+                    source_lines=req.source_lines,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+            },
         )
         return ComposeDigestClusterDraftResponse(**result)
     except Exception as e:

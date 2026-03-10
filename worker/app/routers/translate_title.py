@@ -26,9 +26,11 @@ def translate_title_endpoint(req: TranslateTitleRequest, request: Request):
     return dispatch_by_model(
         request,
         req.model,
-        anthropic=lambda api_key: translate_title_claude(req.title, api_key=api_key, model=req.model),
-        google=lambda api_key: translate_title_gemini(req.title, model=str(req.model), api_key=api_key),
-        groq=lambda api_key: translate_title_groq(req.title, model=str(req.model), api_key=api_key),
-        deepseek=lambda api_key: translate_title_deepseek(req.title, model=str(req.model), api_key=api_key),
-        openai=lambda api_key: translate_title_openai(req.title, model=str(req.model), api_key=api_key),
+        handlers={
+            "anthropic": lambda api_key: translate_title_claude(req.title, api_key=api_key, model=req.model),
+            "google": lambda api_key: translate_title_gemini(req.title, model=str(req.model), api_key=api_key or ""),
+            "groq": lambda api_key: translate_title_groq(req.title, model=str(req.model), api_key=api_key or ""),
+            "deepseek": lambda api_key: translate_title_deepseek(req.title, model=str(req.model), api_key=api_key or ""),
+            "openai": lambda api_key: translate_title_openai(req.title, model=str(req.model), api_key=api_key or ""),
+        },
     )

@@ -19,20 +19,31 @@ type LLMCatalog struct {
 
 type LLMProviderCatalog struct {
 	ID            string            `json:"id"`
+	APIKeyHeader  string            `json:"api_key_header"`
 	MatchExact    []string          `json:"match_exact"`
 	MatchPrefixes []string          `json:"match_prefixes"`
 	DefaultModels map[string]string `json:"default_models"`
 }
 
 type LLMModelCatalog struct {
-	ID                string           `json:"id"`
-	Provider          string           `json:"provider"`
-	AvailablePurposes []string         `json:"available_purposes"`
-	Recommendation    string           `json:"recommendation"`
-	BestFor           string           `json:"best_for"`
-	Highlights        []string         `json:"highlights"`
-	Comment           string           `json:"comment"`
-	Pricing           *LLMModelPricing `json:"pricing,omitempty"`
+	ID                string                `json:"id"`
+	Provider          string                `json:"provider"`
+	AvailablePurposes []string              `json:"available_purposes"`
+	Recommendation    string                `json:"recommendation"`
+	BestFor           string                `json:"best_for"`
+	Highlights        []string              `json:"highlights"`
+	Comment           string                `json:"comment"`
+	Capabilities      *LLMModelCapabilities `json:"capabilities,omitempty"`
+	Pricing           *LLMModelPricing      `json:"pricing,omitempty"`
+}
+
+type LLMModelCapabilities struct {
+	SupportsStructuredOutput  bool `json:"supports_structured_output"`
+	SupportsStrictJSONSchema  bool `json:"supports_strict_json_schema"`
+	SupportsReasoning         bool `json:"supports_reasoning"`
+	SupportsToolCalling       bool `json:"supports_tool_calling"`
+	SupportsCacheReadPricing  bool `json:"supports_cache_read_pricing"`
+	SupportsCacheWritePricing bool `json:"supports_cache_write_pricing"`
 }
 
 type LLMModelPricing struct {
@@ -132,4 +143,12 @@ func CatalogSupportedEmbeddingModels(provider string) []string {
 		out = append(out, m.ID)
 	}
 	return out
+}
+
+func CatalogModelCapabilities(model string) *LLMModelCapabilities {
+	entry := findModelCatalog(model)
+	if entry == nil {
+		return nil
+	}
+	return entry.Capabilities
 }

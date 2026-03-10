@@ -34,41 +34,43 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
         result = dispatch_by_model(
             request,
             req.model,
-            anthropic=lambda api_key: summarize(
-                req.title,
-                req.facts,
-                source_text_chars=req.source_text_chars,
-                api_key=api_key,
-                model=req.model,
-            ),
-            google=lambda api_key: summarize_gemini(
-                req.title,
-                req.facts,
-                source_text_chars=req.source_text_chars,
-                model=str(req.model),
-                api_key=api_key,
-            ),
-            groq=lambda api_key: summarize_groq(
-                req.title,
-                req.facts,
-                source_text_chars=req.source_text_chars,
-                model=str(req.model),
-                api_key=api_key,
-            ),
-            deepseek=lambda api_key: summarize_deepseek(
-                req.title,
-                req.facts,
-                source_text_chars=req.source_text_chars,
-                model=str(req.model),
-                api_key=api_key,
-            ),
-            openai=lambda api_key: summarize_openai(
-                req.title,
-                req.facts,
-                source_text_chars=req.source_text_chars,
-                model=str(req.model),
-                api_key=api_key,
-            ),
+            handlers={
+                "anthropic": lambda api_key: summarize(
+                    req.title,
+                    req.facts,
+                    source_text_chars=req.source_text_chars,
+                    api_key=api_key,
+                    model=req.model,
+                ),
+                "google": lambda api_key: summarize_gemini(
+                    req.title,
+                    req.facts,
+                    source_text_chars=req.source_text_chars,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "groq": lambda api_key: summarize_groq(
+                    req.title,
+                    req.facts,
+                    source_text_chars=req.source_text_chars,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "deepseek": lambda api_key: summarize_deepseek(
+                    req.title,
+                    req.facts,
+                    source_text_chars=req.source_text_chars,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "openai": lambda api_key: summarize_openai(
+                    req.title,
+                    req.facts,
+                    source_text_chars=req.source_text_chars,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+            },
         )
         return SummarizeResponse(**result)
     except Exception as e:

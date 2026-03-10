@@ -1039,35 +1039,29 @@ export default function SettingsPage() {
               </button>
             </div>
             <div className="overflow-auto px-5 py-4">
-              <div className="min-w-[1120px]">
-                <div className="grid grid-cols-[minmax(250px,2fr)_120px_120px_120px_120px_150px_minmax(160px,1.1fr)_minmax(280px,2fr)] gap-3 border-b border-zinc-200 pb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  <div>{t("settings.modelGuide.columns.model")}</div>
-                  <div>{t("settings.modelGuide.columns.provider")}</div>
-                  <div>{t("settings.modelGuide.columns.inputPrice")}</div>
-                  <div>{t("settings.modelGuide.columns.outputPrice")}</div>
-                  <div>{t("settings.modelGuide.columns.recommendation")}</div>
-                  <div>{t("settings.modelGuide.columns.highlights")}</div>
-                  <div>{t("settings.modelGuide.columns.bestFor")}</div>
-                  <div>{t("settings.modelGuide.columns.comment")}</div>
-                </div>
-                <div className="divide-y divide-zinc-100">
+              <table className="min-w-[1600px] table-auto border-separate border-spacing-0 text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    <th className="border-b border-zinc-200 px-3 pb-2 text-left">{t("settings.modelGuide.columns.model")}</th>
+                    <th className="border-b border-zinc-200 px-3 pb-2 text-left">{t("settings.modelGuide.columns.provider")}</th>
+                    <th className="border-b border-zinc-200 px-3 pb-2 text-left">{t("settings.modelGuide.columns.inputPrice")}</th>
+                    <th className="border-b border-zinc-200 px-3 pb-2 text-left">{t("settings.modelGuide.columns.outputPrice")}</th>
+                    <th className="border-b border-zinc-200 px-3 pb-2 text-left">{t("settings.modelGuide.columns.recommendation")}</th>
+                    <th className="border-b border-zinc-200 px-3 pb-2 text-left">{t("settings.modelGuide.columns.highlights")}</th>
+                    <th className="border-b border-zinc-200 px-3 pb-2 text-left">{t("settings.modelGuide.columns.bestFor")}</th>
+                    <th className="border-b border-zinc-200 px-3 pb-2 text-left">{t("settings.modelGuide.columns.comment")}</th>
+                  </tr>
+                </thead>
+                <tbody>
                   {modelComparisonEntries.map((entry) => (
-                    <div
-                      key={entry.model}
-                      className="grid grid-cols-[minmax(250px,2fr)_120px_120px_120px_120px_150px_minmax(160px,1.1fr)_minmax(280px,2fr)] gap-3 py-3 text-sm text-zinc-700"
-                    >
-                      <div className="min-w-0">
-                        <div className="break-all font-medium text-zinc-900">{entry.model}</div>
-                        {entry.status && (
-                          <div className="mt-1 text-xs text-zinc-500">
-                            {t(`settings.modelGuide.status.${entry.status}`)}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-zinc-600">{t(`settings.modelGuide.provider.${entry.provider}`)}</div>
-                      <div className="text-zinc-600">{entry.inputPrice}</div>
-                      <div className="text-zinc-600">{entry.outputPrice}</div>
-                      <div>
+                    <tr key={entry.model} className="text-zinc-700">
+                      <td className="border-b border-zinc-100 px-3 py-3 align-top">
+                        <div className="whitespace-nowrap font-medium text-zinc-900">{entry.model}</div>
+                      </td>
+                      <td className="border-b border-zinc-100 px-3 py-3 align-top text-zinc-600 whitespace-nowrap">{t(`settings.modelGuide.provider.${entry.provider}`)}</td>
+                      <td className="border-b border-zinc-100 px-3 py-3 align-top text-zinc-600 whitespace-nowrap">{entry.inputPrice}</td>
+                      <td className="border-b border-zinc-100 px-3 py-3 align-top text-zinc-600 whitespace-nowrap">{entry.outputPrice}</td>
+                      <td className="border-b border-zinc-100 px-3 py-3 align-top whitespace-nowrap">
                         <span
                           className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
                             entry.recommendation === "recommended"
@@ -1079,25 +1073,27 @@ export default function SettingsPage() {
                         >
                           {t(`settings.modelGuide.recommendation.${entry.recommendation}`)}
                         </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {entry.highlights.length > 0 ? entry.highlights.map((highlight) => (
-                          <span
-                            key={highlight}
-                            className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700"
-                          >
-                            {t(`settings.modelGuide.highlights.${highlight}`)}
-                          </span>
-                        )) : (
-                          <span className="text-zinc-400">-</span>
-                        )}
-                      </div>
-                      <div className="text-zinc-600">{t(`settings.modelGuide.bestFor.${entry.bestFor}`)}</div>
-                      <div className="text-xs leading-5 text-zinc-600">{entry.comment ?? "-"}</div>
-                    </div>
+                      </td>
+                      <td className="border-b border-zinc-100 px-3 py-3 align-top">
+                        <div className="flex flex-wrap gap-1.5">
+                          {entry.highlights.length > 0 ? entry.highlights.map((highlight) => (
+                            <span
+                              key={highlight}
+                              className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700 whitespace-nowrap"
+                            >
+                              {t(`settings.modelGuide.highlights.${highlight}`)}
+                            </span>
+                          )) : (
+                            <span className="text-zinc-400">-</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="border-b border-zinc-100 px-3 py-3 align-top text-zinc-600 whitespace-nowrap">{t(`settings.modelGuide.bestFor.${entry.bestFor}`)}</td>
+                      <td className="border-b border-zinc-100 px-3 py-3 align-top whitespace-nowrap text-xs leading-5 text-zinc-600">{entry.comment ?? "-"}</td>
+                    </tr>
                   ))}
-                </div>
-              </div>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

@@ -82,7 +82,7 @@ func (h *BriefingHandler) Today(w http.ResponseWriter, r *http.Request) {
 				}
 				payload.Status = s.Status
 				payload.GeneratedAt = s.GeneratedAt
-				if isSnapshotFresh(s.GeneratedAt, now) {
+				if !cacheBust && isSnapshotFresh(s.GeneratedAt, now) {
 					writeJSON(w, payload)
 					return
 				}

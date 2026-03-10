@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Brain, Coins, KeyRound, Mail, Settings as SettingsIcon } from "lucide-react";
+import { Brain, Coins, KeyRound, Mail, Settings as SettingsIcon, X } from "lucide-react";
 import { api, LLMCatalog, LLMCatalogModel, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -13,6 +13,8 @@ type ModelOption = {
   label: string;
   note?: string;
 };
+
+const MODEL_UPDATES_DISMISSED_AT_KEY = "provider-model-updates:dismissed-at";
 
 function formatUSDPerMTok(value: number): string {
   const rounded = value >= 1 ? value.toFixed(2) : value.toFixed(4);
@@ -67,6 +69,10 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [catalog, setCatalog] = useState<LLMCatalog | null>(null);
   const [providerModelUpdates, setProviderModelUpdates] = useState<ProviderModelChangeEvent[]>([]);
+  const [dismissedModelUpdatesAt, setDismissedModelUpdatesAt] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(MODEL_UPDATES_DISMISSED_AT_KEY);
+  });
   const [budgetUSD, setBudgetUSD] = useState<string>("");
   const [alertEnabled, setAlertEnabled] = useState(false);
   const [thresholdPct, setThresholdPct] = useState<number>(20);
@@ -180,6 +186,12 @@ export default function SettingsPage() {
     () => [...(catalog?.chat_models ?? []), ...(catalog?.embedding_models ?? [])],
     [catalog?.chat_models, catalog?.embedding_models]
   );
+  const visibleProviderModelUpdates = useMemo(() => {
+    if (!dismissedModelUpdatesAt) return providerModelUpdates;
+    const dismissedMs = Date.parse(dismissedModelUpdatesAt);
+    if (Number.isNaN(dismissedMs)) return providerModelUpdates;
+    return providerModelUpdates.filter((event) => Date.parse(event.detected_at) > dismissedMs);
+  }, [dismissedModelUpdatesAt, providerModelUpdates]);
 
   const budgetRemainingTone = useMemo(() => {
     const v = settings?.current_month.remaining_budget_pct;
@@ -188,6 +200,22 @@ export default function SettingsPage() {
     if (v < thresholdPct) return "text-amber-600";
     return "text-zinc-700";
   }, [settings?.current_month.remaining_budget_pct, thresholdPct]);
+
+  function dismissProviderModelUpdates() {
+    const latest = providerModelUpdates.reduce<string | null>((max, event) => {
+      if (!max) return event.detected_at;
+      return Date.parse(event.detected_at) > Date.parse(max) ? event.detected_at : max;
+    }, null);
+    if (!latest || typeof window === "undefined") return;
+    window.localStorage.setItem(MODEL_UPDATES_DISMISSED_AT_KEY, latest);
+    setDismissedModelUpdatesAt(latest);
+  }
+
+  function restoreProviderModelUpdates() {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(MODEL_UPDATES_DISMISSED_AT_KEY);
+    setDismissedModelUpdatesAt(null);
+  }
 
   async function submitBudget(e: FormEvent) {
     e.preventDefault();
@@ -883,20 +911,43 @@ export default function SettingsPage() {
         <OneSignalSettings />
 
         <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-              <Brain className="size-4 text-zinc-500" aria-hidden="true" />
-              {t("settings.providerModelUpdates")}
-            </h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              {t("settings.providerModelUpdatesDescription")}
-            </p>
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+                <Brain className="size-4 text-zinc-500" aria-hidden="true" />
+                {t("settings.providerModelUpdates")}
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                {t("settings.providerModelUpdatesDescription")}
+              </p>
+            </div>
+            {providerModelUpdates.length > 0 && visibleProviderModelUpdates.length > 0 && (
+              <button
+                type="button"
+                onClick={dismissProviderModelUpdates}
+                className="inline-flex items-center rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                <X className="mr-1 size-4" aria-hidden="true" />
+                {t("settings.providerModelUpdate.dismiss")}
+              </button>
+            )}
           </div>
           {providerModelUpdates.length === 0 ? (
             <p className="text-sm text-zinc-500">{t("settings.providerModelUpdate.empty")}</p>
+          ) : visibleProviderModelUpdates.length === 0 ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm text-zinc-500">{t("settings.providerModelUpdate.dismissed")}</p>
+              <button
+                type="button"
+                onClick={restoreProviderModelUpdates}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                {t("settings.providerModelUpdate.restore")}
+              </button>
+            </div>
           ) : (
             <div className="space-y-2">
-              {providerModelUpdates.map((event) => (
+              {visibleProviderModelUpdates.map((event) => (
                 <div key={event.id} className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="rounded bg-white px-2 py-0.5 text-xs font-medium text-zinc-700 ring-1 ring-zinc-200">

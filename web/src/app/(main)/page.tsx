@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Bell, BookOpen, Flame, ListTree, Sparkles, Target } from "lucide-react";
+import { ArrowRight, Bell, BookOpen, Flame, ListTree, Sparkles, Target, X } from "lucide-react";
 import { api, BriefingCluster, Item, ProviderModelChangeEvent } from "@/lib/api";
 import { InlineReader } from "@/components/inline-reader";
 import { useI18n } from "@/components/i18n-provider";
@@ -15,12 +15,17 @@ import { SkeletonCard, SkeletonKpi } from "@/components/skeleton";
 const EMPTY_ITEMS: Item[] = [];
 const EMPTY_CLUSTERS: BriefingCluster[] = [];
 const EMPTY_MODEL_UPDATES: ProviderModelChangeEvent[] = [];
+const MODEL_UPDATES_DISMISSED_AT_KEY = "provider-model-updates:dismissed-at";
 
 export default function BriefingPage() {
   const { t, locale } = useI18n();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
+  const [dismissedModelUpdatesAt, setDismissedModelUpdatesAt] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(MODEL_UPDATES_DISMISSED_AT_KEY);
+  });
   const briefingQuery = useQuery({
     queryKey: ["briefing-today", 18] as const,
     queryFn: () => api.getBriefingToday({ size: 18 }),
@@ -38,6 +43,12 @@ export default function BriefingPage() {
   const error = briefingQuery.error ? String(briefingQuery.error) : null;
   const data = briefingQuery.data;
   const modelUpdates = modelUpdatesQuery.data ?? EMPTY_MODEL_UPDATES;
+  const visibleModelUpdates = useMemo(() => {
+    if (!dismissedModelUpdatesAt) return modelUpdates;
+    const dismissedMs = Date.parse(dismissedModelUpdatesAt);
+    if (Number.isNaN(dismissedMs)) return modelUpdates;
+    return modelUpdates.filter((event) => Date.parse(event.detected_at) > dismissedMs);
+  }, [dismissedModelUpdatesAt, modelUpdates]);
   const highlights = data?.highlight_items ?? EMPTY_ITEMS;
   const clusters = data?.clusters ?? EMPTY_CLUSTERS;
   const unreadHighlights = useMemo(() => highlights.filter((item) => !item.is_read), [highlights]);
@@ -96,33 +107,50 @@ export default function BriefingPage() {
     }
     return ids.length > 0 ? ids : briefingQueueItemIds;
   }, [briefingQueueItemIds, nextReads, nowReading]);
+  const dismissModelUpdates = () => {
+    const latest = modelUpdates.reduce<string | null>((max, event) => {
+      if (!max) return event.detected_at;
+      return Date.parse(event.detected_at) > Date.parse(max) ? event.detected_at : max;
+    }, null);
+    if (!latest || typeof window === "undefined") return;
+    window.localStorage.setItem(MODEL_UPDATES_DISMISSED_AT_KEY, latest);
+    setDismissedModelUpdatesAt(latest);
+  };
 
   return (
     <PageTransition>
       <div className="space-y-6">
+        {visibleModelUpdates.length > 0 && (
         <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <Bell className="size-4 shrink-0 text-amber-700" aria-hidden="true" />
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold text-amber-900">{t("briefing.providerModelUpdates")}</h2>
-                {modelUpdates.length === 0 ? (
-                  <p className="text-sm text-amber-800">{t("briefing.providerModelUpdatesEmpty")}</p>
-                ) : (
-                  <p className="text-sm text-amber-800">
-                    {modelUpdates.slice(0, 3).map((event) => `${event.provider} ${event.change_type === "added" ? "+" : "-"} ${event.model_id}`).join(" / ")}
-                  </p>
-                )}
+                <p className="text-sm text-amber-800">
+                  {visibleModelUpdates.slice(0, 3).map((event) => `${event.provider} ${event.change_type === "added" ? "+" : "-"} ${event.model_id}`).join(" / ")}
+                </p>
               </div>
             </div>
-            <Link
-              href="/settings"
-              className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 press focus-ring"
-            >
-              {t("briefing.providerModelUpdatesOpen")}
-            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={dismissModelUpdates}
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 press focus-ring"
+              >
+                <X className="mr-1 size-4" aria-hidden="true" />
+                {t("briefing.providerModelUpdatesDismiss")}
+              </button>
+              <Link
+                href="/settings"
+                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 press focus-ring"
+              >
+                {t("briefing.providerModelUpdatesOpen")}
+              </Link>
+            </div>
           </div>
         </section>
+        )}
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">

@@ -175,7 +175,7 @@ type LLMUsage struct {
 }
 
 func (w *WorkerClient) ExtractBody(ctx context.Context, url string) (*ExtractBodyResponse, error) {
-	return postWithHeaders[ExtractBodyResponse](ctx, w, "/extract-body", map[string]any{"url": url}, workerHeaders(nil, nil, nil, w.internalSecret))
+	return postWithHeaders[ExtractBodyResponse](ctx, w, "/extract-body", map[string]any{"url": url}, workerHeaders(nil, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) Health(ctx context.Context) error {
@@ -201,48 +201,48 @@ func (w *WorkerClient) Health(ctx context.Context) error {
 	return nil
 }
 
-func (w *WorkerClient) ExtractFacts(ctx context.Context, title *string, content string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string) (*ExtractFactsResponse, error) {
+func (w *WorkerClient) ExtractFacts(ctx context.Context, title *string, content string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string) (*ExtractFactsResponse, error) {
 	return postWithHeaders[ExtractFactsResponse](ctx, w, "/extract-facts", map[string]any{
 		"title":   title,
 		"content": content,
 		"model":   nil,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) ExtractFactsWithModel(ctx context.Context, title *string, content string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, model *string) (*ExtractFactsResponse, error) {
+func (w *WorkerClient) ExtractFactsWithModel(ctx context.Context, title *string, content string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, model *string) (*ExtractFactsResponse, error) {
 	return postWithHeaders[ExtractFactsResponse](ctx, w, "/extract-facts", map[string]any{
 		"title":   title,
 		"content": content,
 		"model":   model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) Summarize(ctx context.Context, title *string, facts []string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string) (*SummarizeResponse, error) {
+func (w *WorkerClient) Summarize(ctx context.Context, title *string, facts []string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string) (*SummarizeResponse, error) {
 	return postWithHeaders[SummarizeResponse](ctx, w, "/summarize", map[string]any{
 		"title":             title,
 		"facts":             facts,
 		"model":             nil,
 		"source_text_chars": nil,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, facts []string, sourceTextChars *int, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, model *string) (*SummarizeResponse, error) {
+func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, facts []string, sourceTextChars *int, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, model *string) (*SummarizeResponse, error) {
 	return postWithHeaders[SummarizeResponse](ctx, w, "/summarize", map[string]any{
 		"title":             title,
 		"facts":             facts,
 		"model":             model,
 		"source_text_chars": sourceTextChars,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) TranslateTitleWithModel(ctx context.Context, title string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, model *string) (*TranslateTitleResponse, error) {
+func (w *WorkerClient) TranslateTitleWithModel(ctx context.Context, title string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, model *string) (*TranslateTitleResponse, error) {
 	return postWithHeaders[TranslateTitleResponse](ctx, w, "/translate-title", map[string]any{
 		"title": title,
 		"model": model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string) (*ComposeDigestResponse, error) {
+func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string) (*ComposeDigestResponse, error) {
 	if _, ok := ctx.Deadline(); !ok && w.composeDigestTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, w.composeDigestTimeout)
@@ -252,10 +252,10 @@ func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, ite
 		"digest_date": digestDate,
 		"items":       items,
 		"model":       nil,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, model *string) (*ComposeDigestResponse, error) {
+func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, model *string) (*ComposeDigestResponse, error) {
 	if _, ok := ctx.Deadline(); !ok && w.composeDigestTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, w.composeDigestTimeout)
@@ -265,7 +265,7 @@ func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate st
 		"digest_date": digestDate,
 		"items":       items,
 		"model":       model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) ComposeDigestClusterDraftWithModel(
@@ -277,6 +277,7 @@ func (w *WorkerClient) ComposeDigestClusterDraftWithModel(
 	anthropicAPIKey *string,
 	googleAPIKey *string,
 	groqAPIKey *string,
+	deepseekAPIKey *string,
 	model *string,
 ) (*ComposeDigestClusterDraftResponse, error) {
 	return postWithHeaders[ComposeDigestClusterDraftResponse](ctx, w, "/compose-digest-cluster-draft", map[string]any{
@@ -285,7 +286,7 @@ func (w *WorkerClient) ComposeDigestClusterDraftWithModel(
 		"topics":        topics,
 		"source_lines":  sourceLines,
 		"model":         model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) AskWithModel(
@@ -295,13 +296,14 @@ func (w *WorkerClient) AskWithModel(
 	anthropicAPIKey *string,
 	googleAPIKey *string,
 	groqAPIKey *string,
+	deepseekAPIKey *string,
 	model *string,
 ) (*AskResponse, error) {
 	return postWithHeaders[AskResponse](ctx, w, "/ask", map[string]any{
 		"query":      query,
 		"candidates": candidates,
 		"model":      model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) RankFeedSuggestions(
@@ -314,6 +316,7 @@ func (w *WorkerClient) RankFeedSuggestions(
 	anthropicAPIKey *string,
 	googleAPIKey *string,
 	groqAPIKey *string,
+	deepseekAPIKey *string,
 ) (*RankFeedSuggestionsResponse, error) {
 	return postWithHeaders[RankFeedSuggestionsResponse](ctx, w, "/rank-feed-suggestions", map[string]any{
 		"existing_sources":  existing,
@@ -322,7 +325,7 @@ func (w *WorkerClient) RankFeedSuggestions(
 		"positive_examples": positiveExamples,
 		"negative_examples": negativeExamples,
 		"model":             nil,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) RankFeedSuggestionsWithModel(
@@ -335,6 +338,7 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 	anthropicAPIKey *string,
 	googleAPIKey *string,
 	groqAPIKey *string,
+	deepseekAPIKey *string,
 	model *string,
 ) (*RankFeedSuggestionsResponse, error) {
 	return postWithHeaders[RankFeedSuggestionsResponse](ctx, w, "/rank-feed-suggestions", map[string]any{
@@ -344,7 +348,7 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 		"positive_examples": positiveExamples,
 		"negative_examples": negativeExamples,
 		"model":             model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) SuggestFeedSeedSites(
@@ -356,6 +360,7 @@ func (w *WorkerClient) SuggestFeedSeedSites(
 	anthropicAPIKey *string,
 	googleAPIKey *string,
 	groqAPIKey *string,
+	deepseekAPIKey *string,
 ) (*SuggestFeedSeedSitesResponse, error) {
 	return postWithHeaders[SuggestFeedSeedSitesResponse](ctx, w, "/suggest-feed-seed-sites", map[string]any{
 		"existing_sources":  existing,
@@ -363,7 +368,7 @@ func (w *WorkerClient) SuggestFeedSeedSites(
 		"positive_examples": positiveExamples,
 		"negative_examples": negativeExamples,
 		"model":             nil,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
@@ -375,6 +380,7 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 	anthropicAPIKey *string,
 	googleAPIKey *string,
 	groqAPIKey *string,
+	deepseekAPIKey *string,
 	model *string,
 ) (*SuggestFeedSeedSitesResponse, error) {
 	return postWithHeaders[SuggestFeedSeedSitesResponse](ctx, w, "/suggest-feed-seed-sites", map[string]any{
@@ -383,10 +389,10 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 		"positive_examples": positiveExamples,
 		"negative_examples": negativeExamples,
 		"model":             model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, w.internalSecret))
 }
 
-func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, internalSecret string) map[string]string {
+func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, internalSecret string) map[string]string {
 	headers := map[string]string{}
 	if internalSecret != "" {
 		headers["X-Internal-Worker-Secret"] = internalSecret
@@ -399,6 +405,9 @@ func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *st
 	}
 	if groqAPIKey != nil && *groqAPIKey != "" {
 		headers["X-Groq-Api-Key"] = *groqAPIKey
+	}
+	if deepseekAPIKey != nil && *deepseekAPIKey != "" {
+		headers["X-Deepseek-Api-Key"] = *deepseekAPIKey
 	}
 	if len(headers) == 0 {
 		return nil

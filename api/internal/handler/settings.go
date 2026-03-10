@@ -63,6 +63,8 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		"google_api_key_last4":       settings.GoogleAPIKeyLast4,
 		"has_groq_api_key":           settings.HasGroqAPIKey,
 		"groq_api_key_last4":         settings.GroqAPIKeyLast4,
+		"has_deepseek_api_key":       settings.HasDeepSeekAPIKey,
+		"deepseek_api_key_last4":     settings.DeepSeekAPIKeyLast4,
 		"has_inoreader_oauth":        settings.HasInoreaderOAuth,
 		"inoreader_token_expires_at": settings.InoreaderTokenExpiresAt,
 		"monthly_budget_usd":         settings.MonthlyBudgetUSD,
@@ -585,5 +587,58 @@ func (h *SettingsHandler) DeleteGroqAPIKey(w http.ResponseWriter, r *http.Reques
 		"user_id":            settings.UserID,
 		"has_groq_api_key":   settings.HasGroqAPIKey,
 		"groq_api_key_last4": settings.GroqAPIKeyLast4,
+	})
+}
+
+func (h *SettingsHandler) SetDeepSeekAPIKey(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	key := strings.TrimSpace(body.APIKey)
+	if key == "" {
+		http.Error(w, "api_key is required", http.StatusBadRequest)
+		return
+	}
+	if h.cipher == nil || !h.cipher.Enabled() {
+		http.Error(w, "user secret encryption is not configured", http.StatusInternalServerError)
+		return
+	}
+	enc, err := h.cipher.EncryptString(key)
+	if err != nil {
+		http.Error(w, "failed to encrypt api key", http.StatusInternalServerError)
+		return
+	}
+	last4 := key
+	if len(last4) > 4 {
+		last4 = last4[len(last4)-4:]
+	}
+	settings, err := h.repo.SetDeepSeekAPIKey(r.Context(), userID, enc, last4)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"user_id":                settings.UserID,
+		"has_deepseek_api_key":   settings.HasDeepSeekAPIKey,
+		"deepseek_api_key_last4": settings.DeepSeekAPIKeyLast4,
+	})
+}
+
+func (h *SettingsHandler) DeleteDeepSeekAPIKey(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	settings, err := h.repo.ClearDeepSeekAPIKey(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"user_id":                settings.UserID,
+		"has_deepseek_api_key":   settings.HasDeepSeekAPIKey,
+		"deepseek_api_key_last4": settings.DeepSeekAPIKeyLast4,
 	})
 }

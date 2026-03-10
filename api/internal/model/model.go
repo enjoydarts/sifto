@@ -21,6 +21,8 @@ type UserSettings struct {
 	HasGoogleAPIKey             bool       `json:"has_google_api_key"`
 	GroqAPIKeyLast4             *string    `json:"groq_api_key_last4,omitempty"`
 	HasGroqAPIKey               bool       `json:"has_groq_api_key"`
+	DeepSeekAPIKeyLast4         *string    `json:"deepseek_api_key_last4,omitempty"`
+	HasDeepSeekAPIKey           bool       `json:"has_deepseek_api_key"`
 	MonthlyBudgetUSD            *float64   `json:"monthly_budget_usd,omitempty"`
 	BudgetAlertEnabled          bool       `json:"budget_alert_enabled"`
 	BudgetAlertThresholdPct     int        `json:"budget_alert_threshold_pct"`

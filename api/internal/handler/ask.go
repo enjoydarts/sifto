@@ -87,9 +87,9 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	if settings.OpenAIEmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*settings.OpenAIEmbeddingModel) {
 		embeddingModel = *settings.OpenAIEmbeddingModel
 	}
-	modelName := chooseAskModel(settings, settings.HasAnthropicAPIKey, settings.HasGoogleAPIKey, settings.HasGroqAPIKey)
+	modelName := chooseAskModel(settings, settings.HasAnthropicAPIKey, settings.HasGoogleAPIKey, settings.HasGroqAPIKey, settings.HasDeepSeekAPIKey)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or groq api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or groq or deepseek api key is required", http.StatusBadRequest)
 		return
 	}
 	cacheKey := cacheKeyAsk(userID, query, *modelName, embeddingModel, body.Days, body.UnreadOnly, body.Limit, body.SourceIDs)
@@ -141,9 +141,10 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	anthropicKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAnthropicAPIKeyEncrypted, h.cipher, userID, "")
 	googleKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGoogleAPIKeyEncrypted, h.cipher, userID, "")
 	groqKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGroqAPIKeyEncrypted, h.cipher, userID, "")
-	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, groqKey != nil)
+	deepseekKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
+	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, groqKey != nil, deepseekKey != nil)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or groq api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or groq or deepseek api key is required", http.StatusBadRequest)
 		return
 	}
 
@@ -166,7 +167,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 			Similarity:      c.Similarity,
 		})
 	}
-	askResp, err := h.worker.AskWithModel(r.Context(), query, workerCandidates, anthropicKey, googleKey, groqKey, modelName)
+	askResp, err := h.worker.AskWithModel(r.Context(), query, workerCandidates, anthropicKey, googleKey, groqKey, deepseekKey, modelName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("ask worker: %v", err), http.StatusBadGateway)
 		return
@@ -274,7 +275,7 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 	return &v
 }
 
-func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGroq bool) *string {
+func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGroq, hasDeepSeek bool) *string {
 	if settings != nil && settings.AnthropicAskModel != nil && strings.TrimSpace(*settings.AnthropicAskModel) != "" {
 		v := strings.TrimSpace(*settings.AnthropicAskModel)
 		switch service.LLMProviderForModel(&v) {
@@ -284,6 +285,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			}
 		case "groq":
 			if hasGroq {
+				return &v
+			}
+		case "deepseek":
+			if hasDeepSeek {
 				return &v
 			}
 		default:
@@ -303,6 +308,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			if hasGroq {
 				return &v
 			}
+		case "deepseek":
+			if hasDeepSeek {
+				return &v
+			}
 		default:
 			if hasAnthropic {
 				return &v
@@ -318,6 +327,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			}
 		case "groq":
 			if hasGroq {
+				return &v
+			}
+		case "deepseek":
+			if hasDeepSeek {
 				return &v
 			}
 		default:
@@ -336,6 +349,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 	}
 	if hasGroq {
 		v := "openai/gpt-oss-20b"
+		return &v
+	}
+	if hasDeepSeek {
+		v := "deepseek-chat"
 		return &v
 	}
 	return nil

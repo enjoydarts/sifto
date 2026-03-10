@@ -24,12 +24,25 @@ func IsGroqModel(model *string) bool {
 		strings.HasPrefix(v, "llama-")
 }
 
+func IsDeepSeekModel(model *string) bool {
+	if model == nil {
+		return false
+	}
+	v := strings.ToLower(strings.TrimSpace(*model))
+	if v == "" {
+		return false
+	}
+	return v == "deepseek-chat" || v == "deepseek-reasoner"
+}
+
 func LLMProviderForModel(model *string) string {
 	switch {
 	case IsGeminiModel(model):
 		return "google"
 	case IsGroqModel(model):
 		return "groq"
+	case IsDeepSeekModel(model):
+		return "deepseek"
 	default:
 		return "anthropic"
 	}
@@ -50,6 +63,13 @@ func DefaultLLMModelForPurpose(provider, purpose string) string {
 			return "openai/gpt-oss-120b"
 		default:
 			return "openai/gpt-oss-20b"
+		}
+	case "deepseek":
+		switch purpose {
+		case "summary", "digest_cluster_draft", "digest":
+			return "deepseek-reasoner"
+		default:
+			return "deepseek-chat"
 		}
 	default:
 		switch purpose {

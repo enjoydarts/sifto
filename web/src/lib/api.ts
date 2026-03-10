@@ -370,6 +370,8 @@ export interface UserSettings {
   google_api_key_last4: string | null;
   has_groq_api_key: boolean;
   groq_api_key_last4: string | null;
+  has_deepseek_api_key: boolean;
+  deepseek_api_key_last4: string | null;
   has_inoreader_oauth?: boolean;
   inoreader_token_expires_at?: string | null;
   monthly_budget_usd: number | null;
@@ -743,6 +745,16 @@ export const api = {
   deleteGroqApiKey: () =>
     apiFetch<{ user_id: string; has_groq_api_key: boolean; groq_api_key_last4: string | null }>(
       "/settings/groq-key",
+      { method: "DELETE" }
+    ),
+  setDeepSeekApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_deepseek_api_key: boolean; deepseek_api_key_last4: string | null }>(
+      "/settings/deepseek-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteDeepSeekApiKey: () =>
+    apiFetch<{ user_id: string; has_deepseek_api_key: boolean; deepseek_api_key_last4: string | null }>(
+      "/settings/deepseek-key",
       { method: "DELETE" }
     ),
   deleteInoreaderOAuth: () =>

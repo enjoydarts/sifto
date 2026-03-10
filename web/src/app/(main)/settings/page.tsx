@@ -16,7 +16,7 @@ type ModelOption = {
 
 type ModelComparisonEntry = {
   model: string;
-  provider: "anthropic" | "google" | "groq" | "openai";
+  provider: "anthropic" | "google" | "groq" | "openai" | "deepseek";
   inputPrice: string;
   outputPrice: string;
   recommendation: "recommended" | "strong" | "experimental";
@@ -43,6 +43,8 @@ export default function SettingsPage() {
   const [deletingGoogleKey, setDeletingGoogleKey] = useState(false);
   const [savingGroqKey, setSavingGroqKey] = useState(false);
   const [deletingGroqKey, setDeletingGroqKey] = useState(false);
+  const [savingDeepSeekKey, setSavingDeepSeekKey] = useState(false);
+  const [deletingDeepSeekKey, setDeletingDeepSeekKey] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -54,6 +56,7 @@ export default function SettingsPage() {
   const [openAIApiKeyInput, setOpenAIApiKeyInput] = useState("");
   const [googleApiKeyInput, setGoogleApiKeyInput] = useState("");
   const [groqApiKeyInput, setGroqApiKeyInput] = useState("");
+  const [deepseekApiKeyInput, setDeepseekApiKeyInput] = useState("");
   const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
   const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
@@ -82,6 +85,8 @@ export default function SettingsPage() {
     { value: "llama-3.3-70b-versatile", label: "llama-3.3-70b-versatile", note: "Groq / in $0.59 / out $0.79 / 1M tok" },
     { value: "meta-llama/llama-4-scout-17b-16e-instruct", label: "meta-llama/llama-4-scout-17b-16e-instruct", note: "Groq Preview / in $0.11 / out $0.34 / 1M tok" },
     { value: "qwen/qwen3-32b", label: "qwen/qwen3-32b", note: "Groq / in $0.29 / out $0.59 / 1M tok" },
+    { value: "deepseek-chat", label: "deepseek-chat", note: "DeepSeek / cached in $0.028 / in $0.28 / out $0.42 / 1M tok" },
+    { value: "deepseek-reasoner", label: "deepseek-reasoner", note: "DeepSeek / cached in $0.028 / in $0.28 / out $0.42 / 1M tok" },
   ];
   const anthropicOnlyModelOptions: ModelOption[] = [
     { value: "claude-haiku-4-5", label: "claude-haiku-4-5", note: "in $1 / out $5 / 1M tok" },
@@ -108,6 +113,8 @@ export default function SettingsPage() {
     { model: "llama-3.3-70b-versatile", provider: "groq", inputPrice: "$0.59", outputPrice: "$0.79", recommendation: "strong", bestFor: "summary", highlights: ["fast"], comment: "知能は非常に高いが、速度とコストは重めで大量処理では負担が出やすい。" },
     { model: "meta-llama/llama-4-scout-17b-16e-instruct", provider: "groq", inputPrice: "$0.11", outputPrice: "$0.34", recommendation: "experimental", bestFor: "summary", highlights: ["fast"], status: "preview", comment: "MoEで賢さと価格のバランスが良く、要約やRAGを安く回したい時に有力。" },
     { model: "qwen/qwen3-32b", provider: "groq", inputPrice: "$0.29", outputPrice: "$0.59", recommendation: "experimental", bestFor: "summary", highlights: [], comment: "日本語と多言語の安定感が高く、混在記事の忠実要約やRAGで特に強い。" },
+    { model: "deepseek-chat", provider: "deepseek", inputPrice: "$0.28", outputPrice: "$0.42", recommendation: "strong", bestFor: "facts", highlights: ["fast"], comment: "低価格で扱いやすく、事実抽出や通常要約のコストを抑えたい時の有力候補。" },
+    { model: "deepseek-reasoner", provider: "deepseek", inputPrice: "$0.28", outputPrice: "$0.42", recommendation: "strong", bestFor: "digest", highlights: [], comment: "推論寄りの長文整理に向くが、応答の重さを許容する高難度タスク向け。" },
     { model: "text-embedding-3-small", provider: "openai", inputPrice: "$0.02", outputPrice: "-", recommendation: "recommended", bestFor: "embedding", highlights: ["lowestCost"] },
     { model: "text-embedding-3-large", provider: "openai", inputPrice: "$0.13", outputPrice: "-", recommendation: "strong", bestFor: "embedding", highlights: [] },
   ];
@@ -411,6 +418,45 @@ export default function SettingsPage() {
     }
   }
 
+  async function submitDeepSeekApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingDeepSeekKey(true);
+    try {
+      if (!deepseekApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setDeepSeekApiKey(deepseekApiKeyInput.trim());
+      setDeepseekApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.deepseekSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingDeepSeekKey(false);
+    }
+  }
+
+  async function handleDeleteDeepSeekApiKey() {
+    if (!(await confirm({
+      title: t("settings.deepseekDeleteTitle"),
+      message: t("settings.deepseekDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingDeepSeekKey(true);
+    try {
+      await api.deleteDeepSeekApiKey();
+      await load();
+      showToast(t("settings.toast.deepseekDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingDeepSeekKey(false);
+    }
+  }
+
   async function handleDeleteInoreaderOAuth() {
     if (!(await confirm({
       title: t("settings.inoreaderDeleteTitle"),
@@ -703,6 +749,63 @@ export default function SettingsPage() {
               className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
             >
               {deletingGroqKey ? t("settings.deleting") : t("settings.deleteKey")}
+            </button>
+          </div>
+        </form>
+
+        <form onSubmit={submitDeepSeekApiKey} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+              <KeyRound className="size-4 text-zinc-500" aria-hidden="true" />
+              {t("settings.deepseekTitle")}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              {t("settings.deepseekDescription")}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+            {settings.has_deepseek_api_key ? (
+              <>
+                {t("settings.configured")}{" "}
+                <span className="font-mono text-xs text-zinc-500">
+                  ••••{settings.deepseek_api_key_last4 ?? "****"}
+                </span>
+              </>
+            ) : (
+              <span className="text-zinc-500">
+                {t("settings.deepseekNotSet")}
+              </span>
+            )}
+          </div>
+
+          <label className="mt-4 block text-sm font-medium text-zinc-700">
+            {t("settings.newApiKey")}
+          </label>
+          <input
+            type="password"
+            autoComplete="off"
+            value={deepseekApiKeyInput}
+            onChange={(e) => setDeepseekApiKeyInput(e.target.value)}
+            placeholder="sk-..."
+            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-400"
+          />
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={savingDeepSeekKey}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {savingDeepSeekKey ? t("common.saving") : t("settings.saveOrUpdate")}
+            </button>
+            <button
+              type="button"
+              disabled={deletingDeepSeekKey || !settings.has_deepseek_api_key}
+              onClick={handleDeleteDeepSeekApiKey}
+              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
+            >
+              {deletingDeepSeekKey ? t("settings.deleting") : t("settings.deleteKey")}
             </button>
           </div>
         </form>

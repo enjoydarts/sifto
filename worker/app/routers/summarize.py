@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from app.services.claude_service import summarize
+from app.services.deepseek_service import summarize as summarize_deepseek
 from app.services.gemini_service import summarize as summarize_gemini
 from app.services.groq_service import summarize as summarize_groq
-from app.services.model_router import is_gemini_model, is_groq_model
+from app.services.model_router import is_deepseek_model, is_gemini_model, is_groq_model
 
 router = APIRouter()
 
@@ -37,6 +38,15 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
                 source_text_chars=req.source_text_chars,
                 model=str(req.model),
                 api_key=google_api_key,
+            )
+        elif is_deepseek_model(req.model):
+            deepseek_api_key = request.headers.get("x-deepseek-api-key") or ""
+            result = summarize_deepseek(
+                req.title,
+                req.facts,
+                source_text_chars=req.source_text_chars,
+                model=str(req.model),
+                api_key=deepseek_api_key,
             )
         elif is_groq_model(req.model):
             groq_api_key = request.headers.get("x-groq-api-key") or ""

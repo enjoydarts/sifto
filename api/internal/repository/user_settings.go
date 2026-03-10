@@ -27,6 +27,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var openAIKeyEnc *string
 	var googleAPIKeyEnc *string
 	var groqAPIKeyEnc *string
+	var deepseekAPIKeyEnc *string
 	var inoreaderAccessTokenEnc *string
 	err := r.db.QueryRow(ctx, `
 		SELECT user_id,
@@ -38,6 +39,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       google_api_key_last4,
 		       groq_api_key_enc,
 		       groq_api_key_last4,
+		       deepseek_api_key_enc,
+		       deepseek_api_key_last4,
 		       monthly_budget_usd,
 		       budget_alert_enabled,
 		       budget_alert_threshold_pct,
@@ -70,6 +73,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.GoogleAPIKeyLast4,
 		&groqAPIKeyEnc,
 		&v.GroqAPIKeyLast4,
+		&deepseekAPIKeyEnc,
+		&v.DeepSeekAPIKeyLast4,
 		&v.MonthlyBudgetUSD,
 		&v.BudgetAlertEnabled,
 		&v.BudgetAlertThresholdPct,
@@ -97,6 +102,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasOpenAIAPIKey = openAIKeyEnc != nil && *openAIKeyEnc != ""
 	v.HasGoogleAPIKey = googleAPIKeyEnc != nil && *googleAPIKeyEnc != ""
 	v.HasGroqAPIKey = groqAPIKeyEnc != nil && *groqAPIKeyEnc != ""
+	v.HasDeepSeekAPIKey = deepseekAPIKeyEnc != nil && *deepseekAPIKeyEnc != ""
 	v.HasInoreaderOAuth = inoreaderAccessTokenEnc != nil && *inoreaderAccessTokenEnc != ""
 	return &v, nil
 }
@@ -295,6 +301,26 @@ func (r *UserSettingsRepo) GetGroqAPIKeyEncrypted(ctx context.Context, userID st
 	return v, nil
 }
 
+func (r *UserSettingsRepo) GetDeepSeekAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT deepseek_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1`,
+		userID,
+	).Scan(&v)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
 func (r *UserSettingsRepo) GetInoreaderTokensEncrypted(ctx context.Context, userID string) (accessTokenEnc, refreshTokenEnc *string, expiresAt *time.Time, err error) {
 	err = r.db.QueryRow(ctx, `
 		SELECT inoreader_access_token_enc, inoreader_refresh_token_enc, inoreader_token_expires_at
@@ -409,6 +435,22 @@ func (r *UserSettingsRepo) SetGroqAPIKey(ctx context.Context, userID, encryptedK
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetDeepSeekAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, deepseek_api_key_enc, deepseek_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET deepseek_api_key_enc = EXCLUDED.deepseek_api_key_enc,
+		    deepseek_api_key_last4 = EXCLUDED.deepseek_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) ClearAnthropicAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, anthropic_api_key_enc, anthropic_api_key_last4)
@@ -464,6 +506,22 @@ func (r *UserSettingsRepo) ClearGroqAPIKey(ctx context.Context, userID string) (
 		ON CONFLICT (user_id) DO UPDATE
 		SET groq_api_key_enc = NULL,
 		    groq_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearDeepSeekAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, deepseek_api_key_enc, deepseek_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET deepseek_api_key_enc = NULL,
+		    deepseek_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

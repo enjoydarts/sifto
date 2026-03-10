@@ -180,6 +180,8 @@ func main() {
 			r.Delete("/google-key", settingsH.DeleteGoogleAPIKey)
 			r.Post("/groq-key", settingsH.SetGroqAPIKey)
 			r.Delete("/groq-key", settingsH.DeleteGroqAPIKey)
+			r.Post("/deepseek-key", settingsH.SetDeepSeekAPIKey)
+			r.Delete("/deepseek-key", settingsH.DeleteDeepSeekAPIKey)
 		})
 	})
 

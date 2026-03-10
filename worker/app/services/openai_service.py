@@ -123,6 +123,17 @@ def _should_use_responses_api(model: str) -> bool:
     return family.startswith("gpt-5")
 
 
+def _responses_reasoning(model: str) -> dict | None:
+    family = _normalize_model_family(model)
+    if not family.startswith("gpt-5"):
+        return None
+    if family.endswith("-pro"):
+        return None
+    if family.startswith("gpt-5.1") or family.startswith("gpt-5.2") or family.startswith("gpt-5.4"):
+        return {"effort": "none"}
+    return {"effort": "minimal"}
+
+
 def _usage_from_response(data: dict) -> dict:
     usage = data.get("usage") or {}
     prompt_details = usage.get("prompt_tokens_details") or {}
@@ -163,9 +174,13 @@ def _extract_text_from_responses(data: dict) -> str:
         for content in item.get("content") or []:
             if not isinstance(content, dict):
                 continue
-            text = str(content.get("text") or "").strip()
+            text = str(content.get("text") or content.get("output_text") or "").strip()
             if text:
                 out.append(text)
+            if str(content.get("type") or "").strip() == "refusal":
+                refusal_text = str(content.get("refusal") or "").strip()
+                if refusal_text:
+                    out.append(refusal_text)
         refusal = str(item.get("refusal") or "").strip()
         if refusal:
             out.append(refusal)
@@ -190,6 +205,9 @@ def _responses_json(
     }
     if system_instruction:
         body["instructions"] = system_instruction
+    reasoning = _responses_reasoning(model)
+    if reasoning is not None:
+        body["reasoning"] = reasoning
     use_strict_schema = response_schema is not None and _supports_strict_schema(model)
     if response_schema is not None:
         if use_strict_schema:
@@ -242,7 +260,29 @@ def _responses_json(
         raise RuntimeError(f"openai responses failed status={resp.status_code} body={resp.text[:1000]}")
     data = resp.json() if resp.content else {}
     text = _extract_text_from_responses(data)
+    if not text and response_schema is not None:
+        fallback_body = dict(body)
+        fallback_body.pop("text", None)
+        with httpx.Client(timeout=req_timeout) as client:
+            resp = client.post(url, headers=headers, json=fallback_body)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"openai responses fallback failed status={resp.status_code} body={resp.text[:1000]}")
+        data = resp.json() if resp.content else {}
+        text = _extract_text_from_responses(data)
+    if not text:
+        status = str(data.get("status") or "")
+        incomplete = data.get("incomplete_details")
+        raise RuntimeError(f"openai responses returned empty output status={status} incomplete={incomplete}")
     return text, _usage_from_responses(data)
+
+
+def _extract_bulletish_lines(text: str) -> list[str]:
+    lines: list[str] = []
+    for raw in _strip_code_fence(text).splitlines():
+        line = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", raw).strip()
+        if line:
+            lines.append(line)
+    return lines
 
 
 def _chat_json(
@@ -403,7 +443,7 @@ def extract_facts(title: str | None, content: str, model: str, api_key: str) -> 
 提供される記事から重要な事実を8〜18個の箇条書きで抽出してください。
 
 # Rules
-- 出力は必ず ["事実1", "事実2", ...] のJSON形式の配列のみとしてください。
+- 出力は必ず {"facts": ["事実1", "事実2", ...]} のJSONオブジェクト1つのみにしてください。
 - 余計な挨拶や解説は一切不要です。
 - 事実は客観的かつ具体的に記述してください。
 - 記事が英語の場合も、出力は自然な日本語にしてください。
@@ -415,8 +455,15 @@ def extract_facts(title: str | None, content: str, model: str, api_key: str) -> 
 {content}
 """
     schema = {
-        "type": "array",
-        "items": {"type": "string"},
+        "type": "object",
+        "properties": {
+            "facts": {
+                "type": "array",
+                "items": {"type": "string"},
+            }
+        },
+        "required": ["facts"],
+        "additionalProperties": False,
     }
     text, usage = _chat_json(
         prompt,
@@ -427,15 +474,16 @@ def extract_facts(title: str | None, content: str, model: str, api_key: str) -> 
         response_schema=schema if _supports_strict_schema(model) else None,
         schema_name="facts",
     )
-    facts = _parse_json_string_array(text)
+    obj = _extract_first_json_object(text) or {}
+    raw = obj.get("facts")
+    facts = [str(v).strip() for v in raw if str(v).strip()] if isinstance(raw, list) else []
     if not facts:
-        obj = _extract_first_json_object(text) or {}
-        raw = obj.get("facts")
-        if isinstance(raw, list):
-            facts = [str(v).strip() for v in raw if str(v).strip()]
+        facts = _parse_json_string_array(text)
     if not facts:
         matches = re.findall(r'"((?:\\.|[^"\\])*)"', _strip_code_fence(text), re.S)
         facts = [_decode_json_string_fragment(m).strip() for m in matches if _decode_json_string_fragment(m).strip()]
+    if not facts:
+        facts = _extract_bulletish_lines(text)
     if not facts:
         raise RuntimeError(f"openai extract_facts parse failed: response_snippet={text[:500]}")
     return {"facts": facts[:18], "llm": _llm_meta(model, "facts", usage)}

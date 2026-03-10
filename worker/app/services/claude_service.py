@@ -4,6 +4,7 @@ import os
 import re
 import time
 import anthropic
+from app.services.llm_catalog import model_pricing
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -17,7 +18,7 @@ _feed_suggest_model_fallback = os.getenv("ANTHROPIC_FEED_SUGGEST_MODEL_FALLBACK"
 _log = logging.getLogger(__name__)
 _ANTHROPIC_PRICING_SOURCE_VERSION = "anthropic_static_2026_02"
 
-_DEFAULT_MODEL_PRICING = {
+_LEGACY_MODEL_PRICING = {
     # USD per 1M tokens (Claude API pricing); cache write assumes 5m cache.
     "claude-haiku-4-5": {
         "input_per_mtok_usd": 1.0,
@@ -357,7 +358,9 @@ def _env_optional_float(name: str) -> float | None:
 def _normalize_model_family(model: str) -> str:
     if not model:
         return ""
-    for family in sorted(_DEFAULT_MODEL_PRICING.keys(), key=len, reverse=True):
+    if model_pricing(model) is not None:
+        return model
+    for family in sorted(_LEGACY_MODEL_PRICING.keys(), key=len, reverse=True):
         if model == family or model.startswith(family + "-"):
             return family
     return model
@@ -366,7 +369,9 @@ def _normalize_model_family(model: str) -> str:
 def _pricing_for_model(model: str, purpose: str) -> dict:
     family = _normalize_model_family(model)
     base = dict(
-        _DEFAULT_MODEL_PRICING.get(
+        model_pricing(family)
+        or model_pricing(model)
+        or _LEGACY_MODEL_PRICING.get(
             family,
             {
                 "input_per_mtok_usd": 0.0,
@@ -376,7 +381,7 @@ def _pricing_for_model(model: str, purpose: str) -> dict:
             },
         )
     )
-    source = _ANTHROPIC_PRICING_SOURCE_VERSION
+    source = str(base.get("pricing_source") or _ANTHROPIC_PRICING_SOURCE_VERSION)
     # Optional per-purpose overrides for temporary pricing changes without deploy.
     prefix = f"ANTHROPIC_{purpose.upper()}_"
     override_map = {

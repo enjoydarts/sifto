@@ -20,20 +20,10 @@ from app.services.gemini_service import (
     _target_summary_chars,
     _decode_json_string_fragment,
 )
+from app.services.llm_catalog import model_pricing
 
 _log = logging.getLogger(__name__)
-_OPENAI_PRICING_SOURCE_VERSION = "openai_static_chat_2026_03"
-_DEFAULT_MODEL_PRICING = {
-    "gpt-5-nano": {"input_per_mtok_usd": 0.05, "output_per_mtok_usd": 0.40, "cache_read_per_mtok_usd": 0.005},
-    "gpt-5-mini": {"input_per_mtok_usd": 0.25, "output_per_mtok_usd": 2.00, "cache_read_per_mtok_usd": 0.025},
-    "gpt-5": {"input_per_mtok_usd": 1.25, "output_per_mtok_usd": 10.00, "cache_read_per_mtok_usd": 0.125},
-    "gpt-5-pro": {"input_per_mtok_usd": 15.00, "output_per_mtok_usd": 120.00, "cache_read_per_mtok_usd": 0.0},
-    "gpt-5.1": {"input_per_mtok_usd": 1.25, "output_per_mtok_usd": 10.00, "cache_read_per_mtok_usd": 0.125},
-    "gpt-5.2": {"input_per_mtok_usd": 1.75, "output_per_mtok_usd": 14.00, "cache_read_per_mtok_usd": 0.175},
-    "gpt-5.2-pro": {"input_per_mtok_usd": 21.00, "output_per_mtok_usd": 168.00, "cache_read_per_mtok_usd": 0.0},
-    "gpt-5.4": {"input_per_mtok_usd": 2.50, "output_per_mtok_usd": 15.00, "cache_read_per_mtok_usd": 0.25},
-    "gpt-5.4-pro": {"input_per_mtok_usd": 30.00, "output_per_mtok_usd": 180.00, "cache_read_per_mtok_usd": 0.0},
-}
+_OPENAI_PRICING_SOURCE_VERSION = "openai_standard_2026_03"
 
 
 def _env_timeout_seconds(name: str, default: float) -> float:
@@ -63,7 +53,10 @@ def _normalize_model_name(model: str) -> str:
 
 def _normalize_model_family(model: str) -> str:
     m = _normalize_model_name(model)
-    for family in sorted(_DEFAULT_MODEL_PRICING.keys(), key=len, reverse=True):
+    pricing = model_pricing(m)
+    if pricing is not None:
+        return m
+    for family in ("gpt-5.4-pro", "gpt-5.4", "gpt-5.2-pro", "gpt-5.2", "gpt-5.1", "gpt-5-pro", "gpt-5-mini", "gpt-5-nano", "gpt-5"):
         if m == family or m.startswith(family + "-"):
             return family
     return m
@@ -71,8 +64,9 @@ def _normalize_model_family(model: str) -> str:
 
 def _pricing_for_model(model: str, purpose: str) -> dict:
     family = _normalize_model_family(model)
-    base = dict(_DEFAULT_MODEL_PRICING.get(family, {"input_per_mtok_usd": 0.0, "output_per_mtok_usd": 0.0, "cache_read_per_mtok_usd": 0.0}))
-    source = _OPENAI_PRICING_SOURCE_VERSION
+    catalog_pricing = model_pricing(family) or model_pricing(model)
+    base = dict(catalog_pricing or {"input_per_mtok_usd": 0.0, "output_per_mtok_usd": 0.0, "cache_read_per_mtok_usd": 0.0})
+    source = str(base.get("pricing_source") or _OPENAI_PRICING_SOURCE_VERSION)
     prefix = f"OPENAI_{purpose.upper()}_"
     override_map = {
         "input_per_mtok_usd": _env_optional_float(prefix + "INPUT_PER_MTOK_USD"),

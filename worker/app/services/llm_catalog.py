@@ -1,0 +1,48 @@
+import json
+from functools import lru_cache
+from pathlib import Path
+
+
+def _catalog_path() -> Path:
+    return Path(__file__).resolve().parents[3] / "api" / "internal" / "service" / "llm_catalog.json"
+
+
+@lru_cache(maxsize=1)
+def load_llm_catalog() -> dict:
+    path = _catalog_path()
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def provider_for_model(model: str | None) -> str:
+    m = str(model or "").strip()
+    if not m:
+        return ""
+    catalog = load_llm_catalog()
+    for group in ("chat_models", "embedding_models"):
+        for item in catalog.get(group, []):
+            if str(item.get("id") or "").strip() == m:
+                return str(item.get("provider") or "").strip()
+    lower = m.lower()
+    for provider in catalog.get("providers", []):
+        for exact in provider.get("match_exact", []):
+            if lower == str(exact or "").strip().lower():
+                return str(provider.get("id") or "").strip()
+        for prefix in provider.get("match_prefixes", []):
+            p = str(prefix or "").strip().lower()
+            if p and lower.startswith(p):
+                return str(provider.get("id") or "").strip()
+    return ""
+
+
+def model_pricing(model: str | None) -> dict | None:
+    m = str(model or "").strip()
+    if not m:
+        return None
+    catalog = load_llm_catalog()
+    for group in ("chat_models", "embedding_models"):
+        for item in catalog.get(group, []):
+            if str(item.get("id") or "").strip() == m:
+                pricing = item.get("pricing")
+                return dict(pricing) if isinstance(pricing, dict) else None
+    return None

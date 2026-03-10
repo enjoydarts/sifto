@@ -12,6 +12,7 @@ try:
     import redis
 except Exception:  # pragma: no cover
     redis = None
+from app.services.llm_catalog import model_pricing
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
@@ -19,7 +20,7 @@ _GEMINI_CONTEXT_CACHE: dict[str, tuple[str, float]] = {}
 _GEMINI_CONTEXT_CACHE_SKIP: dict[str, float] = {}
 _REDIS_CLIENT = None
 
-_DEFAULT_MODEL_PRICING = {
+_LEGACY_MODEL_PRICING = {
     "gemini-3-flash-preview": {"input_per_mtok_usd": 0.5, "output_per_mtok_usd": 3.0, "cache_read_per_mtok_usd": 0.05},
     "gemini-3.1-flash-lite-preview": {"input_per_mtok_usd": 0.25, "output_per_mtok_usd": 1.5, "cache_read_per_mtok_usd": 0.025},
     # Alias kept for forward compatibility if/when preview suffix is removed.
@@ -202,7 +203,9 @@ def _normalize_model_name(model: str) -> str:
 
 def _normalize_model_family(model: str) -> str:
     m = _normalize_model_name(model)
-    for family in sorted(_DEFAULT_MODEL_PRICING.keys(), key=len, reverse=True):
+    if model_pricing(m) is not None:
+        return m
+    for family in sorted(_LEGACY_MODEL_PRICING.keys(), key=len, reverse=True):
         if m == family or m.startswith(family + "-"):
             return family
     return m
@@ -221,7 +224,9 @@ def _env_optional_float(name: str) -> float | None:
 def _pricing_for_model(model: str, purpose: str) -> dict:
     family = _normalize_model_family(model)
     base = dict(
-        _DEFAULT_MODEL_PRICING.get(
+        model_pricing(family)
+        or model_pricing(model)
+        or _LEGACY_MODEL_PRICING.get(
             family,
             {
                 "input_per_mtok_usd": 0.0,
@@ -230,7 +235,7 @@ def _pricing_for_model(model: str, purpose: str) -> dict:
             },
         )
     )
-    source = _GEMINI_PRICING_SOURCE_VERSION
+    source = str(base.get("pricing_source") or _GEMINI_PRICING_SOURCE_VERSION)
     prefix = f"GEMINI_{purpose.upper()}_"
     override_map = {
         "input_per_mtok_usd": _env_optional_float(prefix + "INPUT_PER_MTOK_USD"),

@@ -8,7 +8,7 @@ from app.services.gemini_service import compose_digest as compose_digest_gemini
 from app.services.gemini_service import compose_digest_cluster_draft as compose_digest_cluster_draft_gemini
 from app.services.groq_service import compose_digest as compose_digest_groq
 from app.services.groq_service import compose_digest_cluster_draft as compose_digest_cluster_draft_groq
-from app.services.model_router import is_deepseek_model, is_gemini_model, is_groq_model, is_openai_model
+from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import compose_digest as compose_digest_openai
 from app.services.openai_service import compose_digest_cluster_draft as compose_digest_cluster_draft_openai
 
@@ -63,46 +63,20 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
             }
             for i in req.items
         ]
-        if is_gemini_model(req.model):
-            google_api_key = request.headers.get("x-google-api-key") or ""
-            result = compose_digest_gemini(
-                req.digest_date,
-                items,
-                model=str(req.model),
-                api_key=google_api_key,
-            )
-        elif is_deepseek_model(req.model):
-            deepseek_api_key = request.headers.get("x-deepseek-api-key") or ""
-            result = compose_digest_deepseek(
-                req.digest_date,
-                items,
-                model=str(req.model),
-                api_key=deepseek_api_key,
-            )
-        elif is_groq_model(req.model):
-            groq_api_key = request.headers.get("x-groq-api-key") or ""
-            result = compose_digest_groq(
-                req.digest_date,
-                items,
-                model=str(req.model),
-                api_key=groq_api_key,
-            )
-        elif is_openai_model(req.model):
-            openai_api_key = request.headers.get("x-openai-api-key") or ""
-            result = compose_digest_openai(
-                req.digest_date,
-                items,
-                model=str(req.model),
-                api_key=openai_api_key,
-            )
-        else:
-            api_key = request.headers.get("x-anthropic-api-key") or None
-            result = compose_digest(
+        result = dispatch_by_model(
+            request,
+            req.model,
+            anthropic=lambda api_key: compose_digest(
                 req.digest_date,
                 items,
                 api_key=api_key,
                 model=req.model,
-            )
+            ),
+            google=lambda api_key: compose_digest_gemini(req.digest_date, items, model=str(req.model), api_key=api_key),
+            groq=lambda api_key: compose_digest_groq(req.digest_date, items, model=str(req.model), api_key=api_key),
+            deepseek=lambda api_key: compose_digest_deepseek(req.digest_date, items, model=str(req.model), api_key=api_key),
+            openai=lambda api_key: compose_digest_openai(req.digest_date, items, model=str(req.model), api_key=api_key),
+        )
         return ComposeDigestResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"compose_digest failed: {e}")
@@ -111,56 +85,50 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
 @router.post("/compose-digest-cluster-draft", response_model=ComposeDigestClusterDraftResponse)
 def compose_digest_cluster_draft_endpoint(req: ComposeDigestClusterDraftRequest, request: Request):
     try:
-        if is_gemini_model(req.model):
-            google_api_key = request.headers.get("x-google-api-key") or ""
-            result = compose_digest_cluster_draft_gemini(
-                cluster_label=req.cluster_label,
-                item_count=req.item_count,
-                topics=req.topics,
-                source_lines=req.source_lines,
-                model=str(req.model),
-                api_key=google_api_key,
-            )
-        elif is_deepseek_model(req.model):
-            deepseek_api_key = request.headers.get("x-deepseek-api-key") or ""
-            result = compose_digest_cluster_draft_deepseek(
-                cluster_label=req.cluster_label,
-                item_count=req.item_count,
-                topics=req.topics,
-                source_lines=req.source_lines,
-                model=str(req.model),
-                api_key=deepseek_api_key,
-            )
-        elif is_groq_model(req.model):
-            groq_api_key = request.headers.get("x-groq-api-key") or ""
-            result = compose_digest_cluster_draft_groq(
-                cluster_label=req.cluster_label,
-                item_count=req.item_count,
-                topics=req.topics,
-                source_lines=req.source_lines,
-                model=str(req.model),
-                api_key=groq_api_key,
-            )
-        elif is_openai_model(req.model):
-            openai_api_key = request.headers.get("x-openai-api-key") or ""
-            result = compose_digest_cluster_draft_openai(
-                cluster_label=req.cluster_label,
-                item_count=req.item_count,
-                topics=req.topics,
-                source_lines=req.source_lines,
-                model=str(req.model),
-                api_key=openai_api_key,
-            )
-        else:
-            api_key = request.headers.get("x-anthropic-api-key") or None
-            result = compose_digest_cluster_draft(
+        result = dispatch_by_model(
+            request,
+            req.model,
+            anthropic=lambda api_key: compose_digest_cluster_draft(
                 cluster_label=req.cluster_label,
                 item_count=req.item_count,
                 topics=req.topics,
                 source_lines=req.source_lines,
                 api_key=api_key,
                 model=req.model,
-            )
+            ),
+            google=lambda api_key: compose_digest_cluster_draft_gemini(
+                cluster_label=req.cluster_label,
+                item_count=req.item_count,
+                topics=req.topics,
+                source_lines=req.source_lines,
+                model=str(req.model),
+                api_key=api_key,
+            ),
+            groq=lambda api_key: compose_digest_cluster_draft_groq(
+                cluster_label=req.cluster_label,
+                item_count=req.item_count,
+                topics=req.topics,
+                source_lines=req.source_lines,
+                model=str(req.model),
+                api_key=api_key,
+            ),
+            deepseek=lambda api_key: compose_digest_cluster_draft_deepseek(
+                cluster_label=req.cluster_label,
+                item_count=req.item_count,
+                topics=req.topics,
+                source_lines=req.source_lines,
+                model=str(req.model),
+                api_key=api_key,
+            ),
+            openai=lambda api_key: compose_digest_cluster_draft_openai(
+                cluster_label=req.cluster_label,
+                item_count=req.item_count,
+                topics=req.topics,
+                source_lines=req.source_lines,
+                model=str(req.model),
+                api_key=api_key,
+            ),
+        )
         return ComposeDigestClusterDraftResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"compose_digest_cluster_draft failed: {e}")

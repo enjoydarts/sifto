@@ -20,10 +20,11 @@ from app.services.gemini_service import (
     _target_summary_chars,
     _decode_json_string_fragment,
 )
+from app.services.llm_catalog import model_pricing
 
 _log = logging.getLogger(__name__)
 _GROQ_PRICING_SOURCE_VERSION = "groq_static_2026_03"
-_DEFAULT_MODEL_PRICING = {
+_LEGACY_MODEL_PRICING = {
     "openai/gpt-oss-20b": {"input_per_mtok_usd": 0.075, "output_per_mtok_usd": 0.30, "cache_read_per_mtok_usd": 0.0375},
     "openai/gpt-oss-120b": {"input_per_mtok_usd": 0.15, "output_per_mtok_usd": 0.60, "cache_read_per_mtok_usd": 0.075},
     "llama-3.1-8b-instant": {"input_per_mtok_usd": 0.05, "output_per_mtok_usd": 0.08, "cache_read_per_mtok_usd": 0.0},
@@ -60,7 +61,9 @@ def _normalize_model_name(model: str) -> str:
 
 def _normalize_model_family(model: str) -> str:
     m = _normalize_model_name(model)
-    for family in sorted(_DEFAULT_MODEL_PRICING.keys(), key=len, reverse=True):
+    if model_pricing(m) is not None:
+        return m
+    for family in sorted(_LEGACY_MODEL_PRICING.keys(), key=len, reverse=True):
         if m == family or m.startswith(family + "-"):
             return family
     return m
@@ -68,8 +71,9 @@ def _normalize_model_family(model: str) -> str:
 
 def _pricing_for_model(model: str, purpose: str) -> dict:
     family = _normalize_model_family(model)
-    base = dict(_DEFAULT_MODEL_PRICING.get(family, {"input_per_mtok_usd": 0.0, "output_per_mtok_usd": 0.0, "cache_read_per_mtok_usd": 0.0}))
-    source = _GROQ_PRICING_SOURCE_VERSION
+    catalog_pricing = model_pricing(family) or model_pricing(model)
+    base = dict(catalog_pricing or _LEGACY_MODEL_PRICING.get(family, {"input_per_mtok_usd": 0.0, "output_per_mtok_usd": 0.0, "cache_read_per_mtok_usd": 0.0}))
+    source = str(base.get("pricing_source") or _GROQ_PRICING_SOURCE_VERSION)
     prefix = f"GROQ_{purpose.upper()}_"
     override_map = {
         "input_per_mtok_usd": _env_optional_float(prefix + "INPUT_PER_MTOK_USD"),

@@ -6,6 +6,7 @@ import time
 
 import httpx
 
+from app.services.llm_catalog import model_pricing
 from app.services.gemini_service import (
     _clamp01,
     _extract_compose_digest_fields,
@@ -23,10 +24,6 @@ from app.services.gemini_service import (
 
 _log = logging.getLogger(__name__)
 _DEEPSEEK_PRICING_SOURCE_VERSION = "deepseek_static_2026_03"
-_DEFAULT_MODEL_PRICING = {
-    "deepseek-chat": {"input_per_mtok_usd": 0.28, "output_per_mtok_usd": 0.42, "cache_read_per_mtok_usd": 0.028},
-    "deepseek-reasoner": {"input_per_mtok_usd": 0.28, "output_per_mtok_usd": 0.42, "cache_read_per_mtok_usd": 0.028},
-}
 
 
 def _env_timeout_seconds(name: str, default: float) -> float:
@@ -56,7 +53,7 @@ def _normalize_model_name(model: str) -> str:
 
 def _normalize_model_family(model: str) -> str:
     m = _normalize_model_name(model)
-    for family in sorted(_DEFAULT_MODEL_PRICING.keys(), key=len, reverse=True):
+    for family in ("deepseek-reasoner", "deepseek-chat"):
         if m == family or m.startswith(family + "-"):
             return family
     return m
@@ -64,8 +61,8 @@ def _normalize_model_family(model: str) -> str:
 
 def _pricing_for_model(model: str, purpose: str) -> dict:
     family = _normalize_model_family(model)
-    base = dict(_DEFAULT_MODEL_PRICING.get(family, {"input_per_mtok_usd": 0.0, "output_per_mtok_usd": 0.0, "cache_read_per_mtok_usd": 0.0}))
-    source = _DEEPSEEK_PRICING_SOURCE_VERSION
+    base = dict(model_pricing(family) or model_pricing(model) or {"input_per_mtok_usd": 0.0, "output_per_mtok_usd": 0.0, "cache_read_per_mtok_usd": 0.0})
+    source = str(base.get("pricing_source") or _DEEPSEEK_PRICING_SOURCE_VERSION)
     prefix = f"DEEPSEEK_{purpose.upper()}_"
     override_map = {
         "input_per_mtok_usd": _env_optional_float(prefix + "INPUT_PER_MTOK_USD"),

@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Brain, Coins, KeyRound, Mail, Settings as SettingsIcon } from "lucide-react";
-import { api, UserSettings } from "@/lib/api";
+import { api, LLMCatalog, LLMCatalogModel, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -14,17 +14,34 @@ type ModelOption = {
   note?: string;
 };
 
-type ModelComparisonEntry = {
-  model: string;
-  provider: "anthropic" | "google" | "groq" | "openai" | "deepseek";
-  inputPrice: string;
-  outputPrice: string;
-  recommendation: "recommended" | "strong" | "experimental";
-  bestFor: "facts" | "summary" | "ask" | "digest" | "embedding" | "balanced";
-  highlights: Array<"lowestCost" | "fast" | "jsonStable">;
-  status?: "preview";
-  comment?: string;
-};
+function formatUSDPerMTok(value: number): string {
+  const rounded = value >= 1 ? value.toFixed(2) : value.toFixed(4);
+  return `$${rounded.replace(/\.?0+$/, "")}`;
+}
+
+function formatModelOptionNote(item: LLMCatalogModel): string | undefined {
+  if (!item.pricing) return undefined;
+  const parts: string[] = [];
+  if (item.pricing.cache_read_per_mtok_usd > 0) {
+    parts.push(`cached in ${formatUSDPerMTok(item.pricing.cache_read_per_mtok_usd)}`);
+  }
+  parts.push(`in ${formatUSDPerMTok(item.pricing.input_per_mtok_usd)}`);
+  if (item.pricing.output_per_mtok_usd > 0) {
+    parts.push(`out ${formatUSDPerMTok(item.pricing.output_per_mtok_usd)}`);
+  }
+  parts.push("1M tok");
+  return parts.join(" / ");
+}
+
+function formatModelPriceCell(
+  pricing: LLMCatalogModel["pricing"],
+  kind: "input" | "output"
+): string {
+  if (!pricing) return "-";
+  const value = kind === "input" ? pricing.input_per_mtok_usd : pricing.output_per_mtok_usd;
+  if (value <= 0) return "-";
+  return formatUSDPerMTok(value);
+}
 
 export default function SettingsPage() {
   const { t } = useI18n();
@@ -48,6 +65,7 @@ export default function SettingsPage() {
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [catalog, setCatalog] = useState<LLMCatalog | null>(null);
   const [budgetUSD, setBudgetUSD] = useState<string>("");
   const [alertEnabled, setAlertEnabled] = useState(false);
   const [thresholdPct, setThresholdPct] = useState<number>(20);
@@ -69,74 +87,12 @@ export default function SettingsPage() {
   const [anthropicSourceSuggestionModel, setAnthropicSourceSuggestionModel] = useState("");
   const [openAIEmbeddingModel, setOpenAIEmbeddingModel] = useState("");
 
-  const llmModelOptions: ModelOption[] = [
-    { value: "claude-haiku-4-5", label: "claude-haiku-4-5", note: "in $1 / out $5 / 1M tok" },
-    { value: "claude-sonnet-4-6", label: "claude-sonnet-4-6", note: "in $3 / out $15 / 1M tok" },
-    { value: "claude-opus-4-6", label: "claude-opus-4-6", note: "in $5 / out $25 / 1M tok" },
-    { value: "gemini-3.1-pro-preview", label: "gemini-3.1-pro-preview", note: "Google AI Studio / in $2.00 ($4.00 >200k) / out $12.00 ($18.00 >200k) / 1M tok" },
-    { value: "gemini-3.1-flash-lite-preview", label: "gemini-3.1-flash-lite-preview", note: "Google AI Studio / in $0.25 / out $1.50 / 1M tok" },
-    { value: "gemini-3-flash-preview", label: "gemini-3-flash-preview", note: "Google AI Studio / in $0.50 / out $3.00 / 1M tok" },
-    { value: "gemini-2.5-flash", label: "gemini-2.5-flash", note: "Google AI Studio / in $0.30 / out $2.50 / 1M tok" },
-    { value: "gemini-2.5-flash-lite", label: "gemini-2.5-flash-lite", note: "Google AI Studio / in $0.10 / out $0.40 / 1M tok" },
-    { value: "gemini-2.5-pro", label: "gemini-2.5-pro", note: "Google AI Studio / in $1.25 ($2.50 >200k) / out $10.00 ($15.00 >200k) / 1M tok" },
-    { value: "openai/gpt-oss-20b", label: "openai/gpt-oss-20b", note: "Groq / in $0.075 / out $0.30 / cached in $0.0375 / 1M tok" },
-    { value: "openai/gpt-oss-120b", label: "openai/gpt-oss-120b", note: "Groq / in $0.15 / out $0.60 / cached in $0.075 / 1M tok" },
-    { value: "llama-3.1-8b-instant", label: "llama-3.1-8b-instant", note: "Groq / in $0.05 / out $0.08 / 1M tok" },
-    { value: "llama-3.3-70b-versatile", label: "llama-3.3-70b-versatile", note: "Groq / in $0.59 / out $0.79 / 1M tok" },
-    { value: "meta-llama/llama-4-scout-17b-16e-instruct", label: "meta-llama/llama-4-scout-17b-16e-instruct", note: "Groq Preview / in $0.11 / out $0.34 / 1M tok" },
-    { value: "qwen/qwen3-32b", label: "qwen/qwen3-32b", note: "Groq / in $0.29 / out $0.59 / 1M tok" },
-    { value: "deepseek-chat", label: "deepseek-chat", note: "DeepSeek / cached in $0.028 / in $0.28 / out $0.42 / 1M tok" },
-    { value: "deepseek-reasoner", label: "deepseek-reasoner", note: "DeepSeek / cached in $0.028 / in $0.28 / out $0.42 / 1M tok" },
-    { value: "gpt-5-nano", label: "gpt-5-nano", note: "OpenAI / cached in $0.005 / in $0.05 / out $0.40 / 1M tok" },
-    { value: "gpt-5-mini", label: "gpt-5-mini", note: "OpenAI / cached in $0.025 / in $0.25 / out $2.00 / 1M tok" },
-    { value: "gpt-5", label: "gpt-5", note: "OpenAI / cached in $0.125 / in $1.25 / out $10.00 / 1M tok" },
-    { value: "gpt-5-pro", label: "gpt-5-pro", note: "OpenAI / in $15.00 / out $120.00 / 1M tok" },
-    { value: "gpt-5.1", label: "gpt-5.1", note: "OpenAI / cached in $0.125 / in $1.25 / out $10.00 / 1M tok" },
-    { value: "gpt-5.2", label: "gpt-5.2", note: "OpenAI / cached in $0.175 / in $1.75 / out $14.00 / 1M tok" },
-    { value: "gpt-5.2-pro", label: "gpt-5.2-pro", note: "OpenAI / in $21.00 / out $168.00 / 1M tok" },
-    { value: "gpt-5.4", label: "gpt-5.4", note: "OpenAI / cached in $0.25 / in $2.50 / out $15.00 / 1M tok" },
-    { value: "gpt-5.4-pro", label: "gpt-5.4-pro", note: "OpenAI / in $30.00 / out $180.00 / 1M tok" },
-  ];
-  const openAIEmbeddingModelOptions: ModelOption[] = [
-    { value: "text-embedding-3-small", label: "text-embedding-3-small", note: "$0.02 / 1M tok" },
-    { value: "text-embedding-3-large", label: "text-embedding-3-large", note: "$0.13 / 1M tok" },
-  ];
-  const modelComparisonEntries: ModelComparisonEntry[] = [
-    { model: "claude-haiku-4-5", provider: "anthropic", inputPrice: "$1", outputPrice: "$5", recommendation: "strong", bestFor: "facts", highlights: [] },
-    { model: "claude-sonnet-4-6", provider: "anthropic", inputPrice: "$3", outputPrice: "$15", recommendation: "recommended", bestFor: "balanced", highlights: ["jsonStable"] },
-    { model: "claude-opus-4-6", provider: "anthropic", inputPrice: "$5", outputPrice: "$25", recommendation: "strong", bestFor: "digest", highlights: [] },
-    { model: "gemini-3.1-pro-preview", provider: "google", inputPrice: "$2", outputPrice: "$12", recommendation: "strong", bestFor: "digest", highlights: [], status: "preview" },
-    { model: "gemini-3.1-flash-lite-preview", provider: "google", inputPrice: "$0.25", outputPrice: "$1.50", recommendation: "recommended", bestFor: "facts", highlights: ["lowestCost", "fast"], status: "preview" },
-    { model: "gemini-3-flash-preview", provider: "google", inputPrice: "$0.50", outputPrice: "$3.00", recommendation: "strong", bestFor: "summary", highlights: ["fast"], status: "preview" },
-    { model: "gemini-2.5-flash", provider: "google", inputPrice: "$0.30", outputPrice: "$2.50", recommendation: "recommended", bestFor: "ask", highlights: ["fast"] },
-    { model: "gemini-2.5-flash-lite", provider: "google", inputPrice: "$0.10", outputPrice: "$0.40", recommendation: "strong", bestFor: "facts", highlights: ["lowestCost", "fast"] },
-    { model: "gemini-2.5-pro", provider: "google", inputPrice: "$1.25", outputPrice: "$10", recommendation: "strong", bestFor: "digest", highlights: [] },
-    { model: "openai/gpt-oss-20b", provider: "groq", inputPrice: "$0.075", outputPrice: "$0.30", recommendation: "recommended", bestFor: "ask", highlights: ["jsonStable", "fast"], comment: "超高速でコスパ抜群。ツール利用に強く、抽出段階の定番候補。" },
-    { model: "openai/gpt-oss-120b", provider: "groq", inputPrice: "$0.15", outputPrice: "$0.60", recommendation: "recommended", bestFor: "summary", highlights: ["jsonStable", "fast"], comment: "長文処理と推論のバランスが良く、検索結果を混ぜる要約で扱いやすい。" },
-    { model: "llama-3.1-8b-instant", provider: "groq", inputPrice: "$0.05", outputPrice: "$0.08", recommendation: "strong", bestFor: "facts", highlights: ["lowestCost", "fast"], comment: "最安かつ爆速で日常タスク向き。複雑推論は弱いが低予算運用の第一候補。" },
-    { model: "llama-3.3-70b-versatile", provider: "groq", inputPrice: "$0.59", outputPrice: "$0.79", recommendation: "strong", bestFor: "summary", highlights: ["fast"], comment: "知能は非常に高いが、速度とコストは重めで大量処理では負担が出やすい。" },
-    { model: "meta-llama/llama-4-scout-17b-16e-instruct", provider: "groq", inputPrice: "$0.11", outputPrice: "$0.34", recommendation: "experimental", bestFor: "summary", highlights: ["fast"], status: "preview", comment: "MoEで賢さと価格のバランスが良く、要約やRAGを安く回したい時に有力。" },
-    { model: "qwen/qwen3-32b", provider: "groq", inputPrice: "$0.29", outputPrice: "$0.59", recommendation: "experimental", bestFor: "summary", highlights: [], comment: "日本語と多言語の安定感が高く、混在記事の忠実要約やRAGで特に強い。" },
-    { model: "deepseek-chat", provider: "deepseek", inputPrice: "$0.28", outputPrice: "$0.42", recommendation: "strong", bestFor: "facts", highlights: ["fast"], comment: "低価格で扱いやすく、事実抽出や通常要約のコストを抑えたい時の有力候補。" },
-    { model: "deepseek-reasoner", provider: "deepseek", inputPrice: "$0.28", outputPrice: "$0.42", recommendation: "strong", bestFor: "digest", highlights: [], comment: "推論寄りの長文整理に向くが、応答の重さを許容する高難度タスク向け。" },
-    { model: "gpt-5-nano", provider: "openai", inputPrice: "$0.05", outputPrice: "$0.40", recommendation: "strong", bestFor: "facts", highlights: ["lowestCost", "jsonStable"], comment: "OpenAI系の最安枠。軽い抽出や比較用途で試しやすいが、長文生成の主力には向かない。" },
-    { model: "gpt-5-mini", provider: "openai", inputPrice: "$0.25", outputPrice: "$2.00", recommendation: "recommended", bestFor: "facts", highlights: ["fast", "jsonStable"], comment: "OpenAI系の実用最小構成。事実抽出や短めの要約でコストと安定性のバランスが良い。" },
-    { model: "gpt-5", provider: "openai", inputPrice: "$1.25", outputPrice: "$10", recommendation: "strong", bestFor: "summary", highlights: ["jsonStable"], comment: "通常要約や質問応答の本命候補。コストは上がるが、JSON整形と長文品質は期待しやすい。" },
-    { model: "gpt-5-pro", provider: "openai", inputPrice: "$15", outputPrice: "$120", recommendation: "experimental", bestFor: "digest", highlights: [], comment: "高価だが比較検証用の上限。日常運用向きではなく、難しいダイジェスト生成の比較対象。" },
-    { model: "gpt-5.1", provider: "openai", inputPrice: "$1.25", outputPrice: "$10", recommendation: "strong", bestFor: "summary", highlights: ["jsonStable"], comment: "gpt-5 系の安定比較枠。標準的な要約品質を見たい時に選びやすい。" },
-    { model: "gpt-5.2", provider: "openai", inputPrice: "$1.75", outputPrice: "$14", recommendation: "strong", bestFor: "ask", highlights: ["jsonStable"], comment: "gpt-5 より一段強めの比較候補。RAG質問応答や少し難しい整理で試す価値がある。" },
-    { model: "gpt-5.2-pro", provider: "openai", inputPrice: "$21", outputPrice: "$168", recommendation: "experimental", bestFor: "digest", highlights: [], comment: "高額な上位比較用。構造化出力制約もあるため、常用ではなく精度比較に限定したい。" },
-    { model: "gpt-5.4", provider: "openai", inputPrice: "$2.50", outputPrice: "$15", recommendation: "recommended", bestFor: "digest", highlights: ["jsonStable"], comment: "OpenAI 5系の上位比較候補。ダイジェストやクラスタ草稿の品質確認に向く。" },
-    { model: "gpt-5.4-pro", provider: "openai", inputPrice: "$30", outputPrice: "$180", recommendation: "experimental", bestFor: "digest", highlights: [], comment: "現行の最上位比較枠。価格は極端に高いので、常用ではなくベンチマーク専用。" },
-    { model: "text-embedding-3-small", provider: "openai", inputPrice: "$0.02", outputPrice: "-", recommendation: "recommended", bestFor: "embedding", highlights: ["lowestCost"] },
-    { model: "text-embedding-3-large", provider: "openai", inputPrice: "$0.13", outputPrice: "-", recommendation: "strong", bestFor: "embedding", highlights: [] },
-  ];
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.getSettings();
+      const [data, nextCatalog] = await Promise.all([api.getSettings(), api.getLLMCatalog()]);
       setSettings(data);
+      setCatalog(nextCatalog);
       setBudgetUSD(data.monthly_budget_usd == null ? "" : String(data.monthly_budget_usd));
       setAlertEnabled(Boolean(data.budget_alert_enabled));
       setThresholdPct(data.budget_alert_threshold_pct ?? 20);
@@ -172,6 +128,30 @@ export default function SettingsPage() {
       showToast(t("settings.toast.inoreaderConnectError"), "error");
     }
   }, [showToast, t]);
+
+  const toModelOption = useCallback((item: LLMCatalogModel): ModelOption => ({
+    value: item.id,
+    label: item.id,
+    note: formatModelOptionNote(item),
+  }), []);
+
+  const optionsForPurpose = useCallback(
+    (purpose: string): ModelOption[] =>
+      (catalog?.chat_models ?? [])
+        .filter((item) => (item.available_purposes ?? []).includes(purpose))
+        .map(toModelOption),
+    [catalog?.chat_models, toModelOption]
+  );
+
+  const sourceSuggestionModelOptions = useMemo(() => optionsForPurpose("source_suggestion"), [optionsForPurpose]);
+  const openAIEmbeddingModelOptions = useMemo(
+    () => (catalog?.embedding_models ?? []).map(toModelOption),
+    [catalog?.embedding_models, toModelOption]
+  );
+  const modelComparisonEntries = useMemo(
+    () => [...(catalog?.chat_models ?? []), ...(catalog?.embedding_models ?? [])],
+    [catalog?.chat_models, catalog?.embedding_models]
+  );
 
   const budgetRemainingTone = useMemo(() => {
     const v = settings?.current_month.remaining_budget_pct;
@@ -887,37 +867,37 @@ export default function SettingsPage() {
               label={t("settings.model.facts")}
               value={anthropicFactsModel}
               onChange={setAnthropicFactsModel}
-              options={llmModelOptions}
+              options={optionsForPurpose("facts")}
             />
             <ModelSelect
               label={t("settings.model.summary")}
               value={anthropicSummaryModel}
               onChange={setAnthropicSummaryModel}
-              options={llmModelOptions}
+              options={optionsForPurpose("summary")}
             />
             <ModelSelect
               label={t("settings.model.digestCluster")}
               value={anthropicDigestClusterModel}
               onChange={setAnthropicDigestClusterModel}
-              options={llmModelOptions}
+              options={optionsForPurpose("digest_cluster_draft")}
             />
             <ModelSelect
               label={t("settings.model.digest")}
               value={anthropicDigestModel}
               onChange={setAnthropicDigestModel}
-              options={llmModelOptions}
+              options={optionsForPurpose("digest")}
             />
             <ModelSelect
               label={t("settings.model.ask")}
               value={anthropicAskModel}
               onChange={setAnthropicAskModel}
-              options={llmModelOptions}
+              options={optionsForPurpose("ask")}
             />
             <ModelSelect
               label={t("settings.model.sourceSuggestion")}
               value={anthropicSourceSuggestionModel}
               onChange={setAnthropicSourceSuggestionModel}
-              options={llmModelOptions}
+              options={sourceSuggestionModelOptions}
             />
             <ModelSelect
               label={t("settings.model.embeddings")}
@@ -1170,13 +1150,13 @@ export default function SettingsPage() {
                 </thead>
                 <tbody>
                   {modelComparisonEntries.map((entry) => (
-                    <tr key={entry.model} className="text-zinc-700">
+                    <tr key={entry.id} className="text-zinc-700">
                       <td className="border-b border-zinc-100 px-3 py-3 align-top">
-                        <div className="whitespace-nowrap font-medium text-zinc-900">{entry.model}</div>
+                        <div className="whitespace-nowrap font-medium text-zinc-900">{entry.id}</div>
                       </td>
                       <td className="border-b border-zinc-100 px-3 py-3 align-top text-zinc-600 whitespace-nowrap">{t(`settings.modelGuide.provider.${entry.provider}`)}</td>
-                      <td className="border-b border-zinc-100 px-3 py-3 align-top text-zinc-600 whitespace-nowrap">{entry.inputPrice}</td>
-                      <td className="border-b border-zinc-100 px-3 py-3 align-top text-zinc-600 whitespace-nowrap">{entry.outputPrice}</td>
+                      <td className="border-b border-zinc-100 px-3 py-3 align-top text-zinc-600 whitespace-nowrap">{formatModelPriceCell(entry.pricing, "input")}</td>
+                      <td className="border-b border-zinc-100 px-3 py-3 align-top text-zinc-600 whitespace-nowrap">{formatModelPriceCell(entry.pricing, "output")}</td>
                       <td className="border-b border-zinc-100 px-3 py-3 align-top whitespace-nowrap">
                         <span
                           className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
@@ -1192,7 +1172,7 @@ export default function SettingsPage() {
                       </td>
                       <td className="border-b border-zinc-100 px-3 py-3 align-top">
                         <div className="flex flex-wrap gap-1.5">
-                          {entry.highlights.length > 0 ? entry.highlights.map((highlight) => (
+                          {(entry.highlights ?? []).length > 0 ? (entry.highlights ?? []).map((highlight) => (
                             <span
                               key={highlight}
                               className="inline-flex rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700 whitespace-nowrap"
@@ -1204,7 +1184,7 @@ export default function SettingsPage() {
                           )}
                         </div>
                       </td>
-                      <td className="border-b border-zinc-100 px-3 py-3 align-top text-zinc-600 whitespace-nowrap">{t(`settings.modelGuide.bestFor.${entry.bestFor}`)}</td>
+                      <td className="border-b border-zinc-100 px-3 py-3 align-top text-zinc-600 whitespace-nowrap">{entry.best_for ? t(`settings.modelGuide.bestFor.${entry.best_for}`) : "-"}</td>
                       <td className="border-b border-zinc-100 px-3 py-3 align-top whitespace-nowrap text-xs leading-5 text-zinc-600">{entry.comment ?? "-"}</td>
                     </tr>
                   ))}

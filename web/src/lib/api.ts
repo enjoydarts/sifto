@@ -376,6 +376,38 @@ export interface UserReadingPlanSettings {
   exclude_read: boolean;
 }
 
+export interface LLMCatalogProvider {
+  id: string;
+  match_exact?: string[];
+  match_prefixes?: string[];
+  default_models?: Record<string, string>;
+}
+
+export interface LLMCatalogModelPricing {
+  pricing_source: string;
+  input_per_mtok_usd: number;
+  output_per_mtok_usd: number;
+  cache_write_per_mtok_usd: number;
+  cache_read_per_mtok_usd: number;
+}
+
+export interface LLMCatalogModel {
+  id: string;
+  provider: "anthropic" | "google" | "groq" | "openai" | "deepseek" | string;
+  available_purposes: string[];
+  recommendation?: "recommended" | "strong" | "experimental" | string;
+  best_for?: "facts" | "summary" | "ask" | "digest" | "embedding" | "balanced" | string;
+  highlights?: Array<"lowestCost" | "fast" | "jsonStable" | string>;
+  comment?: string;
+  pricing?: LLMCatalogModelPricing | null;
+}
+
+export interface LLMCatalog {
+  providers: LLMCatalogProvider[];
+  chat_models: LLMCatalogModel[];
+  embedding_models: LLMCatalogModel[];
+}
+
 export interface UserSettings {
   user_id: string;
   has_anthropic_api_key: boolean;
@@ -712,6 +744,7 @@ export const api = {
 
   // Settings
   getSettings: () => apiFetch<UserSettings>("/settings"),
+  getLLMCatalog: () => apiFetch<LLMCatalog>("/settings/llm-catalog"),
   updateSettings: (body: {
     monthly_budget_usd: number | null;
     budget_alert_enabled: boolean;

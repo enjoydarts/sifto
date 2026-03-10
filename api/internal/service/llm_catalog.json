@@ -1,0 +1,491 @@
+{
+  "providers": [
+    {
+      "id": "anthropic",
+      "match_prefixes": ["claude-"],
+      "default_models": {
+        "facts": "claude-haiku-4-5",
+        "summary": "claude-sonnet-4-6",
+        "digest_cluster_draft": "claude-sonnet-4-6",
+        "digest": "claude-sonnet-4-6",
+        "ask": "claude-sonnet-4-6",
+        "source_suggestion": "claude-sonnet-4-6"
+      }
+    },
+    {
+      "id": "google",
+      "match_prefixes": ["gemini-", "models/gemini-"],
+      "default_models": {
+        "facts": "gemini-2.5-flash",
+        "summary": "gemini-2.5-flash",
+        "digest_cluster_draft": "gemini-2.5-flash",
+        "digest": "gemini-2.5-pro",
+        "ask": "gemini-2.5-flash",
+        "source_suggestion": "gemini-2.5-flash"
+      }
+    },
+    {
+      "id": "groq",
+      "match_prefixes": ["openai/gpt-oss-", "qwen/", "meta-llama/", "llama-"],
+      "default_models": {
+        "facts": "openai/gpt-oss-20b",
+        "summary": "openai/gpt-oss-120b",
+        "digest_cluster_draft": "openai/gpt-oss-120b",
+        "digest": "openai/gpt-oss-120b",
+        "ask": "openai/gpt-oss-20b",
+        "source_suggestion": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "id": "deepseek",
+      "match_exact": ["deepseek-chat", "deepseek-reasoner"],
+      "default_models": {
+        "facts": "deepseek-chat",
+        "summary": "deepseek-reasoner",
+        "digest_cluster_draft": "deepseek-reasoner",
+        "digest": "deepseek-reasoner",
+        "ask": "deepseek-chat",
+        "source_suggestion": "deepseek-chat"
+      }
+    },
+    {
+      "id": "openai",
+      "match_prefixes": ["gpt-5"],
+      "default_models": {
+        "facts": "gpt-5-mini",
+        "summary": "gpt-5",
+        "digest_cluster_draft": "gpt-5.4",
+        "digest": "gpt-5.4",
+        "ask": "gpt-5",
+        "source_suggestion": "gpt-5-mini"
+      }
+    }
+  ],
+  "chat_models": [
+    {
+      "id": "claude-haiku-4-5",
+      "provider": "anthropic",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": [],
+      "comment": "軽量で扱いやすく、事実抽出や短い整形タスクを低コストで回したい時の堅実な候補。",
+      "pricing": {
+        "pricing_source": "anthropic_static_2026_03",
+        "input_per_mtok_usd": 1.0,
+        "output_per_mtok_usd": 5.0,
+        "cache_write_per_mtok_usd": 1.25,
+        "cache_read_per_mtok_usd": 0.10
+      }
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "provider": "anthropic",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": ["jsonStable"],
+      "comment": "全体の標準構成に向く安定枠。要約・質問・ダイジェストまで広く無難に任せやすい。",
+      "pricing": {
+        "pricing_source": "anthropic_static_2026_03",
+        "input_per_mtok_usd": 3.0,
+        "output_per_mtok_usd": 15.0,
+        "cache_write_per_mtok_usd": 3.75,
+        "cache_read_per_mtok_usd": 0.30
+      }
+    },
+    {
+      "id": "claude-opus-4-6",
+      "provider": "anthropic",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "高品質寄りの上位候補。コストは高いが、難しい整理や重めのダイジェスト生成で比較価値がある。",
+      "pricing": {
+        "pricing_source": "anthropic_static_2026_03",
+        "input_per_mtok_usd": 5.0,
+        "output_per_mtok_usd": 25.0,
+        "cache_write_per_mtok_usd": 6.25,
+        "cache_read_per_mtok_usd": 0.50
+      }
+    },
+    {
+      "id": "gemini-3.1-pro-preview",
+      "provider": "google",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "Gemini 上位の比較候補。長めの整理やダイジェストで品質を見たい時に向く。",
+      "pricing": {
+        "pricing_source": "google_ai_studio_base_2026_03",
+        "input_per_mtok_usd": 2.0,
+        "output_per_mtok_usd": 12.0,
+        "cache_read_per_mtok_usd": 0.20
+      }
+    },
+    {
+      "id": "gemini-3.1-flash-lite-preview",
+      "provider": "google",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "fast"],
+      "comment": "Gemini 系の軽量高速枠。事実抽出や軽い分類を安く回したい時に使いやすい。",
+      "pricing": {
+        "pricing_source": "google_ai_studio_base_2026_03",
+        "input_per_mtok_usd": 0.25,
+        "output_per_mtok_usd": 1.5,
+        "cache_read_per_mtok_usd": 0.025
+      }
+    },
+    {
+      "id": "gemini-3-flash-preview",
+      "provider": "google",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": ["fast"],
+      "comment": "速度と要約品質のバランスが良く、通常要約の比較候補として扱いやすい。",
+      "pricing": {
+        "pricing_source": "google_ai_studio_base_2026_03",
+        "input_per_mtok_usd": 0.5,
+        "output_per_mtok_usd": 3.0,
+        "cache_read_per_mtok_usd": 0.05
+      }
+    },
+    {
+      "id": "gemini-2.5-flash",
+      "provider": "google",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "ask",
+      "highlights": ["fast"],
+      "comment": "RAG質問応答や日常利用で軽快に使える実用枠。応答速度を重視する場面に向く。",
+      "pricing": {
+        "pricing_source": "google_ai_studio_base_2026_03",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 2.5,
+        "cache_read_per_mtok_usd": 0.03
+      }
+    },
+    {
+      "id": "gemini-2.5-flash-lite",
+      "provider": "google",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "fast"],
+      "comment": "Gemini 系の最安寄り候補。大量の抽出や軽作業を低予算で回す用途に向いている。",
+      "pricing": {
+        "pricing_source": "google_ai_studio_base_2026_03",
+        "input_per_mtok_usd": 0.1,
+        "output_per_mtok_usd": 0.4,
+        "cache_read_per_mtok_usd": 0.01
+      }
+    },
+    {
+      "id": "gemini-2.5-pro",
+      "provider": "google",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "Gemini の上位安定枠。要約やダイジェストで品質を少し引き上げたい時の有力候補。",
+      "pricing": {
+        "pricing_source": "google_ai_studio_base_2026_03",
+        "input_per_mtok_usd": 1.25,
+        "output_per_mtok_usd": 10.0,
+        "cache_read_per_mtok_usd": 0.125
+      }
+    },
+    {
+      "id": "openai/gpt-oss-20b",
+      "provider": "groq",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "ask",
+      "highlights": ["jsonStable", "fast"],
+      "comment": "超高速でコスパ抜群。ツール利用に強く、抽出段階の定番候補。",
+      "pricing": {
+        "pricing_source": "groq_static_2026_03",
+        "input_per_mtok_usd": 0.075,
+        "output_per_mtok_usd": 0.3,
+        "cache_read_per_mtok_usd": 0.0375
+      }
+    },
+    {
+      "id": "openai/gpt-oss-120b",
+      "provider": "groq",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "summary",
+      "highlights": ["jsonStable", "fast"],
+      "comment": "長文処理と推論のバランスが良く、検索結果を混ぜる要約で扱いやすい。",
+      "pricing": {
+        "pricing_source": "groq_static_2026_03",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.6,
+        "cache_read_per_mtok_usd": 0.075
+      }
+    },
+    {
+      "id": "llama-3.1-8b-instant",
+      "provider": "groq",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "fast"],
+      "comment": "最安かつ爆速で日常タスク向き。複雑推論は弱いが低予算運用の第一候補。",
+      "pricing": {
+        "pricing_source": "groq_static_2026_03",
+        "input_per_mtok_usd": 0.05,
+        "output_per_mtok_usd": 0.08,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "llama-3.3-70b-versatile",
+      "provider": "groq",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": ["fast"],
+      "comment": "知能は非常に高いが、速度とコストは重めで大量処理では負担が出やすい。",
+      "pricing": {
+        "pricing_source": "groq_static_2026_03",
+        "input_per_mtok_usd": 0.59,
+        "output_per_mtok_usd": 0.79,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "meta-llama/llama-4-scout-17b-16e-instruct",
+      "provider": "groq",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "summary",
+      "highlights": ["fast"],
+      "comment": "MoEで賢さと価格のバランスが良く、要約やRAGを安く回したい時に有力。",
+      "pricing": {
+        "pricing_source": "groq_static_2026_03",
+        "input_per_mtok_usd": 0.11,
+        "output_per_mtok_usd": 0.34,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "qwen/qwen3-32b",
+      "provider": "groq",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "summary",
+      "highlights": [],
+      "comment": "日本語と多言語の安定感が高く、混在記事の忠実要約やRAGで特に強い。",
+      "pricing": {
+        "pricing_source": "groq_static_2026_03",
+        "input_per_mtok_usd": 0.29,
+        "output_per_mtok_usd": 0.59,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "deepseek-chat",
+      "provider": "deepseek",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["fast"],
+      "comment": "低価格で扱いやすく、事実抽出や通常要約のコストを抑えたい時の有力候補。",
+      "pricing": {
+        "pricing_source": "deepseek_static_2026_03",
+        "input_per_mtok_usd": 0.28,
+        "output_per_mtok_usd": 0.42,
+        "cache_read_per_mtok_usd": 0.028
+      }
+    },
+    {
+      "id": "deepseek-reasoner",
+      "provider": "deepseek",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "推論寄りの長文整理に向くが、応答の重さを許容する高難度タスク向け。",
+      "pricing": {
+        "pricing_source": "deepseek_static_2026_03",
+        "input_per_mtok_usd": 0.28,
+        "output_per_mtok_usd": 0.42,
+        "cache_read_per_mtok_usd": 0.028
+      }
+    },
+    {
+      "id": "gpt-5-nano",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "jsonStable"],
+      "comment": "OpenAI系の最安枠。軽い抽出や比較用途で試しやすいが、長文生成の主力には向かない。",
+      "pricing": {
+        "pricing_source": "openai_standard_2026_03",
+        "input_per_mtok_usd": 0.05,
+        "output_per_mtok_usd": 0.4,
+        "cache_read_per_mtok_usd": 0.005
+      }
+    },
+    {
+      "id": "gpt-5-mini",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "facts",
+      "highlights": ["fast", "jsonStable"],
+      "comment": "OpenAI系の実用最小構成。事実抽出や短めの要約でコストと安定性のバランスが良い。",
+      "pricing": {
+        "pricing_source": "openai_standard_2026_03",
+        "input_per_mtok_usd": 0.25,
+        "output_per_mtok_usd": 2.0,
+        "cache_read_per_mtok_usd": 0.025
+      }
+    },
+    {
+      "id": "gpt-5",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": ["jsonStable"],
+      "comment": "通常要約や質問応答の本命候補。コストは上がるが、JSON整形と長文品質は期待しやすい。",
+      "pricing": {
+        "pricing_source": "openai_standard_2026_03",
+        "input_per_mtok_usd": 1.25,
+        "output_per_mtok_usd": 10.0,
+        "cache_read_per_mtok_usd": 0.125
+      }
+    },
+    {
+      "id": "gpt-5-pro",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "高価だが比較検証用の上限。日常運用向きではなく、難しいダイジェスト生成の比較対象。",
+      "pricing": {
+        "pricing_source": "openai_standard_2026_03",
+        "input_per_mtok_usd": 15.0,
+        "output_per_mtok_usd": 120.0,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "gpt-5.1",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": ["jsonStable"],
+      "comment": "gpt-5 系の安定比較枠。標準的な要約品質を見たい時に選びやすい。",
+      "pricing": {
+        "pricing_source": "openai_standard_2026_03",
+        "input_per_mtok_usd": 1.25,
+        "output_per_mtok_usd": 10.0,
+        "cache_read_per_mtok_usd": 0.125
+      }
+    },
+    {
+      "id": "gpt-5.2",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "ask",
+      "highlights": ["jsonStable"],
+      "comment": "gpt-5 より一段強めの比較候補。RAG質問応答や少し難しい整理で試す価値がある。",
+      "pricing": {
+        "pricing_source": "openai_standard_2026_03",
+        "input_per_mtok_usd": 1.75,
+        "output_per_mtok_usd": 14.0,
+        "cache_read_per_mtok_usd": 0.175
+      }
+    },
+    {
+      "id": "gpt-5.2-pro",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "高額な上位比較用。構造化出力制約もあるため、常用ではなく精度比較に限定したい。",
+      "pricing": {
+        "pricing_source": "openai_standard_2026_03",
+        "input_per_mtok_usd": 21.0,
+        "output_per_mtok_usd": 168.0,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "gpt-5.4",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "digest",
+      "highlights": ["jsonStable"],
+      "comment": "OpenAI 5系の上位比較候補。ダイジェストやクラスタ草稿の品質確認に向く。",
+      "pricing": {
+        "pricing_source": "openai_standard_2026_03",
+        "input_per_mtok_usd": 2.5,
+        "output_per_mtok_usd": 15.0,
+        "cache_read_per_mtok_usd": 0.25
+      }
+    },
+    {
+      "id": "gpt-5.4-pro",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "現行の最上位比較枠。価格は極端に高いので、常用ではなくベンチマーク専用。",
+      "pricing": {
+        "pricing_source": "openai_standard_2026_03",
+        "input_per_mtok_usd": 30.0,
+        "output_per_mtok_usd": 180.0,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    }
+  ],
+  "embedding_models": [
+    {
+      "id": "text-embedding-3-small",
+      "provider": "openai",
+      "available_purposes": ["embedding"],
+      "recommendation": "recommended",
+      "best_for": "embedding",
+      "highlights": ["lowestCost"],
+      "comment": "埋め込みの既定候補。コストが非常に低く、関連記事判定や検索基盤を安く維持しやすい。",
+      "pricing": {
+        "pricing_source": "openai_static_embeddings_2026_02",
+        "input_per_mtok_usd": 0.02,
+        "output_per_mtok_usd": 0.0,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "text-embedding-3-large",
+      "provider": "openai",
+      "available_purposes": ["embedding"],
+      "recommendation": "strong",
+      "best_for": "embedding",
+      "highlights": [],
+      "comment": "より高精度な埋め込みが欲しい時の上位候補。コストは上がるが、検索品質を詰めたい場面向け。",
+      "pricing": {
+        "pricing_source": "openai_static_embeddings_2026_02",
+        "input_per_mtok_usd": 0.13,
+        "output_per_mtok_usd": 0.0,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    }
+  ]
+}

@@ -168,6 +168,7 @@ func main() {
 
 		r.Route("/settings", func(r chi.Router) {
 			r.Get("/", settingsH.Get)
+			r.Get("/llm-catalog", settingsH.GetLLMCatalog)
 			r.Patch("/", settingsH.UpdateBudget)
 			r.Patch("/reading-plan", settingsH.UpdateReadingPlan)
 			r.Patch("/llm-models", settingsH.UpdateLLMModels)

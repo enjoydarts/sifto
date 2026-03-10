@@ -4,7 +4,7 @@ from app.services.claude_service import extract_facts
 from app.services.deepseek_service import extract_facts as extract_facts_deepseek
 from app.services.gemini_service import extract_facts as extract_facts_gemini
 from app.services.groq_service import extract_facts as extract_facts_groq
-from app.services.model_router import is_deepseek_model, is_gemini_model, is_groq_model, is_openai_model
+from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import extract_facts as extract_facts_openai
 
 router = APIRouter()
@@ -23,19 +23,13 @@ class FactsResponse(BaseModel):
 
 @router.post("/extract-facts", response_model=FactsResponse)
 def extract_facts_endpoint(req: FactsRequest, request: Request):
-    if is_gemini_model(req.model):
-        google_api_key = request.headers.get("x-google-api-key") or ""
-        result = extract_facts_gemini(req.title, req.content, model=str(req.model), api_key=google_api_key)
-    elif is_deepseek_model(req.model):
-        deepseek_api_key = request.headers.get("x-deepseek-api-key") or ""
-        result = extract_facts_deepseek(req.title, req.content, model=str(req.model), api_key=deepseek_api_key)
-    elif is_groq_model(req.model):
-        groq_api_key = request.headers.get("x-groq-api-key") or ""
-        result = extract_facts_groq(req.title, req.content, model=str(req.model), api_key=groq_api_key)
-    elif is_openai_model(req.model):
-        openai_api_key = request.headers.get("x-openai-api-key") or ""
-        result = extract_facts_openai(req.title, req.content, model=str(req.model), api_key=openai_api_key)
-    else:
-        api_key = request.headers.get("x-anthropic-api-key") or None
-        result = extract_facts(req.title, req.content, api_key=api_key, model=req.model)
+    result = dispatch_by_model(
+        request,
+        req.model,
+        anthropic=lambda api_key: extract_facts(req.title, req.content, api_key=api_key, model=req.model),
+        google=lambda api_key: extract_facts_gemini(req.title, req.content, model=str(req.model), api_key=api_key),
+        groq=lambda api_key: extract_facts_groq(req.title, req.content, model=str(req.model), api_key=api_key),
+        deepseek=lambda api_key: extract_facts_deepseek(req.title, req.content, model=str(req.model), api_key=api_key),
+        openai=lambda api_key: extract_facts_openai(req.title, req.content, model=str(req.model), api_key=api_key),
+    )
     return FactsResponse(**result)

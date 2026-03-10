@@ -97,6 +97,10 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *SettingsHandler) GetLLMCatalog(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, service.LLMCatalogData())
+}
+
 func oauthRedirectURIFromRequest(r *http.Request) string {
 	if v := strings.TrimSpace(os.Getenv("INOREADER_OAUTH_REDIRECT_URI")); v != "" {
 		return v

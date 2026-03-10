@@ -27,9 +27,10 @@ facts が元記事本文に忠実かを判定してください。
 - placeholder や雛形のような抽象的箇条書きは厳しく評価する
 - 出力は必ず JSON オブジェクト 1 つのみ
 - verdict は pass / warn / fail のいずれか
-- short_comment は日本語で 1〜2 文、120 文字以内
-- short_comment は今回の article と facts を踏まえた具体的な寸評を書く
-- 汎用的な定型文だけで済ませない"""
+- short_comment は日本語 1 文、80 文字以内
+- short_comment は verdict の理由を短く直接述べる
+- 長い説明や言い訳は不要
+- 応答に迷ったら short_comment を省略せず warn を返す"""
 
 
 def facts_check_prompt(title: str | None, content: str, facts: list[str]) -> str:
@@ -40,10 +41,25 @@ def facts_check_prompt(title: str | None, content: str, facts: list[str]) -> str
   "short_comment": "本文で裏付けられた事実抽出です。"
 }}
 
+{{
+  "verdict": "warn",
+  "short_comment": "一部に本文根拠が弱い記述があります。"
+}}
+
+{{
+  "verdict": "fail",
+  "short_comment": "本文にない断定または重大な欠落があります。"
+}}
+
 # 判定基準
 - pass: 主要 facts が article に忠実で、明確な unsupported fact がない
 - warn: おおむね妥当だが、抽象的な箇所や軽い取りこぼしがある
 - fail: article にない断定、矛盾、placeholder、重大な欠落がある
+
+# 注意
+- まず verdict を決め、その理由を short_comment に 1 文で書く
+- short_comment を空にしない
+- JSON 以外は出力しない
 
 # Input
 タイトル: {title or "（不明）"}

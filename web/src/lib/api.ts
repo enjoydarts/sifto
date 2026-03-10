@@ -333,6 +333,17 @@ export interface LLMUsageModelSummary {
   estimated_cost_usd: number;
 }
 
+export interface LLMUsageProviderMonthSummary {
+  month_jst: string;
+  provider: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  estimated_cost_usd: number;
+}
+
 export interface UserSettingsCurrentMonth {
   month_jst: string;
   period_start_jst: string;
@@ -659,6 +670,9 @@ export const api = {
     if (params?.days) q.set("days", String(params.days));
     const qs = q.toString();
     return apiFetch<LLMUsageModelSummary[]>(`/llm-usage/by-model${qs ? `?${qs}` : ""}`);
+  },
+  getLLMUsageCurrentMonthByProvider: () => {
+    return apiFetch<LLMUsageProviderMonthSummary[]>("/llm-usage/current-month/by-provider");
   },
 
   // Settings

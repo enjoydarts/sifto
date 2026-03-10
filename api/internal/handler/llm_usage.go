@@ -59,6 +59,16 @@ func (h *LLMUsageHandler) ModelSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, rows)
 }
 
+func (h *LLMUsageHandler) ProviderSummaryCurrentMonth(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	rows, err := h.repo.ProviderSummaryCurrentMonthByUser(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, rows)
+}
+
 func parseIntOrDefault(s string, d int) int {
 	if s == "" {
 		return d

@@ -17,7 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary, UserSettings } from "@/lib/api";
+import { api, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary, LLMUsageProviderMonthSummary, UserSettings } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 
@@ -50,20 +50,23 @@ export default function LLMUsagePage() {
   const [error, setError] = useState<string | null>(null);
   const [summaryRows, setSummaryRows] = useState<LLMUsageDailySummary[]>([]);
   const [modelRows, setModelRows] = useState<LLMUsageModelSummary[]>([]);
+  const [currentMonthProviderRows, setCurrentMonthProviderRows] = useState<LLMUsageProviderMonthSummary[]>([]);
   const [logs, setLogs] = useState<LLMUsageLog[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
 
   const load = useCallback(async (daysParam: number, limitParam: number) => {
     setLoading(true);
     try {
-      const [summary, byModel, recent, userSettings] = await Promise.all([
+      const [summary, byModel, byProviderCurrentMonth, recent, userSettings] = await Promise.all([
         api.getLLMUsageSummary({ days: daysParam }),
         api.getLLMUsageByModel({ days: daysParam }),
+        api.getLLMUsageCurrentMonthByProvider(),
         api.getLLMUsage({ limit: limitParam }),
         api.getSettings(),
       ]);
       setSummaryRows(summary ?? []);
       setModelRows(byModel ?? []);
+      setCurrentMonthProviderRows(byProviderCurrentMonth ?? []);
       setLogs(recent ?? []);
       setSettings(userSettings);
       setError(null);
@@ -111,6 +114,14 @@ export default function LLMUsagePage() {
       .reduce((acc, [, v]) => acc + v, 0);
     return { openai, anthropic, google, groq, others };
   }, [totals]);
+
+  const currentMonthProviderTableRows = useMemo(() => {
+    const total = settings?.current_month?.estimated_cost_usd ?? currentMonthProviderRows.reduce((acc, row) => acc + row.estimated_cost_usd, 0);
+    return currentMonthProviderRows.map((row) => ({
+      ...row,
+      share_pct: total > 0 ? (row.estimated_cost_usd / total) * 100 : 0,
+    }));
+  }, [currentMonthProviderRows, settings]);
 
   const groupedByDate = useMemo(() => {
     const m = new Map<string, SummaryRow[]>();
@@ -357,6 +368,50 @@ export default function LLMUsagePage() {
           label="Cache Read Ratio"
           value={`${totals.input > 0 ? ((totals.cacheRead / totals.input) * 100).toFixed(1) : "0.0"}%`}
         />
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+            <ReceiptText className="size-4 text-zinc-500" aria-hidden="true" />
+            <span>Current Month by Provider</span>
+          </h2>
+          <span className="text-xs text-zinc-400">
+            {settings?.current_month?.month_jst ?? currentMonthProviderRows[0]?.month_jst ?? "—"} / total {fmtUSD(settings?.current_month?.estimated_cost_usd ?? 0)}
+          </span>
+        </div>
+        {currentMonthProviderTableRows.length === 0 ? (
+          <p className="text-sm text-zinc-400">{t("llm.noSummary")}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="text-xs text-zinc-500">
+                <tr className="border-b border-zinc-100">
+                  <th className="px-3 py-2 text-left font-medium">provider</th>
+                  <th className="px-3 py-2 text-right font-medium">calls</th>
+                  <th className="px-3 py-2 text-right font-medium">input</th>
+                  <th className="px-3 py-2 text-right font-medium">output</th>
+                  <th className="px-3 py-2 text-right font-medium">cache r</th>
+                  <th className="px-3 py-2 text-right font-medium">share</th>
+                  <th className="px-3 py-2 text-right font-medium">cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentMonthProviderTableRows.map((row) => (
+                  <tr key={`${row.month_jst}:${row.provider}`} className="border-b border-zinc-100 last:border-0">
+                    <td className="px-3 py-2 font-medium text-zinc-800">{row.provider}</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(row.calls)}</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(row.input_tokens)}</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(row.output_tokens)}</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(row.cache_read_input_tokens)}</td>
+                    <td className="px-3 py-2 text-right">{row.share_pct.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-right">{fmtUSD(row.estimated_cost_usd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">

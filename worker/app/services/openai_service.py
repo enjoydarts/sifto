@@ -623,7 +623,7 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
         translated_title = ""
     if _needs_title_translation(title, ""):
         normalized_title = _strip_code_fence(translated_title).strip().strip('"').strip("'")
-        if not normalized_title or (not _contains_japanese(normalized_title) and normalized_title.casefold() == (title or "").strip().casefold()):
+        if not normalized_title or not _contains_japanese(normalized_title):
             translated_title = ""
     if _needs_title_translation(title, translated_title):
         translated_title = _translate_title_to_ja(title or "", model, api_key)

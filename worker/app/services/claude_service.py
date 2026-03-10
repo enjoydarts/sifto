@@ -820,6 +820,8 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
     translated_title = str(data.get("translated_title") or "").strip()
     if _contains_japanese(title or ""):
         translated_title = ""
+    elif _needs_title_translation(title, "") and not _contains_japanese(translated_title):
+        translated_title = ""
     if _needs_title_translation(title, translated_title):
         translated_title = _translate_title_to_ja(title or "", used_model or _summary_model, api_key=api_key)
     score = _summary_composite_score(score_breakdown)

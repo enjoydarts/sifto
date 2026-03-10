@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brain, Coins, KeyRound, Mail, Settings as SettingsIcon } from "lucide-react";
 import { api, LLMCatalog, LLMCatalogModel, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
@@ -86,11 +86,14 @@ export default function SettingsPage() {
   const [anthropicAskModel, setAnthropicAskModel] = useState("");
   const [anthropicSourceSuggestionModel, setAnthropicSourceSuggestionModel] = useState("");
   const [openAIEmbeddingModel, setOpenAIEmbeddingModel] = useState("");
+  const loadSeqRef = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
       const [data, nextCatalog] = await Promise.all([api.getSettings(), api.getLLMCatalog()]);
+      if (seq !== loadSeqRef.current) return;
       setSettings(data);
       setCatalog(nextCatalog);
       setBudgetUSD(data.monthly_budget_usd == null ? "" : String(data.monthly_budget_usd));
@@ -110,9 +113,12 @@ export default function SettingsPage() {
       setOpenAIEmbeddingModel(data.llm_models?.openai_embedding ?? "");
       setError(null);
     } catch (e) {
+      if (seq !== loadSeqRef.current) return;
       setError(String(e));
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -192,7 +198,7 @@ export default function SettingsPage() {
         const s = v.trim();
         return s === "" ? null : s;
       };
-      await api.updateLLMModelSettings({
+      const nextModels = {
         anthropic_facts: emptyToNull(anthropicFactsModel),
         anthropic_summary: emptyToNull(anthropicSummaryModel),
         anthropic_digest_cluster: emptyToNull(anthropicDigestClusterModel),
@@ -200,8 +206,18 @@ export default function SettingsPage() {
         anthropic_ask: emptyToNull(anthropicAskModel),
         anthropic_source_suggestion: emptyToNull(anthropicSourceSuggestionModel),
         openai_embedding: emptyToNull(openAIEmbeddingModel),
+      };
+      const resp = await api.updateLLMModelSettings(nextModels);
+      setSettings((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          llm_models: {
+            ...prev.llm_models,
+            ...resp.llm_models,
+          },
+        };
       });
-      await load();
       showToast(t("settings.toast.modelsSaved"), "success");
     } catch (e) {
       showToast(String(e), "error");

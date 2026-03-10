@@ -101,7 +101,50 @@ func digestTextLooksComplete(text string, minLen int) bool {
 }
 
 func validateDigestClusterDraftCompletion(text string) error {
-	if !digestTextLooksComplete(text, 80) {
+	s := strings.TrimSpace(text)
+	if len([]rune(s)) < 40 {
+		return fmt.Errorf("cluster draft looks truncated")
+	}
+	if strings.Count(s, "```")%2 != 0 {
+		return fmt.Errorf("cluster draft looks truncated")
+	}
+	lines := strings.Split(s, "\n")
+	bullets := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		bullets = append(bullets, line)
+	}
+	if len(bullets) < 2 {
+		return fmt.Errorf("cluster draft looks truncated")
+	}
+	last := bullets[len(bullets)-1]
+	if strings.HasPrefix(last, "-") || strings.HasPrefix(last, "・") || strings.HasPrefix(last, "•") {
+		trimmed := strings.TrimSpace(strings.TrimLeft(last, "-・• "))
+		if len([]rune(trimmed)) < 8 {
+			return fmt.Errorf("cluster draft looks truncated")
+		}
+		if strings.HasSuffix(trimmed, "、") ||
+			strings.HasSuffix(trimmed, ",") ||
+			strings.HasSuffix(trimmed, "：") ||
+			strings.HasSuffix(trimmed, ":") ||
+			strings.HasSuffix(trimmed, "は") ||
+			strings.HasSuffix(trimmed, "が") ||
+			strings.HasSuffix(trimmed, "を") ||
+			strings.HasSuffix(trimmed, "に") ||
+			strings.HasSuffix(trimmed, "で") ||
+			strings.HasSuffix(trimmed, "と") ||
+			strings.HasSuffix(trimmed, "の") ||
+			strings.HasSuffix(trimmed, "も") ||
+			strings.HasSuffix(trimmed, "より") ||
+			strings.HasSuffix(trimmed, "から") {
+			return fmt.Errorf("cluster draft looks truncated")
+		}
+		return nil
+	}
+	if !digestTextLooksComplete(s, 80) {
 		return fmt.Errorf("cluster draft looks truncated")
 	}
 	return nil

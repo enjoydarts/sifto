@@ -167,6 +167,27 @@ def score_current(name: str, value, *, comment: str | None = None) -> None:
         _log.warning("langfuse score_current_span failed: %s", e)
 
 
+def update_current_trace(*, user_id: str | None = None, session_id: str | None = None, metadata=None, tags: list[str] | None = None) -> None:
+    client = _client()
+    if client is None:
+        return
+    kwargs = {}
+    if user_id:
+        kwargs["user_id"] = user_id
+    if session_id:
+        kwargs["session_id"] = session_id
+    if metadata is not None:
+        kwargs["metadata"] = metadata
+    if tags:
+        kwargs["tags"] = tags
+    if not kwargs:
+        return
+    try:  # pragma: no cover
+        client.update_current_trace(**kwargs)
+    except Exception as e:
+        _log.warning("langfuse update_current_trace failed: %s", e)
+
+
 def _extract_prompt_text(prompt_obj) -> str:
     if prompt_obj is None:
         return ""

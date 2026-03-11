@@ -16,15 +16,19 @@ import (
 type workerTraceMetaKey string
 
 const (
+	workerTraceUserIDKey   workerTraceMetaKey = "user_id"
 	workerTracePurposeKey  workerTraceMetaKey = "purpose"
 	workerTraceItemIDKey   workerTraceMetaKey = "item_id"
 	workerTraceDigestIDKey workerTraceMetaKey = "digest_id"
 	workerTraceSourceIDKey workerTraceMetaKey = "source_id"
 )
 
-func WithWorkerTraceMetadata(ctx context.Context, purpose string, sourceID, itemID, digestID *string) context.Context {
+func WithWorkerTraceMetadata(ctx context.Context, purpose string, userID, sourceID, itemID, digestID *string) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if userID != nil && *userID != "" {
+		ctx = context.WithValue(ctx, workerTraceUserIDKey, *userID)
 	}
 	if purpose != "" {
 		ctx = context.WithValue(ctx, workerTracePurposeKey, purpose)
@@ -491,6 +495,9 @@ func applyWorkerTraceHeaders(ctx context.Context, headers map[string]string) map
 	}
 	if v, _ := ctx.Value(workerTracePurposeKey).(string); v != "" {
 		headers["X-Sifto-Purpose"] = v
+	}
+	if v, _ := ctx.Value(workerTraceUserIDKey).(string); v != "" {
+		headers["X-Sifto-User-Id"] = v
 	}
 	if v, _ := ctx.Value(workerTraceSourceIDKey).(string); v != "" {
 		headers["X-Sifto-Source-Id"] = v

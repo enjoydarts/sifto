@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from app.routers import ask, digest, extract, facts, facts_check, feed_seed_suggestions, feed_suggestions, summarize, summary_faithfulness, translate_title
-from app.services.langfuse_client import flush as langfuse_flush, log_runtime_status as langfuse_log_runtime_status, span as langfuse_span, update_current as langfuse_update_current
+from app.services.langfuse_client import flush as langfuse_flush, log_runtime_status as langfuse_log_runtime_status, span as langfuse_span, update_current as langfuse_update_current, update_current_trace as langfuse_update_current_trace
 
 _SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
 _log = logging.getLogger(__name__)
@@ -41,6 +41,7 @@ async def langfuse_request_tracing(request: Request, call_next):
     metadata = {
         "path": request.url.path,
         "method": request.method,
+        "user_id": request.headers.get("x-sifto-user-id", ""),
         "provider_hint": request.headers.get("x-llm-provider", ""),
         "model_hint": request.headers.get("x-llm-model", ""),
         "item_id": request.headers.get("x-sifto-item-id", ""),
@@ -58,6 +59,22 @@ async def langfuse_request_tracing(request: Request, call_next):
         ],
     ) as current_span:
         request.state.langfuse_span = current_span
+        session_id = ""
+        if metadata["item_id"]:
+            session_id = f"item:{metadata['item_id']}"
+        elif metadata["digest_id"]:
+            session_id = f"digest:{metadata['digest_id']}"
+        elif metadata["source_id"]:
+            session_id = f"source:{metadata['source_id']}"
+        langfuse_update_current_trace(
+            user_id=metadata["user_id"] or None,
+            session_id=session_id or None,
+            tags=[
+                "worker",
+                f"path:{request.url.path}",
+                f"purpose:{metadata['purpose'] or 'unknown'}",
+            ],
+        )
         try:
             response = await call_next(request)
             langfuse_update_current(metadata={"status_code": response.status_code})

@@ -124,7 +124,7 @@ func extractAndPersistFacts(
 			if err != nil {
 				return nil, err
 			}
-			workerCtx := service.WithWorkerTraceMetadata(ctx, "facts", &data.SourceID, &itemID, nil)
+			workerCtx := service.WithWorkerTraceMetadata(ctx, "facts", userIDPtr, &data.SourceID, &itemID, nil)
 			resp, err := deps.worker.ExtractFactsWithModel(workerCtx, titleForLLM, content, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.OpenAIKey, runtime.Model)
 			if err != nil {
 				return nil, err
@@ -168,7 +168,7 @@ func extractAndPersistFacts(
 			modelOverride:  factsCheckModel,
 			defaultRuntime: factsAttempt.Runtime,
 			call: func(runtime *llmRuntime) (*service.FactsCheckResponse, error) {
-				workerCtx := service.WithWorkerTraceMetadata(ctx, "facts_check", &data.SourceID, &itemID, nil)
+				workerCtx := service.WithWorkerTraceMetadata(ctx, "facts_check", userIDPtr, &data.SourceID, &itemID, nil)
 				return deps.worker.CheckFactsWithModel(
 					workerCtx,
 					titleForLLM,
@@ -261,7 +261,7 @@ func summarizeAndPersistItem(
 				return nil, err
 			}
 			sourceChars := len(sourceContent)
-			workerCtx := service.WithWorkerTraceMetadata(ctx, "summary", &data.SourceID, &itemID, nil)
+			workerCtx := service.WithWorkerTraceMetadata(ctx, "summary", userIDPtr, &data.SourceID, &itemID, nil)
 			resp, err := deps.worker.SummarizeWithModel(workerCtx, titleForLLM, facts, &sourceChars, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.OpenAIKey, runtime.Model)
 			if err != nil {
 				return nil, err
@@ -305,7 +305,7 @@ func summarizeAndPersistItem(
 			modelOverride:  faithfulnessModel,
 			defaultRuntime: summaryAttempt.Runtime,
 			call: func(runtime *llmRuntime) (*service.SummaryFaithfulnessResponse, error) {
-				workerCtx := service.WithWorkerTraceMetadata(ctx, "faithfulness_check", &data.SourceID, &itemID, nil)
+				workerCtx := service.WithWorkerTraceMetadata(ctx, "faithfulness_check", userIDPtr, &data.SourceID, &itemID, nil)
 				return deps.worker.CheckSummaryFaithfulnessWithModel(
 					workerCtx,
 					titleForLLM,

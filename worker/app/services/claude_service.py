@@ -5,6 +5,20 @@ import re
 import time
 import anthropic
 from app.services.llm_catalog import model_pricing
+from app.services.llm_text_utils import (
+    clamp01 as _clamp01,
+    clamp_int as _clamp_int,
+    contains_japanese as _contains_japanese,
+    decode_json_string_fragment as _decode_json_string_fragment,
+    extract_compose_digest_fields as _extract_compose_digest_fields,
+    extract_first_json_object as _extract_first_json_object,
+    extract_json_string_value_loose as _extract_json_string_value_loose,
+    needs_title_translation as _needs_title_translation,
+    parse_json_string_array as _parse_json_string_array,
+    strip_code_fence as _strip_code_fence,
+    summary_composite_score as _summary_composite_score,
+    summary_max_tokens as _summary_max_tokens,
+)
 from app.services.summary_faithfulness_common import (
     SUMMARY_FAITHFULNESS_SCHEMA,
     summary_faithfulness_prompt,
@@ -20,6 +34,7 @@ from app.services.facts_check_common import (
 )
 from app.services.facts_check_runner import run_facts_check
 from app.services.summary_result_common import finalize_translated_title, normalize_score_breakdown
+from app.services.summary_task_common import build_summary_task
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -86,135 +101,6 @@ def _split_text_chunks(text: str, chunk_chars: int = 8000, overlap_chars: int = 
     return chunks
 
 
-def _parse_json_string_array(text: str) -> list[str]:
-    start = text.find("[")
-    end = text.rfind("]") + 1
-    if start == -1 or end == 0:
-        return []
-    try:
-        data = json.loads(text[start:end])
-    except Exception:
-        return []
-    return [str(v) for v in data if isinstance(v, str)]
-
-
-def _strip_code_fence(text: str) -> str:
-    s = (text or "").strip().lstrip("\ufeff")
-    if s.startswith("```"):
-        s = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", s)
-        s = re.sub(r"\n?```$", "", s).strip()
-    return s
-
-
-def _extract_first_json_object(text: str) -> dict | None:
-    s = _strip_code_fence(text)
-    if not s:
-        return None
-    decoder = json.JSONDecoder()
-    idx = s.find("{")
-    while idx >= 0:
-        try:
-            obj, _ = decoder.raw_decode(s[idx:])
-            if isinstance(obj, dict):
-                return obj
-        except Exception:
-            pass
-        idx = s.find("{", idx + 1)
-    return None
-
-
-def _decode_json_string_fragment(raw: str) -> str:
-    try:
-        return json.loads(f'"{raw}"')
-    except Exception:
-        return raw.replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
-
-
-def _extract_json_string_value_loose(text: str, field: str) -> str:
-    s = _strip_code_fence(text)
-    key = f'"{field}"'
-    i = s.find(key)
-    if i < 0:
-        return ""
-    rest = s[i + len(key):]
-    colon = rest.find(":")
-    if colon < 0:
-        return ""
-    raw = rest[colon + 1 :].lstrip()
-    if not raw.startswith('"'):
-        return ""
-    raw = raw[1:]
-    out: list[str] = []
-    escaped = False
-    for ch in raw:
-        if escaped:
-            out.append(ch)
-            escaped = False
-            continue
-        if ch == "\\":
-            out.append(ch)
-            escaped = True
-            continue
-        if ch == '"':
-            break
-        out.append(ch)
-    return _decode_json_string_fragment("".join(out)).strip()
-
-
-def _extract_compose_digest_fields(text: str) -> tuple[str, str]:
-    data = _extract_first_json_object(text) or {}
-    subject = str(data.get("subject") or "").strip()
-    body = str(data.get("body") or "").strip()
-    if subject and body:
-        return subject, body
-
-    s = _strip_code_fence(text)
-    m_subject = re.search(r'"subject"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
-    if not subject and m_subject:
-        subject = _decode_json_string_fragment(m_subject.group(1)).strip()
-
-    m_body = re.search(r'"body"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
-    if not body and m_body:
-        body = _decode_json_string_fragment(m_body.group(1)).strip()
-    elif not body:
-        key = '"body"'
-        i = s.find(key)
-        if i >= 0:
-            rest = s[i + len(key):]
-            colon = rest.find(":")
-            if colon >= 0:
-                raw = rest[colon + 1 :].strip()
-                if raw.startswith('"'):
-                    raw = raw[1:]
-                marker_idx = raw.find('",\n  "sections"')
-                if marker_idx < 0:
-                    marker_idx = raw.find('", "sections"')
-                if marker_idx > 0:
-                    raw = raw[:marker_idx]
-                raw = raw.strip().rstrip('"').strip()
-                if raw:
-                    body = raw.replace("\\n", "\n").replace('\\"', '"').strip()
-    return subject, body
-
-
-def _contains_japanese(text: str) -> bool:
-    s = (text or "").strip()
-    if not s:
-        return False
-    return re.search(r"[\u3040-\u30ff\u3400-\u9fff]", s) is not None
-
-
-def _needs_title_translation(title: str | None, translated_title: str) -> bool:
-    src = (title or "").strip()
-    if not src:
-        return False
-    if (translated_title or "").strip():
-        return False
-    if _contains_japanese(src):
-        return False
-    return re.search(r"[A-Za-z]", src) is not None
-
-
 def _translate_title_to_ja(title: str, model: str, api_key: str | None = None) -> str:
     prompt = f"""次の英語タイトルを自然な日本語に翻訳してください。
 JSONで返してください:
@@ -255,52 +141,6 @@ JSONで返してください:
             plain_text = plain_message.content[0].text.strip()
             candidate = _strip_code_fence(plain_text).strip().strip('"').strip("'")
     return candidate[:300]
-
-
-def _clamp01(v, default: float = 0.5) -> float:
-    try:
-        x = float(v)
-    except Exception:
-        return default
-    if x < 0:
-        return 0.0
-    if x > 1:
-        return 1.0
-    return x
-
-
-def _summary_composite_score(breakdown: dict) -> float:
-    # Weighted for digest ranking / operations triage.
-    weights = {
-        "importance": 0.38,
-        "novelty": 0.22,
-        "actionability": 0.18,
-        "reliability": 0.17,
-        "relevance": 0.05,
-    }
-    total = 0.0
-    for k, w in weights.items():
-        total += _clamp01(breakdown.get(k, 0.5), 0.5) * w
-    return round(total, 4)
-
-
-def _clamp_int(v: int, lo: int, hi: int) -> int:
-    return max(lo, min(hi, int(v)))
-
-
-def _target_summary_chars(source_text_chars: int | None, facts: list[str]) -> int:
-    if isinstance(source_text_chars, int) and source_text_chars > 0:
-        # Article-length aware target: roughly 16% of source chars with safe bounds.
-        return _clamp_int(round(source_text_chars * 0.16), 220, 1200)
-    facts_chars = sum(len(str(f)) for f in (facts or []))
-    if facts_chars > 0:
-        return _clamp_int(round(facts_chars * 0.9), 220, 900)
-    return 300
-
-
-def _summary_max_tokens(target_chars: int) -> int:
-    # Keep enough room for JSON envelope + score fields.
-    return _clamp_int(round(target_chars * 1.2), 700, 2600)
 
 
 def _merge_fact_lists(fact_lists: list[list[str]], max_items: int = 24) -> list[str]:
@@ -688,13 +528,11 @@ def summarize(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
-    target_chars = _target_summary_chars(source_text_chars, facts)
-    min_chars = _clamp_int(round(target_chars * 0.8), 160, 1000)
-    max_chars = _clamp_int(round(target_chars * 1.2), 260, 1400)
-    max_tokens = _summary_max_tokens(target_chars)
+    task = build_summary_task(title, facts, source_text_chars)
+    max_tokens = _summary_max_tokens(task["target_chars"])
 
     if _client_for_api_key(api_key) is None:
-        summary = " / ".join(facts[:8])[:max_chars] if facts else (title or "")
+        summary = " / ".join(facts[:8])[:task["max_chars"]] if facts else (title or "")
         score_breakdown = {
             "importance": 0.4,
             "novelty": 0.4,
@@ -721,48 +559,7 @@ def summarize(
             },
         }
 
-    facts_text = "\n".join(f"- {f}" for f in facts)
-    system_prompt = """# Role
-あなたは正確かつ客観的なニュース要約の専門家です。
-
-# Task
-与えられた事実リストから記事要約を作成してください。
-
-# Rules
-- 出力は必ず有効なJSONオブジェクト1つのみにしてください。
-- 前置き・後置き・コードフェンス・注釈は不要です。
-- 要約は客観的・中立的な自然な日本語で書いてください。
-- 記事の主題、何が起きたか、重要なポイントを過不足なく含めてください。
-- 箇条書きではなく2〜4段落の文章でまとめてください。
-- タイトルが主に英語の場合のみ translated_title に自然な日本語訳を入れてください。
-- タイトルが日本語の場合は translated_title を空文字にしてください。
-- 事実リストにない推測の断定、誇張表現、主観的評価は禁止です。
-- topics は重複を避け、粒度を揃えてください。
-- score_reason は採点の根拠を1〜2文で簡潔に述べてください。
-
-# Output
-{
-  "summary": "要約",
-  "topics": ["トピック1", "トピック2"],
-  "translated_title": "英語タイトルの場合のみ日本語訳（日本語記事は空文字）",
-  "score_breakdown": {
-    "importance": 0.0〜1.0,
-    "novelty": 0.0〜1.0,
-    "actionability": 0.0〜1.0,
-    "reliability": 0.0〜1.0,
-    "relevance": 0.0〜1.0
-  },
-  "score_reason": "採点理由（1〜2文）"
-}"""
-    user_prompt = f"""# Input
-summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target_chars}字にしてください。
-
-タイトル: {title or "（不明）"}
-
-事実:
-{facts_text}
-"""
-    prompt = f"{system_prompt}\n\n{user_prompt}"
+    prompt = f"{task['system_instruction']}\n\n{task['prompt']}"
     enable_summary_prompt_cache = os.getenv("ANTHROPIC_SUMMARY_PROMPT_CACHE", "1").strip() not in ("0", "false", "False")
     message, used_model = _call_with_model_fallback(
         prompt,
@@ -770,12 +567,12 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
         _summary_model_fallback,
         max_tokens=max_tokens,
         api_key=api_key,
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
+        system_prompt=task["system_instruction"],
+        user_prompt=task["prompt"],
         enable_prompt_cache=enable_summary_prompt_cache,
     )
     if message is None:
-        summary = " / ".join(facts[:8])[:max_chars] if facts else (title or "")
+        summary = " / ".join(facts[:8])[:task["max_chars"]] if facts else (title or "")
         score_breakdown = {
             "importance": 0.4,
             "novelty": 0.4,

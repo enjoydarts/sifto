@@ -27,7 +27,6 @@ from app.services.llm_text_utils import (
     strip_code_fence as _strip_code_fence,
     summary_composite_score as _summary_composite_score,
     summary_max_tokens as _summary_max_tokens,
-    target_summary_chars as _target_summary_chars,
 )
 from app.services.summary_faithfulness_common import (
     SUMMARY_FAITHFULNESS_SCHEMA,
@@ -44,6 +43,7 @@ from app.services.facts_check_common import (
 )
 from app.services.facts_check_runner import run_facts_check
 from app.services.summary_result_common import finalize_translated_title, normalize_score_breakdown
+from app.services.summary_task_common import build_summary_task
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
@@ -853,58 +853,16 @@ def summarize(
     model: str = "gemini-2.5-flash",
     api_key: str = "",
 ) -> dict:
-    target_chars = _target_summary_chars(source_text_chars, facts)
-    min_chars = _clamp_int(round(target_chars * 0.8), 160, 1000)
-    max_chars = _clamp_int(round(target_chars * 1.2), 260, 1400)
-    max_tokens = _summary_max_tokens(target_chars)
-    facts_text = "\n".join(f"- {f}" for f in facts)
-    system_instruction = """# Role
-あなたは正確かつ客観的なニュース要約の専門家です。
-
-# Task
-与えられた事実リストから記事要約を作成してください。
-
-# Rules
-- 出力は必ず有効なJSONオブジェクト1つのみにしてください。
-- 前置き・後置き・コードフェンス・注釈は不要です。
-- 要約は客観的・中立的な自然な日本語で書いてください。
-- 記事の主題、何が起きたか、重要なポイントを過不足なく含めてください。
-- 箇条書きではなく2〜4段落の文章でまとめてください。
-- タイトルが主に英語の場合のみ translated_title に自然な日本語訳を入れてください。
-- タイトルが日本語の場合は translated_title を空文字にしてください。
-- 事実リストにない推測の断定、誇張表現、主観的評価は禁止です。
-- topics は重複を避け、粒度を揃えてください。
-- score_reason は採点の根拠を1〜2文で簡潔に述べてください。
-
-# Output
-{
-  "summary": "要約",
-  "topics": ["トピック1", "トピック2"],
-  "translated_title": "英語タイトルの場合のみ日本語訳（日本語記事は空文字）",
-  "score_breakdown": {
-    "importance": 0.0〜1.0,
-    "novelty": 0.0〜1.0,
-    "actionability": 0.0〜1.0,
-    "reliability": 0.0〜1.0,
-    "relevance": 0.0〜1.0
-  },
-  "score_reason": "採点理由（1〜2文）"
-}"""
-    prompt = f"""# Input
-summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target_chars}字にしてください。
-
-タイトル: {title or "（不明）"}
-事実:
-{facts_text}
-"""
+    task = build_summary_task(title, facts, source_text_chars)
+    max_tokens = _summary_max_tokens(task["target_chars"])
     api_key_hash = hashlib.sha256((api_key or "").encode("utf-8")).hexdigest()[:16]
-    cache_key = _cache_key_hash([_normalize_model_name(model), "summary-v2", api_key_hash, system_instruction])
+    cache_key = _cache_key_hash([_normalize_model_name(model), "summary-v2", api_key_hash, task["system_instruction"]])
     text, usage = _generate_content(
-        prompt,
+        task["prompt"],
         model=model,
         api_key=api_key,
         max_output_tokens=max_tokens,
-        system_instruction=system_instruction,
+        system_instruction=task["system_instruction"],
         context_cache_key=cache_key,
     )
     start = text.find("{")

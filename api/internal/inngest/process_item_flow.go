@@ -59,6 +59,23 @@ type processSummaryStageResult struct {
 	RetryCount int
 }
 
+func fallbackFactsCheckWarning(err error) *service.FactsCheckResponse {
+	comment := "事実抽出チェックの判定取得に失敗したため要確認です。"
+	if err != nil {
+		msg := strings.TrimSpace(err.Error())
+		if msg != "" {
+			comment = fmt.Sprintf("事実抽出チェックの判定取得に失敗したため要確認です: %s", msg)
+		}
+	}
+	if len(comment) > 240 {
+		comment = comment[:240]
+	}
+	return &service.FactsCheckResponse{
+		Verdict:      "warn",
+		ShortComment: comment,
+	}
+}
+
 func resolveProcessItemTitleForLLM(extractedTitle *string, fallbackTitle string) *string {
 	titleForLLM := extractedTitle
 	if titleForLLM == nil || strings.TrimSpace(*titleForLLM) == "" {
@@ -183,7 +200,10 @@ func extractAndPersistFacts(
 				failedModel = factsAttempt.Runtime.Model
 			}
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts_check", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "facts check", err)
+			finalFactsCheck = fallbackFactsCheckWarning(err)
+			factsRetryCount = attempt
+			log.Printf("process-item facts_check fallback-warn item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
+			break
 		}
 
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "facts_check", factsCheck.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)

@@ -11,17 +11,26 @@ def _langfuse_llm_update(result: dict | None) -> dict:
     llm = (result or {}).get("llm") or {}
     if not isinstance(llm, dict):
         return {}
+    input_tokens = int(llm.get("input_tokens") or 0)
+    output_tokens = int(llm.get("output_tokens") or 0)
+    cache_read_input_tokens = int(llm.get("cache_read_input_tokens") or 0)
+    cache_creation_input_tokens = int(llm.get("cache_creation_input_tokens") or 0)
     model = str(llm.get("model") or "").strip()
     provider = str(llm.get("provider") or "").strip()
     usage_details = {
-        "input": int(llm.get("input_tokens") or 0),
-        "output": int(llm.get("output_tokens") or 0),
-        "cache_read_input": int(llm.get("cache_read_input_tokens") or 0),
-        "cache_creation_input": int(llm.get("cache_creation_input_tokens") or 0),
+        "input": input_tokens,
+        "output": output_tokens,
+        "prompt_tokens": input_tokens,
+        "completion_tokens": output_tokens,
+        "cache_read_input": cache_read_input_tokens,
+        "cache_creation_input": cache_creation_input_tokens,
+        "cache_read_input_tokens": cache_read_input_tokens,
+        "cache_creation_input_tokens": cache_creation_input_tokens,
+        "total": input_tokens + output_tokens,
     }
     cost = float(llm.get("estimated_cost_usd") or 0.0)
     model_parameters = {"provider": provider} if provider else None
-    cost_details = {"total_usd": cost} if cost > 0 else None
+    cost_details = {"total": cost, "total_cost": cost} if cost > 0 else None
     return {
         "model": model or None,
         "model_parameters": model_parameters,

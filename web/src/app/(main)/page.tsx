@@ -225,16 +225,19 @@ export default function BriefingPage() {
                     key={item.id}
                     type="button"
                     onClick={() => setInlineItemId(item.id)}
-                    className="rounded-2xl border border-zinc-200 bg-white p-4 text-left hover:border-zinc-300 hover:bg-zinc-50"
+                    className="overflow-hidden rounded-2xl border border-zinc-200 bg-white text-left hover:border-zinc-300 hover:bg-zinc-50"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
-                        {t("briefing.highlightBadge")} {idx + 1}
-                      </span>
-                      <span className="text-xs text-zinc-500">{fmtDate(item.published_at || item.created_at, locale)}</span>
-                    </div>
-                    <div className="mt-3 line-clamp-3 break-words [overflow-wrap:anywhere] text-sm font-semibold text-zinc-900">
-                      {item.translated_title || item.title || item.url}
+                    <ThumbnailArtwork item={item} className="h-36 w-full" />
+                    <div className="p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                          {t("briefing.highlightBadge")} {idx + 1}
+                        </span>
+                        <span className="text-xs text-zinc-500">{fmtDate(item.published_at || item.created_at, locale)}</span>
+                      </div>
+                      <div className="mt-3 line-clamp-3 break-words [overflow-wrap:anywhere] text-sm font-semibold text-zinc-900">
+                        {item.translated_title || item.title || item.url}
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -252,41 +255,58 @@ export default function BriefingPage() {
               description={t("emptyState.briefing.desc")}
             />
           ) : (
-            <article className="mt-3 rounded-2xl border border-zinc-200 bg-zinc-50/60 p-4 md:p-5">
-              <button
-                type="button"
-                onClick={() => setInlineItemId(nowReading.id)}
-                className="block w-full text-left"
-              >
-                <h2 className="line-clamp-3 break-words [overflow-wrap:anywhere] text-xl font-semibold leading-tight text-zinc-900 hover:underline">
-                  {nowReading.translated_title || nowReading.title || nowReading.url}
-                </h2>
-              </button>
-              <p className="mt-2 truncate text-xs text-zinc-500" title={nowReading.url}>
-                {nowReading.url}
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                <span className="rounded-full border border-zinc-300 bg-white px-2 py-0.5">
-                  {nowReading.is_read ? t("items.read.read") : t("items.read.unread")}
-                </span>
-                <span>{fmtDate(nowReading.published_at || nowReading.created_at, locale)}</span>
-              </div>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
+            <article className="mt-3 overflow-hidden rounded-[28px] border border-zinc-200 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.12),_transparent_38%),linear-gradient(135deg,_#18181b_0%,_#27272a_48%,_#fafafa_160%)] p-1 shadow-sm">
+              <div className="grid gap-0 overflow-hidden rounded-[24px] bg-white md:grid-cols-[1.3fr_0.9fr]">
+                <div className="flex flex-col justify-between p-5 md:p-6">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                      <span className="rounded-full bg-blue-100 px-2.5 py-1 font-semibold text-blue-700">
+                        {t("briefing.highlightBadge")} 1
+                      </span>
+                      <span className="rounded-full border border-zinc-300 bg-white px-2 py-0.5">
+                        {nowReading.is_read ? t("items.read.read") : t("items.read.unread")}
+                      </span>
+                      <span>{fmtDate(nowReading.published_at || nowReading.created_at, locale)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setInlineItemId(nowReading.id)}
+                      className="mt-4 block w-full text-left"
+                    >
+                      <h2 className="line-clamp-4 break-words [overflow-wrap:anywhere] text-2xl font-semibold leading-tight text-zinc-950 hover:underline md:text-[2rem]">
+                        {nowReading.translated_title || nowReading.title || nowReading.url}
+                      </h2>
+                    </button>
+                    <p className="mt-3 line-clamp-2 break-all text-sm text-zinc-500" title={nowReading.url}>
+                      {nowReading.url}
+                    </p>
+                  </div>
+                  <div className="mt-5 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setInlineItemId(nowReading.id)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring"
+                    >
+                      <BookOpen className="size-4" aria-hidden="true" />
+                      {t("briefing.readNow", "今すぐ読む")}
+                    </button>
+                    <Link
+                      href={`/items/${nowReading.id}?from=${encodeURIComponent("/items?feed=recommended")}`}
+                      className="inline-flex items-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring"
+                    >
+                      {t("items.action.openDetail")}
+                      <ArrowRight className="size-4" aria-hidden="true" />
+                    </Link>
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={() => setInlineItemId(nowReading.id)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring"
+                  className="group relative min-h-[240px] overflow-hidden border-t border-zinc-200 md:min-h-full md:border-l md:border-t-0"
                 >
-                  <BookOpen className="size-4" aria-hidden="true" />
-                  {t("briefing.readNow", "今すぐ読む")}
+                  <ThumbnailArtwork item={nowReading} className="h-full min-h-[240px] w-full md:min-h-[340px]" />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-transparent opacity-80 transition-opacity group-hover:opacity-100" />
                 </button>
-                <Link
-                  href={`/items/${nowReading.id}?from=${encodeURIComponent("/items?feed=recommended")}`}
-                  className="inline-flex items-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring"
-                >
-                  {t("items.action.openDetail")}
-                  <ArrowRight className="size-4" aria-hidden="true" />
-                </Link>
               </div>
             </article>
           )}
@@ -306,20 +326,23 @@ export default function BriefingPage() {
           ) : nextReads.length === 0 ? (
             <p className="mt-2 text-sm text-zinc-500">{t("briefing.emptyHighlights", "次に読む記事はありません。")}</p>
           ) : (
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-3 space-y-3">
               {nextReads.map((item) => (
                 <li key={item.id}>
                   <button
                     type="button"
                     onClick={() => setInlineItemId(item.id)}
-                    className="block w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-left hover:border-zinc-300 hover:bg-zinc-50"
+                    className="grid w-full grid-cols-[92px_1fr] gap-3 rounded-2xl border border-zinc-200 bg-white p-3 text-left hover:border-zinc-300 hover:bg-zinc-50"
                   >
-                    <div className="line-clamp-2 break-words [overflow-wrap:anywhere] text-sm font-medium text-zinc-900">
-                      {item.translated_title || item.title || item.url}
-                    </div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
-                      <span>{item.is_read ? t("items.read.read") : t("items.read.unread")}</span>
-                      <span>{fmtDate(item.published_at || item.created_at, locale)}</span>
+                    <ThumbnailArtwork item={item} className="h-20 w-full" />
+                    <div className="min-w-0">
+                      <div className="line-clamp-2 break-words [overflow-wrap:anywhere] text-sm font-medium text-zinc-900">
+                        {item.translated_title || item.title || item.url}
+                      </div>
+                      <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
+                        <span>{item.is_read ? t("items.read.read") : t("items.read.unread")}</span>
+                        <span>{fmtDate(item.published_at || item.created_at, locale)}</span>
+                      </div>
                     </div>
                   </button>
                 </li>
@@ -413,13 +436,16 @@ export default function BriefingPage() {
                         <button
                           type="button"
                           onClick={() => setInlineItemId(item.id)}
-                          className="block w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-left hover:border-zinc-300 hover:bg-zinc-50"
+                          className="grid w-full grid-cols-[84px_1fr] gap-3 rounded-xl border border-zinc-200 bg-white p-3 text-left hover:border-zinc-300 hover:bg-zinc-50"
                         >
-                          <div className="line-clamp-2 break-words [overflow-wrap:anywhere] text-sm font-medium text-zinc-900">
-                            {item.translated_title || item.title || item.url}
-                          </div>
-                          <div className="mt-1 text-xs text-zinc-500">
-                            {fmtDate(item.published_at || item.created_at, locale)}
+                          <ThumbnailArtwork item={item} className="h-20 w-full" />
+                          <div className="min-w-0">
+                            <div className="line-clamp-2 break-words [overflow-wrap:anywhere] text-sm font-medium text-zinc-900">
+                              {item.translated_title || item.title || item.url}
+                            </div>
+                            <div className="mt-1 text-xs text-zinc-500">
+                              {fmtDate(item.published_at || item.created_at, locale)}
+                            </div>
                           </div>
                         </button>
                       </li>
@@ -457,6 +483,30 @@ function Kpi({ icon, label, value }: { icon: ReactNode; label: string; value: st
         <span>{label}</span>
       </div>
       <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">{value}</div>
+    </div>
+  );
+}
+
+function ThumbnailArtwork({ item, className }: { item: Item; className?: string }) {
+  if (item.thumbnail_url) {
+    return (
+      <div className={`relative overflow-hidden bg-zinc-100 ${className ?? ""}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={item.thumbnail_url}
+          alt={item.translated_title || item.title || item.url}
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+      </div>
+    );
+  }
+  return (
+    <div className={`relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.2),_transparent_35%),linear-gradient(135deg,_#18181b_0%,_#3f3f46_45%,_#d4d4d8_100%)] ${className ?? ""}`}>
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,transparent_0%,rgba(255,255,255,0.12)_45%,transparent_100%)]" />
+      <div className="absolute bottom-3 left-3 right-3 line-clamp-3 text-left text-xs font-medium text-white/90">
+        {item.translated_title || item.title || item.url}
+      </div>
     </div>
   );
 }

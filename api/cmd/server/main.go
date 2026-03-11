@@ -45,6 +45,7 @@ func main() {
 	resend := service.NewResendClient()
 	oneSignal := service.NewOneSignalClient()
 	secretCipher := service.NewSecretCipher()
+	clerkVerifier := service.NewClerkTokenVerifierFromEnv()
 	cache, err := service.NewJSONCacheFromEnv()
 	if err != nil {
 		log.Fatalf("json cache: %v", err)
@@ -111,7 +112,7 @@ func main() {
 	r.Get("/api/internal/debug/system-status", internalH.DebugSystemStatus)
 
 	r.Route("/api", func(r chi.Router) {
-		r.Use(middleware.Auth)
+		r.Use(middleware.Auth(userIdentityRepo, clerkVerifier))
 
 		r.Route("/sources", func(r chi.Router) {
 			r.Get("/", sourceH.List)

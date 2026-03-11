@@ -166,4 +166,6 @@ def require_facts_check_comment(result: dict, raw_text: str) -> dict:
     if _is_valid_short_comment(str(result.get("short_comment") or "").strip()):
         return result
     snippet = (raw_text or "").strip().replace("\n", " ")
+    if not snippet:
+        snippet = "(empty)"
     raise RuntimeError(f"facts check short_comment missing: response_snippet={snippet[:500]}")

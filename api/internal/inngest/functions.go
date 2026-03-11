@@ -365,24 +365,34 @@ func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSetti
 	if resolvedModel == nil || strings.TrimSpace(*resolvedModel) == "" {
 		switch {
 		case userID != nil && *userID != "" && settingsRepo != nil:
-			if key, err := loadUserAnthropicAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
-				return key, nil, nil, nil, nil, nil, nil
-			}
-			if key, err := loadUserGoogleAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
-				fallback := service.DefaultLLMModelForPurpose("google", purpose)
-				return nil, key, nil, nil, nil, &fallback, nil
-			}
-			if key, err := loadUserGroqAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
-				fallback := service.DefaultLLMModelForPurpose("groq", purpose)
-				return nil, nil, key, nil, nil, &fallback, nil
-			}
-			if key, err := loadUserDeepSeekAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
-				fallback := service.DefaultLLMModelForPurpose("deepseek", purpose)
-				return nil, nil, nil, key, nil, &fallback, nil
-			}
-			if key, err := loadUserOpenAIAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
-				fallback := service.DefaultLLMModelForPurpose("openai", purpose)
-				return nil, nil, nil, nil, key, &fallback, nil
+			for _, candidateProvider := range service.CostEfficientLLMProviders("") {
+				switch candidateProvider {
+				case "groq":
+					if key, err := loadUserGroqAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
+						return nil, nil, key, nil, nil, &fallback, nil
+					}
+				case "google":
+					if key, err := loadUserGoogleAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
+						return nil, key, nil, nil, nil, &fallback, nil
+					}
+				case "deepseek":
+					if key, err := loadUserDeepSeekAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
+						return nil, nil, nil, key, nil, &fallback, nil
+					}
+				case "openai":
+					if key, err := loadUserOpenAIAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
+						return nil, nil, nil, nil, key, &fallback, nil
+					}
+				case "anthropic":
+					if key, err := loadUserAnthropicAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
+						return key, nil, nil, nil, nil, &fallback, nil
+					}
+				}
 			}
 		}
 	}

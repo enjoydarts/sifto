@@ -34,6 +34,69 @@ function formatModelOptionNote(item: LLMCatalogModel): string | undefined {
   return parts.join(" / ");
 }
 
+function firstMatchingModelId(models: LLMCatalogModel[], candidates: string[]): string {
+  for (const candidate of candidates) {
+    if (models.some((item) => item.id === candidate)) {
+      return candidate;
+    }
+  }
+  return "";
+}
+
+function buildCostPerformancePreset(catalog: LLMCatalog | null): NonNullable<UserSettings["llm_models"]> {
+  const chatModels = catalog?.chat_models ?? [];
+  const embeddingModels = catalog?.embedding_models ?? [];
+  const purposeModels = (purpose: string) =>
+    chatModels.filter((item) => (item.available_purposes ?? []).includes(purpose));
+
+  return {
+    facts: firstMatchingModelId(purposeModels("facts"), [
+      "openai/gpt-oss-20b",
+      "gemini-2.5-flash-lite",
+      "gpt-5-mini",
+    ]),
+    summary: firstMatchingModelId(purposeModels("summary"), [
+      "openai/gpt-oss-120b",
+      "gemini-2.5-flash",
+      "gpt-5",
+    ]),
+    digest_cluster: firstMatchingModelId(purposeModels("digest_cluster_draft"), [
+      "openai/gpt-oss-120b",
+      "gemini-2.5-flash",
+      "gpt-5",
+    ]),
+    digest: firstMatchingModelId(purposeModels("digest"), [
+      "openai/gpt-oss-120b",
+      "gemini-2.5-flash",
+      "gpt-5",
+    ]),
+    ask: firstMatchingModelId(purposeModels("ask"), [
+      "openai/gpt-oss-20b",
+      "gemini-2.5-flash",
+      "gpt-5-mini",
+    ]),
+    source_suggestion: firstMatchingModelId(purposeModels("source_suggestion"), [
+      "openai/gpt-oss-20b",
+      "gemini-2.5-flash-lite",
+      "gpt-5-mini",
+    ]),
+    facts_check: firstMatchingModelId(purposeModels("facts"), [
+      "openai/gpt-oss-120b",
+      "gemini-2.5-flash",
+      "gpt-5",
+    ]),
+    faithfulness_check: firstMatchingModelId(purposeModels("summary"), [
+      "openai/gpt-oss-120b",
+      "gemini-2.5-flash",
+      "gpt-5",
+    ]),
+    embedding: firstMatchingModelId(embeddingModels, [
+      "text-embedding-3-small",
+      "text-embedding-3-large",
+    ]),
+  };
+}
+
 
 export default function SettingsPage() {
   const { t } = useI18n();
@@ -158,6 +221,20 @@ export default function SettingsPage() {
     label: item.id,
     note: formatModelOptionNote(item),
   }), []);
+
+  const applyCostPerformancePreset = useCallback(() => {
+    const preset = buildCostPerformancePreset(catalog);
+    llmModelsDirtyRef.current = true;
+    setAnthropicFactsModel(preset.facts ?? "");
+    setAnthropicSummaryModel(preset.summary ?? "");
+    setAnthropicDigestClusterModel(preset.digest_cluster ?? "");
+    setAnthropicDigestModel(preset.digest ?? "");
+    setAnthropicAskModel(preset.ask ?? "");
+    setAnthropicSourceSuggestionModel(preset.source_suggestion ?? "");
+    setOpenAIEmbeddingModel(preset.embedding ?? "");
+    setFactsCheckModel(preset.facts_check ?? "");
+    setFaithfulnessCheckModel(preset.faithfulness_check ?? "");
+  }, [catalog]);
 
   const optionsForPurpose = useCallback(
     (purpose: string): ModelOption[] =>
@@ -722,13 +799,22 @@ export default function SettingsPage() {
               {t("settings.pricingDescription")}
             </p>
             <div className="mt-3">
-              <button
-                type="button"
-                onClick={() => setIsModelGuideOpen(true)}
-                className="inline-flex items-center rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
-              >
-                {t("settings.modelGuide.open")}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={applyCostPerformancePreset}
+                  className="inline-flex items-center rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800"
+                >
+                  {t("settings.modelPreset.costPerformance")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsModelGuideOpen(true)}
+                  className="inline-flex items-center rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
+                >
+                  {t("settings.modelGuide.open")}
+                </button>
+              </div>
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">

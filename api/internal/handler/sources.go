@@ -1095,135 +1095,60 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, deepse
 	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
 	hasDeepSeek := deepseekAPIKey != nil && strings.TrimSpace(*deepseekAPIKey) != ""
 	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
+	purpose := "source_suggestion"
+
+	selectByProvider := func(provider string, explicitModel *string) (*string, *string, *string, *string, *string, *string) {
+		resolved := explicitModel
+		if resolved == nil || strings.TrimSpace(*resolved) == "" {
+			v := service.DefaultLLMModelForPurpose(provider, purpose)
+			resolved = &v
+		}
+		switch provider {
+		case "google":
+			if hasGoogle {
+				return nil, googleAPIKey, nil, nil, nil, resolved
+			}
+		case "groq":
+			if hasGroq {
+				return nil, nil, groqAPIKey, nil, nil, resolved
+			}
+		case "deepseek":
+			if hasDeepSeek {
+				return nil, nil, nil, deepseekAPIKey, nil, resolved
+			}
+		case "openai":
+			if hasOpenAI {
+				return nil, nil, nil, nil, openAIAPIKey, resolved
+			}
+		case "anthropic":
+			if hasAnthropic {
+				return anthropicAPIKey, nil, nil, nil, nil, resolved
+			}
+		}
+		return nil, nil, nil, nil, nil, nil
+	}
 
 	// 明示モデルがある場合は基本的にそのプロバイダを優先。
 	// ただし指定プロバイダのキーが無い場合は、利用可能な側へフォールバックして
 	// 「AI提案がまったく動かない」状態を避ける。
 	if model != nil && strings.TrimSpace(*model) != "" {
-		switch service.LLMProviderForModel(model) {
-		case "google":
-			if hasGoogle {
-				return nil, googleAPIKey, nil, nil, nil, model
-			}
-			if hasAnthropic {
-				return anthropicAPIKey, nil, nil, nil, nil, nil
-			}
-			if hasGroq {
-				fallback := "openai/gpt-oss-20b"
-				return nil, nil, groqAPIKey, nil, nil, &fallback
-			}
-			if hasDeepSeek {
-				fallback := "deepseek-chat"
-				return nil, nil, nil, deepseekAPIKey, nil, &fallback
-			}
-			if hasOpenAI {
-				fallback := "gpt-5-mini"
-				return nil, nil, nil, nil, openAIAPIKey, &fallback
-			}
-			return nil, nil, nil, nil, nil, model
-		case "groq":
-			if hasGroq {
-				return nil, nil, groqAPIKey, nil, nil, model
-			}
-			if hasAnthropic {
-				return anthropicAPIKey, nil, nil, nil, nil, nil
-			}
-			if hasGoogle {
-				fallback := "gemini-2.5-flash"
-				return nil, googleAPIKey, nil, nil, nil, &fallback
-			}
-			if hasDeepSeek {
-				fallback := "deepseek-chat"
-				return nil, nil, nil, deepseekAPIKey, nil, &fallback
-			}
-			if hasOpenAI {
-				fallback := "gpt-5-mini"
-				return nil, nil, nil, nil, openAIAPIKey, &fallback
-			}
-			return nil, nil, nil, nil, nil, model
-		case "deepseek":
-			if hasDeepSeek {
-				return nil, nil, nil, deepseekAPIKey, nil, model
-			}
-			if hasAnthropic {
-				return anthropicAPIKey, nil, nil, nil, nil, nil
-			}
-			if hasGoogle {
-				fallback := "gemini-2.5-flash"
-				return nil, googleAPIKey, nil, nil, nil, &fallback
-			}
-			if hasGroq {
-				fallback := "openai/gpt-oss-20b"
-				return nil, nil, groqAPIKey, nil, nil, &fallback
-			}
-			if hasOpenAI {
-				fallback := "gpt-5-mini"
-				return nil, nil, nil, nil, openAIAPIKey, &fallback
-			}
-			return nil, nil, nil, nil, nil, model
-		case "openai":
-			if hasOpenAI {
-				return nil, nil, nil, nil, openAIAPIKey, model
-			}
-			if hasAnthropic {
-				return anthropicAPIKey, nil, nil, nil, nil, nil
-			}
-			if hasGoogle {
-				fallback := "gemini-2.5-flash"
-				return nil, googleAPIKey, nil, nil, nil, &fallback
-			}
-			if hasGroq {
-				fallback := "openai/gpt-oss-20b"
-				return nil, nil, groqAPIKey, nil, nil, &fallback
-			}
-			if hasDeepSeek {
-				fallback := "deepseek-chat"
-				return nil, nil, nil, deepseekAPIKey, nil, &fallback
-			}
-			return nil, nil, nil, nil, nil, model
-		default:
-			if hasAnthropic {
-				return anthropicAPIKey, nil, nil, nil, nil, model
-			}
-			if hasGoogle {
-				fallback := "gemini-2.5-flash"
-				return nil, googleAPIKey, nil, nil, nil, &fallback
-			}
-			if hasGroq {
-				fallback := "openai/gpt-oss-20b"
-				return nil, nil, groqAPIKey, nil, nil, &fallback
-			}
-			if hasDeepSeek {
-				fallback := "deepseek-chat"
-				return nil, nil, nil, deepseekAPIKey, nil, &fallback
-			}
-			if hasOpenAI {
-				fallback := "gpt-5-mini"
-				return nil, nil, nil, nil, openAIAPIKey, &fallback
-			}
-			return nil, nil, nil, nil, nil, model
+		preferredProvider := service.LLMProviderForModel(model)
+		if outAnthropic, outGoogle, outGroq, outDeepSeek, outOpenAI, resolved := selectByProvider(preferredProvider, model); resolved != nil {
+			return outAnthropic, outGoogle, outGroq, outDeepSeek, outOpenAI, resolved
 		}
+		for _, provider := range service.CostEfficientLLMProviders(preferredProvider) {
+			if outAnthropic, outGoogle, outGroq, outDeepSeek, outOpenAI, resolved := selectByProvider(provider, nil); resolved != nil {
+				return outAnthropic, outGoogle, outGroq, outDeepSeek, outOpenAI, resolved
+			}
+		}
+		return nil, nil, nil, nil, nil, model
 	}
 
 	// モデル未指定時は、利用可能なキーに合わせて自動選択。
-	if hasAnthropic {
-		return anthropicAPIKey, nil, nil, nil, nil, nil
-	}
-	if hasGoogle {
-		fallback := "gemini-2.5-flash"
-		return nil, googleAPIKey, nil, nil, nil, &fallback
-	}
-	if hasGroq {
-		fallback := "openai/gpt-oss-20b"
-		return nil, nil, groqAPIKey, nil, nil, &fallback
-	}
-	if hasDeepSeek {
-		fallback := "deepseek-chat"
-		return nil, nil, nil, deepseekAPIKey, nil, &fallback
-	}
-	if hasOpenAI {
-		fallback := "gpt-5-mini"
-		return nil, nil, nil, nil, openAIAPIKey, &fallback
+	for _, provider := range service.CostEfficientLLMProviders("") {
+		if outAnthropic, outGoogle, outGroq, outDeepSeek, outOpenAI, resolved := selectByProvider(provider, nil); resolved != nil {
+			return outAnthropic, outGoogle, outGroq, outDeepSeek, outOpenAI, resolved
+		}
 	}
 	return nil, nil, nil, nil, nil, nil
 }

@@ -292,6 +292,7 @@ export const enDict: Dict = {
   "settings.deleteKey": "Delete key",
   "settings.modelsDescription": "Uses server defaults when empty. OpenAI, Gemini, Groq, and DeepSeek are also available for facts/summary/ask/digest flows.",
   "settings.pricingDescription": "Prices are from the app's static tables (OpenAI/Anthropic/Google/Groq/DeepSeek); update when provider pricing changes.",
+  "settings.modelPreset.costPerformance": "Apply cost-efficient preset",
   "settings.modelGuide.open": "View pricing and recommendations",
   "settings.modelGuide.title": "Model comparison",
   "settings.modelGuide.description": "Reference input / output pricing and a practical recommendation for each model.",

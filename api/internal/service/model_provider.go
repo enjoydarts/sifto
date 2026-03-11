@@ -2,6 +2,8 @@ package service
 
 import "strings"
 
+var costEfficientProviderPriority = []string{"groq", "google", "deepseek", "openai", "anthropic"}
+
 func IsGeminiModel(model *string) bool {
 	if model == nil {
 		return false
@@ -60,4 +62,15 @@ func DefaultLLMModelForPurpose(provider, purpose string) string {
 		return v
 	}
 	return "claude-sonnet-4-6"
+}
+
+func CostEfficientLLMProviders(exclude string) []string {
+	out := make([]string, 0, len(costEfficientProviderPriority))
+	for _, provider := range costEfficientProviderPriority {
+		if provider == exclude {
+			continue
+		}
+		out = append(out, provider)
+	}
+	return out
 }

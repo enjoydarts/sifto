@@ -10,7 +10,7 @@
         "digest_cluster_draft": "claude-sonnet-4-6",
         "digest": "claude-sonnet-4-6",
         "ask": "claude-sonnet-4-6",
-        "source_suggestion": "claude-sonnet-4-6"
+        "source_suggestion": "claude-haiku-4-5"
       }
     },
     {
@@ -18,12 +18,12 @@
       "api_key_header": "x-google-api-key",
       "match_prefixes": ["gemini-", "models/gemini-"],
       "default_models": {
-        "facts": "gemini-2.5-flash",
+        "facts": "gemini-2.5-flash-lite",
         "summary": "gemini-2.5-flash",
         "digest_cluster_draft": "gemini-2.5-flash",
-        "digest": "gemini-2.5-pro",
+        "digest": "gemini-2.5-flash",
         "ask": "gemini-2.5-flash",
-        "source_suggestion": "gemini-2.5-flash"
+        "source_suggestion": "gemini-2.5-flash-lite"
       }
     },
     {
@@ -45,9 +45,9 @@
       "match_exact": ["deepseek-chat", "deepseek-reasoner"],
       "default_models": {
         "facts": "deepseek-chat",
-        "summary": "deepseek-reasoner",
-        "digest_cluster_draft": "deepseek-reasoner",
-        "digest": "deepseek-reasoner",
+        "summary": "deepseek-chat",
+        "digest_cluster_draft": "deepseek-chat",
+        "digest": "deepseek-chat",
         "ask": "deepseek-chat",
         "source_suggestion": "deepseek-chat"
       }
@@ -58,10 +58,10 @@
       "match_prefixes": ["gpt-5"],
       "default_models": {
         "facts": "gpt-5-mini",
-        "summary": "gpt-5",
-        "digest_cluster_draft": "gpt-5.4",
-        "digest": "gpt-5.4",
-        "ask": "gpt-5",
+        "summary": "gpt-5-mini",
+        "digest_cluster_draft": "gpt-5",
+        "digest": "gpt-5",
+        "ask": "gpt-5-mini",
         "source_suggestion": "gpt-5-mini"
       }
     }
@@ -282,9 +282,9 @@
       "provider": "groq",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
       "recommendation": "recommended",
-      "best_for": "ask",
+      "best_for": "facts",
       "highlights": ["jsonStable", "fast"],
-      "comment": "超高速でコスパ抜群。ツール利用に強く、抽出段階の定番候補。",
+      "comment": "超高速でコスパ抜群。事実抽出・RAG質問・ソース提案の標準候補として回しやすい。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": true,
@@ -305,9 +305,9 @@
       "provider": "groq",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
       "recommendation": "recommended",
-      "best_for": "summary",
+      "best_for": "balanced",
       "highlights": ["jsonStable", "fast"],
-      "comment": "長文処理と推論のバランスが良く、検索結果を混ぜる要約で扱いやすい。",
+      "comment": "要約・チェック・ダイジェストまで広く任せやすい低コスト主力。全体のコスパ重視構成で中心に置きやすい。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": true,
@@ -442,10 +442,10 @@
       "id": "deepseek-reasoner",
       "provider": "deepseek",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
-      "recommendation": "strong",
+      "recommendation": "experimental",
       "best_for": "digest",
       "highlights": [],
-      "comment": "推論寄りの長文整理に向くが、応答の重さを許容する高難度タスク向け。",
+      "comment": "推論寄りで比較価値はあるが、速度面では chat より重い。常用より難ケースの比較向け。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -512,9 +512,9 @@
       "provider": "openai",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
       "recommendation": "strong",
-      "best_for": "summary",
+      "best_for": "balanced",
       "highlights": ["jsonStable"],
-      "comment": "通常要約や質問応答の本命候補。コストは上がるが、JSON整形と長文品質は期待しやすい。",
+      "comment": "OpenAI 内で品質を少し上げたい時の主力。mini から一段引き上げる用途に収まりが良い。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": true,
@@ -626,10 +626,10 @@
       "id": "gpt-5.4",
       "provider": "openai",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
-      "recommendation": "recommended",
+      "recommendation": "experimental",
       "best_for": "digest",
       "highlights": ["jsonStable"],
-      "comment": "OpenAI 5系の上位比較候補。ダイジェストやクラスタ草稿の品質確認に向く。",
+      "comment": "品質比較には有用だが、コスパ重視の常用設定では gpt-5 や mini を先に検討したい。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": true,

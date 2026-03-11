@@ -352,25 +352,34 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			}
 		}
 	}
-	if hasAnthropic {
-		v := "claude-sonnet-4-6"
-		return &v
-	}
-	if hasGoogle {
-		v := "gemini-2.5-flash"
-		return &v
-	}
-	if hasGroq {
-		v := "openai/gpt-oss-20b"
-		return &v
-	}
-	if hasDeepSeek {
-		v := "deepseek-chat"
-		return &v
-	}
-	if hasOpenAI {
-		v := "gpt-5-mini"
-		return &v
+	for _, provider := range service.CostEfficientLLMProviders("") {
+		switch provider {
+		case "groq":
+			if hasGroq {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				return &v
+			}
+		case "google":
+			if hasGoogle {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				return &v
+			}
+		case "deepseek":
+			if hasDeepSeek {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				return &v
+			}
+		case "openai":
+			if hasOpenAI {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				return &v
+			}
+		case "anthropic":
+			if hasAnthropic {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				return &v
+			}
+		}
 	}
 	return nil
 }

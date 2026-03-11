@@ -292,6 +292,7 @@ export const jaDict: Dict = {
   "settings.deleteKey": "キーを削除",
   "settings.modelsDescription": "未設定時はサーバー既定モデルを使います。事実抽出・要約・質問・ダイジェスト系ではOpenAI / Gemini / Groq / DeepSeek も選択できます。",
   "settings.pricingDescription": "単価はコード内の静的テーブル表示（OpenAI/Anthropic/Google/Groq/DeepSeek）です。価格改定時は更新が必要です。",
+  "settings.modelPreset.costPerformance": "コスパ重視を適用",
   "settings.modelGuide.open": "価格とおすすめ度を見る",
   "settings.modelGuide.title": "モデル比較",
   "settings.modelGuide.description": "入力 / 出力の概算単価と、現時点での使い分けの目安です。",

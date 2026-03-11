@@ -40,10 +40,11 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		purpose  string
 		want     string
 	}{
-		{provider: "openai", purpose: "digest", want: "gpt-5.4"},
+		{provider: "openai", purpose: "digest", want: "gpt-5"},
 		{provider: "openai", purpose: "facts", want: "gpt-5-mini"},
-		{provider: "deepseek", purpose: "summary", want: "deepseek-reasoner"},
+		{provider: "deepseek", purpose: "summary", want: "deepseek-chat"},
 		{provider: "groq", purpose: "ask", want: "openai/gpt-oss-20b"},
+		{provider: "google", purpose: "facts", want: "gemini-2.5-flash-lite"},
 	}
 	for _, tt := range defaults {
 		if got := DefaultLLMModelForPurpose(tt.provider, tt.purpose); got != tt.want {

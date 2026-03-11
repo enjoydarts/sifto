@@ -40,6 +40,14 @@ from app.services.digest_task_common import (
     parse_cluster_draft_result,
     parse_digest_result,
 )
+from app.services.feed_task_common import (
+    build_ask_task,
+    build_rank_feed_task,
+    build_seed_sites_task,
+    parse_ask_result,
+    parse_rank_feed_result,
+    parse_seed_sites_result,
+)
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -967,60 +975,16 @@ def ask_question(query: str, candidates: list[dict], api_key: str | None = None,
                 "estimated_cost_usd": 0.0,
             },
         }
-
-    lines: list[str] = []
-    for idx, item in enumerate(candidates, start=1):
-        title = item.get("translated_title") or item.get("title") or "（タイトルなし）"
-        facts = [str(v).strip() for v in (item.get("facts") or []) if str(v).strip()]
-        lines.append(
-            f"- item_id={item.get('item_id')} | rank={idx} | title={title} | published_at={item.get('published_at') or ''} | "
-            f"topics={', '.join(item.get('topics') or [])} | similarity={item.get('similarity')} | "
-            f"summary={str(item.get('summary') or '')[:500]} | facts={' / '.join(facts[:4])[:400]}"
-        )
-
-    system_prompt = """# Role
-あなたはRSSキュレーションアシスタントです。
-
-# Task
-与えられた候補記事だけを根拠に、日本語で質問へ回答してください。
-
-# Rules
-- 根拠は候補記事だけに限定してください。
-- 候補記事から判断できないことは「候補記事からは判断できない」と明記してください。
-- 出力はJSONオブジェクトのみとし、余計な説明文は書かないでください。
-- answer は2〜3文にしてください。
-- bullets は2〜3件にしてください。
-- citations は2〜3件に絞ってください。
-- citations は同じ話題に偏らせず、回答の主要な論点を支える記事を優先してください。
-- answer の各文末には対応する item_id を [[item_id]] 形式で付けてください。
-- bullets には citation マーカーを付けないでください。
-- answer で使う [[item_id]] は citations に含まれる item_id だけを使ってください。
-- [[item_id]] を付けられない文は書かないでください。
-"""
-
-    user_prompt = f"""# Output
-{{
-  "answer": "2〜3文の回答 [[item_id]]",
-  "bullets": ["補足ポイント1", "補足ポイント2"],
-  "citations": [
-    {{"item_id": "uuid", "reason": "この観点の根拠"}}
-  ]
-}}
-
-# Input
-question: {query}
-candidates:
-{chr(10).join(lines)}
-"""
+    task = build_ask_task(query, candidates)
     message, used_model = _call_with_model_fallback(
-        f"{system_prompt}\n\n{user_prompt}",
+        f"{task['system_instruction']}\n\n{task['prompt']}",
         str(model or _digest_model),
         _digest_model_fallback,
         max_tokens=3200,
         api_key=api_key,
         timeout_sec=_env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 90.0),
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
+        system_prompt=task["system_instruction"],
+        user_prompt=task["prompt"],
     )
     if message is None:
         return {
@@ -1038,56 +1002,8 @@ candidates:
             },
         }
     text = message.content[0].text.strip()
-    data = _extract_first_json_object(text) or {}
-    answer = str(data.get("answer") or "").strip()
-    if not answer:
-        s = _strip_code_fence(text)
-        m_answer = re.search(r'"answer"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
-        if m_answer:
-            answer = _decode_json_string_fragment(m_answer.group(1)).strip()
-    if not answer:
-        answer = _extract_json_string_value_loose(text, "answer")
-    bullets = [str(v).strip() for v in (data.get("bullets") or []) if str(v).strip()]
-    citations = []
-    for raw in data.get("citations") or []:
-        if not isinstance(raw, dict):
-            continue
-        item_id = str(raw.get("item_id") or "").strip()
-        if not item_id:
-            continue
-        citations.append({
-            "item_id": item_id,
-            "reason": str(raw.get("reason") or "").strip(),
-        })
-    if not citations:
-        s = _strip_code_fence(text)
-        for match in re.finditer(r'"item_id"\s*:\s*"([^"]+)"(?:[^}]*"reason"\s*:\s*"((?:\\.|[^"\\])*)")?', s, re.S):
-            citations.append({
-                "item_id": match.group(1).strip(),
-                "reason": _decode_json_string_fragment(match.group(2)).strip() if match.group(2) else "",
-            })
-    if not answer:
-        snippet = text[:500].replace("\n", "\\n")
-        raise RuntimeError(f"claude ask missing answer; response_snippet={snippet}")
-    if len(citations) < min(3, len(candidates)):
-        seen = {str(c.get("item_id") or "").strip() for c in citations}
-        for item in candidates:
-            item_id = str(item.get("item_id") or "").strip()
-            if not item_id or item_id in seen:
-                continue
-            citations.append({
-                "item_id": item_id,
-                "reason": "回答に関連する候補記事",
-            })
-            seen.add(item_id)
-            if len(citations) >= min(5, len(candidates)):
-                break
-    return {
-        "answer": answer,
-        "bullets": bullets[:3],
-        "citations": citations[:3],
-        "llm": _llm_meta(message, "digest", used_model or _digest_model),
-    }
+    result = parse_ask_result(text, candidates, error_prefix="claude ask missing answer")
+    return {**result, "llm": _llm_meta(message, "ask", used_model or _digest_model)}
 
 
 def compose_digest_cluster_draft(
@@ -1183,18 +1099,12 @@ def rank_feed_suggestions(
                 "estimated_cost_usd": 0.0,
             },
         }
-
-    # Keep prompt bounded.
-    existing_sources = existing_sources[:40]
-    preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:20]
-    candidates = candidates[:80]
-    positive_examples = (positive_examples or [])[:8]
-    negative_examples = (negative_examples or [])[:5]
+    task = build_rank_feed_task(existing_sources, preferred_topics, candidates, positive_examples, negative_examples)
 
     if _client_for_api_key(api_key) is None:
         # Local/dev fallback: keep order and synthesize simple reasons.
         out = []
-        for c in candidates:
+        for c in task["candidates"]:
             reasons = c.get("reasons") or []
             matched_topics = c.get("matched_topics") or []
             reason = " / ".join([*(["高評価トピックに近い"] if matched_topics else []), *[str(r) for r in reasons[:1]]]) or "関連候補"
@@ -1219,41 +1129,8 @@ def rank_feed_suggestions(
             },
         }
 
-    prompt = f"""あなたはRSSフィードの推薦アシスタントです。
-既存の購読ソース・興味トピック・候補フィードを見て、ユーザーに合いそうな候補を順位付けしてください。
-
-要件:
-- 候補は必ず id で指定する（urlは補助情報で、新規URLを作らない）
-- 既存ソースと重複しすぎる候補は下げる
-- 興味トピックに近い候補を優先
-- 理由は日本語で短く（40〜100字）
-- JSONのみで返す
-
-返却形式:
-{{
-  "items": [
-    {{"id":"c001", "reason":"...", "confidence":0.0-1.0}}
-  ]
-}}
-
-Few-shot（好みの既存Feed例）:
-{json.dumps(positive_examples, ensure_ascii=False)}
-
-Few-shot（避けたい傾向の既存Feed例）:
-{json.dumps(negative_examples, ensure_ascii=False)}
-
-既存ソース:
-{json.dumps(existing_sources, ensure_ascii=False)}
-
-興味トピック:
-{json.dumps(preferred_topics, ensure_ascii=False)}
-
-候補フィード:
-{json.dumps(candidates, ensure_ascii=False)}
-"""
-
     message, used_model = _call_with_model_fallback(
-        prompt,
+        task["prompt"],
         str(model or _feed_suggest_model),
         _feed_suggest_model_fallback,
         max_tokens=2800,
@@ -1274,29 +1151,7 @@ Few-shot（避けたい傾向の既存Feed例）:
         }
 
     text = message.content[0].text.strip()
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    try:
-        data = json.loads(text[start:end])
-    except Exception:
-        data = {}
-    rows = data.get("items", [])
-    if not isinstance(rows, list):
-        rows = []
-    out: list[dict] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        cid = str(row.get("id") or "").strip()
-        url = str(row.get("url") or "").strip()
-        if not cid and not url:
-            continue
-        reason = str(row.get("reason") or "").strip()[:180]
-        try:
-            confidence = _clamp01(float(row.get("confidence", 0.5)), 0.5)
-        except Exception:
-            confidence = 0.5
-        out.append({"id": cid or None, "url": url, "reason": reason, "confidence": confidence})
+    out = parse_rank_feed_result(text, task["candidates"])
     return {
         "items": out,
         "llm": _llm_meta(message, "source_suggestion", used_model or _feed_suggest_model),
@@ -1311,10 +1166,7 @@ def suggest_feed_seed_sites(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
-    existing_sources = existing_sources[:40]
-    preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:20]
-    positive_examples = (positive_examples or [])[:8]
-    negative_examples = (negative_examples or [])[:5]
+    task = build_seed_sites_task(existing_sources, preferred_topics, positive_examples, negative_examples)
 
     if _client_for_api_key(api_key) is None:
         return {
@@ -1329,39 +1181,8 @@ def suggest_feed_seed_sites(
                 "estimated_cost_usd": 0.0,
             },
         }
-
-    prompt = f"""あなたはRSSフィード探索アシスタントです。
-既存の購読ソースと興味トピックを元に、「まだ登録していない可能性が高い」ニュース/技術メディアのサイトURL（ホームページURL）候補を提案してください。
-
-要件:
-- URLは実在しそうなサイトのトップURLを優先（https://example.com/ 形式）
-- RSS URLを直接知らない場合はサイトトップURLでよい（後段でRSS探索する）
-- 既存ソースと同じURLは除外
-- 日本語で短い理由を付ける
-- 最大30件
-- JSONのみで返す
-
-返却形式（必須）:
-{{
-  "items": [
-    {{"url":"https://...", "reason":"..."}}
-  ]
-}}
-
-Few-shot（好みの既存Feed例）:
-{json.dumps(positive_examples, ensure_ascii=False)}
-
-Few-shot（避けたい傾向の既存Feed例）:
-{json.dumps(negative_examples, ensure_ascii=False)}
-
-既存ソース:
-{json.dumps(existing_sources, ensure_ascii=False)}
-
-興味トピック:
-{json.dumps(preferred_topics, ensure_ascii=False)}
-"""
     message, used_model = _call_with_model_fallback(
-        prompt,
+        task["prompt"],
         str(model or _feed_suggest_model),
         _feed_suggest_model_fallback,
         max_tokens=2200,
@@ -1381,20 +1202,7 @@ Few-shot（避けたい傾向の既存Feed例）:
             },
         }
     text = message.content[0].text.strip()
-    data = _extract_first_json_object(text) or {}
-    rows = data.get("items", [])
-    if not isinstance(rows, list):
-        rows = []
-    existing_set = {str(s.get("url") or "").strip().lower().rstrip("/") for s in existing_sources}
-    out: list[dict] = []
-    for row in rows[:30]:
-        if not isinstance(row, dict):
-            continue
-        url = str(row.get("url") or "").strip()
-        reason = str(row.get("reason") or "").strip()[:180]
-        if not url or url.lower().rstrip("/") in existing_set:
-            continue
-        out.append({"url": url, "reason": reason})
+    out = parse_seed_sites_result(text, task["existing_sources"])
     if len(out) == 0:
         rescue_prompt = f"""既存ソースと重複しないサイトURL候補を必ず10件以上返してください。JSONのみ。
 {{
@@ -1403,9 +1211,9 @@ Few-shot（避けたい傾向の既存Feed例）:
   ]
 }}
 既存ソース:
-{json.dumps(existing_sources, ensure_ascii=False)}
+{json.dumps(task["existing_sources"], ensure_ascii=False)}
 興味トピック:
-{json.dumps(preferred_topics, ensure_ascii=False)}
+{json.dumps(task["preferred_topics"], ensure_ascii=False)}
 """
         rescue_message, _ = _call_with_model_fallback(
             rescue_prompt,
@@ -1415,17 +1223,7 @@ Few-shot（避けたい傾向の既存Feed例）:
             api_key=api_key,
         )
         if rescue_message is not None:
-            rescue_data = _extract_first_json_object(rescue_message.content[0].text.strip()) or {}
-            rescue_rows = rescue_data.get("items", [])
-            if isinstance(rescue_rows, list):
-                for row in rescue_rows[:30]:
-                    if not isinstance(row, dict):
-                        continue
-                    url = str(row.get("url") or "").strip()
-                    reason = str(row.get("reason") or "").strip()[:180]
-                    if not url or url.lower().rstrip("/") in existing_set:
-                        continue
-                    out.append({"url": url, "reason": reason})
+            out.extend(parse_seed_sites_result(rescue_message.content[0].text.strip(), task["existing_sources"]))
     return {
         "items": out,
         "llm": _llm_meta(message, "source_suggestion", used_model or _feed_suggest_model),

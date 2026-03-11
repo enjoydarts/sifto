@@ -49,6 +49,7 @@ async def langfuse_request_tracing(request: Request, call_next):
         "source_id": request.headers.get("x-sifto-source-id", ""),
         "purpose": request.headers.get("x-sifto-purpose", ""),
     }
+    observation_type = "span" if request.url.path == "/extract-body" else "generation"
     with langfuse_span(
         f"worker:{request.url.path.strip('/') or 'root'}",
         metadata=metadata,
@@ -57,6 +58,7 @@ async def langfuse_request_tracing(request: Request, call_next):
             f"path:{request.url.path}",
             f"purpose:{metadata['purpose'] or 'unknown'}",
         ],
+        as_type=observation_type,
     ) as current_span:
         request.state.langfuse_span = current_span
         session_id = ""

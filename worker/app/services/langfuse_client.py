@@ -249,7 +249,7 @@ def get_prompt_text(name: str, fallback: str, *, variables: dict[str, object] | 
 
 
 @contextmanager
-def span(name: str, *, input=None, metadata=None, tags=None):
+def span(name: str, *, input=None, metadata=None, tags=None, as_type: str = "span"):
     client = _client()
     token = _prompt_refs_var.set(())
     span_token = _current_span_var.set(None)
@@ -269,7 +269,11 @@ def span(name: str, *, input=None, metadata=None, tags=None):
     if merged_metadata:
         kwargs["metadata"] = merged_metadata
     try:  # pragma: no cover
-        with client.start_as_current_span(**kwargs) as current_span:
+        if as_type == "span":
+            span_cm = client.start_as_current_span(**kwargs)
+        else:
+            span_cm = client.start_as_current_observation(as_type=as_type, **kwargs)
+        with span_cm as current_span:
             _current_span_var.set(current_span)
             yield current_span
     except Exception as e:

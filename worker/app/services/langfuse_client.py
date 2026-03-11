@@ -220,13 +220,14 @@ def span(name: str, *, input=None, metadata=None, tags=None):
             _prompt_refs_var.reset(token)
             _current_span_var.reset(span_token)
         return
+    merged_metadata = dict(metadata or {})
+    if tags:
+        merged_metadata["tags"] = list(tags)
     kwargs = {"name": name}
     if input is not None:
         kwargs["input"] = input
-    if metadata is not None:
-        kwargs["metadata"] = metadata
-    if tags is not None:
-        kwargs["tags"] = tags
+    if merged_metadata:
+        kwargs["metadata"] = merged_metadata
     try:  # pragma: no cover
         with client.start_as_current_span(**kwargs) as current_span:
             _current_span_var.set(current_span)

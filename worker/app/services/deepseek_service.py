@@ -2,9 +2,6 @@ import json
 import logging
 import os
 import re
-import time
-
-import httpx
 
 from app.services.llm_catalog import model_pricing, model_supports
 from app.services.llm_text_utils import (
@@ -52,6 +49,7 @@ from app.services.feed_task_common import (
 )
 from app.services.facts_task_common import build_facts_task, parse_facts_result
 from app.services.task_transport_common import wrap_json_transport
+from app.services.openai_compat_transport import run_chat_json
 
 _log = logging.getLogger(__name__)
 _DEEPSEEK_PRICING_SOURCE_VERSION = "deepseek_static_2026_03"
@@ -139,24 +137,6 @@ def _supports_strict_schema(model: str) -> bool:
     return model_supports(_normalize_model_family(model), "supports_strict_json_schema") or model_supports(model, "supports_strict_json_schema")
 
 
-def _usage_from_response(data: dict) -> dict:
-    usage = data.get("usage") or {}
-    prompt_details = usage.get("prompt_tokens_details") or {}
-    cached_tokens = (
-        usage.get("prompt_cache_hit_tokens")
-        or usage.get("cache_read_input_tokens")
-        or prompt_details.get("cached_tokens")
-        or usage.get("cached_tokens")
-        or 0
-    )
-    return {
-        "input_tokens": int(usage.get("prompt_tokens", 0) or 0),
-        "output_tokens": int(usage.get("completion_tokens", 0) or 0),
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": int(cached_tokens or 0),
-    }
-
-
 def _chat_json(
     prompt: str,
     model: str,
@@ -171,91 +151,27 @@ def _chat_json(
     api_key = (api_key or "").strip()
     if not api_key:
         raise RuntimeError("deepseek api key is required")
-    body: dict = {
-        "model": _normalize_model_name(model),
-        "messages": [],
-        "max_tokens": max_output_tokens,
-    }
-    if _normalize_model_family(model) != "deepseek-reasoner":
-        body["temperature"] = 0.2
-    if system_instruction:
-        body["messages"].append({"role": "system", "content": system_instruction})
-    body["messages"].append({"role": "user", "content": prompt})
-    use_strict_schema = response_schema is not None and _supports_strict_schema(model)
-    if response_schema is not None:
-        if use_strict_schema:
-            body["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": schema_name,
-                    "strict": True,
-                    "schema": response_schema,
-                },
-            }
-        else:
-            body["response_format"] = {"type": "json_object"}
-    url = "https://api.deepseek.com/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("DEEPSEEK_TIMEOUT_SEC", 90.0)
     attempts = max(1, int(os.getenv("DEEPSEEK_RETRY_ATTEMPTS", "3") or "3"))
     base_sleep_sec = _env_timeout_seconds("DEEPSEEK_RETRY_BASE_SEC", 0.5)
-    retryable_status = {408, 409, 429, 500, 502, 503, 504}
-
-    def _is_json_validation_error(resp: httpx.Response) -> bool:
-        return resp.status_code == 400 and "json_validate_failed" in (resp.text or "")
-
-    resp: httpx.Response | None = None
-    last_error: Exception | None = None
-    with httpx.Client(timeout=req_timeout) as client:
-        for i in range(attempts):
-            try:
-                resp = client.post(url, headers=headers, json=body)
-                if _is_json_validation_error(resp) and response_schema is not None:
-                    if use_strict_schema:
-                        fallback_body = dict(body)
-                        fallback_body["response_format"] = {"type": "json_object"}
-                        resp = client.post(url, headers=headers, json=fallback_body)
-                    if _is_json_validation_error(resp):
-                        fallback_body = dict(body)
-                        fallback_body.pop("response_format", None)
-                        resp = client.post(url, headers=headers, json=fallback_body)
-            except Exception as e:
-                last_error = e
-                if i < attempts - 1:
-                    sleep_sec = base_sleep_sec * (2**i)
-                    _log.warning("deepseek chat.completions request failed model=%s retry_in=%.1fs attempt=%d/%d err=%s", _normalize_model_name(model), sleep_sec, i + 1, attempts, e)
-                    time.sleep(sleep_sec)
-                    continue
-                raise RuntimeError(f"deepseek chat.completions request failed: {e}") from e
-
-            if resp.status_code < 400:
-                break
-            if resp.status_code in retryable_status and i < attempts - 1:
-                sleep_sec = base_sleep_sec * (2**i)
-                _log.warning("deepseek chat.completions retrying model=%s status=%d retry_in=%.1fs attempt=%d/%d", _normalize_model_name(model), resp.status_code, sleep_sec, i + 1, attempts)
-                time.sleep(sleep_sec)
-                continue
-            break
-    if resp is None:
-        if last_error is not None:
-            raise RuntimeError(f"deepseek chat.completions request failed: {last_error}") from last_error
-        raise RuntimeError("deepseek chat.completions failed: no response")
-    if resp.status_code >= 400:
-        raise RuntimeError(f"deepseek chat.completions failed status={resp.status_code} body={resp.text[:1000]}")
-    data = resp.json() if resp.content else {}
-    choices = data.get("choices") or []
-    if not choices:
-        raise RuntimeError("deepseek chat.completions failed: empty choices")
-    message = choices[0].get("message") or {}
-    content = message.get("content")
-    if isinstance(content, list):
-        text = "\n".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
-    else:
-        text = str(content or "")
-    return text.strip(), _usage_from_response(data)
+    return run_chat_json(
+        prompt,
+        model,
+        api_key,
+        url="https://api.deepseek.com/chat/completions",
+        normalize_model_name=_normalize_model_name,
+        supports_strict_schema=_supports_strict_schema,
+        timeout_sec=req_timeout,
+        attempts=attempts,
+        base_sleep_sec=base_sleep_sec,
+        provider_name="deepseek",
+        logger=_log,
+        system_instruction=system_instruction,
+        max_output_tokens=max_output_tokens,
+        response_schema=response_schema,
+        schema_name=schema_name,
+        include_temperature=_normalize_model_family(model) != "deepseek-reasoner",
+    )
 
 
 def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:

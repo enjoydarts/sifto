@@ -51,6 +51,7 @@ from app.services.feed_task_common import (
     parse_seed_sites_result,
 )
 from app.services.facts_task_common import build_facts_task, parse_facts_result
+from app.services.openai_compat_transport import run_chat_json
 from app.services.task_transport_common import wrap_json_transport
 
 _log = logging.getLogger(__name__)
@@ -163,24 +164,6 @@ def _responses_reasoning(model: str) -> dict | None:
     if family.startswith("gpt-5.1") or family.startswith("gpt-5.2") or family.startswith("gpt-5.4"):
         return {"effort": "none"}
     return {"effort": "minimal"}
-
-
-def _usage_from_response(data: dict) -> dict:
-    usage = data.get("usage") or {}
-    prompt_details = usage.get("prompt_tokens_details") or {}
-    cached_tokens = (
-        usage.get("prompt_cache_hit_tokens")
-        or usage.get("cache_read_input_tokens")
-        or prompt_details.get("cached_tokens")
-        or usage.get("cached_tokens")
-        or 0
-    )
-    return {
-        "input_tokens": int(usage.get("prompt_tokens", 0) or 0),
-        "output_tokens": int(usage.get("completion_tokens", 0) or 0),
-        "cache_creation_input_tokens": 0,
-        "cache_read_input_tokens": int(cached_tokens or 0),
-    }
 
 
 def _usage_from_responses(data: dict) -> dict:
@@ -332,90 +315,27 @@ def _chat_json(
             schema_name=schema_name,
             timeout_sec=timeout_sec,
         )
-    body: dict = {
-        "model": _normalize_model_name(model),
-        "messages": [],
-        "max_completion_tokens": max_output_tokens,
-    }
-    if _supports_custom_temperature(model):
-        body["temperature"] = 0.2
-    if system_instruction:
-        body["messages"].append({"role": "system", "content": system_instruction})
-    body["messages"].append({"role": "user", "content": prompt})
-    use_strict_schema = response_schema is not None and _supports_strict_schema(model)
-    if response_schema is not None:
-        if use_strict_schema:
-            body["response_format"] = {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": schema_name,
-                    "strict": True,
-                    "schema": response_schema,
-                },
-            }
-        else:
-            body["response_format"] = {"type": "json_object"}
-    url = "https://api.openai.com/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("OPENAI_TIMEOUT_SEC", 90.0)
     attempts = max(1, int(os.getenv("OPENAI_RETRY_ATTEMPTS", "3") or "3"))
     base_sleep_sec = _env_timeout_seconds("OPENAI_RETRY_BASE_SEC", 0.5)
-    retryable_status = {408, 409, 429, 500, 502, 503, 504}
-
-    def _is_json_validation_error(resp: httpx.Response) -> bool:
-        return resp.status_code == 400 and ("json_validate_failed" in (resp.text or "") or "response_format" in (resp.text or ""))
-
-    resp: httpx.Response | None = None
-    last_error: Exception | None = None
-    with httpx.Client(timeout=req_timeout) as client:
-        for i in range(attempts):
-            try:
-                resp = client.post(url, headers=headers, json=body)
-                if _is_json_validation_error(resp) and response_schema is not None:
-                    fallback_body = dict(body)
-                    fallback_body["response_format"] = {"type": "json_object"}
-                    resp = client.post(url, headers=headers, json=fallback_body)
-                    if _is_json_validation_error(resp):
-                        fallback_body = dict(body)
-                        fallback_body.pop("response_format", None)
-                        resp = client.post(url, headers=headers, json=fallback_body)
-            except Exception as e:
-                last_error = e
-                if i < attempts - 1:
-                    sleep_sec = base_sleep_sec * (2**i)
-                    _log.warning("openai chat.completions request failed model=%s retry_in=%.1fs attempt=%d/%d err=%s", _normalize_model_name(model), sleep_sec, i + 1, attempts, e)
-                    time.sleep(sleep_sec)
-                    continue
-                raise RuntimeError(f"openai chat.completions request failed: {e}") from e
-
-            if resp.status_code < 400:
-                break
-            if resp.status_code in retryable_status and i < attempts - 1:
-                sleep_sec = base_sleep_sec * (2**i)
-                _log.warning("openai chat.completions retrying model=%s status=%d retry_in=%.1fs attempt=%d/%d", _normalize_model_name(model), resp.status_code, sleep_sec, i + 1, attempts)
-                time.sleep(sleep_sec)
-                continue
-            break
-    if resp is None:
-        if last_error is not None:
-            raise RuntimeError(f"openai chat.completions request failed: {last_error}") from last_error
-        raise RuntimeError("openai chat.completions failed: no response")
-    if resp.status_code >= 400:
-        raise RuntimeError(f"openai chat.completions failed status={resp.status_code} body={resp.text[:1000]}")
-    data = resp.json() if resp.content else {}
-    choices = data.get("choices") or []
-    if not choices:
-        raise RuntimeError("openai chat.completions failed: empty choices")
-    message = choices[0].get("message") or {}
-    content = message.get("content")
-    if isinstance(content, list):
-        text = "\n".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
-    else:
-        text = str(content or "")
-    return text.strip(), _usage_from_response(data)
+    return run_chat_json(
+        prompt,
+        model,
+        api_key,
+        url="https://api.openai.com/v1/chat/completions",
+        normalize_model_name=_normalize_model_name,
+        supports_strict_schema=_supports_strict_schema,
+        timeout_sec=req_timeout,
+        attempts=attempts,
+        base_sleep_sec=base_sleep_sec,
+        provider_name="openai",
+        logger=_log,
+        system_instruction=system_instruction,
+        max_output_tokens=max_output_tokens,
+        response_schema=response_schema,
+        schema_name=schema_name,
+        include_temperature=_supports_custom_temperature(model),
+    )
 
 
 def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:

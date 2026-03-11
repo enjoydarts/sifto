@@ -1,0 +1,142 @@
+import httpx
+import time
+
+
+def usage_from_chat_response(data: dict) -> dict:
+    usage = data.get("usage") or {}
+    prompt_details = usage.get("prompt_tokens_details") or {}
+    cached_tokens = (
+        usage.get("prompt_cache_hit_tokens")
+        or usage.get("cache_read_input_tokens")
+        or prompt_details.get("cached_tokens")
+        or usage.get("cached_tokens")
+        or 0
+    )
+    return {
+        "input_tokens": int(usage.get("prompt_tokens", 0) or 0),
+        "output_tokens": int(usage.get("completion_tokens", 0) or 0),
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": int(cached_tokens or 0),
+    }
+
+
+def run_chat_json(
+    prompt: str,
+    model: str,
+    api_key: str,
+    *,
+    url: str,
+    normalize_model_name,
+    supports_strict_schema,
+    timeout_sec: float,
+    attempts: int,
+    base_sleep_sec: float,
+    provider_name: str,
+    logger,
+    system_instruction: str | None = None,
+    max_output_tokens: int = 1200,
+    response_schema: dict | None = None,
+    schema_name: str = "response",
+    include_temperature: bool = True,
+) -> tuple[str, dict]:
+    body: dict = {
+        "model": normalize_model_name(model),
+        "messages": [],
+        "max_tokens": max_output_tokens,
+    }
+    if include_temperature:
+        body["temperature"] = 0.2
+    if system_instruction:
+        body["messages"].append({"role": "system", "content": system_instruction})
+    body["messages"].append({"role": "user", "content": prompt})
+
+    use_strict_schema = response_schema is not None and supports_strict_schema(model)
+    if response_schema is not None:
+        if use_strict_schema:
+            body["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_name,
+                    "strict": True,
+                    "schema": response_schema,
+                },
+            }
+        else:
+            body["response_format"] = {"type": "json_object"}
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    retryable_status = {408, 409, 429, 500, 502, 503, 504}
+    resp: httpx.Response | None = None
+    last_error: Exception | None = None
+
+    def is_json_validation_error(response: httpx.Response) -> bool:
+        return response.status_code == 400 and "json_validate_failed" in (response.text or "")
+
+    with httpx.Client(timeout=timeout_sec) as client:
+        for i in range(attempts):
+            try:
+                resp = client.post(url, headers=headers, json=body)
+                if is_json_validation_error(resp) and response_schema is not None:
+                    if use_strict_schema:
+                        fallback_body = dict(body)
+                        fallback_body["response_format"] = {"type": "json_object"}
+                        resp = client.post(url, headers=headers, json=fallback_body)
+                    if is_json_validation_error(resp):
+                        fallback_body = dict(body)
+                        fallback_body.pop("response_format", None)
+                        resp = client.post(url, headers=headers, json=fallback_body)
+            except Exception as e:
+                last_error = e
+                if i < attempts - 1:
+                    sleep_sec = base_sleep_sec * (2**i)
+                    logger.warning(
+                        "%s chat.completions request failed model=%s retry_in=%.1fs attempt=%d/%d err=%s",
+                        provider_name,
+                        normalize_model_name(model),
+                        sleep_sec,
+                        i + 1,
+                        attempts,
+                        e,
+                    )
+                    time.sleep(sleep_sec)
+                    continue
+                raise RuntimeError(f"{provider_name} chat.completions request failed: {e}") from e
+
+            if resp.status_code < 400:
+                break
+            if resp.status_code in retryable_status and i < attempts - 1:
+                sleep_sec = base_sleep_sec * (2**i)
+                logger.warning(
+                    "%s chat.completions retrying model=%s status=%d retry_in=%.1fs attempt=%d/%d",
+                    provider_name,
+                    normalize_model_name(model),
+                    resp.status_code,
+                    sleep_sec,
+                    i + 1,
+                    attempts,
+                )
+                time.sleep(sleep_sec)
+                continue
+            break
+
+    if resp is None:
+        if last_error is not None:
+            raise RuntimeError(f"{provider_name} chat.completions request failed: {last_error}") from last_error
+        raise RuntimeError(f"{provider_name} chat.completions failed: no response")
+    if resp.status_code >= 400:
+        raise RuntimeError(f"{provider_name} chat.completions failed status={resp.status_code} body={resp.text[:1000]}")
+
+    data = resp.json() if resp.content else {}
+    choices = data.get("choices") or []
+    if not choices:
+        raise RuntimeError(f"{provider_name} chat.completions failed: empty choices")
+    message = choices[0].get("message") or {}
+    content = message.get("content")
+    if isinstance(content, list):
+        text = "\n".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
+    else:
+        text = str(content or "")
+    return text.strip(), usage_from_chat_response(data)

@@ -15,11 +15,17 @@ except Exception:  # pragma: no cover
 
 
 def enabled() -> bool:
-    return os.getenv("LANGFUSE_ENABLED", "0").strip() not in ("", "0", "false", "False")
+    return _env_flag("LANGFUSE_ENABLED", default="0")
 
 
 def prompt_override_enabled() -> bool:
-    return os.getenv("LANGFUSE_PROMPT_OVERRIDE_ENABLED", "0").strip() not in ("", "0", "false", "False")
+    return _env_flag("LANGFUSE_PROMPT_OVERRIDE_ENABLED", default="0")
+
+
+def _env_flag(name: str, *, default: str = "0") -> bool:
+    value = os.getenv(name, default).strip()
+    value = value.strip('"').strip("'").strip().lower()
+    return value not in ("", "0", "false", "no", "off")
 
 
 def _normalize_langfuse_env() -> None:

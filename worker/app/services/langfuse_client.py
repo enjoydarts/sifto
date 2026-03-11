@@ -153,10 +153,12 @@ def update_current(
         _log.warning("langfuse update_current_span failed: %s", e)
 
 
-def score_current(name: str, value, *, comment: str | None = None) -> None:
+def score_current(name: str, value, *, comment: str | None = None, data_type: str | None = None) -> None:
     kwargs = {"name": name, "value": value}
     if comment:
         kwargs["comment"] = comment
+    if data_type:
+        kwargs["data_type"] = data_type
     current_span = _current_span_var.get()
     if current_span is not None:
         try:  # pragma: no cover

@@ -44,5 +44,10 @@ def run_summary_faithfulness_check(
         if result is None:
             raise last_exc
     result["llm"] = llm
-    score_current("faithfulness_verdict", result.get("verdict"), comment=str(result.get("short_comment") or ""))
+    score_current(
+        "faithfulness_verdict",
+        result.get("verdict"),
+        comment=str(result.get("short_comment") or ""),
+        data_type="CATEGORICAL",
+    )
     return result

@@ -7,27 +7,26 @@ import time
 import httpx
 
 from app.services.llm_catalog import model_pricing, model_supports
-from app.services.gemini_service import (
-    _clamp01,
-    _extract_compose_digest_fields,
-    _extract_first_json_object,
-    _extract_json_string_value_loose,
-    _needs_title_translation,
-    _normalize_url_for_match,
-    _parse_json_string_array,
-    _strip_code_fence,
-    _summary_composite_score,
-    _summary_max_tokens,
-    _target_summary_chars,
-    _decode_json_string_fragment,
+from app.services.llm_text_utils import (
+    clamp01 as _clamp01,
+    decode_json_string_fragment as _decode_json_string_fragment,
+    extract_compose_digest_fields as _extract_compose_digest_fields,
+    extract_first_json_object as _extract_first_json_object,
+    extract_json_string_value_loose as _extract_json_string_value_loose,
+    normalize_url_for_match as _normalize_url_for_match,
+    parse_json_string_array as _parse_json_string_array,
+    strip_code_fence as _strip_code_fence,
+    summary_composite_score as _summary_composite_score,
+    summary_max_tokens as _summary_max_tokens,
+    target_summary_chars as _target_summary_chars,
 )
 from app.services.summary_faithfulness_common import (
     SUMMARY_FAITHFULNESS_SCHEMA,
-    require_summary_faithfulness_comment,
-    normalize_summary_faithfulness_result,
     summary_faithfulness_prompt,
+    summary_faithfulness_retry_prompt,
     summary_faithfulness_system_instruction,
 )
+from app.services.summary_faithfulness_runner import run_summary_faithfulness_check
 from app.services.facts_check_common import (
     FACTS_CHECK_SCHEMA,
     facts_check_prompt,
@@ -35,6 +34,7 @@ from app.services.facts_check_common import (
     facts_check_system_instruction,
 )
 from app.services.facts_check_runner import run_facts_check
+from app.services.summary_result_common import finalize_translated_title, normalize_score_breakdown
 
 _log = logging.getLogger(__name__)
 _DEEPSEEK_PRICING_SOURCE_VERSION = "deepseek_static_2026_03"
@@ -442,21 +442,17 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
     data = _extract_first_json_object(text) or {}
     topics = data.get("topics", []) if isinstance(data.get("topics"), list) else []
     raw_breakdown = data.get("score_breakdown") if isinstance(data.get("score_breakdown"), dict) else {}
-    score_breakdown = {
-        "importance": _clamp01(raw_breakdown.get("importance", 0.5)),
-        "novelty": _clamp01(raw_breakdown.get("novelty", 0.5)),
-        "actionability": _clamp01(raw_breakdown.get("actionability", 0.5)),
-        "reliability": _clamp01(raw_breakdown.get("reliability", 0.5)),
-        "relevance": _clamp01(raw_breakdown.get("relevance", 0.5)),
-    }
+    score_breakdown = normalize_score_breakdown(raw_breakdown)
     score_reason = str(data.get("score_reason") or "").strip() or "総合的な重要度・新規性・実用性を基に採点。"
-    translated_title = str(data.get("translated_title") or "").strip()
-    if _needs_title_translation(title, translated_title):
-        translated_title = _translate_title_to_ja(title or "", model, api_key)
+    translated_title = finalize_translated_title(
+        title,
+        str(data.get("translated_title") or "").strip(),
+        translate_func=lambda raw_title: _translate_title_to_ja(raw_title, model, api_key),
+    )
     return {
         "summary": str(data.get("summary") or "").strip(),
         "topics": [str(t) for t in topics if str(t).strip()],
-        "translated_title": translated_title[:300],
+        "translated_title": translated_title,
         "score": _summary_composite_score(score_breakdown),
         "score_breakdown": score_breakdown,
         "score_reason": score_reason[:400],
@@ -466,21 +462,33 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
 
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, model: str, api_key: str) -> dict:
-    text, usage = _chat_json(
-        summary_faithfulness_prompt(title, facts, summary),
-        model,
-        api_key,
-        system_instruction=summary_faithfulness_system_instruction(),
-        max_output_tokens=320,
-        response_schema=SUMMARY_FAITHFULNESS_SCHEMA,
-        schema_name="summary_faithfulness",
+    return run_summary_faithfulness_check(
+        lambda: (
+            lambda text, usage: (text, _llm_meta(model, "faithfulness_check", usage))
+        )(
+            *_chat_json(
+                summary_faithfulness_prompt(title, facts, summary),
+                model,
+                api_key,
+                system_instruction=summary_faithfulness_system_instruction(),
+                max_output_tokens=320,
+                response_schema=SUMMARY_FAITHFULNESS_SCHEMA,
+                schema_name="summary_faithfulness",
+            )
+        ),
+        retry_call=lambda: (
+            lambda text, usage: (text, _llm_meta(model, "faithfulness_check", usage))
+        )(
+            *_chat_json(
+                summary_faithfulness_retry_prompt(title, facts, summary),
+                model,
+                api_key,
+                system_instruction="pass / warn / fail のいずれか1語のみを返す。",
+                max_output_tokens=120,
+                response_schema=None,
+            )
+        ),
     )
-    result = require_summary_faithfulness_comment(
-        normalize_summary_faithfulness_result(_extract_first_json_object(text)),
-        text,
-    )
-    result["llm"] = _llm_meta(model, "faithfulness_check", usage)
-    return result
 
 
 def check_facts(title: str | None, content: str, facts: list[str], model: str, api_key: str) -> dict:

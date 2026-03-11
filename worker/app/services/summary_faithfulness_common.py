@@ -55,6 +55,26 @@ summary:
 """
 
 
+def summary_faithfulness_retry_prompt(title: str | None, facts: list[str], summary: str) -> str:
+    facts_text = "\n".join(f"- {f}" for f in facts)
+    return f"""1行のみで返してください。
+形式は verdict のみです。
+
+条件:
+- verdict は pass / warn / fail のいずれか
+- 前置き、後置き、コードフェンス禁止
+- 例: pass
+
+タイトル: {title or "（不明）"}
+
+facts:
+{facts_text}
+
+summary:
+{summary}
+"""
+
+
 def extract_first_json_object(text: str) -> dict | None:
     s = (text or "").strip().lstrip("\ufeff")
     if s.startswith("```"):
@@ -83,6 +103,34 @@ def normalize_summary_faithfulness_result(data: dict | None) -> dict:
         "verdict": verdict,
         "short_comment": short_comment[:240],
     }
+
+
+def summary_faithfulness_comment_for_verdict(verdict: str) -> str:
+    mapping = {
+        "pass": "facts に忠実な要約です。",
+        "warn": "おおむね忠実ですが一部に確認したい表現があります。",
+        "fail": "facts にない断定または重要な欠落があります。",
+    }
+    return mapping.get(str(verdict or "").strip().lower(), "要約の忠実性判定結果を確認してください。")
+
+
+def parse_summary_faithfulness_line(text: str) -> dict | None:
+    s = (text or "").strip()
+    if not s:
+        return None
+    if s.startswith("```"):
+        s = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", s)
+        s = re.sub(r"\n?```$", "", s).strip()
+    first = s.splitlines()[0].strip()
+    if not first:
+        return None
+    verdict = first.strip().lower()
+    m = re.search(r"\b(pass|warn|fail)\b", verdict)
+    if m:
+        verdict = m.group(1)
+    if verdict not in {"pass", "warn", "fail"}:
+        return None
+    return {"verdict": verdict, "short_comment": summary_faithfulness_comment_for_verdict(verdict)}
 
 
 def require_summary_faithfulness_comment(result: dict, raw_text: str) -> dict:

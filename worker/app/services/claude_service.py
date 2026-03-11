@@ -7,12 +7,11 @@ import anthropic
 from app.services.llm_catalog import model_pricing
 from app.services.summary_faithfulness_common import (
     SUMMARY_FAITHFULNESS_SCHEMA,
-    extract_first_json_object as _faithfulness_extract_first_json_object,
-    require_summary_faithfulness_comment,
-    normalize_summary_faithfulness_result,
     summary_faithfulness_prompt,
+    summary_faithfulness_retry_prompt,
     summary_faithfulness_system_instruction,
 )
+from app.services.summary_faithfulness_runner import run_summary_faithfulness_check
 from app.services.facts_check_common import (
     FACTS_CHECK_SCHEMA,
     facts_check_prompt,
@@ -20,6 +19,7 @@ from app.services.facts_check_common import (
     facts_check_system_instruction,
 )
 from app.services.facts_check_runner import run_facts_check
+from app.services.summary_result_common import finalize_translated_title, normalize_score_breakdown
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -814,29 +814,21 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
     score_breakdown = data.get("score_breakdown", {})
     if not isinstance(score_breakdown, dict):
         score_breakdown = {}
-    score_breakdown = {
-        "importance": _clamp01(score_breakdown.get("importance", 0.5)),
-        "novelty": _clamp01(score_breakdown.get("novelty", 0.5)),
-        "actionability": _clamp01(score_breakdown.get("actionability", 0.5)),
-        "reliability": _clamp01(score_breakdown.get("reliability", 0.5)),
-        "relevance": _clamp01(score_breakdown.get("relevance", 0.5)),
-    }
+    score_breakdown = normalize_score_breakdown(score_breakdown)
     score_reason = str(data.get("score_reason") or "").strip()
     if not score_reason:
         score_reason = "総合的な重要度・新規性・実用性を基に採点。"
-    translated_title = str(data.get("translated_title") or "").strip()
-    if _contains_japanese(title or ""):
-        translated_title = ""
-    elif _needs_title_translation(title, "") and not _contains_japanese(translated_title):
-        translated_title = ""
-    if _needs_title_translation(title, translated_title):
-        translated_title = _translate_title_to_ja(title or "", used_model or _summary_model, api_key=api_key)
+    translated_title = finalize_translated_title(
+        title,
+        str(data.get("translated_title") or "").strip(),
+        translate_func=lambda raw_title: _translate_title_to_ja(raw_title, used_model or _summary_model, api_key=api_key),
+    )
     score = _summary_composite_score(score_breakdown)
 
     return {
         "summary": data.get("summary", ""),
         "topics": [str(t) for t in topics],
-        "translated_title": translated_title[:300],
+        "translated_title": translated_title,
         "score": score,
         "score_breakdown": score_breakdown,
         "score_reason": score_reason[:400],
@@ -857,7 +849,7 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
         user_prompt=prompt,
     )
     if message is None:
-        result = normalize_summary_faithfulness_result({"verdict": "warn", "short_comment": "判定モデル応答を取得できなかったため簡易扱いです。"})
+        result = {"verdict": "warn", "short_comment": "判定モデル応答を取得できなかったため簡易扱いです。"}
         result["llm"] = {
             "provider": "local-fallback",
             "model": used_model or _summary_model,
@@ -868,13 +860,41 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
             "estimated_cost_usd": 0.0,
         }
         return result
-    raw_text = message.content[0].text.strip()
-    result = require_summary_faithfulness_comment(
-        normalize_summary_faithfulness_result(_faithfulness_extract_first_json_object(raw_text)),
-        raw_text,
+    return run_summary_faithfulness_check(
+        lambda: (
+            message.content[0].text.strip(),
+            _llm_meta(message, "faithfulness_check", used_model or _summary_model),
+        ),
+        retry_call=lambda: (
+            lambda retry_message, retry_model: (
+                (retry_message.content[0].text.strip() if retry_message is not None else ""),
+                _llm_meta(retry_message, "faithfulness_check", retry_model or used_model or _summary_model)
+                if retry_message is not None
+                else {
+                    "provider": "anthropic",
+                    "model": retry_model or used_model or _summary_model,
+                    "pricing_model_family": retry_model or used_model or _summary_model,
+                    "pricing_source": _ANTHROPIC_PRICING_SOURCE_VERSION,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "estimated_cost_usd": 0.0,
+                },
+            )
+        )(
+            *_call_with_model_fallback(
+                summary_faithfulness_retry_prompt(title, facts, summary),
+                str(model or _summary_model),
+                _summary_model_fallback,
+                max_tokens=120,
+                api_key=api_key,
+                system_prompt="pass / warn / fail のいずれか1語のみを返す。",
+                user_prompt=summary_faithfulness_retry_prompt(title, facts, summary),
+                enable_prompt_cache=False,
+            )
+        ),
     )
-    result["llm"] = _llm_meta(message, "faithfulness_check", used_model or _summary_model)
-    return result
 
 
 def check_facts(title: str | None, content: str, facts: list[str], api_key: str | None = None, model: str | None = None) -> dict:

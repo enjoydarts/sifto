@@ -13,13 +13,29 @@ try:
 except Exception:  # pragma: no cover
     redis = None
 from app.services.llm_catalog import model_pricing
+from app.services.llm_text_utils import (
+    clamp01 as _clamp01,
+    clamp_int as _clamp_int,
+    contains_japanese as _contains_japanese,
+    decode_json_string_fragment as _decode_json_string_fragment,
+    extract_compose_digest_fields as _extract_compose_digest_fields,
+    extract_first_json_object as _extract_first_json_object,
+    extract_json_string_value_loose as _extract_json_string_value_loose,
+    needs_title_translation as _needs_title_translation,
+    normalize_url_for_match as _normalize_url_for_match,
+    parse_json_string_array as _parse_json_string_array,
+    strip_code_fence as _strip_code_fence,
+    summary_composite_score as _summary_composite_score,
+    summary_max_tokens as _summary_max_tokens,
+    target_summary_chars as _target_summary_chars,
+)
 from app.services.summary_faithfulness_common import (
     SUMMARY_FAITHFULNESS_SCHEMA,
-    require_summary_faithfulness_comment,
-    normalize_summary_faithfulness_result,
     summary_faithfulness_prompt,
+    summary_faithfulness_retry_prompt,
     summary_faithfulness_system_instruction,
 )
+from app.services.summary_faithfulness_runner import run_summary_faithfulness_check
 from app.services.facts_check_common import (
     FACTS_CHECK_SCHEMA,
     facts_check_prompt,
@@ -27,6 +43,7 @@ from app.services.facts_check_common import (
     facts_check_system_instruction,
 )
 from app.services.facts_check_runner import run_facts_check
+from app.services.summary_result_common import finalize_translated_title, normalize_score_breakdown
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
@@ -75,49 +92,6 @@ def _env_int(name: str, default: int) -> int:
         return v if v > 0 else default
     except Exception:
         return default
-
-
-def _clamp01(v, default: float = 0.5) -> float:
-    try:
-        x = float(v)
-    except Exception:
-        return default
-    if x < 0:
-        return 0.0
-    if x > 1:
-        return 1.0
-    return x
-
-
-def _summary_composite_score(breakdown: dict) -> float:
-    weights = {
-        "importance": 0.38,
-        "novelty": 0.22,
-        "actionability": 0.18,
-        "reliability": 0.17,
-        "relevance": 0.05,
-    }
-    total = 0.0
-    for k, w in weights.items():
-        total += _clamp01(breakdown.get(k, 0.5), 0.5) * w
-    return round(total, 4)
-
-
-def _clamp_int(v: int, lo: int, hi: int) -> int:
-    return max(lo, min(hi, int(v)))
-
-
-def _target_summary_chars(source_text_chars: int | None, facts: list[str]) -> int:
-    if isinstance(source_text_chars, int) and source_text_chars > 0:
-        return _clamp_int(round(source_text_chars * 0.16), 220, 1200)
-    facts_chars = sum(len(str(f)) for f in (facts or []))
-    if facts_chars > 0:
-        return _clamp_int(round(facts_chars * 0.9), 220, 900)
-    return 300
-
-
-def _summary_max_tokens(target_chars: int) -> int:
-    return _clamp_int(round(target_chars * 1.2), 700, 2600)
 
 
 def _digest_primary_topic(item: dict) -> str:
@@ -557,149 +531,6 @@ def _generate_content(
     return text.strip(), usage
 
 
-def _parse_json_string_array(text: str) -> list[str]:
-    start = text.find("[")
-    end = text.rfind("]") + 1
-    if start == -1 or end == 0:
-        return []
-    try:
-        data = json.loads(text[start:end])
-    except Exception:
-        return []
-    return [str(v) for v in data if isinstance(v, str)]
-
-
-def _strip_code_fence(text: str) -> str:
-    s = (text or "").strip().lstrip("\ufeff")
-    if s.startswith("```"):
-        s = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", s)
-        s = re.sub(r"\n?```$", "", s).strip()
-    return s
-
-
-def _extract_first_json_object(text: str) -> dict | None:
-    s = _strip_code_fence(text)
-    if not s:
-        return None
-    decoder = json.JSONDecoder()
-    idx = s.find("{")
-    while idx >= 0:
-        try:
-            obj, _ = decoder.raw_decode(s[idx:])
-            if isinstance(obj, dict):
-                return obj
-        except Exception:
-            pass
-        idx = s.find("{", idx + 1)
-    return None
-
-
-def _normalize_url_for_match(raw: str) -> str:
-    s = (raw or "").strip()
-    if not s:
-        return ""
-    try:
-        u = urlparse(s)
-    except Exception:
-        return s.lower()
-    scheme = (u.scheme or "https").lower()
-    host = (u.netloc or "").lower()
-    path = (u.path or "").rstrip("/")
-    return f"{scheme}://{host}{path}"
-
-
-def _decode_json_string_fragment(raw: str) -> str:
-    try:
-        return json.loads(f'"{raw}"')
-    except Exception:
-        return raw.replace("\\n", "\n").replace('\\"', '"').replace("\\\\", "\\")
-
-
-def _extract_json_string_value_loose(text: str, field: str) -> str:
-    s = _strip_code_fence(text)
-    key = f'"{field}"'
-    i = s.find(key)
-    if i < 0:
-        return ""
-    rest = s[i + len(key):]
-    colon = rest.find(":")
-    if colon < 0:
-        return ""
-    raw = rest[colon + 1 :].lstrip()
-    if not raw.startswith('"'):
-        return ""
-    raw = raw[1:]
-    out: list[str] = []
-    escaped = False
-    for ch in raw:
-        if escaped:
-            out.append(ch)
-            escaped = False
-            continue
-        if ch == "\\":
-            out.append(ch)
-            escaped = True
-            continue
-        if ch == '"':
-            break
-        out.append(ch)
-    return _decode_json_string_fragment("".join(out)).strip()
-
-
-def _extract_compose_digest_fields(text: str) -> tuple[str, str]:
-    data = _extract_first_json_object(text) or {}
-    subject = str(data.get("subject") or "").strip()
-    body = str(data.get("body") or "").strip()
-    if subject and body:
-        return subject, body
-
-    s = _strip_code_fence(text)
-    m_subject = re.search(r'"subject"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
-    if not subject and m_subject:
-        subject = _decode_json_string_fragment(m_subject.group(1)).strip()
-
-    m_body = re.search(r'"body"\s*:\s*"((?:\\.|[^"\\])*)"', s, re.S)
-    if not body and m_body:
-        body = _decode_json_string_fragment(m_body.group(1)).strip()
-    elif not body:
-        key = '"body"'
-        i = s.find(key)
-        if i >= 0:
-            rest = s[i + len(key):]
-            colon = rest.find(":")
-            if colon >= 0:
-                raw = rest[colon + 1 :].strip()
-                if raw.startswith('"'):
-                    raw = raw[1:]
-                marker_idx = raw.find('",\n  "sections"')
-                if marker_idx < 0:
-                    marker_idx = raw.find('", "sections"')
-                if marker_idx > 0:
-                    raw = raw[:marker_idx]
-                raw = raw.strip().rstrip('"').strip()
-                if raw:
-                    body = raw.replace("\\n", "\n").replace('\\"', '"').strip()
-    return subject, body
-
-
-def _contains_japanese(text: str) -> bool:
-    s = (text or "").strip()
-    if not s:
-        return False
-    return re.search(r"[\u3040-\u30ff\u3400-\u9fff]", s) is not None
-
-
-def _needs_title_translation(title: str | None, translated_title: str) -> bool:
-    src = (title or "").strip()
-    if not src:
-        return False
-    if (translated_title or "").strip():
-        return False
-    if _contains_japanese(src):
-        return False
-    return re.search(r"[A-Za-z]", src) is not None
-
-
 def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:
     prompt = f"""次の英語タイトルを自然な日本語に翻訳してください。
 JSONで返してください:
@@ -1088,27 +919,19 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
     score_breakdown = data.get("score_breakdown", {})
     if not isinstance(score_breakdown, dict):
         score_breakdown = {}
-    score_breakdown = {
-        "importance": _clamp01(score_breakdown.get("importance", 0.5)),
-        "novelty": _clamp01(score_breakdown.get("novelty", 0.5)),
-        "actionability": _clamp01(score_breakdown.get("actionability", 0.5)),
-        "reliability": _clamp01(score_breakdown.get("reliability", 0.5)),
-        "relevance": _clamp01(score_breakdown.get("relevance", 0.5)),
-    }
+    score_breakdown = normalize_score_breakdown(score_breakdown)
     score_reason = str(data.get("score_reason") or "").strip()
     if not score_reason:
         score_reason = "総合的な重要度・新規性・実用性を基に採点。"
-    translated_title = str(data.get("translated_title") or "").strip()
-    if _contains_japanese(title or ""):
-        translated_title = ""
-    elif _needs_title_translation(title, "") and not _contains_japanese(translated_title):
-        translated_title = ""
-    if _needs_title_translation(title, translated_title):
-        translated_title = _translate_title_to_ja(title or "", model=model, api_key=api_key)
+    translated_title = finalize_translated_title(
+        title,
+        str(data.get("translated_title") or "").strip(),
+        translate_func=lambda raw_title: _translate_title_to_ja(raw_title, model=model, api_key=api_key),
+    )
     return {
         "summary": str(data.get("summary", "")).strip(),
         "topics": [str(t) for t in topics],
-        "translated_title": translated_title[:300],
+        "translated_title": translated_title,
         "score": _summary_composite_score(score_breakdown),
         "score_breakdown": score_breakdown,
         "score_reason": score_reason[:400],
@@ -1118,20 +941,33 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
 
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, model: str, api_key: str) -> dict:
-    text, usage = _generate_content(
-        summary_faithfulness_prompt(title, facts, summary),
-        model=model,
-        api_key=api_key,
-        max_output_tokens=320,
-        system_instruction=summary_faithfulness_system_instruction(),
-        response_schema=SUMMARY_FAITHFULNESS_SCHEMA,
+    return run_summary_faithfulness_check(
+        lambda: (
+            lambda text, usage: (text, _llm_meta(model, "faithfulness_check", usage))
+        )(
+            *_generate_content(
+                summary_faithfulness_prompt(title, facts, summary),
+                model=model,
+                api_key=api_key,
+                max_output_tokens=320,
+                system_instruction=summary_faithfulness_system_instruction(),
+                response_schema=SUMMARY_FAITHFULNESS_SCHEMA,
+            )
+        ),
+        retry_call=lambda: (
+            lambda text, usage: (text, _llm_meta(model, "faithfulness_check", usage))
+        )(
+            *_generate_content(
+                summary_faithfulness_retry_prompt(title, facts, summary),
+                model=model,
+                api_key=api_key,
+                max_output_tokens=120,
+                system_instruction="pass / warn / fail のいずれか1語のみを返す。",
+                response_schema=None,
+                response_mime_type="text/plain",
+            )
+        ),
     )
-    result = require_summary_faithfulness_comment(
-        normalize_summary_faithfulness_result(_extract_first_json_object(text)),
-        text,
-    )
-    result["llm"] = _llm_meta(model, "faithfulness_check", usage)
-    return result
 
 
 def check_facts(title: str | None, content: str, facts: list[str], model: str, api_key: str) -> dict:

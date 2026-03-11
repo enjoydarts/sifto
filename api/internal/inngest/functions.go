@@ -1086,34 +1086,33 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 
 // ② event/process-item — 本文抽出 → 事実抽出 → 要約（各stepでリトライ可能）
 func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, openAI *service.OpenAIClient, oneSignal *service.OneSignalClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
-	itemRepo := repository.NewItemInngestRepo(db)
-	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
-	llmExecutionRepo := repository.NewLLMExecutionEventRepo(db)
-	sourceRepo := repository.NewSourceRepo(db)
-	userSettingsRepo := repository.NewUserSettingsRepo(db)
-	userRepo := repository.NewUserRepo(db)
-	pushLogRepo := repository.NewPushNotificationLogRepo(db)
-	pickScoreThreshold := envFloat64OrDefault("ONESIGNAL_PICK_SCORE_THRESHOLD", 0.90)
-	pickMaxPerDay := envIntOrDefault("ONESIGNAL_PICK_MAX_PER_DAY", 2)
-
-	type EventData struct {
-		ItemID   string `json:"item_id"`
-		SourceID string `json:"source_id"`
-		URL      string `json:"url"`
-		Title    string `json:"title"`
+	deps := processItemDeps{
+		itemRepo:           repository.NewItemInngestRepo(db),
+		llmUsageRepo:       repository.NewLLMUsageLogRepo(db),
+		llmExecutionRepo:   repository.NewLLMExecutionEventRepo(db),
+		sourceRepo:         repository.NewSourceRepo(db),
+		userSettingsRepo:   repository.NewUserSettingsRepo(db),
+		userRepo:           repository.NewUserRepo(db),
+		pushLogRepo:        repository.NewPushNotificationLogRepo(db),
+		worker:             worker,
+		openAI:             openAI,
+		oneSignal:          oneSignal,
+		secretCipher:       secretCipher,
+		pickScoreThreshold: envFloat64OrDefault("ONESIGNAL_PICK_SCORE_THRESHOLD", 0.90),
+		pickMaxPerDay:      envIntOrDefault("ONESIGNAL_PICK_MAX_PER_DAY", 2),
 	}
 
 	return inngestgo.CreateFunction(
 		client,
 		inngestgo.FunctionOpts{ID: "process-item", Name: "Process Item"},
 		inngestgo.EventTrigger("item/created", nil),
-		func(ctx context.Context, input inngestgo.Input[EventData]) (any, error) {
+		func(ctx context.Context, input inngestgo.Input[processItemEventData]) (any, error) {
 			data := input.Event.Data
 			itemID := data.ItemID
 			url := data.URL
 			var userIDPtr *string
 			if data.SourceID != "" {
-				if uid, err := sourceRepo.GetUserIDBySourceID(ctx, data.SourceID); err == nil {
+				if uid, err := deps.sourceRepo.GetUserIDBySourceID(ctx, data.SourceID); err == nil {
 					userIDPtr = &uid
 				} else {
 					log.Printf("process-item source owner lookup failed source_id=%s err=%v", data.SourceID, err)
@@ -1121,467 +1120,37 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			}
 			var userModelSettings *model.UserSettings
 			if userIDPtr != nil && *userIDPtr != "" {
-				userModelSettings, _ = userSettingsRepo.GetByUserID(ctx, *userIDPtr)
+				userModelSettings, _ = deps.userSettingsRepo.GetByUserID(ctx, *userIDPtr)
 			}
 			log.Printf("process-item start item_id=%s url=%s", itemID, url)
 
 			// Step 1: 本文抽出
 			extracted, err := step.Run(ctx, "extract-body", func(ctx context.Context) (*service.ExtractBodyResponse, error) {
 				log.Printf("process-item extract-body start item_id=%s", itemID)
-				return worker.ExtractBody(ctx, url)
+				return deps.worker.ExtractBody(ctx, url)
 			})
 			if err != nil {
 				log.Printf("process-item extract-body failed item_id=%s err=%v", itemID, err)
-				msg := fmt.Sprintf("extract body: %v", err)
-				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-				return nil, fmt.Errorf("extract body: %w", err)
+				return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "extract body", err)
 			}
 			log.Printf("process-item extract-body done item_id=%s content_len=%d", itemID, len(extracted.Content))
 
-			var publishedAt *time.Time
-			if extracted.PublishedAt != nil {
-				t, err := timeutil.ParseToJST(*extracted.PublishedAt)
-				if err == nil {
-					publishedAt = &t
-				}
-			}
-			if err := itemRepo.UpdateAfterExtract(ctx, itemID, extracted.Content, extracted.Title, extracted.ImageURL, publishedAt); err != nil {
+			if err := updateItemAfterExtract(ctx, deps.itemRepo, itemID, extracted); err != nil {
 				log.Printf("process-item update-after-extract failed item_id=%s err=%v", itemID, err)
 				return nil, fmt.Errorf("update after extract: %w", err)
 			}
 			log.Printf("process-item update-after-extract done item_id=%s", itemID)
-			titleForLLM := extracted.Title
-			if titleForLLM == nil || strings.TrimSpace(*titleForLLM) == "" {
-				eventTitle := strings.TrimSpace(data.Title)
-				if eventTitle != "" {
-					titleForLLM = &eventTitle
-				}
-			}
-
-			// Step 2: 事実抽出 + facts check
-			const maxFactsCheckRetries = 2
-			var factsResp *service.ExtractFactsResponse
-			var finalFactsCheck *service.FactsCheckResponse
-			var factsRetryCount int
-			for attempt := 0; attempt <= maxFactsCheckRetries; attempt++ {
-				stepLabel := "extract-facts"
-				if attempt > 0 {
-					stepLabel = fmt.Sprintf("extract-facts-%d", attempt+1)
-				}
-				type factsAttemptResult struct {
-					Facts         *service.ExtractFactsResponse
-					ResolvedModel *string
-					AnthropicKey  *string
-					GoogleKey     *string
-					GroqKey       *string
-					DeepSeekKey   *string
-					OpenAIKey     *string
-				}
-				factsAttempt, err := step.Run(ctx, stepLabel, func(ctx context.Context) (*factsAttemptResult, error) {
-					log.Printf("process-item extract-facts start item_id=%s attempt=%d", itemID, attempt+1)
-					var modelOverride *string
-					if userModelSettings != nil {
-						modelOverride = ptrStringOrNil(userModelSettings.FactsModel)
-					}
-					userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "facts")
-					if err != nil {
-						return nil, err
-					}
-					resp, err := worker.ExtractFactsWithModel(ctx, titleForLLM, extracted.Content, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
-					if err != nil {
-						return nil, err
-					}
-					return &factsAttemptResult{
-						Facts:         resp,
-						ResolvedModel: resolvedModel,
-						AnthropicKey:  userAnthropicKey,
-						GoogleKey:     userGoogleKey,
-						GroqKey:       userGroqKey,
-						DeepSeekKey:   userDeepSeekKey,
-						OpenAIKey:     userOpenAIKey,
-					}, nil
-				})
-				if err != nil {
-					var failedModel *string
-					if factsAttempt != nil {
-						failedModel = factsAttempt.ResolvedModel
-					}
-					recordLLMExecutionFailure(ctx, llmExecutionRepo, "facts", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-					log.Printf("process-item extract-facts failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
-					msg := fmt.Sprintf("extract facts: %v", err)
-					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-					return nil, fmt.Errorf("extract facts: %w", err)
-				}
-				factsResp = factsAttempt.Facts
-				recordLLMUsage(ctx, llmUsageRepo, "facts", factsResp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
-				if len(factsResp.Facts) == 0 {
-					recordLLMExecutionFailure(ctx, llmExecutionRepo, "facts", factsAttempt.ResolvedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, fmt.Errorf("empty facts returned from worker"))
-					err := fmt.Errorf("empty facts returned from worker")
-					log.Printf("process-item extract-facts empty item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
-					msg := fmt.Sprintf("extract facts: %v", err)
-					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-					return nil, fmt.Errorf("extract facts: %w", err)
-				}
-				recordLLMExecutionSuccess(ctx, llmExecutionRepo, "facts", factsResp.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
-				log.Printf("process-item extract-facts done item_id=%s facts=%d attempt=%d", itemID, len(factsResp.Facts), attempt+1)
-
-				checkStep := "check-facts"
-				if attempt > 0 {
-					checkStep = fmt.Sprintf("check-facts-%d", attempt+1)
-				}
-				factsCheck, err := step.Run(ctx, checkStep, func(ctx context.Context) (*service.FactsCheckResponse, error) {
-					var modelOverride *string
-					if userModelSettings != nil {
-						modelOverride = ptrStringOrNil(userModelSettings.FactsCheckModel)
-					}
-					var resp *service.FactsCheckResponse
-					if modelOverride == nil || strings.TrimSpace(*modelOverride) == "" {
-						modelOverride = factsAttempt.ResolvedModel
-						resp, err = worker.CheckFactsWithModel(
-							ctx,
-							titleForLLM,
-							extracted.Content,
-							factsResp.Facts,
-							factsAttempt.AnthropicKey,
-							factsAttempt.GoogleKey,
-							factsAttempt.GroqKey,
-							factsAttempt.DeepSeekKey,
-							factsAttempt.OpenAIKey,
-							modelOverride,
-						)
-					} else {
-						userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "facts")
-						if keyErr != nil {
-							return nil, keyErr
-						}
-						resp, err = worker.CheckFactsWithModel(ctx, titleForLLM, extracted.Content, factsResp.Facts, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
-					}
-					if err != nil {
-						return nil, err
-					}
-					if resp == nil {
-						return nil, fmt.Errorf("facts check returned nil response")
-					}
-					recordLLMUsage(ctx, llmUsageRepo, "facts_check", resp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
-					return resp, nil
-				})
-				if err != nil {
-					var failedModel *string
-					if userModelSettings != nil && userModelSettings.FactsCheckModel != nil && strings.TrimSpace(*userModelSettings.FactsCheckModel) != "" {
-						failedModel = userModelSettings.FactsCheckModel
-					} else {
-						failedModel = factsAttempt.ResolvedModel
-					}
-					recordLLMExecutionFailure(ctx, llmExecutionRepo, "facts_check", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-					log.Printf("process-item facts_check failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
-					msg := fmt.Sprintf("facts check: %v", err)
-					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-					return nil, fmt.Errorf("facts check: %w", err)
-				}
-				recordLLMExecutionSuccess(ctx, llmExecutionRepo, "facts_check", factsCheck.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
-				finalFactsCheck = factsCheck
-				if factsCheck.Verdict != "fail" {
-					factsRetryCount = attempt
-					break
-				}
-				if attempt >= maxFactsCheckRetries {
-					factsRetryCount = attempt
-					break
-				}
-				log.Printf("process-item facts_check retry item_id=%s attempt=%d verdict=%s comment=%s", itemID, attempt+1, factsCheck.Verdict, factsCheck.ShortComment)
-			}
-			if factsResp == nil {
-				err := fmt.Errorf("facts extraction produced no result")
-				msg := fmt.Sprintf("extract facts: %v", err)
-				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+			titleForLLM := resolveProcessItemTitleForLLM(extracted.Title, data.Title)
+			factsStage, err := extractAndPersistFacts(ctx, deps, data, itemID, userIDPtr, userModelSettings, titleForLLM, extracted.Content)
+			if err != nil {
 				return nil, err
 			}
-			if finalFactsCheck == nil {
-				err := fmt.Errorf("facts check produced no result")
-				msg := fmt.Sprintf("facts check: %v", err)
-				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+			summaryStage, err := summarizeAndPersistItem(ctx, deps, data, itemID, userIDPtr, userModelSettings, titleForLLM, extracted.Content, factsStage.Facts.Facts)
+			if err != nil {
 				return nil, err
 			}
-			if err := itemRepo.InsertFacts(ctx, itemID, factsResp.Facts); err != nil {
-				log.Printf("process-item insert-facts failed item_id=%s err=%v", itemID, err)
-				return nil, fmt.Errorf("insert facts: %w", err)
-			}
-			var factsCheckComment *string
-			if comment := strings.TrimSpace(finalFactsCheck.ShortComment); comment != "" {
-				factsCheckComment = &comment
-			}
-			if err := itemRepo.UpsertFactsCheck(ctx, itemID, finalFactsCheck.Verdict, factsRetryCount, factsCheckComment); err != nil {
-				return nil, fmt.Errorf("upsert facts check: %w", err)
-			}
-			if finalFactsCheck.Verdict == "fail" {
-				msg := fmt.Sprintf("facts check failed after %d retries: %s", factsRetryCount, finalFactsCheck.ShortComment)
-				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-				return nil, fmt.Errorf("facts check: %s", finalFactsCheck.ShortComment)
-			}
-			log.Printf("process-item insert-facts done item_id=%s retries=%d facts_check=%s", itemID, factsRetryCount, finalFactsCheck.Verdict)
-
-			// Step 3: 要約 + faithfulness check
-			const maxSummaryFaithfulnessRetries = 2
-			var summary *service.SummarizeResponse
-			var finalFaithfulness *service.SummaryFaithfulnessResponse
-			var summaryRetryCount int
-			for attempt := 0; attempt <= maxSummaryFaithfulnessRetries; attempt++ {
-				stepLabel := "summarize"
-				if attempt > 0 {
-					stepLabel = fmt.Sprintf("summarize-%d", attempt+1)
-				}
-				type summaryAttemptResult struct {
-					Summary       *service.SummarizeResponse
-					ResolvedModel *string
-					AnthropicKey  *string
-					GoogleKey     *string
-					GroqKey       *string
-					DeepSeekKey   *string
-					OpenAIKey     *string
-				}
-				summaryAttempt, err := step.Run(ctx, stepLabel, func(ctx context.Context) (*summaryAttemptResult, error) {
-					log.Printf("process-item summarize start item_id=%s attempt=%d", itemID, attempt+1)
-					var modelOverride *string
-					if userModelSettings != nil {
-						modelOverride = ptrStringOrNil(userModelSettings.SummaryModel)
-					}
-					userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "summary")
-					if err != nil {
-						return nil, err
-					}
-					sourceChars := len(extracted.Content)
-					resp, err := worker.SummarizeWithModel(ctx, titleForLLM, factsResp.Facts, &sourceChars, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
-					if err != nil {
-						return nil, err
-					}
-					return &summaryAttemptResult{
-						Summary:       resp,
-						ResolvedModel: resolvedModel,
-						AnthropicKey:  userAnthropicKey,
-						GoogleKey:     userGoogleKey,
-						GroqKey:       userGroqKey,
-						DeepSeekKey:   userDeepSeekKey,
-						OpenAIKey:     userOpenAIKey,
-					}, nil
-				})
-				if err != nil {
-					var failedModel *string
-					if summaryAttempt != nil {
-						failedModel = summaryAttempt.ResolvedModel
-					}
-					recordLLMExecutionFailure(ctx, llmExecutionRepo, "summary", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-					log.Printf("process-item summarize failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
-					msg := fmt.Sprintf("summarize: %v", err)
-					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-					return nil, fmt.Errorf("summarize: %w", err)
-				}
-				summary = summaryAttempt.Summary
-				summary.Summary = strings.TrimSpace(summary.Summary)
-				recordLLMUsage(ctx, llmUsageRepo, "summary", summary.LLM, userIDPtr, &data.SourceID, &itemID, nil)
-				if summary.Summary == "" {
-					recordLLMExecutionFailure(ctx, llmExecutionRepo, "summary", summaryAttempt.ResolvedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, fmt.Errorf("empty summary returned from worker"))
-					err := fmt.Errorf("empty summary returned from worker")
-					log.Printf("process-item summarize empty item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
-					msg := fmt.Sprintf("summarize: %v", err)
-					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-					return nil, fmt.Errorf("summarize: %w", err)
-				}
-				recordLLMExecutionSuccess(ctx, llmExecutionRepo, "summary", summary.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
-
-				faithfulnessStep := "check-summary-faithfulness"
-				if attempt > 0 {
-					faithfulnessStep = fmt.Sprintf("check-summary-faithfulness-%d", attempt+1)
-				}
-				faithfulness, err := step.Run(ctx, faithfulnessStep, func(ctx context.Context) (*service.SummaryFaithfulnessResponse, error) {
-					var modelOverride *string
-					if userModelSettings != nil {
-						modelOverride = ptrStringOrNil(userModelSettings.FaithfulnessCheckModel)
-					}
-					var resp *service.SummaryFaithfulnessResponse
-					if modelOverride == nil || strings.TrimSpace(*modelOverride) == "" {
-						modelOverride = summaryAttempt.ResolvedModel
-						resp, err = worker.CheckSummaryFaithfulnessWithModel(
-							ctx,
-							titleForLLM,
-							factsResp.Facts,
-							summary.Summary,
-							summaryAttempt.AnthropicKey,
-							summaryAttempt.GoogleKey,
-							summaryAttempt.GroqKey,
-							summaryAttempt.DeepSeekKey,
-							summaryAttempt.OpenAIKey,
-							modelOverride,
-						)
-					} else {
-						userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, userIDPtr, modelOverride, "summary")
-						if err != nil {
-							return nil, err
-						}
-						resp, err = worker.CheckSummaryFaithfulnessWithModel(ctx, titleForLLM, factsResp.Facts, summary.Summary, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
-					}
-					if err != nil {
-						return nil, err
-					}
-					recordLLMUsage(ctx, llmUsageRepo, "faithfulness_check", resp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
-					return resp, nil
-				})
-				if err != nil {
-					var failedModel *string
-					if userModelSettings != nil && userModelSettings.FaithfulnessCheckModel != nil && strings.TrimSpace(*userModelSettings.FaithfulnessCheckModel) != "" {
-						failedModel = userModelSettings.FaithfulnessCheckModel
-					} else {
-						failedModel = summaryAttempt.ResolvedModel
-					}
-					recordLLMExecutionFailure(ctx, llmExecutionRepo, "faithfulness_check", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-					log.Printf("process-item faithfulness failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
-					msg := fmt.Sprintf("faithfulness check: %v", err)
-					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-					return nil, fmt.Errorf("faithfulness check: %w", err)
-				}
-				recordLLMExecutionSuccess(ctx, llmExecutionRepo, "faithfulness_check", faithfulness.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
-				finalFaithfulness = faithfulness
-				if faithfulness.Verdict != "fail" {
-					summaryRetryCount = attempt
-					break
-				}
-				if attempt >= maxSummaryFaithfulnessRetries {
-					summaryRetryCount = attempt
-					break
-				}
-				log.Printf("process-item faithfulness retry item_id=%s attempt=%d verdict=%s comment=%s", itemID, attempt+1, faithfulness.Verdict, faithfulness.ShortComment)
-			}
-			if summary == nil {
-				err := fmt.Errorf("summary generation produced no result")
-				msg := fmt.Sprintf("summarize: %v", err)
-				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-				return nil, err
-			}
-			if finalFaithfulness == nil {
-				err := fmt.Errorf("faithfulness check produced no result")
-				msg := fmt.Sprintf("faithfulness check: %v", err)
-				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-				return nil, err
-			}
-			var faithfulnessComment *string
-			if comment := strings.TrimSpace(finalFaithfulness.ShortComment); comment != "" {
-				faithfulnessComment = &comment
-			}
-			if err := itemRepo.UpsertSummaryFaithfulnessCheck(ctx, itemID, finalFaithfulness.Verdict, summaryRetryCount, faithfulnessComment); err != nil {
-				return nil, fmt.Errorf("upsert summary faithfulness check: %w", err)
-			}
-			if finalFaithfulness.Verdict == "fail" {
-				msg := fmt.Sprintf("faithfulness check failed after %d retries: %s", summaryRetryCount, finalFaithfulness.ShortComment)
-				_ = itemRepo.MarkFailed(ctx, itemID, &msg)
-				return nil, fmt.Errorf("faithfulness check: %s", finalFaithfulness.ShortComment)
-			}
-			log.Printf("process-item summarize done item_id=%s topics=%d score=%.3f retries=%d faithfulness=%s", itemID, len(summary.Topics), summary.Score, summaryRetryCount, finalFaithfulness.Verdict)
-			if err := itemRepo.InsertSummary(
-				ctx,
-				itemID,
-				summary.Summary,
-				summary.Topics,
-				summary.TranslatedTitle,
-				summary.Score,
-				summary.ScoreBreakdown,
-				summary.ScoreReason,
-				summary.ScorePolicyVersion,
-			); err != nil {
-				log.Printf("process-item insert-summary failed item_id=%s err=%v", itemID, err)
-				return nil, fmt.Errorf("insert summary: %w", err)
-			}
-			if oneSignal != nil && oneSignal.Enabled() && userIDPtr != nil && *userIDPtr != "" && summary.Score >= pickScoreThreshold {
-				alreadyNotified, err := pushLogRepo.ExistsByUserKindItem(ctx, *userIDPtr, "pick_update", itemID)
-				if err != nil {
-					log.Printf("process-item pick-notify exists failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
-				} else if !alreadyNotified {
-					dayJST := timeutil.StartOfDayJST(timeutil.NowJST())
-					countToday, err := pushLogRepo.CountByUserKindDay(ctx, *userIDPtr, "pick_update", dayJST)
-					if err != nil {
-						log.Printf("process-item pick-notify count failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
-					} else if countToday < pickMaxPerDay {
-						u, err := userRepo.GetByID(ctx, *userIDPtr)
-						if err != nil {
-							log.Printf("process-item pick-notify user lookup failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
-						} else {
-							title := "Sifto: 注目記事を追加しました"
-							itemTitle := strings.TrimSpace(summary.TranslatedTitle)
-							if itemTitle == "" {
-								itemTitle = strings.TrimSpace(coalescePtrStr(titleForLLM, url))
-							}
-							message := itemTitle
-							if len(message) > 120 {
-								message = message[:120]
-							}
-							pushRes, err := oneSignal.SendToExternalID(
-								ctx,
-								u.Email,
-								title,
-								message,
-								appPageURL("/items/"+itemID),
-								map[string]any{
-									"type":     "pick_update",
-									"item_id":  itemID,
-									"item_url": appPageURL("/items/" + itemID),
-									"url":      url,
-									"score":    summary.Score,
-								},
-							)
-							if err != nil {
-								log.Printf("process-item pick-notify send failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
-							} else {
-								var oneSignalID *string
-								recipients := 0
-								if pushRes != nil {
-									if strings.TrimSpace(pushRes.ID) != "" {
-										id := strings.TrimSpace(pushRes.ID)
-										oneSignalID = &id
-									}
-									recipients = pushRes.Recipients
-								}
-								if err := pushLogRepo.Insert(ctx, repository.PushNotificationLogInput{
-									UserID:                  *userIDPtr,
-									Kind:                    "pick_update",
-									ItemID:                  &itemID,
-									DayJST:                  dayJST,
-									Title:                   title,
-									Message:                 message,
-									OneSignalNotificationID: oneSignalID,
-									Recipients:              recipients,
-								}); err != nil {
-									log.Printf("process-item pick-notify log failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
-								}
-							}
-						}
-					}
-				}
-			}
-
-			// Step 4: Embedding生成（関連記事用）: 失敗しても記事処理全体は成功扱い
-			if userOpenAIKey, err := loadUserOpenAIAPIKey(ctx, userSettingsRepo, secretCipher, userIDPtr); err != nil {
-				log.Printf("process-item embedding skip item_id=%s reason=%v", itemID, err)
-			} else {
-				inputText := buildItemEmbeddingInput(titleForLLM, summary.Summary, summary.Topics, factsResp.Facts)
-				embModel := service.OpenAIEmbeddingModel()
-				if userModelSettings != nil && userModelSettings.EmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*userModelSettings.EmbeddingModel) {
-					embModel = *userModelSettings.EmbeddingModel
-				}
-				embResp, err := step.Run(ctx, "create-embedding", func(ctx context.Context) (*service.CreateEmbeddingResponse, error) {
-					log.Printf("process-item create-embedding start item_id=%s model=%s", itemID, embModel)
-					return openAI.CreateEmbedding(ctx, *userOpenAIKey, embModel, inputText)
-				})
-				if err != nil {
-					recordLLMExecutionFailure(ctx, llmExecutionRepo, "embedding", &embModel, 0, userIDPtr, &data.SourceID, &itemID, nil, err)
-					log.Printf("process-item create-embedding failed item_id=%s err=%v", itemID, err)
-				} else {
-					if err := itemRepo.UpsertEmbedding(ctx, itemID, embModel, embResp.Embedding); err != nil {
-						log.Printf("process-item upsert-embedding failed item_id=%s err=%v", itemID, err)
-					} else {
-						recordLLMUsage(ctx, llmUsageRepo, "embedding", embResp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
-						recordLLMExecutionSuccess(ctx, llmExecutionRepo, "embedding", embResp.LLM, 0, userIDPtr, &data.SourceID, &itemID, nil)
-						log.Printf("process-item create-embedding done item_id=%s dims=%d", itemID, len(embResp.Embedding))
-					}
-				}
-			}
+			sendPickNotificationIfNeeded(ctx, deps, itemID, url, userIDPtr, titleForLLM, summaryStage.Summary)
+			createEmbeddingIfPossible(ctx, deps, data, itemID, userIDPtr, userModelSettings, titleForLLM, summaryStage.Summary, factsStage.Facts.Facts)
 			log.Printf("process-item complete item_id=%s", itemID)
 
 			return map[string]string{"item_id": itemID, "status": "summarized"}, nil
@@ -1781,129 +1350,7 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 				log.Printf("compose-digest-copy reuse-copy digest_id=%s", data.DigestID)
 			} else {
 				_, err := step.Run(ctx, "compose-digest-copy", func(ctx context.Context) (string, error) {
-					const maxDigestClusterDraftRetries = 2
-					const maxDigestRetries = 2
-					log.Printf("compose-digest-copy step-exec digest_id=%s", data.DigestID)
-					clusterItems := make([]model.Item, 0, len(digest.Items))
-					for _, di := range digest.Items {
-						it := di.Item
-						it.SummaryScore = di.Summary.Score
-						it.SummaryTopics = di.Summary.Topics
-						clusterItems = append(clusterItems, it)
-					}
-					embClusters, err := itemRepo.ClusterItemsByEmbeddings(ctx, clusterItems)
-					if err != nil {
-						return "", fmt.Errorf("cluster digest items: %w", err)
-					}
-					drafts := buildDigestClusterDrafts(digest.Items, embClusters)
-					drafts = compressDigestClusterDrafts(drafts, 20)
-					var clusterDraftModel *string
-					if userModelSettings != nil {
-						clusterDraftModel = ptrStringOrNil(userModelSettings.DigestClusterModel)
-					}
-					clusterDraftAnthropicKey, clusterDraftGoogleKey, clusterDraftGroqKey, clusterDraftDeepSeekKey, clusterDraftOpenAIKey, resolvedClusterDraftModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, &data.UserID, clusterDraftModel, "digest_cluster_draft")
-					if keyErr != nil {
-						return "", keyErr
-					}
-					totalClusterDraftRetryCount := 0
-					for i := range drafts {
-						sourceLines := draftSourceLines(drafts[i].DraftSummary)
-						if len(sourceLines) == 0 {
-							continue
-						}
-						valid := false
-						for attempt := 0; attempt <= maxDigestClusterDraftRetries; attempt++ {
-							resp, err := worker.ComposeDigestClusterDraftWithModel(
-								ctx,
-								drafts[i].ClusterLabel,
-								drafts[i].ItemCount,
-								drafts[i].Topics,
-								sourceLines,
-								clusterDraftAnthropicKey,
-								clusterDraftGoogleKey,
-								clusterDraftGroqKey,
-								clusterDraftDeepSeekKey,
-								clusterDraftOpenAIKey,
-								resolvedClusterDraftModel,
-							)
-							if err != nil {
-								recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", resolvedClusterDraftModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
-								return "", fmt.Errorf("compose digest cluster draft rank=%d attempt=%d: %w", drafts[i].Rank, attempt+1, err)
-							}
-							if resp != nil {
-								recordLLMUsage(ctx, llmUsageRepo, "digest_cluster_draft", resp.LLM, &data.UserID, nil, nil, &data.DigestID)
-							}
-							candidate := drafts[i].DraftSummary
-							if resp != nil && strings.TrimSpace(resp.DraftSummary) != "" {
-								candidate = resp.DraftSummary
-							}
-							if err := validateDigestClusterDraftCompletion(candidate); err == nil {
-								drafts[i].DraftSummary = candidate
-								if resp != nil {
-									recordLLMExecutionSuccess(ctx, llmExecutionRepo, "digest_cluster_draft", resp.LLM, attempt, &data.UserID, nil, nil, &data.DigestID)
-								}
-								totalClusterDraftRetryCount += attempt
-								valid = true
-								break
-							} else if attempt >= maxDigestClusterDraftRetries {
-								recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", resolvedClusterDraftModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
-								return "", fmt.Errorf("compose digest cluster draft rank=%d incomplete after %d retries: %w", drafts[i].Rank, attempt, err)
-							}
-							recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", resolvedClusterDraftModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
-							log.Printf("compose-digest-copy cluster-draft retry digest_id=%s rank=%d attempt=%d err=%v", data.DigestID, drafts[i].Rank, attempt+1, err)
-						}
-						if !valid {
-							return "", fmt.Errorf("compose digest cluster draft rank=%d produced no valid draft", drafts[i].Rank)
-						}
-					}
-					if err := digestRepo.ReplaceClusterDrafts(ctx, data.DigestID, drafts); err != nil {
-						return "", fmt.Errorf("store digest cluster drafts: %w", err)
-					}
-					storedDrafts, err := digestRepo.ListClusterDrafts(ctx, data.DigestID)
-					if err != nil {
-						return "", fmt.Errorf("reload digest cluster drafts: %w", err)
-					}
-					items := buildComposeItemsFromClusterDrafts(storedDrafts, len(storedDrafts))
-					log.Printf(
-						"compose-digest-copy compacted digest_id=%s source_items=%d cluster_drafts=%d compose_items=%d",
-						data.DigestID, len(digest.Items), len(storedDrafts), len(items),
-					)
-					var modelOverride *string
-					if userModelSettings != nil {
-						modelOverride = ptrStringOrNil(userModelSettings.DigestModel)
-					}
-					digestAnthropicKey, digestGoogleKey, digestGroqKey, digestDeepSeekKey, digestOpenAIKey, resolvedDigestModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, secretCipher, &data.UserID, modelOverride, "digest")
-					if keyErr != nil {
-						return "", keyErr
-					}
-					var resp *service.ComposeDigestResponse
-					digestRetryCount := 0
-					for attempt := 0; attempt <= maxDigestRetries; attempt++ {
-						resp, err = worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, digestAnthropicKey, digestGoogleKey, digestGroqKey, digestDeepSeekKey, digestOpenAIKey, resolvedDigestModel)
-						if err != nil {
-							recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", resolvedDigestModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
-							return "", err
-						}
-						recordLLMUsage(ctx, llmUsageRepo, "digest", resp.LLM, &data.UserID, nil, nil, &data.DigestID)
-						if err := validateDigestCompletion(resp.Subject, resp.Body); err == nil {
-							recordLLMExecutionSuccess(ctx, llmExecutionRepo, "digest", resp.LLM, attempt, &data.UserID, nil, nil, &data.DigestID)
-							digestRetryCount = attempt
-							break
-						} else if attempt >= maxDigestRetries {
-							recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", resolvedDigestModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
-							return "", fmt.Errorf("compose digest incomplete after %d retries: %w", attempt, err)
-						}
-						recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", resolvedDigestModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
-						log.Printf("compose-digest-copy digest retry digest_id=%s attempt=%d err=%v", data.DigestID, attempt+1, err)
-					}
-					if resp == nil {
-						return "", fmt.Errorf("compose digest returned no response")
-					}
-					if err := digestRepo.UpdateComposeRetryCounts(ctx, data.DigestID, digestRetryCount, totalClusterDraftRetryCount); err != nil {
-						return "", fmt.Errorf("update digest retry counts: %w", err)
-					}
-					log.Printf("compose-digest-copy worker-done digest_id=%s subject_len=%d body_len=%d", data.DigestID, len(resp.Subject), len(resp.Body))
-					if err := digestRepo.UpdateEmailCopy(ctx, data.DigestID, resp.Subject, resp.Body); err != nil {
+					if err := composeDigestEmailCopy(ctx, digestRepo, itemRepo, userSettingsRepo, llmUsageRepo, llmExecutionRepo, processItemDeps{worker: worker, secretCipher: secretCipher}, data, digest, userModelSettings); err != nil {
 						return "", err
 					}
 					return "stored", nil

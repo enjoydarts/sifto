@@ -57,6 +57,7 @@ from app.services.feed_task_common import (
     parse_seed_sites_result,
 )
 from app.services.facts_task_common import build_facts_task, parse_facts_result
+from app.services.task_transport_common import wrap_json_transport
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
@@ -722,22 +723,19 @@ def summarize(
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, model: str, api_key: str) -> dict:
     return run_summary_faithfulness_check(
-        lambda: (
-            lambda text, usage: (text, _llm_meta(model, "faithfulness_check", usage))
-        )(
-            *_generate_content(
+        lambda: wrap_json_transport(
+            lambda: _generate_content(
                 summary_faithfulness_prompt(title, facts, summary),
                 model=model,
                 api_key=api_key,
                 max_output_tokens=320,
                 system_instruction=summary_faithfulness_system_instruction(),
                 response_schema=SUMMARY_FAITHFULNESS_SCHEMA,
-            )
+            ),
+            lambda usage: _llm_meta(model, "faithfulness_check", usage),
         ),
-        retry_call=lambda: (
-            lambda text, usage: (text, _llm_meta(model, "faithfulness_check", usage))
-        )(
-            *_generate_content(
+        retry_call=lambda: wrap_json_transport(
+            lambda: _generate_content(
                 summary_faithfulness_retry_prompt(title, facts, summary),
                 model=model,
                 api_key=api_key,
@@ -745,29 +743,27 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
                 system_instruction="pass / warn / fail のいずれか1語のみを返す。",
                 response_schema=None,
                 response_mime_type="text/plain",
-            )
+            ),
+            lambda usage: _llm_meta(model, "faithfulness_check", usage),
         ),
     )
 
 
 def check_facts(title: str | None, content: str, facts: list[str], model: str, api_key: str) -> dict:
     return run_facts_check(
-        lambda: (
-            lambda text, usage: (text, _llm_meta(model, "facts_check", usage))
-        )(
-            *_generate_content(
+        lambda: wrap_json_transport(
+            lambda: _generate_content(
                 facts_check_prompt(title, content, facts),
                 model=model,
                 api_key=api_key,
                 max_output_tokens=320,
                 system_instruction=facts_check_system_instruction(),
                 response_schema=FACTS_CHECK_SCHEMA,
-            )
+            ),
+            lambda usage: _llm_meta(model, "facts_check", usage),
         ),
-        retry_call=lambda: (
-            lambda text, usage: (text, _llm_meta(model, "facts_check", usage))
-        )(
-            *_generate_content(
+        retry_call=lambda: wrap_json_transport(
+            lambda: _generate_content(
                 facts_check_retry_prompt(title, content, facts),
                 model=model,
                 api_key=api_key,
@@ -775,7 +771,8 @@ def check_facts(title: str | None, content: str, facts: list[str], model: str, a
                 system_instruction="pass / warn / fail のいずれか1語のみを返す。",
                 response_schema=None,
                 response_mime_type="text/plain",
-            )
+            ),
+            lambda usage: _llm_meta(model, "facts_check", usage),
         ),
     )
 

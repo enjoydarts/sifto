@@ -49,6 +49,7 @@ from app.services.feed_task_common import (
     parse_seed_sites_result,
 )
 from app.services.facts_task_common import build_facts_task, parse_facts_result
+from app.services.task_transport_common import wrap_anthropic_message
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -647,16 +648,26 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
         }
         return result
     return run_summary_faithfulness_check(
-        lambda: (
-            message.content[0].text.strip(),
-            _llm_meta(message, "faithfulness_check", used_model or _summary_model),
+        lambda: wrap_anthropic_message(
+            message,
+            lambda msg: _llm_meta(msg, "faithfulness_check", used_model or _summary_model),
+            {
+                "provider": "anthropic",
+                "model": used_model or _summary_model,
+                "pricing_model_family": used_model or _summary_model,
+                "pricing_source": _ANTHROPIC_PRICING_SOURCE_VERSION,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
         ),
         retry_call=lambda: (
-            lambda retry_message, retry_model: (
-                (retry_message.content[0].text.strip() if retry_message is not None else ""),
-                _llm_meta(retry_message, "faithfulness_check", retry_model or used_model or _summary_model)
-                if retry_message is not None
-                else {
+            lambda retry_message, retry_model: wrap_anthropic_message(
+                retry_message,
+                lambda msg: _llm_meta(msg, "faithfulness_check", retry_model or used_model or _summary_model),
+                {
                     "provider": "anthropic",
                     "model": retry_model or used_model or _summary_model,
                     "pricing_model_family": retry_model or used_model or _summary_model,
@@ -710,16 +721,26 @@ def check_facts(title: str | None, content: str, facts: list[str], api_key: str 
         }
     retry_prompt = facts_check_retry_prompt(title, content, facts)
     return run_facts_check(
-        lambda: (
-            message.content[0].text.strip(),
-            _llm_meta(message, "facts_check", used_model or _summary_model),
+        lambda: wrap_anthropic_message(
+            message,
+            lambda msg: _llm_meta(msg, "facts_check", used_model or _summary_model),
+            {
+                "provider": "anthropic",
+                "model": used_model or _summary_model,
+                "pricing_model_family": used_model or _summary_model,
+                "pricing_source": _ANTHROPIC_PRICING_SOURCE_VERSION,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
         ),
         retry_call=lambda: (
-            lambda retry_message, retry_model: (
-                (retry_message.content[0].text.strip() if retry_message is not None else ""),
-                _llm_meta(retry_message, "facts_check", retry_model or used_model or _summary_model)
-                if retry_message is not None
-                else {
+            lambda retry_message, retry_model: wrap_anthropic_message(
+                retry_message,
+                lambda msg: _llm_meta(msg, "facts_check", retry_model or used_model or _summary_model),
+                {
                     "provider": "anthropic",
                     "model": retry_model or used_model or _summary_model,
                     "pricing_model_family": retry_model or used_model or _summary_model,

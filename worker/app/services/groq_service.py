@@ -51,6 +51,7 @@ from app.services.feed_task_common import (
     parse_seed_sites_result,
 )
 from app.services.facts_task_common import build_facts_task, parse_facts_result
+from app.services.task_transport_common import wrap_json_transport
 
 _log = logging.getLogger(__name__)
 _GROQ_PRICING_SOURCE_VERSION = "groq_static_2026_03"
@@ -343,10 +344,8 @@ def summarize(title: str | None, facts: list[str], source_text_chars: int | None
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, model: str, api_key: str) -> dict:
     return run_summary_faithfulness_check(
-        lambda: (
-            lambda text, usage: (text, _llm_meta(model, "faithfulness_check", usage))
-        )(
-            *_chat_json(
+        lambda: wrap_json_transport(
+            lambda: _chat_json(
                 summary_faithfulness_prompt(title, facts, summary),
                 model,
                 api_key,
@@ -354,29 +353,27 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
                 max_output_tokens=320,
                 response_schema=SUMMARY_FAITHFULNESS_SCHEMA,
                 schema_name="summary_faithfulness",
-            )
+            ),
+            lambda usage: _llm_meta(model, "faithfulness_check", usage),
         ),
-        retry_call=lambda: (
-            lambda text, usage: (text, _llm_meta(model, "faithfulness_check", usage))
-        )(
-            *_chat_json(
+        retry_call=lambda: wrap_json_transport(
+            lambda: _chat_json(
                 summary_faithfulness_retry_prompt(title, facts, summary),
                 model,
                 api_key,
                 system_instruction="pass / warn / fail のいずれか1語のみを返す。",
                 max_output_tokens=120,
                 response_schema=None,
-            )
+            ),
+            lambda usage: _llm_meta(model, "faithfulness_check", usage),
         ),
     )
 
 
 def check_facts(title: str | None, content: str, facts: list[str], model: str, api_key: str) -> dict:
     return run_facts_check(
-        lambda: (
-            lambda text, usage: (text, _llm_meta(model, "facts_check", usage))
-        )(
-            *_chat_json(
+        lambda: wrap_json_transport(
+            lambda: _chat_json(
                 facts_check_prompt(title, content, facts),
                 model,
                 api_key,
@@ -384,19 +381,19 @@ def check_facts(title: str | None, content: str, facts: list[str], model: str, a
                 max_output_tokens=320,
                 response_schema=FACTS_CHECK_SCHEMA,
                 schema_name="facts_check",
-            )
+            ),
+            lambda usage: _llm_meta(model, "facts_check", usage),
         ),
-        retry_call=lambda: (
-            lambda text, usage: (text, _llm_meta(model, "facts_check", usage))
-        )(
-            *_chat_json(
+        retry_call=lambda: wrap_json_transport(
+            lambda: _chat_json(
                 facts_check_retry_prompt(title, content, facts),
                 model,
                 api_key,
                 system_instruction="pass / warn / fail のいずれか1語のみを返す。",
                 max_output_tokens=120,
                 response_schema=None,
-            )
+            ),
+            lambda usage: _llm_meta(model, "facts_check", usage),
         ),
     )
 

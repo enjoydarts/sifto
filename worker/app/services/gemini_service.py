@@ -54,7 +54,7 @@ from app.services.feed_task_common import (
     parse_seed_sites_result,
 )
 from app.services.facts_task_common import build_facts_task, parse_facts_result
-from app.services.task_transport_common import wrap_json_transport
+from app.services.task_transport_common import wrap_usage_transport
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
@@ -446,7 +446,7 @@ def summarize(
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, model: str, api_key: str) -> dict:
     return run_summary_faithfulness_check(
-        lambda: wrap_json_transport(
+        lambda: wrap_usage_transport(
             lambda: _generate_content(
                 summary_faithfulness_prompt(title, facts, summary),
                 model=model,
@@ -457,7 +457,7 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
             ),
             lambda usage: _llm_meta(model, "faithfulness_check", usage),
         ),
-        retry_call=lambda: wrap_json_transport(
+        retry_call=lambda: wrap_usage_transport(
             lambda: _generate_content(
                 summary_faithfulness_retry_prompt(title, facts, summary),
                 model=model,
@@ -474,7 +474,7 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
 
 def check_facts(title: str | None, content: str, facts: list[str], model: str, api_key: str) -> dict:
     return run_facts_check(
-        lambda: wrap_json_transport(
+        lambda: wrap_usage_transport(
             lambda: _generate_content(
                 facts_check_prompt(title, content, facts),
                 model=model,
@@ -485,7 +485,7 @@ def check_facts(title: str | None, content: str, facts: list[str], model: str, a
             ),
             lambda usage: _llm_meta(model, "facts_check", usage),
         ),
-        retry_call=lambda: wrap_json_transport(
+        retry_call=lambda: wrap_usage_transport(
             lambda: _generate_content(
                 facts_check_retry_prompt(title, content, facts),
                 model=model,

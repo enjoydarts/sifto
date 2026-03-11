@@ -50,7 +50,7 @@ from app.services.feed_task_common import (
 from app.services.facts_task_common import build_facts_task, parse_facts_result
 from app.services.openai_compat_transport import run_chat_json
 from app.services.openai_responses_transport import run_responses_json
-from app.services.task_transport_common import wrap_json_transport
+from app.services.task_transport_common import wrap_usage_transport
 
 _log = logging.getLogger(__name__)
 _OPENAI_PRICING_SOURCE_VERSION = "openai_standard_2026_03"
@@ -350,7 +350,7 @@ def summarize(title: str | None, facts: list[str], source_text_chars: int | None
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, model: str, api_key: str) -> dict:
     return run_summary_faithfulness_check(
-        lambda: wrap_json_transport(
+        lambda: wrap_usage_transport(
             lambda: _chat_json(
                 summary_faithfulness_prompt(title, facts, summary),
                 model,
@@ -362,7 +362,7 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
             ),
             lambda usage: _llm_meta(model, "faithfulness_check", usage),
         ),
-        retry_call=lambda: wrap_json_transport(
+        retry_call=lambda: wrap_usage_transport(
             lambda: _chat_json(
                 summary_faithfulness_retry_prompt(title, facts, summary),
                 model,
@@ -378,7 +378,7 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
 
 def check_facts(title: str | None, content: str, facts: list[str], model: str, api_key: str) -> dict:
     return run_facts_check(
-        lambda: wrap_json_transport(
+        lambda: wrap_usage_transport(
             lambda: _chat_json(
                 facts_check_prompt(title, content, facts),
                 model,
@@ -390,7 +390,7 @@ def check_facts(title: str | None, content: str, facts: list[str], model: str, a
             ),
             lambda usage: _llm_meta(model, "facts_check", usage),
         ),
-        retry_call=lambda: wrap_json_transport(
+        retry_call=lambda: wrap_usage_transport(
             lambda: _chat_json(
                 facts_check_retry_prompt(title, content, facts),
                 model,

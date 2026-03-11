@@ -181,6 +181,29 @@ func CatalogModelCapabilities(model string) *LLMModelCapabilities {
 	return entry.Capabilities
 }
 
+func CatalogModelSupportsCapability(model, capability string) bool {
+	caps := CatalogModelCapabilities(model)
+	if caps == nil {
+		return false
+	}
+	switch strings.TrimSpace(capability) {
+	case "structured_output":
+		return caps.SupportsStructuredOutput
+	case "strict_json_schema":
+		return caps.SupportsStrictJSONSchema
+	case "reasoning":
+		return caps.SupportsReasoning
+	case "tool_calling":
+		return caps.SupportsToolCalling
+	case "cache_read_pricing":
+		return caps.SupportsCacheReadPricing
+	case "cache_write_pricing":
+		return caps.SupportsCacheWritePricing
+	default:
+		return false
+	}
+}
+
 func CatalogModelSupportsPurpose(model, purpose string) bool {
 	entry := findModelCatalog(model)
 	if entry == nil {

@@ -122,3 +122,15 @@ func TestCatalogIsEmbeddingModel(t *testing.T) {
 		t.Fatal("gpt-5-mini should not be recognized as embedding model")
 	}
 }
+
+func TestCatalogModelSupportsCapability(t *testing.T) {
+	if !CatalogModelSupportsCapability("gpt-5-mini", "structured_output") {
+		t.Fatal("gpt-5-mini should support structured_output")
+	}
+	if CatalogModelSupportsCapability("text-embedding-3-small", "structured_output") {
+		t.Fatal("text-embedding-3-small should not support structured_output")
+	}
+	if CatalogModelSupportsCapability("does-not-exist", "structured_output") {
+		t.Fatal("unknown model should not support structured_output")
+	}
+}

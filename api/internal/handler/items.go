@@ -24,6 +24,7 @@ type ItemHandler struct {
 	streakRepo *repository.ReadingStreakRepo
 	publisher  *service.EventPublisher
 	cache      service.JSONCache
+	detail     *service.ItemDetailService
 }
 
 const itemsListCacheTTL = 30 * time.Second
@@ -38,7 +39,14 @@ func NewItemHandler(
 	publisher *service.EventPublisher,
 	cache service.JSONCache,
 ) *ItemHandler {
-	return &ItemHandler{repo: repo, sourceRepo: sourceRepo, streakRepo: streakRepo, publisher: publisher, cache: cache}
+	return &ItemHandler{
+		repo:       repo,
+		sourceRepo: sourceRepo,
+		streakRepo: streakRepo,
+		publisher:  publisher,
+		cache:      cache,
+		detail:     service.NewItemDetailService(repo),
+	}
 }
 
 func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -493,7 +501,7 @@ func (h *ItemHandler) TriageAll(w http.ResponseWriter, r *http.Request) {
 func (h *ItemHandler) GetDetail(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	id := chi.URLParam(r, "id")
-	item, err := h.repo.GetDetail(r.Context(), id, userID)
+	item, err := h.detail.Get(r.Context(), id, userID)
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -538,7 +546,7 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var targetTopics []string
-	if detail, err := h.repo.GetDetail(r.Context(), id, userID); err == nil && detail != nil && detail.Summary != nil {
+	if detail, err := h.detail.Get(r.Context(), id, userID); err == nil && detail != nil && detail.Summary != nil {
 		targetTopics = detail.Summary.Topics
 	}
 	items, err := h.repo.ListRelated(r.Context(), id, userID, limit)

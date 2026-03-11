@@ -131,7 +131,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		FaithfulnessCheck: body.FaithfulnessCheck,
 	})
 	if err != nil {
-		if strings.HasPrefix(err.Error(), "invalid model for ") || err.Error() == "invalid embedding model" {
+		if strings.HasPrefix(err.Error(), "invalid model for ") || strings.HasPrefix(err.Error(), "model missing required capability for ") || err.Error() == "invalid embedding model" {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

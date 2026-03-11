@@ -63,6 +63,17 @@ var modelSettingPurposes = map[string]string{
 	"faithfulness_check": "summary",
 }
 
+var modelSettingRequiredCapabilities = map[string][]string{
+	"facts":              {"structured_output"},
+	"summary":            {"structured_output"},
+	"digest_cluster":     {"structured_output"},
+	"digest":             {"structured_output"},
+	"ask":                {"structured_output"},
+	"source_suggestion":  {"structured_output"},
+	"facts_check":        {"structured_output"},
+	"faithfulness_check": {"structured_output"},
+}
+
 func NewSettingsService(repo *repository.UserSettingsRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *SecretCipher) *SettingsService {
 	return &SettingsService{repo: repo, llmUsageRepo: llmUsageRepo, cipher: cipher}
 }
@@ -162,6 +173,18 @@ func validateCatalogModelForPurpose(model *string, purpose string) error {
 	return nil
 }
 
+func validateCatalogModelCapabilities(model *string, settingKey string) error {
+	if model == nil {
+		return nil
+	}
+	for _, capability := range modelSettingRequiredCapabilities[settingKey] {
+		if !CatalogModelSupportsCapability(*model, capability) {
+			return fmt.Errorf("model missing required capability for %s", settingKey)
+		}
+	}
+	return nil
+}
+
 func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in UpdateLLMModelsInput) (*model.UserSettings, error) {
 	normalized := map[string]*string{
 		"facts":              normalizeOptionalModel(in.Facts),
@@ -176,6 +199,9 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 	}
 	for settingKey, purpose := range modelSettingPurposes {
 		if err := validateCatalogModelForPurpose(normalized[settingKey], purpose); err != nil {
+			return nil, err
+		}
+		if err := validateCatalogModelCapabilities(normalized[settingKey], settingKey); err != nil {
 			return nil, err
 		}
 	}

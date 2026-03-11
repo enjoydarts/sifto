@@ -53,7 +53,7 @@ from app.services.feed_task_common import (
     parse_seed_sites_result,
 )
 from app.services.facts_task_common import build_facts_task, parse_facts_result
-from app.services.task_transport_common import empty_llm_meta, wrap_anthropic_message, wrap_anthropic_result
+from app.services.task_transport_common import empty_llm_meta, wrap_message_fallback_transport, wrap_message_transport
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -485,12 +485,12 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
         result["llm"] = empty_llm_meta("local-fallback", used_model or _summary_model)
         return result
     return run_summary_faithfulness_check(
-        lambda: wrap_anthropic_message(
+        lambda: wrap_message_transport(
             message,
             lambda msg: _llm_meta(msg, "faithfulness_check", used_model or _summary_model),
             empty_llm_meta("anthropic", used_model or _summary_model, _ANTHROPIC_PRICING_SOURCE_VERSION),
         ),
-        retry_call=lambda: wrap_anthropic_result(
+        retry_call=lambda: wrap_message_fallback_transport(
             _call_with_model_fallback(
                 summary_faithfulness_retry_prompt(title, facts, summary),
                 str(model or _summary_model),
@@ -528,12 +528,12 @@ def check_facts(title: str | None, content: str, facts: list[str], api_key: str 
         }
     retry_prompt = facts_check_retry_prompt(title, content, facts)
     return run_facts_check(
-        lambda: wrap_anthropic_message(
+        lambda: wrap_message_transport(
             message,
             lambda msg: _llm_meta(msg, "facts_check", used_model or _summary_model),
             empty_llm_meta("anthropic", used_model or _summary_model, _ANTHROPIC_PRICING_SOURCE_VERSION),
         ),
-        retry_call=lambda: wrap_anthropic_result(
+        retry_call=lambda: wrap_message_fallback_transport(
             _call_with_model_fallback(
                 retry_prompt,
                 str(model or _summary_model),

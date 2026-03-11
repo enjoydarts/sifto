@@ -255,8 +255,8 @@ export default function BriefingPage() {
               description={t("emptyState.briefing.desc")}
             />
           ) : (
-            <article className="mt-3 overflow-hidden rounded-[28px] border border-zinc-200 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.12),_transparent_38%),linear-gradient(135deg,_#18181b_0%,_#27272a_48%,_#fafafa_160%)] p-1 shadow-sm">
-              <div className="grid gap-0 overflow-hidden rounded-[24px] bg-white md:grid-cols-[1.3fr_0.9fr]">
+            <article className="mt-3 overflow-hidden rounded-[24px] border border-zinc-200 bg-white shadow-sm">
+              <div className="grid gap-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_34%),linear-gradient(135deg,_#ffffff_0%,_#f8fafc_52%,_#ffffff_100%)] md:grid-cols-[1.3fr_0.9fr]">
                 <div className="flex flex-col justify-between p-5 md:p-6">
                   <div>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">

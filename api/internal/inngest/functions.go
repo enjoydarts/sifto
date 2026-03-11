@@ -58,6 +58,82 @@ func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpo
 	}
 }
 
+func recordLLMExecutionSuccess(ctx context.Context, repo *repository.LLMExecutionEventRepo, purpose string, usage *service.LLMUsage, attemptIndex int, userID, sourceID, itemID, digestID *string) {
+	if repo == nil || usage == nil {
+		return
+	}
+	if usage.Provider == "" || usage.Model == "" {
+		return
+	}
+	if err := repo.Insert(ctx, repository.LLMExecutionEventInput{
+		UserID:       userID,
+		SourceID:     sourceID,
+		ItemID:       itemID,
+		DigestID:     digestID,
+		Provider:     usage.Provider,
+		Model:        usage.Model,
+		Purpose:      purpose,
+		Status:       "success",
+		AttemptIndex: attemptIndex,
+	}); err != nil {
+		log.Printf("record llm execution success purpose=%s: %v", purpose, err)
+	}
+}
+
+func recordLLMExecutionFailure(ctx context.Context, repo *repository.LLMExecutionEventRepo, purpose string, model *string, attemptIndex int, userID, sourceID, itemID, digestID *string, err error) {
+	if repo == nil || model == nil || strings.TrimSpace(*model) == "" || err == nil {
+		return
+	}
+	modelVal := strings.TrimSpace(*model)
+	provider := service.LLMProviderForModel(&modelVal)
+	errorKind, emptyResponse := classifyLLMExecutionError(err)
+	message := err.Error()
+	if len(message) > 500 {
+		message = message[:500]
+	}
+	if err := repo.Insert(ctx, repository.LLMExecutionEventInput{
+		UserID:        userID,
+		SourceID:      sourceID,
+		ItemID:        itemID,
+		DigestID:      digestID,
+		Provider:      provider,
+		Model:         modelVal,
+		Purpose:       purpose,
+		Status:        "failure",
+		AttemptIndex:  attemptIndex,
+		EmptyResponse: emptyResponse,
+		ErrorKind:     &errorKind,
+		ErrorMessage:  &message,
+	}); err != nil {
+		log.Printf("record llm execution failure purpose=%s: %v", purpose, err)
+	}
+}
+
+func classifyLLMExecutionError(err error) (string, bool) {
+	s := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case strings.Contains(s, "response_snippet=(empty)"),
+		strings.Contains(s, "returned nil response"),
+		strings.Contains(s, "empty summary"),
+		strings.Contains(s, "empty facts"),
+		strings.Contains(s, "empty response"):
+		return "empty_response", true
+	case strings.Contains(s, "short_comment missing"),
+		strings.Contains(s, "parse failed"),
+		strings.Contains(s, "json"):
+		return "parse_error", false
+	case strings.Contains(s, "looks truncated"),
+		strings.Contains(s, "incomplete after"),
+		strings.Contains(s, "compose digest incomplete"):
+		return "incomplete_output", false
+	case strings.Contains(s, "timeout"),
+		strings.Contains(s, "deadline exceeded"):
+		return "timeout", false
+	default:
+		return "worker_error", false
+	}
+}
+
 func llmUsageIdempotencyKey(purpose string, usage *service.LLMUsage, userID, sourceID, itemID, digestID *string) string {
 	toVal := func(v *string) string {
 		if v == nil {
@@ -1012,6 +1088,7 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, openAI *service.OpenAIClient, oneSignal *service.OneSignalClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
 	itemRepo := repository.NewItemInngestRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	llmExecutionRepo := repository.NewLLMExecutionEventRepo(db)
 	sourceRepo := repository.NewSourceRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
 	userRepo := repository.NewUserRepo(db)
@@ -1125,6 +1202,11 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					}, nil
 				})
 				if err != nil {
+					var failedModel *string
+					if factsAttempt != nil {
+						failedModel = factsAttempt.ResolvedModel
+					}
+					recordLLMExecutionFailure(ctx, llmExecutionRepo, "facts", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
 					log.Printf("process-item extract-facts failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
 					msg := fmt.Sprintf("extract facts: %v", err)
 					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
@@ -1133,12 +1215,14 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				factsResp = factsAttempt.Facts
 				recordLLMUsage(ctx, llmUsageRepo, "facts", factsResp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
 				if len(factsResp.Facts) == 0 {
+					recordLLMExecutionFailure(ctx, llmExecutionRepo, "facts", factsAttempt.ResolvedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, fmt.Errorf("empty facts returned from worker"))
 					err := fmt.Errorf("empty facts returned from worker")
 					log.Printf("process-item extract-facts empty item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
 					msg := fmt.Sprintf("extract facts: %v", err)
 					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
 					return nil, fmt.Errorf("extract facts: %w", err)
 				}
+				recordLLMExecutionSuccess(ctx, llmExecutionRepo, "facts", factsResp.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 				log.Printf("process-item extract-facts done item_id=%s facts=%d attempt=%d", itemID, len(factsResp.Facts), attempt+1)
 
 				checkStep := "check-facts"
@@ -1182,11 +1266,19 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					return resp, nil
 				})
 				if err != nil {
+					var failedModel *string
+					if userModelSettings != nil && userModelSettings.FactsCheckModel != nil && strings.TrimSpace(*userModelSettings.FactsCheckModel) != "" {
+						failedModel = userModelSettings.FactsCheckModel
+					} else {
+						failedModel = factsAttempt.ResolvedModel
+					}
+					recordLLMExecutionFailure(ctx, llmExecutionRepo, "facts_check", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
 					log.Printf("process-item facts_check failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
 					msg := fmt.Sprintf("facts check: %v", err)
 					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
 					return nil, fmt.Errorf("facts check: %w", err)
 				}
+				recordLLMExecutionSuccess(ctx, llmExecutionRepo, "facts_check", factsCheck.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 				finalFactsCheck = factsCheck
 				if factsCheck.Verdict != "fail" {
 					factsRetryCount = attempt
@@ -1273,6 +1365,11 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					}, nil
 				})
 				if err != nil {
+					var failedModel *string
+					if summaryAttempt != nil {
+						failedModel = summaryAttempt.ResolvedModel
+					}
+					recordLLMExecutionFailure(ctx, llmExecutionRepo, "summary", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
 					log.Printf("process-item summarize failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
 					msg := fmt.Sprintf("summarize: %v", err)
 					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
@@ -1282,12 +1379,14 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				summary.Summary = strings.TrimSpace(summary.Summary)
 				recordLLMUsage(ctx, llmUsageRepo, "summary", summary.LLM, userIDPtr, &data.SourceID, &itemID, nil)
 				if summary.Summary == "" {
+					recordLLMExecutionFailure(ctx, llmExecutionRepo, "summary", summaryAttempt.ResolvedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, fmt.Errorf("empty summary returned from worker"))
 					err := fmt.Errorf("empty summary returned from worker")
 					log.Printf("process-item summarize empty item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
 					msg := fmt.Sprintf("summarize: %v", err)
 					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
 					return nil, fmt.Errorf("summarize: %w", err)
 				}
+				recordLLMExecutionSuccess(ctx, llmExecutionRepo, "summary", summary.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 
 				faithfulnessStep := "check-summary-faithfulness"
 				if attempt > 0 {
@@ -1327,11 +1426,19 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					return resp, nil
 				})
 				if err != nil {
+					var failedModel *string
+					if userModelSettings != nil && userModelSettings.FaithfulnessCheckModel != nil && strings.TrimSpace(*userModelSettings.FaithfulnessCheckModel) != "" {
+						failedModel = userModelSettings.FaithfulnessCheckModel
+					} else {
+						failedModel = summaryAttempt.ResolvedModel
+					}
+					recordLLMExecutionFailure(ctx, llmExecutionRepo, "faithfulness_check", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
 					log.Printf("process-item faithfulness failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
 					msg := fmt.Sprintf("faithfulness check: %v", err)
 					_ = itemRepo.MarkFailed(ctx, itemID, &msg)
 					return nil, fmt.Errorf("faithfulness check: %w", err)
 				}
+				recordLLMExecutionSuccess(ctx, llmExecutionRepo, "faithfulness_check", faithfulness.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 				finalFaithfulness = faithfulness
 				if faithfulness.Verdict != "fail" {
 					summaryRetryCount = attempt
@@ -1463,12 +1570,14 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 					return openAI.CreateEmbedding(ctx, *userOpenAIKey, embModel, inputText)
 				})
 				if err != nil {
+					recordLLMExecutionFailure(ctx, llmExecutionRepo, "embedding", &embModel, 0, userIDPtr, &data.SourceID, &itemID, nil, err)
 					log.Printf("process-item create-embedding failed item_id=%s err=%v", itemID, err)
 				} else {
 					if err := itemRepo.UpsertEmbedding(ctx, itemID, embModel, embResp.Embedding); err != nil {
 						log.Printf("process-item upsert-embedding failed item_id=%s err=%v", itemID, err)
 					} else {
 						recordLLMUsage(ctx, llmUsageRepo, "embedding", embResp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
+						recordLLMExecutionSuccess(ctx, llmExecutionRepo, "embedding", embResp.LLM, 0, userIDPtr, &data.SourceID, &itemID, nil)
 						log.Printf("process-item create-embedding done item_id=%s dims=%d", itemID, len(embResp.Embedding))
 					}
 				}
@@ -1483,6 +1592,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 func embedItemFn(client inngestgo.Client, db *pgxpool.Pool, openAI *service.OpenAIClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
 	itemRepo := repository.NewItemInngestRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	llmExecutionRepo := repository.NewLLMExecutionEventRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
 
 	type EventData struct {
@@ -1520,6 +1630,7 @@ func embedItemFn(client inngestgo.Client, db *pgxpool.Pool, openAI *service.Open
 				return openAI.CreateEmbedding(ctx, *userOpenAIKey, embModel, inputText)
 			})
 			if err != nil {
+				recordLLMExecutionFailure(ctx, llmExecutionRepo, "embedding", &embModel, 0, &candidate.UserID, &candidate.SourceID, &candidate.ItemID, nil, err)
 				return nil, err
 			}
 			if err := itemRepo.UpsertEmbedding(ctx, candidate.ItemID, embModel, embResp.Embedding); err != nil {
@@ -1527,6 +1638,7 @@ func embedItemFn(client inngestgo.Client, db *pgxpool.Pool, openAI *service.Open
 			}
 
 			recordLLMUsage(ctx, llmUsageRepo, "embedding", embResp.LLM, &candidate.UserID, &candidate.SourceID, &candidate.ItemID, nil)
+			recordLLMExecutionSuccess(ctx, llmExecutionRepo, "embedding", embResp.LLM, 0, &candidate.UserID, &candidate.SourceID, &candidate.ItemID, nil)
 			return map[string]any{
 				"item_id":    candidate.ItemID,
 				"source_id":  candidate.SourceID,
@@ -1624,6 +1736,7 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 	digestRepo := repository.NewDigestInngestRepo(db)
 	itemRepo := repository.NewItemRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	llmExecutionRepo := repository.NewLLMExecutionEventRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
 
 	return inngestgo.CreateFunction(
@@ -1714,6 +1827,7 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 								resolvedClusterDraftModel,
 							)
 							if err != nil {
+								recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", resolvedClusterDraftModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 								return "", fmt.Errorf("compose digest cluster draft rank=%d attempt=%d: %w", drafts[i].Rank, attempt+1, err)
 							}
 							if resp != nil {
@@ -1725,12 +1839,17 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 							}
 							if err := validateDigestClusterDraftCompletion(candidate); err == nil {
 								drafts[i].DraftSummary = candidate
+								if resp != nil {
+									recordLLMExecutionSuccess(ctx, llmExecutionRepo, "digest_cluster_draft", resp.LLM, attempt, &data.UserID, nil, nil, &data.DigestID)
+								}
 								totalClusterDraftRetryCount += attempt
 								valid = true
 								break
 							} else if attempt >= maxDigestClusterDraftRetries {
+								recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", resolvedClusterDraftModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 								return "", fmt.Errorf("compose digest cluster draft rank=%d incomplete after %d retries: %w", drafts[i].Rank, attempt, err)
 							}
+							recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", resolvedClusterDraftModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 							log.Printf("compose-digest-copy cluster-draft retry digest_id=%s rank=%d attempt=%d err=%v", data.DigestID, drafts[i].Rank, attempt+1, err)
 						}
 						if !valid {
@@ -1762,15 +1881,19 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 					for attempt := 0; attempt <= maxDigestRetries; attempt++ {
 						resp, err = worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, digestAnthropicKey, digestGoogleKey, digestGroqKey, digestDeepSeekKey, digestOpenAIKey, resolvedDigestModel)
 						if err != nil {
+							recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", resolvedDigestModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 							return "", err
 						}
 						recordLLMUsage(ctx, llmUsageRepo, "digest", resp.LLM, &data.UserID, nil, nil, &data.DigestID)
 						if err := validateDigestCompletion(resp.Subject, resp.Body); err == nil {
+							recordLLMExecutionSuccess(ctx, llmExecutionRepo, "digest", resp.LLM, attempt, &data.UserID, nil, nil, &data.DigestID)
 							digestRetryCount = attempt
 							break
 						} else if attempt >= maxDigestRetries {
+							recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", resolvedDigestModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 							return "", fmt.Errorf("compose digest incomplete after %d retries: %w", attempt, err)
 						}
+						recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", resolvedDigestModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 						log.Printf("compose-digest-copy digest retry digest_id=%s attempt=%d err=%v", data.DigestID, attempt+1, err)
 					}
 					if resp == nil {

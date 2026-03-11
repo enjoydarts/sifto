@@ -391,6 +391,21 @@ export interface LLMUsagePurposeMonthSummary {
   estimated_cost_usd: number;
 }
 
+export interface LLMExecutionCurrentMonthSummary {
+  month_jst: string;
+  purpose: string;
+  provider: string;
+  model: string;
+  attempts: number;
+  successes: number;
+  failures: number;
+  retries: number;
+  empty_responses: number;
+  failure_rate_pct: number;
+  retry_rate_pct: number;
+  empty_rate_pct: number;
+}
+
 export interface ProviderModelChangeEvent {
   id: string;
   provider: string;
@@ -794,6 +809,9 @@ export const api = {
   },
   getLLMUsageCurrentMonthByPurpose: () => {
     return apiFetch<LLMUsagePurposeMonthSummary[]>("/llm-usage/current-month/by-purpose");
+  },
+  getLLMExecutionCurrentMonthSummary: () => {
+    return apiFetch<LLMExecutionCurrentMonthSummary[]>("/llm-usage/current-month/execution-summary");
   },
   getProviderModelUpdates: (params?: { days?: number; limit?: number }) => {
     const q = new URLSearchParams();

@@ -62,6 +62,7 @@ func main() {
 	digestRepo := repository.NewDigestRepo(db)
 	digestInngestRepo := repository.NewDigestInngestRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	llmExecutionRepo := repository.NewLLMExecutionEventRepo(db)
 	providerModelUpdateRepo := repository.NewProviderModelUpdateRepo(db)
 	briefingSnapshotRepo := repository.NewBriefingSnapshotRepo(db)
 	streakRepo := repository.NewReadingStreakRepo(db)
@@ -72,7 +73,7 @@ func main() {
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher)
 	itemH := handler.NewItemHandler(itemRepo, sourceRepo, streakRepo, eventPublisher, cache)
 	digestH := handler.NewDigestHandler(digestRepo)
-	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo)
+	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo, llmExecutionRepo)
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
 	briefingH := handler.NewBriefingHandler(itemRepo, briefingSnapshotRepo, streakRepo, cache)
 	askH := handler.NewAskHandler(itemRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, openAI, cache)
@@ -163,6 +164,7 @@ func main() {
 			r.Get("/by-model", llmUsageH.ModelSummary)
 			r.Get("/current-month/by-provider", llmUsageH.ProviderSummaryCurrentMonth)
 			r.Get("/current-month/by-purpose", llmUsageH.PurposeSummaryCurrentMonth)
+			r.Get("/current-month/execution-summary", llmUsageH.ExecutionSummaryCurrentMonth)
 		})
 
 		r.Route("/provider-model-updates", func(r chi.Router) {

@@ -17,7 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary, LLMUsageProviderMonthSummary, LLMUsagePurposeMonthSummary, UserSettings } from "@/lib/api";
+import { api, LLMExecutionCurrentMonthSummary, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary, LLMUsageProviderMonthSummary, LLMUsagePurposeMonthSummary, UserSettings } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 
@@ -71,6 +71,7 @@ export default function LLMUsagePage() {
   const [modelRows, setModelRows] = useState<LLMUsageModelSummary[]>([]);
   const [currentMonthProviderRows, setCurrentMonthProviderRows] = useState<LLMUsageProviderMonthSummary[]>([]);
   const [currentMonthPurposeRows, setCurrentMonthPurposeRows] = useState<LLMUsagePurposeMonthSummary[]>([]);
+  const [currentMonthExecutionRows, setCurrentMonthExecutionRows] = useState<LLMExecutionCurrentMonthSummary[]>([]);
   const [logs, setLogs] = useState<LLMUsageLog[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
 
@@ -90,11 +91,12 @@ export default function LLMUsagePage() {
   const load = useCallback(async (daysParam: number, limitParam: number) => {
     setLoading(true);
     try {
-      const [summary, byModel, byProviderCurrentMonth, byPurposeCurrentMonth, recent, userSettings] = await Promise.all([
+      const [summary, byModel, byProviderCurrentMonth, byPurposeCurrentMonth, executionCurrentMonth, recent, userSettings] = await Promise.all([
         api.getLLMUsageSummary({ days: daysParam }),
         api.getLLMUsageByModel({ days: daysParam }),
         api.getLLMUsageCurrentMonthByProvider(),
         api.getLLMUsageCurrentMonthByPurpose(),
+        api.getLLMExecutionCurrentMonthSummary(),
         api.getLLMUsage({ limit: limitParam }),
         api.getSettings(),
       ]);
@@ -102,6 +104,7 @@ export default function LLMUsagePage() {
       setModelRows(byModel ?? []);
       setCurrentMonthProviderRows(byProviderCurrentMonth ?? []);
       setCurrentMonthPurposeRows(byPurposeCurrentMonth ?? []);
+      setCurrentMonthExecutionRows(executionCurrentMonth ?? []);
       setLogs(recent ?? []);
       setSettings(userSettings);
       setError(null);
@@ -186,6 +189,21 @@ export default function LLMUsagePage() {
       avg_cost_per_call_usd: row.calls > 0 ? row.estimated_cost_usd / row.calls : 0,
     }));
   }, [currentMonthPurposeRows]);
+
+  const currentMonthExecutionTableRows = useMemo(
+    () =>
+      currentMonthExecutionRows
+        .filter((row) => row.attempts > 0)
+        .sort((a, b) => {
+          if (b.failures !== a.failures) return b.failures - a.failures;
+          if (b.retries !== a.retries) return b.retries - a.retries;
+          if (b.attempts !== a.attempts) return b.attempts - a.attempts;
+          if (a.purpose !== b.purpose) return a.purpose.localeCompare(b.purpose);
+          if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+          return a.model.localeCompare(b.model);
+        }),
+    [currentMonthExecutionRows]
+  );
 
   const groupedByDate = useMemo(() => {
     const m = new Map<string, SummaryRow[]>();
@@ -577,6 +595,54 @@ export default function LLMUsagePage() {
                     <td className="px-3 py-2 text-right">{row.share_pct.toFixed(1)}%</td>
                     <td className="px-3 py-2 text-right">{fmtUSD(row.avg_cost_per_call_usd)}</td>
                     <td className="px-3 py-2 text-right">{fmtUSD(row.estimated_cost_usd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+            <ReceiptText className="size-4 text-zinc-500" aria-hidden="true" />
+            <span>{t("llm.currentMonthReliability")}</span>
+          </h2>
+          <span className="text-xs text-zinc-400">
+            {settings?.current_month?.month_jst ?? currentMonthExecutionRows[0]?.month_jst ?? "—"}
+          </span>
+        </div>
+        {currentMonthExecutionTableRows.length === 0 ? (
+          <p className="text-sm text-zinc-400">{t("llm.noSummary")}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="text-xs text-zinc-500">
+                <tr className="border-b border-zinc-100">
+                  <th className="px-3 py-2 text-left font-medium">purpose</th>
+                  <th className="px-3 py-2 text-left font-medium">model</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("llm.attempts")}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("llm.failures")}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("llm.failureRate")}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("llm.retries")}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("llm.retryRate")}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("llm.emptyResponses")}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("llm.emptyRate")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentMonthExecutionTableRows.map((row) => (
+                  <tr key={`${row.month_jst}:${row.purpose}:${row.provider}:${row.model}`} className="border-b border-zinc-100 last:border-0">
+                    <td className="px-3 py-2 font-medium text-zinc-800">{row.purpose}</td>
+                    <td className="px-3 py-2 text-zinc-700 whitespace-nowrap">{row.provider}/{row.model}</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(row.attempts)}</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(row.failures)}</td>
+                    <td className="px-3 py-2 text-right">{row.failure_rate_pct.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(row.retries)}</td>
+                    <td className="px-3 py-2 text-right">{row.retry_rate_pct.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-right">{fmtNum(row.empty_responses)}</td>
+                    <td className="px-3 py-2 text-right">{row.empty_rate_pct.toFixed(1)}%</td>
                   </tr>
                 ))}
               </tbody>

@@ -8,10 +8,13 @@ import (
 	"github.com/minoru-kitayama/sifto/api/internal/repository"
 )
 
-type LLMUsageHandler struct{ repo *repository.LLMUsageLogRepo }
+type LLMUsageHandler struct {
+	repo          *repository.LLMUsageLogRepo
+	executionRepo *repository.LLMExecutionEventRepo
+}
 
-func NewLLMUsageHandler(repo *repository.LLMUsageLogRepo) *LLMUsageHandler {
-	return &LLMUsageHandler{repo: repo}
+func NewLLMUsageHandler(repo *repository.LLMUsageLogRepo, executionRepo *repository.LLMExecutionEventRepo) *LLMUsageHandler {
+	return &LLMUsageHandler{repo: repo, executionRepo: executionRepo}
 }
 
 func (h *LLMUsageHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -72,6 +75,16 @@ func (h *LLMUsageHandler) ProviderSummaryCurrentMonth(w http.ResponseWriter, r *
 func (h *LLMUsageHandler) PurposeSummaryCurrentMonth(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	rows, err := h.repo.PurposeSummaryCurrentMonthByUser(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, rows)
+}
+
+func (h *LLMUsageHandler) ExecutionSummaryCurrentMonth(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	rows, err := h.executionRepo.CurrentMonthSummaryByUser(r.Context(), userID)
 	if err != nil {
 		writeRepoError(w, err)
 		return

@@ -45,6 +45,7 @@ def translate_title_endpoint(req: TranslateTitleRequest, request: Request):
                 "translated_title_present": bool(result.get("translated_title")),
                 "translated_title_chars": len(result.get("translated_title") or ""),
                 **llm_usage_summary(result),
-            }
+            },
+            llm_result=result,
         )
         return result

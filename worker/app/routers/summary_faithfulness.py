@@ -49,7 +49,8 @@ def check_summary_faithfulness_endpoint(req: SummaryFaithfulnessRequest, request
                     "verdict": result.get("verdict"),
                     "short_comment_chars": len(result.get("short_comment") or ""),
                     **llm_usage_summary(result),
-                }
+                },
+                llm_result=result,
             )
             return SummaryFaithfulnessResponse(**result)
     except Exception as e:

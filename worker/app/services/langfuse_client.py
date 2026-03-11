@@ -98,7 +98,18 @@ def bind_span(current_span):
         _current_span_var.reset(token)
 
 
-def update_current(*, input=None, output=None, metadata=None, level=None, status_message=None) -> None:
+def update_current(
+    *,
+    input=None,
+    output=None,
+    metadata=None,
+    level=None,
+    status_message=None,
+    model: str | None = None,
+    model_parameters: dict | None = None,
+    usage_details: dict | None = None,
+    cost_details: dict | None = None,
+) -> None:
     kwargs = {}
     if input is not None:
         kwargs["input"] = input
@@ -110,6 +121,14 @@ def update_current(*, input=None, output=None, metadata=None, level=None, status
         kwargs["level"] = level
     if status_message is not None:
         kwargs["status_message"] = status_message
+    if model:
+        kwargs["model"] = model
+    if model_parameters:
+        kwargs["model_parameters"] = model_parameters
+    if usage_details:
+        kwargs["usage_details"] = usage_details
+    if cost_details:
+        kwargs["cost_details"] = cost_details
     if not kwargs:
         return
     current_span = _current_span_var.get()

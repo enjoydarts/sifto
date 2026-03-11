@@ -90,7 +90,8 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
                     "subject_chars": len(result.get("subject") or ""),
                     "body_chars": len(result.get("body") or ""),
                     **llm_usage_summary(result),
-                }
+                },
+                llm_result=result,
             )
             return ComposeDigestResponse(**result)
     except Exception as e:
@@ -155,7 +156,8 @@ def compose_digest_cluster_draft_endpoint(req: ComposeDigestClusterDraftRequest,
                 {
                     "draft_chars": len(result.get("draft_summary") or ""),
                     **llm_usage_summary(result),
-                }
+                },
+                llm_result=result,
             )
             return ComposeDigestClusterDraftResponse(**result)
     except Exception as e:

@@ -67,7 +67,8 @@ def ask_endpoint(req: AskRequest, request: Request):
                     "answer_chars": len(result.get("answer") or ""),
                     "citations_count": len(result.get("citations") or []),
                     **llm_usage_summary(result),
-                }
+                },
+                llm_result=result,
             )
             return AskResponse(**result)
     except Exception as e:

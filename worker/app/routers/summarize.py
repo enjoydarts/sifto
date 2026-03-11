@@ -84,7 +84,8 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
                     "summary_chars": len(result.get("summary") or ""),
                     "translated_title_present": bool(result.get("translated_title")),
                     **llm_usage_summary(result),
-                }
+                },
+                llm_result=result,
             )
             return SummarizeResponse(**result)
     except Exception as e:

@@ -97,5 +97,5 @@ def suggest_feed_seed_sites_endpoint(req: FeedSeedSuggestionRequest, request: Re
                 ),
             },
         )
-        observe_request_output({"items_count": len(result.get("items") or []), **llm_usage_summary(result)})
+        observe_request_output({"items_count": len(result.get("items") or []), **llm_usage_summary(result)}, llm_result=result)
         return FeedSeedSuggestionResponse(**result)

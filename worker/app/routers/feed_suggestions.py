@@ -123,5 +123,5 @@ def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Requ
                 ),
             },
         )
-        observe_request_output({"items_count": len(result.get("items") or []), **llm_usage_summary(result)})
+        observe_request_output({"items_count": len(result.get("items") or []), **llm_usage_summary(result)}, llm_result=result)
         return FeedSuggestionRankResponse(**result)

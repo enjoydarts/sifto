@@ -40,5 +40,5 @@ def extract_facts_endpoint(req: FactsRequest, request: Request):
                 "openai": lambda api_key: extract_facts_openai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
             },
         )
-        observe_request_output({"facts_count": len(result.get("facts") or []), **llm_usage_summary(result)})
+        observe_request_output({"facts_count": len(result.get("facts") or []), **llm_usage_summary(result)}, llm_result=result)
         return FactsResponse(**result)

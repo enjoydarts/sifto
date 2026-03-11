@@ -49,7 +49,8 @@ def check_facts_endpoint(req: FactsCheckRequest, request: Request):
                     "verdict": result.get("verdict"),
                     "short_comment_chars": len(result.get("short_comment") or ""),
                     **llm_usage_summary(result),
-                }
+                },
+                llm_result=result,
             )
             return FactsCheckResponse(**result)
     except Exception as e:

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minoru-kitayama/sifto/api/internal/model"
+	"github.com/enjoydarts/sifto/api/internal/model"
 )
 
 type ResendClient struct {

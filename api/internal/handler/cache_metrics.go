@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/minoru-kitayama/sifto/api/internal/service"
+	"github.com/enjoydarts/sifto/api/internal/service"
 )
 
 const userCacheMetricTTL = 24 * time.Hour

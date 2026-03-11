@@ -8,15 +8,15 @@ import (
 	"os"
 	"time"
 
+	"github.com/enjoydarts/sifto/api/internal/handler"
+	inngestfn "github.com/enjoydarts/sifto/api/internal/inngest"
+	"github.com/enjoydarts/sifto/api/internal/middleware"
+	"github.com/enjoydarts/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/service"
 	"github.com/getsentry/sentry-go"
 	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/minoru-kitayama/sifto/api/internal/handler"
-	inngestfn "github.com/minoru-kitayama/sifto/api/internal/inngest"
-	"github.com/minoru-kitayama/sifto/api/internal/middleware"
-	"github.com/minoru-kitayama/sifto/api/internal/repository"
-	"github.com/minoru-kitayama/sifto/api/internal/service"
 )
 
 func main() {

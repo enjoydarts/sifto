@@ -5,8 +5,8 @@ import (
 	"math"
 	"sort"
 
+	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/minoru-kitayama/sifto/api/internal/model"
 )
 
 func loadItemEmbeddingsByID(ctx context.Context, db *pgxpool.Pool, itemIDs []string) (map[string][]float64, error) {

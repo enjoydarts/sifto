@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/enjoydarts/sifto/api/internal/timeutil"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/minoru-kitayama/sifto/api/internal/model"
-	"github.com/minoru-kitayama/sifto/api/internal/timeutil"
 )
 
 type ItemRepo struct{ db *pgxpool.Pool }

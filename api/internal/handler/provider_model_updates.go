@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/minoru-kitayama/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/repository"
 )
 
 type ProviderModelUpdateHandler struct {

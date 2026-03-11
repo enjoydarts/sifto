@@ -4,17 +4,17 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/minoru-kitayama/sifto/api/internal/middleware"
-	"github.com/minoru-kitayama/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/middleware"
+	"github.com/enjoydarts/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/service"
 )
 
 type LLMUsageHandler struct {
-	repo          *repository.LLMUsageLogRepo
-	executionRepo *repository.LLMExecutionEventRepo
+	usage *service.LLMUsageService
 }
 
 func NewLLMUsageHandler(repo *repository.LLMUsageLogRepo, executionRepo *repository.LLMExecutionEventRepo) *LLMUsageHandler {
-	return &LLMUsageHandler{repo: repo, executionRepo: executionRepo}
+	return &LLMUsageHandler{usage: service.NewLLMUsageService(repo, executionRepo)}
 }
 
 func (h *LLMUsageHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -24,7 +24,7 @@ func (h *LLMUsageHandler) List(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
-	rows, err := h.repo.ListByUser(r.Context(), userID, limit)
+	rows, err := h.usage.List(r.Context(), userID, limit)
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -39,7 +39,7 @@ func (h *LLMUsageHandler) DailySummary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid days", http.StatusBadRequest)
 		return
 	}
-	rows, err := h.repo.DailySummaryByUser(r.Context(), userID, days)
+	rows, err := h.usage.DailySummary(r.Context(), userID, days)
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -54,7 +54,7 @@ func (h *LLMUsageHandler) ModelSummary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid days", http.StatusBadRequest)
 		return
 	}
-	rows, err := h.repo.ModelSummaryByUser(r.Context(), userID, days)
+	rows, err := h.usage.ModelSummary(r.Context(), userID, days)
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -64,7 +64,7 @@ func (h *LLMUsageHandler) ModelSummary(w http.ResponseWriter, r *http.Request) {
 
 func (h *LLMUsageHandler) ProviderSummaryCurrentMonth(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
-	rows, err := h.repo.ProviderSummaryCurrentMonthByUser(r.Context(), userID)
+	rows, err := h.usage.ProviderSummaryCurrentMonth(r.Context(), userID)
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -74,7 +74,7 @@ func (h *LLMUsageHandler) ProviderSummaryCurrentMonth(w http.ResponseWriter, r *
 
 func (h *LLMUsageHandler) PurposeSummaryCurrentMonth(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
-	rows, err := h.repo.PurposeSummaryCurrentMonthByUser(r.Context(), userID)
+	rows, err := h.usage.PurposeSummaryCurrentMonth(r.Context(), userID)
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -84,7 +84,7 @@ func (h *LLMUsageHandler) PurposeSummaryCurrentMonth(w http.ResponseWriter, r *h
 
 func (h *LLMUsageHandler) ExecutionSummaryCurrentMonth(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
-	rows, err := h.executionRepo.CurrentMonthSummaryByUser(r.Context(), userID)
+	rows, err := h.usage.ExecutionSummaryCurrentMonth(r.Context(), userID)
 	if err != nil {
 		writeRepoError(w, err)
 		return

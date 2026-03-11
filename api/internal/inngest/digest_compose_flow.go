@@ -6,9 +6,9 @@ import (
 	"log"
 	"strings"
 
-	"github.com/minoru-kitayama/sifto/api/internal/model"
-	"github.com/minoru-kitayama/sifto/api/internal/repository"
-	"github.com/minoru-kitayama/sifto/api/internal/service"
+	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/enjoydarts/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/service"
 )
 
 func composeDigestEmailCopy(

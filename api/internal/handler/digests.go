@@ -3,9 +3,9 @@ package handler
 import (
 	"net/http"
 
+	"github.com/enjoydarts/sifto/api/internal/middleware"
+	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/go-chi/chi/v5"
-	"github.com/minoru-kitayama/sifto/api/internal/middleware"
-	"github.com/minoru-kitayama/sifto/api/internal/repository"
 )
 
 type DigestHandler struct{ repo *repository.DigestRepo }

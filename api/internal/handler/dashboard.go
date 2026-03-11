@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/minoru-kitayama/sifto/api/internal/middleware"
-	"github.com/minoru-kitayama/sifto/api/internal/repository"
-	"github.com/minoru-kitayama/sifto/api/internal/service"
+	"github.com/enjoydarts/sifto/api/internal/middleware"
+	"github.com/enjoydarts/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/service"
 )
 
 const cacheMetricTTL = 8 * 24 * time.Hour

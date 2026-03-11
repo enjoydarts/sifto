@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/minoru-kitayama/sifto/api/internal/model"
 )
 
 type UserSettingsRepo struct{ db *pgxpool.Pool }

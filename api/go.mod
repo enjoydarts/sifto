@@ -1,4 +1,4 @@
-module github.com/minoru-kitayama/sifto/api
+module github.com/enjoydarts/sifto/api
 
 go 1.24.0
 

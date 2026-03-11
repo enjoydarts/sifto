@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/minoru-kitayama/sifto/api/internal/repository"
-	"github.com/minoru-kitayama/sifto/api/internal/service"
+	"github.com/enjoydarts/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/service"
 )
 
 type llmRuntime struct {

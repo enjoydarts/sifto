@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/minoru-kitayama/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/repository"
 )
 
 func writeJSON(w http.ResponseWriter, v any) {

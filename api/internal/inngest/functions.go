@@ -15,13 +15,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/enjoydarts/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/service"
+	"github.com/enjoydarts/sifto/api/internal/timeutil"
 	"github.com/inngest/inngestgo"
 	"github.com/inngest/inngestgo/step"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/minoru-kitayama/sifto/api/internal/model"
-	"github.com/minoru-kitayama/sifto/api/internal/repository"
-	"github.com/minoru-kitayama/sifto/api/internal/service"
-	"github.com/minoru-kitayama/sifto/api/internal/timeutil"
 	"github.com/mmcdole/gofeed"
 )
 

@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 
+	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/minoru-kitayama/sifto/api/internal/model"
 )
 
 type DigestRepo struct{ db *pgxpool.Pool }

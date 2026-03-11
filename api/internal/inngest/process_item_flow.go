@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/enjoydarts/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/service"
+	"github.com/enjoydarts/sifto/api/internal/timeutil"
 	"github.com/inngest/inngestgo/step"
-	"github.com/minoru-kitayama/sifto/api/internal/model"
-	"github.com/minoru-kitayama/sifto/api/internal/repository"
-	"github.com/minoru-kitayama/sifto/api/internal/service"
-	"github.com/minoru-kitayama/sifto/api/internal/timeutil"
 )
 
 type processItemEventData struct {
@@ -152,63 +152,46 @@ func extractAndPersistFacts(
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "facts", factsResp.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 		log.Printf("process-item extract-facts done item_id=%s facts=%d attempt=%d", itemID, len(factsResp.Facts), attempt+1)
 
-		checkStep := "check-facts"
-		if attempt > 0 {
-			checkStep = fmt.Sprintf("check-facts-%d", attempt+1)
+		var factsCheckModel *string
+		if userModelSettings != nil {
+			factsCheckModel = ptrStringOrNil(userModelSettings.FactsCheckModel)
 		}
-		factsCheck, err := step.Run(ctx, checkStep, func(ctx context.Context) (*service.FactsCheckResponse, error) {
-			var modelOverride *string
-			if userModelSettings != nil {
-				modelOverride = ptrStringOrNil(userModelSettings.FactsCheckModel)
-			}
-			var resp *service.FactsCheckResponse
-			if modelOverride == nil || strings.TrimSpace(*modelOverride) == "" {
-				modelOverride = factsAttempt.Runtime.Model
-				resp, err = deps.worker.CheckFactsWithModel(
+		factsCheck, shouldRetry, err := executeLLMCheck(ctx, deps, llmCheckConfig[service.FactsCheckResponse]{
+			baseStepName:   "check-facts",
+			purpose:        "facts_check",
+			resolvePurpose: "facts",
+			attempt:        attempt,
+			userID:         userIDPtr,
+			sourceID:       &data.SourceID,
+			itemID:         &itemID,
+			modelOverride:  factsCheckModel,
+			defaultRuntime: factsAttempt.Runtime,
+			call: func(runtime *llmRuntime) (*service.FactsCheckResponse, error) {
+				return deps.worker.CheckFactsWithModel(
 					ctx,
 					titleForLLM,
 					content,
 					factsResp.Facts,
-					factsAttempt.Runtime.AnthropicKey,
-					factsAttempt.Runtime.GoogleKey,
-					factsAttempt.Runtime.GroqKey,
-					factsAttempt.Runtime.DeepSeekKey,
-					factsAttempt.Runtime.OpenAIKey,
-					modelOverride,
+					runtime.AnthropicKey,
+					runtime.GoogleKey,
+					runtime.GroqKey,
+					runtime.DeepSeekKey,
+					runtime.OpenAIKey,
+					runtime.Model,
 				)
-			} else {
-				runtime, keyErr := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, modelOverride, "facts")
-				if keyErr != nil {
-					return nil, keyErr
-				}
-				resp, err = deps.worker.CheckFactsWithModel(ctx, titleForLLM, content, factsResp.Facts, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.OpenAIKey, runtime.Model)
-			}
-			if err != nil {
-				return nil, err
-			}
-			if resp == nil {
-				return nil, fmt.Errorf("facts check returned nil response")
-			}
-			recordLLMUsage(ctx, deps.llmUsageRepo, "facts_check", resp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
-			return resp, nil
+			},
+			getLLM:     func(result *service.FactsCheckResponse) *service.LLMUsage { return result.LLM },
+			getVerdict: func(result *service.FactsCheckResponse) string { return result.Verdict },
+			onExecutionError: func(err error) *service.FactsCheckResponse {
+				return fallbackFactsCheckWarning(err)
+			},
 		})
 		if err != nil {
-			var failedModel *string
-			if userModelSettings != nil && userModelSettings.FactsCheckModel != nil && strings.TrimSpace(*userModelSettings.FactsCheckModel) != "" {
-				failedModel = userModelSettings.FactsCheckModel
-			} else {
-				failedModel = factsAttempt.Runtime.Model
-			}
-			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts_check", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-			finalFactsCheck = fallbackFactsCheckWarning(err)
-			factsRetryCount = attempt
-			log.Printf("process-item facts_check fallback-warn item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
-			break
+			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "facts check", err)
 		}
 
-		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "facts_check", factsCheck.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 		finalFactsCheck = factsCheck
-		if factsCheck.Verdict != "fail" || attempt >= maxFactsCheckRetries {
+		if !shouldRetry || attempt >= maxFactsCheckRetries {
 			factsRetryCount = attempt
 			break
 		}
@@ -304,57 +287,43 @@ func summarizeAndPersistItem(
 		}
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "summary", summary.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 
-		faithfulnessStep := "check-summary-faithfulness"
-		if attempt > 0 {
-			faithfulnessStep = fmt.Sprintf("check-summary-faithfulness-%d", attempt+1)
+		var faithfulnessModel *string
+		if userModelSettings != nil {
+			faithfulnessModel = ptrStringOrNil(userModelSettings.FaithfulnessCheckModel)
 		}
-		faithfulness, err := step.Run(ctx, faithfulnessStep, func(ctx context.Context) (*service.SummaryFaithfulnessResponse, error) {
-			var modelOverride *string
-			if userModelSettings != nil {
-				modelOverride = ptrStringOrNil(userModelSettings.FaithfulnessCheckModel)
-			}
-			var resp *service.SummaryFaithfulnessResponse
-			if modelOverride == nil || strings.TrimSpace(*modelOverride) == "" {
-				modelOverride = summaryAttempt.Runtime.Model
-				resp, err = deps.worker.CheckSummaryFaithfulnessWithModel(
+		faithfulness, shouldRetry, err := executeLLMCheck(ctx, deps, llmCheckConfig[service.SummaryFaithfulnessResponse]{
+			baseStepName:   "check-summary-faithfulness",
+			purpose:        "faithfulness_check",
+			resolvePurpose: "summary",
+			attempt:        attempt,
+			userID:         userIDPtr,
+			sourceID:       &data.SourceID,
+			itemID:         &itemID,
+			modelOverride:  faithfulnessModel,
+			defaultRuntime: summaryAttempt.Runtime,
+			call: func(runtime *llmRuntime) (*service.SummaryFaithfulnessResponse, error) {
+				return deps.worker.CheckSummaryFaithfulnessWithModel(
 					ctx,
 					titleForLLM,
 					facts,
 					summary.Summary,
-					summaryAttempt.Runtime.AnthropicKey,
-					summaryAttempt.Runtime.GoogleKey,
-					summaryAttempt.Runtime.GroqKey,
-					summaryAttempt.Runtime.DeepSeekKey,
-					summaryAttempt.Runtime.OpenAIKey,
-					modelOverride,
+					runtime.AnthropicKey,
+					runtime.GoogleKey,
+					runtime.GroqKey,
+					runtime.DeepSeekKey,
+					runtime.OpenAIKey,
+					runtime.Model,
 				)
-			} else {
-				runtime, keyErr := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, modelOverride, "summary")
-				if keyErr != nil {
-					return nil, keyErr
-				}
-				resp, err = deps.worker.CheckSummaryFaithfulnessWithModel(ctx, titleForLLM, facts, summary.Summary, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.OpenAIKey, runtime.Model)
-			}
-			if err != nil {
-				return nil, err
-			}
-			recordLLMUsage(ctx, deps.llmUsageRepo, "faithfulness_check", resp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
-			return resp, nil
+			},
+			getLLM:     func(result *service.SummaryFaithfulnessResponse) *service.LLMUsage { return result.LLM },
+			getVerdict: func(result *service.SummaryFaithfulnessResponse) string { return result.Verdict },
 		})
 		if err != nil {
-			var failedModel *string
-			if userModelSettings != nil && userModelSettings.FaithfulnessCheckModel != nil && strings.TrimSpace(*userModelSettings.FaithfulnessCheckModel) != "" {
-				failedModel = userModelSettings.FaithfulnessCheckModel
-			} else {
-				failedModel = summaryAttempt.Runtime.Model
-			}
-			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "faithfulness_check", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "faithfulness check", err)
 		}
 
-		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "faithfulness_check", faithfulness.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 		finalFaithfulness = faithfulness
-		if faithfulness.Verdict != "fail" || attempt >= maxSummaryFaithfulnessRetries {
+		if !shouldRetry || attempt >= maxSummaryFaithfulnessRetries {
 			summaryRetryCount = attempt
 			break
 		}

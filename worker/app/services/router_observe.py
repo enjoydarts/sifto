@@ -56,6 +56,37 @@ def llm_usage_summary(result: dict | None) -> dict:
     }
 
 
+def observe_result(
+    result,
+    *,
+    output_builder=None,
+    include_llm_result: bool = True,
+):
+    output_payload = output_builder(result) if callable(output_builder) else (output_builder or {})
+    llm_result = result if include_llm_result and isinstance(result, dict) else None
+    observe_request_output(output_payload, llm_result=llm_result)
+    return result
+
+
+def run_observed_request(
+    request,
+    *,
+    metadata: dict | None = None,
+    input_payload: dict | None = None,
+    call,
+    output_builder=None,
+    include_llm_result: bool = True,
+):
+    with bind_request_span(request):
+        observe_request_input(metadata=metadata, input_payload=input_payload)
+        result = call()
+        return observe_result(
+            result,
+            output_builder=output_builder,
+            include_llm_result=include_llm_result,
+        )
+
+
 @contextmanager
 def bind_request_span(request) -> None:
     with bind_span(getattr(getattr(request, "state", None), "langfuse_span", None)):

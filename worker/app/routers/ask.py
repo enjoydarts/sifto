@@ -7,7 +7,7 @@ from app.services.gemini_service import ask_question as ask_question_gemini
 from app.services.groq_service import ask_question as ask_question_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import ask_question as ask_question_openai
-from app.services.router_observe import bind_request_span, llm_usage_summary, observe_request_input, observe_request_output
+from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
 
@@ -45,13 +45,12 @@ class AskResponse(BaseModel):
 @router.post("/ask", response_model=AskResponse)
 def ask_endpoint(req: AskRequest, request: Request):
     try:
-        with bind_request_span(request):
-            candidates = [c.model_dump() for c in req.candidates]
-            observe_request_input(
-                metadata={"model": req.model or "", "candidates_count": len(candidates), "query_chars": len(req.query or "")},
-                input_payload={"query": req.query, "candidates_count": len(candidates), "model": req.model},
-            )
-            result = dispatch_by_model(
+        candidates = [c.model_dump() for c in req.candidates]
+        result = run_observed_request(
+            request,
+            metadata={"model": req.model or "", "candidates_count": len(candidates), "query_chars": len(req.query or "")},
+            input_payload={"query": req.query, "candidates_count": len(candidates), "model": req.model},
+            call=lambda: dispatch_by_model(
                 request,
                 req.model,
                 handlers={
@@ -61,15 +60,13 @@ def ask_endpoint(req: AskRequest, request: Request):
                     "deepseek": lambda api_key: ask_question_deepseek(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: ask_question_openai(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                 },
-            )
-            observe_request_output(
-                {
-                    "answer_chars": len(result.get("answer") or ""),
-                    "citations_count": len(result.get("citations") or []),
-                    **llm_usage_summary(result),
-                },
-                llm_result=result,
-            )
-            return AskResponse(**result)
+            ),
+            output_builder=lambda result: {
+                "answer_chars": len(result.get("answer") or ""),
+                "citations_count": len(result.get("citations") or []),
+                **llm_usage_summary(result),
+            },
+        )
+        return AskResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ask failed: {e}")

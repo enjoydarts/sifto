@@ -6,7 +6,7 @@ from app.services.gemini_service import summarize as summarize_gemini
 from app.services.groq_service import summarize as summarize_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import summarize as summarize_openai
-from app.services.router_observe import bind_request_span, llm_usage_summary, observe_request_input, observe_request_output
+from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
 
@@ -32,12 +32,11 @@ class SummarizeResponse(BaseModel):
 @router.post("/summarize", response_model=SummarizeResponse)
 def summarize_endpoint(req: SummarizeRequest, request: Request):
     try:
-        with bind_request_span(request):
-            observe_request_input(
-                metadata={"model": req.model or "", "facts_count": len(req.facts or []), "source_text_chars": req.source_text_chars or 0},
-                input_payload={"title": req.title, "facts_count": len(req.facts or []), "model": req.model},
-            )
-            result = dispatch_by_model(
+        result = run_observed_request(
+            request,
+            metadata={"model": req.model or "", "facts_count": len(req.facts or []), "source_text_chars": req.source_text_chars or 0},
+            input_payload={"title": req.title, "facts_count": len(req.facts or []), "model": req.model},
+            call=lambda: dispatch_by_model(
                 request,
                 req.model,
                 handlers={
@@ -77,16 +76,14 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
                         api_key=api_key or "",
                     ),
                 },
-            )
-            observe_request_output(
-                {
-                    "topics_count": len(result.get("topics") or []),
-                    "summary_chars": len(result.get("summary") or ""),
-                    "translated_title_present": bool(result.get("translated_title")),
-                    **llm_usage_summary(result),
-                },
-                llm_result=result,
-            )
-            return SummarizeResponse(**result)
+            ),
+            output_builder=lambda result: {
+                "topics_count": len(result.get("topics") or []),
+                "summary_chars": len(result.get("summary") or ""),
+                "translated_title_present": bool(result.get("translated_title")),
+                **llm_usage_summary(result),
+            },
+        )
+        return SummarizeResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"summarize failed: {e}")

@@ -7,7 +7,7 @@ from app.services.gemini_service import suggest_feed_seed_sites as suggest_feed_
 from app.services.groq_service import suggest_feed_seed_sites as suggest_feed_seed_sites_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import suggest_feed_seed_sites as suggest_feed_seed_sites_openai
-from app.services.router_observe import bind_request_span, llm_usage_summary, observe_request_input, observe_request_output
+from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
 
@@ -43,15 +43,14 @@ class FeedSeedSuggestionResponse(BaseModel):
 
 @router.post("/suggest-feed-seed-sites", response_model=FeedSeedSuggestionResponse)
 def suggest_feed_seed_sites_endpoint(req: FeedSeedSuggestionRequest, request: Request):
-    with bind_request_span(request):
-        existing_sources = [{"title": s.title, "url": s.url} for s in req.existing_sources]
-        positive_examples = [{"url": e.url, "title": e.title, "reason": e.reason} for e in req.positive_examples]
-        negative_examples = [{"url": e.url, "title": e.title, "reason": e.reason} for e in req.negative_examples]
-        observe_request_input(
-            metadata={"model": req.model or "", "existing_sources_count": len(existing_sources), "preferred_topics_count": len(req.preferred_topics or [])},
-            input_payload={"preferred_topics": req.preferred_topics, "model": req.model},
-        )
-        result = dispatch_by_model(
+    existing_sources = [{"title": s.title, "url": s.url} for s in req.existing_sources]
+    positive_examples = [{"url": e.url, "title": e.title, "reason": e.reason} for e in req.positive_examples]
+    negative_examples = [{"url": e.url, "title": e.title, "reason": e.reason} for e in req.negative_examples]
+    result = run_observed_request(
+        request,
+        metadata={"model": req.model or "", "existing_sources_count": len(existing_sources), "preferred_topics_count": len(req.preferred_topics or [])},
+        input_payload={"preferred_topics": req.preferred_topics, "model": req.model},
+        call=lambda: dispatch_by_model(
             request,
             req.model,
             handlers={
@@ -96,6 +95,7 @@ def suggest_feed_seed_sites_endpoint(req: FeedSeedSuggestionRequest, request: Re
                     api_key=api_key or "",
                 ),
             },
-        )
-        observe_request_output({"items_count": len(result.get("items") or []), **llm_usage_summary(result)}, llm_result=result)
-        return FeedSeedSuggestionResponse(**result)
+        ),
+        output_builder=lambda result: {"items_count": len(result.get("items") or []), **llm_usage_summary(result)},
+    )
+    return FeedSeedSuggestionResponse(**result)

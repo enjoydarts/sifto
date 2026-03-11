@@ -6,7 +6,7 @@ from app.services.gemini_service import extract_facts as extract_facts_gemini
 from app.services.groq_service import extract_facts as extract_facts_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import extract_facts as extract_facts_openai
-from app.services.router_observe import bind_request_span, llm_usage_summary, observe_request_input, observe_request_output
+from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
 
@@ -24,12 +24,11 @@ class FactsResponse(BaseModel):
 
 @router.post("/extract-facts", response_model=FactsResponse)
 def extract_facts_endpoint(req: FactsRequest, request: Request):
-    with bind_request_span(request):
-        observe_request_input(
-            metadata={"model": req.model or "", "title_present": bool(req.title), "content_chars": len(req.content or "")},
-            input_payload={"title": req.title, "content_chars": len(req.content or ""), "model": req.model},
-        )
-        result = dispatch_by_model(
+    result = run_observed_request(
+        request,
+        metadata={"model": req.model or "", "title_present": bool(req.title), "content_chars": len(req.content or "")},
+        input_payload={"title": req.title, "content_chars": len(req.content or ""), "model": req.model},
+        call=lambda: dispatch_by_model(
             request,
             req.model,
             handlers={
@@ -39,6 +38,7 @@ def extract_facts_endpoint(req: FactsRequest, request: Request):
                 "deepseek": lambda api_key: extract_facts_deepseek(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                 "openai": lambda api_key: extract_facts_openai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
             },
-        )
-        observe_request_output({"facts_count": len(result.get("facts") or []), **llm_usage_summary(result)}, llm_result=result)
-        return FactsResponse(**result)
+        ),
+        output_builder=lambda result: {"facts_count": len(result.get("facts") or []), **llm_usage_summary(result)},
+    )
+    return FactsResponse(**result)

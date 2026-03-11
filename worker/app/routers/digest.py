@@ -11,7 +11,7 @@ from app.services.groq_service import compose_digest_cluster_draft as compose_di
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import compose_digest as compose_digest_openai
 from app.services.openai_service import compose_digest_cluster_draft as compose_digest_cluster_draft_openai
-from app.services.router_observe import bind_request_span, llm_usage_summary, observe_request_input, observe_request_output
+from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
 
@@ -53,23 +53,22 @@ class ComposeDigestClusterDraftResponse(BaseModel):
 @router.post("/compose-digest", response_model=ComposeDigestResponse)
 def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
     try:
-        with bind_request_span(request):
-            observe_request_input(
-                metadata={"model": req.model or "", "digest_date": req.digest_date, "items_count": len(req.items or [])},
-                input_payload={"digest_date": req.digest_date, "items_count": len(req.items or []), "model": req.model},
-            )
-            items = [
-                {
-                    "rank": i.rank,
-                    "title": i.title,
-                    "url": i.url,
-                    "summary": i.summary,
-                    "topics": i.topics,
-                    "score": i.score,
-                }
-                for i in req.items
-            ]
-            result = dispatch_by_model(
+        items = [
+            {
+                "rank": i.rank,
+                "title": i.title,
+                "url": i.url,
+                "summary": i.summary,
+                "topics": i.topics,
+                "score": i.score,
+            }
+            for i in req.items
+        ]
+        result = run_observed_request(
+            request,
+            metadata={"model": req.model or "", "digest_date": req.digest_date, "items_count": len(req.items or [])},
+            input_payload={"digest_date": req.digest_date, "items_count": len(req.items or []), "model": req.model},
+            call=lambda: dispatch_by_model(
                 request,
                 req.model,
                 handlers={
@@ -84,16 +83,14 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
                     "deepseek": lambda api_key: compose_digest_deepseek(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: compose_digest_openai(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                 },
-            )
-            observe_request_output(
-                {
-                    "subject_chars": len(result.get("subject") or ""),
-                    "body_chars": len(result.get("body") or ""),
-                    **llm_usage_summary(result),
-                },
-                llm_result=result,
-            )
-            return ComposeDigestResponse(**result)
+            ),
+            output_builder=lambda result: {
+                "subject_chars": len(result.get("subject") or ""),
+                "body_chars": len(result.get("body") or ""),
+                **llm_usage_summary(result),
+            },
+        )
+        return ComposeDigestResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"compose_digest failed: {e}")
 
@@ -101,12 +98,11 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
 @router.post("/compose-digest-cluster-draft", response_model=ComposeDigestClusterDraftResponse)
 def compose_digest_cluster_draft_endpoint(req: ComposeDigestClusterDraftRequest, request: Request):
     try:
-        with bind_request_span(request):
-            observe_request_input(
-                metadata={"model": req.model or "", "cluster_label": req.cluster_label, "item_count": req.item_count, "source_lines_count": len(req.source_lines or [])},
-                input_payload={"cluster_label": req.cluster_label, "item_count": req.item_count, "model": req.model},
-            )
-            result = dispatch_by_model(
+        result = run_observed_request(
+            request,
+            metadata={"model": req.model or "", "cluster_label": req.cluster_label, "item_count": req.item_count, "source_lines_count": len(req.source_lines or [])},
+            input_payload={"cluster_label": req.cluster_label, "item_count": req.item_count, "model": req.model},
+            call=lambda: dispatch_by_model(
                 request,
                 req.model,
                 handlers={
@@ -151,14 +147,12 @@ def compose_digest_cluster_draft_endpoint(req: ComposeDigestClusterDraftRequest,
                         api_key=api_key or "",
                     ),
                 },
-            )
-            observe_request_output(
-                {
-                    "draft_chars": len(result.get("draft_summary") or ""),
-                    **llm_usage_summary(result),
-                },
-                llm_result=result,
-            )
-            return ComposeDigestClusterDraftResponse(**result)
+            ),
+            output_builder=lambda result: {
+                "draft_chars": len(result.get("draft_summary") or ""),
+                **llm_usage_summary(result),
+            },
+        )
+        return ComposeDigestClusterDraftResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"compose_digest_cluster_draft failed: {e}")

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/minoru-kitayama/sifto/api/internal/middleware"
+	"github.com/minoru-kitayama/sifto/api/internal/model"
 	"github.com/minoru-kitayama/sifto/api/internal/repository"
 	"github.com/minoru-kitayama/sifto/api/internal/service"
 	"github.com/minoru-kitayama/sifto/api/internal/timeutil"
@@ -21,6 +22,20 @@ type SettingsHandler struct {
 	repo         *repository.UserSettingsRepo
 	llmUsageRepo *repository.LLMUsageLogRepo
 	cipher       *service.SecretCipher
+}
+
+func llmModelSettingsPayload(settings *model.UserSettings) map[string]any {
+	return map[string]any{
+		"facts":              settings.FactsModel,
+		"summary":            settings.SummaryModel,
+		"digest_cluster":     settings.DigestClusterModel,
+		"digest":             settings.DigestModel,
+		"ask":                settings.AskModel,
+		"source_suggestion":  settings.SourceSuggestionModel,
+		"embedding":          settings.EmbeddingModel,
+		"facts_check":        settings.FactsCheckModel,
+		"faithfulness_check": settings.FaithfulnessCheckModel,
+	}
 }
 
 func NewSettingsHandler(repo *repository.UserSettingsRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher) *SettingsHandler {
@@ -77,17 +92,7 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"diversify_topics": settings.ReadingPlanDiversifyTopics,
 			"exclude_read":     settings.ReadingPlanExcludeRead,
 		},
-		"llm_models": map[string]any{
-			"facts":              settings.FactsModel,
-			"summary":            settings.SummaryModel,
-			"digest_cluster":     settings.DigestClusterModel,
-			"digest":             settings.DigestModel,
-			"ask":                settings.AskModel,
-			"source_suggestion":  settings.SourceSuggestionModel,
-			"embedding":          settings.EmbeddingModel,
-			"facts_check":        settings.FactsCheckModel,
-			"faithfulness_check": settings.FaithfulnessCheckModel,
-		},
+		"llm_models": llmModelSettingsPayload(settings),
 		"current_month": map[string]any{
 			"month_jst":            monthStart.Format("2006-01"),
 			"period_start_jst":     monthStart.Format(time.RFC3339),
@@ -307,18 +312,8 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, map[string]any{
-		"user_id": settings.UserID,
-		"llm_models": map[string]any{
-			"facts":              settings.FactsModel,
-			"summary":            settings.SummaryModel,
-			"digest_cluster":     settings.DigestClusterModel,
-			"digest":             settings.DigestModel,
-			"ask":                settings.AskModel,
-			"source_suggestion":  settings.SourceSuggestionModel,
-			"embedding":          settings.EmbeddingModel,
-			"facts_check":        settings.FactsCheckModel,
-			"faithfulness_check": settings.FaithfulnessCheckModel,
-		},
+		"user_id":    settings.UserID,
+		"llm_models": llmModelSettingsPayload(settings),
 	})
 }
 

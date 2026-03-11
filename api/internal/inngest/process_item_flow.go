@@ -38,23 +38,13 @@ type processItemDeps struct {
 }
 
 type processFactsAttemptResult struct {
-	Facts         *service.ExtractFactsResponse
-	ResolvedModel *string
-	AnthropicKey  *string
-	GoogleKey     *string
-	GroqKey       *string
-	DeepSeekKey   *string
-	OpenAIKey     *string
+	Facts   *service.ExtractFactsResponse
+	Runtime *llmRuntime
 }
 
 type processSummaryAttemptResult struct {
-	Summary       *service.SummarizeResponse
-	ResolvedModel *string
-	AnthropicKey  *string
-	GoogleKey     *string
-	GroqKey       *string
-	DeepSeekKey   *string
-	OpenAIKey     *string
+	Summary *service.SummarizeResponse
+	Runtime *llmRuntime
 }
 
 type processFactsStageResult struct {
@@ -113,28 +103,23 @@ func extractAndPersistFacts(
 			if userModelSettings != nil {
 				modelOverride = ptrStringOrNil(userModelSettings.FactsModel)
 			}
-			userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, modelOverride, "facts")
+			runtime, err := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, modelOverride, "facts")
 			if err != nil {
 				return nil, err
 			}
-			resp, err := deps.worker.ExtractFactsWithModel(ctx, titleForLLM, content, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
+			resp, err := deps.worker.ExtractFactsWithModel(ctx, titleForLLM, content, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.OpenAIKey, runtime.Model)
 			if err != nil {
 				return nil, err
 			}
 			return &processFactsAttemptResult{
-				Facts:         resp,
-				ResolvedModel: resolvedModel,
-				AnthropicKey:  userAnthropicKey,
-				GoogleKey:     userGoogleKey,
-				GroqKey:       userGroqKey,
-				DeepSeekKey:   userDeepSeekKey,
-				OpenAIKey:     userOpenAIKey,
+				Facts:   resp,
+				Runtime: runtime,
 			}, nil
 		})
 		if err != nil {
 			var failedModel *string
-			if factsAttempt != nil {
-				failedModel = factsAttempt.ResolvedModel
+			if factsAttempt != nil && factsAttempt.Runtime != nil {
+				failedModel = factsAttempt.Runtime.Model
 			}
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "extract facts", err)
@@ -144,7 +129,7 @@ func extractAndPersistFacts(
 		recordLLMUsage(ctx, deps.llmUsageRepo, "facts", factsResp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
 		if len(factsResp.Facts) == 0 {
 			err := fmt.Errorf("empty facts returned from worker")
-			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", factsAttempt.ResolvedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
+			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", factsAttempt.Runtime.Model, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "extract facts", err)
 		}
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "facts", factsResp.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
@@ -161,25 +146,25 @@ func extractAndPersistFacts(
 			}
 			var resp *service.FactsCheckResponse
 			if modelOverride == nil || strings.TrimSpace(*modelOverride) == "" {
-				modelOverride = factsAttempt.ResolvedModel
+				modelOverride = factsAttempt.Runtime.Model
 				resp, err = deps.worker.CheckFactsWithModel(
 					ctx,
 					titleForLLM,
 					content,
 					factsResp.Facts,
-					factsAttempt.AnthropicKey,
-					factsAttempt.GoogleKey,
-					factsAttempt.GroqKey,
-					factsAttempt.DeepSeekKey,
-					factsAttempt.OpenAIKey,
+					factsAttempt.Runtime.AnthropicKey,
+					factsAttempt.Runtime.GoogleKey,
+					factsAttempt.Runtime.GroqKey,
+					factsAttempt.Runtime.DeepSeekKey,
+					factsAttempt.Runtime.OpenAIKey,
 					modelOverride,
 				)
 			} else {
-				userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, keyErr := loadLLMKeysForModel(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, modelOverride, "facts")
+				runtime, keyErr := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, modelOverride, "facts")
 				if keyErr != nil {
 					return nil, keyErr
 				}
-				resp, err = deps.worker.CheckFactsWithModel(ctx, titleForLLM, content, factsResp.Facts, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
+				resp, err = deps.worker.CheckFactsWithModel(ctx, titleForLLM, content, factsResp.Facts, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.OpenAIKey, runtime.Model)
 			}
 			if err != nil {
 				return nil, err
@@ -195,7 +180,7 @@ func extractAndPersistFacts(
 			if userModelSettings != nil && userModelSettings.FactsCheckModel != nil && strings.TrimSpace(*userModelSettings.FactsCheckModel) != "" {
 				failedModel = userModelSettings.FactsCheckModel
 			} else {
-				failedModel = factsAttempt.ResolvedModel
+				failedModel = factsAttempt.Runtime.Model
 			}
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts_check", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "facts check", err)
@@ -266,29 +251,24 @@ func summarizeAndPersistItem(
 			if userModelSettings != nil {
 				modelOverride = ptrStringOrNil(userModelSettings.SummaryModel)
 			}
-			userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, modelOverride, "summary")
+			runtime, err := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, modelOverride, "summary")
 			if err != nil {
 				return nil, err
 			}
 			sourceChars := len(sourceContent)
-			resp, err := deps.worker.SummarizeWithModel(ctx, titleForLLM, facts, &sourceChars, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
+			resp, err := deps.worker.SummarizeWithModel(ctx, titleForLLM, facts, &sourceChars, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.OpenAIKey, runtime.Model)
 			if err != nil {
 				return nil, err
 			}
 			return &processSummaryAttemptResult{
-				Summary:       resp,
-				ResolvedModel: resolvedModel,
-				AnthropicKey:  userAnthropicKey,
-				GoogleKey:     userGoogleKey,
-				GroqKey:       userGroqKey,
-				DeepSeekKey:   userDeepSeekKey,
-				OpenAIKey:     userOpenAIKey,
+				Summary: resp,
+				Runtime: runtime,
 			}, nil
 		})
 		if err != nil {
 			var failedModel *string
-			if summaryAttempt != nil {
-				failedModel = summaryAttempt.ResolvedModel
+			if summaryAttempt != nil && summaryAttempt.Runtime != nil {
+				failedModel = summaryAttempt.Runtime.Model
 			}
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "summary", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "summarize", err)
@@ -299,7 +279,7 @@ func summarizeAndPersistItem(
 		recordLLMUsage(ctx, deps.llmUsageRepo, "summary", summary.LLM, userIDPtr, &data.SourceID, &itemID, nil)
 		if summary.Summary == "" {
 			err := fmt.Errorf("empty summary returned from worker")
-			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "summary", summaryAttempt.ResolvedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
+			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "summary", summaryAttempt.Runtime.Model, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "summarize", err)
 		}
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "summary", summary.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
@@ -315,25 +295,25 @@ func summarizeAndPersistItem(
 			}
 			var resp *service.SummaryFaithfulnessResponse
 			if modelOverride == nil || strings.TrimSpace(*modelOverride) == "" {
-				modelOverride = summaryAttempt.ResolvedModel
+				modelOverride = summaryAttempt.Runtime.Model
 				resp, err = deps.worker.CheckSummaryFaithfulnessWithModel(
 					ctx,
 					titleForLLM,
 					facts,
 					summary.Summary,
-					summaryAttempt.AnthropicKey,
-					summaryAttempt.GoogleKey,
-					summaryAttempt.GroqKey,
-					summaryAttempt.DeepSeekKey,
-					summaryAttempt.OpenAIKey,
+					summaryAttempt.Runtime.AnthropicKey,
+					summaryAttempt.Runtime.GoogleKey,
+					summaryAttempt.Runtime.GroqKey,
+					summaryAttempt.Runtime.DeepSeekKey,
+					summaryAttempt.Runtime.OpenAIKey,
 					modelOverride,
 				)
 			} else {
-				userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel, keyErr := loadLLMKeysForModel(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, modelOverride, "summary")
+				runtime, keyErr := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, modelOverride, "summary")
 				if keyErr != nil {
 					return nil, keyErr
 				}
-				resp, err = deps.worker.CheckSummaryFaithfulnessWithModel(ctx, titleForLLM, facts, summary.Summary, userAnthropicKey, userGoogleKey, userGroqKey, userDeepSeekKey, userOpenAIKey, resolvedModel)
+				resp, err = deps.worker.CheckSummaryFaithfulnessWithModel(ctx, titleForLLM, facts, summary.Summary, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.OpenAIKey, runtime.Model)
 			}
 			if err != nil {
 				return nil, err
@@ -346,7 +326,7 @@ func summarizeAndPersistItem(
 			if userModelSettings != nil && userModelSettings.FaithfulnessCheckModel != nil && strings.TrimSpace(*userModelSettings.FaithfulnessCheckModel) != "" {
 				failedModel = userModelSettings.FaithfulnessCheckModel
 			} else {
-				failedModel = summaryAttempt.ResolvedModel
+				failedModel = summaryAttempt.Runtime.Model
 			}
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "faithfulness_check", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "faithfulness check", err)

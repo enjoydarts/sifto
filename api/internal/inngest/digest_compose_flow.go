@@ -45,7 +45,7 @@ func composeDigestEmailCopy(
 	if userModelSettings != nil {
 		clusterDraftModel = ptrStringOrNil(userModelSettings.DigestClusterModel)
 	}
-	clusterDraftAnthropicKey, clusterDraftGoogleKey, clusterDraftGroqKey, clusterDraftDeepSeekKey, clusterDraftOpenAIKey, resolvedClusterDraftModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, workerDeps.secretCipher, &data.UserID, clusterDraftModel, "digest_cluster_draft")
+	clusterDraftRuntime, keyErr := resolveLLMRuntime(ctx, userSettingsRepo, workerDeps.secretCipher, &data.UserID, clusterDraftModel, "digest_cluster_draft")
 	if keyErr != nil {
 		return keyErr
 	}
@@ -64,15 +64,15 @@ func composeDigestEmailCopy(
 				drafts[i].ItemCount,
 				drafts[i].Topics,
 				sourceLines,
-				clusterDraftAnthropicKey,
-				clusterDraftGoogleKey,
-				clusterDraftGroqKey,
-				clusterDraftDeepSeekKey,
-				clusterDraftOpenAIKey,
-				resolvedClusterDraftModel,
+				clusterDraftRuntime.AnthropicKey,
+				clusterDraftRuntime.GoogleKey,
+				clusterDraftRuntime.GroqKey,
+				clusterDraftRuntime.DeepSeekKey,
+				clusterDraftRuntime.OpenAIKey,
+				clusterDraftRuntime.Model,
 			)
 			if err != nil {
-				recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", resolvedClusterDraftModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
+				recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", clusterDraftRuntime.Model, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 				return fmt.Errorf("compose digest cluster draft rank=%d attempt=%d: %w", drafts[i].Rank, attempt+1, err)
 			}
 			if resp != nil {
@@ -91,10 +91,10 @@ func composeDigestEmailCopy(
 				valid = true
 				break
 			} else if attempt >= maxDigestClusterDraftRetries {
-				recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", resolvedClusterDraftModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
+				recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", clusterDraftRuntime.Model, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 				return fmt.Errorf("compose digest cluster draft rank=%d incomplete after %d retries: %w", drafts[i].Rank, attempt, err)
 			} else {
-				recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", resolvedClusterDraftModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
+				recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", clusterDraftRuntime.Model, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 				log.Printf("compose-digest-copy cluster-draft retry digest_id=%s rank=%d attempt=%d err=%v", data.DigestID, drafts[i].Rank, attempt+1, err)
 			}
 		}
@@ -117,7 +117,7 @@ func composeDigestEmailCopy(
 	if userModelSettings != nil {
 		modelOverride = ptrStringOrNil(userModelSettings.DigestModel)
 	}
-	digestAnthropicKey, digestGoogleKey, digestGroqKey, digestDeepSeekKey, digestOpenAIKey, resolvedDigestModel, keyErr := loadLLMKeysForModel(ctx, userSettingsRepo, workerDeps.secretCipher, &data.UserID, modelOverride, "digest")
+	digestRuntime, keyErr := resolveLLMRuntime(ctx, userSettingsRepo, workerDeps.secretCipher, &data.UserID, modelOverride, "digest")
 	if keyErr != nil {
 		return keyErr
 	}
@@ -125,9 +125,9 @@ func composeDigestEmailCopy(
 	var resp *service.ComposeDigestResponse
 	digestRetryCount := 0
 	for attempt := 0; attempt <= maxDigestRetries; attempt++ {
-		resp, err = workerDeps.worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, digestAnthropicKey, digestGoogleKey, digestGroqKey, digestDeepSeekKey, digestOpenAIKey, resolvedDigestModel)
+		resp, err = workerDeps.worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, digestRuntime.AnthropicKey, digestRuntime.GoogleKey, digestRuntime.GroqKey, digestRuntime.DeepSeekKey, digestRuntime.OpenAIKey, digestRuntime.Model)
 		if err != nil {
-			recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", resolvedDigestModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
+			recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", digestRuntime.Model, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 			return err
 		}
 		recordLLMUsage(ctx, llmUsageRepo, "digest", resp.LLM, &data.UserID, nil, nil, &data.DigestID)
@@ -136,10 +136,10 @@ func composeDigestEmailCopy(
 			digestRetryCount = attempt
 			break
 		} else if attempt >= maxDigestRetries {
-			recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", resolvedDigestModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
+			recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", digestRuntime.Model, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 			return fmt.Errorf("compose digest incomplete after %d retries: %w", attempt, err)
 		} else {
-			recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", resolvedDigestModel, attempt, &data.UserID, nil, nil, &data.DigestID, err)
+			recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", digestRuntime.Model, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 			log.Printf("compose-digest-copy digest retry digest_id=%s attempt=%d err=%v", data.DigestID, attempt+1, err)
 		}
 	}

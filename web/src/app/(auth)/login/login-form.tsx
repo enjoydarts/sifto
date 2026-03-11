@@ -1,16 +1,18 @@
 "use client";
 
+import { SignIn } from "@clerk/nextjs";
 import Image from "next/image";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { useI18n } from "@/components/i18n-provider";
 
 interface Props {
+  showClerk: boolean;
   showDev: boolean;
   showGoogle: boolean;
 }
 
-export default function LoginForm({ showDev, showGoogle }: Props) {
+export default function LoginForm({ showClerk, showDev, showGoogle }: Props) {
   const { t } = useI18n();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/items";
@@ -27,8 +29,25 @@ export default function LoginForm({ showDev, showGoogle }: Props) {
           <p className="text-sm text-zinc-500">{t("login.subtitle")}</p>
         </div>
 
-        {/* Sign-in buttons */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
+          {showClerk && (
+            <div className="overflow-hidden rounded-xl border border-zinc-200">
+              <SignIn
+                routing="hash"
+                fallbackRedirectUrl={callbackUrl}
+                forceRedirectUrl={callbackUrl}
+                appearance={{
+                  elements: {
+                    card: "shadow-none border-0",
+                    rootBox: "w-full",
+                  },
+                }}
+              />
+            </div>
+          )}
+
+          {/* Sign-in buttons */}
+          <div className="flex flex-col gap-3">
           {showGoogle && (
             <button
               onClick={() => signIn("google", { callbackUrl })}
@@ -65,11 +84,12 @@ export default function LoginForm({ showDev, showGoogle }: Props) {
             </button>
           )}
 
-          {!showGoogle && !showDev && (
+          {!showClerk && !showGoogle && !showDev && (
             <p className="text-center text-sm text-zinc-400">
               {t("login.noProvider")}
             </p>
           )}
+          </div>
         </div>
       </div>
     </div>

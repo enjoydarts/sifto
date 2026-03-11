@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ClerkProvider } from "@clerk/nextjs";
 import { SessionProvider } from "next-auth/react";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { I18nProvider } from "@/components/i18n-provider";
 import { ToastProvider } from "@/components/toast-provider";
 import { ConfirmProvider } from "@/components/confirm-provider";
+import AuthTokenBridge from "@/components/auth-token-bridge";
 import PWARegister from "@/components/pwa-register";
 import OneSignalInit from "@/components/onesignal-init";
 
@@ -42,6 +44,7 @@ function QueryRefreshOnResume() {
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {
+  const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -58,12 +61,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       })
   );
 
-  return (
+  const content = (
     <QueryClientProvider client={queryClient}>
       <SessionProvider>
         <I18nProvider>
           <ToastProvider>
             <ConfirmProvider>
+              {clerkEnabled ? <AuthTokenBridge /> : null}
               <QueryRefreshOnResume />
               <PWARegister />
               <OneSignalInit />
@@ -74,4 +78,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       </SessionProvider>
     </QueryClientProvider>
   );
+
+  if (!clerkEnabled) {
+    return content;
+  }
+
+  return <ClerkProvider>{content}</ClerkProvider>;
 }

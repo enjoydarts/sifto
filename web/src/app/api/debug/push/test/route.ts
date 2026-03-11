@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
 import { resolveServerAPIURL } from "@/lib/server-api-url";
-import { authOptions } from "@/lib/auth";
+import { getServerAuthUser } from "@/lib/server-auth";
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
+  const user = await getServerAuthUser();
+  if (!user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -14,7 +13,7 @@ export async function POST(req: NextRequest) {
   if (!secret) {
     return NextResponse.json({ error: "NEXTAUTH_SECRET is not set" }, { status: 500 });
   }
-  const externalId = session.user?.email ?? null;
+  const externalId = user.email ?? null;
   if (!externalId) {
     return NextResponse.json({ error: "session email is missing" }, { status: 400 });
   }

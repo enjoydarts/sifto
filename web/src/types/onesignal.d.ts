@@ -23,6 +23,10 @@ declare global {
   interface Window {
     OneSignalDeferred?: Array<(OneSignal: OneSignalLike) => void | Promise<void>>;
     OneSignal?: OneSignalLike | OneSignalLegacyQueueItem[];
+    __siftoGetAuthToken?: () => Promise<string | null>;
+    __siftoClerkIdentityResolved?: boolean;
+    __siftoClerkIdentityKey?: string;
+    __siftoClerkIdentityPromise?: Promise<void>;
     __siftoOneSignalLoading?: boolean;
     __siftoOneSignalReady?: boolean;
     __siftoOneSignalInitError?: string;

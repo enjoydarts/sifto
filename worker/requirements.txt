@@ -6,3 +6,4 @@ httpx==0.28.1
 pydantic==2.10.6
 redis==5.2.1
 sentry-sdk[fastapi]==2.22.0
+langfuse>=3,<4

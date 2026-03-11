@@ -1,5 +1,6 @@
 import json
 import re
+from app.services.langfuse_client import get_prompt_text
 
 
 FACTS_CHECK_SCHEMA = {
@@ -14,7 +15,7 @@ FACTS_CHECK_SCHEMA = {
 
 
 def facts_check_system_instruction() -> str:
-    return """# Role
+    fallback = """# Role
 あなたはニュース記事から抽出された facts の妥当性を検査するレビュアーです。
 
 # Task
@@ -31,11 +32,12 @@ facts が元記事本文に忠実かを判定してください。
 - short_comment は verdict の理由を短く直接述べる
 - 長い説明や言い訳は不要
 - 応答に迷ったら short_comment を省略せず warn を返す"""
+    return get_prompt_text("facts_check.system", fallback)
 
 
 def facts_check_prompt(title: str | None, content: str, facts: list[str]) -> str:
     facts_text = "\n".join(f"- {f}" for f in facts)
-    return f"""# Output
+    fallback = f"""# Output
 {{
   "verdict": "pass",
   "short_comment": "本文で裏付けられた事実抽出です。"
@@ -70,11 +72,16 @@ article:
 facts:
 {facts_text}
 """
+    return get_prompt_text(
+        "facts_check.primary",
+        fallback,
+        variables={"title": title or "（不明）", "content": content, "facts_text": facts_text},
+    )
 
 
 def facts_check_retry_prompt(title: str | None, content: str, facts: list[str]) -> str:
     facts_text = "\n".join(f"- {f}" for f in facts)
-    return f"""1行のみで返してください。
+    fallback = f"""1行のみで返してください。
 形式は verdict のみです。
 
 条件:
@@ -89,6 +96,11 @@ article:
 facts:
 {facts_text}
 """
+    return get_prompt_text(
+        "facts_check.retry",
+        fallback,
+        variables={"title": title or "（不明）", "content": content, "facts_text": facts_text},
+    )
 
 
 def facts_check_comment_for_verdict(verdict: str) -> str:

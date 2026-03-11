@@ -1,6 +1,7 @@
 import json
 
 from app.services.llm_text_utils import extract_compose_digest_fields, extract_first_json_object, extract_json_string_value_loose
+from app.services.langfuse_client import get_prompt_text
 
 
 DIGEST_SYSTEM_INSTRUCTION = """# Role
@@ -127,7 +128,7 @@ def parse_digest_result(text: str, *, error_prefix: str) -> tuple[str, str]:
 def build_cluster_draft_task(cluster_label: str, item_count: int, topics: list[str], source_lines: list[str]) -> dict:
     topics = [str(t).strip() for t in topics if str(t).strip()][:8]
     source_lines = [str(x).strip()[:500] for x in source_lines if str(x).strip()][:16]
-    prompt = f"""# Output
+    prompt_fallback = f"""# Output
 {{
   "draft_summary": "- ...\\n- ..."
 }}
@@ -139,7 +140,7 @@ topics: {json.dumps(topics, ensure_ascii=False)}
 source_lines:
 {json.dumps(source_lines, ensure_ascii=False)}
 """
-    fallback_prompt = f"""次の要点メモだけを使って、重複をまとめたクラスタ下書きを作成してください。
+    fallback_prompt_fallback = f"""次の要点メモだけを使って、重複をまとめたクラスタ下書きを作成してください。
 
 要件:
 - 推測しない
@@ -158,6 +159,26 @@ topics: {json.dumps(topics, ensure_ascii=False)}
 source_lines:
 {json.dumps(source_lines[:10], ensure_ascii=False)}
 """
+    prompt = get_prompt_text(
+        "digest_cluster_draft.primary",
+        prompt_fallback,
+        variables={
+            "cluster_label": cluster_label,
+            "item_count": item_count,
+            "topics": json.dumps(topics, ensure_ascii=False),
+            "source_lines": json.dumps(source_lines, ensure_ascii=False),
+        },
+    )
+    fallback_prompt = get_prompt_text(
+        "digest_cluster_draft.fallback",
+        fallback_prompt_fallback,
+        variables={
+            "cluster_label": cluster_label,
+            "item_count": item_count,
+            "topics": json.dumps(topics, ensure_ascii=False),
+            "source_lines": json.dumps(source_lines[:10], ensure_ascii=False),
+        },
+    )
     return {
         "system_instruction": CLUSTER_DRAFT_SYSTEM_INSTRUCTION,
         "prompt": prompt,

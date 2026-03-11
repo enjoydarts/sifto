@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from app.routers import ask, digest, extract, facts, facts_check, feed_seed_suggestions, feed_suggestions, summarize, summary_faithfulness, translate_title
+from app.services.langfuse_client import flush as langfuse_flush, span as langfuse_span, update_current as langfuse_update_current
 
 _SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
 if _SENTRY_DSN:
@@ -29,6 +30,43 @@ async def require_internal_worker_secret(request: Request, call_next):
     if provided != _INTERNAL_WORKER_SECRET:
         return JSONResponse(status_code=401, content={"detail": "unauthorized"})
     return await call_next(request)
+
+
+@app.middleware("http")
+async def langfuse_request_tracing(request: Request, call_next):
+    if request.url.path == "/health":
+        return await call_next(request)
+    metadata = {
+        "path": request.url.path,
+        "method": request.method,
+        "provider_hint": request.headers.get("x-llm-provider", ""),
+        "model_hint": request.headers.get("x-llm-model", ""),
+        "item_id": request.headers.get("x-sifto-item-id", ""),
+        "digest_id": request.headers.get("x-sifto-digest-id", ""),
+        "source_id": request.headers.get("x-sifto-source-id", ""),
+        "purpose": request.headers.get("x-sifto-purpose", ""),
+    }
+    with langfuse_span(
+        f"worker:{request.url.path.strip('/') or 'root'}",
+        metadata=metadata,
+        tags=[
+            "worker",
+            f"path:{request.url.path}",
+            f"purpose:{metadata['purpose'] or 'unknown'}",
+        ],
+    ):
+        try:
+            response = await call_next(request)
+            langfuse_update_current(metadata={"status_code": response.status_code})
+            return response
+        except Exception as e:
+            langfuse_update_current(level="ERROR", status_message=str(e)[:500])
+            raise
+
+
+@app.on_event("shutdown")
+def flush_langfuse():
+    langfuse_flush()
 
 app.include_router(extract.router)
 app.include_router(facts.router)

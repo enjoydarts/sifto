@@ -6,6 +6,7 @@ from app.services.gemini_service import summarize as summarize_gemini
 from app.services.groq_service import summarize as summarize_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import summarize as summarize_openai
+from app.services.router_observe import observe_request_input, observe_request_output
 
 router = APIRouter()
 
@@ -31,6 +32,10 @@ class SummarizeResponse(BaseModel):
 @router.post("/summarize", response_model=SummarizeResponse)
 def summarize_endpoint(req: SummarizeRequest, request: Request):
     try:
+        observe_request_input(
+            metadata={"model": req.model or "", "facts_count": len(req.facts or []), "source_text_chars": req.source_text_chars or 0},
+            input_payload={"title": req.title, "facts_count": len(req.facts or []), "model": req.model},
+        )
         result = dispatch_by_model(
             request,
             req.model,
@@ -71,6 +76,14 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
                     api_key=api_key or "",
                 ),
             },
+        )
+        observe_request_output(
+            {
+                "topics_count": len(result.get("topics") or []),
+                "summary_chars": len(result.get("summary") or ""),
+                "translated_title_present": bool(result.get("translated_title")),
+                "llm_model": ((result.get("llm") or {}).get("model") or ""),
+            }
         )
         return SummarizeResponse(**result)
     except Exception as e:

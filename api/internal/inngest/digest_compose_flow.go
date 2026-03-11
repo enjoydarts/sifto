@@ -58,8 +58,9 @@ func composeDigestEmailCopy(
 		}
 		valid := false
 		for attempt := 0; attempt <= maxDigestClusterDraftRetries; attempt++ {
+			workerCtx := service.WithWorkerTraceMetadata(ctx, "digest_cluster_draft", nil, nil, &data.DigestID)
 			resp, err := workerDeps.worker.ComposeDigestClusterDraftWithModel(
-				ctx,
+				workerCtx,
 				drafts[i].ClusterLabel,
 				drafts[i].ItemCount,
 				drafts[i].Topics,
@@ -125,7 +126,8 @@ func composeDigestEmailCopy(
 	var resp *service.ComposeDigestResponse
 	digestRetryCount := 0
 	for attempt := 0; attempt <= maxDigestRetries; attempt++ {
-		resp, err = workerDeps.worker.ComposeDigestWithModel(ctx, digest.DigestDate, items, digestRuntime.AnthropicKey, digestRuntime.GoogleKey, digestRuntime.GroqKey, digestRuntime.DeepSeekKey, digestRuntime.OpenAIKey, digestRuntime.Model)
+		workerCtx := service.WithWorkerTraceMetadata(ctx, "digest", nil, nil, &data.DigestID)
+		resp, err = workerDeps.worker.ComposeDigestWithModel(workerCtx, digest.DigestDate, items, digestRuntime.AnthropicKey, digestRuntime.GoogleKey, digestRuntime.GroqKey, digestRuntime.DeepSeekKey, digestRuntime.OpenAIKey, digestRuntime.Model)
 		if err != nil {
 			recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", digestRuntime.Model, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 			return err

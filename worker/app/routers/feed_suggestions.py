@@ -7,6 +7,7 @@ from app.services.gemini_service import rank_feed_suggestions as rank_feed_sugge
 from app.services.groq_service import rank_feed_suggestions as rank_feed_suggestions_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import rank_feed_suggestions as rank_feed_suggestions_openai
+from app.services.router_observe import observe_request_input, observe_request_output
 
 router = APIRouter()
 
@@ -66,6 +67,10 @@ def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Requ
     ]
     positive_examples = [{"url": e.url, "title": e.title, "reason": e.reason} for e in req.positive_examples]
     negative_examples = [{"url": e.url, "title": e.title, "reason": e.reason} for e in req.negative_examples]
+    observe_request_input(
+        metadata={"model": req.model or "", "existing_sources_count": len(existing_sources), "candidates_count": len(candidates)},
+        input_payload={"preferred_topics": req.preferred_topics, "candidates_count": len(candidates), "model": req.model},
+    )
     result = dispatch_by_model(
         request,
         req.model,
@@ -117,4 +122,5 @@ def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Requ
             ),
         },
     )
+    observe_request_output({"items_count": len(result.get("items") or []), "llm_model": ((result.get("llm") or {}).get("model") or "")})
     return FeedSuggestionRankResponse(**result)

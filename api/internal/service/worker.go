@@ -13,6 +13,34 @@ import (
 	"time"
 )
 
+type workerTraceMetaKey string
+
+const (
+	workerTracePurposeKey  workerTraceMetaKey = "purpose"
+	workerTraceItemIDKey   workerTraceMetaKey = "item_id"
+	workerTraceDigestIDKey workerTraceMetaKey = "digest_id"
+	workerTraceSourceIDKey workerTraceMetaKey = "source_id"
+)
+
+func WithWorkerTraceMetadata(ctx context.Context, purpose string, sourceID, itemID, digestID *string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if purpose != "" {
+		ctx = context.WithValue(ctx, workerTracePurposeKey, purpose)
+	}
+	if sourceID != nil && *sourceID != "" {
+		ctx = context.WithValue(ctx, workerTraceSourceIDKey, *sourceID)
+	}
+	if itemID != nil && *itemID != "" {
+		ctx = context.WithValue(ctx, workerTraceItemIDKey, *itemID)
+	}
+	if digestID != nil && *digestID != "" {
+		ctx = context.WithValue(ctx, workerTraceDigestIDKey, *digestID)
+	}
+	return ctx
+}
+
 type WorkerClient struct {
 	baseURL              string
 	http                 *http.Client
@@ -454,6 +482,28 @@ func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *st
 	return headers
 }
 
+func applyWorkerTraceHeaders(ctx context.Context, headers map[string]string) map[string]string {
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	if ctx == nil {
+		return headers
+	}
+	if v, _ := ctx.Value(workerTracePurposeKey).(string); v != "" {
+		headers["X-Sifto-Purpose"] = v
+	}
+	if v, _ := ctx.Value(workerTraceSourceIDKey).(string); v != "" {
+		headers["X-Sifto-Source-Id"] = v
+	}
+	if v, _ := ctx.Value(workerTraceItemIDKey).(string); v != "" {
+		headers["X-Sifto-Item-Id"] = v
+	}
+	if v, _ := ctx.Value(workerTraceDigestIDKey).(string); v != "" {
+		headers["X-Sifto-Digest-Id"] = v
+	}
+	return headers
+}
+
 func postWithHeaders[T any](ctx context.Context, w *WorkerClient, path string, body any, headers map[string]string) (*T, error) {
 	b, err := json.Marshal(body)
 	if err != nil {
@@ -464,7 +514,7 @@ func postWithHeaders[T any](ctx context.Context, w *WorkerClient, path string, b
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	for k, v := range headers {
+	for k, v := range applyWorkerTraceHeaders(ctx, headers) {
 		if v != "" {
 			req.Header.Set(k, v)
 		}

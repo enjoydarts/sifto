@@ -6,6 +6,7 @@ from app.services.facts_check_common import (
     parse_facts_check_line,
     require_facts_check_comment,
 )
+from app.services.langfuse_client import score_current
 
 
 def _parse_facts_check_response(text: str) -> dict:
@@ -43,4 +44,5 @@ def run_facts_check(
         if result is None:
             raise last_exc
     result["llm"] = llm
+    score_current("facts_check_verdict", result.get("verdict"), comment=str(result.get("short_comment") or ""))
     return result

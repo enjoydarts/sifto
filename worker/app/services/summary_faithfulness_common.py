@@ -1,5 +1,6 @@
 import json
 import re
+from app.services.langfuse_client import get_prompt_text
 
 
 SUMMARY_FAITHFULNESS_SCHEMA = {
@@ -14,7 +15,7 @@ SUMMARY_FAITHFULNESS_SCHEMA = {
 
 
 def summary_faithfulness_system_instruction() -> str:
-    return """# Role
+    fallback = """# Role
 あなたはニュース要約の faithfulness を検査するレビュアーです。
 
 # Task
@@ -29,11 +30,12 @@ summary が facts に忠実かを判定してください。
 - short_comment は日本語で 1〜2 文、120 文字以内
 - short_comment は今回の summary と facts を踏まえた具体的な寸評を書く
 - 汎用的な定型文だけで済ませない"""
+    return get_prompt_text("faithfulness_check.system", fallback)
 
 
 def summary_faithfulness_prompt(title: str | None, facts: list[str], summary: str) -> str:
     facts_text = "\n".join(f"- {f}" for f in facts)
-    return f"""# Output
+    fallback = f"""# Output
 {{
   "verdict": "pass",
   "short_comment": "facts で裏付けられた自然な要約です。"
@@ -53,11 +55,16 @@ facts:
 summary:
 {summary}
 """
+    return get_prompt_text(
+        "faithfulness_check.primary",
+        fallback,
+        variables={"title": title or "（不明）", "facts_text": facts_text, "summary": summary},
+    )
 
 
 def summary_faithfulness_retry_prompt(title: str | None, facts: list[str], summary: str) -> str:
     facts_text = "\n".join(f"- {f}" for f in facts)
-    return f"""1行のみで返してください。
+    fallback = f"""1行のみで返してください。
 形式は verdict のみです。
 
 条件:
@@ -73,6 +80,11 @@ facts:
 summary:
 {summary}
 """
+    return get_prompt_text(
+        "faithfulness_check.retry",
+        fallback,
+        variables={"title": title or "（不明）", "facts_text": facts_text, "summary": summary},
+    )
 
 
 def extract_first_json_object(text: str) -> dict | None:

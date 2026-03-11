@@ -7,7 +7,7 @@ from app.services.gemini_service import translate_title as translate_title_gemin
 from app.services.groq_service import translate_title as translate_title_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import translate_title as translate_title_openai
-from app.services.router_observe import observe_request_input, observe_request_output
+from app.services.router_observe import llm_usage_summary, observe_request_input, observe_request_output
 
 router = APIRouter()
 
@@ -39,5 +39,11 @@ def translate_title_endpoint(req: TranslateTitleRequest, request: Request):
             "openai": lambda api_key: translate_title_openai(req.title, model=str(req.model), api_key=api_key or ""),
         },
     )
-    observe_request_output({"translated_title_present": bool(result.get("translated_title")), "llm_model": ((result.get("llm") or {}).get("model") or "")})
+    observe_request_output(
+        {
+            "translated_title_present": bool(result.get("translated_title")),
+            "translated_title_chars": len(result.get("translated_title") or ""),
+            **llm_usage_summary(result),
+        }
+    )
     return result

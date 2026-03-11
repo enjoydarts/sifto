@@ -7,7 +7,7 @@ from app.services.gemini_service import suggest_feed_seed_sites as suggest_feed_
 from app.services.groq_service import suggest_feed_seed_sites as suggest_feed_seed_sites_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import suggest_feed_seed_sites as suggest_feed_seed_sites_openai
-from app.services.router_observe import observe_request_input, observe_request_output
+from app.services.router_observe import llm_usage_summary, observe_request_input, observe_request_output
 
 router = APIRouter()
 
@@ -96,5 +96,5 @@ def suggest_feed_seed_sites_endpoint(req: FeedSeedSuggestionRequest, request: Re
             ),
         },
     )
-    observe_request_output({"items_count": len(result.get("items") or []), "llm_model": ((result.get("llm") or {}).get("model") or "")})
+    observe_request_output({"items_count": len(result.get("items") or []), **llm_usage_summary(result)})
     return FeedSeedSuggestionResponse(**result)

@@ -6,7 +6,7 @@ from app.services.gemini_service import extract_facts as extract_facts_gemini
 from app.services.groq_service import extract_facts as extract_facts_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import extract_facts as extract_facts_openai
-from app.services.router_observe import observe_request_input, observe_request_output
+from app.services.router_observe import llm_usage_summary, observe_request_input, observe_request_output
 
 router = APIRouter()
 
@@ -39,5 +39,5 @@ def extract_facts_endpoint(req: FactsRequest, request: Request):
             "openai": lambda api_key: extract_facts_openai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
         },
     )
-    observe_request_output({"facts_count": len(result.get("facts") or []), "llm_model": ((result.get("llm") or {}).get("model") or "")})
+    observe_request_output({"facts_count": len(result.get("facts") or []), **llm_usage_summary(result)})
     return FactsResponse(**result)

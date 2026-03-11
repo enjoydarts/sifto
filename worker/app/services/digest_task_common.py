@@ -85,7 +85,7 @@ def build_simple_digest_input(items: list[dict]) -> str:
 
 
 def build_digest_task(digest_date: str, items_count: int, digest_input: str, *, input_mode: str = "items") -> dict:
-    prompt = f"""# Output
+    prompt_fallback = f"""# Output
 {{
   "subject": "件名（40字程度）",
   "body": "メール本文（プレーンテキスト。改行を含めてよい）",
@@ -105,6 +105,16 @@ input_mode: {input_mode}
 items:
 {digest_input}
 """
+    prompt = get_prompt_text(
+        "digest.primary",
+        prompt_fallback,
+        variables={
+            "digest_date": digest_date,
+            "items_count": items_count,
+            "input_mode": input_mode,
+            "digest_input": digest_input,
+        },
+    )
     return {
         "system_instruction": DIGEST_SYSTEM_INSTRUCTION,
         "prompt": prompt,

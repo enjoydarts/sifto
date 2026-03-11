@@ -1,4 +1,5 @@
 from app.services.llm_text_utils import clamp_int, target_summary_chars
+from app.services.langfuse_client import get_prompt_text
 
 
 SUMMARY_SYSTEM_INSTRUCTION = """# Role
@@ -50,7 +51,7 @@ def build_summary_task(title: str | None, facts: list[str], source_text_chars: i
     min_chars = clamp_int(round(target_chars * 0.8), 160, 1000)
     max_chars = clamp_int(round(target_chars * 1.2), 260, 1400)
     facts_text = "\n".join(f"- {f}" for f in facts)
-    prompt = f"""# Output
+    prompt_fallback = f"""# Output
 {{
   "summary": "要約",
   "topics": ["トピック1", "トピック2"],
@@ -72,6 +73,17 @@ summary は {min_chars}〜{max_chars}字程度で作成し、目標は約{target
 事実:
 {facts_text}
 """
+    prompt = get_prompt_text(
+        "summary.primary",
+        prompt_fallback,
+        variables={
+            "title": title or "（不明）",
+            "facts_text": facts_text,
+            "target_chars": target_chars,
+            "min_chars": min_chars,
+            "max_chars": max_chars,
+        },
+    )
     return {
         "target_chars": target_chars,
         "min_chars": min_chars,

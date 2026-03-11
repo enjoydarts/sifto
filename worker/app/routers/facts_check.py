@@ -7,7 +7,7 @@ from app.services.gemini_service import check_facts as check_facts_gemini
 from app.services.groq_service import check_facts as check_facts_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import check_facts as check_facts_openai
-from app.services.router_observe import observe_request_input, observe_request_output
+from app.services.router_observe import llm_usage_summary, observe_request_input, observe_request_output
 
 router = APIRouter()
 
@@ -43,7 +43,13 @@ def check_facts_endpoint(req: FactsCheckRequest, request: Request):
                 "openai": lambda api_key: check_facts_openai(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
             },
         )
-        observe_request_output({"verdict": result.get("verdict"), "llm_model": ((result.get("llm") or {}).get("model") or "")})
+        observe_request_output(
+            {
+                "verdict": result.get("verdict"),
+                "short_comment_chars": len(result.get("short_comment") or ""),
+                **llm_usage_summary(result),
+            }
+        )
         return FactsCheckResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"check_facts failed: {e}")

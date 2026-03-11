@@ -7,7 +7,7 @@ from app.services.gemini_service import ask_question as ask_question_gemini
 from app.services.groq_service import ask_question as ask_question_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import ask_question as ask_question_openai
-from app.services.router_observe import observe_request_input, observe_request_output
+from app.services.router_observe import llm_usage_summary, observe_request_input, observe_request_output
 
 router = APIRouter()
 
@@ -65,7 +65,7 @@ def ask_endpoint(req: AskRequest, request: Request):
             {
                 "answer_chars": len(result.get("answer") or ""),
                 "citations_count": len(result.get("citations") or []),
-                "llm_model": ((result.get("llm") or {}).get("model") or ""),
+                **llm_usage_summary(result),
             }
         )
         return AskResponse(**result)

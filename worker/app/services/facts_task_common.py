@@ -1,4 +1,5 @@
 import re
+from app.services.langfuse_client import get_prompt_text
 
 from app.services.llm_text_utils import (
     decode_json_string_fragment,
@@ -27,7 +28,7 @@ def build_facts_task(title: str | None, content: str, *, output_mode: str = "obj
         if output_mode == "object"
         else '- 出力は必ず ["事実1", "事実2", ...] のJSON形式の配列のみとしてください。'
     )
-    system_instruction = f"""# Role
+    system_instruction_fallback = f"""# Role
 あなたは正確かつ客観的なニュース要約の専門家です。
 
 # Task
@@ -39,12 +40,22 @@ def build_facts_task(title: str | None, content: str, *, output_mode: str = "obj
 - 事実は客観的かつ具体的に記述してください。
 - 記事が英語の場合も、出力は自然な日本語にしてください。
 - 固有名詞は原文を尊重し、適宜英字を維持してください。"""
-    prompt = f"""# Input
+    prompt_fallback = f"""# Input
 タイトル: {title or '（不明）'}
 
 本文:
 {content}
 """
+    system_instruction = get_prompt_text(
+        "facts.system",
+        system_instruction_fallback,
+        variables={"fact_range": fact_range, "output_rule": output_rule},
+    )
+    prompt = get_prompt_text(
+        "facts.primary",
+        prompt_fallback,
+        variables={"title": title or "（不明）", "content": content, "fact_range": fact_range},
+    )
     return {
         "system_instruction": system_instruction,
         "prompt": prompt,

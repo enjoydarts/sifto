@@ -6,7 +6,7 @@ from app.services.gemini_service import summarize as summarize_gemini
 from app.services.groq_service import summarize as summarize_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import summarize as summarize_openai
-from app.services.router_observe import observe_request_input, observe_request_output
+from app.services.router_observe import llm_usage_summary, observe_request_input, observe_request_output
 
 router = APIRouter()
 
@@ -82,7 +82,7 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
                 "topics_count": len(result.get("topics") or []),
                 "summary_chars": len(result.get("summary") or ""),
                 "translated_title_present": bool(result.get("translated_title")),
-                "llm_model": ((result.get("llm") or {}).get("model") or ""),
+                **llm_usage_summary(result),
             }
         )
         return SummarizeResponse(**result)

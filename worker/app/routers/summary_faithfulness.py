@@ -7,7 +7,7 @@ from app.services.gemini_service import check_summary_faithfulness as check_summ
 from app.services.groq_service import check_summary_faithfulness as check_summary_faithfulness_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.openai_service import check_summary_faithfulness as check_summary_faithfulness_openai
-from app.services.router_observe import observe_request_input, observe_request_output
+from app.services.router_observe import llm_usage_summary, observe_request_input, observe_request_output
 
 router = APIRouter()
 
@@ -43,7 +43,13 @@ def check_summary_faithfulness_endpoint(req: SummaryFaithfulnessRequest, request
                 "openai": lambda api_key: check_summary_faithfulness_openai(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
             },
         )
-        observe_request_output({"verdict": result.get("verdict"), "llm_model": ((result.get("llm") or {}).get("model") or "")})
+        observe_request_output(
+            {
+                "verdict": result.get("verdict"),
+                "short_comment_chars": len(result.get("short_comment") or ""),
+                **llm_usage_summary(result),
+            }
+        )
         return SummaryFaithfulnessResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"check_summary_faithfulness failed: {e}")

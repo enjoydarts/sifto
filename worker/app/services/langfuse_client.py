@@ -6,6 +6,7 @@ from contextlib import contextmanager
 
 _log = logging.getLogger(__name__)
 _prompt_refs_var = contextvars.ContextVar("langfuse_prompt_refs", default=())
+_current_span_var = contextvars.ContextVar("langfuse_current_span", default=None)
 
 try:  # pragma: no cover - optional dependency
     from langfuse import get_client as _langfuse_get_client
@@ -89,9 +90,6 @@ def _append_prompt_ref(ref: dict) -> None:
 
 
 def update_current(*, input=None, output=None, metadata=None, level=None, status_message=None) -> None:
-    client = _client()
-    if client is None:
-        return
     kwargs = {}
     if input is not None:
         kwargs["input"] = input
@@ -105,6 +103,16 @@ def update_current(*, input=None, output=None, metadata=None, level=None, status
         kwargs["status_message"] = status_message
     if not kwargs:
         return
+    current_span = _current_span_var.get()
+    if current_span is not None:
+        try:  # pragma: no cover
+            current_span.update(**kwargs)
+            return
+        except Exception as e:
+            _log.warning("langfuse span.update failed: %s", e)
+    client = _client()
+    if client is None:
+        return
     try:  # pragma: no cover
         client.update_current_span(**kwargs)
     except Exception as e:
@@ -112,12 +120,19 @@ def update_current(*, input=None, output=None, metadata=None, level=None, status
 
 
 def score_current(name: str, value, *, comment: str | None = None) -> None:
-    client = _client()
-    if client is None:
-        return
     kwargs = {"name": name, "value": value}
     if comment:
         kwargs["comment"] = comment
+    current_span = _current_span_var.get()
+    if current_span is not None:
+        try:  # pragma: no cover
+            current_span.score(**kwargs)
+            return
+        except Exception as e:
+            _log.warning("langfuse span.score failed: %s", e)
+    client = _client()
+    if client is None:
+        return
     try:  # pragma: no cover
         client.score_current_span(**kwargs)
     except Exception as e:
@@ -188,11 +203,13 @@ def get_prompt_text(name: str, fallback: str, *, variables: dict[str, object] | 
 def span(name: str, *, input=None, metadata=None, tags=None):
     client = _client()
     token = _prompt_refs_var.set(())
+    span_token = _current_span_var.set(None)
     if client is None:
         try:
             yield None
         finally:
             _prompt_refs_var.reset(token)
+            _current_span_var.reset(span_token)
         return
     kwargs = {"name": name}
     if input is not None:
@@ -203,12 +220,14 @@ def span(name: str, *, input=None, metadata=None, tags=None):
         kwargs["tags"] = tags
     try:  # pragma: no cover
         with client.start_as_current_span(**kwargs) as current_span:
+            _current_span_var.set(current_span)
             yield current_span
     except Exception as e:
         _log.warning("langfuse span failed name=%s err=%s", name, e)
         yield None
     finally:
         _prompt_refs_var.reset(token)
+        _current_span_var.reset(span_token)
 
 
 def flush() -> None:

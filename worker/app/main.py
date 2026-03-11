@@ -1,13 +1,15 @@
 import os
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from app.routers import ask, digest, extract, facts, facts_check, feed_seed_suggestions, feed_suggestions, summarize, summary_faithfulness, translate_title
-from app.services.langfuse_client import flush as langfuse_flush, span as langfuse_span, update_current as langfuse_update_current
+from app.services.langfuse_client import flush as langfuse_flush, log_runtime_status as langfuse_log_runtime_status, span as langfuse_span, update_current as langfuse_update_current
 
 _SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
+_log = logging.getLogger(__name__)
 if _SENTRY_DSN:
     sentry_sdk.init(
         dsn=_SENTRY_DSN,
@@ -67,6 +69,14 @@ async def langfuse_request_tracing(request: Request, call_next):
 @app.on_event("shutdown")
 def flush_langfuse():
     langfuse_flush()
+
+
+@app.on_event("startup")
+def log_langfuse_status():
+    try:
+        langfuse_log_runtime_status()
+    except Exception as e:
+        _log.warning("failed to log langfuse runtime status: %s", e)
 
 app.include_router(extract.router)
 app.include_router(facts.router)

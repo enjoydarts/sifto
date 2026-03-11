@@ -28,6 +28,49 @@ def _normalize_langfuse_env() -> None:
         os.environ["LANGFUSE_BASE_URL"] = legacy_host
 
 
+def runtime_status() -> dict[str, object]:
+    _normalize_langfuse_env()
+    base_url = os.getenv("LANGFUSE_BASE_URL", "").strip()
+    public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
+    secret_key = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
+    is_enabled = enabled()
+    prompt_override = prompt_override_enabled()
+    sdk_imported = _langfuse_get_client is not None
+    keys_configured = bool(public_key and secret_key)
+    base_url_configured = bool(base_url)
+    ready = is_enabled and sdk_imported and keys_configured and base_url_configured
+    return {
+        "enabled": is_enabled,
+        "prompt_override_enabled": prompt_override,
+        "sdk_imported": sdk_imported,
+        "base_url_configured": base_url_configured,
+        "keys_configured": keys_configured,
+        "ready": ready,
+        "base_url": base_url,
+    }
+
+
+def log_runtime_status() -> None:
+    status = runtime_status()
+    if not status["enabled"]:
+        _log.info("langfuse disabled")
+        return
+    if not status["sdk_imported"]:
+        _log.warning("langfuse enabled but SDK is not installed in worker image")
+        return
+    if not status["base_url_configured"]:
+        _log.warning("langfuse enabled but LANGFUSE_BASE_URL is missing")
+        return
+    if not status["keys_configured"]:
+        _log.warning("langfuse enabled but LANGFUSE_PUBLIC_KEY or LANGFUSE_SECRET_KEY is missing")
+        return
+    _log.info(
+        "langfuse enabled base_url=%s prompt_override=%s",
+        status["base_url"],
+        status["prompt_override_enabled"],
+    )
+
+
 def _client():
     if not enabled() or _langfuse_get_client is None:
         return None

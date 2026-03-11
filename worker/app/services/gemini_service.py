@@ -16,16 +16,13 @@ from app.services.llm_catalog import model_pricing
 from app.services.llm_text_utils import (
     clamp01 as _clamp01,
     clamp_int as _clamp_int,
-    contains_japanese as _contains_japanese,
     decode_json_string_fragment as _decode_json_string_fragment,
     extract_compose_digest_fields as _extract_compose_digest_fields,
     extract_first_json_object as _extract_first_json_object,
     extract_json_string_value_loose as _extract_json_string_value_loose,
-    needs_title_translation as _needs_title_translation,
     normalize_url_for_match as _normalize_url_for_match,
     parse_json_string_array as _parse_json_string_array,
     strip_code_fence as _strip_code_fence,
-    summary_composite_score as _summary_composite_score,
     summary_max_tokens as _summary_max_tokens,
 )
 from app.services.summary_faithfulness_common import (
@@ -42,8 +39,9 @@ from app.services.facts_check_common import (
     facts_check_system_instruction,
 )
 from app.services.facts_check_runner import run_facts_check
-from app.services.summary_result_common import finalize_translated_title, normalize_score_breakdown
 from app.services.summary_task_common import build_summary_task
+from app.services.summary_parse_common import finalize_summary_result
+from app.services.title_translation_common import TITLE_TRANSLATION_SCHEMA, run_title_translation
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
@@ -540,39 +538,33 @@ JSONで返してください:
 
 タイトル: {title}
 """
-    schema = {
-        "type": "object",
-        "properties": {
-            "translated_title": {"type": "string"},
-        },
-        "required": ["translated_title"],
-    }
-    text, _ = _generate_content(
-        prompt,
-        model=model,
-        api_key=api_key,
-        max_output_tokens=200,
-        response_schema=schema,
-    )
-    data = _extract_first_json_object(text) or {}
-    candidate = str(data.get("translated_title") or "").strip()
-    if not candidate:
-        candidate = _strip_code_fence(text).strip().strip('"').strip("'")
-    if not candidate:
-        plain_prompt = f"""次のタイトルを日本語に翻訳してください。
+    plain_prompt = f"""次のタイトルを日本語に翻訳してください。
 説明は不要です。翻訳結果のみを1行で返してください。
 
 タイトル: {title}
 """
-        plain_text, _ = _generate_content(
+    return run_title_translation(
+        title,
+        structured_call=lambda: str(
+            (_extract_first_json_object(
+                _generate_content(
+                    prompt,
+                    model=model,
+                    api_key=api_key,
+                    max_output_tokens=200,
+                    response_schema=TITLE_TRANSLATION_SCHEMA,
+                )[0]
+            ) or {}).get("translated_title")
+            or ""
+        ),
+        plain_retry_call=lambda: _generate_content(
             plain_prompt,
             model=model,
             api_key=api_key,
             max_output_tokens=120,
             response_schema=None,
-        )
-        candidate = _strip_code_fence(plain_text).strip().strip('"').strip("'")
-    return candidate[:300]
+        )[0],
+    )
 
 
 def rank_feed_suggestions(
@@ -874,28 +866,18 @@ def summarize(
     topics = data.get("topics", [])
     if not isinstance(topics, list):
         topics = []
-    score_breakdown = data.get("score_breakdown", {})
-    if not isinstance(score_breakdown, dict):
-        score_breakdown = {}
-    score_breakdown = normalize_score_breakdown(score_breakdown)
-    score_reason = str(data.get("score_reason") or "").strip()
-    if not score_reason:
-        score_reason = "総合的な重要度・新規性・実用性を基に採点。"
-    translated_title = finalize_translated_title(
-        title,
-        str(data.get("translated_title") or "").strip(),
+    return finalize_summary_result(
+        title=title,
+        summary_text=str(data.get("summary", "")).strip(),
+        topics=topics,
+        raw_score_breakdown=data.get("score_breakdown") if isinstance(data.get("score_breakdown"), dict) else {},
+        score_reason=str(data.get("score_reason") or "").strip(),
+        translated_title=str(data.get("translated_title") or "").strip(),
         translate_func=lambda raw_title: _translate_title_to_ja(raw_title, model=model, api_key=api_key),
+        llm=_llm_meta(model, "summary", usage),
+        error_prefix="gemini summarize parse failed",
+        response_text=text,
     )
-    return {
-        "summary": str(data.get("summary", "")).strip(),
-        "topics": [str(t) for t in topics],
-        "translated_title": translated_title,
-        "score": _summary_composite_score(score_breakdown),
-        "score_breakdown": score_breakdown,
-        "score_reason": score_reason[:400],
-        "score_policy_version": "v2",
-        "llm": _llm_meta(model, "summary", usage),
-    }
 
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, model: str, api_key: str) -> dict:

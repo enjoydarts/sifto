@@ -16,7 +16,6 @@ from app.services.llm_text_utils import (
     normalize_url_for_match as _normalize_url_for_match,
     parse_json_string_array as _parse_json_string_array,
     strip_code_fence as _strip_code_fence,
-    summary_composite_score as _summary_composite_score,
     summary_max_tokens as _summary_max_tokens,
 )
 from app.services.summary_faithfulness_common import (
@@ -33,8 +32,9 @@ from app.services.facts_check_common import (
     facts_check_system_instruction,
 )
 from app.services.facts_check_runner import run_facts_check
-from app.services.summary_result_common import finalize_translated_title, normalize_score_breakdown
 from app.services.summary_task_common import build_summary_task
+from app.services.summary_parse_common import finalize_summary_result
+from app.services.title_translation_common import TITLE_TRANSLATION_SCHEMA, run_title_translation
 
 _log = logging.getLogger(__name__)
 _DEEPSEEK_PRICING_SOURCE_VERSION = "deepseek_static_2026_03"
@@ -298,23 +298,28 @@ def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:
 # Input
 タイトル: {title}
 """
-    text, _ = _chat_json(prompt, model, api_key, system_instruction=system_instruction, max_output_tokens=180, response_schema={
-        "type": "object",
-        "properties": {"translated_title": {"type": "string"}},
-        "required": ["translated_title"],
-        "additionalProperties": False,
-    }, schema_name="translated_title")
-    data = _extract_first_json_object(text) or {}
-    translated = str(data.get("translated_title") or "").strip()
-    if translated:
-        return translated[:300]
     plain_prompt = f"""# Input
 次のタイトルが外国語なら自然な日本語に翻訳し、日本語なら空文字を返してください。
 タイトル: {title}
 """
-    plain_text, _ = _chat_json(plain_prompt, model, api_key, max_output_tokens=120)
-    candidate = _strip_code_fence(plain_text).strip().strip('"').strip("'")
-    return candidate[:300]
+    return run_title_translation(
+        title,
+        structured_call=lambda: str(
+            (_extract_first_json_object(
+                _chat_json(
+                    prompt,
+                    model,
+                    api_key,
+                    system_instruction=system_instruction,
+                    max_output_tokens=180,
+                    response_schema=TITLE_TRANSLATION_SCHEMA,
+                    schema_name="translated_title",
+                )[0]
+            ) or {}).get("translated_title")
+            or ""
+        ),
+        plain_retry_call=lambda: _chat_json(plain_prompt, model, api_key, max_output_tokens=120)[0],
+    )
 
 
 def extract_facts(title: str | None, content: str, model: str, api_key: str) -> dict:
@@ -384,24 +389,18 @@ def summarize(title: str | None, facts: list[str], source_text_chars: int | None
     )
     data = _extract_first_json_object(text) or {}
     topics = data.get("topics", []) if isinstance(data.get("topics"), list) else []
-    raw_breakdown = data.get("score_breakdown") if isinstance(data.get("score_breakdown"), dict) else {}
-    score_breakdown = normalize_score_breakdown(raw_breakdown)
-    score_reason = str(data.get("score_reason") or "").strip() or "総合的な重要度・新規性・実用性を基に採点。"
-    translated_title = finalize_translated_title(
-        title,
-        str(data.get("translated_title") or "").strip(),
+    return finalize_summary_result(
+        title=title,
+        summary_text=str(data.get("summary") or "").strip(),
+        topics=topics,
+        raw_score_breakdown=data.get("score_breakdown"),
+        score_reason=str(data.get("score_reason") or "").strip(),
+        translated_title=str(data.get("translated_title") or "").strip(),
         translate_func=lambda raw_title: _translate_title_to_ja(raw_title, model, api_key),
+        llm=_llm_meta(model, "summary", usage),
+        error_prefix="deepseek summarize parse failed",
+        response_text=text,
     )
-    return {
-        "summary": str(data.get("summary") or "").strip(),
-        "topics": [str(t) for t in topics if str(t).strip()],
-        "translated_title": translated_title,
-        "score": _summary_composite_score(score_breakdown),
-        "score_breakdown": score_breakdown,
-        "score_reason": score_reason[:400],
-        "score_policy_version": "v2",
-        "llm": _llm_meta(model, "summary", usage),
-    }
 
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, model: str, api_key: str) -> dict:

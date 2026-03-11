@@ -8,12 +8,10 @@ from app.services.llm_catalog import model_pricing
 from app.services.llm_text_utils import (
     clamp01 as _clamp01,
     clamp_int as _clamp_int,
-    contains_japanese as _contains_japanese,
     decode_json_string_fragment as _decode_json_string_fragment,
     extract_compose_digest_fields as _extract_compose_digest_fields,
     extract_first_json_object as _extract_first_json_object,
     extract_json_string_value_loose as _extract_json_string_value_loose,
-    needs_title_translation as _needs_title_translation,
     parse_json_string_array as _parse_json_string_array,
     strip_code_fence as _strip_code_fence,
     summary_composite_score as _summary_composite_score,
@@ -33,8 +31,9 @@ from app.services.facts_check_common import (
     facts_check_system_instruction,
 )
 from app.services.facts_check_runner import run_facts_check
-from app.services.summary_result_common import finalize_translated_title, normalize_score_breakdown
 from app.services.summary_task_common import build_summary_task
+from app.services.summary_parse_common import finalize_summary_result
+from app.services.title_translation_common import run_title_translation
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -110,37 +109,40 @@ JSONで返してください:
 
 タイトル: {title}
 """
-    message, _ = _call_with_model_fallback(
-        prompt,
-        model,
-        _summary_model_fallback,
-        max_tokens=200,
-        api_key=api_key,
-    )
-    if message is None:
-        return ""
-    text = message.content[0].text.strip()
-    data = _extract_first_json_object(text) or {}
-    candidate = str(data.get("translated_title") or "").strip()
-    if not candidate:
-        candidate = _strip_code_fence(text).strip().strip('"').strip("'")
-    if not candidate:
-        plain_prompt = f"""次のタイトルを日本語に翻訳してください。
+    plain_prompt = f"""次のタイトルを日本語に翻訳してください。
 説明は不要です。翻訳結果のみを1行で返してください。
 
 タイトル: {title}
 """
-        plain_message, _ = _call_with_model_fallback(
-            plain_prompt,
-            model,
-            _summary_model_fallback,
-            max_tokens=120,
-            api_key=api_key,
-        )
-        if plain_message is not None:
-            plain_text = plain_message.content[0].text.strip()
-            candidate = _strip_code_fence(plain_text).strip().strip('"').strip("'")
-    return candidate[:300]
+    return run_title_translation(
+        title,
+        structured_call=lambda: (
+            lambda message: (
+                str(((_extract_first_json_object(message.content[0].text.strip()) or {}).get("translated_title") or ""))
+                if message is not None
+                else ""
+            )
+        )(
+            _call_with_model_fallback(
+                prompt,
+                model,
+                _summary_model_fallback,
+                max_tokens=200,
+                api_key=api_key,
+            )[0]
+        ),
+        plain_retry_call=lambda: (
+            lambda message: (message.content[0].text.strip() if message is not None else "")
+        )(
+            _call_with_model_fallback(
+                plain_prompt,
+                model,
+                _summary_model_fallback,
+                max_tokens=120,
+                api_key=api_key,
+            )[0]
+        ),
+    )
 
 
 def _merge_fact_lists(fact_lists: list[list[str]], max_items: int = 24) -> list[str]:
@@ -608,30 +610,18 @@ def summarize(
     topics = data.get("topics", [])
     if not isinstance(topics, list):
         topics = []
-    score_breakdown = data.get("score_breakdown", {})
-    if not isinstance(score_breakdown, dict):
-        score_breakdown = {}
-    score_breakdown = normalize_score_breakdown(score_breakdown)
-    score_reason = str(data.get("score_reason") or "").strip()
-    if not score_reason:
-        score_reason = "総合的な重要度・新規性・実用性を基に採点。"
-    translated_title = finalize_translated_title(
-        title,
-        str(data.get("translated_title") or "").strip(),
+    return finalize_summary_result(
+        title=title,
+        summary_text=str(data.get("summary", "")),
+        topics=topics,
+        raw_score_breakdown=data.get("score_breakdown") if isinstance(data.get("score_breakdown"), dict) else {},
+        score_reason=str(data.get("score_reason") or "").strip(),
+        translated_title=str(data.get("translated_title") or "").strip(),
         translate_func=lambda raw_title: _translate_title_to_ja(raw_title, used_model or _summary_model, api_key=api_key),
+        llm=_llm_meta(message, "summary", used_model or _summary_model),
+        error_prefix="anthropic summarize parse failed",
+        response_text=text,
     )
-    score = _summary_composite_score(score_breakdown)
-
-    return {
-        "summary": data.get("summary", ""),
-        "topics": [str(t) for t in topics],
-        "translated_title": translated_title,
-        "score": score,
-        "score_breakdown": score_breakdown,
-        "score_reason": score_reason[:400],
-        "score_policy_version": "v2",
-        "llm": _llm_meta(message, "summary", used_model or _summary_model),
-    }
 
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, api_key: str | None = None, model: str | None = None) -> dict:

@@ -8,16 +8,13 @@ import httpx
 
 from app.services.llm_text_utils import (
     clamp01 as _clamp01,
-    contains_japanese as _contains_japanese,
     decode_json_string_fragment as _decode_json_string_fragment,
     extract_compose_digest_fields as _extract_compose_digest_fields,
     extract_first_json_object as _extract_first_json_object,
     extract_json_string_value_loose as _extract_json_string_value_loose,
-    needs_title_translation as _needs_title_translation,
     normalize_url_for_match as _normalize_url_for_match,
     parse_json_string_array as _parse_json_string_array,
     strip_code_fence as _strip_code_fence,
-    summary_composite_score as _summary_composite_score,
     summary_max_tokens as _summary_max_tokens,
 )
 from app.services.llm_catalog import model_pricing, model_supports
@@ -35,8 +32,9 @@ from app.services.facts_check_common import (
     facts_check_system_instruction,
 )
 from app.services.facts_check_runner import run_facts_check
-from app.services.summary_result_common import finalize_translated_title, normalize_score_breakdown
 from app.services.summary_task_common import build_summary_task
+from app.services.summary_parse_common import finalize_summary_result
+from app.services.title_translation_common import TITLE_TRANSLATION_SCHEMA, run_title_translation
 
 _log = logging.getLogger(__name__)
 _OPENAI_PRICING_SOURCE_VERSION = "openai_standard_2026_03"
@@ -414,25 +412,6 @@ def _chat_json(
 
 def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:
     src = (title or "").strip()
-    if not _needs_title_translation(src, ""):
-        return ""
-
-    def _normalize_title_candidate(value: str) -> str:
-        text = _strip_code_fence(str(value or "")).strip().strip('"').strip("'")
-        text = re.sub(r"\s+", " ", text)
-        return text.strip()
-
-    def _is_untranslated_title(candidate: str) -> bool:
-        normalized = _normalize_title_candidate(candidate)
-        if not normalized:
-            return True
-        if _contains_japanese(normalized):
-            return False
-        source_normalized = _normalize_title_candidate(src)
-        if normalized.casefold() == source_normalized.casefold():
-            return True
-        return re.search(r"[A-Za-z]", normalized) is not None
-
     system_instruction = """# Role
 あなたは見出し翻訳の専門家です。
 
@@ -452,16 +431,6 @@ def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:
 # Input
 タイトル: {src}
 """
-    text, _ = _chat_json(prompt, model, api_key, system_instruction=system_instruction, max_output_tokens=180, response_schema={
-        "type": "object",
-        "properties": {"translated_title": {"type": "string"}},
-        "required": ["translated_title"],
-        "additionalProperties": False,
-    }, schema_name="translated_title")
-    data = _extract_first_json_object(text) or {}
-    translated = _normalize_title_candidate(str(data.get("translated_title") or ""))
-    if not _is_untranslated_title(translated):
-        return translated[:300]
     plain_prompt = f"""# Input
 次のタイトルが外国語なら自然な日本語に翻訳してください。
 説明・JSON・引用符は不要です。翻訳結果のみを1行で返してください。
@@ -469,22 +438,37 @@ def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:
 
 タイトル: {src}
 """
-    plain_text, _ = _chat_json(plain_prompt, model, api_key, max_output_tokens=120)
-    candidate = _normalize_title_candidate(plain_text)
-    if not _is_untranslated_title(candidate):
-        return candidate[:300]
-
     retry_prompt = f"""あなたはニュース見出し翻訳者です。
 次の英語タイトルを、日本のニュースアプリに載せる自然な日本語見出しへ翻訳してください。
 出力は翻訳後タイトル1行のみです。説明、引用符、原文の反復は禁止です。
 
 タイトル: {src}
 """
-    retry_text, _ = _chat_json(retry_prompt, model, api_key, system_instruction="出力は自然な日本語タイトル1行のみ。", max_output_tokens=120)
-    retry_candidate = _normalize_title_candidate(retry_text)
-    if _is_untranslated_title(retry_candidate):
-        return ""
-    return retry_candidate[:300]
+    return run_title_translation(
+        src,
+        structured_call=lambda: str(
+            (_extract_first_json_object(
+                _chat_json(
+                    prompt,
+                    model,
+                    api_key,
+                    system_instruction=system_instruction,
+                    max_output_tokens=180,
+                    response_schema=TITLE_TRANSLATION_SCHEMA,
+                    schema_name="translated_title",
+                )[0]
+            ) or {}).get("translated_title")
+            or ""
+        ),
+        plain_retry_call=lambda: _chat_json(plain_prompt, model, api_key, max_output_tokens=120)[0],
+        final_retry_call=lambda: _chat_json(
+            retry_prompt,
+            model,
+            api_key,
+            system_instruction="出力は自然な日本語タイトル1行のみ。",
+            max_output_tokens=120,
+        )[0],
+    )
 
 
 def extract_facts(title: str | None, content: str, model: str, api_key: str) -> dict:
@@ -554,30 +538,23 @@ def summarize(title: str | None, facts: list[str], source_text_chars: int | None
     )
     data = _extract_first_json_object(text) or {}
     topics = data.get("topics", []) if isinstance(data.get("topics"), list) else []
-    score_breakdown = normalize_score_breakdown(data.get("score_breakdown"))
     summary_text = str(data.get("summary") or "").strip() or _extract_json_string_value_loose(text, "summary")
     if not topics:
         topic_matches = re.findall(r'"topics"\s*:\s*\[((?:.|\n)*?)\]', _strip_code_fence(text), re.S)
         if topic_matches:
             topics = [str(v).strip() for v in _parse_json_string_array("[" + topic_matches[0] + "]") if str(v).strip()]
-    score_reason = str(data.get("score_reason") or "").strip() or _extract_json_string_value_loose(text, "score_reason") or "総合的な重要度・新規性・実用性を基に採点。"
-    translated_title = finalize_translated_title(
-        title,
-        str(data.get("translated_title") or "").strip() or _extract_json_string_value_loose(text, "translated_title"),
+    return finalize_summary_result(
+        title=title,
+        summary_text=summary_text,
+        topics=topics,
+        raw_score_breakdown=data.get("score_breakdown"),
+        score_reason=str(data.get("score_reason") or "").strip() or _extract_json_string_value_loose(text, "score_reason"),
+        translated_title=str(data.get("translated_title") or "").strip() or _extract_json_string_value_loose(text, "translated_title"),
         translate_func=lambda raw_title: _translate_title_to_ja(raw_title, model, api_key),
+        llm=_llm_meta(model, "summary", usage),
+        error_prefix="openai summarize parse failed",
+        response_text=text,
     )
-    if not summary_text:
-        raise RuntimeError(f"openai summarize parse failed: response_snippet={text[:500]}")
-    return {
-        "summary": summary_text,
-        "topics": [str(t) for t in topics if str(t).strip()],
-        "translated_title": translated_title,
-        "score": _summary_composite_score(score_breakdown),
-        "score_breakdown": score_breakdown,
-        "score_reason": score_reason[:400],
-        "score_policy_version": "v2",
-        "llm": _llm_meta(model, "summary", usage),
-    }
 
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, model: str, api_key: str) -> dict:

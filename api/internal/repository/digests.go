@@ -59,13 +59,7 @@ func (r *DigestRepo) GetDetail(ctx context.Context, id, userID string) (*model.D
 		return nil, mapDBError(err)
 	}
 
-	if digestLLM, llmErr := loadLatestDigestLLMUsage(ctx, r.db, id, "digest"); llmErr == nil {
-		d.DigestLLM = digestLLM
-	}
-
-	if clusterDraftLLM, llmErr := loadLatestDigestLLMUsage(ctx, r.db, id, "digest_cluster_draft"); llmErr == nil {
-		d.ClusterDraftLLM = clusterDraftLLM
-	}
+	r.loadDigestLLMRefs(ctx, id, &d)
 
 	rows, err := r.db.Query(ctx, `
 			SELECT di.rank,

@@ -49,7 +49,7 @@ from app.services.feed_task_common import (
     parse_seed_sites_result,
 )
 from app.services.facts_task_common import build_facts_task, parse_facts_result
-from app.services.task_transport_common import wrap_anthropic_message
+from app.services.task_transport_common import empty_llm_meta, wrap_anthropic_message, wrap_anthropic_result
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -637,50 +637,16 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
     )
     if message is None:
         result = {"verdict": "warn", "short_comment": "判定モデル応答を取得できなかったため簡易扱いです。"}
-        result["llm"] = {
-            "provider": "local-fallback",
-            "model": used_model or _summary_model,
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
-            "estimated_cost_usd": 0.0,
-        }
+        result["llm"] = empty_llm_meta("local-fallback", used_model or _summary_model)
         return result
     return run_summary_faithfulness_check(
         lambda: wrap_anthropic_message(
             message,
             lambda msg: _llm_meta(msg, "faithfulness_check", used_model or _summary_model),
-            {
-                "provider": "anthropic",
-                "model": used_model or _summary_model,
-                "pricing_model_family": used_model or _summary_model,
-                "pricing_source": _ANTHROPIC_PRICING_SOURCE_VERSION,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
+            empty_llm_meta("anthropic", used_model or _summary_model, _ANTHROPIC_PRICING_SOURCE_VERSION),
         ),
-        retry_call=lambda: (
-            lambda retry_message, retry_model: wrap_anthropic_message(
-                retry_message,
-                lambda msg: _llm_meta(msg, "faithfulness_check", retry_model or used_model or _summary_model),
-                {
-                    "provider": "anthropic",
-                    "model": retry_model or used_model or _summary_model,
-                    "pricing_model_family": retry_model or used_model or _summary_model,
-                    "pricing_source": _ANTHROPIC_PRICING_SOURCE_VERSION,
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
-                    "estimated_cost_usd": 0.0,
-                },
-            )
-        )(
-            *_call_with_model_fallback(
+        retry_call=lambda: wrap_anthropic_result(
+            _call_with_model_fallback(
                 summary_faithfulness_retry_prompt(title, facts, summary),
                 str(model or _summary_model),
                 _summary_model_fallback,
@@ -689,7 +655,11 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
                 system_prompt="pass / warn / fail のいずれか1語のみを返す。",
                 user_prompt=summary_faithfulness_retry_prompt(title, facts, summary),
                 enable_prompt_cache=False,
-            )
+            ),
+            lambda msg, resolved_model: _llm_meta(msg, "faithfulness_check", resolved_model),
+            "anthropic",
+            used_model or _summary_model,
+            _ANTHROPIC_PRICING_SOURCE_VERSION,
         ),
     )
 
@@ -709,51 +679,17 @@ def check_facts(title: str | None, content: str, facts: list[str], api_key: str 
         return {
             "verdict": "warn",
             "short_comment": "判定モデル応答を取得できなかったため簡易扱いです。",
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or _summary_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
+            "llm": empty_llm_meta("local-fallback", used_model or _summary_model),
         }
     retry_prompt = facts_check_retry_prompt(title, content, facts)
     return run_facts_check(
         lambda: wrap_anthropic_message(
             message,
             lambda msg: _llm_meta(msg, "facts_check", used_model or _summary_model),
-            {
-                "provider": "anthropic",
-                "model": used_model or _summary_model,
-                "pricing_model_family": used_model or _summary_model,
-                "pricing_source": _ANTHROPIC_PRICING_SOURCE_VERSION,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
+            empty_llm_meta("anthropic", used_model or _summary_model, _ANTHROPIC_PRICING_SOURCE_VERSION),
         ),
-        retry_call=lambda: (
-            lambda retry_message, retry_model: wrap_anthropic_message(
-                retry_message,
-                lambda msg: _llm_meta(msg, "facts_check", retry_model or used_model or _summary_model),
-                {
-                    "provider": "anthropic",
-                    "model": retry_model or used_model or _summary_model,
-                    "pricing_model_family": retry_model or used_model or _summary_model,
-                    "pricing_source": _ANTHROPIC_PRICING_SOURCE_VERSION,
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 0,
-                    "estimated_cost_usd": 0.0,
-                },
-            )
-        )(
-            *_call_with_model_fallback(
+        retry_call=lambda: wrap_anthropic_result(
+            _call_with_model_fallback(
                 retry_prompt,
                 str(model or _summary_model),
                 _summary_model_fallback,
@@ -762,7 +698,11 @@ def check_facts(title: str | None, content: str, facts: list[str], api_key: str 
                 system_prompt="pass / warn / fail のいずれか1語のみを返す。",
                 user_prompt=retry_prompt,
                 enable_prompt_cache=False,
-            )
+            ),
+            lambda msg, resolved_model: _llm_meta(msg, "facts_check", resolved_model),
+            "anthropic",
+            used_model or _summary_model,
+            _ANTHROPIC_PRICING_SOURCE_VERSION,
         ),
     )
 

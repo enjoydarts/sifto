@@ -971,47 +971,8 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 		return nil, mapDBError(err)
 	}
 
-	// facts
-	var f model.ItemFacts
-	err = r.db.QueryRow(ctx, `
-		SELECT id, item_id, facts, extracted_at FROM item_facts WHERE item_id = $1`, id,
-	).Scan(&f.ID, &f.ItemID, &f.Facts, &f.ExtractedAt)
-	if err == nil {
-		d.Facts = &f
-		if factsLLM, llmErr := loadLatestItemLLMUsage(ctx, r.db, id, "facts"); llmErr == nil {
-			d.FactsLLM = factsLLM
-		}
-
-		if factsCheck, checkErr := loadFactsCheck(ctx, r.db, id); checkErr == nil {
-			d.FactsCheck = factsCheck
-			if factsCheckLLM, llmErr := loadLatestItemLLMUsage(ctx, r.db, id, "facts_check"); llmErr == nil {
-				d.FactsCheckLLM = factsCheckLLM
-			}
-		}
-	}
-
-	// summary
-	var s model.ItemSummary
-	err = r.db.QueryRow(ctx, `
-		SELECT id, item_id, summary, topics, translated_title, score, score_breakdown, score_reason, score_policy_version, summarized_at
-		FROM item_summaries WHERE item_id = $1`, id,
-	).Scan(&s.ID, &s.ItemID, &s.Summary, &s.Topics, &s.TranslatedTitle, &s.Score,
-		scoreBreakdownScanner{dst: &s.ScoreBreakdown}, &s.ScoreReason, &s.ScorePolicyVersion, &s.SummarizedAt)
-	if err == nil {
-		d.Summary = &s
-	}
-	if d.Summary != nil {
-		if llm, llmErr := loadLatestItemLLMUsage(ctx, r.db, id, "summary"); llmErr == nil {
-			d.SummaryLLM = llm
-		}
-	}
-
-	if faithfulness, checkErr := loadFaithfulnessCheck(ctx, r.db, id); checkErr == nil {
-		d.Faithfulness = faithfulness
-		if llm, llmErr := loadLatestItemLLMUsage(ctx, r.db, id, "faithfulness_check"); llmErr == nil {
-			d.FaithfulnessLLM = llm
-		}
-	}
+	_ = r.loadFactsDetail(ctx, id, &d)
+	_ = r.loadSummaryDetail(ctx, id, &d)
 
 	// feedback (optional)
 	fb, err := r.GetFeedback(ctx, userID, id)

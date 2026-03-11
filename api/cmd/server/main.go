@@ -55,6 +55,7 @@ func main() {
 	}
 
 	userRepo := repository.NewUserRepo(db)
+	userIdentityRepo := repository.NewUserIdentityRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
 	sourceRepo := repository.NewSourceRepo(db)
 	itemRepo := repository.NewItemRepo(db)
@@ -69,7 +70,7 @@ func main() {
 	settingsH := handler.NewSettingsHandler(userSettingsRepo, llmUsageRepo, secretCipher)
 	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo)
 
-	internalH := handler.NewInternalHandler(userRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal)
+	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher)
 	itemH := handler.NewItemHandler(itemRepo, sourceRepo, streakRepo, eventPublisher, cache)
 	digestH := handler.NewDigestHandler(digestRepo)
@@ -101,6 +102,7 @@ func main() {
 
 	// NextAuth からのみ呼ばれる内部エンドポイント（X-Internal-Secret で保護）
 	r.Post("/api/internal/users/upsert", internalH.UpsertUser)
+	r.Post("/api/internal/users/resolve-identity", internalH.ResolveIdentity)
 	r.Post("/api/internal/debug/digests/generate", internalH.DebugGenerateDigest)
 	r.Post("/api/internal/debug/digests/send", internalH.DebugSendDigest)
 	r.Post("/api/internal/debug/embeddings/backfill", internalH.DebugBackfillEmbeddings)

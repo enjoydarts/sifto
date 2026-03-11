@@ -58,3 +58,15 @@ func (r *UserRepo) GetByID(ctx context.Context, id string) (*model.User, error) 
 	}
 	return &u, nil
 }
+
+func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*model.User, error) {
+	var u model.User
+	err := r.db.QueryRow(ctx, `
+		SELECT id, email, name, email_verified_at, created_at, updated_at
+		FROM users WHERE email = $1
+	`, email).Scan(&u.ID, &u.Email, &u.Name, &u.EmailVerifiedAt, &u.CreatedAt, &u.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}

@@ -21,9 +21,17 @@ def prompt_override_enabled() -> bool:
     return os.getenv("LANGFUSE_PROMPT_OVERRIDE_ENABLED", "0").strip() not in ("", "0", "false", "False")
 
 
+def _normalize_langfuse_env() -> None:
+    base_url = os.getenv("LANGFUSE_BASE_URL", "").strip()
+    legacy_host = os.getenv("LANGFUSE_HOST", "").strip()
+    if not base_url and legacy_host:
+        os.environ["LANGFUSE_BASE_URL"] = legacy_host
+
+
 def _client():
     if not enabled() or _langfuse_get_client is None:
         return None
+    _normalize_langfuse_env()
     try:
         return _langfuse_get_client()
     except Exception as e:  # pragma: no cover

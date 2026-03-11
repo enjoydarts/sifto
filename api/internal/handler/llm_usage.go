@@ -17,10 +17,26 @@ func NewLLMUsageHandler(repo *repository.LLMUsageLogRepo, executionRepo *reposit
 	return &LLMUsageHandler{usage: service.NewLLMUsageService(repo, executionRepo)}
 }
 
-func (h *LLMUsageHandler) List(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
+func parseUsageLimit(r *http.Request) (int, bool) {
 	limit := parseIntOrDefault(r.URL.Query().Get("limit"), 100)
 	if limit < 1 || limit > 500 {
+		return 0, false
+	}
+	return limit, true
+}
+
+func parseUsageDays(r *http.Request) (int, bool) {
+	days := parseIntOrDefault(r.URL.Query().Get("days"), 14)
+	if days < 1 || days > 365 {
+		return 0, false
+	}
+	return days, true
+}
+
+func (h *LLMUsageHandler) List(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	limit, ok := parseUsageLimit(r)
+	if !ok {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
@@ -34,8 +50,8 @@ func (h *LLMUsageHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *LLMUsageHandler) DailySummary(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
-	days := parseIntOrDefault(r.URL.Query().Get("days"), 14)
-	if days < 1 || days > 365 {
+	days, ok := parseUsageDays(r)
+	if !ok {
 		http.Error(w, "invalid days", http.StatusBadRequest)
 		return
 	}
@@ -49,8 +65,8 @@ func (h *LLMUsageHandler) DailySummary(w http.ResponseWriter, r *http.Request) {
 
 func (h *LLMUsageHandler) ModelSummary(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
-	days := parseIntOrDefault(r.URL.Query().Get("days"), 14)
-	if days < 1 || days > 365 {
+	days, ok := parseUsageDays(r)
+	if !ok {
 		http.Error(w, "invalid days", http.StatusBadRequest)
 		return
 	}

@@ -7,14 +7,11 @@ import (
 )
 
 func (r *ItemRepo) loadFactsDetail(ctx context.Context, itemID string, detail *model.ItemDetail) error {
-	var facts model.ItemFacts
-	err := r.db.QueryRow(ctx, `
-		SELECT id, item_id, facts, extracted_at FROM item_facts WHERE item_id = $1`, itemID,
-	).Scan(&facts.ID, &facts.ItemID, &facts.Facts, &facts.ExtractedAt)
+	facts, err := r.queryFactsDetail(ctx, itemID)
 	if err != nil {
 		return err
 	}
-	detail.Facts = &facts
+	detail.Facts = facts
 	if llm, llmErr := loadLatestItemLLMUsage(ctx, r.db, itemID, "facts"); llmErr == nil {
 		detail.FactsLLM = llm
 	}
@@ -28,16 +25,11 @@ func (r *ItemRepo) loadFactsDetail(ctx context.Context, itemID string, detail *m
 }
 
 func (r *ItemRepo) loadSummaryDetail(ctx context.Context, itemID string, detail *model.ItemDetail) error {
-	var summary model.ItemSummary
-	err := r.db.QueryRow(ctx, `
-		SELECT id, item_id, summary, topics, translated_title, score, score_breakdown, score_reason, score_policy_version, summarized_at
-		FROM item_summaries WHERE item_id = $1`, itemID,
-	).Scan(&summary.ID, &summary.ItemID, &summary.Summary, &summary.Topics, &summary.TranslatedTitle, &summary.Score,
-		scoreBreakdownScanner{dst: &summary.ScoreBreakdown}, &summary.ScoreReason, &summary.ScorePolicyVersion, &summary.SummarizedAt)
+	summary, err := r.querySummaryDetail(ctx, itemID)
 	if err != nil {
 		return err
 	}
-	detail.Summary = &summary
+	detail.Summary = summary
 	if llm, llmErr := loadLatestItemLLMUsage(ctx, r.db, itemID, "summary"); llmErr == nil {
 		detail.SummaryLLM = llm
 	}

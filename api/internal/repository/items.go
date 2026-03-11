@@ -952,27 +952,13 @@ func scanItems(rows itemRowScanner) ([]model.Item, error) {
 }
 
 func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.ItemDetail, error) {
-	var d model.ItemDetail
-	err := r.db.QueryRow(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
-		       sm.translated_title,
-		       EXISTS (
-		           SELECT 1 FROM item_reads ir
-		           WHERE ir.item_id = i.id AND ir.user_id = $2
-		       ) AS is_read, i.processing_error,
-		       i.published_at, i.fetched_at, i.created_at, i.updated_at
-		FROM items i
-		JOIN sources s ON s.id = i.source_id
-		LEFT JOIN item_summaries sm ON sm.item_id = i.id
-		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
-	).Scan(&d.ID, &d.SourceID, &d.URL, &d.Title, &d.ThumbnailURL, &d.ContentText,
-		&d.Status, &d.TranslatedTitle, &d.IsRead, &d.ProcessingError, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
+	d, err := r.loadItemDetailBase(ctx, id, userID)
 	if err != nil {
-		return nil, mapDBError(err)
+		return nil, err
 	}
 
-	_ = r.loadFactsDetail(ctx, id, &d)
-	_ = r.loadSummaryDetail(ctx, id, &d)
+	_ = r.loadFactsDetail(ctx, id, d)
+	_ = r.loadSummaryDetail(ctx, id, d)
 
 	// feedback (optional)
 	fb, err := r.GetFeedback(ctx, userID, id)
@@ -980,7 +966,7 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 		d.Feedback = fb
 	}
 
-	return &d, nil
+	return d, nil
 }
 
 func (r *ItemRepo) GetFeedback(ctx context.Context, userID, itemID string) (*model.ItemFeedback, error) {

@@ -89,6 +89,15 @@ def _append_prompt_ref(ref: dict) -> None:
     _prompt_refs_var.set(tuple(current))
 
 
+@contextmanager
+def bind_span(current_span):
+    token = _current_span_var.set(current_span)
+    try:
+        yield
+    finally:
+        _current_span_var.reset(token)
+
+
 def update_current(*, input=None, output=None, metadata=None, level=None, status_message=None) -> None:
     kwargs = {}
     if input is not None:

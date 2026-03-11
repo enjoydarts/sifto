@@ -56,7 +56,8 @@ async def langfuse_request_tracing(request: Request, call_next):
             f"path:{request.url.path}",
             f"purpose:{metadata['purpose'] or 'unknown'}",
         ],
-    ):
+    ) as current_span:
+        request.state.langfuse_span = current_span
         try:
             response = await call_next(request)
             langfuse_update_current(metadata={"status_code": response.status_code})

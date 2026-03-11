@@ -1,4 +1,6 @@
-from app.services.langfuse_client import update_current
+from contextlib import contextmanager
+
+from app.services.langfuse_client import bind_span, update_current
 
 
 def observe_request_input(metadata: dict | None = None, input_payload: dict | None = None) -> None:
@@ -20,3 +22,9 @@ def llm_usage_summary(result: dict | None) -> dict:
         "input_tokens": llm.get("input_tokens") or 0,
         "output_tokens": llm.get("output_tokens") or 0,
     }
+
+
+@contextmanager
+def bind_request_span(request) -> None:
+    with bind_span(getattr(getattr(request, "state", None), "langfuse_span", None)):
+        yield

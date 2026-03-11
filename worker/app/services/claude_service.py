@@ -48,6 +48,7 @@ from app.services.feed_task_common import (
     parse_rank_feed_result,
     parse_seed_sites_result,
 )
+from app.services.facts_task_common import build_facts_task, parse_facts_result
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -474,42 +475,26 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
     per_chunk_fact_target = 4 if len(chunks) <= 3 else 3 if len(chunks) <= 8 else 2
 
     for idx, chunk in enumerate(chunks, start=1):
-        system_prompt = """# Role
-あなたは正確かつ客観的なニュース要約の専門家です。
-
-# Task
-提供される記事チャンクから重要な事実を{per_chunk_fact_target}〜{per_chunk_fact_target + 2}個の箇条書きで抽出してください。
-
-# Rules
-- 出力は必ず ["事実1", "事実2", ...] のJSON形式の配列のみとしてください。
-- 余計な挨拶や解説は一切不要です。
-- このチャンク内に明示されている内容だけを対象にしてください。
-- 事実は客観的かつ具体的に記述してください。
-- 記事が英語の場合も、出力は自然な日本語にしてください。
-- 固有名詞は原文を尊重し、適宜英字を維持してください。
-"""
-
-        user_prompt = f"""# Input
-タイトル: {title or "（不明）"}
-チャンク: {idx}/{len(chunks)}
-
-本文:
-{chunk}
-"""
+        task = build_facts_task(
+            title,
+            f"チャンク: {idx}/{len(chunks)}\n\n{chunk}",
+            output_mode="array",
+            fact_range=f"{per_chunk_fact_target}〜{per_chunk_fact_target + 2}個",
+        )
         message, used_model = _call_with_model_fallback(
-            f"{system_prompt}\n\n{user_prompt}",
+            f"{task['system_instruction']}\n\n{task['prompt']}",
             str(model or _facts_model),
             _facts_model_fallback,
             max_tokens=1024,
             api_key=api_key,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
+            system_prompt=task["system_instruction"],
+            user_prompt=task["prompt"],
         )
         if message is None:
             continue
         any_llm_success = True
         text = message.content[0].text.strip()
-        all_fact_lists.append(_parse_json_string_array(text))
+        all_fact_lists.append(parse_facts_result(text))
         llm_metas.append(_llm_meta(message, "facts", used_model or _facts_model))
 
     if not any_llm_success:

@@ -56,6 +56,7 @@ from app.services.feed_task_common import (
     parse_rank_feed_result,
     parse_seed_sites_result,
 )
+from app.services.facts_task_common import build_facts_task, parse_facts_result
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
@@ -669,28 +670,11 @@ def suggest_feed_seed_sites(
 
 
 def extract_facts(title: str | None, content: str, model: str, api_key: str) -> dict:
-    system_instruction = """# Role
-あなたは正確かつ客観的なニュース要約の専門家です。
-
-# Task
-提供される記事から重要な事実を8〜18個の箇条書きで抽出してください。
-
-# Rules
-- 出力は必ず ["事実1", "事実2", ...] のJSON形式の配列のみとしてください。
-- 余計な挨拶や解説は一切不要です。
-- 事実は客観的かつ具体的に記述してください。
-- 記事が英語の場合も、出力は自然な日本語にしてください。
-- 固有名詞は原文を尊重し、適宜英字を維持してください。
-"""
-
-    prompt = f"""# Input
-タイトル: {title or "（不明）"}
-
-本文:
-{content}
-"""
-    text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=1500, system_instruction=system_instruction)
-    facts = _parse_json_string_array(text)
+    task = build_facts_task(title, content, output_mode="array")
+    text, usage = _generate_content(task["prompt"], model=model, api_key=api_key, max_output_tokens=1500, system_instruction=task["system_instruction"])
+    facts = parse_facts_result(text)
+    if not facts:
+        raise RuntimeError(f"gemini extract_facts parse failed: response_snippet={text[:500]}")
     return {"facts": facts, "llm": _llm_meta(model, "facts", usage)}
 
 

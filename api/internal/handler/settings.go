@@ -15,13 +15,12 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
-	"github.com/enjoydarts/sifto/api/internal/timeutil"
 )
 
 type SettingsHandler struct {
-	repo         *repository.UserSettingsRepo
-	llmUsageRepo *repository.LLMUsageLogRepo
-	cipher       *service.SecretCipher
+	repo     *repository.UserSettingsRepo
+	cipher   *service.SecretCipher
+	settings *service.SettingsService
 }
 
 func llmModelSettingsPayload(settings *model.UserSettings) map[string]any {
@@ -39,69 +38,21 @@ func llmModelSettingsPayload(settings *model.UserSettings) map[string]any {
 }
 
 func NewSettingsHandler(repo *repository.UserSettingsRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher) *SettingsHandler {
-	return &SettingsHandler{repo: repo, llmUsageRepo: llmUsageRepo, cipher: cipher}
+	return &SettingsHandler{
+		repo:     repo,
+		cipher:   cipher,
+		settings: service.NewSettingsService(repo, llmUsageRepo, cipher),
+	}
 }
 
 func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
-	settings, err := h.repo.EnsureDefaults(r.Context(), userID)
+	payload, err := h.settings.Get(r.Context(), userID)
 	if err != nil {
-		writeRepoError(w, err)
+		http.Error(w, "failed to load settings", http.StatusInternalServerError)
 		return
 	}
-
-	nowJST := timeutil.NowJST()
-	monthStart := time.Date(nowJST.Year(), nowJST.Month(), 1, 0, 0, 0, 0, timeutil.JST)
-	nextMonth := monthStart.AddDate(0, 1, 0)
-	usedCostUSD, err := h.llmUsageRepo.SumEstimatedCostByUserBetween(r.Context(), userID, monthStart, nextMonth)
-	if err != nil {
-		http.Error(w, "failed to load usage summary", http.StatusInternalServerError)
-		return
-	}
-
-	var remainingBudgetUSD *float64
-	var remainingPct *float64
-	if settings.MonthlyBudgetUSD != nil && *settings.MonthlyBudgetUSD > 0 {
-		v := *settings.MonthlyBudgetUSD - usedCostUSD
-		remainingBudgetUSD = &v
-		p := (v / *settings.MonthlyBudgetUSD) * 100
-		remainingPct = &p
-	}
-
-	writeJSON(w, map[string]any{
-		"user_id":                    settings.UserID,
-		"has_anthropic_api_key":      settings.HasAnthropicAPIKey,
-		"anthropic_api_key_last4":    settings.AnthropicAPIKeyLast4,
-		"has_openai_api_key":         settings.HasOpenAIAPIKey,
-		"openai_api_key_last4":       settings.OpenAIAPIKeyLast4,
-		"has_google_api_key":         settings.HasGoogleAPIKey,
-		"google_api_key_last4":       settings.GoogleAPIKeyLast4,
-		"has_groq_api_key":           settings.HasGroqAPIKey,
-		"groq_api_key_last4":         settings.GroqAPIKeyLast4,
-		"has_deepseek_api_key":       settings.HasDeepSeekAPIKey,
-		"deepseek_api_key_last4":     settings.DeepSeekAPIKeyLast4,
-		"has_inoreader_oauth":        settings.HasInoreaderOAuth,
-		"inoreader_token_expires_at": settings.InoreaderTokenExpiresAt,
-		"monthly_budget_usd":         settings.MonthlyBudgetUSD,
-		"budget_alert_enabled":       settings.BudgetAlertEnabled,
-		"budget_alert_threshold_pct": settings.BudgetAlertThresholdPct,
-		"digest_email_enabled":       settings.DigestEmailEnabled,
-		"reading_plan": map[string]any{
-			"window":           settings.ReadingPlanWindow,
-			"size":             settings.ReadingPlanSize,
-			"diversify_topics": settings.ReadingPlanDiversifyTopics,
-			"exclude_read":     settings.ReadingPlanExcludeRead,
-		},
-		"llm_models": llmModelSettingsPayload(settings),
-		"current_month": map[string]any{
-			"month_jst":            monthStart.Format("2006-01"),
-			"period_start_jst":     monthStart.Format(time.RFC3339),
-			"period_end_jst":       nextMonth.Format(time.RFC3339),
-			"estimated_cost_usd":   usedCostUSD,
-			"remaining_budget_usd": remainingBudgetUSD,
-			"remaining_budget_pct": remainingPct,
-		},
-	})
+	writeJSON(w, payload)
 }
 
 func (h *SettingsHandler) GetLLMCatalog(w http.ResponseWriter, r *http.Request) {
@@ -294,20 +245,22 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		http.Error(w, "invalid embedding model", http.StatusBadRequest)
 		return
 	}
-	settings, err := h.repo.UpsertLLMModelConfig(
-		r.Context(),
-		userID,
-		norm(body.Facts),
-		norm(body.Summary),
-		norm(body.DigestCluster),
-		norm(body.Digest),
-		norm(body.Ask),
-		norm(body.SourceSuggestion),
-		embeddingModel,
-		norm(body.FactsCheck),
-		norm(body.FaithfulnessCheck),
-	)
+	settings, err := h.settings.UpdateLLMModels(r.Context(), userID, service.UpdateLLMModelsInput{
+		Facts:             norm(body.Facts),
+		Summary:           norm(body.Summary),
+		DigestCluster:     norm(body.DigestCluster),
+		Digest:            norm(body.Digest),
+		Ask:               norm(body.Ask),
+		SourceSuggestion:  norm(body.SourceSuggestion),
+		Embedding:         embeddingModel,
+		FactsCheck:        norm(body.FactsCheck),
+		FaithfulnessCheck: norm(body.FaithfulnessCheck),
+	})
 	if err != nil {
+		if err.Error() == "invalid embedding model" {
+			http.Error(w, "invalid embedding model", http.StatusBadRequest)
+			return
+		}
 		writeRepoError(w, err)
 		return
 	}
@@ -337,7 +290,7 @@ func (h *SettingsHandler) UpdateReadingPlan(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "invalid size", http.StatusBadRequest)
 		return
 	}
-	settings, err := h.repo.UpsertReadingPlanConfig(r.Context(), userID, body.Window, body.Size, body.DiversifyTopics, body.ExcludeRead)
+	settings, err := h.settings.UpdateReadingPlan(r.Context(), userID, body.Window, body.Size, body.DiversifyTopics, body.ExcludeRead)
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -377,7 +330,7 @@ func (h *SettingsHandler) UpdateBudget(w http.ResponseWriter, r *http.Request) {
 	if body.MonthlyBudgetUSD != nil && *body.MonthlyBudgetUSD > 0 {
 		budget = body.MonthlyBudgetUSD
 	}
-	settings, err := h.repo.UpsertBudgetConfig(r.Context(), userID, budget, body.BudgetAlertEnabled, body.BudgetAlertThresholdPct, body.DigestEmailEnabled)
+	settings, err := h.settings.UpdateBudget(r.Context(), userID, budget, body.BudgetAlertEnabled, body.BudgetAlertThresholdPct, body.DigestEmailEnabled)
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -385,7 +338,7 @@ func (h *SettingsHandler) UpdateBudget(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, settings)
 }
 
-func (h *SettingsHandler) SetAnthropicAPIKey(w http.ResponseWriter, r *http.Request) {
+func (h *SettingsHandler) setAPIKey(w http.ResponseWriter, r *http.Request, provider string, payload map[string]func(*model.UserSettings) any) {
 	userID := middleware.GetUserID(r)
 	var body struct {
 		APIKey string `json:"api_key"`
@@ -399,253 +352,102 @@ func (h *SettingsHandler) SetAnthropicAPIKey(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "api_key is required", http.StatusBadRequest)
 		return
 	}
-	if h.cipher == nil || !h.cipher.Enabled() {
-		http.Error(w, "user secret encryption is not configured", http.StatusInternalServerError)
-		return
-	}
-	enc, err := h.cipher.EncryptString(key)
+	settings, err := h.settings.SetAPIKey(r.Context(), userID, provider, key)
 	if err != nil {
-		http.Error(w, "failed to encrypt api key", http.StatusInternalServerError)
+		if err.Error() == "user secret encryption is not configured" {
+			http.Error(w, "user secret encryption is not configured", http.StatusInternalServerError)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	last4 := key
-	if len(last4) > 4 {
-		last4 = last4[len(last4)-4:]
+	resp := map[string]any{"user_id": settings.UserID}
+	for k, fn := range payload {
+		resp[k] = fn(settings)
 	}
-	settings, err := h.repo.SetAnthropicAPIKey(r.Context(), userID, enc, last4)
+	writeJSON(w, resp)
+}
+
+func (h *SettingsHandler) deleteAPIKey(w http.ResponseWriter, r *http.Request, provider string, payload map[string]func(*model.UserSettings) any) {
+	userID := middleware.GetUserID(r)
+	settings, err := h.settings.DeleteAPIKey(r.Context(), userID, provider)
 	if err != nil {
-		writeRepoError(w, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, map[string]any{
-		"user_id":                 settings.UserID,
-		"has_anthropic_api_key":   settings.HasAnthropicAPIKey,
-		"anthropic_api_key_last4": settings.AnthropicAPIKeyLast4,
+	resp := map[string]any{"user_id": settings.UserID}
+	for k, fn := range payload {
+		resp[k] = fn(settings)
+	}
+	writeJSON(w, resp)
+}
+
+func (h *SettingsHandler) SetAnthropicAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "anthropic", map[string]func(*model.UserSettings) any{
+		"has_anthropic_api_key":   func(s *model.UserSettings) any { return s.HasAnthropicAPIKey },
+		"anthropic_api_key_last4": func(s *model.UserSettings) any { return s.AnthropicAPIKeyLast4 },
 	})
 }
 
 func (h *SettingsHandler) DeleteAnthropicAPIKey(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	settings, err := h.repo.ClearAnthropicAPIKey(r.Context(), userID)
-	if err != nil {
-		writeRepoError(w, err)
-		return
-	}
-	writeJSON(w, map[string]any{
-		"user_id":                 settings.UserID,
-		"has_anthropic_api_key":   settings.HasAnthropicAPIKey,
-		"anthropic_api_key_last4": settings.AnthropicAPIKeyLast4,
+	h.deleteAPIKey(w, r, "anthropic", map[string]func(*model.UserSettings) any{
+		"has_anthropic_api_key":   func(s *model.UserSettings) any { return s.HasAnthropicAPIKey },
+		"anthropic_api_key_last4": func(s *model.UserSettings) any { return s.AnthropicAPIKeyLast4 },
 	})
 }
 
 func (h *SettingsHandler) SetOpenAIAPIKey(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	var body struct {
-		APIKey string `json:"api_key"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
-		return
-	}
-	key := strings.TrimSpace(body.APIKey)
-	if key == "" {
-		http.Error(w, "api_key is required", http.StatusBadRequest)
-		return
-	}
-	if h.cipher == nil || !h.cipher.Enabled() {
-		http.Error(w, "user secret encryption is not configured", http.StatusInternalServerError)
-		return
-	}
-	enc, err := h.cipher.EncryptString(key)
-	if err != nil {
-		http.Error(w, "failed to encrypt api key", http.StatusInternalServerError)
-		return
-	}
-	last4 := key
-	if len(last4) > 4 {
-		last4 = last4[len(last4)-4:]
-	}
-	settings, err := h.repo.SetOpenAIAPIKey(r.Context(), userID, enc, last4)
-	if err != nil {
-		writeRepoError(w, err)
-		return
-	}
-	writeJSON(w, map[string]any{
-		"user_id":              settings.UserID,
-		"has_openai_api_key":   settings.HasOpenAIAPIKey,
-		"openai_api_key_last4": settings.OpenAIAPIKeyLast4,
+	h.setAPIKey(w, r, "openai", map[string]func(*model.UserSettings) any{
+		"has_openai_api_key":   func(s *model.UserSettings) any { return s.HasOpenAIAPIKey },
+		"openai_api_key_last4": func(s *model.UserSettings) any { return s.OpenAIAPIKeyLast4 },
 	})
 }
 
 func (h *SettingsHandler) DeleteOpenAIAPIKey(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	settings, err := h.repo.ClearOpenAIAPIKey(r.Context(), userID)
-	if err != nil {
-		writeRepoError(w, err)
-		return
-	}
-	writeJSON(w, map[string]any{
-		"user_id":              settings.UserID,
-		"has_openai_api_key":   settings.HasOpenAIAPIKey,
-		"openai_api_key_last4": settings.OpenAIAPIKeyLast4,
+	h.deleteAPIKey(w, r, "openai", map[string]func(*model.UserSettings) any{
+		"has_openai_api_key":   func(s *model.UserSettings) any { return s.HasOpenAIAPIKey },
+		"openai_api_key_last4": func(s *model.UserSettings) any { return s.OpenAIAPIKeyLast4 },
 	})
 }
 
 func (h *SettingsHandler) SetGoogleAPIKey(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	var body struct {
-		APIKey string `json:"api_key"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
-		return
-	}
-	key := strings.TrimSpace(body.APIKey)
-	if key == "" {
-		http.Error(w, "api_key is required", http.StatusBadRequest)
-		return
-	}
-	if h.cipher == nil || !h.cipher.Enabled() {
-		http.Error(w, "user secret encryption is not configured", http.StatusInternalServerError)
-		return
-	}
-	enc, err := h.cipher.EncryptString(key)
-	if err != nil {
-		http.Error(w, "failed to encrypt api key", http.StatusInternalServerError)
-		return
-	}
-	last4 := key
-	if len(last4) > 4 {
-		last4 = last4[len(last4)-4:]
-	}
-	settings, err := h.repo.SetGoogleAPIKey(r.Context(), userID, enc, last4)
-	if err != nil {
-		writeRepoError(w, err)
-		return
-	}
-	writeJSON(w, map[string]any{
-		"user_id":              settings.UserID,
-		"has_google_api_key":   settings.HasGoogleAPIKey,
-		"google_api_key_last4": settings.GoogleAPIKeyLast4,
+	h.setAPIKey(w, r, "google", map[string]func(*model.UserSettings) any{
+		"has_google_api_key":   func(s *model.UserSettings) any { return s.HasGoogleAPIKey },
+		"google_api_key_last4": func(s *model.UserSettings) any { return s.GoogleAPIKeyLast4 },
 	})
 }
 
 func (h *SettingsHandler) DeleteGoogleAPIKey(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	settings, err := h.repo.ClearGoogleAPIKey(r.Context(), userID)
-	if err != nil {
-		writeRepoError(w, err)
-		return
-	}
-	writeJSON(w, map[string]any{
-		"user_id":              settings.UserID,
-		"has_google_api_key":   settings.HasGoogleAPIKey,
-		"google_api_key_last4": settings.GoogleAPIKeyLast4,
+	h.deleteAPIKey(w, r, "google", map[string]func(*model.UserSettings) any{
+		"has_google_api_key":   func(s *model.UserSettings) any { return s.HasGoogleAPIKey },
+		"google_api_key_last4": func(s *model.UserSettings) any { return s.GoogleAPIKeyLast4 },
 	})
 }
 
 func (h *SettingsHandler) SetGroqAPIKey(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	var body struct {
-		APIKey string `json:"api_key"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
-		return
-	}
-	key := strings.TrimSpace(body.APIKey)
-	if key == "" {
-		http.Error(w, "api_key is required", http.StatusBadRequest)
-		return
-	}
-	if h.cipher == nil || !h.cipher.Enabled() {
-		http.Error(w, "user secret encryption is not configured", http.StatusInternalServerError)
-		return
-	}
-	enc, err := h.cipher.EncryptString(key)
-	if err != nil {
-		http.Error(w, "failed to encrypt api key", http.StatusInternalServerError)
-		return
-	}
-	last4 := key
-	if len(last4) > 4 {
-		last4 = last4[len(last4)-4:]
-	}
-	settings, err := h.repo.SetGroqAPIKey(r.Context(), userID, enc, last4)
-	if err != nil {
-		writeRepoError(w, err)
-		return
-	}
-	writeJSON(w, map[string]any{
-		"user_id":            settings.UserID,
-		"has_groq_api_key":   settings.HasGroqAPIKey,
-		"groq_api_key_last4": settings.GroqAPIKeyLast4,
+	h.setAPIKey(w, r, "groq", map[string]func(*model.UserSettings) any{
+		"has_groq_api_key":   func(s *model.UserSettings) any { return s.HasGroqAPIKey },
+		"groq_api_key_last4": func(s *model.UserSettings) any { return s.GroqAPIKeyLast4 },
 	})
 }
 
 func (h *SettingsHandler) DeleteGroqAPIKey(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	settings, err := h.repo.ClearGroqAPIKey(r.Context(), userID)
-	if err != nil {
-		writeRepoError(w, err)
-		return
-	}
-	writeJSON(w, map[string]any{
-		"user_id":            settings.UserID,
-		"has_groq_api_key":   settings.HasGroqAPIKey,
-		"groq_api_key_last4": settings.GroqAPIKeyLast4,
+	h.deleteAPIKey(w, r, "groq", map[string]func(*model.UserSettings) any{
+		"has_groq_api_key":   func(s *model.UserSettings) any { return s.HasGroqAPIKey },
+		"groq_api_key_last4": func(s *model.UserSettings) any { return s.GroqAPIKeyLast4 },
 	})
 }
 
 func (h *SettingsHandler) SetDeepSeekAPIKey(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	var body struct {
-		APIKey string `json:"api_key"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
-		return
-	}
-	key := strings.TrimSpace(body.APIKey)
-	if key == "" {
-		http.Error(w, "api_key is required", http.StatusBadRequest)
-		return
-	}
-	if h.cipher == nil || !h.cipher.Enabled() {
-		http.Error(w, "user secret encryption is not configured", http.StatusInternalServerError)
-		return
-	}
-	enc, err := h.cipher.EncryptString(key)
-	if err != nil {
-		http.Error(w, "failed to encrypt api key", http.StatusInternalServerError)
-		return
-	}
-	last4 := key
-	if len(last4) > 4 {
-		last4 = last4[len(last4)-4:]
-	}
-	settings, err := h.repo.SetDeepSeekAPIKey(r.Context(), userID, enc, last4)
-	if err != nil {
-		writeRepoError(w, err)
-		return
-	}
-	writeJSON(w, map[string]any{
-		"user_id":                settings.UserID,
-		"has_deepseek_api_key":   settings.HasDeepSeekAPIKey,
-		"deepseek_api_key_last4": settings.DeepSeekAPIKeyLast4,
+	h.setAPIKey(w, r, "deepseek", map[string]func(*model.UserSettings) any{
+		"has_deepseek_api_key":   func(s *model.UserSettings) any { return s.HasDeepSeekAPIKey },
+		"deepseek_api_key_last4": func(s *model.UserSettings) any { return s.DeepSeekAPIKeyLast4 },
 	})
 }
 
 func (h *SettingsHandler) DeleteDeepSeekAPIKey(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.GetUserID(r)
-	settings, err := h.repo.ClearDeepSeekAPIKey(r.Context(), userID)
-	if err != nil {
-		writeRepoError(w, err)
-		return
-	}
-	writeJSON(w, map[string]any{
-		"user_id":                settings.UserID,
-		"has_deepseek_api_key":   settings.HasDeepSeekAPIKey,
-		"deepseek_api_key_last4": settings.DeepSeekAPIKeyLast4,
+	h.deleteAPIKey(w, r, "deepseek", map[string]func(*model.UserSettings) any{
+		"has_deepseek_api_key":   func(s *model.UserSettings) any { return s.HasDeepSeekAPIKey },
+		"deepseek_api_key_last4": func(s *model.UserSettings) any { return s.DeepSeekAPIKeyLast4 },
 	})
 }

@@ -96,7 +96,7 @@ func (h *BriefingHandler) Today(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if fallbackSnapshot != nil {
 			if h.cache != nil {
-				if cacheErr := h.cache.SetJSON(r.Context(), cacheKey, fallbackSnapshot, 45*time.Second); cacheErr != nil {
+				if cacheErr := h.cache.SetJSON(r.Context(), cacheKey, fallbackSnapshot, 15*time.Second); cacheErr != nil {
 					log.Printf("briefing cache set stale failed user_id=%s key=%s err=%v", userID, cacheKey, cacheErr)
 				}
 			}
@@ -115,7 +115,7 @@ func (h *BriefingHandler) Today(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if h.cache != nil {
-		if err := h.cache.SetJSON(r.Context(), cacheKey, payload, 90*time.Second); err != nil {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, payload, 20*time.Second); err != nil {
 			incrCacheMetric(r.Context(), h.cache, userID, "briefing.error")
 			log.Printf("briefing cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
@@ -134,7 +134,7 @@ func isSnapshotFresh(generatedAt *time.Time, now time.Time) bool {
 }
 
 func loadBriefingSnapshotMaxAge() time.Duration {
-	const defaultMaxAge = 45 * time.Minute
+	const defaultMaxAge = 10 * time.Minute
 	v := strings.TrimSpace(os.Getenv("BRIEFING_SNAPSHOT_MAX_AGE_SEC"))
 	if v == "" {
 		return defaultMaxAge

@@ -103,12 +103,12 @@ func BuildBriefingToday(
 		return items[i].CreatedAt.After(items[j].CreatedAt)
 	})
 
-	highlight, err := itemRepo.HighlightItems24h(ctx, userID, 0.85, 3)
+	highlight, err := itemRepo.HighlightItems24h(ctx, userID, 0.78, 4)
 	if err != nil {
 		highlight = nil
 	}
 	if len(highlight) == 0 {
-		highlightCount := minInt(3, len(items))
+		highlightCount := minInt(4, len(items))
 		highlight = make([]model.Item, 0, highlightCount)
 		highlight = append(highlight, items[:highlightCount]...)
 	}

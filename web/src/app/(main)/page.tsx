@@ -29,7 +29,9 @@ export default function BriefingPage() {
   const briefingQuery = useQuery({
     queryKey: ["briefing-today", 18] as const,
     queryFn: () => api.getBriefingToday({ size: 18 }),
-    staleTime: 60_000,
+    staleTime: 15_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
     placeholderData: (prev) => prev,
   });
   const modelUpdatesQuery = useQuery({
@@ -57,6 +59,15 @@ export default function BriefingPage() {
     const src = unreadHighlights.length > 0 ? unreadHighlights : highlights;
     return src.slice(1, 7);
   }, [highlights, unreadHighlights]);
+  const generatedAtLabel = (() => {
+    if (!data?.generated_at) return null;
+    const date = new Date(data.generated_at);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleTimeString(locale === "ja" ? "ja-JP" : "en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  })();
 
   const clusterRows = useMemo(
     () =>
@@ -162,6 +173,12 @@ export default function BriefingPage() {
               <p className="mt-1 text-sm text-zinc-600">
                 {`${greetingLabel} · ${data?.date ?? ""}`}
               </p>
+              {generatedAtLabel ? (
+                <p className="mt-1 text-xs text-zinc-500">
+                  {t("briefing.generatedAt")} {generatedAtLabel}
+                  {data?.status === "stale" ? ` · ${t("briefing.statusStale")}` : ""}
+                </p>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -176,9 +193,10 @@ export default function BriefingPage() {
                       // keep current snapshot on refresh failure
                     });
                 }}
+                disabled={briefingQuery.isFetching}
                 className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 press focus-ring"
               >
-                {t("common.refresh")}
+                {briefingQuery.isFetching ? t("briefing.refreshing") : t("common.refresh")}
               </button>
               <Link
                 href="/triage?mode=all"
@@ -196,6 +214,33 @@ export default function BriefingPage() {
               {t("briefing.nowReadingLabel", "NOW READING")}
             </p>
           </div>
+          {!loading && highlights.length > 0 ? (
+            <div className="mt-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.highlights")}</h2>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {highlights.slice(0, 4).map((item, idx) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setInlineItemId(item.id)}
+                    className="rounded-2xl border border-zinc-200 bg-white p-4 text-left hover:border-zinc-300 hover:bg-zinc-50"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                        {t("briefing.highlightBadge")} {idx + 1}
+                      </span>
+                      <span className="text-xs text-zinc-500">{fmtDate(item.published_at || item.created_at, locale)}</span>
+                    </div>
+                    <div className="mt-3 line-clamp-3 break-words [overflow-wrap:anywhere] text-sm font-semibold text-zinc-900">
+                      {item.translated_title || item.title || item.url}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {loading ? (
             <div className="mt-3">
               <SkeletonCard />
@@ -328,6 +373,62 @@ export default function BriefingPage() {
               </p>
             </div>
           ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.clusters")}</h2>
+            <Link href="/items?feed=recommended" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
+              {t("briefing.openRecommended")}
+            </Link>
+          </div>
+          {loading ? (
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          ) : clusterRows.length === 0 ? (
+            <p className="mt-2 text-sm text-zinc-500">{t("briefing.emptyClusters")}</p>
+          ) : (
+            <div className="mt-3 grid gap-4 xl:grid-cols-2">
+              {clusterRows.slice(0, 6).map((cluster) => (
+                <section key={cluster.id} className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-base font-semibold text-zinc-900">
+                        {cluster.label || t("briefing.clusterFallback")}
+                      </h3>
+                      {cluster.summary ? (
+                        <p className="mt-1 line-clamp-2 text-sm text-zinc-600">{cluster.summary}</p>
+                      ) : null}
+                    </div>
+                    <span className="rounded-full border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-600">
+                      {cluster.topItems.length}
+                    </span>
+                  </div>
+                  <ul className="mt-3 space-y-2">
+                    {cluster.topItems.map((item) => (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => setInlineItemId(item.id)}
+                          className="block w-full rounded-xl border border-zinc-200 bg-white px-3 py-3 text-left hover:border-zinc-300 hover:bg-zinc-50"
+                        >
+                          <div className="line-clamp-2 break-words [overflow-wrap:anywhere] text-sm font-medium text-zinc-900">
+                            {item.translated_title || item.title || item.url}
+                          </div>
+                          <div className="mt-1 text-xs text-zinc-500">
+                            {fmtDate(item.published_at || item.created_at, locale)}
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          )}
         </section>
 
         {inlineItemId && (

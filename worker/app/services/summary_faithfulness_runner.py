@@ -6,7 +6,7 @@ from app.services.summary_faithfulness_common import (
     parse_summary_faithfulness_line,
     require_summary_faithfulness_comment,
 )
-from app.services.langfuse_client import score_current
+from app.services.check_result_common import record_check_score
 
 
 def _parse_summary_faithfulness_response(text: str) -> dict:
@@ -44,10 +44,5 @@ def run_summary_faithfulness_check(
         if result is None:
             raise last_exc
     result["llm"] = llm
-    score_current(
-        "faithfulness_verdict",
-        result.get("verdict"),
-        comment=str(result.get("short_comment") or ""),
-        data_type="CATEGORICAL",
-    )
+    record_check_score("faithfulness_verdict", result)
     return result

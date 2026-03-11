@@ -1,17 +1,9 @@
-import json
 import re
+from app.services.check_result_common import CHECK_RESULT_SCHEMA, extract_first_json_object, normalize_check_result, parse_check_line, require_check_comment
 from app.services.langfuse_client import get_prompt_text
 
 
-FACTS_CHECK_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "verdict": {"type": "string"},
-        "short_comment": {"type": "string"},
-    },
-    "required": ["verdict", "short_comment"],
-    "additionalProperties": False,
-}
+FACTS_CHECK_SCHEMA = CHECK_RESULT_SCHEMA
 
 
 def facts_check_system_instruction() -> str:
@@ -126,58 +118,17 @@ def _is_valid_short_comment(text: str) -> bool:
 
 
 def parse_facts_check_line(text: str) -> dict | None:
-    s = (text or "").strip()
-    if not s:
-        return None
-    if s.startswith("```"):
-        s = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", s)
-        s = re.sub(r"\n?```$", "", s).strip()
-    first = s.splitlines()[0].strip()
-    if not first:
-        return None
-    verdict = first.strip().lower()
-    m = re.search(r"\b(pass|warn|fail)\b", verdict)
-    if m:
-        verdict = m.group(1)
-    if verdict not in {"pass", "warn", "fail"}:
-        return None
-    return {"verdict": verdict, "short_comment": facts_check_comment_for_verdict(verdict)}
-
-
-def extract_first_json_object(text: str) -> dict | None:
-    s = (text or "").strip().lstrip("\ufeff")
-    if s.startswith("```"):
-        s = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", s)
-        s = re.sub(r"\n?```$", "", s).strip()
-    decoder = json.JSONDecoder()
-    idx = s.find("{")
-    while idx >= 0:
-        try:
-            obj, _ = decoder.raw_decode(s[idx:])
-            if isinstance(obj, dict):
-                return obj
-        except Exception:
-            pass
-        idx = s.find("{", idx + 1)
-    return None
+    return parse_check_line(text, comment_for_verdict=facts_check_comment_for_verdict)
 
 
 def normalize_facts_check_result(data: dict | None) -> dict:
-    payload = data or {}
-    verdict = str(payload.get("verdict") or "").strip().lower()
-    if verdict not in {"pass", "warn", "fail"}:
-        verdict = "warn"
-    short_comment = str(payload.get("short_comment") or "").strip()
-    return {
-        "verdict": verdict,
-        "short_comment": short_comment[:240],
-    }
+    return normalize_check_result(data, max_comment_len=240)
 
 
 def require_facts_check_comment(result: dict, raw_text: str) -> dict:
-    if _is_valid_short_comment(str(result.get("short_comment") or "").strip()):
-        return result
-    snippet = (raw_text or "").strip().replace("\n", " ")
-    if not snippet:
-        snippet = "(empty)"
-    raise RuntimeError(f"facts check short_comment missing: response_snippet={snippet[:500]}")
+    return require_check_comment(
+        result,
+        raw_text,
+        error_prefix="facts check",
+        validator=_is_valid_short_comment,
+    )

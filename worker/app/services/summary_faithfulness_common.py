@@ -1,17 +1,8 @@
-import json
-import re
+from app.services.check_result_common import CHECK_RESULT_SCHEMA, extract_first_json_object, normalize_check_result, parse_check_line, require_check_comment
 from app.services.langfuse_client import get_prompt_text
 
 
-SUMMARY_FAITHFULNESS_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "verdict": {"type": "string"},
-        "short_comment": {"type": "string"},
-    },
-    "required": ["verdict", "short_comment"],
-    "additionalProperties": False,
-}
+SUMMARY_FAITHFULNESS_SCHEMA = CHECK_RESULT_SCHEMA
 
 
 def summary_faithfulness_system_instruction() -> str:
@@ -87,34 +78,8 @@ summary:
     )
 
 
-def extract_first_json_object(text: str) -> dict | None:
-    s = (text or "").strip().lstrip("\ufeff")
-    if s.startswith("```"):
-        s = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", s)
-        s = re.sub(r"\n?```$", "", s).strip()
-    decoder = json.JSONDecoder()
-    idx = s.find("{")
-    while idx >= 0:
-        try:
-            obj, _ = decoder.raw_decode(s[idx:])
-            if isinstance(obj, dict):
-                return obj
-        except Exception:
-            pass
-        idx = s.find("{", idx + 1)
-    return None
-
-
 def normalize_summary_faithfulness_result(data: dict | None) -> dict:
-    payload = data or {}
-    verdict = str(payload.get("verdict") or "").strip().lower()
-    if verdict not in {"pass", "warn", "fail"}:
-        verdict = "warn"
-    short_comment = str(payload.get("short_comment") or "").strip()
-    return {
-        "verdict": verdict,
-        "short_comment": short_comment[:240],
-    }
+    return normalize_check_result(data, max_comment_len=240)
 
 
 def summary_faithfulness_comment_for_verdict(verdict: str) -> str:
@@ -127,26 +92,8 @@ def summary_faithfulness_comment_for_verdict(verdict: str) -> str:
 
 
 def parse_summary_faithfulness_line(text: str) -> dict | None:
-    s = (text or "").strip()
-    if not s:
-        return None
-    if s.startswith("```"):
-        s = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", s)
-        s = re.sub(r"\n?```$", "", s).strip()
-    first = s.splitlines()[0].strip()
-    if not first:
-        return None
-    verdict = first.strip().lower()
-    m = re.search(r"\b(pass|warn|fail)\b", verdict)
-    if m:
-        verdict = m.group(1)
-    if verdict not in {"pass", "warn", "fail"}:
-        return None
-    return {"verdict": verdict, "short_comment": summary_faithfulness_comment_for_verdict(verdict)}
+    return parse_check_line(text, comment_for_verdict=summary_faithfulness_comment_for_verdict)
 
 
 def require_summary_faithfulness_comment(result: dict, raw_text: str) -> dict:
-    if str(result.get("short_comment") or "").strip():
-        return result
-    snippet = (raw_text or "").strip().replace("\n", " ")
-    raise RuntimeError(f"faithfulness short_comment missing: response_snippet={snippet[:500]}")
+    return require_check_comment(result, raw_text, error_prefix="faithfulness")

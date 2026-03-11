@@ -112,6 +112,10 @@ func findModelCatalog(model string) *LLMModelCatalog {
 	return nil
 }
 
+func CatalogModelByID(model string) *LLMModelCatalog {
+	return findModelCatalog(model)
+}
+
 func providerCatalogByID(provider string) *LLMProviderCatalog {
 	p := strings.TrimSpace(provider)
 	if p == "" {
@@ -175,4 +179,34 @@ func CatalogModelCapabilities(model string) *LLMModelCapabilities {
 		return nil
 	}
 	return entry.Capabilities
+}
+
+func CatalogModelSupportsPurpose(model, purpose string) bool {
+	entry := findModelCatalog(model)
+	if entry == nil {
+		return false
+	}
+	want := strings.TrimSpace(purpose)
+	if want == "" {
+		return false
+	}
+	for _, available := range entry.AvailablePurposes {
+		if strings.TrimSpace(available) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func CatalogIsEmbeddingModel(model string) bool {
+	entry := findModelCatalog(model)
+	if entry == nil {
+		return false
+	}
+	for _, candidate := range LLMCatalogData().EmbeddingModels {
+		if candidate.ID == entry.ID {
+			return true
+		}
+	}
+	return false
 }

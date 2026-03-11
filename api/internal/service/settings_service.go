@@ -52,11 +52,22 @@ type UpdateLLMModelsInput struct {
 	FaithfulnessCheck *string
 }
 
+var modelSettingPurposes = map[string]string{
+	"facts":              "facts",
+	"summary":            "summary",
+	"digest_cluster":     "digest_cluster_draft",
+	"digest":             "digest",
+	"ask":                "ask",
+	"source_suggestion":  "source_suggestion",
+	"facts_check":        "facts",
+	"faithfulness_check": "summary",
+}
+
 func NewSettingsService(repo *repository.UserSettingsRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *SecretCipher) *SettingsService {
 	return &SettingsService{repo: repo, llmUsageRepo: llmUsageRepo, cipher: cipher}
 }
 
-func llmModelSettingsPayload(settings *model.UserSettings) map[string]any {
+func LLMModelSettingsPayload(settings *model.UserSettings) map[string]any {
 	return map[string]any{
 		"facts":              settings.FactsModel,
 		"summary":            settings.SummaryModel,
@@ -118,7 +129,7 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		BudgetAlertThresholdPct: settings.BudgetAlertThresholdPct,
 		DigestEmailEnabled:      settings.DigestEmailEnabled,
 		ReadingPlan:             readingPlanPayload(settings),
-		LLMModels:               llmModelSettingsPayload(settings),
+		LLMModels:               LLMModelSettingsPayload(settings),
 		CurrentMonth: map[string]any{
 			"month_jst":            monthStart.Format("2006-01"),
 			"period_start_jst":     monthStart.Format(time.RFC3339),
@@ -141,23 +152,49 @@ func normalizeOptionalModel(v *string) *string {
 	return &s
 }
 
+func validateCatalogModelForPurpose(model *string, purpose string) error {
+	if model == nil {
+		return nil
+	}
+	if !CatalogModelSupportsPurpose(*model, purpose) {
+		return fmt.Errorf("invalid model for %s", purpose)
+	}
+	return nil
+}
+
 func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in UpdateLLMModelsInput) (*model.UserSettings, error) {
-	embeddingModel := normalizeOptionalModel(in.Embedding)
-	if embeddingModel != nil && !IsSupportedOpenAIEmbeddingModel(*embeddingModel) {
+	normalized := map[string]*string{
+		"facts":              normalizeOptionalModel(in.Facts),
+		"summary":            normalizeOptionalModel(in.Summary),
+		"digest_cluster":     normalizeOptionalModel(in.DigestCluster),
+		"digest":             normalizeOptionalModel(in.Digest),
+		"ask":                normalizeOptionalModel(in.Ask),
+		"source_suggestion":  normalizeOptionalModel(in.SourceSuggestion),
+		"embedding":          normalizeOptionalModel(in.Embedding),
+		"facts_check":        normalizeOptionalModel(in.FactsCheck),
+		"faithfulness_check": normalizeOptionalModel(in.FaithfulnessCheck),
+	}
+	for settingKey, purpose := range modelSettingPurposes {
+		if err := validateCatalogModelForPurpose(normalized[settingKey], purpose); err != nil {
+			return nil, err
+		}
+	}
+	embeddingModel := normalized["embedding"]
+	if embeddingModel != nil && !CatalogIsEmbeddingModel(*embeddingModel) {
 		return nil, fmt.Errorf("invalid embedding model")
 	}
 	return s.repo.UpsertLLMModelConfig(
 		ctx,
 		userID,
-		normalizeOptionalModel(in.Facts),
-		normalizeOptionalModel(in.Summary),
-		normalizeOptionalModel(in.DigestCluster),
-		normalizeOptionalModel(in.Digest),
-		normalizeOptionalModel(in.Ask),
-		normalizeOptionalModel(in.SourceSuggestion),
+		normalized["facts"],
+		normalized["summary"],
+		normalized["digest_cluster"],
+		normalized["digest"],
+		normalized["ask"],
+		normalized["source_suggestion"],
 		embeddingModel,
-		normalizeOptionalModel(in.FactsCheck),
-		normalizeOptionalModel(in.FaithfulnessCheck),
+		normalized["facts_check"],
+		normalized["faithfulness_check"],
 	)
 }
 

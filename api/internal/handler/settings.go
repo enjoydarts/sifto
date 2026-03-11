@@ -23,20 +23,6 @@ type SettingsHandler struct {
 	settings *service.SettingsService
 }
 
-func llmModelSettingsPayload(settings *model.UserSettings) map[string]any {
-	return map[string]any{
-		"facts":              settings.FactsModel,
-		"summary":            settings.SummaryModel,
-		"digest_cluster":     settings.DigestClusterModel,
-		"digest":             settings.DigestModel,
-		"ask":                settings.AskModel,
-		"source_suggestion":  settings.SourceSuggestionModel,
-		"embedding":          settings.EmbeddingModel,
-		"facts_check":        settings.FactsCheckModel,
-		"faithfulness_check": settings.FaithfulnessCheckModel,
-	}
-}
-
 func NewSettingsHandler(repo *repository.UserSettingsRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher) *SettingsHandler {
 	return &SettingsHandler{
 		repo:     repo,
@@ -230,35 +216,20 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
-	norm := func(v *string) *string {
-		if v == nil {
-			return nil
-		}
-		s := strings.TrimSpace(*v)
-		if s == "" {
-			return nil
-		}
-		return &s
-	}
-	embeddingModel := norm(body.Embedding)
-	if embeddingModel != nil && !service.IsSupportedOpenAIEmbeddingModel(*embeddingModel) {
-		http.Error(w, "invalid embedding model", http.StatusBadRequest)
-		return
-	}
 	settings, err := h.settings.UpdateLLMModels(r.Context(), userID, service.UpdateLLMModelsInput{
-		Facts:             norm(body.Facts),
-		Summary:           norm(body.Summary),
-		DigestCluster:     norm(body.DigestCluster),
-		Digest:            norm(body.Digest),
-		Ask:               norm(body.Ask),
-		SourceSuggestion:  norm(body.SourceSuggestion),
-		Embedding:         embeddingModel,
-		FactsCheck:        norm(body.FactsCheck),
-		FaithfulnessCheck: norm(body.FaithfulnessCheck),
+		Facts:             body.Facts,
+		Summary:           body.Summary,
+		DigestCluster:     body.DigestCluster,
+		Digest:            body.Digest,
+		Ask:               body.Ask,
+		SourceSuggestion:  body.SourceSuggestion,
+		Embedding:         body.Embedding,
+		FactsCheck:        body.FactsCheck,
+		FaithfulnessCheck: body.FaithfulnessCheck,
 	})
 	if err != nil {
-		if err.Error() == "invalid embedding model" {
-			http.Error(w, "invalid embedding model", http.StatusBadRequest)
+		if strings.HasPrefix(err.Error(), "invalid model for ") || err.Error() == "invalid embedding model" {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		writeRepoError(w, err)
@@ -266,7 +237,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 	}
 	writeJSON(w, map[string]any{
 		"user_id":    settings.UserID,
-		"llm_models": llmModelSettingsPayload(settings),
+		"llm_models": service.LLMModelSettingsPayload(settings),
 	})
 }
 

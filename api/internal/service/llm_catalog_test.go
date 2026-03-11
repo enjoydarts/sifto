@@ -94,3 +94,31 @@ func TestLLMCatalogProvidersAndCapabilitiesAreFilled(t *testing.T) {
 		}
 	}
 }
+
+func TestCatalogModelSupportsPurpose(t *testing.T) {
+	tests := []struct {
+		model   string
+		purpose string
+		want    bool
+	}{
+		{model: "gpt-5-mini", purpose: "summary", want: true},
+		{model: "gpt-5-mini", purpose: "source_suggestion", want: true},
+		{model: "text-embedding-3-small", purpose: "summary", want: false},
+		{model: "text-embedding-3-small", purpose: "embedding", want: true},
+		{model: "does-not-exist", purpose: "summary", want: false},
+	}
+	for _, tt := range tests {
+		if got := CatalogModelSupportsPurpose(tt.model, tt.purpose); got != tt.want {
+			t.Fatalf("CatalogModelSupportsPurpose(%q, %q) = %v, want %v", tt.model, tt.purpose, got, tt.want)
+		}
+	}
+}
+
+func TestCatalogIsEmbeddingModel(t *testing.T) {
+	if !CatalogIsEmbeddingModel("text-embedding-3-small") {
+		t.Fatal("text-embedding-3-small should be recognized as embedding model")
+	}
+	if CatalogIsEmbeddingModel("gpt-5-mini") {
+		t.Fatal("gpt-5-mini should not be recognized as embedding model")
+	}
+}

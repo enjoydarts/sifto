@@ -59,30 +59,12 @@ func (r *DigestRepo) GetDetail(ctx context.Context, id, userID string) (*model.D
 		return nil, mapDBError(err)
 	}
 
-	var digestLLM model.ItemSummaryLLM
-	err = r.db.QueryRow(ctx, `
-		SELECT provider, model, pricing_source, created_at
-		FROM llm_usage_logs
-		WHERE digest_id = $1
-		  AND purpose = 'digest'
-		ORDER BY created_at DESC
-		LIMIT 1`, id,
-	).Scan(&digestLLM.Provider, &digestLLM.Model, &digestLLM.PricingSource, &digestLLM.CreatedAt)
-	if err == nil {
-		d.DigestLLM = &digestLLM
+	if digestLLM, llmErr := loadLatestDigestLLMUsage(ctx, r.db, id, "digest"); llmErr == nil {
+		d.DigestLLM = digestLLM
 	}
 
-	var clusterDraftLLM model.ItemSummaryLLM
-	err = r.db.QueryRow(ctx, `
-		SELECT provider, model, pricing_source, created_at
-		FROM llm_usage_logs
-		WHERE digest_id = $1
-		  AND purpose = 'digest_cluster_draft'
-		ORDER BY created_at DESC
-		LIMIT 1`, id,
-	).Scan(&clusterDraftLLM.Provider, &clusterDraftLLM.Model, &clusterDraftLLM.PricingSource, &clusterDraftLLM.CreatedAt)
-	if err == nil {
-		d.ClusterDraftLLM = &clusterDraftLLM
+	if clusterDraftLLM, llmErr := loadLatestDigestLLMUsage(ctx, r.db, id, "digest_cluster_draft"); llmErr == nil {
+		d.ClusterDraftLLM = clusterDraftLLM
 	}
 
 	rows, err := r.db.Query(ctx, `

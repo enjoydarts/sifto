@@ -34,6 +34,12 @@ from app.services.facts_check_runner import run_facts_check
 from app.services.summary_task_common import build_summary_task
 from app.services.summary_parse_common import finalize_summary_result
 from app.services.title_translation_common import run_title_translation
+from app.services.digest_task_common import (
+    build_cluster_draft_task,
+    build_digest_task,
+    parse_cluster_draft_result,
+    parse_digest_result,
+)
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -887,57 +893,17 @@ def compose_digest(digest_date: str, items: list[dict], api_key: str | None = No
     input_mode, digest_input = _build_digest_input_sections(items)
     compose_timeout = _env_timeout_seconds("ANTHROPIC_COMPOSE_DIGEST_TIMEOUT_SEC", 300.0)
 
-    system_prompt = """# Role
-あなたはニュースダイジェスト編集者です。
-
-# Task
-与えられた記事一覧をもとに、メール用のダイジェスト本文を日本語で作成してください。
-
-# Rules
-- 当日分の全記事要約を踏まえて全体像をまとめてください。記事を取りこぼさないでください。
-- 本文は900〜2200字程度を目安とし、必要なら超えて構いません。
-- 本文は必ず次の順序で構成してください:
-  1) 全体サマリ（1〜3段落）
-  2) 注目ポイント（5〜10個。各ポイントは1〜2段落）
-  3) その他のポイント（個数指定なし。箇条書き）
-  4) 明日以降のフォローポイント（1段落）
-  5) 締めの1文
-- body は可読性を最優先し、各セクションの間に必ず空行1行（\\n\\n）を入れてください。
-- 段落同士も必要に応じて空行（\\n\\n）で分けてください。
-- 誇張せず、与えられた情報だけで書いてください。
-- 出力はJSONオブジェクトのみとしてください。
-"""
-
-    user_prompt = f"""# Output
-{{
-  "subject": "件名（40字程度）",
-  "body": "メール本文（プレーンテキスト。改行を含めてよい）",
-  "sections": {{
-    "overall_summary": "1〜3段落",
-    "highlights": ["注目ポイント1（1〜2段落）", "注目ポイント2（1〜2段落）"],
-    "other_points": ["補足1", "補足2"],
-    "follow_up": "明日以降のフォローポイント（1段落）",
-    "closing": "締めの1文"
-  }}
-}}
-
-# Input
-digest_date: {digest_date}
-items_count: {len(items)}
-input_mode: {input_mode}
-items:
-{digest_input}
-"""
+    task = build_digest_task(digest_date, len(items), digest_input, input_mode=input_mode)
 
     message, used_model = _call_with_model_fallback(
-        f"{system_prompt}\n\n{user_prompt}",
+        f"{task['system_instruction']}\n\n{task['prompt']}",
         str(model or _digest_model),
         _digest_model_fallback,
         max_tokens=10000,
         api_key=api_key,
         timeout_sec=compose_timeout,
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
+        system_prompt=task["system_instruction"],
+        user_prompt=task["prompt"],
     )
     if message is None:
         top_topics = []
@@ -972,10 +938,7 @@ items:
         }
 
     text = message.content[0].text.strip()
-    subject, body = _extract_compose_digest_fields(text)
-    if not subject or not body:
-        snippet = text[:500].replace("\n", "\\n")
-        raise RuntimeError(f"claude compose_digest missing subject/body; response_snippet={snippet}")
+    subject, body = parse_digest_result(text, error_prefix="claude compose_digest missing subject/body")
     if len(body) < 80:
         raise RuntimeError(f"claude compose_digest body too short: len={len(body)}")
     llm = _llm_meta(message, "digest", used_model or _digest_model)
@@ -1166,35 +1129,16 @@ def compose_digest_cluster_draft(
             },
         }
 
-    prompt = f"""あなたはニュースダイジェストの下書き編集者です。
-以下は同じ話題（クラスタ）に属する複数記事の要点メモです。重複をまとめ、事実ベースで読みやすいクラスタ下書きに整理してください。
-
-要件:
-- 与えられた内容のみ使う（推測しない）
-- 重複をまとめる
-- 重要な相違点があれば残す
-- プレーンテキストで返す
-- 箇条書き 3〜8 行程度
-- JSONのみで返す
-
-返却形式:
-{{
-  "draft_summary": "- ...\\n- ..."
-}}
-
-cluster_label: {cluster_label}
-item_count: {item_count}
-topics: {json.dumps(topics, ensure_ascii=False)}
-source_lines:
-{json.dumps(source_lines, ensure_ascii=False)}
-"""
+    task = build_cluster_draft_task(cluster_label, item_count, topics, source_lines)
 
     message, used_model = _call_with_model_fallback(
-        prompt,
+        task["prompt"],
         str(model or _digest_model),
         _digest_model_fallback,
         max_tokens=1200,
         api_key=api_key,
+        system_prompt=task["system_instruction"],
+        user_prompt=task["prompt"],
     )
     if message is None:
         return {
@@ -1210,15 +1154,7 @@ source_lines:
             },
         }
     text = message.content[0].text.strip()
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    try:
-        data = json.loads(text[start:end])
-    except Exception:
-        data = {}
-    draft_summary = str(data.get("draft_summary") or "").strip()
-    if not draft_summary:
-        draft_summary = "\n".join(source_lines)
+    draft_summary = parse_cluster_draft_result(text, task["source_lines"])
     return {
         "draft_summary": draft_summary,
         "llm": _llm_meta(message, "digest_cluster_draft", used_model or _digest_model),

@@ -35,6 +35,13 @@ from app.services.facts_check_runner import run_facts_check
 from app.services.summary_task_common import build_summary_task
 from app.services.summary_parse_common import finalize_summary_result
 from app.services.title_translation_common import TITLE_TRANSLATION_SCHEMA, run_title_translation
+from app.services.digest_task_common import (
+    build_cluster_draft_task,
+    build_digest_task,
+    build_simple_digest_input,
+    parse_cluster_draft_result,
+    parse_digest_result,
+)
 
 _log = logging.getLogger(__name__)
 _DEEPSEEK_PRICING_SOURCE_VERSION = "deepseek_static_2026_03"
@@ -478,74 +485,18 @@ def compose_digest(digest_date: str, items: list[dict], model: str, api_key: str
             "body": "本日のダイジェスト対象記事はありませんでした。",
             "llm": _llm_meta(model, "digest", {"input_tokens": 0, "output_tokens": 0}),
         }
-    lines = []
-    for idx, item in enumerate(items, start=1):
-        lines.append(
-            f"- item={idx} rank={item.get('rank')} | title={item.get('title') or '（タイトルなし）'} | topics={', '.join(item.get('topics') or [])} | score={item.get('score')} | summary={str(item.get('summary') or '')[:260]}"
-        )
-    system_instruction = """# Role
-あなたはニュースダイジェスト編集者です。
-
-# Task
-与えられた記事一覧をもとに、メール用のダイジェスト本文を日本語で作成してください。
-
-# Rules
-- 当日分の全記事要約を踏まえて全体像をまとめてください。記事を取りこぼさないでください。
-- 本文は900〜2200字程度を目安とし、必要なら超えて構いません。
-- 本文は必ず次の順序で構成してください:
-  1) 全体サマリ（1〜3段落）
-  2) 注目ポイント（5〜10個。各ポイントは1〜2段落）
-  3) その他のポイント（個数指定なし。箇条書き）
-  4) 明日以降のフォローポイント（1段落）
-  5) 締めの1文
-- body は可読性を最優先し、各セクションの間に必ず空行1行（\\n\\n）を入れてください。
-- 段落同士も必要に応じて空行（\\n\\n）で分けてください。
-- 誇張せず、与えられた情報だけで書いてください。
-- 出力はJSONオブジェクトのみとしてください。"""
-    prompt = f"""# Output
-{{
-  \"subject\": \"件名（40字程度）\",
-  \"body\": \"メール本文（プレーンテキスト。改行を含めてよい）\",
-  \"sections\": {{
-    \"overall_summary\": \"1〜3段落\",
-    \"highlights\": [\"注目ポイント1（1〜2段落）\", \"注目ポイント2（1〜2段落）\"],
-    \"other_points\": [\"補足1\", \"補足2\"],
-    \"follow_up\": \"明日以降のフォローポイント（1段落）\",
-    \"closing\": \"締めの1文\"
-  }}
-}}
-
-# Input
-digest_date: {digest_date}
-items_count: {len(items)}
-items:
-{chr(10).join(lines)}
-"""
-    schema = {
-        "type": "object",
-        "properties": {
-            "subject": {"type": "string"},
-            "body": {"type": "string"},
-            "sections": {
-                "type": "object",
-                "properties": {
-                    "overall_summary": {"type": "string"},
-                    "highlights": {"type": "array", "items": {"type": "string"}},
-                    "other_points": {"type": "array", "items": {"type": "string"}},
-                    "follow_up": {"type": "string"},
-                    "closing": {"type": "string"},
-                },
-                "required": ["overall_summary", "highlights", "other_points", "follow_up", "closing"],
-                "additionalProperties": False,
-            },
-        },
-        "required": ["subject", "body", "sections"],
-        "additionalProperties": False,
-    }
-    text, usage = _chat_json(prompt, model, api_key, system_instruction=system_instruction, max_output_tokens=8000, response_schema=schema, schema_name="digest", timeout_sec=_env_timeout_seconds("DEEPSEEK_COMPOSE_DIGEST_TIMEOUT_SEC", 240.0))
-    subject, body = _extract_compose_digest_fields(text)
-    if not subject or not body:
-        raise RuntimeError(f"groq compose_digest parse failed: response_snippet={text[:500]}")
+    task = build_digest_task(digest_date, len(items), build_simple_digest_input(items))
+    text, usage = _chat_json(
+        task["prompt"],
+        model,
+        api_key,
+        system_instruction=task["system_instruction"],
+        max_output_tokens=8000,
+        response_schema=task["schema"],
+        schema_name="digest",
+        timeout_sec=_env_timeout_seconds("DEEPSEEK_COMPOSE_DIGEST_TIMEOUT_SEC", 240.0),
+    )
+    subject, body = parse_digest_result(text, error_prefix="deepseek compose_digest parse failed")
     return {"subject": subject, "body": body, "llm": _llm_meta(model, "digest", usage)}
 
 
@@ -647,81 +598,28 @@ candidates:
 
 
 def compose_digest_cluster_draft(cluster_label: str, item_count: int, topics: list[str], source_lines: list[str], model: str, api_key: str) -> dict:
-    cluster_label = str(cluster_label or "話題").strip() or "話題"
-    topics = [str(t).strip() for t in topics if str(t).strip()][:8]
-    source_lines = [str(x).strip()[:500] for x in source_lines if str(x).strip()][:16]
-    if not source_lines:
+    task = build_cluster_draft_task(str(cluster_label or "話題").strip() or "話題", item_count, topics, source_lines)
+    if not task["source_lines"]:
         return {"draft_summary": "", "llm": _llm_meta(model, "digest_cluster_draft", {"input_tokens": 0, "output_tokens": 0})}
-
-    system_instruction = """# Role
-あなたはニュースダイジェストの下書き編集者です。
-
-# Task
-同じ話題に属する複数記事の要点メモから、重複をまとめたクラスタ下書きを作成してください。
-
-# Rules
-- 与えられた内容のみ使う
-- 重複をまとめる
-- 重要な相違点があれば残す
-- 出力は必ず自然な日本語にする
-- 原文が英語でも日本語で要約する
-- プレーンテキストの箇条書き 3〜8 行程度
-- draft_summary 以外のキーを出さない
-- JSONのみで返す"""
-    prompt = f"""# Output
-{{
-  \"draft_summary\": \"- ...\\n- ...\"
-}}
-
-# Input
-cluster_label: {cluster_label}
-item_count: {item_count}
-topics: {json.dumps(topics, ensure_ascii=False)}
-source_lines:
-{json.dumps(source_lines, ensure_ascii=False)}
-"""
-    schema = {
-        "type": "object",
-        "properties": {"draft_summary": {"type": "string"}},
-        "required": ["draft_summary"],
-        "additionalProperties": False,
-    }
-    fallback_prompt = f"""次の要点メモだけを使って、重複をまとめたクラスタ下書きを作成してください。
-
-要件:
-- 推測しない
-- 出力は必ず自然な日本語にする
-- 原文が英語でも日本語で要約する
-- 箇条書き 3〜8 行
-- JSONのみで返す
-- キーは draft_summary のみ
-
-返却形式:
-{{"draft_summary":"- ...\\n- ..."}}
-
-cluster_label: {cluster_label}
-item_count: {item_count}
-topics: {json.dumps(topics, ensure_ascii=False)}
-source_lines:
-{json.dumps(source_lines[:10], ensure_ascii=False)}
-"""
     try:
-        text, usage = _chat_json(prompt, model, api_key, system_instruction=system_instruction, max_output_tokens=900, response_schema=schema, schema_name="digest_cluster_draft")
+        text, usage = _chat_json(
+            task["prompt"],
+            model,
+            api_key,
+            system_instruction=task["system_instruction"],
+            max_output_tokens=900,
+            response_schema=task["schema"],
+            schema_name="digest_cluster_draft",
+        )
     except Exception as exc:
-        _log.warning("groq compose_digest_cluster_draft primary attempt failed: %s", exc)
+        _log.warning("deepseek compose_digest_cluster_draft primary attempt failed: %s", exc)
         try:
-            text, usage = _chat_json(fallback_prompt, model, api_key, max_output_tokens=500, response_schema=None)
+            text, usage = _chat_json(task["fallback_prompt"], model, api_key, max_output_tokens=500, response_schema=None)
         except Exception as retry_exc:
-            _log.warning("groq compose_digest_cluster_draft fallback failed: %s", retry_exc)
-            return {"draft_summary": "\n".join(source_lines[:5]), "llm": _llm_meta(model, "digest_cluster_draft", {"input_tokens": 0, "output_tokens": 0})}
+            _log.warning("deepseek compose_digest_cluster_draft fallback failed: %s", retry_exc)
+            return {"draft_summary": "\n".join(task["source_lines"][:5]), "llm": _llm_meta(model, "digest_cluster_draft", {"input_tokens": 0, "output_tokens": 0})}
 
-    data = _extract_first_json_object(text) or {}
-    draft = str(data.get("draft_summary") or "").strip()
-    if not draft:
-        draft = _extract_json_string_value_loose(text, "draft_summary")
-    draft = str(draft or "").strip()
-    if not draft:
-        draft = "\n".join(source_lines[:5])
+    draft = parse_cluster_draft_result(text, task["source_lines"])
     return {"draft_summary": draft, "llm": _llm_meta(model, "digest_cluster_draft", usage)}
 
 

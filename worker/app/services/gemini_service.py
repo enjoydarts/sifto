@@ -42,6 +42,12 @@ from app.services.facts_check_runner import run_facts_check
 from app.services.summary_task_common import build_summary_task
 from app.services.summary_parse_common import finalize_summary_result
 from app.services.title_translation_common import TITLE_TRANSLATION_SCHEMA, run_title_translation
+from app.services.digest_task_common import (
+    build_cluster_draft_task,
+    build_digest_task,
+    parse_cluster_draft_result,
+    parse_digest_result,
+)
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
@@ -966,82 +972,25 @@ def compose_digest(digest_date: str, items: list[dict], model: str, api_key: str
             "llm": _llm_meta(model, "digest", {"input_tokens": 0, "output_tokens": 0}),
         }
     input_mode, digest_input = _build_digest_input_sections(items)
-    system_instruction = """# Role
-あなたはニュースダイジェスト編集者です。
-
-# Task
-与えられた記事一覧をもとに、メール用のダイジェスト本文を日本語で作成してください。
-
-# Rules
-- 当日分の全記事要約を踏まえて全体像をまとめてください。記事を取りこぼさないでください。
-- 本文は900〜2200字程度を目安とし、必要なら超えて構いません。
-- 本文は必ず次の順序で構成してください:
-  1) 全体サマリ（1〜3段落）
-  2) 注目ポイント（5〜10個。各ポイントは1〜2段落）
-  3) その他のポイント（個数指定なし。箇条書き）
-  4) 明日以降のフォローポイント（1段落）
-  5) 締めの1文
-- body は可読性を最優先し、各セクションの間に必ず空行1行（\\n\\n）を入れてください。
-- 段落同士も必要に応じて空行（\\n\\n）で分けてください。
-- 誇張せず、与えられた情報だけで書いてください。
-- 出力はJSONオブジェクトのみとしてください。
-"""
-
-    prompt = f"""# Output
-{{
-  "subject": "件名（40字程度）",
-  "body": "メール本文（プレーンテキスト。改行を含めてよい）",
-  "sections": {{
-    "overall_summary": "1〜3段落",
-    "highlights": ["注目ポイント1（1〜2段落）", "注目ポイント2（1〜2段落）"],
-    "other_points": ["補足1", "補足2"],
-    "follow_up": "明日以降のフォローポイント（1段落）",
-    "closing": "締めの1文"
-  }}
-}}
-
-# Input
-digest_date: {digest_date}
-items_count: {len(items)}
-input_mode: {input_mode}
-items:
-{digest_input}
-"""
-    digest_schema = {
-        "type": "OBJECT",
-        "properties": {
-            "subject": {"type": "STRING"},
-            "body": {"type": "STRING"},
-            "sections": {
-                "type": "OBJECT",
-                "properties": {
-                    "overall_summary": {"type": "STRING"},
-                    "highlights": {"type": "ARRAY", "items": {"type": "STRING"}},
-                    "other_points": {"type": "ARRAY", "items": {"type": "STRING"}},
-                    "follow_up": {"type": "STRING"},
-                    "closing": {"type": "STRING"},
-                },
-            },
-        },
-        "required": ["subject", "body"],
-    }
+    task = build_digest_task(digest_date, len(items), digest_input, input_mode=input_mode)
 
     compose_timeout = _env_timeout_seconds("GEMINI_COMPOSE_DIGEST_TIMEOUT_SEC", 240.0)
     last_text = ""
     last_error = "unknown"
     for max_tokens in (10000, 15000):
         text, usage = _generate_content(
-            prompt,
+            task["prompt"],
             model=model,
             api_key=api_key,
             max_output_tokens=max_tokens,
-            response_schema=digest_schema,
+            response_schema=task["schema"],
             timeout_sec=compose_timeout,
-            system_instruction=system_instruction,
+            system_instruction=task["system_instruction"],
         )
         last_text = text
-        subject, body = _extract_compose_digest_fields(text)
-        if not subject or not body:
+        try:
+            subject, body = parse_digest_result(text, error_prefix="gemini compose_digest parse failed")
+        except Exception:
             last_error = "missing subject/body"
             continue
         if len(body) < 80:
@@ -1197,38 +1146,16 @@ def compose_digest_cluster_draft(
     model: str,
     api_key: str,
 ) -> dict:
-    prompt = f"""あなたはニュースダイジェストの下書き編集者です。
-以下は同じ話題（クラスタ）に属する複数記事の要点メモです。重複をまとめ、事実ベースで読みやすいクラスタ下書きに整理してください。
-
-要件:
-- 与えられた内容のみ使う（推測しない）
-- 重複をまとめる
-- 重要な相違点があれば残す
-- プレーンテキストで返す
-- 箇条書き 3〜8 行程度
-- JSONのみで返す
-
-返却形式:
-{{
-  "draft_summary": "- ...\\n- ..."
-}}
-
-cluster_label: {cluster_label}
-item_count: {item_count}
-topics: {json.dumps(topics or [], ensure_ascii=False)}
-source_lines:
-{json.dumps(source_lines or [], ensure_ascii=False)}
-"""
-    text, usage = _generate_content(prompt, model=model, api_key=api_key, max_output_tokens=900)
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    try:
-        data = json.loads(text[start:end])
-    except Exception:
-        data = {}
-    summary = str(data.get("draft_summary") or "").strip()
-    if not summary:
-        summary = "\n".join(source_lines[:5])
+    task = build_cluster_draft_task(cluster_label, item_count, topics, source_lines)
+    text, usage = _generate_content(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=900,
+        system_instruction=task["system_instruction"],
+        response_schema=task["schema"],
+    )
+    summary = parse_cluster_draft_result(text, task["source_lines"])
     return {
         "draft_summary": summary,
         "llm": _llm_meta(model, "digest_cluster_draft", usage),

@@ -220,17 +220,25 @@ export default function SettingsPage() {
   }, [load]);
 
   useEffect(() => {
-    const inoreaderStatus = new URLSearchParams(window.location.search).get("inoreader");
+    const params = new URLSearchParams(window.location.search);
+    const inoreaderStatus = params.get("inoreader");
     if (inoreaderStatus === "connected") {
       showToast(t("settings.toast.inoreaderConnected"), "success");
     } else if (inoreaderStatus === "error") {
       showToast(t("settings.toast.inoreaderConnectError"), "error");
     }
-    const obsidianStatus = new URLSearchParams(window.location.search).get("obsidian_github");
+    const obsidianStatus = params.get("obsidian_github");
     if (obsidianStatus === "connected") {
       showToast(t("settings.toast.obsidianGithubConnected"), "success");
     } else if (obsidianStatus === "error") {
       showToast(t("settings.toast.obsidianGithubConnectError"), "error");
+    }
+    if (inoreaderStatus || obsidianStatus) {
+      params.delete("inoreader");
+      params.delete("obsidian_github");
+      const qs = params.toString();
+      const nextURL = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`;
+      window.history.replaceState(null, "", nextURL);
     }
   }, [showToast, t]);
 

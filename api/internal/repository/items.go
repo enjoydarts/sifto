@@ -1423,6 +1423,44 @@ func (r *ItemRepo) MarkLater(ctx context.Context, userID, itemID string) error {
 	return err
 }
 
+func (r *ItemRepo) MarkLaterBulk(ctx context.Context, userID string, itemIDs []string) (int, error) {
+	if len(itemIDs) == 0 {
+		return 0, nil
+	}
+	unique := make([]string, 0, len(itemIDs))
+	seen := make(map[string]struct{}, len(itemIDs))
+	for _, itemID := range itemIDs {
+		itemID = strings.TrimSpace(itemID)
+		if itemID == "" {
+			continue
+		}
+		if _, ok := seen[itemID]; ok {
+			continue
+		}
+		seen[itemID] = struct{}{}
+		unique = append(unique, itemID)
+	}
+	if len(unique) == 0 {
+		return 0, nil
+	}
+
+	tag, err := r.db.Exec(ctx, `
+		INSERT INTO item_laters (user_id, item_id)
+		SELECT $1, i.id
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		WHERE s.user_id = $1
+		  AND i.id = ANY($2::uuid[])
+		ON CONFLICT (user_id, item_id) DO UPDATE
+		SET updated_at = NOW()`,
+		userID, unique,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 func (r *ItemRepo) UnmarkLater(ctx context.Context, userID, itemID string) error {
 	if err := r.ensureOwned(ctx, userID, itemID); err != nil {
 		return err

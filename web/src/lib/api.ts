@@ -186,6 +186,11 @@ export interface BulkMarkReadResult {
   updated_count: number;
 }
 
+export interface BulkMarkLaterResult {
+  status: "ok";
+  updated_count: number;
+}
+
 export interface ItemLaterResult {
   item_id: string;
   is_later: boolean;
@@ -820,6 +825,11 @@ export const api = {
     }),
   markItemLater: (id: string) =>
     apiFetch<ItemLaterResult>(`/items/${id}/later`, { method: "POST" }),
+  markItemsLaterBulk: (body: { item_ids: string[] }) =>
+    apiFetch<BulkMarkLaterResult>("/items/mark-later-bulk", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   unmarkItemLater: (id: string) =>
     apiFetch<ItemLaterResult>(`/items/${id}/later`, { method: "DELETE" }),
   deleteItem: (id: string) =>

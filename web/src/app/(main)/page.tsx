@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Bell, BookOpen, Flame, ListTree, Sparkles, Target, X } from "lucide-react";
 import { api, BriefingCluster, Item, ProviderModelChangeEvent } from "@/lib/api";
@@ -11,6 +11,7 @@ import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { EmptyState } from "@/components/empty-state";
 import { SkeletonCard, SkeletonKpi } from "@/components/skeleton";
+import { useToast } from "@/components/toast-provider";
 
 const EMPTY_ITEMS: Item[] = [];
 const EMPTY_CLUSTERS: BriefingCluster[] = [];
@@ -19,13 +20,13 @@ const MODEL_UPDATES_DISMISSED_AT_KEY = "provider-model-updates:dismissed-at";
 
 export default function BriefingPage() {
   const { t, locale } = useI18n();
+  const { showToast } = useToast();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
-  const [dismissedModelUpdatesAt, setDismissedModelUpdatesAt] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return window.localStorage.getItem(MODEL_UPDATES_DISMISSED_AT_KEY);
-  });
+  const [savingClusterId, setSavingClusterId] = useState<string | null>(null);
+  const [dismissedModelUpdatesAt, setDismissedModelUpdatesAt] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   const briefingQuery = useQuery({
     queryKey: ["briefing-today", 18] as const,
     queryFn: () => api.getBriefingToday({ size: 18 }),
@@ -128,6 +129,39 @@ export default function BriefingPage() {
     setDismissedModelUpdatesAt(latest);
   };
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setHydrated(true);
+    setDismissedModelUpdatesAt(window.localStorage.getItem(MODEL_UPDATES_DISMISSED_AT_KEY));
+  }, []);
+
+  const isRefreshing = hydrated && briefingQuery.isFetching;
+
+  const saveClusterForLater = async (cluster: BriefingCluster) => {
+    const itemIds = Array.from(new Set((cluster.items ?? EMPTY_ITEMS).map((item) => item.id).filter(Boolean)));
+    if (itemIds.length === 0) {
+      showToast(t("briefing.clusterLaterEmpty"), "info");
+      return;
+    }
+    setSavingClusterId(cluster.id);
+    try {
+      const res = await api.markItemsLaterBulk({ item_ids: itemIds });
+      if (res.updated_count <= 0) {
+        showToast(t("briefing.clusterLaterEmpty"), "info");
+        return;
+      }
+      showToast(`${res.updated_count}${locale === "ja" ? "" : " "}${t("briefing.clusterLaterDone")}`, "success");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
+        queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
+      ]);
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setSavingClusterId(null);
+    }
+  };
+
   return (
     <PageTransition>
       <div className="space-y-6">
@@ -193,10 +227,10 @@ export default function BriefingPage() {
                       // keep current snapshot on refresh failure
                     });
                 }}
-                disabled={briefingQuery.isFetching}
+                disabled={isRefreshing}
                 className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 press focus-ring"
               >
-                {briefingQuery.isFetching ? t("briefing.refreshing") : t("common.refresh")}
+                {isRefreshing ? t("briefing.refreshing") : t("common.refresh")}
               </button>
               <Link
                 href="/triage?mode=all"
@@ -427,8 +461,18 @@ export default function BriefingPage() {
                       ) : null}
                     </div>
                     <span className="rounded-full border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-600">
-                      {cluster.topItems.length}
+                      {cluster.items.length}
                     </span>
+                  </div>
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => void saveClusterForLater(cluster)}
+                      disabled={savingClusterId === cluster.id}
+                      className="inline-flex items-center rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 press focus-ring disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {savingClusterId === cluster.id ? t("briefing.clusterLaterSaving") : t("briefing.clusterLater")}
+                    </button>
                   </div>
                   <ul className="mt-3 space-y-2">
                     {cluster.topItems.map((item) => (

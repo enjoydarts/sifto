@@ -143,6 +143,7 @@ func main() {
 			r.Patch("/{id}/feedback", itemH.SetFeedback)
 			r.Post("/{id}/read", itemH.MarkRead)
 			r.Post("/mark-read-bulk", itemH.MarkReadBulk)
+			r.Post("/mark-later-bulk", itemH.MarkLaterBulk)
 			r.Delete("/{id}/read", itemH.MarkUnread)
 			r.Post("/{id}/later", itemH.MarkLater)
 			r.Delete("/{id}/later", itemH.UnmarkLater)

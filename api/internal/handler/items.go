@@ -880,6 +880,32 @@ func (h *ItemHandler) UnmarkLater(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"item_id": id, "is_later": false})
 }
 
+func (h *ItemHandler) MarkLaterBulk(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		ItemIDs []string `json:"item_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if len(body.ItemIDs) == 0 {
+		http.Error(w, "item_ids is required", http.StatusBadRequest)
+		return
+	}
+	if len(body.ItemIDs) > 100 {
+		http.Error(w, "too many item_ids", http.StatusBadRequest)
+		return
+	}
+	updated, err := h.repo.MarkLaterBulk(r.Context(), userID, body.ItemIDs)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	h.invalidateUserCaches(r.Context(), userID)
+	writeJSON(w, map[string]any{"status": "ok", "updated_count": updated})
+}
+
 func (h *ItemHandler) SetFeedback(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	id := chi.URLParam(r, "id")

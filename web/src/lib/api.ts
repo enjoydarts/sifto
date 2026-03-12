@@ -642,7 +642,12 @@ export const api = {
   getSources: () => apiFetch<Source[]>("/sources"),
   getSourceHealth: () => apiFetch<{ items: SourceHealth[] }>("/sources/health"),
   exportSourcesOPML: async () => {
-    const res = await fetch("/api/sources/opml");
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch("/api/sources/opml", {
+      headers: {
+        ...authHeaders,
+      },
+    });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`${res.status}: ${text || res.statusText}`);

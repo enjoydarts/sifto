@@ -101,7 +101,7 @@ func main() {
 	// Inngest serve endpoint（認証不要）
 	r.Mount("/api/inngest", inngestHandler)
 
-	// NextAuth からのみ呼ばれる内部エンドポイント（X-Internal-Secret で保護）
+	// Next.js からのみ呼ばれる内部エンドポイント（X-Internal-Secret で保護）
 	r.Post("/api/internal/users/upsert", internalH.UpsertUser)
 	r.Post("/api/internal/users/resolve-identity", internalH.ResolveIdentity)
 	r.Post("/api/internal/debug/digests/generate", internalH.DebugGenerateDigest)

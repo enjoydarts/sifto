@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getInternalAPISecret, getInternalAPISecretError } from "@/lib/internal-secret";
 import { resolveServerAPIURL } from "@/lib/server-api-url";
 import { getServerAuthUser } from "@/lib/server-auth";
 
@@ -9,12 +10,9 @@ export async function POST(req: NextRequest) {
   }
 
   const apiUrl = resolveServerAPIURL();
-  const secret = process.env.NEXTAUTH_SECRET ?? "";
+  const secret = getInternalAPISecret();
   if (!secret) {
-    return NextResponse.json(
-      { error: "NEXTAUTH_SECRET is not set" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: getInternalAPISecretError() }, { status: 500 });
   }
 
   const body = await req.text();

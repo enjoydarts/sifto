@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"os"
 	"regexp"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 type contextKey string
@@ -31,37 +29,28 @@ func Auth(identityRepo *repository.UserIdentityRepo, clerkVerifier *service.Cler
 			}
 
 			bearerToken := extractBearerToken(r)
-			cookieToken := extractNextAuthCookieToken(r)
-			if bearerToken == "" && cookieToken == "" {
+			if bearerToken == "" {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
 
-			if bearerToken != "" && identityRepo != nil && clerkVerifier != nil && clerkVerifier.Enabled() {
-				claims, err := clerkVerifier.Verify(r.Context(), bearerToken)
-				if err == nil {
-					identity, lookupErr := identityRepo.GetByProviderUserID(r.Context(), "clerk", claims.Subject)
-					if lookupErr == nil && uuidPattern.MatchString(identity.UserID) {
-						ctx := context.WithValue(r.Context(), UserIDKey, identity.UserID)
-						next.ServeHTTP(w, r.WithContext(ctx))
-						return
-					}
-					http.Error(w, "unauthorized", http.StatusUnauthorized)
-					return
-				}
-			}
-
-			token := bearerToken
-			if token == "" {
-				token = cookieToken
-			}
-			userID, err := parseNextAuthUserID(token)
-			if err != nil || userID == "" || !uuidPattern.MatchString(userID) {
+			if identityRepo == nil || clerkVerifier == nil || !clerkVerifier.Enabled() {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), UserIDKey, userID)
+			claims, err := clerkVerifier.Verify(r.Context(), bearerToken)
+			if err != nil {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			identity, lookupErr := identityRepo.GetByProviderUserID(r.Context(), "clerk", claims.Subject)
+			if lookupErr != nil || !uuidPattern.MatchString(identity.UserID) {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), UserIDKey, identity.UserID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -87,36 +76,4 @@ func extractBearerToken(r *http.Request) string {
 		return strings.TrimPrefix(h, "Bearer ")
 	}
 	return ""
-}
-
-func extractNextAuthCookieToken(r *http.Request) string {
-	if c, err := r.Cookie("next-auth.session-token"); err == nil {
-		return c.Value
-	}
-	if c, err := r.Cookie("__Secure-next-auth.session-token"); err == nil {
-		return c.Value
-	}
-	return ""
-}
-
-func parseNextAuthUserID(token string) (string, error) {
-	secret := os.Getenv("NEXTAUTH_SECRET")
-	parsed, err := jwt.Parse(token, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, jwt.ErrSignatureInvalid
-		}
-		return []byte(secret), nil
-	})
-	if err != nil || !parsed.Valid {
-		if err == nil {
-			err = errors.New("invalid nextauth token")
-		}
-		return "", err
-	}
-	claims, ok := parsed.Claims.(jwt.MapClaims)
-	if !ok {
-		return "", errors.New("invalid nextauth claims")
-	}
-	userID, _ := claims["sub"].(string)
-	return userID, nil
 }

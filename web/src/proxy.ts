@@ -14,15 +14,8 @@ const isPublicRoute = createRouteMatcher([
   "/logo.png",
 ]);
 
-function hasLegacySessionCookie(req: Request & { cookies: { get: (name: string) => { value?: string } | undefined } }) {
-  return Boolean(
-    req.cookies.get("next-auth.session-token")?.value ||
-      req.cookies.get("__Secure-next-auth.session-token")?.value
-  );
-}
-
 export default clerkMiddleware(async (auth, req) => {
-  if (isPublicRoute(req) || hasLegacySessionCookie(req)) {
+  if (isPublicRoute(req)) {
     return NextResponse.next();
   }
 

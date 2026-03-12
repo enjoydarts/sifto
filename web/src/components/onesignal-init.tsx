@@ -2,9 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
-import { useSession } from "next-auth/react";
-
-const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 function isOneSignalLike(
   v: unknown
@@ -34,25 +31,8 @@ async function cleanupLegacyOneSignalRootWorker() {
 }
 
 export default function OneSignalInit() {
-  if (!clerkEnabled) {
-    return <OneSignalInitLegacy />;
-  }
-  return <OneSignalInitWithClerk />;
-}
-
-function OneSignalInitLegacy() {
-  const { data: session } = useSession();
-  return <OneSignalInitInner externalId={session?.user?.email ?? null} />;
-}
-
-function OneSignalInitWithClerk() {
-  const { data: session } = useSession();
   const { user } = useUser();
-  return (
-    <OneSignalInitInner
-      externalId={user?.primaryEmailAddress?.emailAddress ?? session?.user?.email ?? null}
-    />
-  );
+  return <OneSignalInitInner externalId={user?.primaryEmailAddress?.emailAddress ?? null} />;
 }
 
 function OneSignalInitInner({ externalId }: { externalId: string | null }) {

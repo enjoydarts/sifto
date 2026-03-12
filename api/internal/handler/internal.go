@@ -62,12 +62,12 @@ func NewInternalHandler(
 }
 
 func checkInternalSecret(r *http.Request) bool {
-	secret := os.Getenv("NEXTAUTH_SECRET")
+	secret := service.InternalAPISecretFromEnv()
 	return r.Header.Get("X-Internal-Secret") == secret
 }
 
 // UpsertUser はメールアドレスでユーザーを取得または作成して UUID を返す内部エンドポイント。
-// Next.js の NextAuth jwt コールバックから呼ばれる。X-Internal-Secret で保護。
+// Next.js の auth bridge / debug route から呼ばれる。X-Internal-Secret で保護。
 func (h *InternalHandler) UpsertUser(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalSecret(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)

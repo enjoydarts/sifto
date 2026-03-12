@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import { useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useUser } from "@clerk/nextjs";
 import { api, BulkRetryFailedResult, DigestDetail } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -168,7 +168,7 @@ function todayJstPlusOneDateString() {
 export default function DebugDigestsPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
-  const { data: session } = useSession();
+  const { user } = useUser();
   const [userId, setUserId] = useState("00000000-0000-0000-0000-000000000001");
   const [digestDate, setDigestDate] = useState(todayJstPlusOneDateString());
   const [skipSend, setSkipSend] = useState(true);
@@ -304,7 +304,7 @@ export default function DebugDigestsPage() {
         init_error: window.__siftoOneSignalInitError ?? null,
         permission,
         opted_in: optedIn,
-        login_external_id: session?.user?.email ?? null,
+        login_external_id: user?.primaryEmailAddress?.emailAddress ?? null,
         subscription_id: subscriptionId,
         sw_scopes: scopes,
         sw_registrations: swRegistrations,
@@ -321,7 +321,7 @@ export default function DebugDigestsPage() {
   useEffect(() => {
     loadOneSignalDebug();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.email]);
+  }, [user?.primaryEmailAddress?.emailAddress]);
 
   useEffect(() => {
     if (!oneSignalDebug?.subscription_id) return;

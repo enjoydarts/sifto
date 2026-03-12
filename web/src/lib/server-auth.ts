@@ -1,21 +1,11 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 
 export interface ServerAuthUser {
-  provider: "clerk" | "nextauth";
+  provider: "clerk";
   email: string | null;
 }
 
 export async function getServerAuthUser(): Promise<ServerAuthUser | null> {
-  const session = await getServerSession(authOptions);
-  if (session?.user) {
-    return {
-      provider: "nextauth",
-      email: session.user.email ?? null,
-    };
-  }
-
   const clerkEnabled = Boolean(
     process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY
   );

@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useClerk, useUser } from "@clerk/nextjs";
+import { useAuth, useClerk, useUser } from "@clerk/nextjs";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
 import {
   Activity,
   Brain,
@@ -20,8 +19,6 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import PWAInstallButton from "@/components/pwa-install";
-
-const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 const primaryLinks = [
   { href: "/", labelKey: "nav.briefing", icon: Sparkles },
@@ -45,14 +42,7 @@ type SharedNavProps = {
 };
 
 export default function Nav() {
-  if (!clerkEnabled) {
-    return <LegacyNav />;
-  }
-  return <HybridNav />;
-}
-
-function HybridNav() {
-  const { data: session } = useSession();
+  const { isSignedIn, userId } = useAuth();
   const { user } = useUser();
   const clerk = useClerk();
 
@@ -61,26 +51,11 @@ function HybridNav() {
       displayName={
         user?.fullName ??
         user?.primaryEmailAddress?.emailAddress ??
-        session?.user?.name ??
-        session?.user?.email ??
+        userId ??
         null
       }
-      hasSignedInUser={Boolean(user || session?.user)}
-      onSignOut={() =>
-        user ? clerk.signOut({ redirectUrl: "/login" }) : signOut({ callbackUrl: "/login" })
-      }
-    />
-  );
-}
-
-function LegacyNav() {
-  const { data: session } = useSession();
-
-  return (
-    <NavShell
-      displayName={session?.user?.name ?? session?.user?.email ?? null}
-      hasSignedInUser={Boolean(session?.user)}
-      onSignOut={() => signOut({ callbackUrl: "/login" })}
+      hasSignedInUser={Boolean(isSignedIn || userId)}
+      onSignOut={() => clerk.signOut({ redirectUrl: "/login" })}
     />
   );
 }

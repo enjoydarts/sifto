@@ -104,32 +104,39 @@ func BuildBriefingToday(
 		return items[i].CreatedAt.After(items[j].CreatedAt)
 	})
 
-	highlight, err := itemRepo.HighlightItems24h(ctx, userID, 0.78, 4)
-	if err != nil {
-		highlight = nil
-	}
-	if len(highlight) == 0 {
-		highlightCount := minInt(4, len(items))
-		highlight = make([]model.Item, 0, highlightCount)
-		highlight = append(highlight, items[:highlightCount]...)
-	}
-	highlightIDs := make(map[string]struct{}, len(highlight))
-	for _, it := range highlight {
-		highlightIDs[it.ID] = struct{}{}
-	}
-
 	briefingClusters, err := itemRepo.BriefingClusters24h(ctx, userID, clusterLimit)
 	if err != nil {
 		return nil, err
+	}
+
+	highlight := make([]model.Item, 0, 6)
+	seenHighlightIDs := make(map[string]struct{}, 6)
+	for pass := 0; pass < 3 && len(highlight) < 6; pass++ {
+		for _, cluster := range briefingClusters {
+			if pass >= len(cluster.Items) {
+				continue
+			}
+			item := cluster.Items[pass]
+			if _, exists := seenHighlightIDs[item.ID]; exists {
+				continue
+			}
+			seenHighlightIDs[item.ID] = struct{}{}
+			highlight = append(highlight, item)
+			if len(highlight) >= 6 {
+				break
+			}
+		}
+	}
+	if len(highlight) == 0 {
+		highlightCount := minInt(6, len(items))
+		highlight = make([]model.Item, 0, highlightCount)
+		highlight = append(highlight, items[:highlightCount]...)
 	}
 
 	summaryItemIDs := make([]string, 0, len(briefingClusters)*3)
 	for _, c := range briefingClusters {
 		added := 0
 		for _, it := range c.Items {
-			if _, duplicated := highlightIDs[it.ID]; duplicated {
-				continue
-			}
 			summaryItemIDs = append(summaryItemIDs, it.ID)
 			added++
 			if added >= 3 {
@@ -144,19 +151,12 @@ func BuildBriefingToday(
 
 	clusters := make([]model.BriefingCluster, 0, len(briefingClusters))
 	for _, c := range briefingClusters {
-		filteredItems := make([]model.Item, 0, len(c.Items))
-		for _, it := range c.Items {
-			if _, duplicated := highlightIDs[it.ID]; duplicated {
-				continue
-			}
-			filteredItems = append(filteredItems, it)
-		}
-		if len(filteredItems) == 0 {
+		if len(c.Items) == 0 {
 			continue
 		}
 		var maxScore *float64
-		if filteredItems[0].SummaryScore != nil {
-			v := *filteredItems[0].SummaryScore
+		if c.Items[0].SummaryScore != nil {
+			v := *c.Items[0].SummaryScore
 			maxScore = &v
 		} else if c.Representative.SummaryScore != nil {
 			v := *c.Representative.SummaryScore
@@ -165,10 +165,10 @@ func BuildBriefingToday(
 		clusters = append(clusters, model.BriefingCluster{
 			ID:       c.ID,
 			Label:    c.Label,
-			Summary:  buildClusterSummary(filteredItems, summaryMap),
+			Summary:  buildClusterSummary(c.Items, summaryMap),
 			MaxScore: maxScore,
 			Topics:   c.Representative.SummaryTopics,
-			Items:    filteredItems,
+			Items:    c.Items,
 		})
 	}
 

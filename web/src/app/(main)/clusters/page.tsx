@@ -199,7 +199,7 @@ export default function ClustersPage() {
           <div className="grid gap-5 xl:grid-cols-2">
             {rows.map((cluster, idx) => (
               <div key={cluster.id} className="relative">
-                {rows[idx + 1] ? (
+                {idx === 0 && rows[idx + 1] ? (
                   <div
                     aria-hidden="true"
                     className="pointer-events-none absolute inset-x-3 top-3 h-full rounded-[28px] border border-zinc-200/70 bg-zinc-50 shadow-sm"

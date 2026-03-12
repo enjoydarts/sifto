@@ -6,9 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path"
-	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
@@ -201,18 +201,44 @@ func wikilink(v string) string {
 	return "[[" + s + "]]"
 }
 
-var slugUnsafe = regexp.MustCompile(`[^a-z0-9]+`)
-
 func slugify(title, fallback string) string {
-	s := strings.ToLower(strings.TrimSpace(title))
-	s = strings.ReplaceAll(s, "'", "")
-	s = slugUnsafe.ReplaceAllString(s, "-")
-	s = strings.Trim(s, "-")
+	raw := strings.TrimSpace(title)
+	if raw == "" {
+		return fallback
+	}
+	var b strings.Builder
+	lastWasSep := false
+	for _, r := range raw {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsNumber(r):
+			b.WriteRune(r)
+			lastWasSep = false
+		case r == ' ' || r == '-' || r == '_' || r == '・':
+			if !lastWasSep {
+				b.WriteRune('-')
+				lastWasSep = true
+			}
+		case strings.ContainsRune(`'"`+"`~!@#$%^&*()+=[]{}|\\:;<>?,./", r):
+			if !lastWasSep {
+				b.WriteRune('-')
+				lastWasSep = true
+			}
+		default:
+			if unicode.IsPunct(r) || unicode.IsSymbol(r) {
+				if !lastWasSep {
+					b.WriteRune('-')
+					lastWasSep = true
+				}
+			}
+		}
+	}
+	s := strings.Trim(b.String(), "-")
 	if s == "" {
 		return fallback
 	}
-	if len(s) > 80 {
-		s = strings.Trim(s[:80], "-")
+	runes := []rune(s)
+	if len(runes) > 80 {
+		s = strings.Trim(string(runes[:80]), "-")
 	}
 	return s
 }

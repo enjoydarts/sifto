@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"sort"
+	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -172,11 +173,113 @@ func (r *ItemRepo) readingPlanClustersByEmbeddings(ctx context.Context, items []
 	return reorderReadingPlanClustersMMR(clusters, embByID), nil
 }
 
+func (r *ItemRepo) briefingClustersByEmbeddings(ctx context.Context, items []model.Item) ([]model.ReadingPlanCluster, error) {
+	if len(items) < 2 {
+		return nil, nil
+	}
+	itemIDs := make([]string, 0, len(items))
+	for _, it := range items {
+		itemIDs = append(itemIDs, it.ID)
+	}
+	embByID, err := loadItemEmbeddingsByID(ctx, r.db, itemIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(embByID) < 2 {
+		return nil, nil
+	}
+
+	used := make([]bool, len(items))
+	clusters := make([]model.ReadingPlanCluster, 0, len(items)/2)
+	for i := range items {
+		if used[i] {
+			continue
+		}
+		seed := items[i]
+		seedEmb, ok := embByID[seed.ID]
+		if !ok || len(seedEmb) == 0 {
+			continue
+		}
+		used[i] = true
+		members := []model.Item{seed}
+		maxSim := 0.0
+		for j := i + 1; j < len(items); j++ {
+			if used[j] {
+				continue
+			}
+			cand := items[j]
+			cEmb, ok := embByID[cand.ID]
+			if !ok || len(cEmb) == 0 {
+				continue
+			}
+			match := false
+			bestSim := 0.0
+			for _, member := range members {
+				mEmb, ok := embByID[member.ID]
+				if !ok || len(mEmb) == 0 {
+					continue
+				}
+				sim := cosineSimilarity(mEmb, cEmb)
+				if sim > bestSim {
+					bestSim = sim
+				}
+				if shouldClusterBriefing(member, cand, sim) {
+					match = true
+					break
+				}
+			}
+			if match {
+				used[j] = true
+				members = append(members, cand)
+				if bestSim > maxSim {
+					maxSim = bestSim
+				}
+			}
+		}
+		if len(members) < 2 {
+			continue
+		}
+		sortClusterMembers(members)
+		representative := members[0]
+		clusters = append(clusters, model.ReadingPlanCluster{
+			ID:             representative.ID,
+			Label:          readingPlanClusterLabel(representative),
+			Size:           len(members),
+			MaxSimilarity:  maxSim,
+			Representative: representative,
+			Items:          members,
+		})
+	}
+
+	sort.SliceStable(clusters, func(i, j int) bool {
+		si := briefingClusterRankScore(clusters[i])
+		sj := briefingClusterRankScore(clusters[j])
+		if si != sj {
+			return si > sj
+		}
+		if clusters[i].Size != clusters[j].Size {
+			return clusters[i].Size > clusters[j].Size
+		}
+		return clusters[i].Representative.CreatedAt.After(clusters[j].Representative.CreatedAt)
+	})
+	return clusters, nil
+}
+
 func shouldClusterReadingPlan(seed, cand model.Item, similarity float64) bool {
 	if similarity >= 0.68 {
 		return true
 	}
 	if similarity < 0.50 {
+		return false
+	}
+	return hasTopicOverlap(seed.SummaryTopics, cand.SummaryTopics)
+}
+
+func shouldClusterBriefing(seed, cand model.Item, similarity float64) bool {
+	if similarity >= 0.64 {
+		return true
+	}
+	if similarity < 0.45 {
 		return false
 	}
 	return hasTopicOverlap(seed.SummaryTopics, cand.SummaryTopics)
@@ -201,6 +304,23 @@ func hasTopicOverlap(a, b []string) bool {
 	return false
 }
 
+func sortClusterMembers(items []model.Item) {
+	sort.SliceStable(items, func(a, b int) bool {
+		as := -1.0
+		if items[a].SummaryScore != nil {
+			as = *items[a].SummaryScore
+		}
+		bs := -1.0
+		if items[b].SummaryScore != nil {
+			bs = *items[b].SummaryScore
+		}
+		if as != bs {
+			return as > bs
+		}
+		return items[a].CreatedAt.After(items[b].CreatedAt)
+	})
+}
+
 func readingPlanClusterLabel(it model.Item) string {
 	for _, t := range it.SummaryTopics {
 		if t != "" {
@@ -211,6 +331,49 @@ func readingPlanClusterLabel(it model.Item) string {
 		return *it.Title
 	}
 	return "Related"
+}
+
+func briefingClusterRankScore(c model.ReadingPlanCluster) float64 {
+	score := 0.0
+	if c.Representative.SummaryScore != nil {
+		score = *c.Representative.SummaryScore
+	}
+	sizeBonus := math.Min(0.30, float64(c.Size-1)*0.06)
+	diversityBonus := math.Min(0.12, float64(clusterSourceDiversity(c)-1)*0.04)
+	freshnessBonus := briefingClusterFreshnessBonus(c.Representative)
+	return score + sizeBonus + diversityBonus + freshnessBonus
+}
+
+func clusterSourceDiversity(c model.ReadingPlanCluster) int {
+	if len(c.Items) == 0 {
+		return 0
+	}
+	seen := make(map[string]struct{}, len(c.Items))
+	for _, item := range c.Items {
+		if item.SourceID == "" {
+			continue
+		}
+		seen[item.SourceID] = struct{}{}
+	}
+	if len(seen) == 0 {
+		return 1
+	}
+	return len(seen)
+}
+
+func briefingClusterFreshnessBonus(item model.Item) float64 {
+	ts := item.CreatedAt
+	if item.PublishedAt != nil {
+		ts = *item.PublishedAt
+	}
+	ageHours := time.Since(ts).Hours()
+	if ageHours <= 0 {
+		return 0.12
+	}
+	if ageHours >= 24 {
+		return 0
+	}
+	return 0.12 * (1 - ageHours/24)
 }
 
 func reorderReadingPlanClustersMMR(clusters []model.ReadingPlanCluster, embByID map[string][]float64) []model.ReadingPlanCluster {

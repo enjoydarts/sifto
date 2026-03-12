@@ -810,6 +810,7 @@ export const api = {
   markItemUnread: (id: string) =>
     apiFetch<ItemReadResult>(`/items/${id}/read`, { method: "DELETE" }),
   markItemsReadBulk: (body: {
+    item_ids?: string[];
     status?: string | null;
     source_id?: string | null;
     topic?: string | null;
@@ -822,6 +823,11 @@ export const api = {
     apiFetch<BulkMarkReadResult>("/items/mark-read-bulk", {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+  markItemsReadByIDs: (itemIds: string[]) =>
+    apiFetch<BulkMarkReadResult>("/items/mark-read-bulk", {
+      method: "POST",
+      body: JSON.stringify({ item_ids: itemIds }),
     }),
   markItemLater: (id: string) =>
     apiFetch<ItemLaterResult>(`/items/${id}/later`, { method: "POST" }),

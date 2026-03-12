@@ -823,17 +823,32 @@ func (h *ItemHandler) MarkUnread(w http.ResponseWriter, r *http.Request) {
 func (h *ItemHandler) MarkReadBulk(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	var body struct {
-		Status        *string `json:"status"`
-		SourceID      *string `json:"source_id"`
-		Topic         *string `json:"topic"`
-		UnreadOnly    bool    `json:"unread_only"`
-		ReadOnly      bool    `json:"read_only"`
-		FavoriteOnly  bool    `json:"favorite_only"`
-		LaterOnly     bool    `json:"later_only"`
-		OlderThanDays *int    `json:"older_than_days"`
+		ItemIDs       []string `json:"item_ids"`
+		Status        *string  `json:"status"`
+		SourceID      *string  `json:"source_id"`
+		Topic         *string  `json:"topic"`
+		UnreadOnly    bool     `json:"unread_only"`
+		ReadOnly      bool     `json:"read_only"`
+		FavoriteOnly  bool     `json:"favorite_only"`
+		LaterOnly     bool     `json:"later_only"`
+		OlderThanDays *int     `json:"older_than_days"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if len(body.ItemIDs) > 0 {
+		if len(body.ItemIDs) > 100 {
+			http.Error(w, "too many item_ids", http.StatusBadRequest)
+			return
+		}
+		updated, err := h.repo.MarkReadBulkByIDs(r.Context(), userID, body.ItemIDs)
+		if err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		h.invalidateUserCaches(r.Context(), userID)
+		writeJSON(w, map[string]any{"status": "ok", "updated_count": updated})
 		return
 	}
 	if body.UnreadOnly && body.ReadOnly {

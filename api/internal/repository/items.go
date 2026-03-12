@@ -320,6 +320,52 @@ func (r *ItemRepo) MarkReadBulk(ctx context.Context, userID string, p BulkMarkRe
 	return inserted, err
 }
 
+func (r *ItemRepo) MarkReadBulkByIDs(ctx context.Context, userID string, itemIDs []string) (int, error) {
+	if len(itemIDs) == 0 {
+		return 0, nil
+	}
+	unique := make([]string, 0, len(itemIDs))
+	seen := make(map[string]struct{}, len(itemIDs))
+	for _, itemID := range itemIDs {
+		itemID = strings.TrimSpace(itemID)
+		if itemID == "" {
+			continue
+		}
+		if _, ok := seen[itemID]; ok {
+			continue
+		}
+		seen[itemID] = struct{}{}
+		unique = append(unique, itemID)
+	}
+	if len(unique) == 0 {
+		return 0, nil
+	}
+
+	var inserted int
+	err := r.db.QueryRow(ctx, `
+		WITH target_items AS (
+			SELECT i.id
+			FROM items i
+			JOIN sources s ON s.id = i.source_id
+			WHERE s.user_id = $1
+			  AND i.id = ANY($2::uuid[])
+		), inserted_rows AS (
+			INSERT INTO item_reads (user_id, item_id, read_at)
+			SELECT $1, t.id, NOW()
+			FROM target_items t
+			ON CONFLICT (user_id, item_id) DO NOTHING
+			RETURNING item_id
+		), deleted_laters AS (
+			DELETE FROM item_laters il
+			USING target_items t
+			WHERE il.user_id = $1
+			  AND il.item_id = t.id
+		)
+		SELECT COUNT(*)::int FROM inserted_rows
+	`, userID, unique).Scan(&inserted)
+	return inserted, err
+}
+
 func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlanParams) (*model.ReadingPlanResponse, error) {
 	if p.Size <= 0 {
 		p.Size = 15
@@ -443,6 +489,62 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 // logic as ReadingPlan (without filtering by selected IDs).
 func (r *ItemRepo) ClusterItemsByEmbeddings(ctx context.Context, items []model.Item) ([]model.ReadingPlanCluster, error) {
 	return r.readingPlanClustersByEmbeddings(ctx, items, nil)
+}
+
+func (r *ItemRepo) BriefingClusters24h(ctx context.Context, userID string, limit int) ([]model.ReadingPlanCluster, error) {
+	if limit <= 0 {
+		limit = 16
+	}
+	if limit > 40 {
+		limit = 40
+	}
+	const candidateLimit = 800
+	rows, err := r.db.Query(ctx, `
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status,
+		       fc.final_result AS facts_check_result,
+		       sfc.final_result AS faithfulness_result,
+		       (ir.item_id IS NOT NULL) AS is_read,
+		       COALESCE(fb.is_favorite, false) AS is_favorite,
+		       COALESCE(fb.rating, 0) AS feedback_rating,
+		       sm.score, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
+		       i.published_at, i.fetched_at, i.created_at, i.updated_at
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		JOIN item_summaries sm ON sm.item_id = i.id
+		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
+		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
+		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
+		WHERE s.user_id = $1
+		  AND i.status = 'summarized'
+		  AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '24 hours'
+		  AND ir.item_id IS NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM item_laters il
+			WHERE il.user_id = $1
+			  AND il.item_id = i.id
+		  )
+		ORDER BY sm.score DESC NULLS LAST, COALESCE(i.published_at, i.created_at) DESC
+		LIMIT $2`,
+		userID, candidateLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	candidates, err := scanItems(rows)
+	if err != nil {
+		return nil, err
+	}
+	clusters, err := r.briefingClustersByEmbeddings(ctx, candidates)
+	if err != nil {
+		return nil, err
+	}
+	if len(clusters) > limit {
+		clusters = clusters[:limit]
+	}
+	return clusters, nil
 }
 
 func (r *ItemRepo) readingPlanTopics(ctx context.Context, userID string, p ReadingPlanParams) ([]model.ReadingPlanTopic, error) {

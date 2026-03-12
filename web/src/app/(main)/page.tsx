@@ -161,6 +161,32 @@ export default function BriefingPage() {
       setSavingClusterId(null);
     }
   };
+  const markClusterRead = async (cluster: BriefingCluster) => {
+    const itemIds = Array.from(
+      new Set((cluster.items ?? EMPTY_ITEMS).filter((item) => !item.is_read).map((item) => item.id).filter(Boolean))
+    );
+    if (itemIds.length === 0) {
+      showToast(t("briefing.clusterReadEmpty"), "info");
+      return;
+    }
+    setSavingClusterId(`read:${cluster.id}`);
+    try {
+      const res = await api.markItemsReadByIDs(itemIds);
+      if (res.updated_count <= 0) {
+        showToast(t("briefing.clusterReadEmpty"), "info");
+        return;
+      }
+      showToast(`${res.updated_count}${locale === "ja" ? "" : " "}${t("briefing.clusterReadDone")}`, "success");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
+        queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
+      ]);
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setSavingClusterId(null);
+    }
+  };
 
   return (
     <PageTransition>
@@ -435,9 +461,14 @@ export default function BriefingPage() {
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.clusters")}</h2>
-            <Link href="/items?feed=recommended" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
-              {t("briefing.openRecommended")}
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link href="/clusters" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
+                {t("briefing.openClusters")}
+              </Link>
+              <Link href="/items?feed=recommended" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
+                {t("briefing.openRecommended")}
+              </Link>
+            </div>
           </div>
           {loading ? (
             <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -464,14 +495,22 @@ export default function BriefingPage() {
                       {cluster.items.length}
                     </span>
                   </div>
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => void saveClusterForLater(cluster)}
-                      disabled={savingClusterId === cluster.id}
+                      disabled={savingClusterId === cluster.id || savingClusterId === `read:${cluster.id}`}
                       className="inline-flex items-center rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 press focus-ring disabled:cursor-wait disabled:opacity-60"
                     >
                       {savingClusterId === cluster.id ? t("briefing.clusterLaterSaving") : t("briefing.clusterLater")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void markClusterRead(cluster)}
+                      disabled={savingClusterId === cluster.id || savingClusterId === `read:${cluster.id}`}
+                      className="inline-flex items-center rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 press focus-ring disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {savingClusterId === `read:${cluster.id}` ? t("briefing.clusterReadSaving") : t("briefing.clusterRead")}
                     </button>
                   </div>
                   <ul className="mt-3 space-y-2">

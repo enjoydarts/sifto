@@ -48,6 +48,7 @@ func BuildBriefingToday(
 		size = 30
 	}
 	const streakTarget = 3
+	const clusterLimit = 16
 	start := timeutil.StartOfDayJST(targetDate)
 	dateStr := start.Format("2006-01-02")
 
@@ -117,8 +118,13 @@ func BuildBriefingToday(
 		highlightIDs[it.ID] = struct{}{}
 	}
 
-	summaryItemIDs := make([]string, 0, len(plan.Clusters)*3)
-	for _, c := range plan.Clusters {
+	briefingClusters, err := itemRepo.BriefingClusters24h(ctx, userID, clusterLimit)
+	if err != nil {
+		return nil, err
+	}
+
+	summaryItemIDs := make([]string, 0, len(briefingClusters)*3)
+	for _, c := range briefingClusters {
 		added := 0
 		for _, it := range c.Items {
 			if _, duplicated := highlightIDs[it.ID]; duplicated {
@@ -136,8 +142,8 @@ func BuildBriefingToday(
 		summaryMap = map[string]string{}
 	}
 
-	clusters := make([]model.BriefingCluster, 0, len(plan.Clusters))
-	for _, c := range plan.Clusters {
+	clusters := make([]model.BriefingCluster, 0, len(briefingClusters))
+	for _, c := range briefingClusters {
 		filteredItems := make([]model.Item, 0, len(c.Items))
 		for _, it := range c.Items {
 			if _, duplicated := highlightIDs[it.ID]; duplicated {

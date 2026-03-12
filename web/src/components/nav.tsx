@@ -9,6 +9,7 @@ import {
   Activity,
   Brain,
   Bug,
+  Layers3,
   Mail,
   Newspaper,
   Rss,
@@ -22,6 +23,7 @@ import PWAInstallButton from "@/components/pwa-install";
 
 const primaryLinks = [
   { href: "/", labelKey: "nav.briefing", icon: Sparkles },
+  { href: "/clusters", labelKey: "nav.clusters", icon: Layers3 },
   { href: "/items", labelKey: "nav.items", icon: Newspaper },
   { href: "/pulse", labelKey: "nav.pulse", icon: Activity },
 ];

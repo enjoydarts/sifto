@@ -17,6 +17,7 @@ from app.services.llm_text_utils import (
     extract_compose_digest_fields as _extract_compose_digest_fields,
     extract_first_json_object as _extract_first_json_object,
     extract_json_string_value_loose as _extract_json_string_value_loose,
+    facts_need_japanese_localization as _facts_need_japanese_localization,
     normalize_url_for_match as _normalize_url_for_match,
     parse_json_string_array as _parse_json_string_array,
     strip_code_fence as _strip_code_fence,
@@ -53,7 +54,7 @@ from app.services.feed_task_common import (
     parse_rank_feed_result,
     parse_seed_sites_result,
 )
-from app.services.facts_task_common import build_facts_task, parse_facts_result
+from app.services.facts_task_common import build_facts_localization_task, build_facts_task, parse_facts_result
 from app.services.task_transport_common import wrap_usage_transport
 
 _log = logging.getLogger(__name__)
@@ -399,6 +400,21 @@ def extract_facts(title: str | None, content: str, model: str, api_key: str) -> 
     facts = parse_facts_result(text)
     if not facts:
         raise RuntimeError(f"gemini extract_facts parse failed: response_snippet={text[:500]}")
+    if _facts_need_japanese_localization(facts):
+        localize_task = build_facts_localization_task(title, facts)
+        localized_text, localized_usage = _generate_content(
+            localize_task["prompt"],
+            model=model,
+            api_key=api_key,
+            max_output_tokens=1200,
+            system_instruction=localize_task["system_instruction"],
+            response_schema=localize_task["schema"],
+        )
+        localized_facts = parse_facts_result(localized_text)
+        if localized_facts:
+            facts = localized_facts
+            usage["input_tokens"] = int(usage.get("input_tokens", 0)) + int(localized_usage.get("input_tokens", 0))
+            usage["output_tokens"] = int(usage.get("output_tokens", 0)) + int(localized_usage.get("output_tokens", 0))
     return {"facts": facts, "llm": _llm_meta(model, "facts", usage)}
 
 

@@ -22,6 +22,38 @@ FACTS_SCHEMA = {
 }
 
 
+def build_facts_localization_task(title: str | None, facts: list[str]) -> dict:
+    facts_text = "\n".join(f"- {str(f).strip()}" for f in (facts or []) if str(f).strip())
+    system_instruction = """# Role
+あなたはニュース記事の事実リストを日本語へ整える編集者です。
+
+# Task
+与えられた facts を、意味を変えずに自然な日本語へ統一してください。
+
+# Rules
+- 出力は必ず {"facts": ["...", "..."]} のJSONオブジェクト1つのみ
+- 各 facts は必ず日本語の文字を1文字以上含める
+- 固有名詞・企業名・製品名・人名・数値・記号は原文を尊重してよい
+- 英文の文構造を残さず、日本語の箇条書きとして自然に言い換える
+- 事実の追加・削除・推測は禁止"""
+    prompt = f"""# Output
+{{
+  "facts": ["日本語化した事実1", "日本語化した事実2"]
+}}
+
+# Input
+タイトル: {title or '（不明）'}
+
+facts:
+{facts_text}
+"""
+    return {
+        "system_instruction": system_instruction,
+        "prompt": prompt,
+        "schema": FACTS_SCHEMA,
+    }
+
+
 def build_facts_task(title: str | None, content: str, *, output_mode: str = "object", fact_range: str = "8〜18個") -> dict:
     output_rule = (
         '- 出力は必ず {"facts": ["...", "..."]} のJSONオブジェクト1つのみにしてください。'
@@ -39,6 +71,7 @@ def build_facts_task(title: str | None, content: str, *, output_mode: str = "obj
 - 余計な挨拶や解説は一切不要です。
 - 事実は客観的かつ具体的に記述してください。
 - 記事が英語の場合も、出力は自然な日本語にしてください。
+- 各 fact は必ず日本語の文字を1文字以上含めてください。
 - 固有名詞は原文を尊重し、適宜英字を維持してください。"""
     prompt_fallback = f"""# Input
 タイトル: {title or '（不明）'}

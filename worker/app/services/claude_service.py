@@ -16,6 +16,7 @@ from app.services.llm_text_utils import (
     extract_compose_digest_fields as _extract_compose_digest_fields,
     extract_first_json_object as _extract_first_json_object,
     extract_json_string_value_loose as _extract_json_string_value_loose,
+    facts_need_japanese_localization as _facts_need_japanese_localization,
     parse_json_string_array as _parse_json_string_array,
     strip_code_fence as _strip_code_fence,
     summary_composite_score as _summary_composite_score,
@@ -52,7 +53,7 @@ from app.services.feed_task_common import (
     parse_rank_feed_result,
     parse_seed_sites_result,
 )
-from app.services.facts_task_common import build_facts_task, parse_facts_result
+from app.services.facts_task_common import build_facts_localization_task, build_facts_task, parse_facts_result
 from app.services.task_transport_common import empty_llm_meta, wrap_message_fallback_transport, wrap_message_transport
 
 _client = None
@@ -359,6 +360,22 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
         }
 
     merged_facts = _merge_fact_lists(all_fact_lists, max_items=24)
+    if merged_facts and _facts_need_japanese_localization(merged_facts):
+        localize_task = build_facts_localization_task(title, merged_facts)
+        message, used_model = _call_with_model_fallback(
+            f"{localize_task['system_instruction']}\n\n{localize_task['prompt']}",
+            str(model or _facts_model),
+            _facts_model_fallback,
+            max_tokens=1024,
+            api_key=api_key,
+            system_prompt=localize_task["system_instruction"],
+            user_prompt=localize_task["prompt"],
+        )
+        if message is not None:
+            localized_facts = parse_facts_result(message.content[0].text.strip())
+            if localized_facts:
+                merged_facts = localized_facts
+                llm_metas.append(_llm_meta(message, "facts", used_model or _facts_model))
     llm = _merge_llm_metas(llm_metas, "facts")
     llm["chunk_count"] = len(chunks)
     llm["chunk_success_count"] = len(llm_metas)

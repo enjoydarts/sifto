@@ -275,7 +275,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
           showBottomNav ? "" : "hidden"
         }`}
       >
-        <div className="mx-auto grid max-w-md grid-cols-4 gap-1">
+        <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
           {primaryLinks.map(({ href, labelKey, icon: Icon }) => {
             const active = isActive(href);
             return (

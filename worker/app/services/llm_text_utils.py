@@ -178,6 +178,14 @@ def contains_japanese(text: str) -> bool:
     return re.search(r"[\u3040-\u30ff\u3400-\u9fff]", s) is not None
 
 
+def facts_need_japanese_localization(facts: list[str]) -> bool:
+    cleaned = [str(v).strip() for v in (facts or []) if str(v).strip()]
+    if not cleaned:
+        return False
+    japanese_count = sum(1 for fact in cleaned if contains_japanese(fact))
+    return japanese_count * 2 < len(cleaned)
+
+
 def needs_title_translation(title: str | None, translated_title: str) -> bool:
     src = (title or "").strip()
     if not src:

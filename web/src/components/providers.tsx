@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ClerkProvider } from "@clerk/nextjs";
+import { ClerkProvider, useAuth } from "@clerk/nextjs";
+import { usePathname, useRouter } from "next/navigation";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { I18nProvider } from "@/components/i18n-provider";
 import { useI18n } from "@/components/i18n-provider";
@@ -132,7 +133,40 @@ function ProvidersWithI18n({
       publishableKey={clerkPublishableKey}
       localization={locale === "ja" ? clerkJapaneseLocalization : undefined}
     >
-      {children}
+      <ProtectedAppGate>{children}</ProtectedAppGate>
     </ClerkProvider>
   );
+}
+
+function ProtectedAppGate({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { isLoaded, isSignedIn } = useAuth();
+  const { t } = useI18n();
+
+  const isPublicRoute = pathname === "/login";
+
+  useEffect(() => {
+    if (isPublicRoute) return;
+    if (!isLoaded) return;
+    if (isSignedIn) return;
+    const callbackUrl = pathname || "/";
+    router.replace(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+  }, [isLoaded, isPublicRoute, isSignedIn, pathname, router]);
+
+  if (isPublicRoute) {
+    return <>{children}</>;
+  }
+
+  if (!isLoaded || !isSignedIn) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-6">
+        <div className="rounded-2xl border border-zinc-200 bg-white px-5 py-4 text-sm text-zinc-600 shadow-sm">
+          {t("common.loading")}
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }

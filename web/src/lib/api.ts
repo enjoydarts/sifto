@@ -571,14 +571,29 @@ export interface AskResponse {
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const authHeaders = await getAuthHeaders();
+  let res = await fetch(`/api${path}`, {
     cache: "no-store",
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders,
       ...options?.headers,
     },
   });
+  if (res.status === 401 && authHeaders.Authorization) {
+    await resolveClerkIdentityIfNeeded();
+    const retryAuthHeaders = await getAuthHeaders();
+    res = await fetch(`/api${path}`, {
+      cache: "no-store",
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...retryAuthHeaders,
+        ...options?.headers,
+      },
+    });
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`${res.status}: ${text || res.statusText}`);
@@ -587,12 +602,52 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (typeof window === "undefined") return {};
+  const token = await window.__siftoGetAuthToken?.().catch(() => null);
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
+}
+
+async function resolveClerkIdentityIfNeeded(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (window.__siftoClerkIdentityResolved) return;
+  if (window.__siftoClerkIdentityPromise) {
+    await window.__siftoClerkIdentityPromise.catch(() => undefined);
+    return;
+  }
+  const promise = fetch("/api/auth/clerk/resolve-identity", {
+    method: "POST",
+    cache: "no-store",
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `resolve identity failed: ${res.status}`);
+      }
+      window.__siftoClerkIdentityResolved = true;
+    })
+    .catch(() => {
+      window.__siftoClerkIdentityResolved = false;
+    })
+    .finally(() => {
+      window.__siftoClerkIdentityPromise = undefined;
+    });
+  window.__siftoClerkIdentityPromise = promise;
+  await promise;
+}
+
 export const api = {
   // Sources
   getSources: () => apiFetch<Source[]>("/sources"),
   getSourceHealth: () => apiFetch<{ items: SourceHealth[] }>("/sources/health"),
   exportSourcesOPML: async () => {
-    const res = await fetch("/api/sources/opml");
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch("/api/sources/opml", {
+      headers: {
+        ...authHeaders,
+      },
+    });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`${res.status}: ${text || res.statusText}`);

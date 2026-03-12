@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { useSession } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useUser } from "@clerk/nextjs";
 
 function isOneSignalLike(
   v: unknown
@@ -32,8 +31,11 @@ async function cleanupLegacyOneSignalRootWorker() {
 }
 
 export default function OneSignalInit() {
-  const { data: session } = useSession();
-  const externalId = session?.user?.email ?? null;
+  const { user } = useUser();
+  return <OneSignalInitInner externalId={user?.primaryEmailAddress?.emailAddress ?? null} />;
+}
+
+function OneSignalInitInner({ externalId }: { externalId: string | null }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {

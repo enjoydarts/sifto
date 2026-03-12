@@ -45,6 +45,7 @@ func main() {
 	resend := service.NewResendClient()
 	oneSignal := service.NewOneSignalClient()
 	secretCipher := service.NewSecretCipher()
+	clerkVerifier := service.NewClerkTokenVerifierFromEnv()
 	cache, err := service.NewJSONCacheFromEnv()
 	if err != nil {
 		log.Fatalf("json cache: %v", err)
@@ -55,6 +56,7 @@ func main() {
 	}
 
 	userRepo := repository.NewUserRepo(db)
+	userIdentityRepo := repository.NewUserIdentityRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
 	sourceRepo := repository.NewSourceRepo(db)
 	itemRepo := repository.NewItemRepo(db)
@@ -69,7 +71,7 @@ func main() {
 	settingsH := handler.NewSettingsHandler(userSettingsRepo, llmUsageRepo, secretCipher)
 	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo)
 
-	internalH := handler.NewInternalHandler(userRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal)
+	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher)
 	itemH := handler.NewItemHandler(itemRepo, sourceRepo, streakRepo, eventPublisher, cache)
 	digestH := handler.NewDigestHandler(digestRepo)
@@ -99,8 +101,9 @@ func main() {
 	// Inngest serve endpoint（認証不要）
 	r.Mount("/api/inngest", inngestHandler)
 
-	// NextAuth からのみ呼ばれる内部エンドポイント（X-Internal-Secret で保護）
+	// Next.js からのみ呼ばれる内部エンドポイント（X-Internal-Secret で保護）
 	r.Post("/api/internal/users/upsert", internalH.UpsertUser)
+	r.Post("/api/internal/users/resolve-identity", internalH.ResolveIdentity)
 	r.Post("/api/internal/debug/digests/generate", internalH.DebugGenerateDigest)
 	r.Post("/api/internal/debug/digests/send", internalH.DebugSendDigest)
 	r.Post("/api/internal/debug/embeddings/backfill", internalH.DebugBackfillEmbeddings)
@@ -109,7 +112,7 @@ func main() {
 	r.Get("/api/internal/debug/system-status", internalH.DebugSystemStatus)
 
 	r.Route("/api", func(r chi.Router) {
-		r.Use(middleware.Auth)
+		r.Use(middleware.Auth(userIdentityRepo, clerkVerifier))
 
 		r.Route("/sources", func(r chi.Router) {
 			r.Get("/", sourceH.List)

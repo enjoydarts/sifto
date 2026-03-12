@@ -26,6 +26,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const clerkEnabled = Boolean(clerkPublishableKey && process.env.CLERK_SECRET_KEY);
+
   return (
     <html lang="ja" className={geist.variable}>
       <body className="min-h-screen bg-zinc-50 font-sans text-zinc-900 antialiased">
@@ -34,7 +37,9 @@ export default function RootLayout({
           src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
           strategy="lazyOnload"
         />
-        <Providers>{children}</Providers>
+        <Providers clerkEnabled={clerkEnabled} clerkPublishableKey={clerkPublishableKey}>
+          {children}
+        </Providers>
       </body>
     </html>
   );

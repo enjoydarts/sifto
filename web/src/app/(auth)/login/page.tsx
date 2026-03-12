@@ -2,14 +2,13 @@ import { Suspense } from "react";
 import LoginForm from "./login-form";
 
 export default function LoginPage() {
-  const showDev = process.env.ALLOW_DEV_AUTH_BYPASS === "true";
-  const showGoogle = !!(
-    process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+  const showClerk = !!(
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY
   );
 
   return (
     <Suspense>
-      <LoginForm showDev={showDev} showGoogle={showGoogle} />
+      <LoginForm showClerk={showClerk} />
     </Suspense>
   );
 }

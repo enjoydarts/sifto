@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,24 +15,27 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
 	"github.com/enjoydarts/sifto/api/internal/timeutil"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type InternalHandler struct {
-	userRepo   *repository.UserRepo
-	itemRepo   *repository.ItemInngestRepo
-	digestRepo *repository.DigestInngestRepo
-	settings   *repository.UserSettingsRepo
-	cipher     *service.SecretCipher
-	publisher  *service.EventPublisher
-	db         *pgxpool.Pool
-	cache      service.JSONCache
-	worker     *service.WorkerClient
-	oneSignal  *service.OneSignalClient
+	userRepo     *repository.UserRepo
+	identityRepo *repository.UserIdentityRepo
+	itemRepo     *repository.ItemInngestRepo
+	digestRepo   *repository.DigestInngestRepo
+	settings     *repository.UserSettingsRepo
+	cipher       *service.SecretCipher
+	publisher    *service.EventPublisher
+	db           *pgxpool.Pool
+	cache        service.JSONCache
+	worker       *service.WorkerClient
+	oneSignal    *service.OneSignalClient
 }
 
 func NewInternalHandler(
 	userRepo *repository.UserRepo,
+	identityRepo *repository.UserIdentityRepo,
 	itemRepo *repository.ItemInngestRepo,
 	digestRepo *repository.DigestInngestRepo,
 	settings *repository.UserSettingsRepo,
@@ -43,26 +47,27 @@ func NewInternalHandler(
 	oneSignal *service.OneSignalClient,
 ) *InternalHandler {
 	return &InternalHandler{
-		userRepo:   userRepo,
-		itemRepo:   itemRepo,
-		digestRepo: digestRepo,
-		settings:   settings,
-		cipher:     cipher,
-		publisher:  publisher,
-		db:         db,
-		cache:      cache,
-		worker:     worker,
-		oneSignal:  oneSignal,
+		userRepo:     userRepo,
+		identityRepo: identityRepo,
+		itemRepo:     itemRepo,
+		digestRepo:   digestRepo,
+		settings:     settings,
+		cipher:       cipher,
+		publisher:    publisher,
+		db:           db,
+		cache:        cache,
+		worker:       worker,
+		oneSignal:    oneSignal,
 	}
 }
 
 func checkInternalSecret(r *http.Request) bool {
-	secret := os.Getenv("NEXTAUTH_SECRET")
+	secret := service.InternalAPISecretFromEnv()
 	return r.Header.Get("X-Internal-Secret") == secret
 }
 
 // UpsertUser はメールアドレスでユーザーを取得または作成して UUID を返す内部エンドポイント。
-// Next.js の NextAuth jwt コールバックから呼ばれる。X-Internal-Secret で保護。
+// Next.js の auth bridge / debug route から呼ばれる。X-Internal-Secret で保護。
 func (h *InternalHandler) UpsertUser(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalSecret(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
@@ -86,6 +91,86 @@ func (h *InternalHandler) UpsertUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, map[string]string{"id": user.ID})
+}
+
+// ResolveIdentity は external auth provider の subject を internal user_id へ解決する。
+// identity が未登録なら email ベースで既存/新規 user を解決し、provider identity を保存する。
+func (h *InternalHandler) ResolveIdentity(w http.ResponseWriter, r *http.Request) {
+	if !checkInternalSecret(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	var body struct {
+		Provider       string  `json:"provider"`
+		ProviderUserID string  `json:"provider_user_id"`
+		Email          string  `json:"email"`
+		Name           *string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	body.Provider = strings.TrimSpace(body.Provider)
+	body.ProviderUserID = strings.TrimSpace(body.ProviderUserID)
+	body.Email = strings.TrimSpace(strings.ToLower(body.Email))
+	if body.Provider == "" || body.ProviderUserID == "" || body.Email == "" {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	identity, err := h.identityRepo.GetByProviderUserID(r.Context(), body.Provider, body.ProviderUserID)
+	if err == nil {
+		writeJSON(w, map[string]any{
+			"id":               identity.UserID,
+			"identity_id":      identity.ID,
+			"identity_created": false,
+			"user_created":     false,
+			"resolved_by":      "identity",
+			"provider":         identity.Provider,
+			"provider_user_id": identity.ProviderUserID,
+		})
+		return
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		log.Printf("internal resolve identity lookup failed: provider=%s provider_user_id=%s err=%v", body.Provider, body.ProviderUserID, err)
+		http.Error(w, fmt.Sprintf("lookup identity failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	user, getErr := h.userRepo.GetByEmail(r.Context(), body.Email)
+	userCreated := false
+	if getErr != nil && !errors.Is(getErr, pgx.ErrNoRows) {
+		log.Printf("internal resolve identity user lookup failed: email=%s err=%v", body.Email, getErr)
+		http.Error(w, fmt.Sprintf("resolve identity failed: %v", getErr), http.StatusInternalServerError)
+		return
+	}
+	if errors.Is(getErr, pgx.ErrNoRows) {
+		user, err = h.userRepo.Upsert(r.Context(), body.Email, body.Name)
+		if err != nil {
+			log.Printf("internal resolve identity user upsert failed: provider=%s provider_user_id=%s email=%s err=%v", body.Provider, body.ProviderUserID, body.Email, err)
+			http.Error(w, fmt.Sprintf("resolve identity failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		userCreated = true
+	}
+
+	identity, err = h.identityRepo.Upsert(r.Context(), user.ID, body.Provider, body.ProviderUserID, &body.Email)
+	if err != nil {
+		log.Printf("internal resolve identity upsert failed: provider=%s provider_user_id=%s user_id=%s err=%v", body.Provider, body.ProviderUserID, user.ID, err)
+		http.Error(w, fmt.Sprintf("upsert identity failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"id":               user.ID,
+		"identity_id":      identity.ID,
+		"identity_created": true,
+		"user_created":     userCreated,
+		"resolved_by":      "email",
+		"provider":         identity.Provider,
+		"provider_user_id": identity.ProviderUserID,
+	})
 }
 
 func (h *InternalHandler) DebugGenerateDigest(w http.ResponseWriter, r *http.Request) {

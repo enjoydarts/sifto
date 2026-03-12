@@ -1,39 +1,37 @@
-import { withAuth } from "next-auth/middleware";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { jwtVerify } from "jose";
 
-export default withAuth(
-  function middleware() {
+const isPublicRoute = createRouteMatcher([
+  "/login(.*)",
+  "/health(.*)",
+  "/api/auth(.*)",
+  "/onesignal/(.*)",
+  "/OneSignalSDKWorker.js",
+  "/OneSignalSDKUpdaterWorker.js",
+  "/_next/static/(.*)",
+  "/_next/image(.*)",
+  "/favicon.ico",
+  "/logo.png",
+]);
+
+export default clerkMiddleware(async (auth, req) => {
+  if (isPublicRoute(req)) {
     return NextResponse.next();
-  },
-  {
-    callbacks: {
-      authorized: ({ token }) => !!token,
-    },
-    pages: {
-      signIn: "/login",
-    },
-    // auth.ts の encode に合わせて HS256 でデコードする
-    jwt: {
-      decode: async ({ secret, token }) => {
-        if (!token) return null;
-        try {
-          const key = new TextEncoder().encode(secret as string);
-          const { payload } = await jwtVerify(token, key, {
-            algorithms: ["HS256"],
-          });
-          return payload as import("next-auth/jwt").JWT;
-        } catch {
-          return null;
-        }
-      },
-    },
   }
-);
+
+  const { userId } = await auth();
+  if (userId) {
+    return NextResponse.next();
+  }
+
+  const loginURL = new URL("/login", req.url);
+  const callbackURL = `${req.nextUrl.pathname}${req.nextUrl.search}`;
+  if (callbackURL && callbackURL !== "/login") {
+    loginURL.searchParams.set("callbackUrl", callbackURL);
+  }
+  return NextResponse.redirect(loginURL);
+});
 
 export const config = {
-  // Protect all routes except login, NextAuth API, and static assets
-  matcher: [
-    "/((?!login|health|api/auth|onesignal/|OneSignalSDKWorker\\.js|OneSignalSDKUpdaterWorker\\.js|_next/static|_next/image|favicon\\.ico|logo\\.png).*)",
-  ],
+  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
 };

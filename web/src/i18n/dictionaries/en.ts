@@ -108,6 +108,7 @@ export const enDict: Dict = {
   "briefing.streakRisk.suffix": " today to keep your streak.",
   "clusters.title": "Topic Clusters",
   "clusters.subtitle": "Review unread items from the last 24 hours in broader topic bundles.",
+  "clusters.swipeHint": "Swipe left to mark read, swipe right to save for later.",
   "clusters.backBriefing": "Back to briefing",
   "clusters.empty": "No clusters available yet.",
   "clusters.eyebrow": "Topic Cluster",

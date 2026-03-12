@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { type PointerEvent, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layers3 } from "lucide-react";
 import { api, BriefingCluster, Item } from "@/lib/api";
@@ -16,6 +16,11 @@ export default function ClustersPage() {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [savingClusterId, setSavingClusterId] = useState<string | null>(null);
+  const [hiddenClusterIds, setHiddenClusterIds] = useState<Record<string, true>>({});
+  const [dragClusterId, setDragClusterId] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [swipeExit, setSwipeExit] = useState<"read" | "later" | null>(null);
+  const startRef = useRef<{ x: number; y: number } | null>(null);
 
   const briefingQuery = useQuery({
     queryKey: ["briefing-clusters", 24] as const,
@@ -27,7 +32,10 @@ export default function ClustersPage() {
   });
 
   const clusters = briefingQuery.data?.clusters ?? EMPTY_CLUSTERS;
-  const rows = useMemo(() => clusters.filter((cluster) => (cluster.items ?? []).length > 0), [clusters]);
+  const rows = useMemo(
+    () => clusters.filter((cluster) => (cluster.items ?? []).length > 0 && !hiddenClusterIds[cluster.id]),
+    [clusters, hiddenClusterIds]
+  );
 
   const saveClusterForLater = async (cluster: BriefingCluster) => {
     const itemIds = Array.from(new Set((cluster.items ?? []).map((item) => item.id).filter(Boolean)));
@@ -48,6 +56,7 @@ export default function ClustersPage() {
         queryClient.invalidateQueries({ queryKey: ["briefing-clusters"] }),
         queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
       ]);
+      setHiddenClusterIds((prev) => ({ ...prev, [cluster.id]: true }));
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
@@ -76,11 +85,84 @@ export default function ClustersPage() {
         queryClient.invalidateQueries({ queryKey: ["briefing-clusters"] }),
         queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
       ]);
+      setHiddenClusterIds((prev) => ({ ...prev, [cluster.id]: true }));
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
       setSavingClusterId(null);
     }
+  };
+
+  const resetSwipeState = () => {
+    setDragClusterId(null);
+    setDragOffset({ x: 0, y: 0 });
+    setSwipeExit(null);
+    startRef.current = null;
+  };
+
+  const onPointerDown = (clusterId: string) => (e: PointerEvent<HTMLElement>) => {
+    if (savingClusterId) return;
+    startRef.current = { x: e.clientX, y: e.clientY };
+    setDragClusterId(clusterId);
+    setSwipeExit(null);
+  };
+
+  const onPointerMove = (clusterId: string) => (e: PointerEvent<HTMLElement>) => {
+    if (!startRef.current || dragClusterId !== clusterId || savingClusterId) return;
+    setDragOffset({
+      x: e.clientX - startRef.current.x,
+      y: e.clientY - startRef.current.y,
+    });
+  };
+
+  const onPointerUp = (cluster: BriefingCluster) => async (e: PointerEvent<HTMLElement>) => {
+    if (!startRef.current || dragClusterId !== cluster.id || savingClusterId) {
+      resetSwipeState();
+      return;
+    }
+    const dx = e.clientX - startRef.current.x;
+    const dy = e.clientY - startRef.current.y;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    const threshold = 42;
+    if (absX > absY && absX > threshold) {
+      const action = dx < 0 ? "read" : "later";
+      setSwipeExit(action);
+      window.setTimeout(() => {
+        if (action === "read") {
+          void markClusterRead(cluster);
+        } else {
+          void saveClusterForLater(cluster);
+        }
+        resetSwipeState();
+      }, 160);
+      return;
+    }
+    resetSwipeState();
+  };
+
+  const cardTransform = (clusterId: string) => {
+    if (dragClusterId !== clusterId) return "";
+    if (swipeExit === "read") return "translate(-120%, 0) rotate(-8deg)";
+    if (swipeExit === "later") return "translate(120%, 0) rotate(8deg)";
+    return `translate(${dragOffset.x}px, ${dragOffset.y}px) rotate(${(dragOffset.x / 22).toFixed(2)}deg)`;
+  };
+
+  const nextCardTransform = (clusterId: string) => {
+    if (dragClusterId !== clusterId) return "scale(0.985) translateY(10px)";
+    const progress = Math.min(1, Math.abs(dragOffset.x) / 120);
+    const scale = 0.985 + progress * 0.015;
+    const translateY = 10 - progress * 10;
+    return `scale(${scale.toFixed(3)}) translateY(${translateY.toFixed(1)}px)`;
+  };
+
+  const swipeBadgeOpacity = (kind: "read" | "later") => {
+    if (!dragClusterId || swipeExit) return kind === swipeExit ? 1 : 0;
+    const x = dragOffset.x;
+    if (kind === "read") {
+      return Math.max(0, Math.min(1, x < -20 ? Math.abs(x) / 140 : 0));
+    }
+    return Math.max(0, Math.min(1, x > 20 ? Math.abs(x) / 140 : 0));
   };
 
   return (
@@ -94,6 +176,7 @@ export default function ClustersPage() {
                 <span>{t("clusters.title")}</span>
               </h1>
               <p className="mt-1 text-sm text-zinc-600">{t("clusters.subtitle")}</p>
+              <p className="mt-2 text-xs text-zinc-500">{t("clusters.swipeHint")}</p>
             </div>
             <Link
               href="/"
@@ -114,11 +197,45 @@ export default function ClustersPage() {
           </section>
         ) : (
           <div className="grid gap-5 xl:grid-cols-2">
-            {rows.map((cluster) => (
-              <section
-                key={cluster.id}
-                className="overflow-hidden rounded-[28px] border border-zinc-200 bg-white shadow-sm transition-shadow hover:shadow-md"
-              >
+            {rows.map((cluster, idx) => (
+              <div key={cluster.id} className="relative">
+                {rows[idx + 1] ? (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-x-3 top-3 h-full rounded-[28px] border border-zinc-200/70 bg-zinc-50 shadow-sm"
+                    style={{
+                      transform: nextCardTransform(cluster.id),
+                      opacity: dragClusterId === cluster.id ? 0.95 : 1,
+                      transition: "transform 180ms ease, opacity 180ms ease",
+                    }}
+                  />
+                ) : null}
+                <section
+                  className="relative z-10 overflow-hidden rounded-[28px] border border-zinc-200 bg-white shadow-sm transition-shadow hover:shadow-md touch-pan-y"
+                onPointerDown={onPointerDown(cluster.id)}
+                onPointerMove={onPointerMove(cluster.id)}
+                onPointerUp={onPointerUp(cluster)}
+                onPointerCancel={resetSwipeState}
+                style={{
+                  transform: cardTransform(cluster.id),
+                  opacity: dragClusterId === cluster.id && swipeExit ? 0.35 : 1,
+                  transition: dragClusterId === cluster.id && !swipeExit ? "none" : "transform 180ms ease, opacity 180ms ease",
+                }}
+                >
+                <div className="pointer-events-none absolute inset-0 z-10">
+                  <div
+                    className="absolute left-4 top-4 rounded-full border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700"
+                    style={{ opacity: swipeBadgeOpacity("read") }}
+                  >
+                    {t("briefing.clusterRead")}
+                  </div>
+                  <div
+                    className="absolute right-4 top-4 rounded-full border border-zinc-300 bg-zinc-50 px-2 py-1 text-[10px] font-semibold text-zinc-700"
+                    style={{ opacity: swipeBadgeOpacity("later") }}
+                  >
+                    {t("briefing.clusterLater")}
+                  </div>
+                </div>
                 <div className="border-b border-zinc-100 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_30%),linear-gradient(180deg,_#ffffff_0%,_#f8fafc_100%)] p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -208,7 +325,8 @@ export default function ClustersPage() {
                   ))}
                   </ul>
                 </div>
-              </section>
+                </section>
+              </div>
             ))}
           </div>
         )}

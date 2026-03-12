@@ -108,6 +108,7 @@ export const jaDict: Dict = {
   "briefing.streakRisk.suffix": "読むと継続できます",
   "clusters.title": "話題クラスタ一覧",
   "clusters.subtitle": "直近24時間の未読記事を、近い話題ごとにまとめて扱えます。",
+  "clusters.swipeHint": "左へスワイプで既読、右へスワイプであとで読むに振り分けます。",
   "clusters.backBriefing": "ブリーフィングへ戻る",
   "clusters.empty": "まだ扱えるクラスタはありません。",
   "clusters.eyebrow": "Topic Cluster",

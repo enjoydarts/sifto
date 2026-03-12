@@ -63,3 +63,15 @@ func (r *BriefingSnapshotRepo) Upsert(ctx context.Context, userID, date, status 
 	)
 	return err
 }
+
+func (r *BriefingSnapshotRepo) MarkStale(ctx context.Context, userID, date string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE briefing_snapshots
+		SET status = 'stale',
+		    updated_at = NOW()
+		WHERE user_id = $1
+		  AND briefing_date = $2`,
+		userID, date,
+	)
+	return err
+}

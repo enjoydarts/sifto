@@ -19,12 +19,13 @@ import (
 )
 
 type ItemHandler struct {
-	repo       *repository.ItemRepo
-	sourceRepo *repository.SourceRepo
-	streakRepo *repository.ReadingStreakRepo
-	publisher  *service.EventPublisher
-	cache      service.JSONCache
-	detail     *service.ItemDetailService
+	repo         *repository.ItemRepo
+	sourceRepo   *repository.SourceRepo
+	streakRepo   *repository.ReadingStreakRepo
+	snapshotRepo *repository.BriefingSnapshotRepo
+	publisher    *service.EventPublisher
+	cache        service.JSONCache
+	detail       *service.ItemDetailService
 }
 
 const itemsListCacheTTL = 30 * time.Second
@@ -36,16 +37,18 @@ func NewItemHandler(
 	repo *repository.ItemRepo,
 	sourceRepo *repository.SourceRepo,
 	streakRepo *repository.ReadingStreakRepo,
+	snapshotRepo *repository.BriefingSnapshotRepo,
 	publisher *service.EventPublisher,
 	cache service.JSONCache,
 ) *ItemHandler {
 	return &ItemHandler{
-		repo:       repo,
-		sourceRepo: sourceRepo,
-		streakRepo: streakRepo,
-		publisher:  publisher,
-		cache:      cache,
-		detail:     service.NewItemDetailService(repo),
+		repo:         repo,
+		sourceRepo:   sourceRepo,
+		streakRepo:   streakRepo,
+		snapshotRepo: snapshotRepo,
+		publisher:    publisher,
+		cache:        cache,
+		detail:       service.NewItemDetailService(repo),
 	}
 }
 
@@ -207,12 +210,20 @@ func (h *ItemHandler) UXMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ItemHandler) invalidateUserCaches(ctx context.Context, userID string) {
-	if h.cache == nil || userID == "" {
+	if userID == "" {
 		return
 	}
-	for _, prefix := range cacheUserInvalidatePrefixes(userID) {
-		if _, err := h.cache.DeleteByPrefix(ctx, prefix, 5000); err != nil {
-			log.Printf("cache invalidate failed user_id=%s prefix=%s err=%v", userID, prefix, err)
+	if h.cache != nil {
+		for _, prefix := range cacheUserInvalidatePrefixes(userID) {
+			if _, err := h.cache.DeleteByPrefix(ctx, prefix, 5000); err != nil {
+				log.Printf("cache invalidate failed user_id=%s prefix=%s err=%v", userID, prefix, err)
+			}
+		}
+	}
+	if h.snapshotRepo != nil {
+		today := timeutil.StartOfDayJST(timeutil.NowJST()).Format("2006-01-02")
+		if err := h.snapshotRepo.MarkStale(ctx, userID, today); err != nil {
+			log.Printf("briefing snapshot stale failed user_id=%s date=%s err=%v", userID, today, err)
 		}
 	}
 }

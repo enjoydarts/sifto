@@ -73,7 +73,7 @@ func main() {
 
 	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher)
-	itemH := handler.NewItemHandler(itemRepo, sourceRepo, streakRepo, eventPublisher, cache)
+	itemH := handler.NewItemHandler(itemRepo, sourceRepo, streakRepo, briefingSnapshotRepo, eventPublisher, cache)
 	digestH := handler.NewDigestHandler(digestRepo)
 	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo, llmExecutionRepo)
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)

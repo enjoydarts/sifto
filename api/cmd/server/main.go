@@ -71,7 +71,8 @@ func main() {
 	providerModelUpdateRepo := repository.NewProviderModelUpdateRepo(db)
 	briefingSnapshotRepo := repository.NewBriefingSnapshotRepo(db)
 	streakRepo := repository.NewReadingStreakRepo(db)
-	settingsH := handler.NewSettingsHandler(userSettingsRepo, obsidianExportRepo, llmUsageRepo, secretCipher, githubApp)
+	obsidianExportSvc := service.NewObsidianExportService(itemRepo, itemExportRepo, obsidianExportRepo, githubApp)
+	settingsH := handler.NewSettingsHandler(userSettingsRepo, obsidianExportRepo, llmUsageRepo, secretCipher, githubApp, obsidianExportSvc)
 	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo)
 
 	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp)
@@ -82,7 +83,6 @@ func main() {
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
 	briefingH := handler.NewBriefingHandler(itemRepo, briefingSnapshotRepo, streakRepo, cache)
 	askH := handler.NewAskHandler(itemRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, openAI, cache)
-	obsidianExportSvc := service.NewObsidianExportService(itemRepo, itemExportRepo, obsidianExportRepo, githubApp)
 
 	inngestHandler := inngestfn.NewHandler(db, worker, resend, oneSignal, obsidianExportSvc)
 
@@ -191,6 +191,7 @@ func main() {
 			r.Patch("/reading-plan", settingsH.UpdateReadingPlan)
 			r.Patch("/llm-models", settingsH.UpdateLLMModels)
 			r.Patch("/obsidian-export", settingsH.UpdateObsidianExport)
+			r.Post("/obsidian-export/run", settingsH.RunObsidianExport)
 			r.Get("/inoreader/connect", settingsH.InoreaderConnect)
 			r.Get("/inoreader/callback", settingsH.InoreaderCallback)
 			r.Delete("/inoreader-oauth", settingsH.DeleteInoreaderOAuth)

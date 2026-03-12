@@ -107,6 +107,7 @@ export default function SettingsPage() {
   const [savingDigestDelivery, setSavingDigestDelivery] = useState(false);
   const [savingReadingPlan, setSavingReadingPlan] = useState(false);
   const [savingObsidianExport, setSavingObsidianExport] = useState(false);
+  const [runningObsidianExport, setRunningObsidianExport] = useState(false);
   const [savingLLMModels, setSavingLLMModels] = useState(false);
   const [savingAnthropicKey, setSavingAnthropicKey] = useState(false);
   const [deletingAnthropicKey, setDeletingAnthropicKey] = useState(false);
@@ -433,6 +434,22 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setSavingObsidianExport(false);
+    }
+  }
+
+  async function runObsidianExportNow() {
+    setRunningObsidianExport(true);
+    try {
+      const res = await api.runObsidianExportNow();
+      await load();
+      showToast(
+        `${t("settings.toast.obsidianExportRunNowResult")} updated=${res.updated} skipped=${res.skipped} failed=${res.failed}`,
+        res.failed > 0 ? "error" : "success"
+      );
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setRunningObsidianExport(false);
     }
   }
 
@@ -897,13 +914,23 @@ export default function SettingsPage() {
             )}
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="submit"
               disabled={savingObsidianExport}
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
             >
               {savingObsidianExport ? t("common.saving") : t("settings.obsidianSave")}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void runObsidianExportNow();
+              }}
+              disabled={runningObsidianExport}
+              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-60"
+            >
+              {runningObsidianExport ? t("settings.obsidianRunNowRunning") : t("settings.obsidianRunNow")}
             </button>
           </div>
         </form>

@@ -12,16 +12,20 @@ import (
 )
 
 type SettingsHandler struct {
-	settings *service.SettingsService
-	oauth    *service.InoreaderOAuthService
-	github   *service.GitHubAppClient
+	settings       *service.SettingsService
+	obsidianRepo   *repository.ObsidianExportRepo
+	oauth          *service.InoreaderOAuthService
+	github         *service.GitHubAppClient
+	obsidianExport *service.ObsidianExportService
 }
 
-func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher, github *service.GitHubAppClient) *SettingsHandler {
+func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService) *SettingsHandler {
 	return &SettingsHandler{
-		settings: service.NewSettingsService(repo, obsidianRepo, llmUsageRepo, cipher, github),
-		oauth:    service.NewInoreaderOAuthService(repo, cipher),
-		github:   github,
+		settings:       service.NewSettingsService(repo, obsidianRepo, llmUsageRepo, cipher, github),
+		obsidianRepo:   obsidianRepo,
+		oauth:          service.NewInoreaderOAuthService(repo, cipher),
+		github:         github,
+		obsidianExport: obsidianExport,
 	}
 }
 
@@ -242,6 +246,29 @@ func (h *SettingsHandler) UpdateObsidianExport(w http.ResponseWriter, r *http.Re
 		"user_id":         settings.UserID,
 		"obsidian_export": serviceMapObsidianExport(settings, h.github),
 	})
+}
+
+func (h *SettingsHandler) RunObsidianExport(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	if h.obsidianExport == nil {
+		http.Error(w, "obsidian export unavailable", http.StatusInternalServerError)
+		return
+	}
+	if h.obsidianRepo == nil {
+		http.Error(w, "obsidian export unavailable", http.StatusInternalServerError)
+		return
+	}
+	cfg, err := h.obsidianRepo.EnsureDefaults(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	res, err := h.obsidianExport.RunUser(r.Context(), *cfg, 20)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, res)
 }
 
 func serviceMapObsidianExport(settings *model.ObsidianExportSettings, github *service.GitHubAppClient) map[string]any {

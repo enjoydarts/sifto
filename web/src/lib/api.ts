@@ -530,6 +530,13 @@ export interface UserSettings {
   current_month: UserSettingsCurrentMonth;
 }
 
+export interface ObsidianExportRunResult {
+  user_id: string;
+  updated: number;
+  skipped: number;
+  failed: number;
+}
+
 export interface DashboardSnapshot {
   sources_count: number;
   item_stats: ItemStats | null;
@@ -960,6 +967,10 @@ export const api = {
     }>("/settings/obsidian-export", {
       method: "PATCH",
       body: JSON.stringify(body),
+    }),
+  runObsidianExportNow: () =>
+    apiFetch<ObsidianExportRunResult>("/settings/obsidian-export/run", {
+      method: "POST",
     }),
   updateLLMModelSettings: (body: {
     facts?: string | null;

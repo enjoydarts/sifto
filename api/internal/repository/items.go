@@ -311,6 +311,15 @@ func (r *ItemRepo) FavoriteExportItems(ctx context.Context, userID string, days,
 		); err != nil {
 			return nil, err
 		}
+		if llm, err := loadLatestItemLLMUsage(ctx, r.db, item.ID, "summary"); err == nil {
+			item.SummaryLLM = llm
+		}
+		if llm, err := loadLatestItemLLMUsage(ctx, r.db, item.ID, "facts"); err == nil {
+			item.FactsLLM = llm
+		}
+		if emb, err := loadLatestItemEmbeddingModel(ctx, r.db, item.ID); err == nil {
+			item.EmbeddingModel = emb
+		}
 		out = append(out, item)
 	}
 	return out, rows.Err()

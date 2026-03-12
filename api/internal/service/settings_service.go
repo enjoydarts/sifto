@@ -13,8 +13,10 @@ import (
 
 type SettingsService struct {
 	repo         *repository.UserSettingsRepo
+	obsidianRepo *repository.ObsidianExportRepo
 	llmUsageRepo *repository.LLMUsageLogRepo
 	cipher       *SecretCipher
+	githubApp    *GitHubAppClient
 }
 
 type SettingsGetPayload struct {
@@ -38,6 +40,7 @@ type SettingsGetPayload struct {
 	ReadingPlan             map[string]any `json:"reading_plan"`
 	LLMModels               map[string]any `json:"llm_models"`
 	CurrentMonth            map[string]any `json:"current_month"`
+	ObsidianExport          map[string]any `json:"obsidian_export"`
 }
 
 type UpdateLLMModelsInput struct {
@@ -74,8 +77,27 @@ var modelSettingRequiredCapabilities = map[string][]string{
 	"faithfulness_check": {"structured_output"},
 }
 
-func NewSettingsService(repo *repository.UserSettingsRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *SecretCipher) *SettingsService {
-	return &SettingsService{repo: repo, llmUsageRepo: llmUsageRepo, cipher: cipher}
+func NewSettingsService(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *SecretCipher, githubApp *GitHubAppClient) *SettingsService {
+	return &SettingsService{repo: repo, obsidianRepo: obsidianRepo, llmUsageRepo: llmUsageRepo, cipher: cipher, githubApp: githubApp}
+}
+
+func obsidianExportPayload(settings *model.ObsidianExportSettings, githubApp *GitHubAppClient) map[string]any {
+	out := map[string]any{
+		"enabled":                settings.Enabled,
+		"github_installation_id": settings.GitHubInstallationID,
+		"github_repo_owner":      settings.GitHubRepoOwner,
+		"github_repo_name":       settings.GitHubRepoName,
+		"github_repo_branch":     settings.GitHubRepoBranch,
+		"vault_root_path":        settings.VaultRootPath,
+		"keyword_link_mode":      settings.KeywordLinkMode,
+		"last_run_at":            settings.LastRunAt,
+		"last_success_at":        settings.LastSuccessAt,
+	}
+	if githubApp != nil {
+		out["github_app_enabled"] = githubApp.Enabled()
+		out["github_app_install_url"] = githubApp.InstallURL()
+	}
+	return out
 }
 
 func LLMModelSettingsPayload(settings *model.UserSettings) map[string]any {
@@ -103,6 +125,10 @@ func readingPlanPayload(settings *model.UserSettings) map[string]any {
 
 func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetPayload, error) {
 	settings, err := s.repo.EnsureDefaults(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	obsidianSettings, err := s.obsidianRepo.EnsureDefaults(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -141,6 +167,7 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		DigestEmailEnabled:      settings.DigestEmailEnabled,
 		ReadingPlan:             readingPlanPayload(settings),
 		LLMModels:               LLMModelSettingsPayload(settings),
+		ObsidianExport:          obsidianExportPayload(obsidianSettings, s.githubApp),
 		CurrentMonth: map[string]any{
 			"month_jst":            monthStart.Format("2006-01"),
 			"period_start_jst":     monthStart.Format(time.RFC3339),
@@ -150,6 +177,15 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 			"remaining_budget_pct": remainingPct,
 		},
 	}, nil
+}
+
+type UpdateObsidianExportInput struct {
+	Enabled          bool
+	GitHubRepoOwner  *string
+	GitHubRepoName   *string
+	GitHubRepoBranch *string
+	VaultRootPath    *string
+	KeywordLinkMode  *string
 }
 
 func normalizeOptionalModel(v *string) *string {
@@ -234,6 +270,44 @@ func (s *SettingsService) UpdateBudget(ctx context.Context, userID string, month
 		budget = monthlyBudgetUSD
 	}
 	return s.repo.UpsertBudgetConfig(ctx, userID, budget, enabled, thresholdPct, digestEmailEnabled)
+}
+
+func normalizeOptionalString(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*v)
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func (s *SettingsService) UpdateObsidianExport(ctx context.Context, userID string, in UpdateObsidianExportInput) (*model.ObsidianExportSettings, error) {
+	repoOwner := normalizeOptionalString(in.GitHubRepoOwner)
+	repoName := normalizeOptionalString(in.GitHubRepoName)
+	repoBranch := normalizeOptionalString(in.GitHubRepoBranch)
+	vaultRootPath := normalizeOptionalString(in.VaultRootPath)
+	keywordLinkMode := normalizeOptionalString(in.KeywordLinkMode)
+	if keywordLinkMode != nil && *keywordLinkMode != "topics_only" {
+		return nil, fmt.Errorf("invalid keyword_link_mode")
+	}
+	return s.obsidianRepo.UpsertConfig(ctx, userID, in.Enabled, repoOwner, repoName, repoBranch, vaultRootPath, keywordLinkMode)
+}
+
+func (s *SettingsService) UpsertObsidianGitHubInstallation(ctx context.Context, userID string, installationID int64) (*model.ObsidianExportSettings, error) {
+	var owner *string
+	if s.githubApp != nil && s.githubApp.Enabled() {
+		installation, err := s.githubApp.GetInstallation(ctx, installationID)
+		if err != nil {
+			return nil, err
+		}
+		if installation != nil && installation.Account != nil && strings.TrimSpace(installation.Account.Login) != "" {
+			v := strings.TrimSpace(installation.Account.Login)
+			owner = &v
+		}
+	}
+	return s.obsidianRepo.UpsertInstallation(ctx, userID, installationID, owner)
 }
 
 func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKey string) (*model.UserSettings, error) {

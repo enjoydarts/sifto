@@ -514,6 +514,19 @@ export interface UserSettings {
     facts_check?: string | null;
     faithfulness_check?: string | null;
   };
+  obsidian_export?: {
+    enabled: boolean;
+    github_app_enabled?: boolean;
+    github_app_install_url?: string | null;
+    github_installation_id?: number | null;
+    github_repo_owner?: string | null;
+    github_repo_name?: string | null;
+    github_repo_branch?: string | null;
+    vault_root_path?: string | null;
+    keyword_link_mode?: string | null;
+    last_run_at?: string | null;
+    last_success_at?: string | null;
+  };
   current_month: UserSettingsCurrentMonth;
 }
 
@@ -930,6 +943,21 @@ export const api = {
     }),
   updateReadingPlanSettings: (body: Pick<UserReadingPlanSettings, "window" | "size" | "diversify_topics">) =>
     apiFetch<{ user_id: string; reading_plan: UserReadingPlanSettings }>("/settings/reading-plan", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  updateObsidianExport: (body: {
+    enabled: boolean;
+    github_repo_owner?: string | null;
+    github_repo_name?: string | null;
+    github_repo_branch?: string | null;
+    vault_root_path?: string | null;
+    keyword_link_mode?: string | null;
+  }) =>
+    apiFetch<{
+      user_id: string;
+      obsidian_export: NonNullable<UserSettings["obsidian_export"]>;
+    }>("/settings/obsidian-export", {
       method: "PATCH",
       body: JSON.stringify(body),
     }),

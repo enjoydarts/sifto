@@ -46,6 +46,7 @@ func main() {
 	oneSignal := service.NewOneSignalClient()
 	secretCipher := service.NewSecretCipher()
 	clerkVerifier := service.NewClerkTokenVerifierFromEnv()
+	githubApp := service.NewGitHubAppClientFromEnv()
 	cache, err := service.NewJSONCacheFromEnv()
 	if err != nil {
 		log.Fatalf("json cache: %v", err)
@@ -58,6 +59,8 @@ func main() {
 	userRepo := repository.NewUserRepo(db)
 	userIdentityRepo := repository.NewUserIdentityRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
+	obsidianExportRepo := repository.NewObsidianExportRepo(db)
+	itemExportRepo := repository.NewItemExportRepo(db)
 	sourceRepo := repository.NewSourceRepo(db)
 	itemRepo := repository.NewItemRepo(db)
 	itemInngestRepo := repository.NewItemInngestRepo(db)
@@ -68,7 +71,7 @@ func main() {
 	providerModelUpdateRepo := repository.NewProviderModelUpdateRepo(db)
 	briefingSnapshotRepo := repository.NewBriefingSnapshotRepo(db)
 	streakRepo := repository.NewReadingStreakRepo(db)
-	settingsH := handler.NewSettingsHandler(userSettingsRepo, llmUsageRepo, secretCipher)
+	settingsH := handler.NewSettingsHandler(userSettingsRepo, obsidianExportRepo, llmUsageRepo, secretCipher, githubApp)
 	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo)
 
 	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal)
@@ -79,8 +82,9 @@ func main() {
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
 	briefingH := handler.NewBriefingHandler(itemRepo, briefingSnapshotRepo, streakRepo, cache)
 	askH := handler.NewAskHandler(itemRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, openAI, cache)
+	obsidianExportSvc := service.NewObsidianExportService(itemRepo, itemExportRepo, obsidianExportRepo, githubApp)
 
-	inngestHandler := inngestfn.NewHandler(db, worker, resend, oneSignal)
+	inngestHandler := inngestfn.NewHandler(db, worker, resend, oneSignal, obsidianExportSvc)
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Logger)
@@ -185,6 +189,9 @@ func main() {
 			r.Patch("/", settingsH.UpdateBudget)
 			r.Patch("/reading-plan", settingsH.UpdateReadingPlan)
 			r.Patch("/llm-models", settingsH.UpdateLLMModels)
+			r.Patch("/obsidian-export", settingsH.UpdateObsidianExport)
+			r.Get("/obsidian-github/connect", settingsH.ObsidianGitHubConnect)
+			r.Get("/obsidian-github/callback", settingsH.ObsidianGitHubCallback)
 			r.Get("/inoreader/connect", settingsH.InoreaderConnect)
 			r.Get("/inoreader/callback", settingsH.InoreaderCallback)
 			r.Delete("/inoreader-oauth", settingsH.DeleteInoreaderOAuth)

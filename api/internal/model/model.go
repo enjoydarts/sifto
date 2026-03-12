@@ -56,6 +56,36 @@ type UserSettings struct {
 	UpdatedAt                  time.Time  `json:"updated_at"`
 }
 
+type ObsidianExportSettings struct {
+	UserID               string     `json:"user_id"`
+	Enabled              bool       `json:"enabled"`
+	GitHubInstallationID *int64     `json:"github_installation_id,omitempty"`
+	GitHubRepoOwner      *string    `json:"github_repo_owner,omitempty"`
+	GitHubRepoName       *string    `json:"github_repo_name,omitempty"`
+	GitHubRepoBranch     string     `json:"github_repo_branch"`
+	VaultRootPath        *string    `json:"vault_root_path,omitempty"`
+	KeywordLinkMode      string     `json:"keyword_link_mode"`
+	LastRunAt            *time.Time `json:"last_run_at,omitempty"`
+	LastSuccessAt        *time.Time `json:"last_success_at,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
+}
+
+type ItemExportRecord struct {
+	ID          string     `json:"id"`
+	UserID      string     `json:"user_id"`
+	ItemID      string     `json:"item_id"`
+	Target      string     `json:"target"`
+	GitHubPath  *string    `json:"github_path,omitempty"`
+	GitHubSHA   *string    `json:"github_sha,omitempty"`
+	ContentHash *string    `json:"content_hash,omitempty"`
+	Status      string     `json:"status"`
+	ExportedAt  *time.Time `json:"exported_at,omitempty"`
+	LastError   *string    `json:"last_error,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
 type Source struct {
 	ID            string     `json:"id"`
 	UserID        string     `json:"user_id"`
@@ -242,16 +272,19 @@ type ItemListResponse struct {
 }
 
 type FavoriteExportItem struct {
-	ID              string     `json:"id"`
-	URL             string     `json:"url"`
-	Title           *string    `json:"title,omitempty"`
-	TranslatedTitle *string    `json:"translated_title,omitempty"`
-	SourceTitle     *string    `json:"source_title,omitempty"`
-	Summary         *string    `json:"summary,omitempty"`
-	Topics          []string   `json:"topics,omitempty"`
-	SummaryScore    *float64   `json:"summary_score,omitempty"`
-	PublishedAt     *time.Time `json:"published_at,omitempty"`
-	FavoritedAt     time.Time  `json:"favorited_at"`
+	ID              string          `json:"id"`
+	URL             string          `json:"url"`
+	Title           *string         `json:"title,omitempty"`
+	TranslatedTitle *string         `json:"translated_title,omitempty"`
+	SourceTitle     *string         `json:"source_title,omitempty"`
+	Summary         *string         `json:"summary,omitempty"`
+	Topics          []string        `json:"topics,omitempty"`
+	SummaryScore    *float64        `json:"summary_score,omitempty"`
+	PublishedAt     *time.Time      `json:"published_at,omitempty"`
+	FavoritedAt     time.Time       `json:"favorited_at"`
+	SummaryLLM      *ItemSummaryLLM `json:"summary_llm,omitempty"`
+	FactsLLM        *ItemSummaryLLM `json:"facts_llm,omitempty"`
+	EmbeddingModel  *string         `json:"embedding_model,omitempty"`
 }
 
 type ReadingPlanResponse struct {

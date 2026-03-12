@@ -747,7 +747,7 @@ type DigestCopyComposedData struct {
 }
 
 // NewHandler registers all Inngest functions and returns the HTTP handler.
-func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, oneSignal *service.OneSignalClient) http.Handler {
+func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, oneSignal *service.OneSignalClient, obsidianExport *service.ObsidianExportService) http.Handler {
 	secretCipher := service.NewSecretCipher()
 	openAI := service.NewOpenAIClient()
 	client, err := inngestgo.NewClient(inngestgo.ClientOpts{
@@ -767,6 +767,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(processItemFn(client, db, worker, openAI, oneSignal, secretCipher))
 	register(embedItemFn(client, db, openAI, secretCipher))
 	register(generateBriefingSnapshotsFn(client, db, oneSignal))
+	register(exportObsidianFavoritesFn(client, db, obsidianExport))
 	register(trackProviderModelUpdatesFn(client, db, oneSignal))
 	register(generateDigestFn(client, db))
 	register(composeDigestCopyFn(client, db, worker, secretCipher))
@@ -888,6 +889,45 @@ func generateBriefingSnapshotsFn(client inngestgo.Client, db *pgxpool.Pool, oneS
 				"date":    dateStr,
 				"users":   len(users),
 				"updated": updated,
+				"failed":  failed,
+			}, nil
+		},
+	)
+}
+
+func exportObsidianFavoritesFn(client inngestgo.Client, db *pgxpool.Pool, obsidianExport *service.ObsidianExportService) (inngestgo.ServableFunction, error) {
+	obsidianRepo := repository.NewObsidianExportRepo(db)
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "export-obsidian-favorites", Name: "Export Obsidian Favorites"},
+		inngestgo.CronTrigger("0 * * * *"),
+		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
+			if obsidianExport == nil {
+				return map[string]any{"enabled": false}, nil
+			}
+			configs, err := obsidianRepo.ListEnabled(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("list enabled obsidian exports: %w", err)
+			}
+			updated := 0
+			skipped := 0
+			failed := 0
+			for _, cfg := range configs {
+				res, runErr := obsidianExport.RunUser(ctx, cfg, 100)
+				if runErr != nil {
+					failed++
+					log.Printf("export-obsidian-favorites user=%s: %v", cfg.UserID, runErr)
+					_ = obsidianRepo.MarkRun(ctx, cfg.UserID, false)
+					continue
+				}
+				updated += res.Updated
+				skipped += res.Skipped
+				failed += res.Failed
+			}
+			return map[string]any{
+				"users":   len(configs),
+				"updated": updated,
+				"skipped": skipped,
 				"failed":  failed,
 			}, nil
 		},

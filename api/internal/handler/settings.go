@@ -14,12 +14,14 @@ import (
 type SettingsHandler struct {
 	settings *service.SettingsService
 	oauth    *service.InoreaderOAuthService
+	github   *service.GitHubAppClient
 }
 
-func NewSettingsHandler(repo *repository.UserSettingsRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher) *SettingsHandler {
+func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher, github *service.GitHubAppClient) *SettingsHandler {
 	return &SettingsHandler{
-		settings: service.NewSettingsService(repo, llmUsageRepo, cipher),
+		settings: service.NewSettingsService(repo, obsidianRepo, llmUsageRepo, cipher, github),
 		oauth:    service.NewInoreaderOAuthService(repo, cipher),
+		github:   github,
 	}
 }
 
@@ -102,6 +104,32 @@ func (h *SettingsHandler) DeleteInoreaderOAuth(w http.ResponseWriter, r *http.Re
 	})
 }
 
+func (h *SettingsHandler) ObsidianGitHubConnect(w http.ResponseWriter, r *http.Request) {
+	if h.github == nil || strings.TrimSpace(h.github.InstallURL()) == "" {
+		http.Error(w, "github app is not configured", http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, h.github.InstallURL(), http.StatusFound)
+}
+
+func (h *SettingsHandler) ObsidianGitHubCallback(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	if h.github == nil || !h.github.Enabled() {
+		http.Redirect(w, r, "/settings?obsidian_github=error&reason=disabled", http.StatusFound)
+		return
+	}
+	installationID, err := service.ParseGitHubInstallationID(r.URL.Query().Get("installation_id"))
+	if err != nil || installationID <= 0 {
+		http.Redirect(w, r, "/settings?obsidian_github=error&reason=invalid_installation", http.StatusFound)
+		return
+	}
+	if _, err := h.settings.UpsertObsidianGitHubInstallation(r.Context(), userID, installationID); err != nil {
+		http.Redirect(w, r, "/settings?obsidian_github=error&reason=save_failed", http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/settings?obsidian_github=connected", http.StatusFound)
+}
+
 func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	var body struct {
@@ -178,6 +206,61 @@ func (h *SettingsHandler) UpdateReadingPlan(w http.ResponseWriter, r *http.Reque
 			"exclude_read":     settings.ReadingPlanExcludeRead,
 		},
 	})
+}
+
+func (h *SettingsHandler) UpdateObsidianExport(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		Enabled          bool    `json:"enabled"`
+		GitHubRepoOwner  *string `json:"github_repo_owner"`
+		GitHubRepoName   *string `json:"github_repo_name"`
+		GitHubRepoBranch *string `json:"github_repo_branch"`
+		VaultRootPath    *string `json:"vault_root_path"`
+		KeywordLinkMode  *string `json:"keyword_link_mode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	settings, err := h.settings.UpdateObsidianExport(r.Context(), userID, service.UpdateObsidianExportInput{
+		Enabled:          body.Enabled,
+		GitHubRepoOwner:  body.GitHubRepoOwner,
+		GitHubRepoName:   body.GitHubRepoName,
+		GitHubRepoBranch: body.GitHubRepoBranch,
+		VaultRootPath:    body.VaultRootPath,
+		KeywordLinkMode:  body.KeywordLinkMode,
+	})
+	if err != nil {
+		if err.Error() == "invalid keyword_link_mode" {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"user_id":         settings.UserID,
+		"obsidian_export": serviceMapObsidianExport(settings, h.github),
+	})
+}
+
+func serviceMapObsidianExport(settings *model.ObsidianExportSettings, github *service.GitHubAppClient) map[string]any {
+	out := map[string]any{
+		"enabled":                settings.Enabled,
+		"github_installation_id": settings.GitHubInstallationID,
+		"github_repo_owner":      settings.GitHubRepoOwner,
+		"github_repo_name":       settings.GitHubRepoName,
+		"github_repo_branch":     settings.GitHubRepoBranch,
+		"vault_root_path":        settings.VaultRootPath,
+		"keyword_link_mode":      settings.KeywordLinkMode,
+		"last_run_at":            settings.LastRunAt,
+		"last_success_at":        settings.LastSuccessAt,
+	}
+	if github != nil {
+		out["github_app_enabled"] = github.Enabled()
+		out["github_app_install_url"] = github.InstallURL()
+	}
+	return out
 }
 
 func (h *SettingsHandler) UpdateBudget(w http.ResponseWriter, r *http.Request) {

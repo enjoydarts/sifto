@@ -38,3 +38,18 @@ func loadLatestDigestLLMUsage(ctx context.Context, db *pgxpool.Pool, digestID, p
 	}
 	return &llm, nil
 }
+
+func loadLatestItemEmbeddingModel(ctx context.Context, db *pgxpool.Pool, itemID string) (*string, error) {
+	var modelID string
+	err := db.QueryRow(ctx, `
+		SELECT model
+		FROM item_embeddings
+		WHERE item_id = $1
+		ORDER BY updated_at DESC
+		LIMIT 1`, itemID,
+	).Scan(&modelID)
+	if err != nil {
+		return nil, err
+	}
+	return &modelID, nil
+}

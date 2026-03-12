@@ -106,6 +106,7 @@ export default function SettingsPage() {
   const [savingBudget, setSavingBudget] = useState(false);
   const [savingDigestDelivery, setSavingDigestDelivery] = useState(false);
   const [savingReadingPlan, setSavingReadingPlan] = useState(false);
+  const [savingObsidianExport, setSavingObsidianExport] = useState(false);
   const [savingLLMModels, setSavingLLMModels] = useState(false);
   const [savingAnthropicKey, setSavingAnthropicKey] = useState(false);
   const [deletingAnthropicKey, setDeletingAnthropicKey] = useState(false);
@@ -139,6 +140,11 @@ export default function SettingsPage() {
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
   const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
   const [readingPlanDiversifyTopics, setReadingPlanDiversifyTopics] = useState(true);
+  const [obsidianEnabled, setObsidianEnabled] = useState(false);
+  const [obsidianRepoOwner, setObsidianRepoOwner] = useState("");
+  const [obsidianRepoName, setObsidianRepoName] = useState("");
+  const [obsidianRepoBranch, setObsidianRepoBranch] = useState("main");
+  const [obsidianRootPath, setObsidianRootPath] = useState("Sifto/Favorites");
   const [anthropicFactsModel, setAnthropicFactsModel] = useState("");
   const [anthropicSummaryModel, setAnthropicSummaryModel] = useState("");
   const [anthropicDigestClusterModel, setAnthropicDigestClusterModel] = useState("");
@@ -189,6 +195,11 @@ export default function SettingsPage() {
       const rpSize = data.reading_plan?.size;
       setReadingPlanSize(String(rpSize === 7 || rpSize === 15 || rpSize === 25 ? rpSize : 15));
       setReadingPlanDiversifyTopics(Boolean(data.reading_plan?.diversify_topics ?? true));
+      setObsidianEnabled(Boolean(data.obsidian_export?.enabled));
+      setObsidianRepoOwner(data.obsidian_export?.github_repo_owner ?? "");
+      setObsidianRepoName(data.obsidian_export?.github_repo_name ?? "");
+      setObsidianRepoBranch(data.obsidian_export?.github_repo_branch ?? "main");
+      setObsidianRootPath(data.obsidian_export?.vault_root_path ?? "Sifto/Favorites");
       if (!llmModelsDirtyRef.current) {
         syncLLMModelForm(data.llm_models);
       }
@@ -213,6 +224,12 @@ export default function SettingsPage() {
       showToast(t("settings.toast.inoreaderConnected"), "success");
     } else if (inoreaderStatus === "error") {
       showToast(t("settings.toast.inoreaderConnectError"), "error");
+    }
+    const obsidianStatus = new URLSearchParams(window.location.search).get("obsidian_github");
+    if (obsidianStatus === "connected") {
+      showToast(t("settings.toast.obsidianGithubConnected"), "success");
+    } else if (obsidianStatus === "error") {
+      showToast(t("settings.toast.obsidianGithubConnectError"), "error");
     }
   }, [showToast, t]);
 
@@ -395,6 +412,27 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setSavingReadingPlan(false);
+    }
+  }
+
+  async function submitObsidianExport(e: FormEvent) {
+    e.preventDefault();
+    setSavingObsidianExport(true);
+    try {
+      const resp = await api.updateObsidianExport({
+        enabled: obsidianEnabled,
+        github_repo_owner: obsidianRepoOwner.trim() || null,
+        github_repo_name: obsidianRepoName.trim() || null,
+        github_repo_branch: obsidianRepoBranch.trim() || null,
+        vault_root_path: obsidianRootPath.trim() || null,
+        keyword_link_mode: "topics_only",
+      });
+      setSettings((prev) => (prev ? { ...prev, obsidian_export: resp.obsidian_export } : prev));
+      showToast(t("settings.toast.obsidianExportSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingObsidianExport(false);
     }
   }
 
@@ -766,6 +804,109 @@ export default function SettingsPage() {
             </button>
           </div>
         </section>
+
+        <form onSubmit={submitObsidianExport} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="mb-4">
+            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+              <SettingsIcon className="size-4 text-zinc-500" aria-hidden="true" />
+              {t("settings.obsidianTitle")}
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500">{t("settings.obsidianDescription")}</p>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
+              <div>
+                <div className="text-sm font-medium text-zinc-800">{t("settings.obsidianEnabled")}</div>
+                <div className="text-xs text-zinc-500">{t("settings.obsidianEnabledHint")}</div>
+              </div>
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+                <input
+                  type="checkbox"
+                  checked={obsidianEnabled}
+                  onChange={(e) => setObsidianEnabled(e.target.checked)}
+                  className="size-4 rounded border-zinc-300"
+                />
+                {obsidianEnabled ? t("settings.on") : t("settings.off")}
+              </label>
+            </div>
+
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+              {settings.obsidian_export?.github_installation_id
+                ? t("settings.obsidianGithubConnected")
+                : t("settings.obsidianGithubNotConnected")}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href="/api/settings/obsidian-github/connect"
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white"
+              >
+                {t("settings.obsidianGithubConnect")}
+              </a>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700">{t("settings.obsidianRepoOwner")}</label>
+              <input
+                type="text"
+                value={obsidianRepoOwner}
+                onChange={(e) => setObsidianRepoOwner(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                placeholder="your-org"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700">{t("settings.obsidianRepoName")}</label>
+              <input
+                type="text"
+                value={obsidianRepoName}
+                onChange={(e) => setObsidianRepoName(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                placeholder="obsidian-vault"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700">{t("settings.obsidianBranch")}</label>
+              <input
+                type="text"
+                value={obsidianRepoBranch}
+                onChange={(e) => setObsidianRepoBranch(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                placeholder="main"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-700">{t("settings.obsidianRootPath")}</label>
+              <input
+                type="text"
+                value={obsidianRootPath}
+                onChange={(e) => setObsidianRootPath(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                placeholder="Sifto/Favorites"
+              />
+              <p className="mt-1 text-xs text-zinc-500">{t("settings.obsidianRootPathHint")}</p>
+            </div>
+
+            {settings.obsidian_export?.last_success_at && (
+              <p className="text-xs text-zinc-500">
+                {t("settings.obsidianLastSuccess")}: {new Date(settings.obsidian_export.last_success_at).toLocaleString()}
+              </p>
+            )}
+          </div>
+
+          <div className="mt-4">
+            <button
+              type="submit"
+              disabled={savingObsidianExport}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              {savingObsidianExport ? t("common.saving") : t("settings.obsidianSave")}
+            </button>
+          </div>
+        </form>
 
         <OneSignalSettings />
 

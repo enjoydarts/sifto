@@ -260,6 +260,62 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 	}, nil
 }
 
+func (r *ItemRepo) FavoriteExportItems(ctx context.Context, userID string, days, limit int) ([]model.FavoriteExportItem, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	query := `
+		SELECT i.id, i.url, i.title, sm.translated_title, s.title,
+		       sm.summary, COALESCE(sm.topics, '{}'::text[]), sm.score,
+		       COALESCE(i.published_at, i.created_at) AS published_at,
+		       fb.updated_at
+		FROM item_feedbacks fb
+		JOIN items i ON i.id = fb.item_id
+		JOIN sources s ON s.id = i.source_id
+		LEFT JOIN item_summaries sm ON sm.item_id = i.id
+		WHERE fb.user_id = $1
+		  AND s.user_id = $1
+		  AND fb.is_favorite = true`
+	args := []any{userID}
+	if days > 0 {
+		args = append(args, days)
+		query += ` AND fb.updated_at >= NOW() - ($` + itoa(len(args)) + `::int * INTERVAL '1 day')`
+	}
+	args = append(args, limit)
+	query += ` ORDER BY fb.updated_at DESC, sm.score DESC NULLS LAST, i.created_at DESC LIMIT $` + itoa(len(args))
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]model.FavoriteExportItem, 0, limit)
+	for rows.Next() {
+		var item model.FavoriteExportItem
+		if err := rows.Scan(
+			&item.ID,
+			&item.URL,
+			&item.Title,
+			&item.TranslatedTitle,
+			&item.SourceTitle,
+			&item.Summary,
+			&item.Topics,
+			&item.SummaryScore,
+			&item.PublishedAt,
+			&item.FavoritedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
 func (r *ItemRepo) MarkReadBulk(ctx context.Context, userID string, p BulkMarkReadParams) (int, error) {
 	where := ` FROM items i
 		JOIN sources s ON s.id = i.source_id

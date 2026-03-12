@@ -140,6 +140,82 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
+func (h *ItemHandler) ExportFavoritesMarkdown(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	days := parseIntOrDefault(r.URL.Query().Get("days"), 30)
+	limit := parseIntOrDefault(r.URL.Query().Get("limit"), 50)
+	if days < 0 || days > 3650 {
+		http.Error(w, "invalid days", http.StatusBadRequest)
+		return
+	}
+	if limit < 1 || limit > 200 {
+		http.Error(w, "invalid limit", http.StatusBadRequest)
+		return
+	}
+
+	items, err := h.repo.FavoriteExportItems(r.Context(), userID, days, limit)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+
+	now := timeutil.NowJST()
+	rangeLabel := "all favorites"
+	if days > 0 {
+		rangeLabel = fmt.Sprintf("last %d days", days)
+	}
+	filenameDate := now.Format("2006-01-02")
+	filename := fmt.Sprintf("sifto-favorites-%s.md", filenameDate)
+
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	_, _ = w.Write([]byte(buildFavoritesMarkdown(items, now, rangeLabel)))
+}
+
+func buildFavoritesMarkdown(items []model.FavoriteExportItem, now time.Time, rangeLabel string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Sifto favorites\n\n")
+	fmt.Fprintf(&b, "Generated: %s\n\n", now.Format("2006-01-02 15:04 JST"))
+	fmt.Fprintf(&b, "Range: %s\n\n", rangeLabel)
+	fmt.Fprintf(&b, "Items: %d\n\n", len(items))
+	for i, item := range items {
+		title := pickFavoriteExportTitle(item)
+		fmt.Fprintf(&b, "## %d. %s\n\n", i+1, title)
+		fmt.Fprintf(&b, "- URL: %s\n", item.URL)
+		fmt.Fprintf(&b, "- Favorited: %s\n", item.FavoritedAt.In(timeutil.JST).Format("2006-01-02 15:04 JST"))
+		if item.PublishedAt != nil {
+			fmt.Fprintf(&b, "- Published: %s\n", item.PublishedAt.In(timeutil.JST).Format("2006-01-02 15:04 JST"))
+		}
+		if item.SourceTitle != nil && strings.TrimSpace(*item.SourceTitle) != "" {
+			fmt.Fprintf(&b, "- Source: %s\n", strings.TrimSpace(*item.SourceTitle))
+		}
+		if item.SummaryScore != nil {
+			fmt.Fprintf(&b, "- Score: %.2f\n", *item.SummaryScore)
+		}
+		if len(item.Topics) > 0 {
+			fmt.Fprintf(&b, "- Topics: %s\n", strings.Join(item.Topics, ", "))
+		}
+		b.WriteString("\n")
+		if item.Summary != nil && strings.TrimSpace(*item.Summary) != "" {
+			b.WriteString(strings.TrimSpace(*item.Summary))
+			b.WriteString("\n\n")
+		} else {
+			b.WriteString("Summary: (not available)\n\n")
+		}
+	}
+	return b.String()
+}
+
+func pickFavoriteExportTitle(item model.FavoriteExportItem) string {
+	if item.TranslatedTitle != nil && strings.TrimSpace(*item.TranslatedTitle) != "" {
+		return strings.TrimSpace(*item.TranslatedTitle)
+	}
+	if item.Title != nil && strings.TrimSpace(*item.Title) != "" {
+		return strings.TrimSpace(*item.Title)
+	}
+	return item.URL
+}
+
 func (h *ItemHandler) Stats(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	resp, err := h.repo.Stats(r.Context(), userID)

@@ -26,7 +26,7 @@ func loadFeedbackPreferenceProfile(ctx context.Context, db *pgxpool.Pool, userID
 		           WHEN fb.rating < 0 THEN -1.0
 		           ELSE 0.0
 		         END
-		         + CASE WHEN fb.is_favorite THEN 0.7 ELSE 0.0 END
+		         + CASE WHEN fb.is_favorite THEN 1.0 ELSE 0.0 END
 		       )::double precision AS signal
 		FROM item_feedbacks fb
 		JOIN items i ON i.id = fb.item_id
@@ -91,13 +91,13 @@ func itemPreferenceAdjustedScore(item model.Item, profile *feedbackPreferencePro
 	}
 	if profile == nil {
 		if item.IsFavorite {
-			return base + 0.12
+			return base + 0.18
 		}
 		return base
 	}
 	adj := base
 	if item.IsFavorite {
-		adj += 0.12
+		adj += 0.18
 	}
 	return adj
 }

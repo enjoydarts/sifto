@@ -191,6 +191,11 @@ export interface BulkMarkLaterResult {
   updated_count: number;
 }
 
+export interface FavoritesMarkdownExportParams {
+  days?: number;
+  limit?: number;
+}
+
 export interface ItemLaterResult {
   item_id: string;
   is_later: boolean;
@@ -717,6 +722,24 @@ export const api = {
     if (params?.later_only != null) q.set("later_only", String(params.later_only));
     const qs = q.toString();
     return apiFetch<ItemListResponse>(`/items${qs ? `?${qs}` : ""}`);
+  },
+  exportFavoritesMarkdown: async (params?: FavoritesMarkdownExportParams) => {
+    const q = new URLSearchParams();
+    if (params?.days != null) q.set("days", String(params.days));
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    const authHeaders = await getAuthHeaders();
+    const qs = q.toString();
+    const res = await fetch(`/api/items/favorites/export-markdown${qs ? `?${qs}` : ""}`, {
+      cache: "no-store",
+      headers: {
+        ...authHeaders,
+      },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`${res.status}: ${text || res.statusText}`);
+    }
+    return res.text();
   },
   getReadingPlan: (params?: {
     window?: "24h" | "today_jst" | "7d";

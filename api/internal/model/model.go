@@ -241,6 +241,19 @@ type ItemListResponse struct {
 	SourceID *string `json:"source_id,omitempty"`
 }
 
+type FavoriteExportItem struct {
+	ID              string     `json:"id"`
+	URL             string     `json:"url"`
+	Title           *string    `json:"title,omitempty"`
+	TranslatedTitle *string    `json:"translated_title,omitempty"`
+	SourceTitle     *string    `json:"source_title,omitempty"`
+	Summary         *string    `json:"summary,omitempty"`
+	Topics          []string   `json:"topics,omitempty"`
+	SummaryScore    *float64   `json:"summary_score,omitempty"`
+	PublishedAt     *time.Time `json:"published_at,omitempty"`
+	FavoritedAt     time.Time  `json:"favorited_at"`
+}
+
 type ReadingPlanResponse struct {
 	Items           []Item               `json:"items"`
 	Window          string               `json:"window"`

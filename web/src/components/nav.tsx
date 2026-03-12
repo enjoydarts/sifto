@@ -16,6 +16,7 @@ import {
   Search,
   Settings as SettingsIcon,
   Sparkles,
+  Star,
   type LucideIcon,
 } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
@@ -29,6 +30,7 @@ const primaryLinks = [
 ];
 
 const secondaryLinks = [
+  { href: "/favorites", labelKey: "nav.favorites", icon: Star },
   { href: "/sources", labelKey: "nav.sources", icon: Rss },
   { href: "/digests", labelKey: "nav.digests", icon: Mail },
   { href: "/ask", labelKey: "nav.ask", icon: Search },

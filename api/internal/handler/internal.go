@@ -22,6 +22,7 @@ import (
 type InternalHandler struct {
 	userRepo     *repository.UserRepo
 	identityRepo *repository.UserIdentityRepo
+	obsidianRepo *repository.ObsidianExportRepo
 	itemRepo     *repository.ItemInngestRepo
 	digestRepo   *repository.DigestInngestRepo
 	settings     *repository.UserSettingsRepo
@@ -31,11 +32,13 @@ type InternalHandler struct {
 	cache        service.JSONCache
 	worker       *service.WorkerClient
 	oneSignal    *service.OneSignalClient
+	githubApp    *service.GitHubAppClient
 }
 
 func NewInternalHandler(
 	userRepo *repository.UserRepo,
 	identityRepo *repository.UserIdentityRepo,
+	obsidianRepo *repository.ObsidianExportRepo,
 	itemRepo *repository.ItemInngestRepo,
 	digestRepo *repository.DigestInngestRepo,
 	settings *repository.UserSettingsRepo,
@@ -45,10 +48,12 @@ func NewInternalHandler(
 	cache service.JSONCache,
 	worker *service.WorkerClient,
 	oneSignal *service.OneSignalClient,
+	githubApp *service.GitHubAppClient,
 ) *InternalHandler {
 	return &InternalHandler{
 		userRepo:     userRepo,
 		identityRepo: identityRepo,
+		obsidianRepo: obsidianRepo,
 		itemRepo:     itemRepo,
 		digestRepo:   digestRepo,
 		settings:     settings,
@@ -58,6 +63,7 @@ func NewInternalHandler(
 		cache:        cache,
 		worker:       worker,
 		oneSignal:    oneSignal,
+		githubApp:    githubApp,
 	}
 }
 
@@ -170,6 +176,63 @@ func (h *InternalHandler) ResolveIdentity(w http.ResponseWriter, r *http.Request
 		"resolved_by":      "email",
 		"provider":         identity.Provider,
 		"provider_user_id": identity.ProviderUserID,
+	})
+}
+
+func (h *InternalHandler) UpsertObsidianGitHubInstallation(w http.ResponseWriter, r *http.Request) {
+	if !checkInternalSecret(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.obsidianRepo == nil || h.githubApp == nil || !h.githubApp.Enabled() {
+		http.Error(w, "github app unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	var body struct {
+		UserID         string `json:"user_id"`
+		InstallationID int64  `json:"installation_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	body.UserID = strings.TrimSpace(body.UserID)
+	if body.UserID == "" || body.InstallationID <= 0 {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	installation, err := h.githubApp.GetInstallation(r.Context(), body.InstallationID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("get installation failed: %v", err), http.StatusBadGateway)
+		return
+	}
+	var owner *string
+	if installation != nil && installation.Account != nil {
+		v := strings.TrimSpace(installation.Account.Login)
+		if v != "" {
+			owner = &v
+		}
+	}
+	settings, err := h.obsidianRepo.UpsertInstallation(r.Context(), body.UserID, body.InstallationID, owner)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("save installation failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"user_id": settings.UserID,
+		"obsidian_export": map[string]any{
+			"enabled":                settings.Enabled,
+			"github_installation_id": settings.GitHubInstallationID,
+			"github_repo_owner":      settings.GitHubRepoOwner,
+			"github_repo_name":       settings.GitHubRepoName,
+			"github_repo_branch":     settings.GitHubRepoBranch,
+			"vault_root_path":        settings.VaultRootPath,
+			"keyword_link_mode":      settings.KeywordLinkMode,
+			"last_run_at":            settings.LastRunAt,
+			"last_success_at":        settings.LastSuccessAt,
+		},
 	})
 }
 

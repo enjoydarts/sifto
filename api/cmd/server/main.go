@@ -74,7 +74,7 @@ func main() {
 	settingsH := handler.NewSettingsHandler(userSettingsRepo, obsidianExportRepo, llmUsageRepo, secretCipher, githubApp)
 	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo)
 
-	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal)
+	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher)
 	itemH := handler.NewItemHandler(itemRepo, sourceRepo, streakRepo, briefingSnapshotRepo, eventPublisher, cache)
 	digestH := handler.NewDigestHandler(digestRepo)
@@ -108,6 +108,7 @@ func main() {
 	// Next.js からのみ呼ばれる内部エンドポイント（X-Internal-Secret で保護）
 	r.Post("/api/internal/users/upsert", internalH.UpsertUser)
 	r.Post("/api/internal/users/resolve-identity", internalH.ResolveIdentity)
+	r.Post("/api/internal/settings/obsidian-github/installation", internalH.UpsertObsidianGitHubInstallation)
 	r.Post("/api/internal/debug/digests/generate", internalH.DebugGenerateDigest)
 	r.Post("/api/internal/debug/digests/send", internalH.DebugSendDigest)
 	r.Post("/api/internal/debug/embeddings/backfill", internalH.DebugBackfillEmbeddings)
@@ -190,8 +191,6 @@ func main() {
 			r.Patch("/reading-plan", settingsH.UpdateReadingPlan)
 			r.Patch("/llm-models", settingsH.UpdateLLMModels)
 			r.Patch("/obsidian-export", settingsH.UpdateObsidianExport)
-			r.Get("/obsidian-github/connect", settingsH.ObsidianGitHubConnect)
-			r.Get("/obsidian-github/callback", settingsH.ObsidianGitHubCallback)
 			r.Get("/inoreader/connect", settingsH.InoreaderConnect)
 			r.Get("/inoreader/callback", settingsH.InoreaderCallback)
 			r.Delete("/inoreader-oauth", settingsH.DeleteInoreaderOAuth)

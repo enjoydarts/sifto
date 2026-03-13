@@ -42,7 +42,10 @@ def run_summary_faithfulness_check(
             except RuntimeError as retry_exc:
                 last_exc = retry_exc
         if result is None:
-            raise last_exc
+            result = {
+                "verdict": "warn",
+                "short_comment": "忠実性チェックの判定応答を取得できなかったため未確認です。再試行してください。",
+            }
     result["llm"] = llm
     record_check_score("faithfulness_verdict", result)
     return result

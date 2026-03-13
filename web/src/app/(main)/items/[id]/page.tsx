@@ -63,6 +63,13 @@ export default function ItemDetailPage() {
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const [nextItemHref, setNextItemHref] = useState<string | null>(null);
   const autoMarkedRef = useRef<Record<string, true>>({});
+  const readStateOverrideRef = useRef<Record<string, boolean>>({});
+
+  const applyReadOverride = useCallback((nextItem: ItemDetail): ItemDetail => {
+    const override = readStateOverrideRef.current[nextItem.id];
+    if (override == null) return nextItem;
+    return { ...nextItem, is_read: override };
+  }, []);
 
   const refreshReadDependentQueries = useCallback(async () => {
     await Promise.allSettled([
@@ -252,7 +259,7 @@ export default function ItemDetailPage() {
       6,
     ]);
     if (cachedItem) {
-      setItem(cachedItem);
+      setItem(applyReadOverride(cachedItem));
       setError(null);
       setLoading(false);
     } else {
@@ -272,8 +279,9 @@ export default function ItemDetailPage() {
         if (detailRes.status === "rejected") {
           if (!cachedItem) throw detailRes.reason;
         } else {
-          queryClient.setQueryData(["item-detail", id], detailRes.value);
-          setItem(detailRes.value);
+          const nextItem = applyReadOverride(detailRes.value);
+          queryClient.setQueryData(["item-detail", id], nextItem);
+          setItem(nextItem);
           setError(null);
         }
 
@@ -299,7 +307,7 @@ export default function ItemDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, queryClient]);
+  }, [applyReadOverride, id, queryClient]);
 
   useEffect(() => {
     if (!item || item.is_read || autoMarkedRef.current[item.id]) return;
@@ -309,7 +317,11 @@ export default function ItemDetailPage() {
     api
       .markItemRead(item.id)
       .then(async (next) => {
+        readStateOverrideRef.current[item.id] = next.is_read;
         syncItemReadInFeedCaches(item.id, next.is_read);
+        queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) =>
+          prev ? { ...prev, is_read: next.is_read } : prev
+        );
         setItem((prev) => (prev && prev.id === item.id ? { ...prev, is_read: next.is_read } : prev));
         await refreshReadDependentQueries();
       })
@@ -317,7 +329,7 @@ export default function ItemDetailPage() {
         delete autoMarkedRef.current[item.id];
       })
       .finally(() => setReadUpdating(false));
-  }, [item, refreshReadDependentQueries, syncItemReadInFeedCaches]);
+  }, [item, queryClient, refreshReadDependentQueries, syncItemReadInFeedCaches]);
 
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
   const backHref = useMemo(() => {
@@ -406,7 +418,11 @@ export default function ItemDetailPage() {
     setReadUpdating(true);
     try {
       const next = item.is_read ? await api.markItemUnread(item.id) : await api.markItemRead(item.id);
+      readStateOverrideRef.current[item.id] = next.is_read;
       syncItemReadInFeedCaches(item.id, next.is_read);
+      queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) =>
+        prev ? { ...prev, is_read: next.is_read } : prev
+      );
       setItem({ ...item, is_read: next.is_read });
       await refreshReadDependentQueries();
       showToast(

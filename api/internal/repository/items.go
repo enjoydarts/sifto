@@ -27,7 +27,7 @@ type ItemListParams struct {
 	ReadOnly     bool
 	FavoriteOnly bool
 	LaterOnly    bool
-	Sort         string // newest | score
+	Sort         string // newest | score | personal_score
 	Page         int
 	PageSize     int
 }
@@ -119,7 +119,7 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 	if p.PageSize > 200 {
 		p.PageSize = 200
 	}
-	if p.Sort != "score" {
+	if p.Sort != "score" && p.Sort != "personal_score" {
 		p.Sort = "newest"
 	}
 
@@ -180,7 +180,7 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 	offsetArg := `$` + itoa(len(args))
 
 	orderBy := ` ORDER BY i.created_at DESC`
-	if p.Sort == "score" {
+	if p.Sort == "score" || p.Sort == "personal_score" {
 		orderBy = ` ORDER BY sm.score DESC NULLS LAST, i.created_at DESC`
 	}
 

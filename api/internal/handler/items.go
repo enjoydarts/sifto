@@ -20,13 +20,14 @@ import (
 )
 
 type ItemHandler struct {
-	repo         *repository.ItemRepo
-	sourceRepo   *repository.SourceRepo
-	streakRepo   *repository.ReadingStreakRepo
-	snapshotRepo *repository.BriefingSnapshotRepo
-	publisher    *service.EventPublisher
-	cache        service.JSONCache
-	detail       *service.ItemDetailService
+	repo            *repository.ItemRepo
+	sourceRepo      *repository.SourceRepo
+	streakRepo      *repository.ReadingStreakRepo
+	snapshotRepo    *repository.BriefingSnapshotRepo
+	prefProfileRepo *repository.PreferenceProfileRepo
+	publisher       *service.EventPublisher
+	cache           service.JSONCache
+	detail          *service.ItemDetailService
 }
 
 const itemsListCacheTTL = 30 * time.Second
@@ -39,17 +40,19 @@ func NewItemHandler(
 	sourceRepo *repository.SourceRepo,
 	streakRepo *repository.ReadingStreakRepo,
 	snapshotRepo *repository.BriefingSnapshotRepo,
+	prefProfileRepo *repository.PreferenceProfileRepo,
 	publisher *service.EventPublisher,
 	cache service.JSONCache,
 ) *ItemHandler {
 	return &ItemHandler{
-		repo:         repo,
-		sourceRepo:   sourceRepo,
-		streakRepo:   streakRepo,
-		snapshotRepo: snapshotRepo,
-		publisher:    publisher,
-		cache:        cache,
-		detail:       service.NewItemDetailService(repo),
+		repo:            repo,
+		sourceRepo:      sourceRepo,
+		streakRepo:      streakRepo,
+		snapshotRepo:    snapshotRepo,
+		prefProfileRepo: prefProfileRepo,
+		publisher:       publisher,
+		cache:           cache,
+		detail:          service.NewItemDetailService(repo),
 	}
 }
 
@@ -80,7 +83,7 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	if sort == "" {
 		sort = "newest"
 	}
-	if sort != "newest" && sort != "score" {
+	if sort != "newest" && sort != "score" && sort != "personal_score" {
 		http.Error(w, "invalid sort", http.StatusBadRequest)
 		return
 	}
@@ -131,6 +134,9 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	if sort == "personal_score" && resp != nil && len(resp.Items) > 0 {
+		h.applyPersonalScoreSort(r.Context(), userID, resp)
+	}
 	if h.cache != nil && resp != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, itemsListCacheTTL); err != nil {
 			itemsListCacheCounter.errors.Add(1)
@@ -139,6 +145,54 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, resp)
+}
+
+func (h *ItemHandler) applyPersonalScoreSort(ctx context.Context, userID string, resp *model.ItemListResponse) {
+	if h.prefProfileRepo == nil {
+		return
+	}
+	profile, err := h.prefProfileRepo.GetProfile(ctx, userID)
+	if err != nil || profile == nil || profile.FeedbackCount < 10 {
+		return
+	}
+
+	itemIDs := make([]string, len(resp.Items))
+	for i, it := range resp.Items {
+		itemIDs[i] = it.ID
+	}
+	embeddings, err := h.repo.LoadItemEmbeddingsByID(ctx, itemIDs)
+	if err != nil {
+		log.Printf("personal_score: load embeddings failed user_id=%s err=%v", userID, err)
+		embeddings = nil
+	}
+
+	for i := range resp.Items {
+		it := &resp.Items[i]
+		input := repository.PersonalScoreInput{
+			SummaryScore:   it.SummaryScore,
+			ScoreBreakdown: it.SummaryScoreBreakdown,
+			Topics:         it.SummaryTopics,
+			SourceID:       it.SourceID,
+		}
+		if embeddings != nil {
+			input.Embedding = embeddings[it.ID]
+		}
+		score, reason := repository.CalcPersonalScore(input, profile)
+		it.PersonalScore = &score
+		it.PersonalScoreReason = &reason
+	}
+
+	sort.SliceStable(resp.Items, func(i, j int) bool {
+		si := 0.0
+		sj := 0.0
+		if resp.Items[i].PersonalScore != nil {
+			si = *resp.Items[i].PersonalScore
+		}
+		if resp.Items[j].PersonalScore != nil {
+			sj = *resp.Items[j].PersonalScore
+		}
+		return si > sj
+	})
 }
 
 func (h *ItemHandler) ExportFavoritesMarkdown(w http.ResponseWriter, r *http.Request) {

@@ -10,6 +10,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// LoadItemEmbeddingsByID fetches embeddings for the given item IDs.
+func (r *ItemRepo) LoadItemEmbeddingsByID(ctx context.Context, itemIDs []string) (map[string][]float64, error) {
+	return loadItemEmbeddingsByID(ctx, r.db, itemIDs)
+}
+
 func loadItemEmbeddingsByID(ctx context.Context, db *pgxpool.Pool, itemIDs []string) (map[string][]float64, error) {
 	if len(itemIDs) == 0 {
 		return nil, nil

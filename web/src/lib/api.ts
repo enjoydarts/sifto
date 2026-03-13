@@ -468,7 +468,7 @@ export interface LLMCatalogModelPricing {
 
 export interface LLMCatalogModel {
   id: string;
-  provider: "anthropic" | "google" | "groq" | "openai" | "deepseek" | string;
+  provider: "anthropic" | "google" | "groq" | "openai" | "deepseek" | "alibaba" | "mistral" | string;
   available_purposes: string[];
   recommendation?: "recommended" | "strong" | "experimental" | string;
   best_for?: "facts" | "summary" | "ask" | "digest" | "embedding" | "balanced" | string;
@@ -496,6 +496,10 @@ export interface UserSettings {
   groq_api_key_last4: string | null;
   has_deepseek_api_key: boolean;
   deepseek_api_key_last4: string | null;
+  has_alibaba_api_key: boolean;
+  alibaba_api_key_last4: string | null;
+  has_mistral_api_key: boolean;
+  mistral_api_key_last4: string | null;
   has_inoreader_oauth?: boolean;
   inoreader_token_expires_at?: string | null;
   monthly_budget_usd: number | null;
@@ -1037,6 +1041,26 @@ export const api = {
   deleteDeepSeekApiKey: () =>
     apiFetch<{ user_id: string; has_deepseek_api_key: boolean; deepseek_api_key_last4: string | null }>(
       "/settings/deepseek-key",
+      { method: "DELETE" }
+    ),
+  setAlibabaApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_alibaba_api_key: boolean; alibaba_api_key_last4: string | null }>(
+      "/settings/alibaba-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteAlibabaApiKey: () =>
+    apiFetch<{ user_id: string; has_alibaba_api_key: boolean; alibaba_api_key_last4: string | null }>(
+      "/settings/alibaba-key",
+      { method: "DELETE" }
+    ),
+  setMistralApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_mistral_api_key: boolean; mistral_api_key_last4: string | null }>(
+      "/settings/mistral-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteMistralApiKey: () =>
+    apiFetch<{ user_id: string; has_mistral_api_key: boolean; mistral_api_key_last4: string | null }>(
+      "/settings/mistral-key",
       { method: "DELETE" }
     ),
   deleteInoreaderOAuth: () =>

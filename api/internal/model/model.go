@@ -33,6 +33,10 @@ type UserSettings struct {
 	HasGroqAPIKey              bool       `json:"has_groq_api_key"`
 	DeepSeekAPIKeyLast4        *string    `json:"deepseek_api_key_last4,omitempty"`
 	HasDeepSeekAPIKey          bool       `json:"has_deepseek_api_key"`
+	AlibabaAPIKeyLast4         *string    `json:"alibaba_api_key_last4,omitempty"`
+	HasAlibabaAPIKey           bool       `json:"has_alibaba_api_key"`
+	MistralAPIKeyLast4         *string    `json:"mistral_api_key_last4,omitempty"`
+	HasMistralAPIKey           bool       `json:"has_mistral_api_key"`
 	MonthlyBudgetUSD           *float64   `json:"monthly_budget_usd,omitempty"`
 	BudgetAlertEnabled         bool       `json:"budget_alert_enabled"`
 	BudgetAlertThresholdPct    int        `json:"budget_alert_threshold_pct"`

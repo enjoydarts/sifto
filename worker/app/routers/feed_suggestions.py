@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
+from app.services.alibaba_service import rank_feed_suggestions as rank_feed_suggestions_alibaba
 from app.services.claude_service import rank_feed_suggestions
 from app.services.deepseek_service import rank_feed_suggestions as rank_feed_suggestions_deepseek
 from app.services.gemini_service import rank_feed_suggestions as rank_feed_suggestions_gemini
 from app.services.groq_service import rank_feed_suggestions as rank_feed_suggestions_groq
 from app.services.llm_dispatch import dispatch_by_model
+from app.services.mistral_service import rank_feed_suggestions as rank_feed_suggestions_mistral
 from app.services.openai_service import rank_feed_suggestions as rank_feed_suggestions_openai
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
@@ -103,6 +105,24 @@ def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Requ
                     api_key=api_key or "",
                 ),
                 "deepseek": lambda api_key: rank_feed_suggestions_deepseek(
+                    existing_sources=existing_sources,
+                    preferred_topics=req.preferred_topics,
+                    candidates=candidates,
+                    positive_examples=positive_examples,
+                    negative_examples=negative_examples,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "alibaba": lambda api_key: rank_feed_suggestions_alibaba(
+                    existing_sources=existing_sources,
+                    preferred_topics=req.preferred_topics,
+                    candidates=candidates,
+                    positive_examples=positive_examples,
+                    negative_examples=negative_examples,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "mistral": lambda api_key: rank_feed_suggestions_mistral(
                     existing_sources=existing_sources,
                     preferred_topics=req.preferred_topics,
                     candidates=candidates,

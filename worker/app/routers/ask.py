@@ -1,11 +1,13 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from app.services.alibaba_service import ask_question as ask_question_alibaba
 from app.services.claude_service import ask_question
 from app.services.deepseek_service import ask_question as ask_question_deepseek
 from app.services.gemini_service import ask_question as ask_question_gemini
 from app.services.groq_service import ask_question as ask_question_groq
 from app.services.llm_dispatch import dispatch_by_model
+from app.services.mistral_service import ask_question as ask_question_mistral
 from app.services.openai_service import ask_question as ask_question_openai
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
@@ -58,6 +60,8 @@ def ask_endpoint(req: AskRequest, request: Request):
                     "google": lambda api_key: ask_question_gemini(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                     "groq": lambda api_key: ask_question_groq(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                     "deepseek": lambda api_key: ask_question_deepseek(req.query, candidates, model=str(req.model), api_key=api_key or ""),
+                    "alibaba": lambda api_key: ask_question_alibaba(req.query, candidates, model=str(req.model), api_key=api_key or ""),
+                    "mistral": lambda api_key: ask_question_mistral(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: ask_question_openai(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                 },
             ),

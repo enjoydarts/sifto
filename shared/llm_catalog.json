@@ -53,6 +53,48 @@
       }
     },
     {
+      "id": "alibaba",
+      "api_key_header": "x-alibaba-api-key",
+      "match_exact": [
+        "qwen3-max",
+        "qwen3.5-plus",
+        "qwen3.5-flash",
+        "qwen3.5-397b-a17b",
+        "qwen3.5-35b-a3b",
+        "qwen3.5-27b"
+      ],
+      "default_models": {
+        "facts": "qwen3.5-flash",
+        "summary": "qwen3.5-plus",
+        "digest_cluster_draft": "qwen3-max",
+        "digest": "qwen3-max",
+        "ask": "qwen3.5-plus",
+        "source_suggestion": "qwen3.5-flash"
+      }
+    },
+    {
+      "id": "mistral",
+      "api_key_header": "x-mistral-api-key",
+      "match_exact": [
+        "mistral-large-2512",
+        "mistral-medium-2508",
+        "mistral-small-2506",
+        "ministral-14b-2512",
+        "ministral-8b-2512",
+        "ministral-3b-2512",
+        "magistral-medium-2509",
+        "magistral-small-2509"
+      ],
+      "default_models": {
+        "facts": "mistral-small-2506",
+        "summary": "mistral-small-2506",
+        "digest_cluster_draft": "mistral-medium-2508",
+        "digest": "mistral-medium-2508",
+        "ask": "mistral-small-2506",
+        "source_suggestion": "ministral-8b-2512"
+      }
+    },
+    {
       "id": "openai",
       "api_key_header": "x-openai-api-key",
       "match_prefixes": ["gpt-5"],
@@ -413,6 +455,314 @@
         "input_per_mtok_usd": 0.29,
         "output_per_mtok_usd": 0.59,
         "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "qwen3-max",
+      "provider": "alibaba",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "DashScope 国際リージョンの上位 Qwen3 枠。難しめの整理や長めのダイジェストで比較候補になる。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "alibaba_dashscope_static_2026_03",
+        "input_per_mtok_usd": 1.6,
+        "output_per_mtok_usd": 6.4
+      }
+    },
+    {
+      "id": "qwen3.5-plus",
+      "provider": "alibaba",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": ["fast"],
+      "comment": "Qwen3.5 系の標準候補。要約や質問応答を安定して回しやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "alibaba_dashscope_static_2026_03",
+        "input_per_mtok_usd": 0.4,
+        "output_per_mtok_usd": 1.2
+      }
+    },
+    {
+      "id": "qwen3.5-flash",
+      "provider": "alibaba",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "fast"],
+      "comment": "Qwen 3.5 系の軽量枠。大量の抽出や候補生成を低コストで回したい時に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "alibaba_dashscope_static_2026_03",
+        "input_per_mtok_usd": 0.05,
+        "output_per_mtok_usd": 0.4
+      }
+    },
+    {
+      "id": "qwen3.5-397b-a17b",
+      "provider": "alibaba",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": [],
+      "comment": "Qwen 3.5 の大規模 MoE 枠。品質重視の比較候補として扱いやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "alibaba_dashscope_static_2026_03",
+        "input_per_mtok_usd": 1.6,
+        "output_per_mtok_usd": 6.4
+      }
+    },
+    {
+      "id": "qwen3.5-35b-a3b",
+      "provider": "alibaba",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["fast"],
+      "comment": "Qwen 3.5 の中量級 MoE 枠。速度と品質のバランスを取りやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "alibaba_dashscope_static_2026_03",
+        "input_per_mtok_usd": 0.2,
+        "output_per_mtok_usd": 0.6
+      }
+    },
+    {
+      "id": "qwen3.5-27b",
+      "provider": "alibaba",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["fast"],
+      "comment": "Qwen 3.5 の密結合 27B 枠。軽さと安定性を優先した比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "alibaba_dashscope_static_2026_03",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.6
+      }
+    },
+    {
+      "id": "mistral-large-2512",
+      "provider": "mistral",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "Mistral の上位汎用モデル。難しめの整理や長めのダイジェスト生成の比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "mistral_static_2026_03",
+        "input_per_mtok_usd": 0.5,
+        "output_per_mtok_usd": 1.5
+      }
+    },
+    {
+      "id": "mistral-medium-2508",
+      "provider": "mistral",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["fast"],
+      "comment": "Mistral Medium 3.1。日常的な要約や質問応答を広く担当させやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "mistral_static_2026_03",
+        "input_per_mtok_usd": 0.4,
+        "output_per_mtok_usd": 2.0
+      }
+    },
+    {
+      "id": "mistral-small-2506",
+      "provider": "mistral",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "facts",
+      "highlights": ["fast"],
+      "comment": "Mistral Small 3.2。抽出や軽めの要約でコストと品質のバランスが良い。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "mistral_static_2026_03",
+        "input_per_mtok_usd": 0.1,
+        "output_per_mtok_usd": 0.3
+      }
+    },
+    {
+      "id": "ministral-14b-2512",
+      "provider": "mistral",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": ["fast"],
+      "comment": "Ministral 3 の上位軽量枠。ローカル志向の軽量系として扱いやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "mistral_static_2026_03",
+        "input_per_mtok_usd": 0.2,
+        "output_per_mtok_usd": 0.2
+      }
+    },
+    {
+      "id": "ministral-8b-2512",
+      "provider": "mistral",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "fast"],
+      "comment": "Ministral 3 8B。候補生成や軽量タスクを安く回したい時向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "mistral_static_2026_03",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.15
+      }
+    },
+    {
+      "id": "ministral-3b-2512",
+      "provider": "mistral",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "fast"],
+      "comment": "Ministral 3 3B。Mistral 系で最軽量寄りの選択肢。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "mistral_static_2026_03",
+        "input_per_mtok_usd": 0.1,
+        "output_per_mtok_usd": 0.1
+      }
+    },
+    {
+      "id": "magistral-medium-2509",
+      "provider": "mistral",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "Magistral Medium 1.2。推論寄りの難ケース比較向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "mistral_static_2026_03",
+        "input_per_mtok_usd": 2.0,
+        "output_per_mtok_usd": 5.0
+      }
+    },
+    {
+      "id": "magistral-small-2509",
+      "provider": "mistral",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "ask",
+      "highlights": [],
+      "comment": "Magistral Small 1.2。推論寄りの軽量比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "mistral_static_2026_03",
+        "input_per_mtok_usd": 0.5,
+        "output_per_mtok_usd": 1.5
       }
     },
     {

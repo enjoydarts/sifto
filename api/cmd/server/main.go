@@ -206,6 +206,10 @@ func main() {
 			r.Delete("/groq-key", settingsH.DeleteGroqAPIKey)
 			r.Post("/deepseek-key", settingsH.SetDeepSeekAPIKey)
 			r.Delete("/deepseek-key", settingsH.DeleteDeepSeekAPIKey)
+			r.Post("/alibaba-key", settingsH.SetAlibabaAPIKey)
+			r.Delete("/alibaba-key", settingsH.DeleteAlibabaAPIKey)
+			r.Post("/mistral-key", settingsH.SetMistralAPIKey)
+			r.Delete("/mistral-key", settingsH.DeleteMistralAPIKey)
 		})
 	})
 

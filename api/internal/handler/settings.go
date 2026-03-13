@@ -435,3 +435,31 @@ func (h *SettingsHandler) DeleteDeepSeekAPIKey(w http.ResponseWriter, r *http.Re
 		"deepseek_api_key_last4": func(s *model.UserSettings) any { return s.DeepSeekAPIKeyLast4 },
 	})
 }
+
+func (h *SettingsHandler) SetAlibabaAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "alibaba", map[string]func(*model.UserSettings) any{
+		"has_alibaba_api_key":   func(s *model.UserSettings) any { return s.HasAlibabaAPIKey },
+		"alibaba_api_key_last4": func(s *model.UserSettings) any { return s.AlibabaAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteAlibabaAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "alibaba", map[string]func(*model.UserSettings) any{
+		"has_alibaba_api_key":   func(s *model.UserSettings) any { return s.HasAlibabaAPIKey },
+		"alibaba_api_key_last4": func(s *model.UserSettings) any { return s.AlibabaAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) SetMistralAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "mistral", map[string]func(*model.UserSettings) any{
+		"has_mistral_api_key":   func(s *model.UserSettings) any { return s.HasMistralAPIKey },
+		"mistral_api_key_last4": func(s *model.UserSettings) any { return s.MistralAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteMistralAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "mistral", map[string]func(*model.UserSettings) any{
+		"has_mistral_api_key":   func(s *model.UserSettings) any { return s.HasMistralAPIKey },
+		"mistral_api_key_last4": func(s *model.UserSettings) any { return s.MistralAPIKeyLast4 },
+	})
+}

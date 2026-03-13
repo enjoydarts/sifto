@@ -6,6 +6,21 @@ export default function PWARegister() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!("serviceWorker" in navigator)) return;
+    const isDev = process.env.NODE_ENV !== "production";
+    if (isDev) {
+      navigator.serviceWorker.getRegistrations()
+        .then((registrations) =>
+          Promise.all(
+            registrations
+              .filter((registration) => registration.scope === `${window.location.origin}/`)
+              .map((registration) => registration.unregister())
+          )
+        )
+        .catch(() => {
+          // no-op
+        });
+      return;
+    }
     const isSecure = window.location.protocol === "https:" || window.location.hostname === "localhost";
     if (!isSecure) return;
 

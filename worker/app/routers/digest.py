@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from app.services.alibaba_service import compose_digest as compose_digest_alibaba
+from app.services.alibaba_service import compose_digest_cluster_draft as compose_digest_cluster_draft_alibaba
 from app.services.claude_service import compose_digest, compose_digest_cluster_draft
 from app.services.deepseek_service import compose_digest as compose_digest_deepseek
 from app.services.deepseek_service import compose_digest_cluster_draft as compose_digest_cluster_draft_deepseek
@@ -9,6 +11,8 @@ from app.services.gemini_service import compose_digest_cluster_draft as compose_
 from app.services.groq_service import compose_digest as compose_digest_groq
 from app.services.groq_service import compose_digest_cluster_draft as compose_digest_cluster_draft_groq
 from app.services.llm_dispatch import dispatch_by_model
+from app.services.mistral_service import compose_digest as compose_digest_mistral
+from app.services.mistral_service import compose_digest_cluster_draft as compose_digest_cluster_draft_mistral
 from app.services.openai_service import compose_digest as compose_digest_openai
 from app.services.openai_service import compose_digest_cluster_draft as compose_digest_cluster_draft_openai
 from app.services.router_observe import llm_usage_summary, run_observed_request
@@ -81,6 +85,8 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
                     "google": lambda api_key: compose_digest_gemini(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "groq": lambda api_key: compose_digest_groq(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "deepseek": lambda api_key: compose_digest_deepseek(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
+                    "alibaba": lambda api_key: compose_digest_alibaba(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
+                    "mistral": lambda api_key: compose_digest_mistral(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: compose_digest_openai(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                 },
             ),
@@ -131,6 +137,22 @@ def compose_digest_cluster_draft_endpoint(req: ComposeDigestClusterDraftRequest,
                         api_key=api_key or "",
                     ),
                     "deepseek": lambda api_key: compose_digest_cluster_draft_deepseek(
+                        cluster_label=req.cluster_label,
+                        item_count=req.item_count,
+                        topics=req.topics,
+                        source_lines=req.source_lines,
+                        model=str(req.model),
+                        api_key=api_key or "",
+                    ),
+                    "alibaba": lambda api_key: compose_digest_cluster_draft_alibaba(
+                        cluster_label=req.cluster_label,
+                        item_count=req.item_count,
+                        topics=req.topics,
+                        source_lines=req.source_lines,
+                        model=str(req.model),
+                        api_key=api_key or "",
+                    ),
+                    "mistral": lambda api_key: compose_digest_cluster_draft_mistral(
                         cluster_label=req.cluster_label,
                         item_count=req.item_count,
                         topics=req.topics,

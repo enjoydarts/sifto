@@ -119,6 +119,10 @@ export default function SettingsPage() {
   const [deletingGroqKey, setDeletingGroqKey] = useState(false);
   const [savingDeepSeekKey, setSavingDeepSeekKey] = useState(false);
   const [deletingDeepSeekKey, setDeletingDeepSeekKey] = useState(false);
+  const [savingAlibabaKey, setSavingAlibabaKey] = useState(false);
+  const [deletingAlibabaKey, setDeletingAlibabaKey] = useState(false);
+  const [savingMistralKey, setSavingMistralKey] = useState(false);
+  const [deletingMistralKey, setDeletingMistralKey] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -137,6 +141,8 @@ export default function SettingsPage() {
   const [googleApiKeyInput, setGoogleApiKeyInput] = useState("");
   const [groqApiKeyInput, setGroqApiKeyInput] = useState("");
   const [deepseekApiKeyInput, setDeepseekApiKeyInput] = useState("");
+  const [alibabaApiKeyInput, setAlibabaApiKeyInput] = useState("");
+  const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
   const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
   const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
@@ -179,15 +185,13 @@ export default function SettingsPage() {
     const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
-      const [data, nextCatalog, modelUpdates] = await Promise.all([
+      const [data, nextCatalog] = await Promise.all([
         api.getSettings(),
         api.getLLMCatalog(),
-        api.getProviderModelUpdates({ days: 14, limit: 20 }),
       ]);
       if (seq !== loadSeqRef.current) return;
       setSettings(data);
       setCatalog(nextCatalog);
-      setProviderModelUpdates(modelUpdates ?? []);
       setBudgetUSD(data.monthly_budget_usd == null ? "" : String(data.monthly_budget_usd));
       setAlertEnabled(Boolean(data.budget_alert_enabled));
       setThresholdPct(data.budget_alert_threshold_pct ?? 20);
@@ -220,6 +224,22 @@ export default function SettingsPage() {
   }, [load]);
 
   useEffect(() => {
+    let cancelled = false;
+    api.getProviderModelUpdates({ days: 14, limit: 20 })
+      .then((modelUpdates) => {
+        if (cancelled) return;
+        setProviderModelUpdates(modelUpdates ?? []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setProviderModelUpdates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const inoreaderStatus = params.get("inoreader");
     if (inoreaderStatus === "connected") {
@@ -246,7 +266,14 @@ export default function SettingsPage() {
     value: item.id,
     label: item.id,
     note: formatModelOptionNote(item),
+    provider: t(`settings.modelGuide.provider.${item.provider}`, item.provider),
   }), []);
+
+  const modelSelectLabels = useMemo(() => ({
+    defaultOption: t("settings.modelSelect.default"),
+    searchPlaceholder: t("settings.modelSelect.searchPlaceholder"),
+    noResults: t("settings.modelSelect.noResults"),
+  }), [t]);
 
   const applyCostPerformancePreset = useCallback(() => {
     const preset = buildCostPerformancePreset(catalog);
@@ -659,6 +686,84 @@ export default function SettingsPage() {
     }
   }
 
+  async function submitAlibabaApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingAlibabaKey(true);
+    try {
+      if (!alibabaApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setAlibabaApiKey(alibabaApiKeyInput.trim());
+      setAlibabaApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.alibabaSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingAlibabaKey(false);
+    }
+  }
+
+  async function handleDeleteAlibabaApiKey() {
+    if (!(await confirm({
+      title: t("settings.alibabaDeleteTitle"),
+      message: t("settings.alibabaDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingAlibabaKey(true);
+    try {
+      await api.deleteAlibabaApiKey();
+      await load();
+      showToast(t("settings.toast.alibabaDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingAlibabaKey(false);
+    }
+  }
+
+  async function submitMistralApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingMistralKey(true);
+    try {
+      if (!mistralApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setMistralApiKey(mistralApiKeyInput.trim());
+      setMistralApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.mistralSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingMistralKey(false);
+    }
+  }
+
+  async function handleDeleteMistralApiKey() {
+    if (!(await confirm({
+      title: t("settings.mistralDeleteTitle"),
+      message: t("settings.mistralDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingMistralKey(true);
+    try {
+      await api.deleteMistralApiKey();
+      await load();
+      showToast(t("settings.toast.mistralDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingMistralKey(false);
+    }
+  }
+
   async function handleDeleteInoreaderOAuth() {
     if (!(await confirm({
       title: t("settings.inoreaderDeleteTitle"),
@@ -793,6 +898,38 @@ export default function SettingsPage() {
           saving={savingDeepSeekKey}
           deleting={deletingDeepSeekKey}
           labels={{ ...apiKeyCardLabels, notSet: t("settings.deepseekNotSet") }}
+        />
+
+        <ApiKeyCard
+          icon={KeyRound}
+          title={t("settings.alibabaTitle")}
+          description={t("settings.alibabaDescription")}
+          configured={settings.has_alibaba_api_key}
+          last4={settings.alibaba_api_key_last4}
+          value={alibabaApiKeyInput}
+          onChange={setAlibabaApiKeyInput}
+          onSubmit={submitAlibabaApiKey}
+          onDelete={handleDeleteAlibabaApiKey}
+          placeholder="sk-..."
+          saving={savingAlibabaKey}
+          deleting={deletingAlibabaKey}
+          labels={{ ...apiKeyCardLabels, notSet: t("settings.alibabaNotSet") }}
+        />
+
+        <ApiKeyCard
+          icon={KeyRound}
+          title={t("settings.mistralTitle")}
+          description={t("settings.mistralDescription")}
+          configured={settings.has_mistral_api_key}
+          last4={settings.mistral_api_key_last4}
+          value={mistralApiKeyInput}
+          onChange={setMistralApiKeyInput}
+          onSubmit={submitMistralApiKey}
+          onDelete={handleDeleteMistralApiKey}
+          placeholder="sk-..."
+          saving={savingMistralKey}
+          deleting={deletingMistralKey}
+          labels={{ ...apiKeyCardLabels, notSet: t("settings.mistralNotSet") }}
         />
 
         <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -999,54 +1136,63 @@ export default function SettingsPage() {
               value={anthropicFactsModel}
               onChange={(value) => onChangeLLMModel(setAnthropicFactsModel, value)}
               options={optionsForPurpose("facts")}
+              labels={modelSelectLabels}
             />
             <ModelSelect
               label={t("settings.model.summary")}
               value={anthropicSummaryModel}
               onChange={(value) => onChangeLLMModel(setAnthropicSummaryModel, value)}
               options={optionsForPurpose("summary")}
+              labels={modelSelectLabels}
             />
             <ModelSelect
               label={t("settings.model.digestCluster")}
               value={anthropicDigestClusterModel}
               onChange={(value) => onChangeLLMModel(setAnthropicDigestClusterModel, value)}
               options={optionsForPurpose("digest_cluster_draft")}
+              labels={modelSelectLabels}
             />
             <ModelSelect
               label={t("settings.model.digest")}
               value={anthropicDigestModel}
               onChange={(value) => onChangeLLMModel(setAnthropicDigestModel, value)}
               options={optionsForPurpose("digest")}
+              labels={modelSelectLabels}
             />
             <ModelSelect
               label={t("settings.model.ask")}
               value={anthropicAskModel}
               onChange={(value) => onChangeLLMModel(setAnthropicAskModel, value)}
               options={optionsForPurpose("ask")}
+              labels={modelSelectLabels}
             />
             <ModelSelect
               label={t("settings.model.factsCheck")}
               value={factsCheckModel}
               onChange={(value) => onChangeLLMModel(setFactsCheckModel, value)}
               options={optionsForPurpose("facts")}
+              labels={modelSelectLabels}
             />
             <ModelSelect
               label={t("settings.model.faithfulnessCheck")}
               value={faithfulnessCheckModel}
               onChange={(value) => onChangeLLMModel(setFaithfulnessCheckModel, value)}
               options={optionsForPurpose("summary")}
+              labels={modelSelectLabels}
             />
             <ModelSelect
               label={t("settings.model.sourceSuggestion")}
               value={anthropicSourceSuggestionModel}
               onChange={(value) => onChangeLLMModel(setAnthropicSourceSuggestionModel, value)}
               options={sourceSuggestionModelOptions}
+              labels={modelSelectLabels}
             />
             <ModelSelect
               label={t("settings.model.embeddings")}
               value={openAIEmbeddingModel}
               onChange={(value) => onChangeLLMModel(setOpenAIEmbeddingModel, value)}
               options={openAIEmbeddingModelOptions}
+              labels={modelSelectLabels}
             />
           </div>
           <div className="mt-4">

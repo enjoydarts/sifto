@@ -1,11 +1,13 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from app.services.alibaba_service import check_summary_faithfulness as check_summary_faithfulness_alibaba
 from app.services.claude_service import check_summary_faithfulness
 from app.services.deepseek_service import check_summary_faithfulness as check_summary_faithfulness_deepseek
 from app.services.gemini_service import check_summary_faithfulness as check_summary_faithfulness_gemini
 from app.services.groq_service import check_summary_faithfulness as check_summary_faithfulness_groq
 from app.services.llm_dispatch import dispatch_by_model
+from app.services.mistral_service import check_summary_faithfulness as check_summary_faithfulness_mistral
 from app.services.openai_service import check_summary_faithfulness as check_summary_faithfulness_openai
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
@@ -40,6 +42,8 @@ def check_summary_faithfulness_endpoint(req: SummaryFaithfulnessRequest, request
                     "google": lambda api_key: check_summary_faithfulness_gemini(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "groq": lambda api_key: check_summary_faithfulness_groq(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "deepseek": lambda api_key: check_summary_faithfulness_deepseek(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
+                    "alibaba": lambda api_key: check_summary_faithfulness_alibaba(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
+                    "mistral": lambda api_key: check_summary_faithfulness_mistral(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: check_summary_faithfulness_openai(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                 },
             ),

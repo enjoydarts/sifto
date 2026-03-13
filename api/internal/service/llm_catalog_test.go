@@ -27,6 +27,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "gemini-2.5-flash", provider: "google"},
 		{model: "openai/gpt-oss-20b", provider: "groq"},
 		{model: "deepseek-chat", provider: "deepseek"},
+		{model: "qwen3.5-plus", provider: "alibaba"},
+		{model: "mistral-small-2506", provider: "mistral"},
 		{model: "gpt-5-mini", provider: "openai"},
 	}
 	for _, tt := range tests {
@@ -45,6 +47,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{provider: "deepseek", purpose: "summary", want: "deepseek-chat"},
 		{provider: "groq", purpose: "ask", want: "openai/gpt-oss-20b"},
 		{provider: "google", purpose: "facts", want: "gemini-2.5-flash-lite"},
+		{provider: "alibaba", purpose: "source_suggestion", want: "qwen3.5-flash"},
+		{provider: "mistral", purpose: "digest", want: "mistral-medium-2508"},
 	}
 	for _, tt := range defaults {
 		if got := DefaultLLMModelForPurpose(tt.provider, tt.purpose); got != tt.want {

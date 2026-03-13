@@ -608,6 +608,8 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 			var googleKey *string
 			var groqKey *string
 			var deepseekKey *string
+			var alibabaKey *string
+			var mistralKey *string
 			var openAIKey *string
 			switch service.LLMProviderForModel(model) {
 			case "google":
@@ -616,6 +618,10 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				groqKey, err = h.loadGroqAPIKey(r.Context(), t.UserID)
 			case "deepseek":
 				deepseekKey, err = h.loadDeepSeekAPIKey(r.Context(), t.UserID)
+			case "alibaba":
+				alibabaKey, err = h.loadAlibabaAPIKey(r.Context(), t.UserID)
+			case "mistral":
+				mistralKey, err = h.loadMistralAPIKey(r.Context(), t.UserID)
 			case "openai":
 				openAIKey, err = h.loadOpenAIAPIKey(r.Context(), t.UserID)
 			default:
@@ -632,7 +638,7 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				}
 				continue
 			}
-			resp, err := h.worker.TranslateTitleWithModel(r.Context(), t.Title, anthropicKey, googleKey, groqKey, deepseekKey, openAIKey, model)
+			resp, err := h.worker.TranslateTitleWithModel(r.Context(), t.Title, anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, openAIKey, model)
 			if err != nil {
 				failed++
 				if len(errorSamples) < 10 {
@@ -750,6 +756,42 @@ func (h *InternalHandler) loadDeepSeekAPIKey(ctx context.Context, userID string)
 	}
 	if enc == nil || *enc == "" {
 		return nil, fmt.Errorf("deepseek api key is not set")
+	}
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+func (h *InternalHandler) loadAlibabaAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetAlibabaAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("alibaba api key is not set")
+	}
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+func (h *InternalHandler) loadMistralAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetMistralAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("mistral api key is not set")
 	}
 	if !h.cipher.Enabled() {
 		return nil, fmt.Errorf("secret cipher is not configured")

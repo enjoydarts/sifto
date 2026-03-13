@@ -1,10 +1,12 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from app.services.alibaba_service import summarize as summarize_alibaba
 from app.services.claude_service import summarize
 from app.services.deepseek_service import summarize as summarize_deepseek
 from app.services.gemini_service import summarize as summarize_gemini
 from app.services.groq_service import summarize as summarize_groq
 from app.services.llm_dispatch import dispatch_by_model
+from app.services.mistral_service import summarize as summarize_mistral
 from app.services.openai_service import summarize as summarize_openai
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
@@ -62,6 +64,20 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
                         api_key=api_key or "",
                     ),
                     "deepseek": lambda api_key: summarize_deepseek(
+                        req.title,
+                        req.facts,
+                        source_text_chars=req.source_text_chars,
+                        model=str(req.model),
+                        api_key=api_key or "",
+                    ),
+                    "alibaba": lambda api_key: summarize_alibaba(
+                        req.title,
+                        req.facts,
+                        source_text_chars=req.source_text_chars,
+                        model=str(req.model),
+                        api_key=api_key or "",
+                    ),
+                    "mistral": lambda api_key: summarize_mistral(
                         req.title,
                         req.facts,
                         source_text_chars=req.source_text_chars,

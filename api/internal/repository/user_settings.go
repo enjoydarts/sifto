@@ -28,6 +28,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var googleAPIKeyEnc *string
 	var groqAPIKeyEnc *string
 	var deepseekAPIKeyEnc *string
+	var alibabaAPIKeyEnc *string
+	var mistralAPIKeyEnc *string
 	var inoreaderAccessTokenEnc *string
 	err := r.db.QueryRow(ctx, `
 		SELECT user_id,
@@ -41,6 +43,10 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       groq_api_key_last4,
 		       deepseek_api_key_enc,
 		       deepseek_api_key_last4,
+		       alibaba_api_key_enc,
+		       alibaba_api_key_last4,
+		       mistral_api_key_enc,
+		       mistral_api_key_last4,
 		       monthly_budget_usd,
 		       budget_alert_enabled,
 		       budget_alert_threshold_pct,
@@ -77,6 +83,10 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.GroqAPIKeyLast4,
 		&deepseekAPIKeyEnc,
 		&v.DeepSeekAPIKeyLast4,
+		&alibabaAPIKeyEnc,
+		&v.AlibabaAPIKeyLast4,
+		&mistralAPIKeyEnc,
+		&v.MistralAPIKeyLast4,
 		&v.MonthlyBudgetUSD,
 		&v.BudgetAlertEnabled,
 		&v.BudgetAlertThresholdPct,
@@ -107,6 +117,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasGoogleAPIKey = googleAPIKeyEnc != nil && *googleAPIKeyEnc != ""
 	v.HasGroqAPIKey = groqAPIKeyEnc != nil && *groqAPIKeyEnc != ""
 	v.HasDeepSeekAPIKey = deepseekAPIKeyEnc != nil && *deepseekAPIKeyEnc != ""
+	v.HasAlibabaAPIKey = alibabaAPIKeyEnc != nil && *alibabaAPIKeyEnc != ""
+	v.HasMistralAPIKey = mistralAPIKeyEnc != nil && *mistralAPIKeyEnc != ""
 	v.HasInoreaderOAuth = inoreaderAccessTokenEnc != nil && *inoreaderAccessTokenEnc != ""
 	return &v, nil
 }
@@ -331,6 +343,46 @@ func (r *UserSettingsRepo) GetDeepSeekAPIKeyEncrypted(ctx context.Context, userI
 	return v, nil
 }
 
+func (r *UserSettingsRepo) GetAlibabaAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT alibaba_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1`,
+		userID,
+	).Scan(&v)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
+func (r *UserSettingsRepo) GetMistralAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT mistral_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1`,
+		userID,
+	).Scan(&v)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
 func (r *UserSettingsRepo) GetInoreaderTokensEncrypted(ctx context.Context, userID string) (accessTokenEnc, refreshTokenEnc *string, expiresAt *time.Time, err error) {
 	err = r.db.QueryRow(ctx, `
 		SELECT inoreader_access_token_enc, inoreader_refresh_token_enc, inoreader_token_expires_at
@@ -461,6 +513,38 @@ func (r *UserSettingsRepo) SetDeepSeekAPIKey(ctx context.Context, userID, encryp
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetAlibabaAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, alibaba_api_key_enc, alibaba_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET alibaba_api_key_enc = EXCLUDED.alibaba_api_key_enc,
+		    alibaba_api_key_last4 = EXCLUDED.alibaba_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) SetMistralAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, mistral_api_key_enc, mistral_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET mistral_api_key_enc = EXCLUDED.mistral_api_key_enc,
+		    mistral_api_key_last4 = EXCLUDED.mistral_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) ClearAnthropicAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, anthropic_api_key_enc, anthropic_api_key_last4)
@@ -532,6 +616,38 @@ func (r *UserSettingsRepo) ClearDeepSeekAPIKey(ctx context.Context, userID strin
 		ON CONFLICT (user_id) DO UPDATE
 		SET deepseek_api_key_enc = NULL,
 		    deepseek_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearAlibabaAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, alibaba_api_key_enc, alibaba_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET alibaba_api_key_enc = NULL,
+		    alibaba_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearMistralAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, mistral_api_key_enc, mistral_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET mistral_api_key_enc = NULL,
+		    mistral_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

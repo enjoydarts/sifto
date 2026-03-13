@@ -87,9 +87,18 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	if settings.EmbeddingModel != nil && service.IsSupportedOpenAIEmbeddingModel(*settings.EmbeddingModel) {
 		embeddingModel = *settings.EmbeddingModel
 	}
-	modelName := chooseAskModel(settings, settings.HasAnthropicAPIKey, settings.HasGoogleAPIKey, settings.HasGroqAPIKey, settings.HasDeepSeekAPIKey, settings.HasOpenAIAPIKey)
+	modelName := chooseAskModel(
+		settings,
+		settings.HasAnthropicAPIKey,
+		settings.HasGoogleAPIKey,
+		settings.HasGroqAPIKey,
+		settings.HasDeepSeekAPIKey,
+		settings.HasAlibabaAPIKey,
+		settings.HasMistralAPIKey,
+		settings.HasOpenAIAPIKey,
+	)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or groq or deepseek or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or groq or deepseek or alibaba or mistral or openai api key is required", http.StatusBadRequest)
 		return
 	}
 	cacheKey := cacheKeyAsk(userID, query, *modelName, embeddingModel, body.Days, body.UnreadOnly, body.Limit, body.SourceIDs)
@@ -142,10 +151,12 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	googleKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGoogleAPIKeyEncrypted, h.cipher, userID, "")
 	groqKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGroqAPIKeyEncrypted, h.cipher, userID, "")
 	deepseekKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
+	alibabaKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
+	mistralKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
 	openAIChatKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
-	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, groqKey != nil, deepseekKey != nil, openAIChatKey != nil)
+	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, groqKey != nil, deepseekKey != nil, alibabaKey != nil, mistralKey != nil, openAIChatKey != nil)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or groq or deepseek or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or groq or deepseek or alibaba or mistral or openai api key is required", http.StatusBadRequest)
 		return
 	}
 
@@ -168,7 +179,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 			Similarity:      c.Similarity,
 		})
 	}
-	askResp, err := h.worker.AskWithModel(r.Context(), query, workerCandidates, anthropicKey, googleKey, groqKey, deepseekKey, openAIChatKey, modelName)
+	askResp, err := h.worker.AskWithModel(r.Context(), query, workerCandidates, anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, openAIChatKey, modelName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("ask worker: %v", err), http.StatusBadGateway)
 		return
@@ -276,7 +287,7 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 	return &v
 }
 
-func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGroq, hasDeepSeek, hasOpenAI bool) *string {
+func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasOpenAI bool) *string {
 	if settings != nil && settings.AskModel != nil && strings.TrimSpace(*settings.AskModel) != "" {
 		v := strings.TrimSpace(*settings.AskModel)
 		switch service.LLMProviderForModel(&v) {
@@ -290,6 +301,14 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			}
 		case "deepseek":
 			if hasDeepSeek {
+				return &v
+			}
+		case "alibaba":
+			if hasAlibaba {
+				return &v
+			}
+		case "mistral":
+			if hasMistral {
 				return &v
 			}
 		case "openai":
@@ -317,6 +336,14 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			if hasDeepSeek {
 				return &v
 			}
+		case "alibaba":
+			if hasAlibaba {
+				return &v
+			}
+		case "mistral":
+			if hasMistral {
+				return &v
+			}
 		case "openai":
 			if hasOpenAI {
 				return &v
@@ -342,6 +369,14 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			if hasDeepSeek {
 				return &v
 			}
+		case "alibaba":
+			if hasAlibaba {
+				return &v
+			}
+		case "mistral":
+			if hasMistral {
+				return &v
+			}
 		case "openai":
 			if hasOpenAI {
 				return &v
@@ -361,6 +396,16 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			}
 		case "google":
 			if hasGoogle {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				return &v
+			}
+		case "alibaba":
+			if hasAlibaba {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				return &v
+			}
+		case "mistral":
+			if hasMistral {
 				v := service.DefaultLLMModelForPurpose(provider, "ask")
 				return &v
 			}

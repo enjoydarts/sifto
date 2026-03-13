@@ -39,6 +39,9 @@
 - provider 追加時は API / worker / web / 利用集計 / 設定画面をまとめて確認する。
 - 構造化出力を使う LLM では、JSON schema 制約・フォールバック・再試行・空文字応答の扱いまで含めて見る。
 - DeepSeek は独立 provider として扱う前提。OpenAI / Groq に雑に混ぜない。
+- `shared/llm_catalog.json` の表示用モデル一覧には、日付付き固定版や `*-latest` alias を原則そのまま並べず、代表モデルだけを載せる。互換判定が必要な alias は `providers[].match_exact` 側で吸収する。
+- Alibaba / Qwen は公式の安定したモデル一覧 API 前提にしない。catalog は手動更新し、provider model updates の自動検知対象にも安易に追加しない。
+- Mistral は公式 docs / API で現行モデルと価格を確認できる範囲だけ catalog に載せる。未確認の価格を推測で入れない。
 
 ## Push通知運用メモ
 

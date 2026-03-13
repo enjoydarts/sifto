@@ -140,8 +140,11 @@ type Item struct {
 	IsRead               bool       `json:"is_read"`
 	IsFavorite           bool       `json:"is_favorite"`
 	FeedbackRating       int        `json:"feedback_rating"` // -1 | 0 | 1
-	SummaryScore         *float64   `json:"summary_score,omitempty"`
-	SummaryTopics        []string   `json:"summary_topics,omitempty"`
+	SummaryScore          *float64                   `json:"summary_score,omitempty"`
+	SummaryScoreBreakdown *ItemSummaryScoreBreakdown `json:"summary_score_breakdown,omitempty"`
+	PersonalScore         *float64                   `json:"personal_score,omitempty"`
+	PersonalScoreReason   *string                    `json:"personal_score_reason,omitempty"`
+	SummaryTopics         []string                   `json:"summary_topics,omitempty"`
 	RecommendationReason *string    `json:"recommendation_reason,omitempty"`
 	TranslatedTitle      *string    `json:"translated_title,omitempty"`
 	PublishedAt          *time.Time `json:"published_at,omitempty"`
@@ -441,4 +444,23 @@ type DigestClusterDraft struct {
 	DraftSummary string    `json:"draft_summary"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type UserPreferenceProfile struct {
+	UserID           string             `json:"user_id"`
+	LearnedWeights   map[string]float64 `json:"learned_weights"`
+	TopicInterests   map[string]float64 `json:"topic_interests"`
+	PrefEmbedding    []float64          `json:"pref_embedding,omitempty"`
+	SourceAffinities map[string]float64 `json:"source_affinities"`
+	FeedbackCount    int                `json:"feedback_count"`
+	ReadCount        int                `json:"read_count"`
+	ComputedAt       *time.Time         `json:"computed_at,omitempty"`
+}
+
+var DefaultScoreWeights = map[string]float64{
+	"importance":    0.38,
+	"novelty":       0.22,
+	"actionability": 0.18,
+	"reliability":   0.17,
+	"relevance":     0.05,
 }

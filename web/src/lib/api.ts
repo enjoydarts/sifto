@@ -62,6 +62,8 @@ export interface Item {
   summary_score?: number | null;
   summary_topics?: string[];
   recommendation_reason?: string | null;
+  personal_score?: number;
+  personal_score_reason?: string;
   published_at: string | null;
   fetched_at: string | null;
   created_at: string;

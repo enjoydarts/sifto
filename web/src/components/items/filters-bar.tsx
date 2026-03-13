@@ -30,7 +30,7 @@ export function FiltersBar({
     <div className="flex flex-wrap items-center gap-2">
       {!focusMode && (
         <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
-          {(["newest", "score"] as SortMode[]).map((s) => (
+          {(["newest", "score", "personal_score"] as SortMode[]).map((s) => (
             <button
               key={s}
               type="button"

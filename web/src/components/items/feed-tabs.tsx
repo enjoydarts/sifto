@@ -1,5 +1,5 @@
 export type FeedMode = "unread" | "later" | "read";
-export type SortMode = "newest" | "score";
+export type SortMode = "newest" | "score" | "personal_score";
 
 export function FeedTabs({
   feedMode,

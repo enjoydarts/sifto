@@ -43,7 +43,7 @@ function ItemsPageContent() {
           : "unread";
 
     const qSort = searchParams.get("sort");
-    const sortMode: SortMode = qSort === "score" ? "score" : "newest";
+    const sortMode: SortMode = qSort === "score" ? "score" : qSort === "personal_score" ? "personal_score" : "newest";
 
     const qFilter = searchParams.get("status");
     const filter =
@@ -332,7 +332,11 @@ function ItemsPageContent() {
   );
 
   const sortedItems = [...items].sort((a, b) => {
-    if (sortMode === "score") {
+    if (sortMode === "personal_score") {
+      const as = a.personal_score ?? a.summary_score ?? -1;
+      const bs = b.personal_score ?? b.summary_score ?? -1;
+      if (bs !== as) return bs - as;
+    } else if (sortMode === "score") {
       const as = a.summary_score ?? -1;
       const bs = b.summary_score ?? -1;
       if (bs !== as) return bs - as;
@@ -445,7 +449,7 @@ function ItemsPageContent() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
-              {(["newest", "score"] as SortMode[]).map((s) => (
+              {(["newest", "score", "personal_score"] as SortMode[]).map((s) => (
                 <button
                   key={s}
                   type="button"

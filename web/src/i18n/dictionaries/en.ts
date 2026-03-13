@@ -628,6 +628,7 @@ export const enDict: Dict = {
   "items.feed.read": "Read",
   "items.sort.newest": "Newest",
   "items.sort.score": "Score",
+  "items.sort.personal_score": "For You",
   "items.topic": "Topic",
   "items.source": "Feed",
   "items.source.all": "All feeds",

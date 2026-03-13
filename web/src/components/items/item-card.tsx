@@ -154,7 +154,7 @@ export function ItemCard({
                 />
               </div>
               {!featured && (
-                <ScoreIndicator score={item.summary_score} size="sm" />
+                <ScoreIndicator score={item.summary_score} personalScore={item.personal_score} personalScoreReason={item.personal_score_reason} locale={locale} size="sm" />
               )}
             </div>
             <div className={`h-4 truncate text-[12px] ${featured ? "w-full text-zinc-500" : "text-zinc-400"}`}>
@@ -171,7 +171,7 @@ export function ItemCard({
         >
           {featured && (
             <div className="self-start md:self-auto">
-              <ScoreIndicator score={item.summary_score} size="md" />
+              <ScoreIndicator score={item.summary_score} personalScore={item.personal_score} personalScoreReason={item.personal_score_reason} locale={locale} size="md" />
             </div>
           )}
           <button

@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -1054,6 +1055,34 @@ func (h *ItemHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to enqueue retry", http.StatusBadGateway)
 		return
 	}
+	w.WriteHeader(http.StatusAccepted)
+	writeJSON(w, map[string]any{
+		"status":  "queued",
+		"item_id": item.ID,
+	})
+}
+
+func (h *ItemHandler) RetryFromFacts(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	id := chi.URLParam(r, "id")
+	item, err := h.repo.ResetForFactsRetry(r.Context(), id, userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrConflict) {
+			http.Error(w, "item cannot be retried from facts", http.StatusConflict)
+			return
+		}
+		writeRepoError(w, err)
+		return
+	}
+	if h.publisher == nil {
+		http.Error(w, "event publisher unavailable", http.StatusInternalServerError)
+		return
+	}
+	if err := h.publisher.SendItemCreatedE(r.Context(), item.ID, item.SourceID, item.URL); err != nil {
+		http.Error(w, "failed to enqueue retry", http.StatusBadGateway)
+		return
+	}
+	h.invalidateUserCaches(r.Context(), userID)
 	w.WriteHeader(http.StatusAccepted)
 	writeJSON(w, map[string]any{
 		"status":  "queued",

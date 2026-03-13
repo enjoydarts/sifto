@@ -55,6 +55,7 @@ export default function ItemDetailPage() {
   const [deleteUpdating, setDeleteUpdating] = useState(false);
   const [feedbackUpdating, setFeedbackUpdating] = useState(false);
   const [retryUpdating, setRetryUpdating] = useState(false);
+  const [retryFromFactsUpdating, setRetryFromFactsUpdating] = useState(false);
   const [related, setRelated] = useState<RelatedItem[]>([]);
   const [relatedClusters, setRelatedClusters] = useState<RelatedCluster[]>([]);
   const [expandedRelatedClusterIds, setExpandedRelatedClusterIds] = useState<Record<string, boolean>>({});
@@ -62,6 +63,28 @@ export default function ItemDetailPage() {
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const [nextItemHref, setNextItemHref] = useState<string | null>(null);
   const autoMarkedRef = useRef<Record<string, true>>({});
+
+  const refreshReadDependentQueries = useCallback(async () => {
+    await Promise.allSettled([
+      queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
+      queryClient.invalidateQueries({ queryKey: ["focus-queue"] }),
+      queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
+    ]);
+  }, [queryClient]);
+
+  const refreshItemQueries = useCallback(
+    async (itemId: string) => {
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ["item-detail", itemId] }),
+        queryClient.invalidateQueries({ queryKey: ["item-related", itemId, 6] }),
+        queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
+        queryClient.invalidateQueries({ queryKey: ["focus-queue"] }),
+        queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+      ]);
+    },
+    [queryClient]
+  );
 
   const syncItemReadInFeedCaches = useCallback((itemId: string, isRead: boolean) => {
     queryClient.setQueriesData({ queryKey: ["items-feed"] }, (prev: unknown) => {
@@ -285,15 +308,16 @@ export default function ItemDetailPage() {
     setReadUpdating(true);
     api
       .markItemRead(item.id)
-      .then((next) => {
+      .then(async (next) => {
         syncItemReadInFeedCaches(item.id, next.is_read);
         setItem((prev) => (prev && prev.id === item.id ? { ...prev, is_read: next.is_read } : prev));
+        await refreshReadDependentQueries();
       })
       .catch(() => {
         delete autoMarkedRef.current[item.id];
       })
       .finally(() => setReadUpdating(false));
-  }, [item, syncItemReadInFeedCaches]);
+  }, [item, refreshReadDependentQueries, syncItemReadInFeedCaches]);
 
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
   const backHref = useMemo(() => {
@@ -384,6 +408,7 @@ export default function ItemDetailPage() {
       const next = item.is_read ? await api.markItemUnread(item.id) : await api.markItemRead(item.id);
       syncItemReadInFeedCaches(item.id, next.is_read);
       setItem({ ...item, is_read: next.is_read });
+      await refreshReadDependentQueries();
       showToast(
         next.is_read ? t("itemDetail.toast.markRead") : t("itemDetail.toast.markUnread"),
         "success"
@@ -460,6 +485,46 @@ export default function ItemDetailPage() {
     }
   };
 
+  const retryFromFacts = async () => {
+    if (!item || retryFromFactsUpdating) return;
+    const ok = await confirm({
+      title: t("itemDetail.retryFromFacts.title"),
+      message: t("itemDetail.retryFromFacts.message"),
+      tone: "default",
+      confirmLabel: t("itemDetail.retryFromFacts.confirm"),
+      cancelLabel: t("common.cancel"),
+    });
+    if (!ok) return;
+    setRetryFromFactsUpdating(true);
+    try {
+      await api.retryItemFromFacts(item.id);
+      setItem((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "fetched",
+              processing_error: null,
+              facts: null,
+              facts_llm: null,
+              facts_check: null,
+              facts_check_llm: null,
+              summary: null,
+              summary_llm: null,
+              faithfulness: null,
+              faithfulness_llm: null,
+            }
+          : prev
+      );
+      await refreshItemQueries(item.id);
+      showToast(t("itemDetail.toast.retryFromFactsQueued"), "success");
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setRetryFromFactsUpdating(false);
+    }
+  };
+
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!item) return null;
@@ -511,6 +576,16 @@ export default function ItemDetailPage() {
             }`}
           >
             {retryUpdating ? t("common.saving") : t("itemDetail.retrySummary")}
+          </button>
+          <button
+            type="button"
+            onClick={retryFromFacts}
+            disabled={retryFromFactsUpdating}
+            className={`rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+              item.status === "new" ? "hidden" : ""
+            }`}
+          >
+            {retryFromFactsUpdating ? t("common.saving") : t("itemDetail.retryFromFacts")}
           </button>
           <button
             type="button"

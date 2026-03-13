@@ -154,6 +154,7 @@ func main() {
 			r.Post("/{id}/later", itemH.MarkLater)
 			r.Delete("/{id}/later", itemH.UnmarkLater)
 			r.Post("/{id}/retry", itemH.Retry)
+			r.Post("/{id}/retry-from-facts", itemH.RetryFromFacts)
 		})
 
 		r.Route("/topics", func(r chi.Router) {

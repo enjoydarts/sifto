@@ -890,6 +890,8 @@ export const api = {
     }),
   retryItem: (id: string) =>
     apiFetch<ItemRetryResult>(`/items/${id}/retry`, { method: "POST" }),
+  retryItemFromFacts: (id: string) =>
+    apiFetch<ItemRetryResult>(`/items/${id}/retry-from-facts`, { method: "POST" }),
   retryFailedItems: (params?: { source_id?: string }) => {
     const q = new URLSearchParams();
     if (params?.source_id) q.set("source_id", params.source_id);

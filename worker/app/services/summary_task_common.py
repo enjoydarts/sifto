@@ -18,7 +18,11 @@ SUMMARY_SYSTEM_INSTRUCTION = """# Role
 - タイトルが日本語の場合は translated_title を空文字にしてください。
 - 事実リストにない推測の断定、誇張表現、主観的評価は禁止です。
 - topics は重複を避け、粒度を揃えてください。
-- score_reason は採点の根拠を1〜2文で簡潔に述べてください。"""
+- score_reason は採点の根拠を1〜2文で簡潔に述べてください。
+- score_breakdown は各項目を0.0〜1.0で採点してください。
+- score_breakdown は記事内容に応じて差を付けてください。
+- score_breakdown の全項目を同じ値にしないでください。
+- 根拠なく全項目を0.0にしないでください。"""
 
 
 SUMMARY_SCHEMA = {
@@ -57,11 +61,11 @@ def build_summary_task(title: str | None, facts: list[str], source_text_chars: i
   "topics": ["トピック1", "トピック2"],
   "translated_title": "英語タイトルの場合のみ日本語訳（日本語記事は空文字）",
   "score_breakdown": {{
-    "importance": 0.0,
-    "novelty": 0.0,
-    "actionability": 0.0,
-    "reliability": 0.0,
-    "relevance": 0.0
+    "importance": 0.78,
+    "novelty": 0.54,
+    "actionability": 0.61,
+    "reliability": 0.83,
+    "relevance": 0.57
   }},
   "score_reason": "採点理由（1〜2文）"
 }}

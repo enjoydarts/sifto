@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -36,6 +37,24 @@ type BudgetAlertEmail struct {
 	ThresholdPct       int
 }
 
+var digestSubjectPrefixPattern = regexp.MustCompile(`^\s*(?:【[^】]*ダイジェスト】\s*|Sifto\s*Digest\s*[-:]?\s*\d{4}-\d{1,2}-\d{1,2}\s*[-:：]?\s*|Sifto\s*Digest\s*\d{4}-\d{1,2}-\d{1,2}\s*[-:：]?\s*|\d{4}年\d{1,2}月\d{1,2}日ダイジェスト\s*[-:：]?\s*)+`)
+
+func FormatDigestEmailSubject(digestDate string, subject string) string {
+	dateText := strings.TrimSpace(digestDate)
+	if parsed, err := time.Parse("2006-01-02", dateText); err == nil {
+		dateText = fmt.Sprintf("%d年%d月%d日", parsed.Year(), parsed.Month(), parsed.Day())
+	}
+	prefix := fmt.Sprintf("【%sダイジェスト】", dateText)
+	trimmed := strings.TrimSpace(digestSubjectPrefixPattern.ReplaceAllString(strings.TrimSpace(subject), ""))
+	if trimmed == "" {
+		return prefix
+	}
+	if strings.HasPrefix(trimmed, prefix) {
+		return trimmed
+	}
+	return prefix + trimmed
+}
+
 func NewResendClient() *ResendClient {
 	return &ResendClient{
 		apiKey:   os.Getenv("RESEND_API_KEY"),
@@ -55,9 +74,9 @@ func (r *ResendClient) SendDigest(ctx context.Context, to string, digest *model.
 		return nil
 	}
 
-	subject := fmt.Sprintf("Sifto Digest - %s", digest.DigestDate)
+	subject := FormatDigestEmailSubject(digest.DigestDate, "")
 	if copy != nil && strings.TrimSpace(copy.Subject) != "" {
-		subject = copy.Subject
+		subject = FormatDigestEmailSubject(digest.DigestDate, copy.Subject)
 	}
 	html := buildDigestHTML(digest, copy)
 

@@ -12,6 +12,10 @@ DIGEST_SYSTEM_INSTRUCTION = """# Role
 
 # Rules
 - 当日分の全記事要約を踏まえて全体像をまとめてください。記事を取りこぼさないでください。
+- subject は件名本体のみを返してください。
+- subject に日付は入れないでください。
+- subject に「ダイジェスト」という語は入れないでください。
+- subject は20〜40字程度の自然な日本語にしてください。
 - 本文は900〜2200字程度を目安とし、必要なら超えて構いません。
 - 本文は必ず次の順序で構成してください:
   1) 全体サマリ（1〜3段落）
@@ -91,7 +95,7 @@ def build_simple_digest_input(items: list[dict]) -> str:
 def build_digest_task(digest_date: str, items_count: int, digest_input: str, *, input_mode: str = "items") -> dict:
     prompt_fallback = f"""# Output
 {{
-  "subject": "件名（40字程度）",
+  "subject": "件名本体のみ（20〜40字。日付やダイジェストは入れない）",
   "body": "メール本文（プレーンテキスト。改行を含めてよい）",
   "sections": {{
     "overall_summary": "1〜3段落",

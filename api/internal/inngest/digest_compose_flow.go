@@ -148,6 +148,7 @@ func composeDigestEmailCopy(
 	if resp == nil {
 		return fmt.Errorf("compose digest returned no response")
 	}
+	resp.Subject = service.FormatDigestEmailSubject(digest.DigestDate, resp.Subject)
 	if err := digestRepo.UpdateComposeRetryCounts(ctx, data.DigestID, digestRetryCount, totalClusterDraftRetryCount); err != nil {
 		return fmt.Errorf("update digest retry counts: %w", err)
 	}

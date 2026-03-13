@@ -555,15 +555,17 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	deepseekAPIKey := h.getUserDeepSeekAPIKey(r.Context(), userID)
 	alibabaAPIKey := h.getUserAlibabaAPIKey(r.Context(), userID)
 	mistralAPIKey := h.getUserMistralAPIKey(r.Context(), userID)
+	xaiAPIKey := h.getUserXAIAPIKey(r.Context(), userID)
 	openAIAPIKey := h.getUserOpenAIAPIKey(r.Context(), userID)
 	anthropicSourceSuggestionModel := h.getUserSourceSuggestionModel(r.Context(), userID)
-	anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, openAIAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
+	anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, openAIAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
 		anthropicAPIKey,
 		googleAPIKey,
 		groqAPIKey,
 		deepseekAPIKey,
 		alibabaAPIKey,
 		mistralAPIKey,
+		xaiAPIKey,
 		openAIAPIKey,
 		anthropicSourceSuggestionModel,
 	)
@@ -607,7 +609,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cands := map[string]*sourceSuggestionAgg{}
-	aiReady := (anthropicAPIKey != nil || googleAPIKey != nil || groqAPIKey != nil || deepseekAPIKey != nil || alibabaAPIKey != nil || mistralAPIKey != nil || openAIAPIKey != nil) && h.worker != nil
+	aiReady := (anthropicAPIKey != nil || googleAPIKey != nil || groqAPIKey != nil || deepseekAPIKey != nil || alibabaAPIKey != nil || mistralAPIKey != nil || xaiAPIKey != nil || openAIAPIKey != nil) && h.worker != nil
 	// AI主導: まずAIシード提案から候補を作る。
 	if aiReady {
 		h.expandSourceSuggestionsWithLLMSeeds(
@@ -625,6 +627,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 			deepseekAPIKey,
 			alibabaAPIKey,
 			mistralAPIKey,
+			xaiAPIKey,
 			openAIAPIKey,
 			anthropicSourceSuggestionModel,
 		)
@@ -752,6 +755,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 		deepseekAPIKey,
 		alibabaAPIKey,
 		mistralAPIKey,
+		xaiAPIKey,
 		openAIAPIKey,
 		anthropicSourceSuggestionModel,
 	)
@@ -841,6 +845,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	deepseekAPIKey *string,
 	alibabaAPIKey *string,
 	mistralAPIKey *string,
+	xaiAPIKey *string,
 	openAIAPIKey *string,
 	model *string,
 ) map[string]any {
@@ -853,8 +858,9 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	hasDeepSeek := deepseekAPIKey != nil && strings.TrimSpace(*deepseekAPIKey) != ""
 	hasAlibaba := alibabaAPIKey != nil && strings.TrimSpace(*alibabaAPIKey) != ""
 	hasMistral := mistralAPIKey != nil && strings.TrimSpace(*mistralAPIKey) != ""
+	hasXAI := xaiAPIKey != nil && strings.TrimSpace(*xaiAPIKey) != ""
 	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
-	if !hasAnthropic && !hasGoogle && !hasGroq && !hasDeepSeek && !hasAlibaba && !hasMistral && !hasOpenAI {
+	if !hasAnthropic && !hasGoogle && !hasGroq && !hasDeepSeek && !hasAlibaba && !hasMistral && !hasXAI && !hasOpenAI {
 		return nil
 	}
 	existing := make([]service.RankFeedSuggestionsExistingSource, 0, len(sources))
@@ -891,6 +897,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 		deepseekAPIKey,
 		alibabaAPIKey,
 		mistralAPIKey,
+		xaiAPIKey,
 		openAIAPIKey,
 		model,
 	)
@@ -1122,6 +1129,25 @@ func (h *SourceHandler) getUserMistralAPIKey(ctx context.Context, userID string)
 	return &plain
 }
 
+func (h *SourceHandler) getUserXAIAPIKey(ctx context.Context, userID string) *string {
+	if h.settingsRepo == nil || h.cipher == nil {
+		return nil
+	}
+	enc, err := h.settingsRepo.GetXAIAPIKeyEncrypted(ctx, userID)
+	if err != nil || enc == nil || *enc == "" {
+		return nil
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil
+	}
+	plain = strings.TrimSpace(plain)
+	if plain == "" {
+		return nil
+	}
+	return &plain
+}
+
 func (h *SourceHandler) getUserOpenAIAPIKey(ctx context.Context, userID string) *string {
 	if h.settingsRepo == nil || h.cipher == nil {
 		return nil
@@ -1141,17 +1167,18 @@ func (h *SourceHandler) getUserOpenAIAPIKey(ctx context.Context, userID string) 
 	return &plain
 }
 
-func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, openAIAPIKey, model *string) (*string, *string, *string, *string, *string, *string, *string, *string) {
+func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, openAIAPIKey, model *string) (*string, *string, *string, *string, *string, *string, *string, *string, *string) {
 	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
 	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
 	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
 	hasDeepSeek := deepseekAPIKey != nil && strings.TrimSpace(*deepseekAPIKey) != ""
 	hasAlibaba := alibabaAPIKey != nil && strings.TrimSpace(*alibabaAPIKey) != ""
 	hasMistral := mistralAPIKey != nil && strings.TrimSpace(*mistralAPIKey) != ""
+	hasXAI := xaiAPIKey != nil && strings.TrimSpace(*xaiAPIKey) != ""
 	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
 	purpose := "source_suggestion"
 
-	selectByProvider := func(provider string, explicitModel *string) (*string, *string, *string, *string, *string, *string, *string, *string) {
+	selectByProvider := func(provider string, explicitModel *string) (*string, *string, *string, *string, *string, *string, *string, *string, *string) {
 		resolved := explicitModel
 		if resolved == nil || strings.TrimSpace(*resolved) == "" {
 			v := service.DefaultLLMModelForPurpose(provider, purpose)
@@ -1160,34 +1187,38 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, deepse
 		switch provider {
 		case "google":
 			if hasGoogle {
-				return nil, googleAPIKey, nil, nil, nil, nil, nil, resolved
+				return nil, googleAPIKey, nil, nil, nil, nil, nil, nil, resolved
 			}
 		case "groq":
 			if hasGroq {
-				return nil, nil, groqAPIKey, nil, nil, nil, nil, resolved
+				return nil, nil, groqAPIKey, nil, nil, nil, nil, nil, resolved
 			}
 		case "deepseek":
 			if hasDeepSeek {
-				return nil, nil, nil, deepseekAPIKey, nil, nil, nil, resolved
+				return nil, nil, nil, deepseekAPIKey, nil, nil, nil, nil, resolved
 			}
 		case "alibaba":
 			if hasAlibaba {
-				return nil, nil, nil, nil, alibabaAPIKey, nil, nil, resolved
+				return nil, nil, nil, nil, alibabaAPIKey, nil, nil, nil, resolved
 			}
 		case "mistral":
 			if hasMistral {
-				return nil, nil, nil, nil, nil, mistralAPIKey, nil, resolved
+				return nil, nil, nil, nil, nil, mistralAPIKey, nil, nil, resolved
+			}
+		case "xai":
+			if hasXAI {
+				return nil, nil, nil, nil, nil, nil, xaiAPIKey, nil, resolved
 			}
 		case "openai":
 			if hasOpenAI {
-				return nil, nil, nil, nil, nil, nil, openAIAPIKey, resolved
+				return nil, nil, nil, nil, nil, nil, nil, openAIAPIKey, resolved
 			}
 		case "anthropic":
 			if hasAnthropic {
-				return anthropicAPIKey, nil, nil, nil, nil, nil, nil, resolved
+				return anthropicAPIKey, nil, nil, nil, nil, nil, nil, nil, resolved
 			}
 		}
-		return nil, nil, nil, nil, nil, nil, nil, nil
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil
 	}
 
 	// 明示モデルがある場合は基本的にそのプロバイダを優先。
@@ -1195,24 +1226,24 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, deepse
 	// 「AI提案がまったく動かない」状態を避ける。
 	if model != nil && strings.TrimSpace(*model) != "" {
 		preferredProvider := service.LLMProviderForModel(model)
-		if outAnthropic, outGoogle, outGroq, outDeepSeek, outAlibaba, outMistral, outOpenAI, resolved := selectByProvider(preferredProvider, model); resolved != nil {
-			return outAnthropic, outGoogle, outGroq, outDeepSeek, outAlibaba, outMistral, outOpenAI, resolved
+		if outAnthropic, outGoogle, outGroq, outDeepSeek, outAlibaba, outMistral, outXAI, outOpenAI, resolved := selectByProvider(preferredProvider, model); resolved != nil {
+			return outAnthropic, outGoogle, outGroq, outDeepSeek, outAlibaba, outMistral, outXAI, outOpenAI, resolved
 		}
 		for _, provider := range service.CostEfficientLLMProviders(preferredProvider) {
-			if outAnthropic, outGoogle, outGroq, outDeepSeek, outAlibaba, outMistral, outOpenAI, resolved := selectByProvider(provider, nil); resolved != nil {
-				return outAnthropic, outGoogle, outGroq, outDeepSeek, outAlibaba, outMistral, outOpenAI, resolved
+			if outAnthropic, outGoogle, outGroq, outDeepSeek, outAlibaba, outMistral, outXAI, outOpenAI, resolved := selectByProvider(provider, nil); resolved != nil {
+				return outAnthropic, outGoogle, outGroq, outDeepSeek, outAlibaba, outMistral, outXAI, outOpenAI, resolved
 			}
 		}
-		return nil, nil, nil, nil, nil, nil, nil, model
+		return nil, nil, nil, nil, nil, nil, nil, nil, model
 	}
 
 	// モデル未指定時は、利用可能なキーに合わせて自動選択。
 	for _, provider := range service.CostEfficientLLMProviders("") {
-		if outAnthropic, outGoogle, outGroq, outDeepSeek, outAlibaba, outMistral, outOpenAI, resolved := selectByProvider(provider, nil); resolved != nil {
-			return outAnthropic, outGoogle, outGroq, outDeepSeek, outAlibaba, outMistral, outOpenAI, resolved
+		if outAnthropic, outGoogle, outGroq, outDeepSeek, outAlibaba, outMistral, outXAI, outOpenAI, resolved := selectByProvider(provider, nil); resolved != nil {
+			return outAnthropic, outGoogle, outGroq, outDeepSeek, outAlibaba, outMistral, outXAI, outOpenAI, resolved
 		}
 	}
-	return nil, nil, nil, nil, nil, nil, nil, nil
+	return nil, nil, nil, nil, nil, nil, nil, nil, nil
 }
 
 func (h *SourceHandler) buildSourceSuggestionFewShotExamples(
@@ -1263,6 +1294,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	deepseekAPIKey *string,
 	alibabaAPIKey *string,
 	mistralAPIKey *string,
+	xaiAPIKey *string,
 	openAIAPIKey *string,
 	model *string,
 ) {
@@ -1282,6 +1314,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 		deepseekAPIKey,
 		alibabaAPIKey,
 		mistralAPIKey,
+		xaiAPIKey,
 		openAIAPIKey,
 		model,
 	)

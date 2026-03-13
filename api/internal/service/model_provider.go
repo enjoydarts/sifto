@@ -2,7 +2,7 @@ package service
 
 import "strings"
 
-var costEfficientProviderPriority = []string{"groq", "alibaba", "google", "mistral", "deepseek", "openai", "anthropic"}
+var costEfficientProviderPriority = []string{"groq", "alibaba", "google", "mistral", "xai", "deepseek", "openai", "anthropic"}
 
 func IsGeminiModel(model *string) bool {
 	if model == nil {
@@ -53,6 +53,17 @@ func IsMistralModel(model *string) bool {
 		return false
 	}
 	return CatalogProviderForModel(v) == "mistral"
+}
+
+func IsXAIModel(model *string) bool {
+	if model == nil {
+		return false
+	}
+	v := strings.ToLower(strings.TrimSpace(*model))
+	if v == "" {
+		return false
+	}
+	return CatalogProviderForModel(v) == "xai"
 }
 
 func IsOpenAIModel(model *string) bool {

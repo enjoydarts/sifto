@@ -9,6 +9,7 @@ from app.services.groq_service import translate_title as translate_title_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import translate_title as translate_title_mistral
 from app.services.openai_service import translate_title as translate_title_openai
+from app.services.xai_service import translate_title as translate_title_xai
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
@@ -40,6 +41,7 @@ def translate_title_endpoint(req: TranslateTitleRequest, request: Request):
                 "deepseek": lambda api_key: translate_title_deepseek(req.title, model=str(req.model), api_key=api_key or ""),
                 "alibaba": lambda api_key: translate_title_alibaba(req.title, model=str(req.model), api_key=api_key or ""),
                 "mistral": lambda api_key: translate_title_mistral(req.title, model=str(req.model), api_key=api_key or ""),
+                "xai": lambda api_key: translate_title_xai(req.title, model=str(req.model), api_key=api_key or ""),
                 "openai": lambda api_key: translate_title_openai(req.title, model=str(req.model), api_key=api_key or ""),
             },
         ),

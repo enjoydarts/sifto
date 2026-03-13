@@ -123,6 +123,8 @@ export default function SettingsPage() {
   const [deletingAlibabaKey, setDeletingAlibabaKey] = useState(false);
   const [savingMistralKey, setSavingMistralKey] = useState(false);
   const [deletingMistralKey, setDeletingMistralKey] = useState(false);
+  const [savingXAIKey, setSavingXAIKey] = useState(false);
+  const [deletingXAIKey, setDeletingXAIKey] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -143,6 +145,7 @@ export default function SettingsPage() {
   const [deepseekApiKeyInput, setDeepseekApiKeyInput] = useState("");
   const [alibabaApiKeyInput, setAlibabaApiKeyInput] = useState("");
   const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
+  const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
   const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
   const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
@@ -764,6 +767,45 @@ export default function SettingsPage() {
     }
   }
 
+  async function submitXAIApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingXAIKey(true);
+    try {
+      if (!xaiApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setXAIApiKey(xaiApiKeyInput.trim());
+      setXaiApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.xaiSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingXAIKey(false);
+    }
+  }
+
+  async function handleDeleteXAIApiKey() {
+    if (!(await confirm({
+      title: t("settings.xaiDeleteTitle"),
+      message: t("settings.xaiDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingXAIKey(true);
+    try {
+      await api.deleteXAIApiKey();
+      await load();
+      showToast(t("settings.toast.xaiDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingXAIKey(false);
+    }
+  }
+
   async function handleDeleteInoreaderOAuth() {
     if (!(await confirm({
       title: t("settings.inoreaderDeleteTitle"),
@@ -930,6 +972,22 @@ export default function SettingsPage() {
           saving={savingMistralKey}
           deleting={deletingMistralKey}
           labels={{ ...apiKeyCardLabels, notSet: t("settings.mistralNotSet") }}
+        />
+
+        <ApiKeyCard
+          icon={KeyRound}
+          title={t("settings.xaiTitle")}
+          description={t("settings.xaiDescription")}
+          configured={settings.has_xai_api_key}
+          last4={settings.xai_api_key_last4}
+          value={xaiApiKeyInput}
+          onChange={setXaiApiKeyInput}
+          onSubmit={submitXAIApiKey}
+          onDelete={handleDeleteXAIApiKey}
+          placeholder="xai-..."
+          saving={savingXAIKey}
+          deleting={deletingXAIKey}
+          labels={{ ...apiKeyCardLabels, notSet: t("settings.xaiNotSet") }}
         />
 
         <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">

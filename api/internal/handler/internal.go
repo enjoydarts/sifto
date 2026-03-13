@@ -610,6 +610,7 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 			var deepseekKey *string
 			var alibabaKey *string
 			var mistralKey *string
+			var xaiKey *string
 			var openAIKey *string
 			switch service.LLMProviderForModel(model) {
 			case "google":
@@ -622,6 +623,8 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				alibabaKey, err = h.loadAlibabaAPIKey(r.Context(), t.UserID)
 			case "mistral":
 				mistralKey, err = h.loadMistralAPIKey(r.Context(), t.UserID)
+			case "xai":
+				xaiKey, err = h.loadXAIAPIKey(r.Context(), t.UserID)
 			case "openai":
 				openAIKey, err = h.loadOpenAIAPIKey(r.Context(), t.UserID)
 			default:
@@ -638,7 +641,7 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				}
 				continue
 			}
-			resp, err := h.worker.TranslateTitleWithModel(r.Context(), t.Title, anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, openAIKey, model)
+			resp, err := h.worker.TranslateTitleWithModel(r.Context(), t.Title, anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, xaiKey, openAIKey, model)
 			if err != nil {
 				failed++
 				if len(errorSamples) < 10 {
@@ -792,6 +795,24 @@ func (h *InternalHandler) loadMistralAPIKey(ctx context.Context, userID string) 
 	}
 	if enc == nil || *enc == "" {
 		return nil, fmt.Errorf("mistral api key is not set")
+	}
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+func (h *InternalHandler) loadXAIAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetXAIAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("xai api key is not set")
 	}
 	if !h.cipher.Enabled() {
 		return nil, fmt.Errorf("secret cipher is not configured")

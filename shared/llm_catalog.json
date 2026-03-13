@@ -95,6 +95,26 @@
       }
     },
     {
+      "id": "xai",
+      "api_key_header": "x-xai-api-key",
+      "match_exact": [
+        "grok-4",
+        "grok-4-fast-reasoning",
+        "grok-4-fast-non-reasoning",
+        "grok-4-1-fast-reasoning",
+        "grok-4-1-fast-non-reasoning",
+        "grok-4.20-beta-latest-non-reasoning"
+      ],
+      "default_models": {
+        "facts": "grok-4-fast-non-reasoning",
+        "summary": "grok-4-1-fast-non-reasoning",
+        "digest_cluster_draft": "grok-4",
+        "digest": "grok-4",
+        "ask": "grok-4-1-fast-non-reasoning",
+        "source_suggestion": "grok-4-fast-non-reasoning"
+      }
+    },
+    {
       "id": "openai",
       "api_key_header": "x-openai-api-key",
       "match_prefixes": ["gpt-5"],
@@ -763,6 +783,138 @@
         "pricing_source": "mistral_static_2026_03",
         "input_per_mtok_usd": 0.5,
         "output_per_mtok_usd": 1.5
+      }
+    },
+    {
+      "id": "grok-4",
+      "provider": "xai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "xAI の上位汎用モデル。難しめの整理や重めのダイジェスト生成の比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "xai_static_2026_03",
+        "input_per_mtok_usd": 3.0,
+        "output_per_mtok_usd": 15.0
+      }
+    },
+    {
+      "id": "grok-4-fast-reasoning",
+      "provider": "xai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": ["fast"],
+      "comment": "xAI の高速 reasoning 枠。整理や比較を速く回したい時向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "xai_static_2026_03",
+        "input_per_mtok_usd": 0.2,
+        "output_per_mtok_usd": 0.5
+      }
+    },
+    {
+      "id": "grok-4-fast-non-reasoning",
+      "provider": "xai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "fast"],
+      "comment": "xAI の軽量高速枠。抽出や候補生成を低コストで回したい時に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "xai_static_2026_03",
+        "input_per_mtok_usd": 0.2,
+        "output_per_mtok_usd": 0.5
+      }
+    },
+    {
+      "id": "grok-4-1-fast-reasoning",
+      "provider": "xai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "ask",
+      "highlights": ["fast"],
+      "comment": "Grok 4.1 系の高速 reasoning 枠。質問応答や比較検討の候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "xai_static_2026_03",
+        "input_per_mtok_usd": 0.2,
+        "output_per_mtok_usd": 0.5
+      }
+    },
+    {
+      "id": "grok-4-1-fast-non-reasoning",
+      "provider": "xai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["fast"],
+      "comment": "Grok 4.1 系の通常高速枠。日常的な要約や質問応答を広く担当させやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "xai_static_2026_03",
+        "input_per_mtok_usd": 0.2,
+        "output_per_mtok_usd": 0.5
+      }
+    },
+    {
+      "id": "grok-4.20-beta-latest-non-reasoning",
+      "provider": "xai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "summary",
+      "highlights": [],
+      "comment": "Grok 4.20 Beta の比較枠。experimental 扱いで、既定用途には使わない前提。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "xai_static_2026_03",
+        "input_per_mtok_usd": 2.0,
+        "output_per_mtok_usd": 6.0
       }
     },
     {

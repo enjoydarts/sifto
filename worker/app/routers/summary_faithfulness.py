@@ -9,6 +9,7 @@ from app.services.groq_service import check_summary_faithfulness as check_summar
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import check_summary_faithfulness as check_summary_faithfulness_mistral
 from app.services.openai_service import check_summary_faithfulness as check_summary_faithfulness_openai
+from app.services.xai_service import check_summary_faithfulness as check_summary_faithfulness_xai
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
@@ -44,6 +45,7 @@ def check_summary_faithfulness_endpoint(req: SummaryFaithfulnessRequest, request
                     "deepseek": lambda api_key: check_summary_faithfulness_deepseek(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "alibaba": lambda api_key: check_summary_faithfulness_alibaba(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "mistral": lambda api_key: check_summary_faithfulness_mistral(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
+                    "xai": lambda api_key: check_summary_faithfulness_xai(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: check_summary_faithfulness_openai(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                 },
             ),

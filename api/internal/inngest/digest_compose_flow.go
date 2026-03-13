@@ -71,6 +71,7 @@ func composeDigestEmailCopy(
 				clusterDraftRuntime.DeepSeekKey,
 				clusterDraftRuntime.AlibabaKey,
 				clusterDraftRuntime.MistralKey,
+				clusterDraftRuntime.XAIKey,
 				clusterDraftRuntime.OpenAIKey,
 				clusterDraftRuntime.Model,
 			)
@@ -129,7 +130,7 @@ func composeDigestEmailCopy(
 	digestRetryCount := 0
 	for attempt := 0; attempt <= maxDigestRetries; attempt++ {
 		workerCtx := service.WithWorkerTraceMetadata(ctx, "digest", &data.UserID, nil, nil, &data.DigestID)
-		resp, err = workerDeps.worker.ComposeDigestWithModel(workerCtx, digest.DigestDate, items, digestRuntime.AnthropicKey, digestRuntime.GoogleKey, digestRuntime.GroqKey, digestRuntime.DeepSeekKey, digestRuntime.AlibabaKey, digestRuntime.MistralKey, digestRuntime.OpenAIKey, digestRuntime.Model)
+		resp, err = workerDeps.worker.ComposeDigestWithModel(workerCtx, digest.DigestDate, items, digestRuntime.AnthropicKey, digestRuntime.GoogleKey, digestRuntime.GroqKey, digestRuntime.DeepSeekKey, digestRuntime.AlibabaKey, digestRuntime.MistralKey, digestRuntime.XAIKey, digestRuntime.OpenAIKey, digestRuntime.Model)
 		if err != nil {
 			recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest", digestRuntime.Model, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 			return err

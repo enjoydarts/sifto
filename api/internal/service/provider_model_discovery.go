@@ -39,6 +39,7 @@ func (s *ProviderModelDiscoveryService) DiscoverAll(ctx context.Context) ([]Prov
 		{"groq", s.fetchGroqModels},
 		{"deepseek", s.fetchDeepSeekModels},
 		{"mistral", s.fetchMistralModels},
+		{"xai", s.fetchXAIModels},
 	}
 	out := make([]ProviderModelsResult, 0, len(providers))
 	for _, p := range providers {
@@ -246,6 +247,41 @@ func (s *ProviderModelDiscoveryService) fetchMistralModels(ctx context.Context) 
 	base := strings.TrimRight(strings.TrimSpace(os.Getenv("MISTRAL_API_BASE_URL")), "/")
 	if base == "" {
 		base = "https://api.mistral.ai/v1"
+	} else if strings.HasSuffix(base, "/chat/completions") {
+		base = strings.TrimSuffix(base, "/chat/completions")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	var decoded struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if err := readJSONResponse(resp, &decoded); err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(decoded.Data))
+	for _, item := range decoded.Data {
+		models = append(models, item.ID)
+	}
+	return normalizeModelIDs(models), nil
+}
+
+func (s *ProviderModelDiscoveryService) fetchXAIModels(ctx context.Context) ([]string, error) {
+	apiKey := strings.TrimSpace(os.Getenv("XAI_API_KEY"))
+	if apiKey == "" {
+		return nil, fmt.Errorf("api key is required")
+	}
+	base := strings.TrimRight(strings.TrimSpace(os.Getenv("XAI_API_BASE_URL")), "/")
+	if base == "" {
+		base = "https://api.x.ai/v1"
 	} else if strings.HasSuffix(base, "/chat/completions") {
 		base = strings.TrimSuffix(base, "/chat/completions")
 	}

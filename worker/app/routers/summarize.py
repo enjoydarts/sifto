@@ -8,6 +8,7 @@ from app.services.groq_service import summarize as summarize_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import summarize as summarize_mistral
 from app.services.openai_service import summarize as summarize_openai
+from app.services.xai_service import summarize as summarize_xai
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
@@ -78,6 +79,13 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
                         api_key=api_key or "",
                     ),
                     "mistral": lambda api_key: summarize_mistral(
+                        req.title,
+                        req.facts,
+                        source_text_chars=req.source_text_chars,
+                        model=str(req.model),
+                        api_key=api_key or "",
+                    ),
+                    "xai": lambda api_key: summarize_xai(
                         req.title,
                         req.facts,
                         source_text_chars=req.source_text_chars,

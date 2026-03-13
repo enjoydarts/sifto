@@ -210,6 +210,8 @@ func main() {
 			r.Delete("/alibaba-key", settingsH.DeleteAlibabaAPIKey)
 			r.Post("/mistral-key", settingsH.SetMistralAPIKey)
 			r.Delete("/mistral-key", settingsH.DeleteMistralAPIKey)
+			r.Post("/xai-key", settingsH.SetXAIAPIKey)
+			r.Delete("/xai-key", settingsH.DeleteXAIAPIKey)
 		})
 	})
 

@@ -35,6 +35,8 @@ type SettingsGetPayload struct {
 	AlibabaAPIKeyLast4      *string        `json:"alibaba_api_key_last4,omitempty"`
 	HasMistralAPIKey        bool           `json:"has_mistral_api_key"`
 	MistralAPIKeyLast4      *string        `json:"mistral_api_key_last4,omitempty"`
+	HasXAIAPIKey            bool           `json:"has_xai_api_key"`
+	XAIAPIKeyLast4          *string        `json:"xai_api_key_last4,omitempty"`
 	HasInoreaderOAuth       bool           `json:"has_inoreader_oauth"`
 	InoreaderTokenExpiresAt *time.Time     `json:"inoreader_token_expires_at,omitempty"`
 	MonthlyBudgetUSD        *float64       `json:"monthly_budget_usd,omitempty"`
@@ -167,6 +169,8 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		AlibabaAPIKeyLast4:      settings.AlibabaAPIKeyLast4,
 		HasMistralAPIKey:        settings.HasMistralAPIKey,
 		MistralAPIKeyLast4:      settings.MistralAPIKeyLast4,
+		HasXAIAPIKey:            settings.HasXAIAPIKey,
+		XAIAPIKeyLast4:          settings.XAIAPIKeyLast4,
 		HasInoreaderOAuth:       settings.HasInoreaderOAuth,
 		InoreaderTokenExpiresAt: settings.InoreaderTokenExpiresAt,
 		MonthlyBudgetUSD:        settings.MonthlyBudgetUSD,
@@ -346,6 +350,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetAlibabaAPIKey(ctx, userID, enc, last4)
 	case "mistral":
 		return s.repo.SetMistralAPIKey(ctx, userID, enc, last4)
+	case "xai":
+		return s.repo.SetXAIAPIKey(ctx, userID, enc, last4)
 	default:
 		return nil, fmt.Errorf("unsupported provider")
 	}
@@ -367,6 +373,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearAlibabaAPIKey(ctx, userID)
 	case "mistral":
 		return s.repo.ClearMistralAPIKey(ctx, userID)
+	case "xai":
+		return s.repo.ClearXAIAPIKey(ctx, userID)
 	default:
 		return nil, fmt.Errorf("unsupported provider")
 	}

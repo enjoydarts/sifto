@@ -463,3 +463,17 @@ func (h *SettingsHandler) DeleteMistralAPIKey(w http.ResponseWriter, r *http.Req
 		"mistral_api_key_last4": func(s *model.UserSettings) any { return s.MistralAPIKeyLast4 },
 	})
 }
+
+func (h *SettingsHandler) SetXAIAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "xai", map[string]func(*model.UserSettings) any{
+		"has_xai_api_key":   func(s *model.UserSettings) any { return s.HasXAIAPIKey },
+		"xai_api_key_last4": func(s *model.UserSettings) any { return s.XAIAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteXAIAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "xai", map[string]func(*model.UserSettings) any{
+		"has_xai_api_key":   func(s *model.UserSettings) any { return s.HasXAIAPIKey },
+		"xai_api_key_last4": func(s *model.UserSettings) any { return s.XAIAPIKeyLast4 },
+	})
+}

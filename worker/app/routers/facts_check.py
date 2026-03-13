@@ -9,6 +9,7 @@ from app.services.groq_service import check_facts as check_facts_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import check_facts as check_facts_mistral
 from app.services.openai_service import check_facts as check_facts_openai
+from app.services.xai_service import check_facts as check_facts_xai
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
@@ -44,6 +45,7 @@ def check_facts_endpoint(req: FactsCheckRequest, request: Request):
                     "deepseek": lambda api_key: check_facts_deepseek(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
                     "alibaba": lambda api_key: check_facts_alibaba(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
                     "mistral": lambda api_key: check_facts_mistral(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
+                    "xai": lambda api_key: check_facts_xai(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: check_facts_openai(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
                 },
             ),

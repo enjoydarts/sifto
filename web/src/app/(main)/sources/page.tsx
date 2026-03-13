@@ -49,6 +49,9 @@ export default function SourcesPage() {
   const opmlInputRef = useRef<HTMLInputElement | null>(null);
   const pageSize = 10;
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
+  const normalizeSuggestionReason = useCallback((value: string | null | undefined) => {
+    return (value ?? "").trim().replace(/\s+/g, " ");
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -507,7 +510,12 @@ export default function SourcesPage() {
         )}
         {suggestions.length > 0 && (
           <ul className="mt-3 space-y-2">
-            {suggestions.map((s) => (
+            {suggestions.map((s) => {
+              const normalizedAIReason = normalizeSuggestionReason(s.ai_reason);
+              const hasDistinctAIReason =
+                normalizedAIReason !== "" &&
+                !s.reasons.some((reason) => normalizeSuggestionReason(reason) === normalizedAIReason);
+              return (
               <li
                 key={s.url}
                 className="flex items-start justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2"
@@ -539,7 +547,7 @@ export default function SourcesPage() {
                       ))}
                     </div>
                   )}
-                  {s.ai_reason && (
+                  {hasDistinctAIReason && s.ai_reason && (
                     <p className="mt-1 text-xs leading-5 text-zinc-600">
                       <span className="font-medium text-zinc-700">
                         {t("sources.suggest.aiReason")}:
@@ -559,7 +567,8 @@ export default function SourcesPage() {
                     : t("sources.add")}
                 </button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </section>

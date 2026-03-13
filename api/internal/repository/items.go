@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -481,7 +482,7 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
-		       sm.score, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
+		       sm.score, sm.score_breakdown, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
@@ -498,32 +499,62 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 		return nil, err
 	}
 	defer rows.Close()
-	candidates, err := scanItems(rows)
+	candidates, err := scanItemsWithBreakdown(rows)
 	if err != nil {
 		return nil, err
 	}
-	profile, err := loadFeedbackPreferenceProfile(ctx, r.db, userID)
-	if err != nil {
-		return nil, err
-	}
+
+	// Load preference profile for personal scoring.
+	prefRepo := NewPreferenceProfileRepo(r.db)
+	prefProfile, _ := prefRepo.GetProfile(ctx, userID) // nil on cold-start is OK
+
 	candidateIDs := make([]string, 0, len(candidates))
 	for _, it := range candidates {
 		candidateIDs = append(candidateIDs, it.ID)
 	}
-	embeddingBiasByItemID, err := loadEmbeddingBiasByItemID(ctx, r.db, candidateIDs, profile)
-	if err != nil {
-		return nil, err
-	}
-	sortItemsByPreference(candidates, profile, embeddingBiasByItemID)
 	candidateEmbByItemID, err := loadItemEmbeddingsByID(ctx, r.db, candidateIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	selected := selectItemsByMMR(candidates, p.Size, p.DiversifyTopics, profile, embeddingBiasByItemID, candidateEmbByItemID)
+	// Apply CalcPersonalScore to each candidate.
+	for i := range candidates {
+		input := PersonalScoreInput{
+			SummaryScore:   candidates[i].SummaryScore,
+			ScoreBreakdown: candidates[i].SummaryScoreBreakdown,
+			Topics:         candidates[i].SummaryTopics,
+			Embedding:      candidateEmbByItemID[candidates[i].ID],
+			SourceID:       candidates[i].SourceID,
+		}
+		score, reason := CalcPersonalScore(input, prefProfile)
+		candidates[i].PersonalScore = &score
+		candidates[i].PersonalScoreReason = &reason
+	}
+
+	// Sort by personal score descending.
+	sort.SliceStable(candidates, func(i, j int) bool {
+		si, sj := 0.0, 0.0
+		if candidates[i].PersonalScore != nil {
+			si = *candidates[i].PersonalScore
+		}
+		if candidates[j].PersonalScore != nil {
+			sj = *candidates[j].PersonalScore
+		}
+		if si != sj {
+			return si > sj
+		}
+		return candidates[i].CreatedAt.After(candidates[j].CreatedAt)
+	})
+
+	selected := selectItemsByMMR(candidates, p.Size, p.DiversifyTopics, candidateEmbByItemID)
 	for i := range selected {
-		reason := itemRecommendationReason(selected[i], embeddingBiasByItemID)
-		selected[i].RecommendationReason = &reason
+		// Use PersonalScoreReason if available; fall back to itemRecommendationReason.
+		if selected[i].PersonalScoreReason != nil && *selected[i].PersonalScoreReason != "attention" {
+			selected[i].RecommendationReason = selected[i].PersonalScoreReason
+		} else {
+			reason := itemRecommendationReason(selected[i], nil)
+			selected[i].RecommendationReason = &reason
+		}
 	}
 	topics, err := r.readingPlanTopics(ctx, userID, p)
 	if err != nil {
@@ -1111,6 +1142,21 @@ func scanItems(rows itemRowScanner) ([]model.Item, error) {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
 			&it.Status, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, it)
+	}
+	return items, rows.Err()
+}
+
+// scanItemsWithBreakdown is like scanItems but also scans sm.score_breakdown
+// (placed right after sm.score in the SELECT clause).
+func scanItemsWithBreakdown(rows itemRowScanner) ([]model.Item, error) {
+	var items []model.Item
+	for rows.Next() {
+		var it model.Item
+		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
+			&it.Status, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryScoreBreakdown, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)

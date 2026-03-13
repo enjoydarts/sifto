@@ -151,8 +151,6 @@ func selectItemsByMMR(
 	candidates []model.Item,
 	size int,
 	diversifyTopics bool,
-	profile *feedbackPreferenceProfile,
-	embeddingBiasByItemID map[string]float64,
 	embByItemID map[string][]float64,
 ) []model.Item {
 	if size <= 0 || len(candidates) == 0 {
@@ -170,11 +168,11 @@ func selectItemsByMMR(
 	sourceCounts := map[string]int{}
 	topicCounts := map[string]int{}
 
-	// Seed with the strongest recommendation by base relevance.
+	// Seed with the strongest recommendation by PersonalScore.
 	bestSeedIdx := 0
 	bestSeedScore := -1e9
 	for i, it := range remaining {
-		s := itemPreferenceAdjustedScoreWithEmbedding(it, profile, embeddingBiasByItemID)
+		s := itemPersonalScoreValue(it)
 		if s > bestSeedScore {
 			bestSeedScore = s
 			bestSeedIdx = i
@@ -190,7 +188,7 @@ func selectItemsByMMR(
 		bestIdx := 0
 		bestScore := -1e9
 		for i, it := range remaining {
-			relevance := itemPreferenceAdjustedScoreWithEmbedding(it, profile, embeddingBiasByItemID)
+			relevance := itemPersonalScoreValue(it)
 			divPenalty := maxSimilarityToSelected(it, selected, embByItemID)
 
 			// Weak source penalty, stronger topic penalty when diversify is enabled.
@@ -220,6 +218,17 @@ func selectItemsByMMR(
 	}
 
 	return selected
+}
+
+// itemPersonalScoreValue returns the PersonalScore value, falling back to SummaryScore.
+func itemPersonalScoreValue(item model.Item) float64 {
+	if item.PersonalScore != nil {
+		return *item.PersonalScore
+	}
+	if item.SummaryScore != nil {
+		return *item.SummaryScore
+	}
+	return 0
 }
 
 func maxSimilarityToSelected(item model.Item, selected []model.Item, embByItemID map[string][]float64) float64 {

@@ -860,6 +860,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(composeDigestCopyFn(client, db, worker, secretCipher))
 	register(sendDigestFn(client, db, worker, resend, oneSignal, secretCipher))
 	register(checkBudgetAlertsFn(client, db, resend, oneSignal))
+	register(computePreferenceProfilesFn(client, db))
 
 	return client.Serve()
 }

@@ -323,6 +323,30 @@ func dotProduct(a, b []float64) float64 {
 	return sum
 }
 
+func sortDigestItemsByPersonalScore(items []model.DigestItemDetail, profile *model.UserPreferenceProfile) {
+	sort.SliceStable(items, func(i, j int) bool {
+		ai := digestPersonalScore(items[i], profile)
+		aj := digestPersonalScore(items[j], profile)
+		if ai != aj {
+			return ai > aj
+		}
+		ti := digestRecency(items[i])
+		tj := digestRecency(items[j])
+		return ti.After(tj)
+	})
+}
+
+func digestPersonalScore(d model.DigestItemDetail, profile *model.UserPreferenceProfile) float64 {
+	input := PersonalScoreInput{
+		SummaryScore:   d.Summary.Score,
+		ScoreBreakdown: d.Summary.ScoreBreakdown,
+		Topics:         d.Summary.Topics,
+		SourceID:       d.Item.SourceID,
+	}
+	score, _ := CalcPersonalScore(input, profile)
+	return score
+}
+
 func digestRecency(d model.DigestItemDetail) time.Time {
 	if d.Item.PublishedAt != nil {
 		return *d.Item.PublishedAt

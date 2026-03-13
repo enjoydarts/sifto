@@ -284,19 +284,9 @@ func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID stri
 		}
 		items = append(items, d)
 	}
-	profile, err := loadFeedbackPreferenceProfile(ctx, r.db, userID)
-	if err != nil {
-		return nil, err
-	}
-	itemIDs := make([]string, 0, len(items))
-	for _, it := range items {
-		itemIDs = append(itemIDs, it.Item.ID)
-	}
-	embeddingBiasByItemID, err := loadEmbeddingBiasByItemID(ctx, r.db, itemIDs, profile)
-	if err != nil {
-		return nil, err
-	}
-	sortDigestItemsByPreference(items, profile, embeddingBiasByItemID)
+	prefRepo := NewPreferenceProfileRepo(r.db)
+	profile, _ := prefRepo.GetProfile(ctx, userID)
+	sortDigestItemsByPersonalScore(items, profile)
 	for i := range items {
 		items[i].Rank = i + 1
 	}

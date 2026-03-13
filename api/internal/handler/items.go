@@ -469,35 +469,7 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, out)
 		return
 	}
-	affinity := map[string]float64{}
-	if h.sourceRepo != nil {
-		if sources, e := h.sourceRepo.RecommendedByUser(r.Context(), userID, 30); e == nil {
-			for _, s := range sources {
-				affinity[s.SourceID] = s.AffinityScore
-			}
-		}
-	}
-	items := make([]model.Item, len(resp.Items))
-	copy(items, resp.Items)
-	sort.SliceStable(items, func(i, j int) bool {
-		ai := affinity[items[i].SourceID]
-		aj := affinity[items[j].SourceID]
-		if ai != aj {
-			return ai > aj
-		}
-		si := 0.0
-		sj := 0.0
-		if items[i].SummaryScore != nil {
-			si = *items[i].SummaryScore
-		}
-		if items[j].SummaryScore != nil {
-			sj = *items[j].SummaryScore
-		}
-		if si != sj {
-			return si > sj
-		}
-		return items[i].CreatedAt.After(items[j].CreatedAt)
-	})
+	items := resp.Items
 	completed := 0
 	for _, it := range items {
 		if it.IsRead {

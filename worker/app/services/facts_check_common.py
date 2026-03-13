@@ -73,13 +73,19 @@ facts:
 
 def facts_check_retry_prompt(title: str | None, content: str, facts: list[str]) -> str:
     facts_text = "\n".join(f"- {f}" for f in facts)
-    fallback = f"""1行のみで返してください。
-形式は verdict のみです。
+    fallback = f"""JSON オブジェクト 1 つのみで返してください。
+形式:
+{{
+  "verdict": "pass",
+  "short_comment": "本文で裏付けられた事実抽出です。"
+}}
 
 条件:
 - verdict は pass / warn / fail のいずれか
+- short_comment は日本語 1 文、80 文字以内
+- short_comment を空にしない
 - 前置き、後置き、コードフェンス禁止
-- 例: pass
+- JSON 以外は出力しない
 
 タイトル: {title or "（不明）"}
 article:

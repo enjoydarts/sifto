@@ -60,7 +60,11 @@ CLUSTER_DRAFT_SYSTEM_INSTRUCTION = """# Role
 - 重要な相違点があれば残す
 - 出力は必ず自然な日本語にする
 - 原文が英語でも日本語で要約する
-- プレーンテキストの箇条書き 3〜8 行程度
+- プレーンテキストの箇条書き 3〜5 行にする
+- 各行は日本語の文字を必ず1文字以上含める
+- 各行は要点を最後まで言い切る
+- 各行の文末は必ず句点（。）で閉じる
+- 書きかけの文、体言止め、助詞で終わる文は禁止
 - draft_summary 以外のキーを出さない
 - JSONのみで返す"""
 
@@ -140,7 +144,7 @@ def build_cluster_draft_task(cluster_label: str, item_count: int, topics: list[s
     source_lines = [str(x).strip()[:500] for x in source_lines if str(x).strip()][:16]
     prompt_fallback = f"""# Output
 {{
-  "draft_summary": "- ...\\n- ..."
+  "draft_summary": "- 要点を1文で言い切る。\\n- 各行は句点で閉じる。\\n- 書きかけで終わらせない。"
 }}
 
 # Input
@@ -156,12 +160,16 @@ source_lines:
 - 推測しない
 - 出力は必ず自然な日本語にする
 - 原文が英語でも日本語で要約する
-- 箇条書き 3〜8 行
+- 箇条書き 3〜5 行
+- 各行は日本語の文字を必ず1文字以上含める
+- 各行は1文で、最後まで言い切る
+- 各行の文末は必ず句点（。）で閉じる
+- 助詞や読点で終わる書きかけの文は禁止
 - JSONのみで返す
 - キーは draft_summary のみ
 
 返却形式:
-{{"draft_summary":"- ...\\n- ..."}}
+{{"draft_summary":"- 要点を1文で言い切る。\\n- 各行は句点で閉じる。\\n- 書きかけで終わらせない。"}}
 
 cluster_label: {cluster_label}
 item_count: {item_count}

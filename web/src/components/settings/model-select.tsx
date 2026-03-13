@@ -77,7 +77,7 @@ export default function ModelSelect({
   }, [open]);
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative min-w-0">
       <label className="block text-sm font-medium text-zinc-700">{label}</label>
       <button
         type="button"
@@ -95,7 +95,7 @@ export default function ModelSelect({
         <ChevronDown className={`mt-0.5 size-4 shrink-0 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="absolute left-0 right-0 z-30 mt-2 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl">
+        <div className="absolute left-0 right-0 z-30 mt-2 w-full max-w-full overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl">
           <div className="border-b border-zinc-100 p-3">
             <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
               <Search className="size-4 text-zinc-400" />
@@ -147,7 +147,11 @@ export default function ModelSelect({
                       >
                         <span className="min-w-0">
                           <span className="block break-all font-medium text-zinc-900">{opt.label}</span>
-                          {opt.note && <span className="mt-0.5 block text-xs text-zinc-500">{opt.note}</span>}
+                          {opt.note && (
+                            <span className="mt-0.5 block whitespace-normal break-words text-xs text-zinc-500">
+                              {opt.note}
+                            </span>
+                          )}
                         </span>
                         {value === opt.value && <Check className="mt-0.5 size-4 shrink-0 text-zinc-700" />}
                       </button>

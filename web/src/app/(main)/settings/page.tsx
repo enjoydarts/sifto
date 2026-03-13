@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Brain, Coins, KeyRound, Mail, Settings as SettingsIcon } from "lucide-react";
+import { BellRing, Brain, ChevronDown, Coins, KeyRound, Link2, Mail, Settings as SettingsIcon } from "lucide-react";
 import { api, LLMCatalog, LLMCatalogModel, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -147,6 +147,11 @@ export default function SettingsPage() {
   const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
   const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
   const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
+  const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
+  const [llmSectionOpen, setLLMSectionOpen] = useState(true);
+  const [operationsSectionOpen, setOperationsSectionOpen] = useState(true);
+  const [integrationsSectionOpen, setIntegrationsSectionOpen] = useState(true);
+  const [llmExtrasOpen, setLLMExtrasOpen] = useState(false);
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
   const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
   const [readingPlanDiversifyTopics, setReadingPlanDiversifyTopics] = useState(true);
@@ -332,6 +337,167 @@ export default function SettingsPage() {
     deleteKey: t("settings.deleteKey"),
     deleting: t("settings.deleting"),
   }), [t]);
+
+  const accessCards = useMemo(() => {
+    if (!settings) return [];
+    return [
+    {
+      id: "anthropic",
+      title: t("settings.anthropicTitle"),
+      description: t("settings.anthropicDescription"),
+      configured: settings.has_anthropic_api_key,
+      last4: settings.anthropic_api_key_last4,
+      value: anthropicApiKeyInput,
+      onChange: setAnthropicApiKeyInput,
+      onSubmit: submitAnthropicApiKey,
+      onDelete: handleDeleteAnthropicApiKey,
+      placeholder: "sk-ant-...",
+      saving: savingAnthropicKey,
+      deleting: deletingAnthropicKey,
+      notSet: t("settings.anthropicNotSet"),
+    },
+    {
+      id: "openai",
+      title: t("settings.openaiTitle"),
+      description: t("settings.openaiDescription"),
+      configured: settings.has_openai_api_key,
+      last4: settings.openai_api_key_last4,
+      value: openAIApiKeyInput,
+      onChange: setOpenAIApiKeyInput,
+      onSubmit: submitOpenAIApiKey,
+      onDelete: handleDeleteOpenAIApiKey,
+      placeholder: "sk-...",
+      saving: savingOpenAIKey,
+      deleting: deletingOpenAIKey,
+      notSet: t("settings.openaiNotSet"),
+    },
+    {
+      id: "google",
+      title: t("settings.googleTitle"),
+      description: t("settings.googleDescription"),
+      configured: settings.has_google_api_key,
+      last4: settings.google_api_key_last4,
+      value: googleApiKeyInput,
+      onChange: setGoogleApiKeyInput,
+      onSubmit: submitGoogleApiKey,
+      onDelete: handleDeleteGoogleApiKey,
+      placeholder: "AIza...",
+      saving: savingGoogleKey,
+      deleting: deletingGoogleKey,
+      notSet: t("settings.googleNotSet"),
+    },
+    {
+      id: "groq",
+      title: t("settings.groqTitle"),
+      description: t("settings.groqDescription"),
+      configured: settings.has_groq_api_key,
+      last4: settings.groq_api_key_last4,
+      value: groqApiKeyInput,
+      onChange: setGroqApiKeyInput,
+      onSubmit: submitGroqApiKey,
+      onDelete: handleDeleteGroqApiKey,
+      placeholder: "gsk_...",
+      saving: savingGroqKey,
+      deleting: deletingGroqKey,
+      notSet: t("settings.groqNotSet"),
+    },
+    {
+      id: "deepseek",
+      title: t("settings.deepseekTitle"),
+      description: t("settings.deepseekDescription"),
+      configured: settings.has_deepseek_api_key,
+      last4: settings.deepseek_api_key_last4,
+      value: deepseekApiKeyInput,
+      onChange: setDeepseekApiKeyInput,
+      onSubmit: submitDeepSeekApiKey,
+      onDelete: handleDeleteDeepSeekApiKey,
+      placeholder: "sk-...",
+      saving: savingDeepSeekKey,
+      deleting: deletingDeepSeekKey,
+      notSet: t("settings.deepseekNotSet"),
+    },
+    {
+      id: "alibaba",
+      title: t("settings.alibabaTitle"),
+      description: t("settings.alibabaDescription"),
+      configured: settings.has_alibaba_api_key,
+      last4: settings.alibaba_api_key_last4,
+      value: alibabaApiKeyInput,
+      onChange: setAlibabaApiKeyInput,
+      onSubmit: submitAlibabaApiKey,
+      onDelete: handleDeleteAlibabaApiKey,
+      placeholder: "sk-...",
+      saving: savingAlibabaKey,
+      deleting: deletingAlibabaKey,
+      notSet: t("settings.alibabaNotSet"),
+    },
+    {
+      id: "mistral",
+      title: t("settings.mistralTitle"),
+      description: t("settings.mistralDescription"),
+      configured: settings.has_mistral_api_key,
+      last4: settings.mistral_api_key_last4,
+      value: mistralApiKeyInput,
+      onChange: setMistralApiKeyInput,
+      onSubmit: submitMistralApiKey,
+      onDelete: handleDeleteMistralApiKey,
+      placeholder: "sk-...",
+      saving: savingMistralKey,
+      deleting: deletingMistralKey,
+      notSet: t("settings.mistralNotSet"),
+    },
+    {
+      id: "xai",
+      title: t("settings.xaiTitle"),
+      description: t("settings.xaiDescription"),
+      configured: settings.has_xai_api_key,
+      last4: settings.xai_api_key_last4,
+      value: xaiApiKeyInput,
+      onChange: setXaiApiKeyInput,
+      onSubmit: submitXAIApiKey,
+      onDelete: handleDeleteXAIApiKey,
+      placeholder: "xai-...",
+      saving: savingXAIKey,
+      deleting: deletingXAIKey,
+      notSet: t("settings.xaiNotSet"),
+    },
+  ];
+  }, [
+    t,
+    settings,
+    anthropicApiKeyInput,
+    openAIApiKeyInput,
+    googleApiKeyInput,
+    groqApiKeyInput,
+    deepseekApiKeyInput,
+    alibabaApiKeyInput,
+    mistralApiKeyInput,
+    xaiApiKeyInput,
+    savingAnthropicKey,
+    deletingAnthropicKey,
+    savingOpenAIKey,
+    deletingOpenAIKey,
+    savingGoogleKey,
+    deletingGoogleKey,
+    savingGroqKey,
+    deletingGroqKey,
+    savingDeepSeekKey,
+    deletingDeepSeekKey,
+    savingAlibabaKey,
+    deletingAlibabaKey,
+    savingMistralKey,
+    deletingMistralKey,
+    savingXAIKey,
+    deletingXAIKey,
+  ]);
+  const configuredProviderCount = useMemo(
+    () => accessCards.filter((card) => card.configured).length,
+    [accessCards]
+  );
+  const activeAccessCard = useMemo(
+    () => accessCards.find((card) => card.id === activeAccessProvider) ?? accessCards[0],
+    [accessCards, activeAccessProvider]
+  );
 
   function dismissProviderModelUpdates() {
     const latest = providerModelUpdates.reduce<string | null>((max, event) => {
@@ -862,135 +1028,472 @@ export default function SettingsPage() {
       </section>
 
       <section className="space-y-6">
-        <ApiKeyCard
-          icon={KeyRound}
-          title={t("settings.anthropicTitle")}
-          description={t("settings.anthropicDescription")}
-          configured={settings.has_anthropic_api_key}
-          last4={settings.anthropic_api_key_last4}
-          value={anthropicApiKeyInput}
-          onChange={setAnthropicApiKeyInput}
-          onSubmit={submitAnthropicApiKey}
-          onDelete={handleDeleteAnthropicApiKey}
-          placeholder="sk-ant-..."
-          saving={savingAnthropicKey}
-          deleting={deletingAnthropicKey}
-          labels={{ ...apiKeyCardLabels, notSet: t("settings.anthropicNotSet") }}
-        />
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setLLMSectionOpen((prev) => !prev)}
+            className="flex w-full items-start justify-between gap-4 text-left"
+          >
+            <div>
+              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+                <Brain className="size-4 text-zinc-500" aria-hidden="true" />
+                {t("settings.section.llm")}
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">{t("settings.section.llmDescription")}</p>
+            </div>
+            <ChevronDown className={`mt-0.5 size-4 shrink-0 text-zinc-500 transition-transform ${llmSectionOpen ? "rotate-180" : ""}`} />
+          </button>
 
-        <ApiKeyCard
-          icon={KeyRound}
-          title={t("settings.openaiTitle")}
-          description={t("settings.openaiDescription")}
-          configured={settings.has_openai_api_key}
-          last4={settings.openai_api_key_last4}
-          value={openAIApiKeyInput}
-          onChange={setOpenAIApiKeyInput}
-          onSubmit={submitOpenAIApiKey}
-          onDelete={handleDeleteOpenAIApiKey}
-          placeholder="sk-..."
-          saving={savingOpenAIKey}
-          deleting={deletingOpenAIKey}
-          labels={{ ...apiKeyCardLabels, notSet: t("settings.openaiNotSet") }}
-        />
+          {llmSectionOpen ? (
+            <>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={applyCostPerformancePreset}
+                  className="inline-flex items-center rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800"
+                >
+                  {t("settings.modelPreset.costPerformance")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsModelGuideOpen(true)}
+                  className="inline-flex items-center rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
+                >
+                  {t("settings.modelGuide.open")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLLMExtrasOpen((prev) => !prev)}
+                  className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
+                >
+                  {t("settings.section.advanced")}
+                  <ChevronDown className={`size-3 transition-transform ${llmExtrasOpen ? "rotate-180" : ""}`} />
+                </button>
+              </div>
 
-        <ApiKeyCard
-          icon={KeyRound}
-          title={t("settings.googleTitle")}
-          description={t("settings.googleDescription")}
-          configured={settings.has_google_api_key}
-          last4={settings.google_api_key_last4}
-          value={googleApiKeyInput}
-          onChange={setGoogleApiKeyInput}
-          onSubmit={submitGoogleApiKey}
-          onDelete={handleDeleteGoogleApiKey}
-          placeholder="AIza..."
-          saving={savingGoogleKey}
-          deleting={deletingGoogleKey}
-          labels={{ ...apiKeyCardLabels, notSet: t("settings.googleNotSet") }}
-        />
+              <div className="mt-5 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-medium text-zinc-900">{t("settings.access.selectProvider")}</div>
+                <div className="text-xs text-zinc-500">
+                  {`${t("settings.access.configuredProviders")}: ${configuredProviderCount}/${accessCards.length}`}
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {accessCards.map((card) => {
+                const selected = card.id === activeAccessCard?.id;
+                return (
+                  <button
+                    key={card.id}
+                    type="button"
+                    onClick={() => setActiveAccessProvider(card.id)}
+                    className={`rounded-xl border px-4 py-3 text-left transition ${
+                      selected
+                        ? "border-zinc-900 bg-white shadow-sm"
+                        : "border-zinc-200 bg-white/70 hover:border-zinc-300 hover:bg-white"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-sm font-medium text-zinc-900">{card.title.replace(/（.*?）|\(.*?\)/g, "").trim()}</div>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                          card.configured
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-zinc-200 text-zinc-600"
+                        }`}
+                      >
+                        {card.configured ? t("settings.configured") : t("settings.access.notConfiguredShort")}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-500">
+                      {card.configured ? `••••${card.last4 ?? "****"}` : card.notSet}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+              </div>
 
-        <ApiKeyCard
-          icon={KeyRound}
-          title={t("settings.groqTitle")}
-          description={t("settings.groqDescription")}
-          configured={settings.has_groq_api_key}
-          last4={settings.groq_api_key_last4}
-          value={groqApiKeyInput}
-          onChange={setGroqApiKeyInput}
-          onSubmit={submitGroqApiKey}
-          onDelete={handleDeleteGroqApiKey}
-          placeholder="gsk_..."
-          saving={savingGroqKey}
-          deleting={deletingGroqKey}
-          labels={{ ...apiKeyCardLabels, notSet: t("settings.groqNotSet") }}
-        />
+              {activeAccessCard ? (
+                <div className="mt-4">
+                  <ApiKeyCard
+                    icon={KeyRound}
+                    title={activeAccessCard.title}
+                    description={activeAccessCard.description}
+                    configured={activeAccessCard.configured}
+                    last4={activeAccessCard.last4}
+                    value={activeAccessCard.value}
+                    onChange={activeAccessCard.onChange}
+                    onSubmit={activeAccessCard.onSubmit}
+                    onDelete={activeAccessCard.onDelete}
+                    placeholder={activeAccessCard.placeholder}
+                    saving={activeAccessCard.saving}
+                    deleting={activeAccessCard.deleting}
+                    labels={{ ...apiKeyCardLabels, notSet: activeAccessCard.notSet }}
+                  />
+                </div>
+              ) : null}
 
-        <ApiKeyCard
-          icon={KeyRound}
-          title={t("settings.deepseekTitle")}
-          description={t("settings.deepseekDescription")}
-          configured={settings.has_deepseek_api_key}
-          last4={settings.deepseek_api_key_last4}
-          value={deepseekApiKeyInput}
-          onChange={setDeepseekApiKeyInput}
-          onSubmit={submitDeepSeekApiKey}
-          onDelete={handleDeleteDeepSeekApiKey}
-          placeholder="sk-..."
-          saving={savingDeepSeekKey}
-          deleting={deletingDeepSeekKey}
-          labels={{ ...apiKeyCardLabels, notSet: t("settings.deepseekNotSet") }}
-        />
+              <form onSubmit={submitLLMModels} className="mt-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <div className="mb-4">
+              <h3 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+                <Brain className="size-4 text-zinc-500" aria-hidden="true" />
+                {t("settings.modelsTitle")}
+              </h3>
+              <p className="mt-1 text-sm text-zinc-500">{t("settings.modelsDescription")}</p>
+              <p className="mt-1 text-xs text-zinc-400">{t("settings.pricingDescription")}</p>
+            </div>
 
-        <ApiKeyCard
-          icon={KeyRound}
-          title={t("settings.alibabaTitle")}
-          description={t("settings.alibabaDescription")}
-          configured={settings.has_alibaba_api_key}
-          last4={settings.alibaba_api_key_last4}
-          value={alibabaApiKeyInput}
-          onChange={setAlibabaApiKeyInput}
-          onSubmit={submitAlibabaApiKey}
-          onDelete={handleDeleteAlibabaApiKey}
-          placeholder="sk-..."
-          saving={savingAlibabaKey}
-          deleting={deletingAlibabaKey}
-          labels={{ ...apiKeyCardLabels, notSet: t("settings.alibabaNotSet") }}
-        />
+            <div className="space-y-4">
+              <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                <h4 className="text-sm font-semibold text-zinc-900">{t("settings.group.summary")}</h4>
+                <div className="mt-3 grid gap-4 md:grid-cols-2">
+                  <ModelSelect
+                    label={t("settings.model.facts")}
+                    value={anthropicFactsModel}
+                    onChange={(value) => onChangeLLMModel(setAnthropicFactsModel, value)}
+                    options={optionsForPurpose("facts")}
+                    labels={modelSelectLabels}
+                  />
+                  <ModelSelect
+                    label={t("settings.model.summary")}
+                    value={anthropicSummaryModel}
+                    onChange={(value) => onChangeLLMModel(setAnthropicSummaryModel, value)}
+                    options={optionsForPurpose("summary")}
+                    labels={modelSelectLabels}
+                  />
+                </div>
+              </section>
 
-        <ApiKeyCard
-          icon={KeyRound}
-          title={t("settings.mistralTitle")}
-          description={t("settings.mistralDescription")}
-          configured={settings.has_mistral_api_key}
-          last4={settings.mistral_api_key_last4}
-          value={mistralApiKeyInput}
-          onChange={setMistralApiKeyInput}
-          onSubmit={submitMistralApiKey}
-          onDelete={handleDeleteMistralApiKey}
-          placeholder="sk-..."
-          saving={savingMistralKey}
-          deleting={deletingMistralKey}
-          labels={{ ...apiKeyCardLabels, notSet: t("settings.mistralNotSet") }}
-        />
+              <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                <h4 className="text-sm font-semibold text-zinc-900">{t("settings.group.digest")}</h4>
+                <div className="mt-3 grid gap-4 md:grid-cols-2">
+                  <ModelSelect
+                    label={t("settings.model.digestCluster")}
+                    value={anthropicDigestClusterModel}
+                    onChange={(value) => onChangeLLMModel(setAnthropicDigestClusterModel, value)}
+                    options={optionsForPurpose("digest_cluster_draft")}
+                    labels={modelSelectLabels}
+                  />
+                  <ModelSelect
+                    label={t("settings.model.digest")}
+                    value={anthropicDigestModel}
+                    onChange={(value) => onChangeLLMModel(setAnthropicDigestModel, value)}
+                    options={optionsForPurpose("digest")}
+                    labels={modelSelectLabels}
+                  />
+                </div>
+              </section>
 
-        <ApiKeyCard
-          icon={KeyRound}
-          title={t("settings.xaiTitle")}
-          description={t("settings.xaiDescription")}
-          configured={settings.has_xai_api_key}
-          last4={settings.xai_api_key_last4}
-          value={xaiApiKeyInput}
-          onChange={setXaiApiKeyInput}
-          onSubmit={submitXAIApiKey}
-          onDelete={handleDeleteXAIApiKey}
-          placeholder="xai-..."
-          saving={savingXAIKey}
-          deleting={deletingXAIKey}
-          labels={{ ...apiKeyCardLabels, notSet: t("settings.xaiNotSet") }}
-        />
+              <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                <h4 className="text-sm font-semibold text-zinc-900">{t("settings.group.validation")}</h4>
+                <div className="mt-3 grid gap-4 md:grid-cols-2">
+                  <ModelSelect
+                    label={t("settings.model.factsCheck")}
+                    value={factsCheckModel}
+                    onChange={(value) => onChangeLLMModel(setFactsCheckModel, value)}
+                    options={optionsForPurpose("facts")}
+                    labels={modelSelectLabels}
+                  />
+                  <ModelSelect
+                    label={t("settings.model.faithfulnessCheck")}
+                    value={faithfulnessCheckModel}
+                    onChange={(value) => onChangeLLMModel(setFaithfulnessCheckModel, value)}
+                    options={optionsForPurpose("summary")}
+                    labels={modelSelectLabels}
+                  />
+                </div>
+              </section>
 
-        <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+              <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                <h4 className="text-sm font-semibold text-zinc-900">{t("settings.group.other")}</h4>
+                <div className="mt-3 grid gap-4 md:grid-cols-2">
+                  <ModelSelect
+                    label={t("settings.model.sourceSuggestion")}
+                    value={anthropicSourceSuggestionModel}
+                    onChange={(value) => onChangeLLMModel(setAnthropicSourceSuggestionModel, value)}
+                    options={sourceSuggestionModelOptions}
+                    labels={modelSelectLabels}
+                  />
+                  <ModelSelect
+                    label={t("settings.model.ask")}
+                    value={anthropicAskModel}
+                    onChange={(value) => onChangeLLMModel(setAnthropicAskModel, value)}
+                    options={optionsForPurpose("ask")}
+                    labels={modelSelectLabels}
+                  />
+                  <ModelSelect
+                    label={t("settings.model.embeddings")}
+                    value={openAIEmbeddingModel}
+                    onChange={(value) => onChangeLLMModel(setOpenAIEmbeddingModel, value)}
+                    options={openAIEmbeddingModelOptions}
+                    labels={modelSelectLabels}
+                  />
+                </div>
+              </section>
+            </div>
+
+            <div className="mt-4">
+              <button
+                type="submit"
+                disabled={savingLLMModels}
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {savingLLMModels ? t("common.saving") : t("settings.saveModels")}
+              </button>
+            </div>
+              </form>
+
+              {llmExtrasOpen ? (
+                <div className="mt-4">
+                  <ProviderModelUpdatesPanel
+                    allEvents={providerModelUpdates}
+                    visibleEvents={visibleProviderModelUpdates}
+                    onDismiss={dismissProviderModelUpdates}
+                    onRestore={restoreProviderModelUpdates}
+                    labels={{
+                      title: t("settings.providerModelUpdates"),
+                      description: t("settings.providerModelUpdatesDescription"),
+                      dismiss: t("settings.providerModelUpdate.dismiss"),
+                      empty: t("settings.providerModelUpdate.empty"),
+                      dismissed: t("settings.providerModelUpdate.dismissed"),
+                      restore: t("settings.providerModelUpdate.restore"),
+                      added: t("settings.providerModelUpdate.added", "added"),
+                      removed: t("settings.providerModelUpdate.removed", "removed"),
+                    }}
+                  />
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setOperationsSectionOpen((prev) => !prev)}
+            className="flex w-full items-start justify-between gap-4 text-left"
+          >
+            <div>
+              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+                <BellRing className="size-4 text-zinc-500" aria-hidden="true" />
+                {t("settings.section.operations")}
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">{t("settings.section.operationsDescription")}</p>
+            </div>
+            <ChevronDown className={`mt-0.5 size-4 shrink-0 text-zinc-500 transition-transform ${operationsSectionOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          {operationsSectionOpen ? (
+            <div className="mt-4 grid gap-6 lg:grid-cols-3">
+            <form onSubmit={submitReadingPlan} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+              <div className="mb-4">
+                <h3 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+                  <Brain className="size-4 text-zinc-500" aria-hidden="true" />
+                  {t("settings.recommendedTitle")}
+                </h3>
+                <p className="mt-1 text-sm text-zinc-500">
+                  {t("settings.recommendedDescription")}
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700">
+                    {t("settings.window")}
+                  </label>
+                  <select
+                    value={readingPlanWindow}
+                    onChange={(e) => setReadingPlanWindow(e.target.value as "24h" | "today_jst" | "7d")}
+                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                  >
+                    <option value="24h">{t("settings.window.24h")}</option>
+                    <option value="today_jst">{t("settings.window.today")}</option>
+                    <option value="7d">{t("settings.window.7d")}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700">
+                    {t("settings.size")}
+                  </label>
+                  <select
+                    value={readingPlanSize}
+                    onChange={(e) => setReadingPlanSize(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                  >
+                    {[7, 15, 25].map((n) => (
+                      <option key={n} value={String(n)}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+                  <span>{t("settings.diversifyTopics")}</span>
+                  <input
+                    type="checkbox"
+                    checked={readingPlanDiversifyTopics}
+                    onChange={(e) => setReadingPlanDiversifyTopics(e.target.checked)}
+                    className="size-4 rounded border-zinc-300"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-4">
+                <button
+                  type="submit"
+                  disabled={savingReadingPlan}
+                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {savingReadingPlan ? t("common.saving") : t("settings.saveRecommended")}
+                </button>
+              </div>
+            </form>
+
+            <form onSubmit={submitDigestDelivery} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+              <div className="mb-4">
+                <h3 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+                  <Mail className="size-4 text-zinc-500" aria-hidden="true" />
+                  {t("settings.digestTitle")}
+                </h3>
+                <p className="mt-1 text-sm text-zinc-500">
+                  {t("settings.digestDescription")}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
+                <div>
+                  <div className="text-sm font-medium text-zinc-800">
+                    {t("settings.digestEmailSending")}
+                  </div>
+                  <div className="text-xs text-zinc-500">
+                    {t("settings.digestDisabledHint")}
+                  </div>
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+                  <input
+                    type="checkbox"
+                    checked={digestEmailEnabled}
+                    onChange={(e) => setDigestEmailEnabled(e.target.checked)}
+                    className="size-4 rounded border-zinc-300"
+                  />
+                  {digestEmailEnabled ? t("settings.on") : t("settings.off")}
+                </label>
+              </div>
+
+              <div className="mt-4">
+                <button
+                  type="submit"
+                  disabled={savingDigestDelivery}
+                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {savingDigestDelivery ? t("common.saving") : t("settings.saveDelivery")}
+                </button>
+              </div>
+            </form>
+
+            <form onSubmit={submitBudget} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+              <div className="mb-4">
+                <h3 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+                  <Coins className="size-4 text-zinc-500" aria-hidden="true" />
+                  {t("settings.budgetTitle")}
+                </h3>
+                <p className="mt-1 text-sm text-zinc-500">
+                  {t("settings.budgetDescription")}
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700">
+                    {t("settings.monthlyBudgetUsd")}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={budgetUSD}
+                    onChange={(e) => setBudgetUSD(e.target.value)}
+                    placeholder={t("settings.budgetPlaceholder")}
+                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-400"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
+                  <div>
+                    <div className="text-sm font-medium text-zinc-800">
+                      {t("settings.budgetAlertEmail")}
+                    </div>
+                    <div className="text-xs text-zinc-500">
+                      {t("settings.budgetAlertHint")}
+                    </div>
+                  </div>
+                  <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+                    <input
+                      type="checkbox"
+                      checked={alertEnabled}
+                      onChange={(e) => setAlertEnabled(e.target.checked)}
+                      className="size-4 rounded border-zinc-300"
+                    />
+                    {alertEnabled ? t("settings.on") : t("settings.off")}
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700">
+                    {t("settings.alertThreshold")}
+                  </label>
+                  <div className="mt-1 flex items-center gap-3">
+                    <input
+                      type="range"
+                      min={1}
+                      max={99}
+                      value={thresholdPct}
+                      onChange={(e) => setThresholdPct(Number(e.target.value))}
+                      className="w-full accent-zinc-900"
+                    />
+                    <span className="w-12 text-right text-sm font-medium text-zinc-800">{thresholdPct}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={savingBudget}
+                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {savingBudget ? t("common.saving") : t("settings.saveBudget")}
+                </button>
+                <span className="text-xs text-zinc-500">
+                  {`${t("settings.currentMonth")}: ${settings.current_month.month_jst}`}
+                </span>
+              </div>
+            </form>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setIntegrationsSectionOpen((prev) => !prev)}
+            className="flex w-full items-start justify-between gap-4 text-left"
+          >
+            <div>
+              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+                <Link2 className="size-4 text-zinc-500" aria-hidden="true" />
+                {t("settings.section.integrations")}
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">{t("settings.section.integrationsDescription")}</p>
+            </div>
+            <ChevronDown className={`mt-0.5 size-4 shrink-0 text-zinc-500 transition-transform ${integrationsSectionOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          {integrationsSectionOpen ? (
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
               <KeyRound className="size-4 text-zinc-500" aria-hidden="true" />
@@ -1023,9 +1526,13 @@ export default function SettingsPage() {
               {deletingInoreaderOAuth ? t("settings.deleting") : t("settings.inoreaderDisconnect")}
             </button>
           </div>
-        </section>
+            </section>
 
-        <form onSubmit={submitObsidianExport} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <div>
+              <OneSignalSettings />
+            </div>
+
+            <form onSubmit={submitObsidianExport} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-2">
           <div className="mb-4">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
               <SettingsIcon className="size-4 text-zinc-500" aria-hidden="true" />
@@ -1136,329 +1643,11 @@ export default function SettingsPage() {
               {runningObsidianExport ? t("settings.obsidianRunNowRunning") : t("settings.obsidianRunNow")}
             </button>
           </div>
-        </form>
+            </form>
 
-        <OneSignalSettings />
-
-        <ProviderModelUpdatesPanel
-          allEvents={providerModelUpdates}
-          visibleEvents={visibleProviderModelUpdates}
-          onDismiss={dismissProviderModelUpdates}
-          onRestore={restoreProviderModelUpdates}
-          labels={{
-            title: t("settings.providerModelUpdates"),
-            description: t("settings.providerModelUpdatesDescription"),
-            dismiss: t("settings.providerModelUpdate.dismiss"),
-            empty: t("settings.providerModelUpdate.empty"),
-            dismissed: t("settings.providerModelUpdate.dismissed"),
-            restore: t("settings.providerModelUpdate.restore"),
-            added: t("settings.providerModelUpdate.added", "added"),
-            removed: t("settings.providerModelUpdate.removed", "removed"),
-          }}
-        />
-
-        <form onSubmit={submitLLMModels} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-              <Brain className="size-4 text-zinc-500" aria-hidden="true" />
-              {t("settings.modelsTitle")}
-            </h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              {t("settings.modelsDescription")}
-            </p>
-            <p className="mt-1 text-xs text-zinc-400">
-              {t("settings.pricingDescription")}
-            </p>
-            <div className="mt-3">
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={applyCostPerformancePreset}
-                  className="inline-flex items-center rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800"
-                >
-                  {t("settings.modelPreset.costPerformance")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsModelGuideOpen(true)}
-                  className="inline-flex items-center rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
-                >
-                  {t("settings.modelGuide.open")}
-                </button>
-              </div>
             </div>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <ModelSelect
-              label={t("settings.model.facts")}
-              value={anthropicFactsModel}
-              onChange={(value) => onChangeLLMModel(setAnthropicFactsModel, value)}
-              options={optionsForPurpose("facts")}
-              labels={modelSelectLabels}
-            />
-            <ModelSelect
-              label={t("settings.model.summary")}
-              value={anthropicSummaryModel}
-              onChange={(value) => onChangeLLMModel(setAnthropicSummaryModel, value)}
-              options={optionsForPurpose("summary")}
-              labels={modelSelectLabels}
-            />
-            <ModelSelect
-              label={t("settings.model.digestCluster")}
-              value={anthropicDigestClusterModel}
-              onChange={(value) => onChangeLLMModel(setAnthropicDigestClusterModel, value)}
-              options={optionsForPurpose("digest_cluster_draft")}
-              labels={modelSelectLabels}
-            />
-            <ModelSelect
-              label={t("settings.model.digest")}
-              value={anthropicDigestModel}
-              onChange={(value) => onChangeLLMModel(setAnthropicDigestModel, value)}
-              options={optionsForPurpose("digest")}
-              labels={modelSelectLabels}
-            />
-            <ModelSelect
-              label={t("settings.model.ask")}
-              value={anthropicAskModel}
-              onChange={(value) => onChangeLLMModel(setAnthropicAskModel, value)}
-              options={optionsForPurpose("ask")}
-              labels={modelSelectLabels}
-            />
-            <ModelSelect
-              label={t("settings.model.factsCheck")}
-              value={factsCheckModel}
-              onChange={(value) => onChangeLLMModel(setFactsCheckModel, value)}
-              options={optionsForPurpose("facts")}
-              labels={modelSelectLabels}
-            />
-            <ModelSelect
-              label={t("settings.model.faithfulnessCheck")}
-              value={faithfulnessCheckModel}
-              onChange={(value) => onChangeLLMModel(setFaithfulnessCheckModel, value)}
-              options={optionsForPurpose("summary")}
-              labels={modelSelectLabels}
-            />
-            <ModelSelect
-              label={t("settings.model.sourceSuggestion")}
-              value={anthropicSourceSuggestionModel}
-              onChange={(value) => onChangeLLMModel(setAnthropicSourceSuggestionModel, value)}
-              options={sourceSuggestionModelOptions}
-              labels={modelSelectLabels}
-            />
-            <ModelSelect
-              label={t("settings.model.embeddings")}
-              value={openAIEmbeddingModel}
-              onChange={(value) => onChangeLLMModel(setOpenAIEmbeddingModel, value)}
-              options={openAIEmbeddingModelOptions}
-              labels={modelSelectLabels}
-            />
-          </div>
-          <div className="mt-4">
-            <button
-              type="submit"
-              disabled={savingLLMModels}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              {savingLLMModels
-                ? t("common.saving")
-                : t("settings.saveModels")}
-            </button>
-          </div>
-        </form>
-
-      </section>
-
-      <section className="space-y-6">
-        <form onSubmit={submitReadingPlan} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-              <Brain className="size-4 text-zinc-500" aria-hidden="true" />
-              {t("settings.recommendedTitle")}
-            </h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              {t("settings.recommendedDescription")}
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">
-                {t("settings.window")}
-              </label>
-              <select
-                value={readingPlanWindow}
-                onChange={(e) => setReadingPlanWindow(e.target.value as "24h" | "today_jst" | "7d")}
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-              >
-                <option value="24h">{t("settings.window.24h")}</option>
-                <option value="today_jst">{t("settings.window.today")}</option>
-                <option value="7d">{t("settings.window.7d")}</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">
-                {t("settings.size")}
-              </label>
-              <select
-                value={readingPlanSize}
-                onChange={(e) => setReadingPlanSize(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-              >
-                {[7, 15, 25].map((n) => (
-                  <option key={n} value={String(n)}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-              <span>{t("settings.diversifyTopics")}</span>
-              <input
-                type="checkbox"
-                checked={readingPlanDiversifyTopics}
-                onChange={(e) => setReadingPlanDiversifyTopics(e.target.checked)}
-                className="size-4 rounded border-zinc-300"
-              />
-            </label>
-          </div>
-
-          <div className="mt-4">
-            <button
-              type="submit"
-              disabled={savingReadingPlan}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              {savingReadingPlan
-                ? t("common.saving")
-                : t("settings.saveRecommended")}
-            </button>
-          </div>
-        </form>
-
-        <form onSubmit={submitDigestDelivery} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-              <Mail className="size-4 text-zinc-500" aria-hidden="true" />
-              {t("settings.digestTitle")}
-            </h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              {t("settings.digestDescription")}
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-            <div>
-              <div className="text-sm font-medium text-zinc-800">
-                {t("settings.digestEmailSending")}
-              </div>
-              <div className="text-xs text-zinc-500">
-                {t("settings.digestDisabledHint")}
-              </div>
-            </div>
-            <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
-              <input
-                type="checkbox"
-                checked={digestEmailEnabled}
-                onChange={(e) => setDigestEmailEnabled(e.target.checked)}
-                className="size-4 rounded border-zinc-300"
-              />
-              {digestEmailEnabled ? t("settings.on") : t("settings.off")}
-            </label>
-          </div>
-
-          <div className="mt-4">
-            <button
-              type="submit"
-              disabled={savingDigestDelivery}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              {savingDigestDelivery
-                ? t("common.saving")
-                : t("settings.saveDelivery")}
-            </button>
-          </div>
-        </form>
-
-        <form onSubmit={submitBudget} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-              <Coins className="size-4 text-zinc-500" aria-hidden="true" />
-              {t("settings.budgetTitle")}
-            </h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              {t("settings.budgetDescription")}
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">
-                {t("settings.monthlyBudgetUsd")}
-              </label>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                value={budgetUSD}
-                onChange={(e) => setBudgetUSD(e.target.value)}
-                placeholder={t("settings.budgetPlaceholder")}
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-400"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-              <div>
-                <div className="text-sm font-medium text-zinc-800">
-                  {t("settings.budgetAlertEmail")}
-                </div>
-                <div className="text-xs text-zinc-500">
-                  {t("settings.budgetAlertHint")}
-                </div>
-              </div>
-              <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
-                <input
-                  type="checkbox"
-                  checked={alertEnabled}
-                  onChange={(e) => setAlertEnabled(e.target.checked)}
-                  className="size-4 rounded border-zinc-300"
-                />
-                {alertEnabled ? t("settings.on") : t("settings.off")}
-              </label>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">
-                {t("settings.alertThreshold")}
-              </label>
-              <div className="mt-1 flex items-center gap-3">
-                <input
-                  type="range"
-                  min={1}
-                  max={99}
-                  value={thresholdPct}
-                  onChange={(e) => setThresholdPct(Number(e.target.value))}
-                  className="w-full accent-zinc-900"
-                />
-                <span className="w-12 text-right text-sm font-medium text-zinc-800">{thresholdPct}%</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-center gap-2">
-            <button
-              type="submit"
-              disabled={savingBudget}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              {savingBudget
-                ? t("common.saving")
-                : t("settings.saveBudget")}
-            </button>
-            <span className="text-xs text-zinc-500">
-              {`${t("settings.currentMonth")}: ${settings.current_month.month_jst}`}
-            </span>
-          </div>
-        </form>
+          ) : null}
+        </section>
       </section>
 
       <ModelGuideModal

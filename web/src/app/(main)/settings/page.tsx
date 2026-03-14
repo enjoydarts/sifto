@@ -8,7 +8,7 @@ import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import OneSignalSettings from "@/components/onesignal-settings";
 import ApiKeyCard from "@/components/settings/api-key-card";
-import ModelGuideModal from "@/components/settings/model-guide-modal";
+import ModelGuideTable from "@/components/settings/model-guide-table";
 import ModelSelect, { type ModelOption } from "@/components/settings/model-select";
 import ProviderModelUpdatesPanel from "@/components/settings/provider-model-updates-panel";
 import SettingsMetricCard from "@/components/settings/settings-metric-card";
@@ -146,7 +146,6 @@ export default function SettingsPage() {
   const [alibabaApiKeyInput, setAlibabaApiKeyInput] = useState("");
   const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
   const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
-  const [isModelGuideOpen, setIsModelGuideOpen] = useState(false);
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
   const [llmSectionOpen, setLLMSectionOpen] = useState(true);
   const [operationsSectionOpen, setOperationsSectionOpen] = useState(true);
@@ -171,6 +170,7 @@ export default function SettingsPage() {
   const [faithfulnessCheckModel, setFaithfulnessCheckModel] = useState("");
   const loadSeqRef = useRef(0);
   const llmModelsDirtyRef = useRef(false);
+  const llmExtrasRef = useRef<HTMLDivElement | null>(null);
 
   const syncLLMModelForm = useCallback((llmModels?: UserSettings["llm_models"] | null) => {
     setAnthropicFactsModel(llmModels?.facts ?? "");
@@ -513,6 +513,18 @@ export default function SettingsPage() {
     if (typeof window === "undefined") return;
     window.localStorage.removeItem(MODEL_UPDATES_DISMISSED_AT_KEY);
     setDismissedModelUpdatesAt(null);
+  }
+
+  function toggleLLMExtras() {
+    setLLMExtrasOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        window.requestAnimationFrame(() => {
+          llmExtrasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
+      return next;
+    });
   }
 
   async function submitBudget(e: FormEvent) {
@@ -1056,17 +1068,10 @@ export default function SettingsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsModelGuideOpen(true)}
-                  className="inline-flex items-center rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
-                >
-                  {t("settings.modelGuide.open")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLLMExtrasOpen((prev) => !prev)}
+                  onClick={toggleLLMExtras}
                   className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
                 >
-                  {t("settings.section.advanced")}
+                  {t("settings.section.llmExtras")}
                   <ChevronDown className={`size-3 transition-transform ${llmExtrasOpen ? "rotate-180" : ""}`} />
                 </button>
               </div>
@@ -1246,23 +1251,34 @@ export default function SettingsPage() {
               </form>
 
               {llmExtrasOpen ? (
-                <div className="mt-4">
-                  <ProviderModelUpdatesPanel
-                    allEvents={providerModelUpdates}
-                    visibleEvents={visibleProviderModelUpdates}
-                    onDismiss={dismissProviderModelUpdates}
-                    onRestore={restoreProviderModelUpdates}
-                    labels={{
-                      title: t("settings.providerModelUpdates"),
-                      description: t("settings.providerModelUpdatesDescription"),
-                      dismiss: t("settings.providerModelUpdate.dismiss"),
-                      empty: t("settings.providerModelUpdate.empty"),
-                      dismissed: t("settings.providerModelUpdate.dismissed"),
-                      restore: t("settings.providerModelUpdate.restore"),
-                      added: t("settings.providerModelUpdate.added", "added"),
-                      removed: t("settings.providerModelUpdate.removed", "removed"),
-                    }}
-                  />
+                <div ref={llmExtrasRef} className="mt-4">
+                  <div className="space-y-4">
+                    <ProviderModelUpdatesPanel
+                      allEvents={providerModelUpdates}
+                      visibleEvents={visibleProviderModelUpdates}
+                      onDismiss={dismissProviderModelUpdates}
+                      onRestore={restoreProviderModelUpdates}
+                      labels={{
+                        title: t("settings.providerModelUpdates"),
+                        description: t("settings.providerModelUpdatesDescription"),
+                        dismiss: t("settings.providerModelUpdate.dismiss"),
+                        empty: t("settings.providerModelUpdate.empty"),
+                        dismissed: t("settings.providerModelUpdate.dismissed"),
+                        restore: t("settings.providerModelUpdate.restore"),
+                        added: t("settings.providerModelUpdate.added", "added"),
+                        removed: t("settings.providerModelUpdate.removed", "removed"),
+                      }}
+                    />
+                    <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+                      <div className="mb-3">
+                        <h3 className="text-sm font-semibold text-zinc-900">{t("settings.modelGuide.title")}</h3>
+                        <p className="mt-1 text-xs text-zinc-500">{t("settings.modelGuide.description")}</p>
+                      </div>
+                      <div className="overflow-auto">
+                        <ModelGuideTable entries={modelComparisonEntries} t={t} />
+                      </div>
+                    </section>
+                  </div>
                 </div>
               ) : null}
             </>
@@ -1649,13 +1665,6 @@ export default function SettingsPage() {
           ) : null}
         </section>
       </section>
-
-      <ModelGuideModal
-        open={isModelGuideOpen}
-        onClose={() => setIsModelGuideOpen(false)}
-        entries={modelComparisonEntries}
-        t={t}
-      />
     </div>
   );
 }

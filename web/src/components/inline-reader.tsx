@@ -230,7 +230,7 @@ export function InlineReader({
   return (
     <div className="fixed inset-0 z-40 bg-black/35" onClick={onClose}>
       <div
-        className={`absolute inset-y-0 right-0 w-full max-w-2xl overflow-y-auto overscroll-y-contain border-l border-zinc-200 bg-white p-4 shadow-2xl will-change-transform ${
+        className={`absolute inset-y-0 right-0 w-full max-w-3xl overflow-y-auto overscroll-y-contain border-l border-zinc-200 bg-white p-4 shadow-2xl will-change-transform sm:p-5 ${
           dragging ? "transition-none" : "transition-transform duration-200 ease-out"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -271,7 +271,7 @@ export function InlineReader({
         {item && (
           <div className="space-y-4">
             <div>
-              <h3 className="text-xl font-semibold leading-snug text-zinc-900">
+              <h3 className="text-[1.35rem] font-semibold leading-snug text-zinc-900 sm:text-2xl">
                 {item.translated_title || item.title || item.url}
               </h3>
               <CheckStatusBadges
@@ -283,7 +283,7 @@ export function InlineReader({
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-1 block break-all text-xs text-blue-600 hover:underline"
+                className="mt-2 block break-all text-sm text-blue-600 hover:underline"
               >
                 {item.url}
               </a>
@@ -387,15 +387,17 @@ export function InlineReader({
 
             {item.summary && (
               <section>
-                <h4 className="mb-1 text-sm font-semibold text-zinc-800">{t("itemDetail.summary")}</h4>
-                <p className="whitespace-pre-wrap text-sm leading-7 text-zinc-700">{item.summary.summary}</p>
+                <h4 className="mb-2 text-base font-semibold text-zinc-800">{t("itemDetail.summary")}</h4>
+                <p className="whitespace-pre-wrap text-[15px] leading-8 text-zinc-700 sm:text-base">
+                  {item.summary.summary}
+                </p>
               </section>
             )}
 
             {item.facts && item.facts.facts.length > 0 && (
               <section>
-                <h4 className="mb-1 text-sm font-semibold text-zinc-800">{t("itemDetail.facts")}</h4>
-                <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-700">
+                <h4 className="mb-2 text-base font-semibold text-zinc-800">{t("itemDetail.facts")}</h4>
+                <ul className="list-disc space-y-2 pl-5 text-[15px] leading-7 text-zinc-700 sm:text-base">
                   {item.facts.facts.map((f, idx) => (
                     <li key={`${item.id}-fact-${idx}`}>{f}</li>
                   ))}
@@ -404,17 +406,17 @@ export function InlineReader({
             )}
 
             <section>
-              <h4 className="mb-1 text-sm font-semibold text-zinc-800">{t("itemDetail.related")}</h4>
+              <h4 className="mb-2 text-base font-semibold text-zinc-800">{t("itemDetail.related")}</h4>
               {related.length === 0 ? (
-                <p className="text-sm text-zinc-500">{t("itemDetail.relatedEmpty")}</p>
+                <p className="text-[15px] text-zinc-500 sm:text-base">{t("itemDetail.relatedEmpty")}</p>
               ) : (
-                <ul className="space-y-1.5">
+                <ul className="space-y-2">
                   {related.map((r) => (
                     <li key={r.id}>
                       <button
                         type="button"
                         onClick={() => (onOpenItem ? onOpenItem(r.id) : onOpenDetail(r.id))}
-                        className="w-full truncate rounded border border-zinc-200 px-2 py-1.5 text-left text-sm text-zinc-700 hover:bg-zinc-50"
+                        className="w-full truncate rounded border border-zinc-200 px-3 py-2 text-left text-[15px] text-zinc-700 hover:bg-zinc-50 sm:text-base"
                         title={r.title || r.url}
                       >
                         {r.title || r.url}

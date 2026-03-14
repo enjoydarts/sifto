@@ -371,6 +371,7 @@ export const enDict: Dict = {
   "settings.section.integrations": "Integrations",
   "settings.section.integrationsDescription": "Organize subscription sync, Obsidian export, and notification channels.",
   "settings.section.advanced": "Advanced",
+  "settings.section.llmExtras": "Updates and comparison",
   "settings.access.configuredProviders": "Configured providers",
   "settings.access.selectProvider": "Provider to edit",
   "settings.access.notConfiguredShort": "Not set",

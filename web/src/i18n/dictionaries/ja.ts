@@ -371,6 +371,7 @@ export const jaDict: Dict = {
   "settings.section.integrations": "連携",
   "settings.section.integrationsDescription": "購読同期、Obsidian出力、通知チャネルを整理します。",
   "settings.section.advanced": "詳細",
+  "settings.section.llmExtras": "更新と比較表",
   "settings.access.configuredProviders": "設定済みプロバイダー",
   "settings.access.selectProvider": "編集するプロバイダー",
   "settings.access.notConfiguredShort": "未設定",

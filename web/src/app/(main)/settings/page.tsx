@@ -1010,7 +1010,7 @@ export default function SettingsPage() {
   if (!settings) return null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
           <SettingsIcon className="size-6 text-zinc-500" aria-hidden="true" />

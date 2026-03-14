@@ -56,6 +56,10 @@ export default function BriefingPage() {
   const clusters = data?.clusters ?? EMPTY_CLUSTERS;
   const unreadHighlights = useMemo(() => highlights.filter((item) => !item.is_read), [highlights]);
   const nowReading = unreadHighlights[0] ?? highlights[0] ?? null;
+  const topHighlightCards = useMemo(() => {
+    if (!nowReading) return highlights.slice(0, 4);
+    return highlights.filter((item) => item.id !== nowReading.id).slice(0, 4);
+  }, [highlights, nowReading]);
   const nextReads = useMemo(() => {
     const src = unreadHighlights.length > 0 ? unreadHighlights : highlights;
     return src.slice(1, 7);
@@ -313,13 +317,13 @@ export default function BriefingPage() {
               {t("briefing.nowReadingLabel", "NOW READING")}
             </p>
           </div>
-          {!loading && highlights.length > 0 ? (
+          {!loading && topHighlightCards.length > 0 ? (
             <div className="mt-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.highlights")}</h2>
               </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {highlights.slice(0, 4).map((item, idx) => (
+                {topHighlightCards.map((item, idx) => (
                   <button
                     key={item.id}
                     type="button"

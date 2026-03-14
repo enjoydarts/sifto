@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from app.services.llm_text_utils import summary_composite_score
+from app.services.llm_text_utils import extract_json_string_value_loose, summary_composite_score
 from app.services.summary_result_common import finalize_translated_title, normalize_score_breakdown
 
 DEFAULT_SCORE_REASON = "総合的な重要度・新規性・実用性を基に採点。"
@@ -20,6 +20,8 @@ def finalize_summary_result(
     response_text: str,
 ) -> dict:
     summary = str(summary_text or "").strip()
+    if not summary:
+        summary = extract_json_string_value_loose(response_text, "summary")
     if not summary:
         raise RuntimeError(f"{error_prefix}: response_snippet={response_text[:500]}")
     score_breakdown = normalize_score_breakdown(raw_score_breakdown)

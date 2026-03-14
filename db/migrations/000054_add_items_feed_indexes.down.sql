@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS idx_items_source_effective_published_at_summarized;
+DROP INDEX IF EXISTS idx_items_source_status_effective_published_at;
+DROP INDEX IF EXISTS idx_sources_user_id;

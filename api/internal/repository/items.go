@@ -61,6 +61,13 @@ type ReadingPlanParams struct {
 	ExcludeLater    bool
 }
 
+const (
+	readingPlanCandidateLimit24h = 800
+	readingPlanCandidateLimit7d  = 1200
+	relatedCandidateLimitMax     = 600
+	askCandidateLimitMax         = 1200
+)
+
 func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *string, limit int) ([]model.Item, error) {
 	if limit <= 0 {
 		limit = 500
@@ -151,7 +158,7 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 			SELECT 1
 			FROM item_summaries smt
 			WHERE smt.item_id = i.id
-			  AND $` + itoa(len(args)) + `::text = ANY(COALESCE(smt.topics, '{}'::text[]))
+			  AND COALESCE(smt.topics, '{}'::text[]) @> ARRAY[$` + itoa(len(args)) + `::text]
 		)`
 	}
 	if p.UnreadOnly {
@@ -226,7 +233,7 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 				q += ` AND EXISTS (
 					SELECT 1 FROM item_summaries smt
 					WHERE smt.item_id = i.id
-					  AND $` + itoa(nextIdx) + `::text = ANY(COALESCE(smt.topics, '{}'::text[]))
+					  AND COALESCE(smt.topics, '{}'::text[]) @> ARRAY[$` + itoa(nextIdx) + `::text]
 				)`
 				nextIdx++
 			}
@@ -356,7 +363,7 @@ func (r *ItemRepo) MarkReadBulk(ctx context.Context, userID string, p BulkMarkRe
 		where += ` AND EXISTS (
 			SELECT 1 FROM item_summaries smt
 			WHERE smt.item_id = i.id
-			  AND $` + itoa(len(args)) + `::text = ANY(COALESCE(smt.topics, '{}'::text[]))
+			  AND COALESCE(smt.topics, '{}'::text[]) @> ARRAY[$` + itoa(len(args)) + `::text]
 		)`
 	}
 	if p.UnreadOnly {
@@ -452,13 +459,13 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 	if p.Window == "" {
 		p.Window = "24h"
 	}
-	// Pull a sufficiently large candidate pool, then diversify in Go.
-	candidateLimit := 2000
+	candidateLimit := readingPlanCandidateLimit24h
 	filterSQL := ``
 	switch p.Window {
 	case "today_jst":
 		filterSQL = ` AND (COALESCE(i.published_at, i.created_at) AT TIME ZONE 'Asia/Tokyo')::date = (NOW() AT TIME ZONE 'Asia/Tokyo')::date`
 	case "7d":
+		candidateLimit = readingPlanCandidateLimit7d
 		filterSQL = ` AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '7 days'`
 	default:
 		p.Window = "24h"
@@ -1339,6 +1346,13 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 	if fetchLimit > 120 {
 		fetchLimit = 120
 	}
+	candidateLimit := fetchLimit * 8
+	if candidateLimit < 240 {
+		candidateLimit = 240
+	}
+	if candidateLimit > relatedCandidateLimitMax {
+		candidateLimit = relatedCandidateLimitMax
+	}
 
 	rows, err := r.db.Query(ctx, `
 		WITH target AS (
@@ -1348,6 +1362,16 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 			JOIN sources ts ON ts.id = ti.source_id
 			WHERE ie.item_id = $1
 			  AND ts.user_id = $2
+		), candidate_items AS (
+			SELECT i.id, i.source_id, COALESCE(i.published_at, i.created_at) AS effective_published_at
+			FROM items i
+			JOIN sources s ON s.id = i.source_id
+			LEFT JOIN item_summaries sm ON sm.item_id = i.id
+			WHERE s.user_id = $2
+			  AND i.status = 'summarized'
+			  AND i.id <> $1
+			ORDER BY COALESCE(i.published_at, i.created_at) DESC, sm.score DESC NULLS LAST
+			LIMIT $5
 		), scored AS (
 			SELECT i.id, i.source_id, i.url, i.title,
 			       sm.summary, COALESCE(sm.topics, '{}'::text[]) AS topics, sm.score,
@@ -1360,21 +1384,20 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 			         0
 			       )::double precision AS similarity,
 			       (i.source_id = t.target_source_id) AS is_same_source,
-			       i.published_at, i.created_at
+			       i.published_at, i.created_at,
+			       ci.effective_published_at
 			FROM target t
-			JOIN item_embeddings ie ON ie.item_id <> $1 AND ie.dimensions = t.dims
+			JOIN candidate_items ci ON true
+			JOIN item_embeddings ie ON ie.item_id = ci.id AND ie.dimensions = t.dims
 			JOIN items i ON i.id = ie.item_id
-			JOIN sources s ON s.id = i.source_id
 			LEFT JOIN item_summaries sm ON sm.item_id = i.id
-			WHERE s.user_id = $2
-			  AND i.status = 'summarized'
 		)
 		SELECT id, source_id, url, title,
 		       summary, topics, score, similarity, published_at, created_at
 		FROM scored
 		WHERE similarity >= $4
-		ORDER BY is_same_source ASC, similarity DESC, COALESCE(published_at, created_at) DESC
-		LIMIT $3`, id, userID, fetchLimit, minSimilarity)
+		ORDER BY is_same_source ASC, similarity DESC, effective_published_at DESC
+		LIMIT $3`, id, userID, fetchLimit, minSimilarity, candidateLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -1426,35 +1449,23 @@ func (r *ItemRepo) AskCandidatesByEmbedding(
 	if fetchLimit > 80 {
 		fetchLimit = 80
 	}
+	candidateLimit := fetchLimit * 12
+	if candidateLimit < 300 {
+		candidateLimit = 300
+	}
+	if candidateLimit > askCandidateLimitMax {
+		candidateLimit = askCandidateLimitMax
+	}
 
 	query := `
 		WITH q AS (
 			SELECT $2::double precision[] AS emb, array_length($2::double precision[], 1) AS dims
-		), scored AS (
-			SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.status,
-			       (ir.item_id IS NOT NULL) AS is_read,
-			       COALESCE(fb.is_favorite, false) AS is_favorite,
-			       COALESCE(fb.rating, 0) AS feedback_rating,
-			       sm.score, COALESCE(sm.topics, '{}'::text[]) AS topics, sm.translated_title,
-			       i.published_at, i.fetched_at, i.created_at, i.updated_at,
-			       sm.summary,
-			       COALESCE(f.facts, '[]'::jsonb) AS facts,
-			       COALESCE(
-			         (
-			           SELECT SUM(qv * cv)
-			           FROM unnest(q.emb) WITH ORDINALITY AS qvals(qv, idx)
-			           JOIN unnest(ie.embedding) WITH ORDINALITY AS cvals(cv, idx) USING (idx)
-			         ),
-			         0
-			       )::double precision AS similarity
-			FROM q
-			JOIN item_embeddings ie ON ie.dimensions = q.dims
-			JOIN items i ON i.id = ie.item_id
+		), candidate_items AS (
+			SELECT i.id, COALESCE(i.published_at, i.created_at) AS effective_published_at, sm.score
+			FROM items i
 			JOIN sources s ON s.id = i.source_id
 			JOIN item_summaries sm ON sm.item_id = i.id
-			LEFT JOIN item_facts f ON f.item_id = i.id
 			LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
-			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 			WHERE s.user_id = $1
 			  AND i.status = 'summarized'
 			  AND COALESCE(i.published_at, i.created_at) >= NOW() - make_interval(days => $3::int)
@@ -1468,6 +1479,38 @@ func (r *ItemRepo) AskCandidatesByEmbedding(
 		query += ` AND i.source_id = ANY($4::uuid[])`
 	}
 	query += `
+			ORDER BY COALESCE(i.published_at, i.created_at) DESC, sm.score DESC NULLS LAST
+			LIMIT $`
+	args = append(args, candidateLimit)
+	query += strconv.Itoa(len(args)) + `
+		), scored AS (
+			SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.status,
+			       (ir.item_id IS NOT NULL) AS is_read,
+			       COALESCE(fb.is_favorite, false) AS is_favorite,
+			       COALESCE(fb.rating, 0) AS feedback_rating,
+			       sm.score, COALESCE(sm.topics, '{}'::text[]) AS topics, sm.translated_title,
+			       i.published_at, i.fetched_at, i.created_at, i.updated_at,
+			       sm.summary,
+			       COALESCE(f.facts, '[]'::jsonb) AS facts,
+			       ci.effective_published_at,
+			       COALESCE(
+			         (
+			           SELECT SUM(qv * cv)
+			           FROM unnest(q.emb) WITH ORDINALITY AS qvals(qv, idx)
+			           JOIN unnest(ie.embedding) WITH ORDINALITY AS cvals(cv, idx) USING (idx)
+			         ),
+			         0
+			       )::double precision AS similarity
+			FROM q
+			JOIN candidate_items ci ON true
+			JOIN item_embeddings ie ON ie.item_id = ci.id AND ie.dimensions = q.dims
+			JOIN items i ON i.id = ie.item_id
+			JOIN item_summaries sm ON sm.item_id = i.id
+			LEFT JOIN item_facts f ON f.item_id = i.id
+			LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
+	`
+	query += `
 		)
 		SELECT id, source_id, url, title, thumbnail_url, status,
 		       is_read, is_favorite, feedback_rating,
@@ -1476,7 +1519,7 @@ func (r *ItemRepo) AskCandidatesByEmbedding(
 		       summary, facts, similarity
 		FROM scored
 		WHERE similarity > 0.15
-		ORDER BY similarity DESC, score DESC NULLS LAST, COALESCE(published_at, created_at) DESC
+		ORDER BY similarity DESC, score DESC NULLS LAST, effective_published_at DESC
 		LIMIT $`
 	args = append(args, fetchLimit)
 	query += strconv.Itoa(len(args))

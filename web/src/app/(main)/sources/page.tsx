@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Activity, Download, Lightbulb, Sparkles, Upload } from "lucide-react";
-import { api, RecommendedSource, Source, SourceHealth, SourceSuggestion } from "@/lib/api";
+import { api, Source, SourceHealth, SourceSuggestion } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -25,8 +25,7 @@ export default function SourcesPage() {
   const [editingSource, setEditingSource] = useState<Source | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
-  const [suggestions, setSuggestions] = useState<SourceSuggestion[]>([]);
-  const [recommendedFeeds, setRecommendedFeeds] = useState<RecommendedSource[]>([]);
+  const [recommendations, setRecommendations] = useState<SourceSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
   const [suggestionsLLM, setSuggestionsLLM] = useState<{
@@ -55,13 +54,12 @@ export default function SourcesPage() {
 
   const load = useCallback(async () => {
     try {
-      const [data, health, recommended] = await Promise.all([
+      setSuggestionsError(null);
+      const [data, health] = await Promise.all([
         api.getSources(),
         api.getSourceHealth().catch(() => ({ items: [] as SourceHealth[] })),
-        api.getRecommendedSources({ limit: 8 }).catch(() => ({ items: [] as RecommendedSource[] })),
       ]);
       setSources(data ?? []);
-      setRecommendedFeeds(recommended.items ?? []);
       const healthMap: Record<string, SourceHealth> = {};
       for (const h of health.items ?? []) healthMap[h.source_id] = h;
       setSourceHealthByID(healthMap);
@@ -111,7 +109,7 @@ export default function SourcesPage() {
         type: "rss",
         title: s.title ?? undefined,
       });
-      setSuggestions((prev) => prev.filter((v) => v.url !== s.url));
+      setRecommendations((prev) => prev.filter((v) => v.url !== s.url));
       await load();
       showToast(t("sources.toast.suggestedAdded"), "success");
     } catch (e) {
@@ -125,8 +123,8 @@ export default function SourcesPage() {
     setLoadingSuggestions(true);
     setSuggestionsError(null);
     try {
-      const res = await api.getSourceSuggestions({ limit: 24 });
-      setSuggestions(res.items ?? []);
+      const res = await api.getRecommendedSources({ limit: 24 });
+      setRecommendations(res.items ?? []);
       setSuggestionsLLM(res.llm ?? null);
     } catch (e) {
       setSuggestionsError(String(e));
@@ -418,45 +416,7 @@ export default function SourcesPage() {
         )}
       </form>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <div className="mb-3">
-          <h2 className="text-sm font-semibold text-zinc-700">{t("sources.recommendedFeeds.title")}</h2>
-          <p className="mt-1 text-xs text-zinc-500">{t("sources.recommendedFeeds.desc")}</p>
-        </div>
-        {recommendedFeeds.length === 0 ? (
-          <p className="text-sm text-zinc-500">{t("sources.recommendedFeeds.empty")}</p>
-        ) : (
-          <ul className="space-y-2">
-            {recommendedFeeds.map((s) => (
-              <li key={s.source_id} className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-zinc-900">{s.title ?? s.url}</div>
-                  {s.title && <div className="truncate text-xs text-zinc-500">{s.url}</div>}
-                </div>
-                <div className="shrink-0 text-right text-xs text-zinc-600">
-                  <div className="font-semibold text-zinc-800">{s.affinity_score.toFixed(2)}</div>
-                  <div>{t("sources.recommendedFeeds.reads")}: {s.read_count_30d}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-2 text-sm font-semibold text-zinc-700">{t("sources.inoreader.title")}</h2>
-        <p className="mb-3 text-xs text-zinc-500">{t("sources.inoreader.desc")}</p>
-        <button
-          type="button"
-          onClick={() => void handleImportInoreader()}
-          disabled={importingInoreader}
-          className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
-        >
-          {importingInoreader ? t("sources.inoreader.importing") : t("sources.inoreader.import")}
-        </button>
-      </section>
-
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+      <section className="rounded-xl border border-zinc-200 bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
@@ -503,14 +463,14 @@ export default function SourcesPage() {
         {suggestionsError && (
           <p className="mt-3 text-sm text-red-500">{suggestionsError}</p>
         )}
-        {!suggestionsError && !loadingSuggestions && suggestions.length === 0 && (
+        {!suggestionsError && !loadingSuggestions && recommendations.length === 0 && (
           <p className="mt-3 text-sm text-zinc-500">
             {t("sources.suggest.empty")}
           </p>
         )}
-        {suggestions.length > 0 && (
+        {recommendations.length > 0 && (
           <ul className="mt-3 space-y-2">
-            {suggestions.map((s) => {
+            {recommendations.map((s) => {
               const normalizedAIReason = normalizeSuggestionReason(s.ai_reason);
               const hasDistinctAIReason =
                 normalizedAIReason !== "" &&
@@ -571,6 +531,19 @@ export default function SourcesPage() {
             })}
           </ul>
         )}
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <h2 className="mb-2 text-sm font-semibold text-zinc-700">{t("sources.inoreader.title")}</h2>
+        <p className="mb-3 text-xs text-zinc-500">{t("sources.inoreader.desc")}</p>
+        <button
+          type="button"
+          onClick={() => void handleImportInoreader()}
+          disabled={importingInoreader}
+          className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+        >
+          {importingInoreader ? t("sources.inoreader.importing") : t("sources.inoreader.import")}
+        </button>
       </section>
 
       {/* State */}

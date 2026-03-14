@@ -284,15 +284,12 @@ func (h *SourceHandler) Recommended(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
-	rows, err := h.repo.RecommendedByUser(r.Context(), userID, limit)
+	out, llmMeta, err := h.buildSourceRecommendations(r.Context(), userID, limit)
 	if err != nil {
 		writeRepoError(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{
-		"items": rows,
-		"limit": limit,
-	})
+	writeJSON(w, map[string]any{"items": out, "limit": limit, "llm": llmMeta})
 }
 
 type opmlURLTitle struct {
@@ -542,25 +539,31 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
-
-	sources, err := h.repo.List(r.Context(), userID)
+	out, llmMeta, err := h.buildSourceRecommendations(r.Context(), userID, limit)
 	if err != nil {
 		writeRepoError(w, err)
 		return
 	}
-	if len(sources) == 0 {
-		writeJSON(w, map[string]any{"items": []sourceSuggestionResponse{}, "limit": limit})
-		return
+	writeJSON(w, map[string]any{"items": out, "limit": limit, "llm": llmMeta})
+}
+
+func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID string, limit int) ([]sourceSuggestionResponse, map[string]any, error) {
+	sources, err := h.repo.List(ctx, userID)
+	if err != nil {
+		return nil, nil, err
 	}
-	anthropicAPIKey := h.getUserAnthropicAPIKey(r.Context(), userID)
-	googleAPIKey := h.getUserGoogleAPIKey(r.Context(), userID)
-	groqAPIKey := h.getUserGroqAPIKey(r.Context(), userID)
-	deepseekAPIKey := h.getUserDeepSeekAPIKey(r.Context(), userID)
-	alibabaAPIKey := h.getUserAlibabaAPIKey(r.Context(), userID)
-	mistralAPIKey := h.getUserMistralAPIKey(r.Context(), userID)
-	xaiAPIKey := h.getUserXAIAPIKey(r.Context(), userID)
-	openAIAPIKey := h.getUserOpenAIAPIKey(r.Context(), userID)
-	anthropicSourceSuggestionModel := h.getUserSourceSuggestionModel(r.Context(), userID)
+	if len(sources) == 0 {
+		return []sourceSuggestionResponse{}, nil, nil
+	}
+	anthropicAPIKey := h.getUserAnthropicAPIKey(ctx, userID)
+	googleAPIKey := h.getUserGoogleAPIKey(ctx, userID)
+	groqAPIKey := h.getUserGroqAPIKey(ctx, userID)
+	deepseekAPIKey := h.getUserDeepSeekAPIKey(ctx, userID)
+	alibabaAPIKey := h.getUserAlibabaAPIKey(ctx, userID)
+	mistralAPIKey := h.getUserMistralAPIKey(ctx, userID)
+	xaiAPIKey := h.getUserXAIAPIKey(ctx, userID)
+	openAIAPIKey := h.getUserOpenAIAPIKey(ctx, userID)
+	anthropicSourceSuggestionModel := h.getUserSourceSuggestionModel(ctx, userID)
 	anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, openAIAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
 		anthropicAPIKey,
 		googleAPIKey,
@@ -574,11 +577,11 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	)
 	var preferredTopics []string
 	if h.itemRepo != nil {
-		if topics, err := h.itemRepo.PositiveFeedbackTopics(r.Context(), userID, 8); err == nil {
+		if topics, err := h.itemRepo.PositiveFeedbackTopics(ctx, userID, 8); err == nil {
 			preferredTopics = topics
 		}
 	}
-	positiveExamples, negativeExamples := h.buildSourceSuggestionFewShotExamples(r.Context(), userID)
+	positiveExamples, negativeExamples := h.buildSourceSuggestionFewShotExamples(ctx, userID)
 
 	registered := map[string]bool{}
 	startAt := time.Now()
@@ -605,18 +608,15 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-
-	// Keep response latency predictable.
 	if len(probes) > 12 {
 		probes = probes[:12]
 	}
 
 	cands := map[string]*sourceSuggestionAgg{}
 	aiReady := (anthropicAPIKey != nil || googleAPIKey != nil || groqAPIKey != nil || deepseekAPIKey != nil || alibabaAPIKey != nil || mistralAPIKey != nil || xaiAPIKey != nil || openAIAPIKey != nil) && h.worker != nil
-	// AI主導: まずAIシード提案から候補を作る。
 	if aiReady {
 		h.expandSourceSuggestionsWithLLMSeeds(
-			r.Context(),
+			ctx,
 			userID,
 			sources,
 			preferredTopics,
@@ -635,18 +635,13 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 			anthropicSourceSuggestionModel,
 		)
 	}
-	// ルールベース探索は不足時のみ補完として使う。
-	probeFallbackThreshold := limit * 2
-	if probeFallbackThreshold < 12 {
-		probeFallbackThreshold = 12
-	}
-	if !aiReady || len(cands) < probeFallbackThreshold {
+	if !aiReady {
 		for _, p := range probes {
 			if isOverBudget() {
 				break
 			}
-			ctx, cancel := context.WithTimeout(r.Context(), 1200*time.Millisecond)
-			feeds, err := discoverRSSFeeds(ctx, p.ProbeURL)
+			probeCtx, cancel := context.WithTimeout(ctx, 1200*time.Millisecond)
+			feeds, err := discoverRSSFeeds(probeCtx, p.ProbeURL)
 			cancel()
 			if err != nil {
 				continue
@@ -701,7 +696,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 		row   sourceSuggestionResponse
 		score int
 	}
-	var rows []sortable
+	rows := make([]sortable, 0, len(cands))
 	for _, a := range cands {
 		reasons := mapKeys(a.Reasons)
 		matchedTopics := mapKeys(a.MatchedTopics)
@@ -729,8 +724,6 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 		}
 		return rows[i].row.URL < rows[j].row.URL
 	})
-	// ルールベースの一次スコアはプール生成までに使い、最終選抜はAIに委ねる。
-	// ただしトークンコストを抑えるため、AIへ渡す候補は最大 N 件に制限する。
 	poolLimit := limit * 6
 	if poolLimit < 24 {
 		poolLimit = 24
@@ -745,7 +738,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 		out = append(out, r.row)
 	}
 	llmMeta := h.rankSourceSuggestionsWithLLM(
-		r.Context(),
+		ctx,
 		userID,
 		sources,
 		preferredTopics,
@@ -765,7 +758,7 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	if len(out) > limit {
 		out = out[:limit]
 	}
-	writeJSON(w, map[string]any{"items": out, "limit": limit, "llm": llmMeta})
+	return out, llmMeta, nil
 }
 
 type suggestionProbe struct {

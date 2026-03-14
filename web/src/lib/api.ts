@@ -718,7 +718,7 @@ export const api = {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString();
-    return apiFetch<{ items: RecommendedSource[]; limit: number }>(`/sources/recommended${qs ? `?${qs}` : ""}`);
+    return apiFetch<{ items: SourceSuggestion[]; limit: number; llm?: { provider?: string; model?: string; estimated_cost_usd?: number; warning?: string; error?: string; stage?: string; items_count?: number } | null }>(`/sources/recommended${qs ? `?${qs}` : ""}`);
   },
   createSource: (body: { url: string; title?: string; type?: string }) =>
     apiFetch<Source>("/sources", { method: "POST", body: JSON.stringify(body) }),

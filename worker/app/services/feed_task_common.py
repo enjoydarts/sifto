@@ -250,14 +250,20 @@ def build_seed_sites_task(
     preferred_topics = [str(t).strip() for t in preferred_topics if str(t).strip()][:20]
     positive_examples = (positive_examples or [])[:8]
     negative_examples = (negative_examples or [])[:5]
-    prompt = f"""あなたはRSSフィード探索アシスタントです。
-既存の購読ソースと興味トピックを元に、「まだ登録していない可能性が高い」ニュース/技術メディアのサイトURL候補を提案してください。
+    prompt = f"""あなたはRSSフィード推薦アシスタントです。
+既存の購読ソースURL、タイトル、興味トピックをもとに、「まだ登録していない可能性が高い」RSS/Atom候補を自由に提案してください。
+
+重要:
+- 同一ドメインや親URLの周辺だけに限定しない
+- 既存ソースと似たテーマ・編集方針・専門性を持つ別ドメインの媒体を優先する
+- 技術メディア、企業ブログ、研究機関、ニュースレター、専門ブログなども対象に含めてよい
+- RSS/AtomのURLを知っている場合は feed URL を返してよい
+- feed URL が不明な場合はサイトトップURLでよい（後段でRSS探索する）
 
 要件:
-- URLは実在しそうなサイトのトップURLを優先（https://example.com/ 形式）
-- RSS URLを直接知らない場合はサイトトップURLでよい（後段でRSS探索する）
 - 既存ソースと同じURLは除外
-- 日本語で短い理由を付ける
+- なるべく多様なドメインを混ぜる
+- 理由は「どの既存ソースやトピックに近いか」が分かる短い日本語にする
 - 最大30件
 - JSONのみで返す
 

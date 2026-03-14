@@ -15,6 +15,8 @@ import (
 type JSONCache interface {
 	GetJSON(ctx context.Context, key string, dst any) (bool, error)
 	SetJSON(ctx context.Context, key string, value any, ttl time.Duration) error
+	GetVersion(ctx context.Context, key string) (int64, error)
+	BumpVersion(ctx context.Context, key string) (int64, error)
 	DeleteByPrefix(ctx context.Context, prefix string, limit int64) (int64, error)
 	Ping(ctx context.Context) error
 	IncrMetric(ctx context.Context, namespace, field string, delta int64, now time.Time, ttl time.Duration) error
@@ -27,6 +29,8 @@ func (NoopJSONCache) GetJSON(context.Context, string, any) (bool, error) { retur
 func (NoopJSONCache) SetJSON(context.Context, string, any, time.Duration) error {
 	return nil
 }
+func (NoopJSONCache) GetVersion(context.Context, string) (int64, error)            { return 0, nil }
+func (NoopJSONCache) BumpVersion(context.Context, string) (int64, error)           { return 0, nil }
 func (NoopJSONCache) DeleteByPrefix(context.Context, string, int64) (int64, error) { return 0, nil }
 func (NoopJSONCache) Ping(context.Context) error                                   { return nil }
 func (NoopJSONCache) IncrMetric(context.Context, string, string, int64, time.Time, time.Duration) error {
@@ -39,6 +43,18 @@ func (NoopJSONCache) SumMetrics(context.Context, string, time.Time, time.Time) (
 type RedisJSONCache struct {
 	client *redis.Client
 	prefix string
+}
+
+func UserLLMUsageCacheVersionKey(userID string) string {
+	return fmt.Sprintf("cache_version:user_llm_usage:%s", strings.TrimSpace(userID))
+}
+
+func BumpUserLLMUsageCacheVersion(ctx context.Context, cache JSONCache, userID string) error {
+	if cache == nil || strings.TrimSpace(userID) == "" {
+		return nil
+	}
+	_, err := cache.BumpVersion(ctx, UserLLMUsageCacheVersionKey(userID))
+	return err
 }
 
 func NewJSONCacheFromEnv() (JSONCache, error) {
@@ -97,6 +113,27 @@ func (c *RedisJSONCache) SetJSON(ctx context.Context, key string, value any, ttl
 		return err
 	}
 	return c.client.Set(ctx, c.key(key), b, ttl).Err()
+}
+
+func (c *RedisJSONCache) GetVersion(ctx context.Context, key string) (int64, error) {
+	if c == nil || c.client == nil {
+		return 0, nil
+	}
+	value, err := c.client.Get(ctx, c.key(key)).Int64()
+	if err == redis.Nil {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return value, nil
+}
+
+func (c *RedisJSONCache) BumpVersion(ctx context.Context, key string) (int64, error) {
+	if c == nil || c.client == nil {
+		return 0, nil
+	}
+	return c.client.Incr(ctx, c.key(key)).Result()
 }
 
 func (c *RedisJSONCache) DeleteByPrefix(ctx context.Context, prefix string, limit int64) (int64, error) {

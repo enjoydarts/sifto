@@ -34,6 +34,7 @@ const itemsListCacheTTL = 30 * time.Second
 const focusQueueCacheTTL = 60 * time.Second
 const triageAllCacheTTL = 90 * time.Second
 const relatedItemsCacheTTL = 5 * time.Minute
+const itemDetailCacheTTL = 5 * time.Minute
 
 func NewItemHandler(
 	repo *repository.ItemRepo,
@@ -54,6 +55,89 @@ func NewItemHandler(
 		cache:           cache,
 		detail:          service.NewItemDetailService(repo),
 	}
+}
+
+func itemsListCacheTTLForSort(sort string) time.Duration {
+	switch sort {
+	case "score":
+		return 2 * time.Minute
+	case "personal_score":
+		return 5 * time.Minute
+	default:
+		return time.Minute
+	}
+}
+
+func (h *ItemHandler) itemsListCacheKey(ctx context.Context, userID, status, sourceID, topic string, unreadOnly, readOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) (string, error) {
+	version := int64(0)
+	if h.cache != nil {
+		var err error
+		version, err = h.cache.GetVersion(ctx, cacheVersionKeyUserItems(userID))
+		if err != nil {
+			return "", err
+		}
+	}
+	return cacheKeyItemsListVersioned(userID, version, status, sourceID, topic, unreadOnly, readOnly, favoriteOnly, laterOnly, sort, page, pageSize), nil
+}
+
+func (h *ItemHandler) bumpUserItemsVersion(ctx context.Context, userID string) error {
+	if h.cache == nil || userID == "" {
+		return nil
+	}
+	_, err := h.cache.BumpVersion(ctx, cacheVersionKeyUserItems(userID))
+	return err
+}
+
+func (h *ItemHandler) itemDetailCacheKey(ctx context.Context, userID, itemID string) (string, error) {
+	version := int64(0)
+	if h.cache != nil {
+		var err error
+		version, err = h.cache.GetVersion(ctx, cacheVersionKeyItemDetail(itemID))
+		if err != nil {
+			return "", err
+		}
+	}
+	return cacheKeyItemDetailVersioned(userID, itemID, version), nil
+}
+
+func (h *ItemHandler) bumpItemDetailVersion(ctx context.Context, itemID string) error {
+	if h.cache == nil || itemID == "" {
+		return nil
+	}
+	_, err := h.cache.BumpVersion(ctx, cacheVersionKeyItemDetail(itemID))
+	return err
+}
+
+func (h *ItemHandler) getItemDetail(ctx context.Context, userID, itemID string, cacheBust bool) (*model.ItemDetail, error) {
+	cacheKey, cacheKeyErr := h.itemDetailCacheKey(ctx, userID, itemID)
+	if cacheKeyErr != nil {
+		log.Printf("item-detail cache key failed user_id=%s item_id=%s err=%v", userID, itemID, cacheKeyErr)
+	}
+	if h.cache != nil && !cacheBust && cacheKeyErr == nil {
+		var cached model.ItemDetail
+		if ok, err := h.cache.GetJSON(ctx, cacheKey, &cached); err == nil && ok {
+			incrCacheMetric(ctx, h.cache, userID, "item_detail.hit")
+			return &cached, nil
+		} else if err != nil {
+			incrCacheMetric(ctx, h.cache, userID, "item_detail.error")
+			log.Printf("item-detail cache get failed user_id=%s item_id=%s key=%s err=%v", userID, itemID, cacheKey, err)
+		}
+		incrCacheMetric(ctx, h.cache, userID, "item_detail.miss")
+	} else if cacheBust && h.cache != nil {
+		incrCacheMetric(ctx, h.cache, userID, "item_detail.bypass")
+	}
+
+	item, err := h.detail.Get(ctx, itemID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if h.cache != nil && item != nil && cacheKeyErr == nil {
+		if err := h.cache.SetJSON(ctx, cacheKey, item, itemDetailCacheTTL); err != nil {
+			incrCacheMetric(ctx, h.cache, userID, "item_detail.error")
+			log.Printf("item-detail cache set failed user_id=%s item_id=%s key=%s err=%v", userID, itemID, cacheKey, err)
+		}
+	}
+	return item, nil
 }
 
 func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -95,9 +179,14 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unread_only and read_only cannot both be true", http.StatusBadRequest)
 		return
 	}
-	cacheKey := cacheKeyItemsList(userID, q.Get("status"), q.Get("source_id"), q.Get("topic"), unreadOnly, readOnly, favoriteOnly, laterOnly, sort, page, pageSize)
+	cacheKey, cacheKeyErr := h.itemsListCacheKey(r.Context(), userID, q.Get("status"), q.Get("source_id"), q.Get("topic"), unreadOnly, readOnly, favoriteOnly, laterOnly, sort, page, pageSize)
 	cacheBust := q.Get("cache_bust") == "1"
-	if h.cache != nil && !cacheBust {
+	if cacheKeyErr != nil {
+		itemsListCacheCounter.errors.Add(1)
+		incrCacheMetric(r.Context(), h.cache, userID, "items_list.error")
+		log.Printf("items-list cache key failed user_id=%s err=%v", userID, cacheKeyErr)
+	}
+	if h.cache != nil && !cacheBust && cacheKeyErr == nil {
 		var cached model.ItemListResponse
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
 			itemsListCacheCounter.hits.Add(1)
@@ -137,8 +226,8 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	if sort == "personal_score" && resp != nil && len(resp.Items) > 0 {
 		h.applyPersonalScoreSort(r.Context(), userID, resp)
 	}
-	if h.cache != nil && resp != nil {
-		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, itemsListCacheTTL); err != nil {
+	if h.cache != nil && resp != nil && cacheKeyErr == nil {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, itemsListCacheTTLForSort(sort)); err != nil {
 			itemsListCacheCounter.errors.Add(1)
 			incrCacheMetric(r.Context(), h.cache, userID, "items_list.error")
 			log.Printf("items-list cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
@@ -615,7 +704,7 @@ func (h *ItemHandler) TriageAll(w http.ResponseWriter, r *http.Request) {
 func (h *ItemHandler) GetDetail(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	id := chi.URLParam(r, "id")
-	item, err := h.detail.Get(r.Context(), id, userID)
+	item, err := h.getItemDetail(r.Context(), userID, id, r.URL.Query().Get("cache_bust") == "1")
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -660,7 +749,7 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var targetTopics []string
-	if detail, err := h.detail.Get(r.Context(), id, userID); err == nil && detail != nil && detail.Summary != nil {
+	if detail, err := h.getItemDetail(r.Context(), userID, id, false); err == nil && detail != nil && detail.Summary != nil {
 		targetTopics = detail.Summary.Topics
 	}
 	items, err := h.repo.ListRelated(r.Context(), id, userID, limit)
@@ -919,6 +1008,12 @@ func (h *ItemHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
 	if inserted && h.streakRepo != nil {
 		_ = h.streakRepo.IncrementRead(r.Context(), userID, timeutil.NowJST(), 3)
 	}
+	if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+		log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+	}
+	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
+		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
+	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"item_id": id, "is_read": true})
 }
@@ -929,6 +1024,12 @@ func (h *ItemHandler) MarkUnread(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.MarkUnread(r.Context(), userID, id); err != nil {
 		writeRepoError(w, err)
 		return
+	}
+	if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+		log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+	}
+	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
+		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"item_id": id, "is_read": false})
@@ -961,6 +1062,9 @@ func (h *ItemHandler) MarkReadBulk(w http.ResponseWriter, r *http.Request) {
 			writeRepoError(w, err)
 			return
 		}
+		if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+			log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+		}
 		h.invalidateUserCaches(r.Context(), userID)
 		writeJSON(w, map[string]any{"status": "ok", "updated_count": updated})
 		return
@@ -983,6 +1087,9 @@ func (h *ItemHandler) MarkReadBulk(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+		log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"status": "ok", "updated_count": updated})
 }
@@ -994,6 +1101,12 @@ func (h *ItemHandler) MarkLater(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+		log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+	}
+	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
+		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
+	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"item_id": id, "is_later": true})
 }
@@ -1004,6 +1117,12 @@ func (h *ItemHandler) UnmarkLater(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.UnmarkLater(r.Context(), userID, id); err != nil {
 		writeRepoError(w, err)
 		return
+	}
+	if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+		log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+	}
+	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
+		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"item_id": id, "is_later": false})
@@ -1031,6 +1150,14 @@ func (h *ItemHandler) MarkLaterBulk(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+		log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+	}
+	for _, itemID := range body.ItemIDs {
+		if err := h.bumpItemDetailVersion(r.Context(), itemID); err != nil {
+			log.Printf("item-detail version bump failed item_id=%s err=%v", itemID, err)
+		}
+	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"status": "ok", "updated_count": updated})
 }
@@ -1054,6 +1181,12 @@ func (h *ItemHandler) SetFeedback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeRepoError(w, err)
 		return
+	}
+	if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+		log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+	}
+	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
+		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, fb)
@@ -1081,6 +1214,12 @@ func (h *ItemHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to enqueue retry", http.StatusBadGateway)
 		return
 	}
+	if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+		log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+	}
+	if err := h.bumpItemDetailVersion(r.Context(), item.ID); err != nil {
+		log.Printf("item-detail version bump failed item_id=%s err=%v", item.ID, err)
+	}
 	w.WriteHeader(http.StatusAccepted)
 	writeJSON(w, map[string]any{
 		"status":  "queued",
@@ -1107,6 +1246,12 @@ func (h *ItemHandler) RetryFromFacts(w http.ResponseWriter, r *http.Request) {
 	if err := h.publisher.SendItemCreatedE(r.Context(), item.ID, item.SourceID, item.URL); err != nil {
 		http.Error(w, "failed to enqueue retry", http.StatusBadGateway)
 		return
+	}
+	if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+		log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+	}
+	if err := h.bumpItemDetailVersion(r.Context(), item.ID); err != nil {
+		log.Printf("item-detail version bump failed item_id=%s err=%v", item.ID, err)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
 	w.WriteHeader(http.StatusAccepted)

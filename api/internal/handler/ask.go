@@ -131,7 +131,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("create query embedding: %v", err), http.StatusBadGateway)
 		return
 	}
-	recordAskLLMUsage(r.Context(), h.llmUsageRepo, "ask", embResp.LLM, &userID)
+	recordAskLLMUsage(r.Context(), h.llmUsageRepo, h.cache, "ask", embResp.LLM, &userID)
 
 	candidates, err := h.itemRepo.AskCandidatesByEmbedding(r.Context(), userID, embResp.Embedding, body.Days, body.UnreadOnly, body.SourceIDs, body.Limit)
 	if err != nil {
@@ -186,7 +186,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("ask worker: %v", err), http.StatusBadGateway)
 		return
 	}
-	recordAskLLMUsage(r.Context(), h.llmUsageRepo, "ask", askResp.LLM, &userID)
+	recordAskLLMUsage(r.Context(), h.llmUsageRepo, h.cache, "ask", askResp.LLM, &userID)
 
 	citationMap := make(map[string]model.AskCandidate, len(candidates))
 	for _, c := range candidates {
@@ -478,7 +478,7 @@ func loadAndDecryptUserSecret(
 	return &plain, nil
 }
 
-func recordAskLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpose string, usage *service.LLMUsage, userID *string) {
+func recordAskLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, cache service.JSONCache, purpose string, usage *service.LLMUsage, userID *string) {
 	if repo == nil || usage == nil || userID == nil || *userID == "" {
 		return
 	}
@@ -488,7 +488,7 @@ func recordAskLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, pu
 	if pricingSource == "" {
 		pricingSource = "unknown"
 	}
-	_ = repo.Insert(ctx, repository.LLMUsageLogInput{
+	if err := repo.Insert(ctx, repository.LLMUsageLogInput{
 		IdempotencyKey:           &key,
 		UserID:                   userID,
 		Provider:                 usage.Provider,
@@ -501,7 +501,9 @@ func recordAskLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, pu
 		CacheCreationInputTokens: usage.CacheCreationInputTokens,
 		CacheReadInputTokens:     usage.CacheReadInputTokens,
 		EstimatedCostUSD:         usage.EstimatedCostUSD,
-	})
+	}); err == nil {
+		_ = service.BumpUserLLMUsageCacheVersion(ctx, cache, *userID)
+	}
 }
 
 func minAskInt(a, b int) int {

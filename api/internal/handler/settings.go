@@ -1,9 +1,12 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/middleware"
 	"github.com/enjoydarts/sifto/api/internal/model"
@@ -17,24 +20,66 @@ type SettingsHandler struct {
 	oauth          *service.InoreaderOAuthService
 	github         *service.GitHubAppClient
 	obsidianExport *service.ObsidianExportService
+	cache          service.JSONCache
 }
 
-func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService) *SettingsHandler {
+const settingsCacheTTL = 2 * time.Minute
+
+func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {
 	return &SettingsHandler{
 		settings:       service.NewSettingsService(repo, obsidianRepo, llmUsageRepo, cipher, github),
 		obsidianRepo:   obsidianRepo,
 		oauth:          service.NewInoreaderOAuthService(repo, cipher),
 		github:         github,
 		obsidianExport: obsidianExport,
+		cache:          cache,
 	}
+}
+
+func (h *SettingsHandler) settingsCacheKey(ctx context.Context, userID string) (string, error) {
+	version := int64(0)
+	if h.cache != nil {
+		var err error
+		version, err = h.cache.GetVersion(ctx, cacheVersionKeyUserSettings(userID))
+		if err != nil {
+			return "", err
+		}
+	}
+	return cacheKeySettingsGetVersioned(userID, version), nil
+}
+
+func (h *SettingsHandler) bumpUserSettingsVersion(ctx context.Context, userID string) error {
+	if h.cache == nil || userID == "" {
+		return nil
+	}
+	_, err := h.cache.BumpVersion(ctx, cacheVersionKeyUserSettings(userID))
+	return err
 }
 
 func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
+	cacheKey, cacheKeyErr := h.settingsCacheKey(r.Context(), userID)
+	if cacheKeyErr != nil {
+		log.Printf("settings cache key failed user_id=%s err=%v", userID, cacheKeyErr)
+	}
+	if h.cache != nil && cacheKeyErr == nil && r.URL.Query().Get("cache_bust") != "1" {
+		var cached service.SettingsGetPayload
+		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
+			writeJSON(w, &cached)
+			return
+		} else if err != nil {
+			log.Printf("settings cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
+	}
 	payload, err := h.settings.Get(r.Context(), userID)
 	if err != nil {
 		http.Error(w, "failed to load settings", http.StatusInternalServerError)
 		return
+	}
+	if h.cache != nil && cacheKeyErr == nil {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, payload, settingsCacheTTL); err != nil {
+			log.Printf("settings cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
 	}
 	writeJSON(w, payload)
 }
@@ -82,6 +127,9 @@ func (h *SettingsHandler) InoreaderCallback(w http.ResponseWriter, r *http.Reque
 		http.Redirect(w, r, "/settings?inoreader=error&reason="+err.Error(), http.StatusFound)
 		return
 	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "inoreader_oauth_state",
 		Value:    "",
@@ -100,6 +148,9 @@ func (h *SettingsHandler) DeleteInoreaderOAuth(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		writeRepoError(w, err)
 		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
 	}
 	writeJSON(w, map[string]any{
 		"user_id":                 settings.UserID,
@@ -130,6 +181,9 @@ func (h *SettingsHandler) ObsidianGitHubCallback(w http.ResponseWriter, r *http.
 	if _, err := h.settings.UpsertObsidianGitHubInstallation(r.Context(), userID, installationID); err != nil {
 		http.Redirect(w, r, "/settings?obsidian_github=error&reason=save_failed", http.StatusFound)
 		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
 	}
 	http.Redirect(w, r, "/settings?obsidian_github=connected", http.StatusFound)
 }
@@ -170,6 +224,9 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		writeRepoError(w, err)
 		return
 	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
 	writeJSON(w, map[string]any{
 		"user_id":    settings.UserID,
 		"llm_models": service.LLMModelSettingsPayload(settings),
@@ -200,6 +257,9 @@ func (h *SettingsHandler) UpdateReadingPlan(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		writeRepoError(w, err)
 		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
 	}
 	writeJSON(w, map[string]any{
 		"user_id": settings.UserID,
@@ -241,6 +301,9 @@ func (h *SettingsHandler) UpdateObsidianExport(w http.ResponseWriter, r *http.Re
 		}
 		writeRepoError(w, err)
 		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
 	}
 	writeJSON(w, map[string]any{
 		"user_id":         settings.UserID,
@@ -319,6 +382,9 @@ func (h *SettingsHandler) UpdateBudget(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
 	writeJSON(w, settings)
 }
 
@@ -345,6 +411,9 @@ func (h *SettingsHandler) setAPIKey(w http.ResponseWriter, r *http.Request, prov
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
 	resp := map[string]any{"user_id": settings.UserID}
 	for k, fn := range payload {
 		resp[k] = fn(settings)
@@ -358,6 +427,9 @@ func (h *SettingsHandler) deleteAPIKey(w http.ResponseWriter, r *http.Request, p
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
 	}
 	resp := map[string]any{"user_id": settings.UserID}
 	for k, fn := range payload {

@@ -25,6 +25,8 @@ import (
 	"github.com/mmcdole/gofeed"
 )
 
+var llmUsageCache service.JSONCache
+
 func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpose string, usage *service.LLMUsage, userID, sourceID, itemID, digestID *string) {
 	if repo == nil || usage == nil {
 		return
@@ -55,6 +57,10 @@ func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpo
 		EstimatedCostUSD:         usage.EstimatedCostUSD,
 	}); err != nil {
 		log.Printf("record llm usage purpose=%s: %v", purpose, err)
+		return
+	}
+	if userID != nil {
+		_ = service.BumpUserLLMUsageCacheVersion(ctx, llmUsageCache, *userID)
 	}
 }
 
@@ -77,6 +83,10 @@ func recordLLMExecutionSuccess(ctx context.Context, repo *repository.LLMExecutio
 		AttemptIndex: attemptIndex,
 	}); err != nil {
 		log.Printf("record llm execution success purpose=%s: %v", purpose, err)
+		return
+	}
+	if userID != nil {
+		_ = service.BumpUserLLMUsageCacheVersion(ctx, llmUsageCache, *userID)
 	}
 }
 
@@ -106,7 +116,18 @@ func recordLLMExecutionFailure(ctx context.Context, repo *repository.LLMExecutio
 		ErrorMessage:  &message,
 	}); err != nil {
 		log.Printf("record llm execution failure purpose=%s: %v", purpose, err)
+		return
 	}
+	if userID != nil {
+		_ = service.BumpUserLLMUsageCacheVersion(ctx, llmUsageCache, toVal(userID))
+	}
+}
+
+func toVal(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
 }
 
 func classifyLLMExecutionError(err error) (string, bool) {
@@ -135,12 +156,6 @@ func classifyLLMExecutionError(err error) (string, bool) {
 }
 
 func llmUsageIdempotencyKey(purpose string, usage *service.LLMUsage, userID, sourceID, itemID, digestID *string) string {
-	toVal := func(v *string) string {
-		if v == nil {
-			return ""
-		}
-		return *v
-	}
 	raw := fmt.Sprintf(
 		"purpose=%s|provider=%s|model=%s|u=%s|s=%s|i=%s|d=%s|in=%d|out=%d|cw=%d|cr=%d",
 		purpose,
@@ -834,9 +849,10 @@ type DigestCopyComposedData struct {
 }
 
 // NewHandler registers all Inngest functions and returns the HTTP handler.
-func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, oneSignal *service.OneSignalClient, obsidianExport *service.ObsidianExportService) http.Handler {
+func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, oneSignal *service.OneSignalClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) http.Handler {
 	secretCipher := service.NewSecretCipher()
 	openAI := service.NewOpenAIClient()
+	llmUsageCache = cache
 	client, err := inngestgo.NewClient(inngestgo.ClientOpts{
 		AppID: "sifto-api",
 	})

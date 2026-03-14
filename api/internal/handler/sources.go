@@ -136,6 +136,7 @@ type SourceHandler struct {
 	worker       *service.WorkerClient
 	cipher       *service.SecretCipher
 	publisher    *service.EventPublisher
+	cache        service.JSONCache
 }
 
 func NewSourceHandler(
@@ -146,6 +147,7 @@ func NewSourceHandler(
 	worker *service.WorkerClient,
 	cipher *service.SecretCipher,
 	publisher *service.EventPublisher,
+	cache service.JSONCache,
 ) *SourceHandler {
 	return &SourceHandler{
 		repo:         repo,
@@ -155,6 +157,7 @@ func NewSourceHandler(
 		worker:       worker,
 		cipher:       cipher,
 		publisher:    publisher,
+		cache:        cache,
 	}
 }
 
@@ -1490,7 +1493,9 @@ func (h *SourceHandler) recordSourceSuggestionLLMUsage(ctx context.Context, user
 		EstimatedCostUSD:         llm.EstimatedCostUSD,
 	}); err != nil {
 		// Best-effort logging: don't fail source suggestions UI on usage log issues.
+		return
 	}
+	_ = service.BumpUserLLMUsageCacheVersion(ctx, h.cache, userID)
 }
 
 func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {

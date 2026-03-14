@@ -6,15 +6,52 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/enjoydarts/sifto/api/internal/service"
 )
 
 const cacheKeyVersion = "v1"
+
+func cacheVersionKeyUserItems(userID string) string {
+	return fmt.Sprintf("cache_version:user_items:%s", userID)
+}
+
+func cacheVersionKeyItemDetail(itemID string) string {
+	return fmt.Sprintf("cache_version:item_detail:%s", itemID)
+}
+
+func cacheVersionKeyUserSettings(userID string) string {
+	return fmt.Sprintf("cache_version:user_settings:%s", userID)
+}
+
+func cacheVersionKeyUserLLMUsage(userID string) string {
+	return service.UserLLMUsageCacheVersionKey(userID)
+}
 
 func cacheKeyItemsList(userID, status, sourceID, topic string, unreadOnly, readOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) string {
 	return fmt.Sprintf(
 		"%s:items:list:%s:status=%s:source=%s:topic=%s:unread=%t:read=%t:fav=%t:later=%t:sort=%s:page=%d:size=%d",
 		cacheKeyVersion,
 		userID,
+		status,
+		sourceID,
+		topic,
+		unreadOnly,
+		readOnly,
+		favoriteOnly,
+		laterOnly,
+		sort,
+		page,
+		pageSize,
+	)
+}
+
+func cacheKeyItemsListVersioned(userID string, version int64, status, sourceID, topic string, unreadOnly, readOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) string {
+	return fmt.Sprintf(
+		"%s:items:list:%s:v=%d:status=%s:source=%s:topic=%s:unread=%t:read=%t:fav=%t:later=%t:sort=%s:page=%d:size=%d",
+		cacheKeyVersion,
+		userID,
+		version,
 		status,
 		sourceID,
 		topic,
@@ -46,6 +83,14 @@ func cacheKeyRelated(userID, itemID string, limit int) string {
 
 func cacheKeyBriefingToday(userID string, size int) string {
 	return fmt.Sprintf("%s:briefing:today:%s:size=%d", cacheKeyVersion, userID, size)
+}
+
+func cacheKeyItemDetailVersioned(userID, itemID string, version int64) string {
+	return fmt.Sprintf("%s:items:detail:%s:item=%s:v=%d", cacheKeyVersion, userID, itemID, version)
+}
+
+func cacheKeySettingsGetVersioned(userID string, version int64) string {
+	return fmt.Sprintf("%s:settings:get:%s:v=%d", cacheKeyVersion, userID, version)
 }
 
 func cacheKeyDashboard(userID string, llmDays, topicLimit, digestLimit int) string {
@@ -89,6 +134,30 @@ func cacheKeyAsk(userID, query, answerModel, embeddingModel string, days int, un
 		limit,
 		strings.Join(normalizedSourceIDs, ","),
 	)
+}
+
+func cacheKeyLLMUsageDailySummaryVersioned(userID string, version int64, days int) string {
+	return fmt.Sprintf("%s:llm_usage:daily:%s:v=%d:days=%d", cacheKeyVersion, userID, version, days)
+}
+
+func cacheKeyLLMUsageModelSummaryVersioned(userID string, version int64, days int) string {
+	return fmt.Sprintf("%s:llm_usage:model:%s:v=%d:days=%d", cacheKeyVersion, userID, version, days)
+}
+
+func cacheKeyLLMUsageProviderCurrentMonthVersioned(userID string, version int64) string {
+	return fmt.Sprintf("%s:llm_usage:provider_current_month:%s:v=%d", cacheKeyVersion, userID, version)
+}
+
+func cacheKeyLLMUsagePurposeCurrentMonthVersioned(userID string, version int64) string {
+	return fmt.Sprintf("%s:llm_usage:purpose_current_month:%s:v=%d", cacheKeyVersion, userID, version)
+}
+
+func cacheKeyLLMUsageExecutionCurrentMonthVersioned(userID string, version int64) string {
+	return fmt.Sprintf("%s:llm_usage:execution_current_month:%s:v=%d", cacheKeyVersion, userID, version)
+}
+
+func cacheKeyLLMUsageListVersioned(userID string, version int64, limit int) string {
+	return fmt.Sprintf("%s:llm_usage:list:%s:v=%d:limit=%d", cacheKeyVersion, userID, version, limit)
 }
 
 func cacheUserInvalidatePrefixes(userID string) []string {

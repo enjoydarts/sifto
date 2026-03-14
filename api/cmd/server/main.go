@@ -73,19 +73,19 @@ func main() {
 	streakRepo := repository.NewReadingStreakRepo(db)
 	prefProfileRepo := repository.NewPreferenceProfileRepo(db)
 	obsidianExportSvc := service.NewObsidianExportService(itemRepo, itemExportRepo, obsidianExportRepo, githubApp)
-	settingsH := handler.NewSettingsHandler(userSettingsRepo, obsidianExportRepo, llmUsageRepo, secretCipher, githubApp, obsidianExportSvc)
+	settingsH := handler.NewSettingsHandler(userSettingsRepo, obsidianExportRepo, llmUsageRepo, secretCipher, githubApp, obsidianExportSvc, cache)
 	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo)
 
 	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp)
-	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher)
+	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher, cache)
 	itemH := handler.NewItemHandler(itemRepo, sourceRepo, streakRepo, briefingSnapshotRepo, prefProfileRepo, eventPublisher, cache)
 	digestH := handler.NewDigestHandler(digestRepo)
-	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo, llmExecutionRepo)
+	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo, llmExecutionRepo, cache)
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
 	briefingH := handler.NewBriefingHandler(itemRepo, briefingSnapshotRepo, streakRepo, cache)
 	askH := handler.NewAskHandler(itemRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, openAI, cache)
 
-	inngestHandler := inngestfn.NewHandler(db, worker, resend, oneSignal, obsidianExportSvc)
+	inngestHandler := inngestfn.NewHandler(db, worker, resend, oneSignal, obsidianExportSvc, cache)
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Logger)

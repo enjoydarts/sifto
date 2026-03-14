@@ -252,8 +252,7 @@ export function InlineReader({
             }`}
           />
         </div>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-800">{t("items.inline.title")}</h2>
+        <div className="mb-2 flex items-center justify-end">
           <button
             type="button"
             onClick={onClose}

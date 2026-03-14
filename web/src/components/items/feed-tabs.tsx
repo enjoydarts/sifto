@@ -17,16 +17,17 @@ export function FeedTabs({
   ];
 
   return (
-    <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
+    <div className="grid w-full grid-cols-3 gap-1 rounded-lg border border-zinc-200 bg-white p-0.5">
       {tabs.map(({ value, labelKey }) => (
         <button
           key={value}
           type="button"
           onClick={() => onSelect(value)}
-          className={`rounded px-3 py-1.5 text-xs font-medium transition-colors press focus-ring ${
+          aria-pressed={feedMode === value}
+          className={`inline-flex min-h-8 items-center justify-center rounded-md px-2.5 py-1.5 text-sm font-medium transition-all duration-150 press focus-ring ${
             feedMode === value
-              ? "bg-zinc-900 text-white"
-              : "text-zinc-600 hover:bg-zinc-50"
+              ? "bg-zinc-900 text-white shadow-sm"
+              : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
           }`}
         >
           {t(labelKey)}

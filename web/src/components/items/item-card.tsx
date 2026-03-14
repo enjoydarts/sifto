@@ -71,8 +71,8 @@ export function ItemCard({
           "group",
           featured
             ? "flex w-full flex-col gap-3 md:flex-row md:items-start"
-            : "flex items-stretch gap-4",
-          "rounded-xl px-4 py-4 transition-all duration-200",
+            : "flex flex-col gap-2.5 sm:flex-row sm:items-stretch sm:gap-4",
+          "rounded-xl px-3 py-3 sm:px-4 sm:py-4 transition-all duration-200",
           featured
             ? isRead
               ? "cursor-pointer border border-zinc-300 bg-zinc-200 hover:border-zinc-400"
@@ -85,13 +85,17 @@ export function ItemCard({
         {/* Inner content row */}
         <div
           className={`min-w-0 flex-1 transition-colors ${
-            featured ? "flex min-w-0 flex-col gap-3 md:flex-row md:items-start" : "flex items-stretch gap-3"
+            featured
+              ? "flex min-w-0 flex-col gap-3 md:flex-row md:items-start"
+              : "flex min-w-0 items-start gap-3"
           }`}
         >
           {/* Thumbnail */}
           <div
             className={`shrink-0 ${
-              featured ? "flex h-36 w-full md:h-[104px] md:w-[136px] md:shrink-0" : "flex h-14 w-14 sm:h-[84px] sm:w-[84px]"
+              featured
+                ? "flex h-36 w-full md:h-[104px] md:w-[136px] md:shrink-0"
+                : "flex h-[88px] w-[88px] sm:h-[84px] sm:w-[84px]"
             }`}
           >
             <Thumbnail
@@ -105,10 +109,10 @@ export function ItemCard({
           {/* Text */}
           <div
             className={`flex min-w-0 flex-1 flex-col ${
-              featured ? "justify-start gap-2 py-0.5" : "justify-between gap-2 py-0.5"
+              featured ? "justify-start gap-2 py-0.5" : "justify-between gap-1.5 py-0.5"
             }`}
           >
-            <div className={featured ? "space-y-2" : "flex items-start gap-2"}>
+            <div className={featured ? "space-y-2" : "space-y-2 sm:flex sm:items-start sm:gap-2 sm:space-y-0"}>
               <div className="min-w-0 flex-1">
                 {featured && rank != null && rank > 0 && (
                   <div className="mb-1 inline-flex items-center gap-1 rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white">
@@ -128,7 +132,7 @@ export function ItemCard({
                 >
                   {displayTitle ?? item.url}
                 </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-zinc-400 sm:text-xs">
                   <span
                     className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
                       isRead
@@ -145,19 +149,40 @@ export function ItemCard({
                       {reactionPill.label}
                     </span>
                   )}
+                  {!featured && (
+                    <span className="sm:hidden">
+                      <ScoreIndicator
+                        score={item.summary_score}
+                        personalScore={item.personal_score}
+                        personalScoreReason={item.personal_score_reason}
+                        locale={locale}
+                        size="sm"
+                      />
+                    </span>
+                  )}
                 </div>
-                <CheckStatusBadges
-                  factsCheckResult={item.facts_check_result}
-                  faithfulnessResult={item.faithfulness_result}
-                  t={t}
-                  compact
-                />
+                <div className="mt-1">
+                  <CheckStatusBadges
+                    factsCheckResult={item.facts_check_result}
+                    faithfulnessResult={item.faithfulness_result}
+                    t={t}
+                    compact
+                  />
+                </div>
               </div>
               {!featured && (
-                <ScoreIndicator score={item.summary_score} personalScore={item.personal_score} personalScoreReason={item.personal_score_reason} locale={locale} size="sm" />
+                <div className="hidden sm:block">
+                  <ScoreIndicator
+                    score={item.summary_score}
+                    personalScore={item.personal_score}
+                    personalScoreReason={item.personal_score_reason}
+                    locale={locale}
+                    size="sm"
+                  />
+                </div>
               )}
             </div>
-            <div className={`h-4 truncate text-[12px] ${featured ? "w-full text-zinc-500" : "text-zinc-400"}`}>
+            <div className={`hidden h-4 truncate text-[12px] sm:block ${featured ? "w-full text-zinc-500" : "text-zinc-400"}`}>
               {displayTitle ? item.url : "\u00A0"}
             </div>
           </div>
@@ -166,7 +191,9 @@ export function ItemCard({
         {/* Actions */}
         <div
           className={`flex shrink-0 gap-2 ${
-            featured ? "flex-row self-start md:flex-col md:items-end" : "flex-col items-end justify-start"
+            featured
+              ? "flex-row self-start md:flex-col md:items-end"
+              : "flex w-full flex-wrap items-center justify-start border-t border-zinc-100 pt-2 sm:w-auto sm:border-t-0 sm:pt-0 sm:max-w-[248px] sm:justify-end"
           }`}
         >
           {featured && (
@@ -176,27 +203,42 @@ export function ItemCard({
           )}
           <button
             type="button"
+            onClick={(e) => { e.stopPropagation(); onOpenDetail(); }}
+            className={`inline-flex items-center justify-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 press focus-ring ${
+              featured ? "h-9 md:min-w-[116px]" : "h-8 min-w-[calc(50%-0.25rem)] flex-1 sm:h-9 sm:min-w-[104px] sm:flex-none"
+            }`}
+          >
+            <ExternalLink className="size-3.5" aria-hidden="true" />
+            <span className="sm:hidden">{t("items.action.openShort")}</span>
+            <span className="hidden sm:inline">{t("items.action.openDetail")}</span>
+          </button>
+          <button
+            type="button"
             disabled={readUpdating}
             onClick={(e) => { e.stopPropagation(); onToggleRead(); }}
-            className={`rounded-lg border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 press focus-ring ${
-              featured ? "h-9 md:min-w-[116px]" : "h-9 min-w-[116px]"
+            className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 press focus-ring ${
+              isRead
+                ? "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+                : "border border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800"
+            } ${
+              featured ? "h-9 md:min-w-[116px]" : "h-8 min-w-[calc(50%-0.25rem)] flex-1 sm:h-9 sm:min-w-[104px] sm:flex-none"
             }`}
           >
             {readUpdating
               ? t("items.action.updating")
               : isRead
-                ? t("items.action.markUnread")
-                : t("items.action.markRead")}
-          </button>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onOpenDetail(); }}
-            className={`inline-flex items-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 press focus-ring ${
-              featured ? "h-9 md:min-w-[116px]" : "h-9 min-w-[116px]"
-            }`}
-          >
-            <ExternalLink className="size-3.5" aria-hidden="true" />
-            <span>{t("items.action.openDetail")}</span>
+                ? (
+                  <>
+                    <span className="sm:hidden">{t("items.action.markUnreadShort")}</span>
+                    <span className="hidden sm:inline">{t("items.action.markUnread")}</span>
+                  </>
+                )
+                : (
+                  <>
+                    <span className="sm:hidden">{t("items.action.markReadShort")}</span>
+                    <span className="hidden sm:inline">{t("items.action.markRead")}</span>
+                  </>
+                )}
           </button>
           {item.status === "failed" && (
             <button
@@ -204,10 +246,15 @@ export function ItemCard({
               disabled={retrying}
               onClick={(e) => { e.stopPropagation(); onRetry(); }}
               className={`rounded-lg border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 press focus-ring ${
-                featured ? "h-9 md:min-w-[116px]" : "h-9 min-w-[116px]"
+                featured ? "h-9 md:min-w-[116px]" : "h-8 min-w-[calc(50%-0.25rem)] flex-1 sm:h-9 sm:min-w-[104px] sm:flex-none"
               }`}
             >
-              {retrying ? t("items.retrying") : t("items.retry")}
+              {retrying ? t("items.retrying") : (
+                <>
+                  <span className="sm:hidden">{t("items.retryShort")}</span>
+                  <span className="hidden sm:inline">{t("items.retry")}</span>
+                </>
+              )}
             </button>
           )}
         </div>

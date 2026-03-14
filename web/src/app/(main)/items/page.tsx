@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCheck, Newspaper, SlidersHorizontal, Star } from "lucide-react";
+import { CheckCheck, Newspaper } from "lucide-react";
 import { api, Item } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import Pagination from "@/components/pagination";
@@ -13,6 +13,7 @@ import { InlineReader } from "@/components/inline-reader";
 import { PageTransition } from "@/components/page-transition";
 import { EmptyState } from "@/components/empty-state";
 import { SkeletonItemRow } from "@/components/skeleton";
+import { FiltersBar } from "@/components/items/filters-bar";
 import { ItemCard } from "@/components/items/item-card";
 import { FeedTabs, type FeedMode, type SortMode } from "@/components/items/feed-tabs";
 
@@ -66,6 +67,7 @@ function ItemsPageContent() {
   const [retryingIds, setRetryingIds] = useState<Record<string, boolean>>({});
   const [readUpdatingIds, setReadUpdatingIds] = useState<Record<string, boolean>>({});
   const [bulkMarkingRead, setBulkMarkingRead] = useState(false);
+  const [toolbarAction, setToolbarAction] = useState<"" | "triage_all" | "bulk_filtered" | "bulk_older">("");
   const restoredScrollRef = useRef<string | null>(null);
   const prefetchedDetailIDsRef = useRef<Record<string, true>>({});
 
@@ -347,6 +349,13 @@ function ItemsPageContent() {
     }
     return Array.from(map.entries()).map(([date, sectionItems]) => ({ date, items: sectionItems }));
   }, [locale, sortedItems]);
+
+  const pageSubtitleKey =
+    feedMode === "later"
+      ? "items.subtitle.later"
+      : feedMode === "read"
+        ? "items.subtitle.read"
+        : "items.subtitle.unread";
   const detailHref = useCallback(
     (itemId: string) => `/items/${itemId}?from=${encodeURIComponent(currentItemsHref)}`,
     [currentItemsHref]
@@ -410,14 +419,6 @@ function ItemsPageContent() {
   return (
     <PageTransition>
       <div className="space-y-4 pb-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <FeedTabs
-            feedMode={feedMode}
-            onSelect={(feed) => replaceItemsQuery({ feed, page: 1 })}
-            t={t}
-          />
-        </div>
-
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold">
@@ -425,108 +426,101 @@ function ItemsPageContent() {
               <span>{t("items.title")}</span>
             </h1>
             <p className="mt-1 text-sm text-zinc-500">
-              {itemsTotal.toLocaleString()} {t("common.rows")}
-              {topic && (
-                <span className="ml-2 text-zinc-400">
-                  {`(${t("items.topic")}: ${topic})`}
-                </span>
-              )}
+              {t(pageSubtitleKey)} · {itemsTotal.toLocaleString()} {t("common.rows")}
             </p>
           </div>
-          <div className="flex w-full flex-wrap gap-3 lg:w-auto lg:justify-end">
-            <section className="min-w-0 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
-              <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                <SlidersHorizontal className="size-3.5" aria-hidden="true" />
-                <span>{t("items.toolbar.view")}</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
-                  {(["newest", "score", "personal_score"] as SortMode[]).map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => replaceItemsQuery({ sort: s, page: 1 })}
-                      className={`rounded px-3 py-1.5 text-xs font-medium transition-colors press focus-ring ${
-                        sortMode === s ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-white"
-                      }`}
-                    >
-                      {t(`items.sort.${s}`)}
-                    </button>
-                  ))}
-                </div>
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={favoriteOnly}
-                    onChange={(e) => replaceItemsQuery({ favorite: e.target.checked, page: 1 })}
-                    className="size-4 rounded border-zinc-300"
-                  />
-                  <span className="inline-flex items-center gap-1">
-                    <Star className="size-3.5 text-amber-500" aria-hidden="true" />
-                    {t("items.filter.favoriteOnly")}
-                  </span>
-                </label>
-              </div>
-            </section>
-
-            <section className="min-w-0 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
-              <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                <CheckCheck className="size-3.5" aria-hidden="true" />
-                <span>{t("items.toolbar.actions")}</span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => router.push("/triage?mode=all")}
-                  className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring"
-                >
-                  {t("items.openAllTriage")}
-                </button>
-                <button
-                  type="button"
-                  disabled={bulkMarkingRead}
-                  onClick={() => void bulkMarkRead("filtered")}
-                  className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring disabled:opacity-60"
-                >
-                  {bulkMarkingRead ? t("common.saving") : t("items.bulkRead.filtered")}
-                </button>
-                <button
-                  type="button"
-                  disabled={bulkMarkingRead}
-                  onClick={() => void bulkMarkRead("older_than_7d")}
-                  className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 press focus-ring disabled:opacity-60"
-                >
-                  {bulkMarkingRead ? t("common.saving") : t("items.bulkRead.olderThan7d")}
-                </button>
-              </div>
-            </section>
-          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/triage?mode=all")}
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-zinc-900 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring"
+          >
+            <CheckCheck className="size-4" aria-hidden="true" />
+            <span>{t("items.openAllTriage")}</span>
+          </button>
         </div>
 
-        {/* Filters */}
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          {topic && (
-            <div className="inline-flex items-center gap-2 rounded border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-800">
-              <span className="font-medium">
-                {t("items.topic")}: {topic}
-              </span>
+        <section className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50/80 shadow-sm">
+          <div className="flex flex-col gap-2 px-3 py-2 xl:flex-row xl:items-center">
+            <div className="shrink-0 xl:w-[320px]">
+              <FeedTabs
+                feedMode={feedMode}
+                onSelect={(feed) => replaceItemsQuery({ feed, page: 1, unread: false })}
+                t={t}
+              />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <FiltersBar
+                feedMode={feedMode}
+                sortMode={sortMode}
+                topic={topic}
+                favoriteOnly={favoriteOnly}
+                onSortChange={(sort) => replaceItemsQuery({ sort, page: 1 })}
+                onTopicClear={() => replaceItemsQuery({ topic: "", page: 1 })}
+                onFavoriteChange={(v) => replaceItemsQuery({ favorite: v, page: 1 })}
+                t={t}
+              />
+            </div>
+
+            <div className="flex shrink-0 items-center gap-2 xl:w-[320px] xl:justify-end">
+              <select
+                value={toolbarAction}
+                onChange={(e) => setToolbarAction(e.target.value as typeof toolbarAction)}
+                className="min-h-9 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus-ring xl:w-[220px] xl:flex-none"
+                aria-label={t("items.toolbar.actions")}
+              >
+                <option value="">{t("items.actions.placeholder")}</option>
+                <option value="bulk_filtered">{t("items.bulkRead.filtered")}</option>
+                <option value="bulk_older">{t("items.bulkRead.olderThan7d")}</option>
+              </select>
               <button
                 type="button"
-                onClick={() => replaceItemsQuery({ topic: "", page: 1 })}
-                className="rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-100 press"
+                disabled={!toolbarAction || bulkMarkingRead}
+                onClick={() => {
+                  if (toolbarAction === "bulk_filtered") {
+                    void bulkMarkRead("filtered");
+                    return;
+                  }
+                  if (toolbarAction === "bulk_older") {
+                    void bulkMarkRead("older_than_7d");
+                  }
+                }}
+                className="inline-flex min-h-9 items-center justify-center rounded-lg border border-zinc-900 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {t("items.clear")}
+                {bulkMarkingRead ? t("common.saving") : t("items.actions.run")}
               </button>
             </div>
-          )}
-          {(sourceID || filter || unreadOnly) && (
-            <div className="inline-flex flex-wrap items-center gap-2 rounded border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm text-zinc-700">
-              {sourceID && <span className="font-medium">{t("items.filter.sourceApplied")}</span>}
-              {filter && <span className="font-medium">{t(`items.filter.${filter}`)}</span>}
-              {unreadOnly && <span className="font-medium">{t("items.filter.unreadOnly")}</span>}
-            </div>
-          )}
-        </div>
+
+            {(sourceID || filter) && (
+              <div className="flex flex-wrap items-center gap-2 xl:order-4 xl:basis-full">
+                {topic && (
+                  <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs text-blue-800">
+                    <span className="font-medium">
+                      {t("items.topic")}: {topic}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => replaceItemsQuery({ topic: "", page: 1 })}
+                      className="rounded-full px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-100 press"
+                    >
+                      {t("items.clear")}
+                    </button>
+                  </div>
+                )}
+                {sourceID && (
+                  <span className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700">
+                    {t("items.filter.sourceApplied")}
+                  </span>
+                )}
+                {filter && (
+                  <span className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700">
+                    {t(`items.filter.${filter}`)}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
 
         {/* State */}
         {visibleError && <p className="text-sm text-red-500">{visibleError}</p>}

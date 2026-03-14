@@ -5,38 +5,36 @@ export function FiltersBar({
   feedMode,
   sortMode,
   topic,
-  unreadOnly,
   favoriteOnly,
   onSortChange,
   onTopicClear,
-  onUnreadChange,
   onFavoriteChange,
   t,
 }: {
   feedMode: string;
   sortMode: SortMode;
   topic: string;
-  unreadOnly: boolean;
   favoriteOnly: boolean;
   onSortChange: (sort: SortMode) => void;
   onTopicClear: () => void;
-  onUnreadChange: (v: boolean) => void;
   onFavoriteChange: (v: boolean) => void;
   t: (key: string) => string;
 }) {
   const focusMode = feedMode === "recommended";
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
       {!focusMode && (
-        <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
+        <div className="flex shrink-0 items-center gap-1 rounded-lg border border-zinc-200 bg-white p-0.5">
           {(["newest", "score", "personal_score"] as SortMode[]).map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => onSortChange(s)}
-              className={`rounded px-3 py-1.5 text-xs font-medium transition-colors press focus-ring ${
-                sortMode === s ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
+              className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors press focus-ring ${
+                sortMode === s
+                  ? "bg-zinc-900 text-white"
+                  : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
               }`}
             >
               {t(`items.sort.${s}`)}
@@ -46,8 +44,8 @@ export function FiltersBar({
       )}
 
       {!focusMode && topic && (
-        <div className="inline-flex items-center gap-2 rounded border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-800">
-          <span className="font-medium">{t("items.topic")}: {topic}</span>
+        <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs text-blue-800">
+          <span className="truncate font-medium">{t("items.topic")}: {topic}</span>
           <button
             type="button"
             onClick={onTopicClear}
@@ -59,19 +57,7 @@ export function FiltersBar({
       )}
 
       {!focusMode && (
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors">
-          <input
-            type="checkbox"
-            checked={unreadOnly}
-            onChange={(e) => onUnreadChange(e.target.checked)}
-            className="size-4 rounded border-zinc-300"
-          />
-          {t("items.filter.unreadOnly")}
-        </label>
-      )}
-
-      {!focusMode && (
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors">
+        <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors">
           <input
             type="checkbox"
             checked={favoriteOnly}

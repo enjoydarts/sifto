@@ -269,6 +269,45 @@ export default function BriefingPage() {
 
           {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
 
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <Link
+              href="/items?feed=unread&sort=newest"
+              className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition-colors hover:border-zinc-300 hover:bg-white"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                {t("briefing.hub.unread")}
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-zinc-900">
+                {String(data?.stats.total_unread ?? 0)}
+              </p>
+              <p className="mt-1 text-sm text-zinc-500">{t("briefing.hub.openInbox")}</p>
+            </Link>
+            <Link
+              href="/items?feed=later&sort=newest"
+              className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition-colors hover:border-zinc-300 hover:bg-white"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                {t("briefing.hub.queue")}
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-zinc-900">
+                {String(nextReads.length)}
+              </p>
+              <p className="mt-1 text-sm text-zinc-500">{t("briefing.hub.openQueue")}</p>
+            </Link>
+            <Link
+              href="/triage"
+              className="rounded-2xl border border-zinc-900 bg-zinc-900 p-4 text-white transition-colors hover:bg-zinc-800"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-300">
+                {t("briefing.hub.triage")}
+              </p>
+              <p className="mt-2 text-2xl font-semibold">
+                {String(data?.stats.today_highlight_count ?? 0)}
+              </p>
+              <p className="mt-1 text-sm text-zinc-300">{t("briefing.hub.start")}</p>
+            </Link>
+          </div>
+
           <div className="mt-5">
             <p className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">
               {t("briefing.nowReadingLabel", "NOW READING")}
@@ -351,7 +390,7 @@ export default function BriefingPage() {
                       {t("briefing.readNow", "今すぐ読む")}
                     </button>
                     <Link
-                      href={`/items/${nowReading.id}?from=${encodeURIComponent("/items?feed=recommended")}`}
+                      href={`/items/${nowReading.id}?from=${encodeURIComponent("/items?feed=unread&sort=newest")}`}
                       className="inline-flex items-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring"
                     >
                       {t("items.action.openDetail")}
@@ -373,7 +412,7 @@ export default function BriefingPage() {
 
           <div className="mt-5 flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.nextReads", "Next Up")}</h2>
-            <Link href="/items?feed=recommended" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
+            <Link href="/items?feed=unread&sort=newest" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
               {t("briefing.openRecommended")}
             </Link>
           </div>
@@ -465,7 +504,7 @@ export default function BriefingPage() {
               <Link href="/clusters" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
                 {t("briefing.openClusters")}
               </Link>
-              <Link href="/items?feed=recommended" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
+              <Link href="/items?feed=unread&sort=newest" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
                 {t("briefing.openRecommended")}
               </Link>
             </div>
@@ -548,7 +587,7 @@ export default function BriefingPage() {
             queueItemIds={nowQueueIds}
             onClose={() => setInlineItemId(null)}
             onOpenDetail={(itemId) => {
-              router.push(`/items/${itemId}?from=${encodeURIComponent("/items?feed=recommended")}`);
+              router.push(`/items/${itemId}?from=${encodeURIComponent("/items?feed=unread&sort=newest")}`);
             }}
             onOpenItem={(itemId) => setInlineItemId(itemId)}
           />

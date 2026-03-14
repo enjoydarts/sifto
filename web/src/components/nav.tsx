@@ -6,9 +6,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Activity,
   Brain,
   Bug,
+  CheckCheck,
+  Menu,
+  X,
   Layers3,
   Mail,
   Newspaper,
@@ -24,16 +26,17 @@ import PWAInstallButton from "@/components/pwa-install";
 
 const primaryLinks = [
   { href: "/", labelKey: "nav.briefing", icon: Sparkles },
-  { href: "/clusters", labelKey: "nav.clusters", icon: Layers3 },
-  { href: "/items", labelKey: "nav.items", icon: Newspaper },
-  { href: "/pulse", labelKey: "nav.pulse", icon: Activity },
+  { href: "/items?feed=unread&sort=newest", activeHref: "/items", labelKey: "nav.inbox", icon: Newspaper },
+  { href: "/triage", labelKey: "nav.triage", icon: CheckCheck },
+  { href: "/ask", labelKey: "nav.ask", icon: Search },
 ];
 
 const secondaryLinks = [
+  { href: "/clusters", labelKey: "nav.clusters", icon: Layers3 },
+  { href: "/pulse", labelKey: "nav.pulse", icon: Sparkles },
   { href: "/favorites", labelKey: "nav.favorites", icon: Star },
   { href: "/sources", labelKey: "nav.sources", icon: Rss },
   { href: "/digests", labelKey: "nav.digests", icon: Mail },
-  { href: "/ask", labelKey: "nav.ask", icon: Search },
   { href: "/llm-usage", labelKey: "nav.llmUsage", icon: Brain },
   { href: "/settings", labelKey: "nav.settings", icon: SettingsIcon },
   { href: "/debug/digests", labelKey: "nav.debug", icon: Bug },
@@ -72,8 +75,8 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
+  const isLinkActive = (href: string, activeHref?: string) => isActive(activeHref ?? href);
   const isMoreActive = secondaryLinks.some((v) => isActive(v.href));
-  const showBottomNav = !/^\/items\/[^/]+/.test(pathname ?? "") && pathname !== "/triage";
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -112,19 +115,23 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="rounded border border-zinc-200 px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 md:hidden press focus-ring"
+                className="inline-flex h-9 w-9 items-center justify-center rounded border border-zinc-200 text-zinc-700 hover:bg-zinc-50 md:hidden press focus-ring"
                 aria-expanded={menuOpen}
                 aria-label={menuOpen ? t("nav.menu.close") : t("nav.menu.open")}
               >
-                {menuOpen ? t("nav.menu.closeShort") : t("nav.menu.short")}
+                {menuOpen ? (
+                  <X className="size-4" aria-hidden="true" />
+                ) : (
+                  <Menu className="size-4" aria-hidden="true" />
+                )}
               </button>
             </div>
           </div>
 
           <div className="mt-2 hidden items-center gap-2 md:flex">
             <nav className="flex min-w-0 flex-1 flex-wrap gap-1">
-              {primaryLinks.map(({ href, labelKey, icon: Icon }) => {
-                const active = isActive(href);
+              {primaryLinks.map(({ href, activeHref, labelKey, icon: Icon }) => {
+                const active = isLinkActive(href, activeHref);
                 return (
                   <Link
                     key={href}
@@ -192,31 +199,11 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
             )}
           </div>
 
-          <div className="mt-2 flex items-center gap-1 overflow-x-auto md:hidden">
-            <nav className="flex min-w-full items-center gap-1">
-              {primaryLinks.map(({ href, labelKey, icon: Icon }) => {
-                const active = isActive(href);
-                return (
-                  <Link
-                    key={href}
-                    href={href}
-                    className={`group inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors duration-150 press focus-ring ${
-                      active ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
-                    }`}
-                  >
-                    <NavIcon icon={Icon} active={active} />
-                    <span>{t(labelKey)}</span>
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-
           {menuOpen && (
             <div className="mt-2 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm md:hidden motion-safe:animate-scale-in">
               <nav className="grid gap-1">
-                {primaryLinks.map(({ href, labelKey, icon: Icon }) => {
-                  const active = isActive(href);
+                {primaryLinks.map(({ href, activeHref, labelKey, icon: Icon }) => {
+                  const active = isLinkActive(href, activeHref);
                   return (
                     <Link
                       key={href}
@@ -271,39 +258,39 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
         </div>
       </header>
       <nav
-        className={`fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-2 backdrop-blur md:hidden ${
-          showBottomNav ? "" : "hidden"
-        }`}
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-2 backdrop-blur md:hidden"
       >
         <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
-          {primaryLinks.map(({ href, labelKey, icon: Icon }) => {
-            const active = isActive(href);
+          {primaryLinks.map(({ href, activeHref, labelKey, icon: Icon }) => {
+            const active = isLinkActive(href, activeHref);
             return (
               <Link
                 key={href}
                 href={href}
+                aria-label={t(labelKey)}
                 className={`relative flex min-h-12 flex-col items-center justify-center rounded-xl px-1 py-1 text-[11px] font-medium transition-colors duration-150 press focus-ring ${
-                  active ? "text-zinc-900" : "text-zinc-500 hover:bg-zinc-50"
+                  active ? "bg-zinc-900/5 text-zinc-900" : "text-zinc-500 hover:bg-zinc-50"
                 }`}
               >
-                <NavIcon icon={Icon} active={active} />
-                <span className="mt-0.5 truncate">{t(labelKey)}</span>
+                <NavIcon icon={Icon} active={active} mobile />
+                <span className="sr-only">{t(labelKey)}</span>
                 {active && (
-                  <span className="absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-zinc-900" />
+                  <span className="absolute bottom-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-zinc-900" />
                 )}
               </Link>
             );
           })}
           <Link
             href="/settings"
+            aria-label={t("nav.more")}
             className={`relative flex min-h-12 flex-col items-center justify-center rounded-xl px-1 py-1 text-[11px] font-medium transition-colors duration-150 press focus-ring ${
-              isMoreActive ? "text-zinc-900" : "text-zinc-500 hover:bg-zinc-50"
+              isMoreActive ? "bg-zinc-900/5 text-zinc-900" : "text-zinc-500 hover:bg-zinc-50"
             }`}
           >
-            <NavIcon icon={SettingsIcon} active={isMoreActive} />
-            <span className="mt-0.5 truncate">{t("nav.more")}</span>
+            <NavIcon icon={SettingsIcon} active={isMoreActive} mobile />
+            <span className="sr-only">{t("nav.more")}</span>
             {isMoreActive && (
-              <span className="absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-zinc-900" />
+              <span className="absolute bottom-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-zinc-900" />
             )}
           </Link>
         </div>
@@ -312,10 +299,10 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   );
 }
 
-function NavIcon({ icon: Icon, active }: { icon: LucideIcon; active?: boolean }) {
+function NavIcon({ icon: Icon, active, mobile = false }: { icon: LucideIcon; active?: boolean; mobile?: boolean }) {
   return (
     <Icon
-      className={`size-4 shrink-0 transition-transform duration-150 group-hover:scale-110 ${active ? "scale-110" : ""}`}
+      className={`${mobile ? "size-[18px]" : "size-4"} shrink-0 transition-transform duration-150 group-hover:scale-110 ${active ? "scale-110" : ""}`}
       strokeWidth={2}
       aria-hidden="true"
     />

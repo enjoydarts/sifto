@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Bell, BookOpen, Flame, ListTree, Sparkles, Target, X } from "lucide-react";
+import { ArrowRight, Bell, BookOpen, Flame, Sparkles, X } from "lucide-react";
 import { api, BriefingCluster, Item, ProviderModelChangeEvent } from "@/lib/api";
 import { InlineReader } from "@/components/inline-reader";
 import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { EmptyState } from "@/components/empty-state";
-import { SkeletonCard, SkeletonKpi } from "@/components/skeleton";
+import { SkeletonCard } from "@/components/skeleton";
 import { useToast } from "@/components/toast-provider";
 
 const EMPTY_ITEMS: Item[] = [];
@@ -92,6 +92,48 @@ export default function BriefingPage() {
     if (data?.greeting) return data.greeting;
     return t("briefing.greetingFallback");
   })();
+  const greetingSummary = (() => {
+    const unread = data?.stats.total_unread ?? 0;
+    const picks = data?.stats.today_highlight_count ?? 0;
+    if (locale === "ja") {
+      return `${unread}件の未読と${picks}件の注目があります`;
+    }
+    return `${unread} unread and ${picks} picks ready`;
+  })();
+  const briefingDateLabel = (() => {
+    const raw = data?.generated_at ?? data?.date ?? null;
+    if (!raw) return null;
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) return data?.date ?? null;
+    return date.toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      weekday: "long",
+    });
+  })();
+  const greetingTail = useMemo(() => {
+    const seed = `${data?.date ?? ""}:${data?.greeting_key ?? ""}`;
+    let hash = 0;
+    for (let i = 0; i < seed.length; i += 1) {
+      hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+    }
+    const variants = [
+      "briefing.tail.0",
+      "briefing.tail.1",
+      "briefing.tail.2",
+      "briefing.tail.3",
+      "briefing.tail.4",
+      "briefing.tail.5",
+      "briefing.tail.6",
+      "briefing.tail.7",
+      "briefing.tail.8",
+      "briefing.tail.9",
+      "briefing.tail.10",
+      "briefing.tail.11",
+    ] as const;
+    return t(variants[hash % variants.length]);
+  }, [data?.date, data?.greeting_key, t]);
   const briefingQueueItemIds = useMemo(() => {
     const ids: string[] = [];
     const seen = new Set<string>();
@@ -234,8 +276,14 @@ export default function BriefingPage() {
                 <Sparkles className="size-6 text-blue-600" aria-hidden="true" />
                 <span>{t("briefing.title")}</span>
               </h1>
+              {briefingDateLabel ? (
+                <p className="mt-1 text-sm text-zinc-600">{briefingDateLabel}</p>
+              ) : null}
               <p className="mt-1 text-sm text-zinc-600">
-                {`${greetingLabel} · ${data?.date ?? ""}`}
+                {`${greetingLabel}、${greetingSummary}。`}
+              </p>
+              <p className="mt-1 text-sm text-zinc-500">
+                {greetingTail}
               </p>
               {generatedAtLabel ? (
                 <p className="mt-1 text-xs text-zinc-500">
@@ -244,7 +292,23 @@ export default function BriefingPage() {
                 </p>
               ) : null}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              {data?.stats.streak_days ? (
+                <div className="text-right">
+                  <div className="inline-flex items-center gap-1 text-sm font-medium text-zinc-700">
+                    <Flame className="size-4 text-amber-500" aria-hidden="true" />
+                    <span>{data.stats.streak_days}{t("briefing.kpi.streakUnit")}</span>
+                  </div>
+                  {data.stats.streak_at_risk ? (
+                    <p className="mt-1 text-xs text-rose-700">
+                      {t("briefing.streakRisk.prefix")}
+                      {data?.stats.streak_remaining ?? 0}
+                      {t("briefing.streakRisk.unit")}
+                      {t("briefing.streakRisk.suffix")}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {
@@ -262,12 +326,6 @@ export default function BriefingPage() {
               >
                 {isRefreshing ? t("briefing.refreshing") : t("common.refresh")}
               </button>
-              <Link
-                href="/triage?mode=all"
-                className="inline-flex items-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring"
-              >
-                {t("briefing.openTriage")}
-              </Link>
             </div>
           </div>
 
@@ -455,53 +513,6 @@ export default function BriefingPage() {
         </section>
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {loading ? (
-              <>
-                <SkeletonKpi />
-                <SkeletonKpi />
-                <SkeletonKpi />
-                <SkeletonKpi />
-              </>
-            ) : (
-              <>
-                <Kpi
-                  icon={<Target className="size-4 text-zinc-500" aria-hidden="true" />}
-                  label={t("briefing.kpi.today")}
-                  value={String(data?.stats.today_highlight_count ?? 0)}
-                />
-                <Kpi
-                  icon={<Bell className="size-4 text-zinc-500" aria-hidden="true" />}
-                  label={t("briefing.kpi.unread")}
-                  value={String(data?.stats.total_unread ?? 0)}
-                />
-                <Kpi
-                  icon={<ListTree className="size-4 text-zinc-500" aria-hidden="true" />}
-                  label={t("briefing.kpi.yesterdayRead")}
-                  value={String(data?.stats.yesterday_read ?? 0)}
-                />
-                <Kpi
-                  icon={<Flame className="size-4 text-zinc-500" aria-hidden="true" />}
-                  label={t("briefing.kpi.streak")}
-                  value={`${data?.stats.streak_days ?? 0}${t("briefing.kpi.streakUnit")}`}
-                />
-              </>
-            )}
-          </div>
-          {data?.stats.streak_at_risk ? (
-            <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-              <p className="font-medium">{t("briefing.streakRisk.title")}</p>
-              <p className="mt-0.5 text-xs text-rose-700">
-                {t("briefing.streakRisk.prefix")}
-                {data?.stats.streak_remaining ?? 0}
-                {t("briefing.streakRisk.unit")}
-                {t("briefing.streakRisk.suffix")}
-              </p>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.clusters")}</h2>
             <div className="flex items-center gap-3">
@@ -598,18 +609,6 @@ export default function BriefingPage() {
         )}
       </div>
     </PageTransition>
-  );
-}
-
-function Kpi({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
-      <div className="flex items-center gap-2 text-xs text-zinc-600">
-        {icon}
-        <span>{label}</span>
-      </div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight text-zinc-900">{value}</div>
-    </div>
   );
 }
 

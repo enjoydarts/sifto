@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Newspaper, Star } from "lucide-react";
+import { CheckCheck, Newspaper, SlidersHorizontal, Star } from "lucide-react";
 import { api, Item } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import Pagination from "@/components/pagination";
@@ -20,9 +20,6 @@ const FILTERS = ["", "summarized", "new", "fetched", "facts_extracted", "failed"
 type ItemsFeedQueryData = {
   items: Item[];
   total: number;
-};
-type FocusQueueData = {
-  items: Item[];
 };
 
 function ItemsPageContent() {
@@ -109,12 +106,6 @@ function ItemsPageContent() {
       };
     },
     placeholderData: (prev) => prev,
-  });
-  const focusQueueQuery = useQuery<FocusQueueData>({
-    queryKey: ["focus-queue", "24h", 20],
-    queryFn: () => api.getFocusQueue({ window: "24h", size: 20, diversify_topics: true, exclude_later: true }),
-    enabled: unreadMode,
-    staleTime: 30_000,
   });
   const cachedItemsLength = listQuery.data?.items?.length ?? 0;
   const items = listQuery.data?.items ?? [];
@@ -343,11 +334,6 @@ function ItemsPageContent() {
     }
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
-  const unreadSuggestion = useMemo(() => {
-    const fromQueue = (focusQueueQuery.data?.items ?? []).find((item) => !item.is_read) ?? null;
-    if (fromQueue) return fromQueue;
-    return sortedItems.find((item) => !item.is_read) ?? null;
-  }, [focusQueueQuery.data?.items, sortedItems]);
   const dateSections = useMemo(() => {
     const map = new Map<string, Item[]>();
     for (const item of sortedItems) {
@@ -447,44 +433,73 @@ function ItemsPageContent() {
               )}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
-              {(["newest", "score", "personal_score"] as SortMode[]).map((s) => (
+          <div className="flex w-full flex-wrap gap-3 lg:w-auto lg:justify-end">
+            <section className="min-w-0 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
+              <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                <SlidersHorizontal className="size-3.5" aria-hidden="true" />
+                <span>{t("items.toolbar.view")}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
+                  {(["newest", "score", "personal_score"] as SortMode[]).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => replaceItemsQuery({ sort: s, page: 1 })}
+                      className={`rounded px-3 py-1.5 text-xs font-medium transition-colors press focus-ring ${
+                        sortMode === s ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-white"
+                      }`}
+                    >
+                      {t(`items.sort.${s}`)}
+                    </button>
+                  ))}
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={favoriteOnly}
+                    onChange={(e) => replaceItemsQuery({ favorite: e.target.checked, page: 1 })}
+                    className="size-4 rounded border-zinc-300"
+                  />
+                  <span className="inline-flex items-center gap-1">
+                    <Star className="size-3.5 text-amber-500" aria-hidden="true" />
+                    {t("items.filter.favoriteOnly")}
+                  </span>
+                </label>
+              </div>
+            </section>
+
+            <section className="min-w-0 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
+              <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                <CheckCheck className="size-3.5" aria-hidden="true" />
+                <span>{t("items.toolbar.actions")}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
                 <button
-                  key={s}
                   type="button"
-                  onClick={() => replaceItemsQuery({ sort: s, page: 1 })}
-                  className={`rounded px-3 py-1.5 text-xs font-medium transition-colors press focus-ring ${
-                    sortMode === s ? "bg-zinc-900 text-white" : "text-zinc-600 hover:bg-zinc-50"
-                  }`}
+                  onClick={() => router.push("/triage?mode=all")}
+                  className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring"
                 >
-                  {t(`items.sort.${s}`)}
+                  {t("items.openAllTriage")}
                 </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => router.push("/triage?mode=all")}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring"
-            >
-              {t("items.openAllTriage")}
-            </button>
-            <button
-              type="button"
-              disabled={bulkMarkingRead}
-              onClick={() => void bulkMarkRead("filtered")}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring disabled:opacity-60"
-            >
-              {bulkMarkingRead ? t("common.saving") : t("items.bulkRead.filtered")}
-            </button>
-            <button
-              type="button"
-              disabled={bulkMarkingRead}
-              onClick={() => void bulkMarkRead("older_than_7d")}
-              className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 press focus-ring disabled:opacity-60"
-            >
-              {bulkMarkingRead ? t("common.saving") : t("items.bulkRead.olderThan7d")}
-            </button>
+                <button
+                  type="button"
+                  disabled={bulkMarkingRead}
+                  onClick={() => void bulkMarkRead("filtered")}
+                  className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring disabled:opacity-60"
+                >
+                  {bulkMarkingRead ? t("common.saving") : t("items.bulkRead.filtered")}
+                </button>
+                <button
+                  type="button"
+                  disabled={bulkMarkingRead}
+                  onClick={() => void bulkMarkRead("older_than_7d")}
+                  className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 press focus-ring disabled:opacity-60"
+                >
+                  {bulkMarkingRead ? t("common.saving") : t("items.bulkRead.olderThan7d")}
+                </button>
+              </div>
+            </section>
           </div>
         </div>
 
@@ -504,18 +519,13 @@ function ItemsPageContent() {
               </button>
             </div>
           )}
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-700 hover:bg-zinc-50 transition-colors">
-            <input
-              type="checkbox"
-              checked={favoriteOnly}
-              onChange={(e) => replaceItemsQuery({ favorite: e.target.checked, page: 1 })}
-              className="size-4 rounded border-zinc-300"
-            />
-            <span className="inline-flex items-center gap-1">
-              <Star className="size-3.5 text-amber-500" aria-hidden="true" />
-              {t("items.filter.favoriteOnly")}
-            </span>
-          </label>
+          {(sourceID || filter || unreadOnly) && (
+            <div className="inline-flex flex-wrap items-center gap-2 rounded border border-zinc-200 bg-zinc-50 px-3 py-1 text-sm text-zinc-700">
+              {sourceID && <span className="font-medium">{t("items.filter.sourceApplied")}</span>}
+              {filter && <span className="font-medium">{t(`items.filter.${filter}`)}</span>}
+              {unreadOnly && <span className="font-medium">{t("items.filter.unreadOnly")}</span>}
+            </div>
+          )}
         </div>
 
         {/* State */}
@@ -538,33 +548,6 @@ function ItemsPageContent() {
             description={t("emptyState.items.desc")}
             action={{ label: t("emptyState.items.action"), href: "/sources" }}
           />
-        )}
-
-        {!loading && unreadMode && unreadSuggestion && (
-          <section className="rounded-xl border border-zinc-200 bg-white p-4">
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-              {locale === "ja" ? "次に読む" : "Next to Read"}
-            </div>
-            <button
-              type="button"
-              onClick={() => setInlineItemId(unreadSuggestion.id)}
-              className="w-full rounded-lg border border-zinc-200 px-3 py-3 text-left hover:bg-zinc-50"
-            >
-              <div className="line-clamp-2 text-base font-semibold text-zinc-900">
-                {unreadSuggestion.translated_title || unreadSuggestion.title || unreadSuggestion.url}
-              </div>
-              <div className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-500">
-                <span>{new Date(unreadSuggestion.published_at ?? unreadSuggestion.created_at).toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US")}</span>
-                <ArrowRight className="size-3.5" />
-              </div>
-              {unreadSuggestion.recommendation_reason && (
-                <div className="mt-2 text-xs text-zinc-600">
-                  {locale === "ja" ? "推薦理由: " : "Why: "}
-                  {unreadSuggestion.recommendation_reason}
-                </div>
-              )}
-            </button>
-          </section>
         )}
 
         {!loading && (

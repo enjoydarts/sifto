@@ -42,6 +42,7 @@ from app.services.title_translation_common import run_title_translation
 from app.services.digest_task_common import (
     build_cluster_draft_task,
     build_digest_task,
+    fallback_cluster_draft_from_source_lines,
     parse_cluster_draft_result,
     parse_digest_result,
 )
@@ -841,7 +842,7 @@ def compose_digest_cluster_draft(
 
     if _client_for_api_key(api_key) is None:
         return {
-            "draft_summary": "\n".join(source_lines),
+            "draft_summary": fallback_cluster_draft_from_source_lines(source_lines),
             "llm": {
                 "provider": "local-dev",
                 "model": "local-fallback",
@@ -866,7 +867,7 @@ def compose_digest_cluster_draft(
     )
     if message is None:
         return {
-            "draft_summary": "\n".join(source_lines),
+            "draft_summary": fallback_cluster_draft_from_source_lines(source_lines),
             "llm": {
                 "provider": "local-fallback",
                 "model": used_model or _digest_model,

@@ -210,6 +210,23 @@ source_lines:
     }
 
 
+def _normalize_cluster_draft_line(line: str) -> str:
+    line = " ".join(str(line or "").strip().split())
+    line = line.lstrip("-・• ").strip()
+    line = line.rstrip("、,，：:;； ")
+    if not line:
+        return ""
+    if line[-1] not in "。.!?！？」』":
+        line = f"{line}。"
+    return f"- {line}"
+
+
+def fallback_cluster_draft_from_source_lines(source_lines: list[str]) -> str:
+    lines = [_normalize_cluster_draft_line(line) for line in source_lines[:5]]
+    lines = [line for line in lines if line]
+    return "\n".join(lines)
+
+
 def parse_cluster_draft_result(text: str, source_lines: list[str]) -> str:
     data = extract_first_json_object(text) or {}
     draft = str(data.get("draft_summary") or "").strip()
@@ -217,5 +234,9 @@ def parse_cluster_draft_result(text: str, source_lines: list[str]) -> str:
         draft = extract_json_string_value_loose(text, "draft_summary")
     draft = str(draft or "").strip()
     if not draft:
-        draft = "\n".join(source_lines[:5])
-    return draft
+        return fallback_cluster_draft_from_source_lines(source_lines)
+    lines = [_normalize_cluster_draft_line(line) for line in draft.splitlines()]
+    lines = [line for line in lines if line]
+    if not lines:
+        return fallback_cluster_draft_from_source_lines(source_lines)
+    return "\n".join(lines[:5])

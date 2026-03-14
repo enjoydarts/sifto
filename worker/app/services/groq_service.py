@@ -36,6 +36,7 @@ from app.services.title_translation_common import TITLE_TRANSLATION_SCHEMA, run_
 from app.services.digest_task_common import (
     build_cluster_draft_task,
     build_digest_task,
+    fallback_cluster_draft_from_source_lines,
     build_simple_digest_input,
     parse_cluster_draft_result,
     parse_digest_result,
@@ -412,7 +413,7 @@ def compose_digest_cluster_draft(cluster_label: str, item_count: int, topics: li
             text, usage = _chat_json(task["fallback_prompt"], model, api_key, max_output_tokens=500, response_schema=None)
         except Exception as retry_exc:
             _log.warning("groq compose_digest_cluster_draft fallback failed: %s", retry_exc)
-            return {"draft_summary": "\n".join(task["source_lines"][:5]), "llm": _llm_meta(model, "digest_cluster_draft", {"input_tokens": 0, "output_tokens": 0})}
+            return {"draft_summary": fallback_cluster_draft_from_source_lines(task["source_lines"]), "llm": _llm_meta(model, "digest_cluster_draft", {"input_tokens": 0, "output_tokens": 0})}
 
     draft = parse_cluster_draft_result(text, task["source_lines"])
     return {"draft_summary": draft, "llm": _llm_meta(model, "digest_cluster_draft", usage)}

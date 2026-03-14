@@ -1070,6 +1070,26 @@ func (r *ItemRepo) TopicPulse(ctx context.Context, userID string, days, limit in
 		item.Points = points
 		out = append(out, *item)
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Delta != out[j].Delta {
+			return out[i].Delta > out[j].Delta
+		}
+		if out[i].Total != out[j].Total {
+			return out[i].Total > out[j].Total
+		}
+		leftMax := -1.0
+		if out[i].MaxScore != nil {
+			leftMax = *out[i].MaxScore
+		}
+		rightMax := -1.0
+		if out[j].MaxScore != nil {
+			rightMax = *out[j].MaxScore
+		}
+		if leftMax != rightMax {
+			return leftMax > rightMax
+		}
+		return out[i].Topic < out[j].Topic
+	})
 	return out, nil
 }
 

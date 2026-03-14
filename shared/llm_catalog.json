@@ -496,7 +496,7 @@
       "pricing": {
         "pricing_source": "alibaba_dashscope_static_2026_03",
         "input_per_mtok_usd": 1.6,
-        "output_per_mtok_usd": 6.4
+        "output_per_mtok_usd": 6.0
       }
     },
     {
@@ -518,7 +518,7 @@
       "pricing": {
         "pricing_source": "alibaba_dashscope_static_2026_03",
         "input_per_mtok_usd": 0.4,
-        "output_per_mtok_usd": 1.2
+        "output_per_mtok_usd": 2.4
       }
     },
     {
@@ -539,7 +539,7 @@
       },
       "pricing": {
         "pricing_source": "alibaba_dashscope_static_2026_03",
-        "input_per_mtok_usd": 0.05,
+        "input_per_mtok_usd": 0.1,
         "output_per_mtok_usd": 0.4
       }
     },

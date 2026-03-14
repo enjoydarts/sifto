@@ -32,6 +32,18 @@ export default function PulsePage() {
 
   const rows = useMemo(() => pulseQuery.data?.items ?? [], [pulseQuery.data?.items]);
   const topForChart = rows.slice(0, 6);
+  const risingRows = useMemo(
+    () =>
+      [...rows].sort((a, b) => {
+        if (a.delta !== b.delta) return b.delta - a.delta;
+        if (a.total !== b.total) return b.total - a.total;
+        const leftMax = typeof a.max_score === "number" ? a.max_score : -1;
+        const rightMax = typeof b.max_score === "number" ? b.max_score : -1;
+        if (leftMax !== rightMax) return rightMax - leftMax;
+        return a.topic.localeCompare(b.topic);
+      }),
+    [rows]
+  );
 
   const chartRows = useMemo(() => {
     const dateSet = new Set<string>();
@@ -236,7 +248,7 @@ export default function PulsePage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {risingRows.map((row) => (
                   <tr key={row.topic}>
                     <td className="border-b border-zinc-100 px-2 py-2 font-medium text-zinc-900">{topicLabel(row.topic)}</td>
                     <td className="border-b border-zinc-100 px-2 py-2 text-zinc-700">{row.total}</td>

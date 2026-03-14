@@ -19,6 +19,16 @@ type ItemRepo struct{ db *pgxpool.Pool }
 
 func NewItemRepo(db *pgxpool.Pool) *ItemRepo { return &ItemRepo{db} }
 
+type topicPulseRow struct {
+	TopicKey string
+	Day      *string
+	Count    *int
+	DayMax   *float64
+	Total    int
+	Delta    int
+	TopMax   *float64
+}
+
 type ItemListParams struct {
 	Status       *string
 	SourceID     *string
@@ -940,6 +950,17 @@ func (r *ItemRepo) TopicTrends(ctx context.Context, userID string, limit int) ([
 }
 
 func (r *ItemRepo) TopicPulse(ctx context.Context, userID string, days, limit int) ([]model.TopicPulseItem, error) {
+	out, err := r.topicPulseFromDailyAggregate(ctx, userID, days, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(out) > 0 {
+		return out, nil
+	}
+	return r.topicPulseFromLiveData(ctx, userID, days, limit)
+}
+
+func (r *ItemRepo) topicPulseFromDailyAggregate(ctx context.Context, userID string, days, limit int) ([]model.TopicPulseItem, error) {
 	if days <= 0 {
 		days = 7
 	}
@@ -953,14 +974,55 @@ func (r *ItemRepo) TopicPulse(ctx context.Context, userID string, days, limit in
 		limit = 50
 	}
 
-	type pulseRow struct {
-		TopicKey string
-		Day      *string
-		Count    *int
-		DayMax   *float64
-		Total    int
-		Delta    int
-		TopMax   *float64
+	rows, err := r.db.Query(ctx, `
+		WITH totals AS (
+			SELECT topic_key,
+			       SUM(count)::int AS total,
+			       COALESCE(SUM(count) FILTER (WHERE day_jst = (NOW() AT TIME ZONE 'Asia/Tokyo')::date), 0)::int AS today_count,
+			       COALESCE(SUM(count) FILTER (WHERE day_jst = (NOW() AT TIME ZONE 'Asia/Tokyo')::date - 1), 0)::int AS prev_count,
+			       MAX(max_score)::double precision AS max_score
+			FROM topic_pulse_daily
+			WHERE user_id = $1
+			  AND day_jst >= ((NOW() AT TIME ZONE 'Asia/Tokyo')::date - ($2::int - 1))
+			GROUP BY topic_key
+			ORDER BY SUM(count) DESC, MAX(max_score) DESC NULLS LAST, topic_key ASC
+			LIMIT $3
+		)
+		SELECT t.topic_key,
+		       d.day_jst::text,
+		       d.count,
+		       d.max_score,
+		       t.total,
+		       (t.today_count - t.prev_count)::int AS delta,
+		       t.max_score
+		FROM totals t
+		LEFT JOIN topic_pulse_daily d
+		  ON d.user_id = $1
+		 AND d.topic_key = t.topic_key
+		 AND d.day_jst >= ((NOW() AT TIME ZONE 'Asia/Tokyo')::date - ($2::int - 1))
+		ORDER BY t.total DESC, t.topic_key ASC, d.day_jst ASC`,
+		userID, days, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanTopicPulseRows(rows, days, limit)
+}
+
+func (r *ItemRepo) topicPulseFromLiveData(ctx context.Context, userID string, days, limit int) ([]model.TopicPulseItem, error) {
+	if days <= 0 {
+		days = 7
+	}
+	if days > 30 {
+		days = 30
+	}
+	if limit <= 0 {
+		limit = 12
+	}
+	if limit > 50 {
+		limit = 50
 	}
 
 	rows, err := r.db.Query(ctx, `
@@ -1014,11 +1076,15 @@ func (r *ItemRepo) TopicPulse(ctx context.Context, userID string, days, limit in
 	}
 	defer rows.Close()
 
+	return scanTopicPulseRows(rows, days, limit)
+}
+
+func scanTopicPulseRows(rows pgx.Rows, days, limit int) ([]model.TopicPulseItem, error) {
 	bucketByTopic := map[string]*model.TopicPulseItem{}
 	pointMapByTopic := map[string]map[string]model.TopicPulsePoint{}
 	order := make([]string, 0, limit)
 	for rows.Next() {
-		var row pulseRow
+		var row topicPulseRow
 		if err := rows.Scan(&row.TopicKey, &row.Day, &row.Count, &row.DayMax, &row.Total, &row.Delta, &row.TopMax); err != nil {
 			return nil, err
 		}
@@ -1070,27 +1136,48 @@ func (r *ItemRepo) TopicPulse(ctx context.Context, userID string, days, limit in
 		item.Points = points
 		out = append(out, *item)
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Delta != out[j].Delta {
-			return out[i].Delta > out[j].Delta
-		}
-		if out[i].Total != out[j].Total {
-			return out[i].Total > out[j].Total
-		}
-		leftMax := -1.0
-		if out[i].MaxScore != nil {
-			leftMax = *out[i].MaxScore
-		}
-		rightMax := -1.0
-		if out[j].MaxScore != nil {
-			rightMax = *out[j].MaxScore
-		}
-		if leftMax != rightMax {
-			return leftMax > rightMax
-		}
-		return out[i].Topic < out[j].Topic
-	})
 	return out, nil
+}
+
+func (r *ItemRepo) RebuildTopicPulseDaily(ctx context.Context, days int) error {
+	if days <= 0 {
+		days = 35
+	}
+	cutoff := timeutil.StartOfDayJST(timeutil.NowJST()).AddDate(0, 0, -(days - 1))
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `DELETE FROM topic_pulse_daily WHERE day_jst >= $1::date`, cutoff.Format("2006-01-02")); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO topic_pulse_daily (user_id, day_jst, topic_key, count, max_score, updated_at)
+		SELECT s.user_id,
+		       (COALESCE(i.published_at, i.created_at) AT TIME ZONE 'Asia/Tokyo')::date AS day_jst,
+		       COALESCE(NULLIF(BTRIM(t.topic), ''), '__untagged__') AS topic_key,
+		       COUNT(*)::int AS count,
+		       MAX(COALESCE(sm.score, 0)::double precision) AS max_score,
+		       NOW()
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		JOIN item_summaries sm ON sm.item_id = i.id
+		CROSS JOIN LATERAL unnest(
+			CASE
+				WHEN COALESCE(array_length(sm.topics, 1), 0) = 0 THEN ARRAY['__untagged__']::text[]
+				ELSE sm.topics
+			END
+		) AS t(topic)
+		WHERE i.status = 'summarized'
+		  AND COALESCE(i.published_at, i.created_at) >= $1
+		GROUP BY s.user_id, day_jst, topic_key`, cutoff); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *ItemRepo) PositiveFeedbackTopics(ctx context.Context, userID string, limit int) ([]string, error) {

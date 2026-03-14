@@ -861,6 +861,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(sendDigestFn(client, db, worker, resend, oneSignal, secretCipher))
 	register(checkBudgetAlertsFn(client, db, resend, oneSignal))
 	register(computePreferenceProfilesFn(client, db))
+	register(computeTopicPulseDailyFn(client, db))
 
 	return client.Serve()
 }

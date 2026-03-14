@@ -127,30 +127,30 @@ type RecommendedSource struct {
 }
 
 type Item struct {
-	ID                   string     `json:"id"`
-	SourceID             string     `json:"source_id"`
-	URL                  string     `json:"url"`
-	Title                *string    `json:"title"`
-	ThumbnailURL         *string    `json:"thumbnail_url,omitempty"`
-	ContentText          *string    `json:"content_text,omitempty"`
-	Summary              *string    `json:"summary,omitempty"`
-	Status               string     `json:"status"` // new | fetched | facts_extracted | summarized | failed
-	FactsCheckResult     *string    `json:"facts_check_result,omitempty"`
-	FaithfulnessResult   *string    `json:"faithfulness_result,omitempty"`
-	IsRead               bool       `json:"is_read"`
-	IsFavorite           bool       `json:"is_favorite"`
-	FeedbackRating       int        `json:"feedback_rating"` // -1 | 0 | 1
+	ID                    string                     `json:"id"`
+	SourceID              string                     `json:"source_id"`
+	URL                   string                     `json:"url"`
+	Title                 *string                    `json:"title"`
+	ThumbnailURL          *string                    `json:"thumbnail_url,omitempty"`
+	ContentText           *string                    `json:"content_text,omitempty"`
+	Summary               *string                    `json:"summary,omitempty"`
+	Status                string                     `json:"status"` // new | fetched | facts_extracted | summarized | failed
+	FactsCheckResult      *string                    `json:"facts_check_result,omitempty"`
+	FaithfulnessResult    *string                    `json:"faithfulness_result,omitempty"`
+	IsRead                bool                       `json:"is_read"`
+	IsFavorite            bool                       `json:"is_favorite"`
+	FeedbackRating        int                        `json:"feedback_rating"` // -1 | 0 | 1
 	SummaryScore          *float64                   `json:"summary_score,omitempty"`
 	SummaryScoreBreakdown *ItemSummaryScoreBreakdown `json:"summary_score_breakdown,omitempty"`
 	PersonalScore         *float64                   `json:"personal_score,omitempty"`
 	PersonalScoreReason   *string                    `json:"personal_score_reason,omitempty"`
 	SummaryTopics         []string                   `json:"summary_topics,omitempty"`
-	RecommendationReason *string    `json:"recommendation_reason,omitempty"`
-	TranslatedTitle      *string    `json:"translated_title,omitempty"`
-	PublishedAt          *time.Time `json:"published_at,omitempty"`
-	FetchedAt            *time.Time `json:"fetched_at,omitempty"`
-	CreatedAt            time.Time  `json:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at"`
+	RecommendationReason  *string                    `json:"recommendation_reason,omitempty"`
+	TranslatedTitle       *string                    `json:"translated_title,omitempty"`
+	PublishedAt           *time.Time                 `json:"published_at,omitempty"`
+	FetchedAt             *time.Time                 `json:"fetched_at,omitempty"`
+	CreatedAt             time.Time                  `json:"created_at"`
+	UpdatedAt             time.Time                  `json:"updated_at"`
 }
 
 type ItemFacts struct {

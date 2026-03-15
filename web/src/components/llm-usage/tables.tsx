@@ -9,6 +9,29 @@ import type {
   LLMUsagePurposeMonthSummary,
 } from "@/lib/api";
 
+function providerLabel(provider: string) {
+  switch (provider) {
+    case "openai":
+      return "OpenAI";
+    case "anthropic":
+      return "Anthropic";
+    case "google":
+      return "Google";
+    case "groq":
+      return "Groq";
+    case "deepseek":
+      return "DeepSeek";
+    case "alibaba":
+      return "Alibaba";
+    case "mistral":
+      return "Mistral";
+    case "xai":
+      return "xAI";
+    default:
+      return provider;
+  }
+}
+
 export function MetricCard({ label, value, className = "" }: { label: string; value: string; className?: string }) {
   return (
     <div className={`min-w-0 w-full rounded-lg border border-zinc-200 bg-white px-4 py-3 ${className}`.trim()}>
@@ -72,7 +95,7 @@ export function CurrentMonthByProviderTable({
             <tbody>
               {rows.map((row) => (
                 <tr key={`${row.month_jst}:${row.provider}`} className="border-b border-zinc-100 last:border-0">
-                  <td className="px-3 py-2 font-medium text-zinc-800">{row.provider}</td>
+                  <td className="px-3 py-2 font-medium text-zinc-800">{providerLabel(row.provider)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.calls)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.input_tokens)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.output_tokens)}</td>
@@ -260,7 +283,7 @@ export function ReliabilityTable({
               {rows.map((row) => (
                 <tr key={`${row.month_jst}:${row.purpose}:${row.provider}:${row.model}`} className="border-b border-zinc-100 last:border-0">
                   <td className="px-3 py-2 font-medium text-zinc-800">{row.purpose}</td>
-                  <td className="px-3 py-2 text-zinc-700 whitespace-nowrap">{row.provider}/{row.model}</td>
+                  <td className="px-3 py-2 text-zinc-700 whitespace-nowrap">{providerLabel(row.provider)}/{row.model}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.attempts)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.failures)}</td>
                   <td className="px-3 py-2 text-right">{row.failure_rate_pct.toFixed(1)}%</td>
@@ -329,7 +352,7 @@ export function DailySummaryGroups({
                       {rows.map((r) => (
                         <tr key={r.key} className="border-b border-zinc-100 last:border-0">
                           <td className="px-3 py-2">{r.purpose}</td>
-                          <td className="px-3 py-2">{r.provider}</td>
+                          <td className="px-3 py-2">{providerLabel(r.provider)}</td>
                           <td className="px-3 py-2">{r.pricing_source}</td>
                           <td className="px-3 py-2 text-right">{fmtNum(r.calls)}</td>
                           <td className="px-3 py-2 text-right">{fmtNum(r.input_tokens)}</td>

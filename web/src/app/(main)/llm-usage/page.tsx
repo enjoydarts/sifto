@@ -52,6 +52,9 @@ const PROVIDER_COLORS: Record<string, { stroke: string; fill: string; fillOpacit
   google: { stroke: "#f59e0b", fill: "#fbbf24", fillOpacity: 0.6, label: "Google" },
   groq: { stroke: "#8b5cf6", fill: "#a78bfa", fillOpacity: 0.55, label: "Groq" },
   deepseek: { stroke: "#ef4444", fill: "#f87171", fillOpacity: 0.55, label: "DeepSeek" },
+  alibaba: { stroke: "#0f766e", fill: "#14b8a6", fillOpacity: 0.55, label: "Alibaba" },
+  mistral: { stroke: "#be123c", fill: "#fb7185", fillOpacity: 0.55, label: "Mistral" },
+  xai: { stroke: "#4338ca", fill: "#818cf8", fillOpacity: 0.55, label: "xAI" },
 };
 
 const FALLBACK_PROVIDER_COLORS = [
@@ -970,7 +973,7 @@ export default function LLMUsagePage() {
                 <tbody>
                   {mergedModelRows.map((r) => (
                     <tr key={`${r.provider}:${r.model}:${r.pricing_source}`} className="border-b border-zinc-100 last:border-0">
-                      <td className="px-3 py-2">{r.provider}</td>
+                      <td className="px-3 py-2">{providerLabel(r.provider)}</td>
                       <td className="px-3 py-2 text-xs whitespace-nowrap">{r.model}</td>
                       <td className="px-3 py-2 text-xs">
                         <div className="relative inline-flex items-center gap-1">

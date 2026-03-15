@@ -75,9 +75,9 @@ def run_chat_json(
     def is_json_validation_error(response: httpx.Response) -> bool:
         return response.status_code == 400 and "json_validate_failed" in (response.text or "")
 
-    with httpx.Client(timeout=timeout_sec) as client:
-        for i in range(attempts):
-            try:
+    for i in range(attempts):
+        try:
+            with httpx.Client(timeout=timeout_sec) as client:
                 resp = client.post(url, headers=headers, json=body)
                 if is_json_validation_error(resp) and response_schema is not None:
                     if use_strict_schema:
@@ -88,39 +88,39 @@ def run_chat_json(
                         fallback_body = dict(body)
                         fallback_body.pop("response_format", None)
                         resp = client.post(url, headers=headers, json=fallback_body)
-            except Exception as e:
-                last_error = e
-                if i < attempts - 1:
-                    sleep_sec = base_sleep_sec * (2**i)
-                    logger.warning(
-                        "%s chat.completions request failed model=%s retry_in=%.1fs attempt=%d/%d err=%s",
-                        provider_name,
-                        normalize_model_name(model),
-                        sleep_sec,
-                        i + 1,
-                        attempts,
-                        e,
-                    )
-                    time.sleep(sleep_sec)
-                    continue
-                raise RuntimeError(f"{provider_name} chat.completions request failed: {e}") from e
-
-            if resp.status_code < 400:
-                break
-            if resp.status_code in retryable_status and i < attempts - 1:
+        except Exception as e:
+            last_error = e
+            if i < attempts - 1:
                 sleep_sec = base_sleep_sec * (2**i)
                 logger.warning(
-                    "%s chat.completions retrying model=%s status=%d retry_in=%.1fs attempt=%d/%d",
+                    "%s chat.completions request failed model=%s retry_in=%.1fs attempt=%d/%d err=%s",
                     provider_name,
                     normalize_model_name(model),
-                    resp.status_code,
                     sleep_sec,
                     i + 1,
                     attempts,
+                    e,
                 )
                 time.sleep(sleep_sec)
                 continue
+            raise RuntimeError(f"{provider_name} chat.completions request failed: {e}") from e
+
+        if resp.status_code < 400:
             break
+        if resp.status_code in retryable_status and i < attempts - 1:
+            sleep_sec = base_sleep_sec * (2**i)
+            logger.warning(
+                "%s chat.completions retrying model=%s status=%d retry_in=%.1fs attempt=%d/%d",
+                provider_name,
+                normalize_model_name(model),
+                resp.status_code,
+                sleep_sec,
+                i + 1,
+                attempts,
+            )
+            time.sleep(sleep_sec)
+            continue
+        break
 
     if resp is None:
         if last_error is not None:

@@ -17,7 +17,7 @@ import { FiltersBar } from "@/components/items/filters-bar";
 import { ItemCard } from "@/components/items/item-card";
 import { FeedTabs, type FeedMode, type SortMode } from "@/components/items/feed-tabs";
 
-const FILTERS = ["", "summarized", "new", "fetched", "facts_extracted", "failed"] as const;
+const FILTERS = ["", "summarized", "pending", "new", "fetched", "facts_extracted", "failed"] as const;
 type ItemsFeedQueryData = {
   items: Item[];
   total: number;
@@ -38,6 +38,8 @@ function ItemsPageContent() {
         ? "later"
         : qFeed === "read"
           ? "read"
+          : qFeed === "pending"
+            ? "pending"
           : "unread";
 
     const qSort = searchParams.get("sort");
@@ -49,8 +51,9 @@ function ItemsPageContent() {
     const topic = (searchParams.get("topic") ?? "").trim();
     const sourceID = (searchParams.get("source_id") ?? "").trim();
 
-    const unreadOnly = searchParams.get("unread") === "1";
-    const favoriteOnly = searchParams.get("favorite") === "1";
+    const pendingFeed = qFeed === "pending";
+    const unreadOnly = !pendingFeed && searchParams.get("unread") === "1";
+    const favoriteOnly = !pendingFeed && searchParams.get("favorite") === "1";
 
     const qPage = Number(searchParams.get("page"));
     const page = Number.isFinite(qPage) && qPage >= 1 ? Math.floor(qPage) : 1;
@@ -61,6 +64,7 @@ function ItemsPageContent() {
   const unreadMode = feedMode === "unread";
   const readMode = feedMode === "read";
   const laterMode = feedMode === "later";
+  const pendingMode = feedMode === "pending";
   const pageSize = 20;
   const [error, setError] = useState<string | null>(null);
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
@@ -91,16 +95,16 @@ function ItemsPageContent() {
     queryKey: listQueryKey,
     queryFn: async () => {
       const data = await api.getItems({
-        ...(filter ? { status: filter } : {}),
+        status: filter || (pendingMode ? "pending" : "summarized"),
         ...(sourceID ? { source_id: sourceID } : {}),
         ...(topic ? { topic } : {}),
         page,
         page_size: pageSize,
-        sort: sortMode,
-        unread_only: unreadMode || unreadOnly,
-        read_only: readMode,
-        favorite_only: favoriteOnly,
-        later_only: laterMode,
+        sort: pendingMode ? "newest" : sortMode,
+        unread_only: pendingMode ? false : unreadMode || unreadOnly,
+        read_only: pendingMode ? false : readMode,
+        favorite_only: pendingMode ? false : favoriteOnly,
+        later_only: pendingMode ? false : laterMode,
       });
       return {
         items: data?.items ?? [],
@@ -135,11 +139,12 @@ function ItemsPageContent() {
       q.set("feed", nextFeed);
 
       const nextSort = patch.sort ?? sortMode;
-      const nextStatus = patch.status ?? filter;
+      const implicitStatus = nextFeed === "pending" ? "pending" : "";
+      const nextStatus = patch.status ?? (patch.feed ? implicitStatus : filter);
       const nextTopic = patch.topic ?? topic;
       const nextSourceID = patch.sourceId ?? sourceID;
-      const nextUnread = patch.unread ?? unreadOnly;
-      const nextFavorite = patch.favorite ?? favoriteOnly;
+      const nextUnread = nextFeed === "pending" ? false : patch.unread ?? unreadOnly;
+      const nextFavorite = nextFeed === "pending" ? false : patch.favorite ?? favoriteOnly;
       const nextPage = patch.page ?? page;
 
       if (nextStatus) q.set("status", nextStatus);
@@ -148,7 +153,7 @@ function ItemsPageContent() {
       else q.delete("source_id");
       if (nextTopic) q.set("topic", nextTopic);
       else q.delete("topic");
-      q.set("sort", nextSort);
+      q.set("sort", nextFeed === "pending" ? "newest" : nextSort);
       if (nextUnread) q.set("unread", "1");
       else q.delete("unread");
       if (nextFavorite) q.set("favorite", "1");
@@ -169,12 +174,12 @@ function ItemsPageContent() {
     if (filter) q.set("status", filter);
     if (sourceID) q.set("source_id", sourceID);
     if (topic) q.set("topic", topic);
-    q.set("sort", sortMode);
+    q.set("sort", pendingMode ? "newest" : sortMode);
     if (page > 1) q.set("page", String(page));
-    if (unreadOnly) q.set("unread", "1");
-    if (favoriteOnly) q.set("favorite", "1");
+    if (!pendingMode && unreadOnly) q.set("unread", "1");
+    if (!pendingMode && favoriteOnly) q.set("favorite", "1");
     return q.toString();
-  }, [favoriteOnly, feedMode, filter, page, sortMode, sourceID, topic, unreadOnly]);
+  }, [favoriteOnly, feedMode, filter, page, pendingMode, sortMode, sourceID, topic, unreadOnly]);
 
   const currentItemsHref = useMemo(
     () => (itemsQueryString ? `${pathname}?${itemsQueryString}` : pathname),
@@ -355,7 +360,9 @@ function ItemsPageContent() {
       ? "items.subtitle.later"
       : feedMode === "read"
         ? "items.subtitle.read"
-        : "items.subtitle.unread";
+        : feedMode === "pending"
+          ? "items.subtitle.pending"
+          : "items.subtitle.unread";
   const detailHref = useCallback(
     (itemId: string) => `/items/${itemId}?from=${encodeURIComponent(currentItemsHref)}`,
     [currentItemsHref]
@@ -429,14 +436,16 @@ function ItemsPageContent() {
               {t(pageSubtitleKey)} · {itemsTotal.toLocaleString()} {t("common.rows")}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => router.push("/triage?mode=all")}
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-zinc-900 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring"
-          >
-            <CheckCheck className="size-4" aria-hidden="true" />
-            <span>{t("items.openAllTriage")}</span>
-          </button>
+          {!pendingMode && (
+            <button
+              type="button"
+              onClick={() => router.push("/triage?mode=all")}
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-zinc-900 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring"
+            >
+              <CheckCheck className="size-4" aria-hidden="true" />
+              <span>{t("items.openAllTriage")}</span>
+            </button>
+          )}
         </div>
 
         <section className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50/80 shadow-sm">
@@ -462,34 +471,36 @@ function ItemsPageContent() {
               />
             </div>
 
-            <div className="flex shrink-0 items-center gap-2 xl:w-[320px] xl:justify-end">
-              <select
-                value={toolbarAction}
-                onChange={(e) => setToolbarAction(e.target.value as typeof toolbarAction)}
-                className="min-h-9 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus-ring xl:w-[220px] xl:flex-none"
-                aria-label={t("items.toolbar.actions")}
-              >
-                <option value="">{t("items.actions.placeholder")}</option>
-                <option value="bulk_filtered">{t("items.bulkRead.filtered")}</option>
-                <option value="bulk_older">{t("items.bulkRead.olderThan7d")}</option>
-              </select>
-              <button
-                type="button"
-                disabled={!toolbarAction || bulkMarkingRead}
-                onClick={() => {
-                  if (toolbarAction === "bulk_filtered") {
-                    void bulkMarkRead("filtered");
-                    return;
-                  }
-                  if (toolbarAction === "bulk_older") {
-                    void bulkMarkRead("older_than_7d");
-                  }
-                }}
-                className="inline-flex min-h-9 items-center justify-center rounded-lg border border-zinc-900 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {bulkMarkingRead ? t("common.saving") : t("items.actions.run")}
-              </button>
-            </div>
+            {!pendingMode && (
+              <div className="flex shrink-0 items-center gap-2 xl:w-[320px] xl:justify-end">
+                <select
+                  value={toolbarAction}
+                  onChange={(e) => setToolbarAction(e.target.value as typeof toolbarAction)}
+                  className="min-h-9 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus-ring xl:w-[220px] xl:flex-none"
+                  aria-label={t("items.toolbar.actions")}
+                >
+                  <option value="">{t("items.actions.placeholder")}</option>
+                  <option value="bulk_filtered">{t("items.bulkRead.filtered")}</option>
+                  <option value="bulk_older">{t("items.bulkRead.olderThan7d")}</option>
+                </select>
+                <button
+                  type="button"
+                  disabled={!toolbarAction || bulkMarkingRead}
+                  onClick={() => {
+                    if (toolbarAction === "bulk_filtered") {
+                      void bulkMarkRead("filtered");
+                      return;
+                    }
+                    if (toolbarAction === "bulk_older") {
+                      void bulkMarkRead("older_than_7d");
+                    }
+                  }}
+                  className="inline-flex min-h-9 items-center justify-center rounded-lg border border-zinc-900 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {bulkMarkingRead ? t("common.saving") : t("items.actions.run")}
+                </button>
+              </div>
+            )}
 
             {(sourceID || filter) && (
               <div className="flex flex-wrap items-center gap-2 xl:order-4 xl:basis-full">
@@ -538,8 +549,8 @@ function ItemsPageContent() {
         {!loading && items.length === 0 && (
           <EmptyState
             icon={Newspaper}
-            title={t("emptyState.items.title")}
-            description={t("emptyState.items.desc")}
+            title={t(pendingMode ? "emptyState.itemsPending.title" : "emptyState.items.title")}
+            description={t(pendingMode ? "emptyState.itemsPending.desc" : "emptyState.items.desc")}
             action={{ label: t("emptyState.items.action"), href: "/sources" }}
           />
         )}

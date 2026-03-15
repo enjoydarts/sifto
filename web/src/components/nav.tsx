@@ -48,6 +48,25 @@ const secondaryLinks = [
   { href: "/debug/digests", labelKey: "nav.debug", icon: Bug },
 ];
 
+const secondaryLinkGroups = [
+  {
+    labelKey: "nav.group.explore",
+    items: secondaryLinks.slice(0, 4),
+  },
+  {
+    labelKey: "nav.group.content",
+    items: secondaryLinks.slice(4, 6),
+  },
+  {
+    labelKey: "nav.group.llm",
+    items: secondaryLinks.slice(6, 8),
+  },
+  {
+    labelKey: "nav.group.system",
+    items: secondaryLinks.slice(8),
+  },
+];
+
 type SharedNavProps = {
   displayName: string | null;
   hasSignedInUser: boolean;
@@ -187,22 +206,30 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                 </button>
                 {moreOpen && (
                   <div className="absolute left-0 top-10 z-30 w-52 rounded-[20px] border border-zinc-200 bg-white p-3 shadow-[0_8px_24px_rgba(0,0,0,0.12)] motion-safe:animate-scale-in">
-                    {secondaryLinks.map(({ href, labelKey, icon: Icon }) => {
-                      const active = isActive(href);
-                      return (
-                        <Link
-                          key={href}
-                          href={href}
-                          onClick={() => setMoreOpen(false)}
-                          className={`flex items-center gap-2 rounded-[14px] px-4 py-3 text-[14px] transition-colors duration-150 press focus-ring ${
-                            active ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-50"
-                          }`}
-                        >
-                          <NavIcon icon={Icon} active={active} />
-                          <span>{t(labelKey)}</span>
-                        </Link>
-                      );
-                    })}
+                    {secondaryLinkGroups.map((group, groupIdx) => (
+                      <div key={group.labelKey}>
+                        {groupIdx > 0 && <div className="my-2 h-px bg-zinc-100" />}
+                        <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                          {t(group.labelKey)}
+                        </div>
+                        {group.items.map(({ href, labelKey, icon: Icon }) => {
+                          const active = isActive(href);
+                          return (
+                            <Link
+                              key={href}
+                              href={href}
+                              onClick={() => setMoreOpen(false)}
+                              className={`flex items-center gap-2 rounded-[14px] px-4 py-3 text-[14px] transition-colors duration-150 press focus-ring ${
+                                active ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-50"
+                              }`}
+                            >
+                              <NavIcon icon={Icon} active={active} />
+                              <span>{t(labelKey)}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -244,24 +271,32 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                   );
                 })}
                 <div className="my-1 h-px bg-zinc-100" />
-                {secondaryLinks.map(({ href, labelKey, icon: Icon }) => {
-                  const active = isActive(href);
-                  return (
-                    <Link
-                      key={href}
-                      href={href}
-                      onClick={() => setMenuOpen(false)}
-                      className={`inline-flex items-center gap-2 rounded-[14px] px-4 py-3 text-sm font-medium transition-colors duration-150 press focus-ring ${
-                        active
-                          ? "bg-zinc-900 text-white"
-                          : "text-zinc-700 hover:bg-zinc-50"
-                      }`}
-                    >
-                      <NavIcon icon={Icon} active={active} />
-                      <span>{t(labelKey)}</span>
-                    </Link>
-                  );
-                })}
+                {secondaryLinkGroups.map((group, groupIdx) => (
+                  <div key={group.labelKey}>
+                    {groupIdx > 0 && <div className="my-1 h-px bg-zinc-100" />}
+                    <div className="px-4 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                      {t(group.labelKey)}
+                    </div>
+                    {group.items.map(({ href, labelKey, icon: Icon }) => {
+                      const active = isActive(href);
+                      return (
+                        <Link
+                          key={href}
+                          href={href}
+                          onClick={() => setMenuOpen(false)}
+                          className={`inline-flex items-center gap-2 rounded-[14px] px-4 py-3 text-sm font-medium transition-colors duration-150 press focus-ring ${
+                            active
+                              ? "bg-zinc-900 text-white"
+                              : "text-zinc-700 hover:bg-zinc-50"
+                          }`}
+                        >
+                          <NavIcon icon={Icon} active={active} />
+                          <span>{t(labelKey)}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ))}
               </nav>
               {hasSignedInUser && (
                 <div className="mt-2 border-t border-zinc-100 px-2 pt-2">

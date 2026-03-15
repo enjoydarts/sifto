@@ -313,7 +313,7 @@ export default function ItemDetailPage() {
   }, [applyReadOverride, id, queryClient]);
 
   useEffect(() => {
-    if (!item || item.is_read || autoMarkedRef.current[item.id]) return;
+    if (!item || item.status !== "summarized" || item.is_read || autoMarkedRef.current[item.id]) return;
 
     autoMarkedRef.current[item.id] = true;
     setReadUpdating(true);
@@ -335,6 +335,7 @@ export default function ItemDetailPage() {
   }, [item, queryClient, refreshReadDependentQueries, syncItemReadInFeedCaches]);
 
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
+  const canMarkRead = item?.status === "summarized";
   const backHref = useMemo(() => {
     const from = searchParams.get("from");
     return from && from.startsWith("/items") ? from : "/items";
@@ -417,7 +418,7 @@ export default function ItemDetailPage() {
   );
 
   const toggleRead = async () => {
-    if (!item) return;
+    if (!item || item.status !== "summarized") return;
     setReadUpdating(true);
     try {
       const next = item.is_read ? await api.markItemUnread(item.id) : await api.markItemRead(item.id);
@@ -625,18 +626,20 @@ export default function ItemDetailPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:justify-end">
-            <button
-              type="button"
-              onClick={toggleRead}
-              disabled={readUpdating}
-              className="rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {readUpdating
-                ? t("items.action.updating")
-                : item.is_read
-                  ? t("items.action.markUnread")
-                  : t("items.action.markRead")}
-            </button>
+            {canMarkRead ? (
+              <button
+                type="button"
+                onClick={toggleRead}
+                disabled={readUpdating}
+                className="rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {readUpdating
+                  ? t("items.action.updating")
+                  : item.is_read
+                    ? t("items.action.markUnread")
+                    : t("items.action.markRead")}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={retryItem}

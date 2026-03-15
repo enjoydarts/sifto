@@ -19,6 +19,17 @@ type ItemRepo struct{ db *pgxpool.Pool }
 
 func NewItemRepo(db *pgxpool.Pool) *ItemRepo { return &ItemRepo{db} }
 
+func appendItemStatusFilter(query string, args []any, status *string) (string, []any) {
+	if status == nil || *status == "" {
+		return query, args
+	}
+	if *status == "pending" {
+		return query + ` AND i.status IN ('new', 'fetched', 'facts_extracted', 'failed')`, args
+	}
+	args = append(args, *status)
+	return query + ` AND i.status = $` + itoa(len(args)), args
+}
+
 type topicPulseRow struct {
 	TopicKey string
 	Day      *string
@@ -95,8 +106,7 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 	args := []any{userID}
 
 	if status != nil {
-		args = append(args, *status)
-		query += ` AND i.status = $` + itoa(len(args))
+		query, args = appendItemStatusFilter(query, args, status)
 	}
 	if sourceID != nil {
 		args = append(args, *sourceID)
@@ -145,8 +155,7 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 		WHERE s.user_id = $1`
 	args := []any{userID}
 	if p.Status != nil {
-		args = append(args, *p.Status)
-		baseWhere += ` AND i.status = $` + itoa(len(args))
+		baseWhere, args = appendItemStatusFilter(baseWhere, args, p.Status)
 	}
 	if p.SourceID != nil {
 		args = append(args, *p.SourceID)
@@ -222,8 +231,12 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 			q := ""
 			nextIdx := 2
 			if p.Status != nil {
-				q += ` AND i.status = $` + itoa(nextIdx)
-				nextIdx++
+				if *p.Status == "pending" {
+					q += ` AND i.status IN ('new', 'fetched', 'facts_extracted', 'failed')`
+				} else {
+					q += ` AND i.status = $` + itoa(nextIdx)
+					nextIdx++
+				}
 			}
 			if p.SourceID != nil {
 				q += ` AND i.source_id = $` + itoa(nextIdx)
@@ -1762,7 +1775,7 @@ func (r *ItemRepo) ListFailedForRetry(ctx context.Context, userID string, source
 		JOIN sources s ON s.id = i.source_id
 		WHERE s.user_id = $1
 		  AND (
-		    i.status = 'failed'
+		    i.status IN ('new', 'fetched', 'facts_extracted', 'failed')
 		    OR (i.status = 'summarized' AND NULLIF(BTRIM(sm.summary), '') IS NULL)
 		  )`
 	args := []any{userID}

@@ -21,10 +21,11 @@ export function FiltersBar({
   t: (key: string) => string;
 }) {
   const focusMode = feedMode === "recommended";
+  const pendingMode = feedMode === "pending";
 
   return (
     <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
-      {!focusMode && (
+      {!focusMode && !pendingMode && (
         <div className="flex shrink-0 items-center gap-1 rounded-lg border border-zinc-200 bg-white p-0.5">
           {(["newest", "score", "personal_score"] as SortMode[]).map((s) => (
             <button
@@ -56,7 +57,7 @@ export function FiltersBar({
         </div>
       )}
 
-      {!focusMode && (
+      {!focusMode && !pendingMode && (
         <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors">
           <input
             type="checkbox"

@@ -59,6 +59,7 @@ export function InlineReader({
   });
 
   const item = detailQuery.data ?? null;
+  const canMarkRead = item?.status === "summarized";
   const related = useMemo(() => relatedQuery.data?.items ?? [], [relatedQuery.data?.items]);
   const nextQueueItemId = useMemo(() => {
     if (!itemId || !queueItemIds || queueItemIds.length === 0) return null;
@@ -72,6 +73,7 @@ export function InlineReader({
     (relatedQuery.error ? String(relatedQuery.error) : null);
 
   async function toggleRead(current: ItemDetail) {
+    if (current.status !== "summarized") return;
     const next = current.is_read ? await api.markItemUnread(current.id) : await api.markItemRead(current.id);
     queryClient.setQueryData<ItemDetail>(["item-detail", current.id], (prev) =>
       prev ? { ...prev, is_read: next.is_read } : prev
@@ -196,7 +198,7 @@ export function InlineReader({
 
   const autoMarkedRef = useRef<Record<string, true>>({});
   useEffect(() => {
-    if (!autoMarkRead || !open || !item || item.is_read || autoMarkedRef.current[item.id]) return;
+    if (!autoMarkRead || !open || !item || !canMarkRead || item.is_read || autoMarkedRef.current[item.id]) return;
     autoMarkedRef.current[item.id] = true;
     api
       .markItemRead(item.id)
@@ -209,7 +211,7 @@ export function InlineReader({
       .catch(() => {
         delete autoMarkedRef.current[item.id];
       });
-  }, [autoMarkRead, item, onReadToggled, open, queryClient]);
+  }, [autoMarkRead, canMarkRead, item, onReadToggled, open, queryClient]);
 
   const onHandlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -350,17 +352,21 @@ export function InlineReader({
                 </button>
               )}
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => void toggleRead(item)}
-                  className="min-h-10 rounded-[14px] border border-zinc-300 bg-white px-3 py-[10px] text-[14px] font-medium text-zinc-700 hover:bg-zinc-50"
-                >
-                  {item.is_read ? t("items.action.markUnread") : t("items.action.markRead")}
-                </button>
+                {canMarkRead ? (
+                  <button
+                    type="button"
+                    onClick={() => void toggleRead(item)}
+                    className="min-h-10 rounded-[14px] border border-zinc-300 bg-white px-3 py-[10px] text-[14px] font-medium text-zinc-700 hover:bg-zinc-50"
+                  >
+                    {item.is_read ? t("items.action.markUnread") : t("items.action.markRead")}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => onOpenDetail(item.id)}
-                  className="inline-flex min-h-10 items-center justify-center gap-1 rounded-[14px] border border-zinc-300 bg-white px-3 py-[10px] text-[14px] font-medium text-zinc-700 hover:bg-zinc-50"
+                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-[14px] border border-zinc-300 bg-white px-3 py-[10px] text-[14px] font-medium text-zinc-700 hover:bg-zinc-50 ${
+                    canMarkRead ? "" : "col-span-2"
+                  }`}
                 >
                   <ExternalLink className="size-3.5" aria-hidden="true" />
                   <span>{t("items.action.openDetail")}</span>

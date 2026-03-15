@@ -37,6 +37,7 @@ export function ItemCard({
 }) {
   const displayTitle = item.translated_title?.trim() ? item.translated_title : item.title;
   const isRead = item.is_read;
+  const canToggleRead = item.status === "summarized";
 
   const reactionPill = item.is_favorite
     ? { icon: <Star className="size-3 fill-current" aria-hidden="true" />, label: t("items.feedback.favorite"), className: "border-amber-200 bg-amber-50 text-amber-700" }
@@ -205,41 +206,47 @@ export function ItemCard({
             type="button"
             onClick={(e) => { e.stopPropagation(); onOpenDetail(); }}
             className={`inline-flex items-center justify-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 press focus-ring ${
-              featured ? "h-9 md:min-w-[116px]" : "h-8 min-w-[calc(50%-0.25rem)] flex-1 sm:h-9 sm:min-w-[104px] sm:flex-none"
+              featured
+                ? "h-9 md:min-w-[116px]"
+                : canToggleRead || item.status === "failed"
+                  ? "h-8 min-w-[calc(50%-0.25rem)] flex-1 sm:h-9 sm:min-w-[104px] sm:flex-none"
+                  : "h-8 w-full sm:h-9 sm:min-w-[140px] sm:flex-none"
             }`}
           >
             <ExternalLink className="size-3.5" aria-hidden="true" />
             <span className="sm:hidden">{t("items.action.openShort")}</span>
             <span className="hidden sm:inline">{t("items.action.openDetail")}</span>
           </button>
-          <button
-            type="button"
-            disabled={readUpdating}
-            onClick={(e) => { e.stopPropagation(); onToggleRead(); }}
-            className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 press focus-ring ${
-              isRead
-                ? "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
-                : "border border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800"
-            } ${
-              featured ? "h-9 md:min-w-[116px]" : "h-8 min-w-[calc(50%-0.25rem)] flex-1 sm:h-9 sm:min-w-[104px] sm:flex-none"
-            }`}
-          >
-            {readUpdating
-              ? t("items.action.updating")
-              : isRead
-                ? (
-                  <>
-                    <span className="sm:hidden">{t("items.action.markUnreadShort")}</span>
-                    <span className="hidden sm:inline">{t("items.action.markUnread")}</span>
-                  </>
-                )
-                : (
-                  <>
-                    <span className="sm:hidden">{t("items.action.markReadShort")}</span>
-                    <span className="hidden sm:inline">{t("items.action.markRead")}</span>
-                  </>
-                )}
-          </button>
+          {canToggleRead && (
+            <button
+              type="button"
+              disabled={readUpdating}
+              onClick={(e) => { e.stopPropagation(); onToggleRead(); }}
+              className={`rounded-lg px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 press focus-ring ${
+                isRead
+                  ? "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
+                  : "border border-zinc-900 bg-zinc-900 text-white hover:bg-zinc-800"
+              } ${
+                featured ? "h-9 md:min-w-[116px]" : "h-8 min-w-[calc(50%-0.25rem)] flex-1 sm:h-9 sm:min-w-[104px] sm:flex-none"
+              }`}
+            >
+              {readUpdating
+                ? t("items.action.updating")
+                : isRead
+                  ? (
+                    <>
+                      <span className="sm:hidden">{t("items.action.markUnreadShort")}</span>
+                      <span className="hidden sm:inline">{t("items.action.markUnread")}</span>
+                    </>
+                  )
+                  : (
+                    <>
+                      <span className="sm:hidden">{t("items.action.markReadShort")}</span>
+                      <span className="hidden sm:inline">{t("items.action.markRead")}</span>
+                    </>
+                  )}
+            </button>
+          )}
           {item.status === "failed" && (
             <button
               type="button"

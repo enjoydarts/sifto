@@ -453,7 +453,7 @@ export default function DebugDigestsPage() {
         retrySourceId.trim() ? { source_id: retrySourceId.trim() } : undefined
       );
       setRetryFailedResult(res);
-      showToast("Failed items retry queued", "success");
+      showToast(t("debug.retryPending.queued"), "success");
     } catch (e) {
       setError(String(e));
       showToast(String(e), "error");
@@ -1011,24 +1011,25 @@ export default function DebugDigestsPage() {
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-800">Retry Failed Items (Debug)</h2>
+        <h2 className="mb-3 text-sm font-semibold text-zinc-800">{t("debug.retryPending.title")}</h2>
         <form onSubmit={onRetryFailedItems} className="space-y-4">
           <label className="block text-sm">
-            <div className="mb-1 text-xs font-medium text-zinc-600">Source ID (optional)</div>
+            <div className="mb-1 text-xs font-medium text-zinc-600">{t("debug.retryPending.sourceId")}</div>
             <input
               value={retrySourceId}
               onChange={(e) => setRetrySourceId(e.target.value)}
               className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-              placeholder="all failed items if empty"
+              placeholder={t("debug.retryPending.sourcePlaceholder")}
             />
           </label>
+          <p className="text-xs text-zinc-500">{t("debug.retryPending.description")}</p>
           <div className="pt-1">
             <button
               type="submit"
               disabled={busyRetryFailed}
               className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
             >
-              {busyRetryFailed ? t("debug.running") : "Queue Retry Failed"}
+              {busyRetryFailed ? t("debug.running") : t("debug.retryPending.run")}
             </button>
           </div>
         </form>

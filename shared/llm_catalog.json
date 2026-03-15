@@ -484,7 +484,7 @@
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
-      "comment": "DashScope 国際リージョンの上位 Qwen3 枠。難しめの整理や長めのダイジェストで比較候補になる。",
+      "comment": "Virginia の Global endpoint 前提の上位 Qwen3 枠。難しめの整理や長めのダイジェストで比較候補になる。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -494,9 +494,9 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "alibaba_dashscope_static_2026_03",
-        "input_per_mtok_usd": 1.6,
-        "output_per_mtok_usd": 6.0
+        "pricing_source": "alibaba_dashscope_global_static_2026_03",
+        "input_per_mtok_usd": 0.359,
+        "output_per_mtok_usd": 1.434
       }
     },
     {
@@ -506,7 +506,7 @@
       "recommendation": "recommended",
       "best_for": "balanced",
       "highlights": ["fast"],
-      "comment": "Qwen3.5 系の標準候補。要約や質問応答を安定して回しやすい。",
+      "comment": "Virginia の Global endpoint 前提の標準候補。要約や質問応答を安定して回しやすい。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -516,9 +516,9 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "alibaba_dashscope_static_2026_03",
-        "input_per_mtok_usd": 0.4,
-        "output_per_mtok_usd": 2.4
+        "pricing_source": "alibaba_dashscope_global_static_2026_03",
+        "input_per_mtok_usd": 0.115,
+        "output_per_mtok_usd": 0.688
       }
     },
     {
@@ -528,7 +528,7 @@
       "recommendation": "strong",
       "best_for": "facts",
       "highlights": ["lowestCost", "fast"],
-      "comment": "Qwen 3.5 系の軽量枠。大量の抽出や候補生成を低コストで回したい時に向く。",
+      "comment": "Qwen 3.5 系の軽量枠。Virginia の Global endpoint 前提で、大量の抽出や候補生成を低コストで回したい時に向く。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -538,9 +538,9 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "alibaba_dashscope_static_2026_03",
-        "input_per_mtok_usd": 0.1,
-        "output_per_mtok_usd": 0.4
+        "pricing_source": "alibaba_dashscope_global_static_2026_03",
+        "input_per_mtok_usd": 0.029,
+        "output_per_mtok_usd": 0.287
       }
     },
     {
@@ -550,7 +550,7 @@
       "recommendation": "strong",
       "best_for": "summary",
       "highlights": [],
-      "comment": "Qwen 3.5 の大規模 MoE 枠。品質重視の比較候補として扱いやすい。",
+      "comment": "Virginia の Global endpoint 前提の大規模 MoE 枠。品質重視の比較候補として扱いやすい。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -560,9 +560,9 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "alibaba_dashscope_static_2026_03",
-        "input_per_mtok_usd": 1.6,
-        "output_per_mtok_usd": 6.4
+        "pricing_source": "alibaba_dashscope_global_static_2026_03",
+        "input_per_mtok_usd": 0.172,
+        "output_per_mtok_usd": 1.032
       }
     },
     {
@@ -572,7 +572,7 @@
       "recommendation": "strong",
       "best_for": "balanced",
       "highlights": ["fast"],
-      "comment": "Qwen 3.5 の中量級 MoE 枠。速度と品質のバランスを取りやすい。",
+      "comment": "Virginia の Global endpoint 前提の中量級 MoE 枠。速度と品質のバランスを取りやすい。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -582,9 +582,9 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "alibaba_dashscope_static_2026_03",
-        "input_per_mtok_usd": 0.2,
-        "output_per_mtok_usd": 0.6
+        "pricing_source": "alibaba_dashscope_global_static_2026_03",
+        "input_per_mtok_usd": 0.057,
+        "output_per_mtok_usd": 0.459
       }
     },
     {
@@ -594,7 +594,7 @@
       "recommendation": "strong",
       "best_for": "balanced",
       "highlights": ["fast"],
-      "comment": "Qwen 3.5 の密結合 27B 枠。軽さと安定性を優先した比較候補。",
+      "comment": "Virginia の Global endpoint 前提の密結合 27B 枠。軽さと安定性を優先した比較候補。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -604,9 +604,9 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "alibaba_dashscope_static_2026_03",
-        "input_per_mtok_usd": 0.15,
-        "output_per_mtok_usd": 0.6
+        "pricing_source": "alibaba_dashscope_global_static_2026_03",
+        "input_per_mtok_usd": 0.086,
+        "output_per_mtok_usd": 0.688
       }
     },
     {

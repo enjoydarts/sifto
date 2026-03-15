@@ -156,7 +156,7 @@ def _chat_json(
         prompt,
         model,
         api_key,
-        url=os.getenv("ALIBABA_API_BASE_URL", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"),
+        url=os.getenv("ALIBABA_API_BASE_URL", "https://dashscope-us.aliyuncs.com/compatible-mode/v1/chat/completions"),
         normalize_model_name=_normalize_model_name,
         supports_strict_schema=_supports_strict_schema,
         timeout_sec=req_timeout,

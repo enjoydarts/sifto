@@ -123,6 +123,7 @@ sifto/
 ポイント:
 
 - ユーザーごとに API キーを保存します。サーバー共通キー前提ではありません。
+- Alibaba (Qwen) は現在 Virginia の Global endpoint を前提にしています。Singapore / International 用ではなく、Virginia 側で発行した API key を使ってください。
 - 用途別にモデルを選択できます。
   - facts
   - summary

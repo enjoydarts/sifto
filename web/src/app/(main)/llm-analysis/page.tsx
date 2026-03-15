@@ -502,6 +502,12 @@ export default function LLMAnalysisPage() {
   };
 
   const hasActiveDrilldown = providerFilter !== "all" || purposeFilter !== "all" || modelQuery.trim() !== "";
+  const hasScatterFilter = hasActiveDrilldown || scatterPurpose !== "all";
+
+  const clearScatterFilters = () => {
+    clearFilters();
+    setScatterPurpose("all");
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -690,7 +696,18 @@ export default function LLMAnalysisPage() {
             <h2 className="text-sm font-semibold text-zinc-800">{t("llmAnalysis.efficiencyScatter")}</h2>
             <p className="mt-1 text-xs text-zinc-500">{t("llmAnalysis.efficiencyScatterHelp")}</p>
           </div>
-          <span className="text-xs text-zinc-400">{scatterRows.length} rows</span>
+          <div className="flex items-center gap-2">
+            {hasScatterFilter ? (
+              <button
+                type="button"
+                onClick={clearScatterFilters}
+                className="rounded-md border border-zinc-300 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+              >
+                {t("llmAnalysis.clearDrilldown")}
+              </button>
+            ) : null}
+            <span className="text-xs text-zinc-400">{scatterRows.length} rows</span>
+          </div>
         </div>
         <div className="mb-3 flex flex-wrap gap-2">
           <button

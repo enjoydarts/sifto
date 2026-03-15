@@ -812,7 +812,7 @@ export default function ItemDetailPage() {
               </span>
             )}
           </div>
-          {item.summary && <p className="text-base leading-8 text-zinc-900">{item.summary.summary}</p>}
+          {item.summary && <p className="whitespace-pre-wrap text-base leading-8 text-zinc-900">{item.summary.summary}</p>}
           {item.summary?.score_reason && (
             <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
               <div className="mb-1 text-xs font-semibold text-zinc-500">

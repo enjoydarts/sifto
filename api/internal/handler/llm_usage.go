@@ -72,8 +72,9 @@ func (h *LLMUsageHandler) List(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageListVersioned(userID, 0, limit))
-	if err == nil && h.cache != nil {
+	if err == nil && h.cache != nil && !cacheBust {
 		var cached []service.LLMUsageLogView
 		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
 			writeJSON(w, cached)
@@ -98,8 +99,9 @@ func (h *LLMUsageHandler) DailySummary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid days", http.StatusBadRequest)
 		return
 	}
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageDailySummaryVersioned(userID, 0, days))
-	if err == nil && h.cache != nil {
+	if err == nil && h.cache != nil && !cacheBust {
 		var cached []service.LLMUsageDailySummaryView
 		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
 			writeJSON(w, cached)
@@ -124,8 +126,9 @@ func (h *LLMUsageHandler) ModelSummary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid days", http.StatusBadRequest)
 		return
 	}
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageModelSummaryVersioned(userID, 0, days))
-	if err == nil && h.cache != nil {
+	if err == nil && h.cache != nil && !cacheBust {
 		var cached []service.LLMUsageModelSummaryView
 		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
 			writeJSON(w, cached)
@@ -145,8 +148,9 @@ func (h *LLMUsageHandler) ModelSummary(w http.ResponseWriter, r *http.Request) {
 
 func (h *LLMUsageHandler) ProviderSummaryCurrentMonth(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageProviderCurrentMonthVersioned(userID, 0))
-	if err == nil && h.cache != nil {
+	if err == nil && h.cache != nil && !cacheBust {
 		var cached []service.LLMUsageProviderMonthSummaryView
 		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
 			writeJSON(w, cached)
@@ -166,8 +170,9 @@ func (h *LLMUsageHandler) ProviderSummaryCurrentMonth(w http.ResponseWriter, r *
 
 func (h *LLMUsageHandler) PurposeSummaryCurrentMonth(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsagePurposeCurrentMonthVersioned(userID, 0))
-	if err == nil && h.cache != nil {
+	if err == nil && h.cache != nil && !cacheBust {
 		var cached []service.LLMUsagePurposeMonthSummaryView
 		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
 			writeJSON(w, cached)
@@ -187,8 +192,9 @@ func (h *LLMUsageHandler) PurposeSummaryCurrentMonth(w http.ResponseWriter, r *h
 
 func (h *LLMUsageHandler) ExecutionSummaryCurrentMonth(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageExecutionCurrentMonthVersioned(userID, 0))
-	if err == nil && h.cache != nil {
+	if err == nil && h.cache != nil && !cacheBust {
 		var cached []service.LLMExecutionCurrentMonthSummaryView
 		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
 			writeJSON(w, cached)

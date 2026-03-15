@@ -23,6 +23,7 @@ export const enDict: Dict = {
   "nav.menu.close": "Close menu",
   "nav.menu.short": "Menu",
   "nav.menu.closeShort": "Close",
+  "nav.refreshLatest": "Reload latest data",
   "common.loading": "Loading…",
   "common.error": "Error",
   "common.noData": "No data.",

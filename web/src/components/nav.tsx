@@ -9,6 +9,7 @@ import {
   Brain,
   Bug,
   CheckCheck,
+  RefreshCw,
   Menu,
   X,
   Layers3,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import PWAInstallButton from "@/components/pwa-install";
+import { enableForceFreshReload } from "@/lib/api";
 
 const primaryLinks = [
   { href: "/", labelKey: "nav.briefing", icon: Sparkles },
@@ -72,6 +74,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   const { locale, setLocale, t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
@@ -90,6 +93,13 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [moreOpen]);
 
+  const handleForceRefresh = () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    enableForceFreshReload();
+    window.location.reload();
+  };
+
   return (
     <>
       <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 backdrop-blur">
@@ -102,11 +112,20 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
 
             <div className="ml-auto flex items-center gap-2">
               <PWAInstallButton />
+              <button
+                type="button"
+                onClick={handleForceRefresh}
+                className="inline-flex h-9 w-9 items-center justify-center rounded border border-zinc-200 text-zinc-700 hover:bg-zinc-50 press focus-ring"
+                aria-label={t("nav.refreshLatest")}
+                title={t("nav.refreshLatest")}
+              >
+                <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+              </button>
               <label className="sr-only">{t("nav.language")}</label>
               <select
                 value={locale}
                 onChange={(e) => setLocale(e.target.value as "ja" | "en")}
-                className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-600 focus-ring"
+                className="h-9 rounded border border-zinc-200 bg-white px-3 text-xs text-zinc-600 focus-ring"
                 aria-label={t("nav.language")}
               >
                 <option value="ja">{t("nav.locale.ja")}</option>

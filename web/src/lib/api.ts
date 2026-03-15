@@ -609,8 +609,9 @@ export interface AskResponse {
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const requestPath = withCacheBust(path, options?.method);
   const authHeaders = await getAuthHeaders();
-  let res = await fetch(`/api${path}`, {
+  let res = await fetch(`/api${requestPath}`, {
     cache: "no-store",
     ...options,
     headers: {
@@ -622,7 +623,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   if (res.status === 401 && authHeaders.Authorization) {
     await resolveClerkIdentityIfNeeded();
     const retryAuthHeaders = await getAuthHeaders();
-    res = await fetch(`/api${path}`, {
+    res = await fetch(`/api${requestPath}`, {
       cache: "no-store",
       ...options,
       headers: {
@@ -638,6 +639,29 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+const FORCE_FRESH_UNTIL_KEY = "sifto.forceFreshUntil";
+
+function withCacheBust(path: string, method?: string): string {
+  const upperMethod = (method ?? "GET").toUpperCase();
+  if (upperMethod !== "GET" && upperMethod !== "HEAD") return path;
+  if (typeof window === "undefined") return path;
+  const raw = window.sessionStorage.getItem(FORCE_FRESH_UNTIL_KEY);
+  const until = raw ? Number(raw) : 0;
+  if (!Number.isFinite(until) || until <= Date.now()) {
+    if (raw) window.sessionStorage.removeItem(FORCE_FRESH_UNTIL_KEY);
+    return path;
+  }
+  const hasQuery = path.includes("?");
+  const sep = hasQuery ? "&" : "?";
+  if (path.includes("cache_bust=")) return path;
+  return `${path}${sep}cache_bust=1`;
+}
+
+export function enableForceFreshReload(windowMs = 15000) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(FORCE_FRESH_UNTIL_KEY, String(Date.now() + windowMs));
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {

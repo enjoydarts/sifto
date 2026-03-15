@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 type LLMCatalog struct {
@@ -53,24 +54,59 @@ type LLMModelPricing struct {
 }
 
 var (
-	llmCatalogOnce sync.Once
-	llmCatalogData LLMCatalog
+	llmCatalogMu       sync.RWMutex
+	llmCatalogData     LLMCatalog
+	llmCatalogLoadedAt time.Time
+	llmCatalogPath     string
 )
 
 func LLMCatalogData() *LLMCatalog {
-	llmCatalogOnce.Do(func() {
-		raw, err := os.ReadFile(catalogPath())
-		if err != nil {
-			log.Printf("load llm catalog failed: %v", err)
-			llmCatalogData = LLMCatalog{}
-			return
-		}
-		if err := json.Unmarshal(raw, &llmCatalogData); err != nil {
-			log.Printf("load llm catalog failed: %v", err)
-			llmCatalogData = LLMCatalog{}
-		}
-	})
-	return &llmCatalogData
+	path := catalogPath()
+	info, err := os.Stat(path)
+	if err != nil {
+		log.Printf("load llm catalog failed: %v", err)
+		llmCatalogMu.Lock()
+		llmCatalogData = LLMCatalog{}
+		llmCatalogLoadedAt = time.Time{}
+		llmCatalogPath = path
+		llmCatalogMu.Unlock()
+		return &llmCatalogData
+	}
+
+	llmCatalogMu.RLock()
+	loaded := llmCatalogLoadedAt
+	loadedPath := llmCatalogPath
+	if !loaded.IsZero() && loadedPath == path && !info.ModTime().After(loaded) {
+		snapshot := llmCatalogData
+		llmCatalogMu.RUnlock()
+		return &snapshot
+	}
+	llmCatalogMu.RUnlock()
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		log.Printf("load llm catalog failed: %v", err)
+		llmCatalogMu.RLock()
+		snapshot := llmCatalogData
+		llmCatalogMu.RUnlock()
+		return &snapshot
+	}
+	var next LLMCatalog
+	if err := json.Unmarshal(raw, &next); err != nil {
+		log.Printf("load llm catalog failed: %v", err)
+		llmCatalogMu.RLock()
+		snapshot := llmCatalogData
+		llmCatalogMu.RUnlock()
+		return &snapshot
+	}
+
+	llmCatalogMu.Lock()
+	llmCatalogData = next
+	llmCatalogLoadedAt = info.ModTime()
+	llmCatalogPath = path
+	llmCatalogMu.Unlock()
+
+	return &next
 }
 
 func catalogPath() string {

@@ -23,6 +23,7 @@ export const jaDict: Dict = {
   "nav.menu.close": "メニューを閉じる",
   "nav.menu.short": "メニュー",
   "nav.menu.closeShort": "閉じる",
+  "nav.refreshLatest": "最新情報で再読込",
   "common.loading": "読み込み中…",
   "common.error": "エラー",
   "common.noData": "データがありません。",

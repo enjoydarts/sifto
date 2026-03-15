@@ -259,6 +259,7 @@ def summarize(title: str | None, facts: list[str], source_text_chars: int | None
         max_output_tokens=_summary_max_tokens(task["target_chars"]),
         response_schema=task["schema"],
         schema_name="summary",
+        timeout_sec=_env_timeout_seconds("ALIBABA_SUMMARY_TIMEOUT_SEC", 240.0),
     )
     data = _extract_first_json_object(text) or {}
     topics = data.get("topics", []) if isinstance(data.get("topics"), list) else []

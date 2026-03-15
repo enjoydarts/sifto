@@ -15,24 +15,26 @@ import (
 )
 
 type SettingsHandler struct {
-	settings       *service.SettingsService
-	obsidianRepo   *repository.ObsidianExportRepo
-	oauth          *service.InoreaderOAuthService
-	github         *service.GitHubAppClient
-	obsidianExport *service.ObsidianExportService
-	cache          service.JSONCache
+	settings         *service.SettingsService
+	obsidianRepo     *repository.ObsidianExportRepo
+	notificationRepo *repository.NotificationPriorityRepo
+	oauth            *service.InoreaderOAuthService
+	github           *service.GitHubAppClient
+	obsidianExport   *service.ObsidianExportService
+	cache            service.JSONCache
 }
 
 const settingsCacheTTL = 2 * time.Minute
 
-func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {
+func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {
 	return &SettingsHandler{
-		settings:       service.NewSettingsService(repo, obsidianRepo, llmUsageRepo, cipher, github),
-		obsidianRepo:   obsidianRepo,
-		oauth:          service.NewInoreaderOAuthService(repo, cipher),
-		github:         github,
-		obsidianExport: obsidianExport,
-		cache:          cache,
+		settings:         service.NewSettingsService(repo, obsidianRepo, llmUsageRepo, cipher, github),
+		obsidianRepo:     obsidianRepo,
+		notificationRepo: notificationRepo,
+		oauth:            service.NewInoreaderOAuthService(repo, cipher),
+		github:           github,
+		obsidianExport:   obsidianExport,
+		cache:            cache,
 	}
 }
 
@@ -75,6 +77,11 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "failed to load settings", http.StatusInternalServerError)
 		return
+	}
+	if h.notificationRepo != nil {
+		if rule, ruleErr := h.notificationRepo.EnsureDefaults(r.Context(), userID); ruleErr == nil {
+			payload.NotificationPriority = serviceMapNotificationPriority(rule)
+		}
 	}
 	if h.cache != nil && cacheKeyErr == nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, payload, settingsCacheTTL); err != nil {
@@ -311,6 +318,47 @@ func (h *SettingsHandler) UpdateObsidianExport(w http.ResponseWriter, r *http.Re
 	})
 }
 
+func (h *SettingsHandler) UpdateNotificationPriority(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	if h.notificationRepo == nil {
+		http.Error(w, "notification priority unavailable", http.StatusInternalServerError)
+		return
+	}
+	var body struct {
+		Sensitivity string  `json:"sensitivity"`
+		DailyCap    int     `json:"daily_cap"`
+		ThemeWeight float64 `json:"theme_weight"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if body.Sensitivity != "low" && body.Sensitivity != "medium" && body.Sensitivity != "high" {
+		http.Error(w, "invalid sensitivity", http.StatusBadRequest)
+		return
+	}
+	if body.DailyCap < 0 || body.DailyCap > 20 {
+		http.Error(w, "invalid daily_cap", http.StatusBadRequest)
+		return
+	}
+	if body.ThemeWeight < 0.5 || body.ThemeWeight > 2.0 {
+		http.Error(w, "invalid theme_weight", http.StatusBadRequest)
+		return
+	}
+	rule, err := h.notificationRepo.Upsert(r.Context(), userID, body.Sensitivity, body.DailyCap, body.ThemeWeight)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
+	writeJSON(w, map[string]any{
+		"user_id":               userID,
+		"notification_priority": serviceMapNotificationPriority(rule),
+	})
+}
+
 func (h *SettingsHandler) RunObsidianExport(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	if h.obsidianExport == nil {
@@ -351,6 +399,22 @@ func serviceMapObsidianExport(settings *model.ObsidianExportSettings, github *se
 		out["github_app_install_url"] = github.InstallURL()
 	}
 	return out
+}
+
+func serviceMapNotificationPriority(rule *model.NotificationPriorityRule) map[string]any {
+	if rule == nil {
+		return map[string]any{
+			"sensitivity":  "medium",
+			"daily_cap":    3,
+			"theme_weight": 1.0,
+		}
+	}
+	return map[string]any{
+		"id":           rule.ID,
+		"sensitivity":  rule.Sensitivity,
+		"daily_cap":    rule.DailyCap,
+		"theme_weight": rule.ThemeWeight,
+	}
 }
 
 func (h *SettingsHandler) UpdateBudget(w http.ResponseWriter, r *http.Request) {

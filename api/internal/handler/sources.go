@@ -129,19 +129,21 @@ func discoverRSSFeeds(ctx context.Context, rawURL string) ([]FeedCandidate, erro
 }
 
 type SourceHandler struct {
-	repo         *repository.SourceRepo
-	itemRepo     *repository.ItemRepo
-	settingsRepo *repository.UserSettingsRepo
-	llmUsageRepo *repository.LLMUsageLogRepo
-	worker       *service.WorkerClient
-	cipher       *service.SecretCipher
-	publisher    *service.EventPublisher
-	cache        service.JSONCache
+	repo                   *repository.SourceRepo
+	itemRepo               *repository.ItemRepo
+	sourceOptimizationRepo *repository.SourceOptimizationRepo
+	settingsRepo           *repository.UserSettingsRepo
+	llmUsageRepo           *repository.LLMUsageLogRepo
+	worker                 *service.WorkerClient
+	cipher                 *service.SecretCipher
+	publisher              *service.EventPublisher
+	cache                  service.JSONCache
 }
 
 func NewSourceHandler(
 	repo *repository.SourceRepo,
 	itemRepo *repository.ItemRepo,
+	sourceOptimizationRepo *repository.SourceOptimizationRepo,
 	settingsRepo *repository.UserSettingsRepo,
 	llmUsageRepo *repository.LLMUsageLogRepo,
 	worker *service.WorkerClient,
@@ -150,15 +152,55 @@ func NewSourceHandler(
 	cache service.JSONCache,
 ) *SourceHandler {
 	return &SourceHandler{
-		repo:         repo,
-		itemRepo:     itemRepo,
-		settingsRepo: settingsRepo,
-		llmUsageRepo: llmUsageRepo,
-		worker:       worker,
-		cipher:       cipher,
-		publisher:    publisher,
-		cache:        cache,
+		repo:                   repo,
+		itemRepo:               itemRepo,
+		sourceOptimizationRepo: sourceOptimizationRepo,
+		settingsRepo:           settingsRepo,
+		llmUsageRepo:           llmUsageRepo,
+		worker:                 worker,
+		cipher:                 cipher,
+		publisher:              publisher,
+		cache:                  cache,
 	}
+}
+
+func (h *SourceHandler) Optimization(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	if h.sourceOptimizationRepo == nil {
+		http.Error(w, "source optimization unavailable", http.StatusInternalServerError)
+		return
+	}
+	sources, err := h.repo.List(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	windowEnd := time.Now()
+	windowStart := windowEnd.AddDate(0, 0, -30)
+	type optimizationItem struct {
+		SourceID       string                               `json:"source_id"`
+		Recommendation string                               `json:"recommendation"`
+		Reason         string                               `json:"reason"`
+		Metrics        repository.SourceOptimizationMetrics `json:"metrics"`
+	}
+	out := make([]optimizationItem, 0, len(sources))
+	for _, source := range sources {
+		metrics, err := h.sourceOptimizationRepo.CollectMetrics(r.Context(), userID, source.ID, windowStart)
+		if err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		decision := service.ClassifySourceOptimization(service.SourceOptimizationMetrics{
+			UnreadBacklog:        metrics.UnreadBacklog,
+			ReadRate:             metrics.ReadRate,
+			FavoriteRate:         metrics.FavoriteRate,
+			NotificationOpenRate: metrics.NotificationOpenRate,
+			AverageSummaryScore:  metrics.AverageSummaryScore,
+		})
+		_ = h.sourceOptimizationRepo.InsertSnapshot(r.Context(), userID, source.ID, windowStart, windowEnd, metrics, decision.Recommendation, decision.Reason)
+		out = append(out, optimizationItem{SourceID: source.ID, Recommendation: decision.Recommendation, Reason: decision.Reason, Metrics: metrics})
+	}
+	writeJSON(w, map[string]any{"items": out})
 }
 
 func (h *SourceHandler) List(w http.ResponseWriter, r *http.Request) {

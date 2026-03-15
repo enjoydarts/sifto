@@ -104,10 +104,11 @@ type LLMExecutionCurrentMonthSummaryView struct {
 type LLMUsageService struct {
 	repo          *repository.LLMUsageLogRepo
 	executionRepo *repository.LLMExecutionEventRepo
+	valueRepo     *repository.LLMValueMetricsRepo
 }
 
-func NewLLMUsageService(repo *repository.LLMUsageLogRepo, executionRepo *repository.LLMExecutionEventRepo) *LLMUsageService {
-	return &LLMUsageService{repo: repo, executionRepo: executionRepo}
+func NewLLMUsageService(repo *repository.LLMUsageLogRepo, executionRepo *repository.LLMExecutionEventRepo, valueRepo *repository.LLMValueMetricsRepo) *LLMUsageService {
+	return &LLMUsageService{repo: repo, executionRepo: executionRepo, valueRepo: valueRepo}
 }
 
 func mapSlice[T any, U any](in []T, fn func(T) U) []U {

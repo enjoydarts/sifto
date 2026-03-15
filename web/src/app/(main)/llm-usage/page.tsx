@@ -17,7 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api, LLMExecutionCurrentMonthSummary, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary, LLMUsageProviderMonthSummary, LLMUsagePurposeMonthSummary, UserSettings } from "@/lib/api";
+import { api, LLMExecutionCurrentMonthSummary, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary, LLMUsageProviderMonthSummary, LLMUsagePurposeMonthSummary, LLMValueMetric, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import {
   CurrentMonthByProviderTable,
@@ -27,6 +27,7 @@ import {
   RecentLogsTable,
   ReliabilityTable,
 } from "@/components/llm-usage/tables";
+import { ValueMetricsPanel } from "@/components/llm-usage/value-metrics-panel";
 
 function fmtUSD(v: number) {
   return `$${v.toFixed(6)}`;
@@ -92,6 +93,7 @@ export default function LLMUsagePage() {
   const [currentMonthProviderRows, setCurrentMonthProviderRows] = useState<LLMUsageProviderMonthSummary[]>([]);
   const [currentMonthPurposeRows, setCurrentMonthPurposeRows] = useState<LLMUsagePurposeMonthSummary[]>([]);
   const [currentMonthExecutionRows, setCurrentMonthExecutionRows] = useState<LLMExecutionCurrentMonthSummary[]>([]);
+  const [valueMetricRows, setValueMetricRows] = useState<LLMValueMetric[]>([]);
   const [logs, setLogs] = useState<LLMUsageLog[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
 
@@ -111,12 +113,13 @@ export default function LLMUsagePage() {
   const load = useCallback(async (daysParam: number, limitParam: number) => {
     setLoading(true);
     try {
-      const [summary, byModel, byProviderCurrentMonth, byPurposeCurrentMonth, executionCurrentMonth, recent, userSettings] = await Promise.all([
+      const [summary, byModel, byProviderCurrentMonth, byPurposeCurrentMonth, executionCurrentMonth, valueMetricsCurrentMonth, recent, userSettings] = await Promise.all([
         api.getLLMUsageSummary({ days: daysParam }),
         api.getLLMUsageByModel({ days: daysParam }),
         api.getLLMUsageCurrentMonthByProvider(),
         api.getLLMUsageCurrentMonthByPurpose(),
         api.getLLMExecutionCurrentMonthSummary(),
+        api.getLLMValueMetricsCurrentMonth(),
         api.getLLMUsage({ limit: limitParam }),
         api.getSettings(),
       ]);
@@ -125,6 +128,7 @@ export default function LLMUsagePage() {
       setCurrentMonthProviderRows(byProviderCurrentMonth ?? []);
       setCurrentMonthPurposeRows(byPurposeCurrentMonth ?? []);
       setCurrentMonthExecutionRows(executionCurrentMonth ?? []);
+      setValueMetricRows(valueMetricsCurrentMonth ?? []);
       setLogs(recent ?? []);
       setSettings(userSettings);
       setError(null);
@@ -699,6 +703,31 @@ export default function LLMUsagePage() {
         sortKey={purposeSortKey}
         sortDir={purposeSortDir}
         onSort={(key) => toggleSort(key, purposeSortKey, setPurposeSortKey, setPurposeSortDir)}
+      />
+
+      <ValueMetricsPanel
+        title={t("llm.valueMetrics.title")}
+        subtitle={t("llm.valueMetrics.subtitle")}
+        rows={valueMetricRows}
+        emptyLabel={t("llm.noSummary")}
+        fmtUSD={fmtUSD}
+        advisoryLabels={{
+          costToRead: t("llm.valueMetrics.costToRead"),
+          costToFavorite: t("llm.valueMetrics.costToFavorite"),
+          costToInsight: t("llm.valueMetrics.costToInsight"),
+          lowSignal: t("llm.valueMetrics.advisory.lowSignal"),
+          reviewModel: t("llm.valueMetrics.advisory.reviewModel"),
+          ok: t("llm.valueMetrics.advisory.ok"),
+          benchmarkPrefix: t("llm.valueMetrics.benchmarkPrefix"),
+          keepInsight: t("llm.valueMetrics.reason.keepInsight"),
+          keepFavorite: t("llm.valueMetrics.reason.keepFavorite"),
+          keepRead: t("llm.valueMetrics.reason.keepRead"),
+          keepDefault: t("llm.valueMetrics.reason.keepDefault"),
+          reviewHigher: t("llm.valueMetrics.reason.reviewHigher"),
+          metricRead: t("llm.valueMetrics.reason.metricRead"),
+          metricFavorite: t("llm.valueMetrics.reason.metricFavorite"),
+          metricInsight: t("llm.valueMetrics.reason.metricInsight"),
+        }}
       />
 
       <ReliabilityTable

@@ -19,7 +19,7 @@ type LLMUsageHandler struct {
 }
 
 func NewLLMUsageHandler(repo *repository.LLMUsageLogRepo, executionRepo *repository.LLMExecutionEventRepo, cache service.JSONCache) *LLMUsageHandler {
-	return &LLMUsageHandler{usage: service.NewLLMUsageService(repo, executionRepo), cache: cache}
+	return &LLMUsageHandler{usage: service.NewLLMUsageService(repo, executionRepo, nil), cache: cache}
 }
 
 const (
@@ -28,6 +28,10 @@ const (
 	llmUsageModelSummaryCacheTTL        = 5 * time.Minute
 	llmUsageCurrentMonthSummaryCacheTTL = 10 * time.Minute
 )
+
+func NewLLMUsageHandlerWithValueMetrics(repo *repository.LLMUsageLogRepo, executionRepo *repository.LLMExecutionEventRepo, valueRepo *repository.LLMValueMetricsRepo, cache service.JSONCache) *LLMUsageHandler {
+	return &LLMUsageHandler{usage: service.NewLLMUsageService(repo, executionRepo, valueRepo), cache: cache}
+}
 
 func (h *LLMUsageHandler) llmUsageCacheKey(ctx context.Context, userID, fallbackKey string) (string, error) {
 	version := int64(0)
@@ -229,6 +233,28 @@ func (h *LLMUsageHandler) ExecutionSummaryCurrentMonth(w http.ResponseWriter, r 
 		}
 	}
 	rows, err := h.usage.ExecutionSummaryCurrentMonth(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	if err == nil && h.cache != nil {
+		_ = h.cache.SetJSON(r.Context(), cacheKey, rows, llmUsageCurrentMonthSummaryCacheTTL)
+	}
+	writeJSON(w, rows)
+}
+
+func (h *LLMUsageHandler) ValueMetricsCurrentMonth(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
+	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageValueMetricsCurrentMonthVersioned(userID, 0))
+	if err == nil && h.cache != nil && !cacheBust {
+		var cached []service.LLMValueMetricView
+		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
+			writeJSON(w, cached)
+			return
+		}
+	}
+	rows, err := h.usage.ValueMetricsCurrentMonth(r.Context(), userID)
 	if err != nil {
 		writeRepoError(w, err)
 		return

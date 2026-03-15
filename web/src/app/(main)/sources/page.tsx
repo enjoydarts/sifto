@@ -3,11 +3,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Activity, Download, Lightbulb, Sparkles, Upload } from "lucide-react";
-import { api, Source, SourceHealth, SourceSuggestion } from "@/lib/api";
+import { api, Source, SourceHealth, SourceOptimizationItem, SourceSuggestion } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
+import { SourceOptimizationPanel } from "@/components/sources/source-optimization-panel";
 
 export default function SourcesPage() {
   const { t, locale } = useI18n();
@@ -15,6 +16,7 @@ export default function SourcesPage() {
   const { confirm } = useConfirm();
   const [sources, setSources] = useState<Source[]>([]);
   const [sourceHealthByID, setSourceHealthByID] = useState<Record<string, SourceHealth>>({});
+  const [sourceOptimization, setSourceOptimization] = useState<SourceOptimizationItem[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,14 +57,16 @@ export default function SourcesPage() {
   const load = useCallback(async () => {
     try {
       setSuggestionsError(null);
-      const [data, health] = await Promise.all([
+      const [data, health, optimization] = await Promise.all([
         api.getSources(),
         api.getSourceHealth().catch(() => ({ items: [] as SourceHealth[] })),
+        api.getSourceOptimization().catch(() => ({ items: [] as SourceOptimizationItem[] })),
       ]);
       setSources(data ?? []);
       const healthMap: Record<string, SourceHealth> = {};
       for (const h of health.items ?? []) healthMap[h.source_id] = h;
       setSourceHealthByID(healthMap);
+      setSourceOptimization(optimization.items ?? []);
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -271,6 +275,7 @@ export default function SourcesPage() {
 
   return (
     <div className="space-y-4">
+      <SourceOptimizationPanel items={sourceOptimization} sources={sources} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
         <h1 className="text-2xl font-bold">{t("sources.title")}</h1>

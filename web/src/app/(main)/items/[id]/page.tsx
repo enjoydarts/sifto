@@ -6,6 +6,8 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlignLeft, ArrowRight, FileText, Info, Link2, ListChecks, Sparkles, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, ItemDetail, RelatedItem } from "@/lib/api";
+import { ItemHighlightList } from "@/components/items/item-highlight-list";
+import { ItemNoteEditor } from "@/components/items/item-note-editor";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -541,6 +543,53 @@ export default function ItemDetailPage() {
     }
   };
 
+  const saveNote = async (content: string) => {
+    if (!item) return;
+    try {
+      const next = await api.saveItemNote(item.id, { content });
+      setItem((prev) => (prev ? { ...prev, note: next } : prev));
+      queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) =>
+        prev ? { ...prev, note: next } : prev
+      );
+      showToast(t("itemNote.saved"), "success");
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    }
+  };
+
+  const createHighlight = async (input: { quote_text: string; anchor_text?: string; section?: string }) => {
+    if (!item) return;
+    try {
+      const next = await api.createItemHighlight(item.id, input);
+      setItem((prev) => (prev ? { ...prev, highlights: [next, ...(prev.highlights ?? [])] } : prev));
+      queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) =>
+        prev ? { ...prev, highlights: [next, ...(prev.highlights ?? [])] } : prev
+      );
+      showToast(t("itemHighlight.saved"), "success");
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    }
+  };
+
+  const deleteHighlight = async (highlightId: string) => {
+    if (!item) return;
+    try {
+      await api.deleteItemHighlight(item.id, highlightId);
+      setItem((prev) =>
+        prev ? { ...prev, highlights: (prev.highlights ?? []).filter((highlight) => highlight.id !== highlightId) } : prev
+      );
+      queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) =>
+        prev ? { ...prev, highlights: (prev.highlights ?? []).filter((highlight) => highlight.id !== highlightId) } : prev
+      );
+      showToast(t("itemHighlight.deleted"), "success");
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    }
+  };
+
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!item) return null;
@@ -904,6 +953,21 @@ export default function ItemDetailPage() {
           </div>
         </section>
       )}
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold text-zinc-700">{t("itemDetail.savedNotes")}</h2>
+          <p className="mt-1 text-sm text-zinc-500">{t("itemDetail.savedNotesDesc")}</p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ItemNoteEditor note={item.note ?? null} onSave={saveNote} />
+          <ItemHighlightList
+            highlights={item.highlights ?? []}
+            onCreate={createHighlight}
+            onDelete={deleteHighlight}
+          />
+        </div>
+      </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-2">

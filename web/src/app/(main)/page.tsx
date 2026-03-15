@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Bell, BookOpen, Flame, Sparkles, X } from "lucide-react";
-import { api, BriefingCluster, Item, ProviderModelChangeEvent } from "@/lib/api";
+import { api, BriefingCluster, Item, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
+import { ReadingGoalsPanel } from "@/components/briefing/reading-goals-panel";
+import { TodayQueue } from "@/components/briefing/today-queue";
+import { DueReviewPanel } from "@/components/reviews/due-review-panel";
+import { WeeklyReviewPanel } from "@/components/reviews/weekly-review-panel";
 import { InlineReader } from "@/components/inline-reader";
 import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
@@ -16,6 +20,9 @@ import { useToast } from "@/components/toast-provider";
 const EMPTY_ITEMS: Item[] = [];
 const EMPTY_CLUSTERS: BriefingCluster[] = [];
 const EMPTY_MODEL_UPDATES: ProviderModelChangeEvent[] = [];
+const EMPTY_GOALS: ReadingGoal[] = [];
+const EMPTY_TODAY_QUEUE: TodayQueueItem[] = [];
+const EMPTY_REVIEW_QUEUE: ReviewQueueItem[] = [];
 const MODEL_UPDATES_DISMISSED_AT_KEY = "provider-model-updates:dismissed-at";
 
 export default function BriefingPage() {
@@ -41,6 +48,30 @@ export default function BriefingPage() {
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
+  const readingGoalsQuery = useQuery({
+    queryKey: ["reading-goals"] as const,
+    queryFn: () => api.getReadingGoals(),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+  const todayQueueQuery = useQuery({
+    queryKey: ["today-queue", 6] as const,
+    queryFn: () => api.getTodayQueue({ size: 6 }),
+    staleTime: 30_000,
+    placeholderData: (prev) => prev,
+  });
+  const reviewQueueQuery = useQuery({
+    queryKey: ["review-queue", 5] as const,
+    queryFn: () => api.getReviewQueue({ size: 5 }),
+    staleTime: 30_000,
+    placeholderData: (prev) => prev,
+  });
+  const weeklyReviewQuery = useQuery({
+    queryKey: ["weekly-review-latest"] as const,
+    queryFn: () => api.getWeeklyReviewLatest(),
+    staleTime: 120_000,
+    placeholderData: (prev) => prev,
+  });
 
   const loading = !briefingQuery.data && (briefingQuery.isLoading || briefingQuery.isFetching);
   const error = briefingQuery.error ? String(briefingQuery.error) : null;
@@ -53,6 +84,10 @@ export default function BriefingPage() {
     return modelUpdates.filter((event) => Date.parse(event.detected_at) > dismissedMs);
   }, [dismissedModelUpdatesAt, modelUpdates]);
   const highlights = data?.highlight_items ?? EMPTY_ITEMS;
+  const activeGoals = readingGoalsQuery.data?.active ?? EMPTY_GOALS;
+  const todayQueue = todayQueueQuery.data?.items ?? EMPTY_TODAY_QUEUE;
+  const reviewQueue = reviewQueueQuery.data?.items ?? EMPTY_REVIEW_QUEUE;
+  const weeklyReview = (weeklyReviewQuery.data ?? null) as WeeklyReviewSnapshot | null;
   const clusters = data?.clusters ?? EMPTY_CLUSTERS;
   const unreadHighlights = useMemo(() => highlights.filter((item) => !item.is_read), [highlights]);
   const nowReading = unreadHighlights[0] ?? highlights[0] ?? null;
@@ -231,6 +266,50 @@ export default function BriefingPage() {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
       setSavingClusterId(null);
+    }
+  };
+
+  const markTodayQueueRead = async (itemId: string) => {
+    try {
+      await api.markItemRead(itemId);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
+        queryClient.invalidateQueries({ queryKey: ["today-queue"] }),
+        queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
+      ]);
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    }
+  };
+
+  const saveTodayQueueForLater = async (itemId: string) => {
+    try {
+      await api.markItemLater(itemId);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
+        queryClient.invalidateQueries({ queryKey: ["today-queue"] }),
+        queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
+      ]);
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    }
+  };
+
+  const markReviewDone = async (id: string) => {
+    try {
+      await api.markReviewDone(id);
+      await queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    }
+  };
+
+  const snoozeReview = async (id: string) => {
+    try {
+      await api.snoozeReview(id, { days: 3 });
+      await queryClient.invalidateQueries({ queryKey: ["review-queue"] });
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
     }
   };
 
@@ -511,6 +590,32 @@ export default function BriefingPage() {
             </ul>
           )}
         </section>
+
+        <ReadingGoalsPanel goals={activeGoals} />
+
+        <TodayQueue
+          items={todayQueue}
+          onOpen={setInlineItemId}
+          onRead={(itemId) => {
+            void markTodayQueueRead(itemId);
+          }}
+          onLater={(itemId) => {
+            void saveTodayQueueForLater(itemId);
+          }}
+        />
+
+        <DueReviewPanel
+          items={reviewQueue}
+          onOpen={setInlineItemId}
+          onDone={(id) => {
+            void markReviewDone(id);
+          }}
+          onSnooze={(id) => {
+            void snoozeReview(id);
+          }}
+        />
+
+        <WeeklyReviewPanel review={weeklyReview} />
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
           <div className="flex items-center justify-between gap-2">

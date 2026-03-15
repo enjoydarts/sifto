@@ -295,27 +295,55 @@ func (r *PreferenceProfileRepo) loadFeedbackBreakdowns(ctx context.Context, user
 
 func (r *PreferenceProfileRepo) loadTopicActions(ctx context.Context, userID string) ([]topicAction, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT
-			isb.topics,
-			(
-				CASE
-					WHEN fb.is_favorite = true THEN 2.0
-					WHEN fb.rating > 0 THEN 1.0
-					WHEN fb.rating < 0 THEN -1.0
-					ELSE 0.3
-				END
-			)::double precision AS signal,
-			EXTRACT(EPOCH FROM (NOW() - COALESCE(fb.updated_at, ir.read_at, i.created_at))) / 86400.0 AS days_ago
-		FROM items i
-		JOIN sources s ON s.id = i.source_id
-		JOIN item_summaries isb ON isb.item_id = i.id
-		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
-		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
-		WHERE s.user_id = $1
-		  AND isb.topics IS NOT NULL
-		  AND array_length(isb.topics, 1) > 0
-		  AND COALESCE(fb.updated_at, ir.read_at, i.created_at) >= NOW() - INTERVAL '90 days'
-		  AND (fb.item_id IS NOT NULL OR ir.item_id IS NOT NULL)`, userID)
+		WITH actions AS (
+			SELECT
+				isb.topics,
+				(
+					CASE
+						WHEN fb.is_favorite = true THEN 2.0
+						WHEN fb.rating > 0 THEN 1.0
+						WHEN fb.rating < 0 THEN -1.0
+						ELSE 0.3
+					END
+				)::double precision AS signal,
+				COALESCE(fb.updated_at, ir.read_at, i.created_at) AS acted_at
+			FROM items i
+			JOIN sources s ON s.id = i.source_id
+			JOIN item_summaries isb ON isb.item_id = i.id
+			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
+			LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+			WHERE s.user_id = $1
+			  AND isb.topics IS NOT NULL
+			  AND array_length(isb.topics, 1) > 0
+			  AND COALESCE(fb.updated_at, ir.read_at, i.created_at) >= NOW() - INTERVAL '90 days'
+			  AND (fb.item_id IS NOT NULL OR ir.item_id IS NOT NULL)
+			UNION ALL
+			SELECT isb.topics, 2.0::double precision AS signal, n.updated_at AS acted_at
+			FROM item_notes n
+			JOIN items i ON i.id = n.item_id
+			JOIN sources s ON s.id = i.source_id AND s.user_id = n.user_id
+			JOIN item_summaries isb ON isb.item_id = i.id
+			WHERE n.user_id = $1
+			  AND n.updated_at >= NOW() - INTERVAL '90 days'
+			UNION ALL
+			SELECT isb.topics, 1.8::double precision AS signal, ai.created_at AS acted_at
+			FROM ask_insight_items aii
+			JOIN ask_insights ai ON ai.id = aii.insight_id AND ai.user_id = $1
+			JOIN items i ON i.id = aii.item_id
+			JOIN item_summaries isb ON isb.item_id = i.id
+			WHERE ai.created_at >= NOW() - INTERVAL '90 days'
+			UNION ALL
+			SELECT isb.topics, 1.5::double precision AS signal, rq.completed_at AS acted_at
+			FROM review_queue rq
+			JOIN items i ON i.id = rq.item_id
+			JOIN item_summaries isb ON isb.item_id = i.id
+			WHERE rq.user_id = $1
+			  AND rq.status = 'done'
+			  AND rq.completed_at IS NOT NULL
+			  AND rq.completed_at >= NOW() - INTERVAL '90 days'
+		)
+		SELECT topics, signal, EXTRACT(EPOCH FROM (NOW() - acted_at)) / 86400.0 AS days_ago
+		FROM actions`, userID)
 	if err != nil {
 		return nil, err
 	}

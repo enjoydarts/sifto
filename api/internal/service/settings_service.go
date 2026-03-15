@@ -47,6 +47,7 @@ type SettingsGetPayload struct {
 	LLMModels               map[string]any `json:"llm_models"`
 	CurrentMonth            map[string]any `json:"current_month"`
 	ObsidianExport          map[string]any `json:"obsidian_export"`
+	NotificationPriority    map[string]any `json:"notification_priority"`
 }
 
 type UpdateLLMModelsInput struct {

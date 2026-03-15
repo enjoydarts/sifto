@@ -45,6 +45,33 @@ export interface SourceHealth {
   status: "ok" | "stale" | "error" | "new" | "disabled" | string;
 }
 
+export interface SourceOptimizationMetrics {
+  unread_backlog: number;
+  read_rate: number;
+  favorite_rate: number;
+  notification_open_rate: number;
+  average_summary_score: number;
+}
+
+export interface SourceOptimizationItem {
+  source_id: string;
+  recommendation: "keep" | "prune" | "mute" | "promote" | string;
+  reason: string;
+  metrics: SourceOptimizationMetrics;
+}
+
+export interface ReadingGoal {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string;
+  priority: number;
+  status: "active" | "archived" | string;
+  due_date?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Item {
   id: string;
   source_id: string;
@@ -131,6 +158,26 @@ export interface ItemFeedback {
   updated_at: string;
 }
 
+export interface ItemNote {
+  id: string;
+  user_id: string;
+  item_id: string;
+  content: string;
+  tags?: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ItemHighlight {
+  id: string;
+  user_id: string;
+  item_id: string;
+  quote_text: string;
+  anchor_text?: string | null;
+  section?: string | null;
+  created_at: string;
+}
+
 export interface ItemDetail extends Item {
   processing_error?: string | null;
   facts: ItemFacts | null;
@@ -142,6 +189,8 @@ export interface ItemDetail extends Item {
   faithfulness?: SummaryFaithfulnessCheck | null;
   faithfulness_llm?: ItemSummaryLLM | null;
   feedback?: ItemFeedback | null;
+  note?: ItemNote | null;
+  highlights?: ItemHighlight[];
 }
 
 export interface RelatedItem {
@@ -243,6 +292,77 @@ export interface FocusQueueResponse {
   total: number;
   source_pool: number;
   diversify_topics: boolean;
+}
+
+export interface TodayQueueItem {
+  item: Item;
+  estimated_reading_minutes: number;
+  reason_labels: string[];
+  matched_goals?: ReadingGoal[];
+}
+
+export interface TodayQueueResponse {
+  items: TodayQueueItem[];
+}
+
+export interface ReviewQueueItem {
+  id: string;
+  user_id: string;
+  item_id: string;
+  source_signal: string;
+  review_stage: string;
+  status: string;
+  review_due_at: string;
+  last_surfaced_at?: string | null;
+  completed_at?: string | null;
+  snooze_count: number;
+  created_at: string;
+  updated_at: string;
+  item: Item;
+  reason_labels?: string[];
+}
+
+export interface ReviewQueueResponse {
+  items: ReviewQueueItem[];
+}
+
+export interface AskInsightItemRef {
+  item_id: string;
+  title: string;
+  url: string;
+  topics?: string[];
+}
+
+export interface AskInsight {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  query?: string;
+  goal_id?: string | null;
+  tags?: string[];
+  items?: AskInsightItemRef[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WeeklyReviewTopic {
+  topic: string;
+  count: number;
+}
+
+export interface WeeklyReviewSnapshot {
+  id: string;
+  user_id: string;
+  week_start: string;
+  week_end: string;
+  read_count: number;
+  note_count: number;
+  insight_count: number;
+  favorite_count: number;
+  dominant_topics?: WeeklyReviewTopic[];
+  missed_high_value?: Item[];
+  created_at: string;
 }
 
 export interface ItemStats {
@@ -431,6 +551,31 @@ export interface LLMExecutionCurrentMonthSummary {
   empty_rate_pct: number;
 }
 
+export interface LLMValueMetric {
+  window_start: string;
+  window_end: string;
+  month_jst: string;
+  purpose: string;
+  provider: string;
+  model: string;
+  pricing_source: string;
+  calls: number;
+  total_cost_usd: number;
+  item_count: number;
+  read_count: number;
+  favorite_count: number;
+  insight_count: number;
+  cost_to_read_usd?: number | null;
+  cost_to_favorite_usd?: number | null;
+  cost_to_insight_usd?: number | null;
+  low_efficiency_flag: boolean;
+  advisory_code: "ok" | "review_model" | "low_signal" | string;
+  advisory_reason?: string | null;
+  benchmark_provider?: string | null;
+  benchmark_model?: string | null;
+  benchmark_metric?: "read" | "favorite" | "insight" | string | null;
+}
+
 export interface ProviderModelChangeEvent {
   id: string;
   provider: string;
@@ -454,6 +599,13 @@ export interface UserReadingPlanSettings {
   size: number;
   diversify_topics: boolean;
   exclude_read: boolean;
+}
+
+export interface NotificationPriorityRule {
+  id?: string;
+  sensitivity: "low" | "medium" | "high" | string;
+  daily_cap: number;
+  theme_weight: number;
 }
 
 export interface LLMCatalogProvider {
@@ -548,6 +700,7 @@ export interface UserSettings {
     last_run_at?: string | null;
     last_success_at?: string | null;
   };
+  notification_priority?: NotificationPriorityRule;
   current_month: UserSettingsCurrentMonth;
 }
 
@@ -716,6 +869,7 @@ export const api = {
   // Sources
   getSources: () => apiFetch<Source[]>("/sources"),
   getSourceHealth: () => apiFetch<{ items: SourceHealth[] }>("/sources/health"),
+  getSourceOptimization: () => apiFetch<{ items: SourceOptimizationItem[] }>("/sources/optimization"),
   exportSourcesOPML: async () => {
     const authHeaders = await getAuthHeaders();
     const res = await fetch("/api/sources/opml", {
@@ -834,6 +988,12 @@ export const api = {
     const qs = q.toString();
     return apiFetch<FocusQueueResponse>(`/items/focus-queue${qs ? `?${qs}` : ""}`);
   },
+  getTodayQueue: (params?: { size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.size) q.set("size", String(params.size));
+    const qs = q.toString();
+    return apiFetch<TodayQueueResponse>(`/items/today-queue${qs ? `?${qs}` : ""}`);
+  },
   getTriageAll: () => apiFetch<FocusQueueResponse>("/items/triage-all"),
   getItemStats: () => apiFetch<ItemStats>("/items/stats"),
   getItemUXMetrics: (params?: { days?: number }) => {
@@ -857,6 +1017,23 @@ export const api = {
     const qs = q.toString();
     return apiFetch<BriefingTodayResponse>(`/briefing/today${qs ? `?${qs}` : ""}`);
   },
+  getReviewQueue: (params?: { size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.size) q.set("size", String(params.size));
+    const qs = q.toString();
+    return apiFetch<ReviewQueueResponse>(`/reviews/due${qs ? `?${qs}` : ""}`);
+  },
+  markReviewDone: (id: string) =>
+    apiFetch<{ status: string; id: string }>(`/reviews/${id}/done`, { method: "POST" }),
+  snoozeReview: (id: string, params?: { days?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.days) q.set("days", String(params.days));
+    const qs = q.toString();
+    return apiFetch<{ status: string; id: string; days: number }>(`/reviews/${id}/snooze${qs ? `?${qs}` : ""}`, {
+      method: "POST",
+    });
+  },
+  getWeeklyReviewLatest: () => apiFetch<WeeklyReviewSnapshot>("/reviews/weekly/latest"),
   ask: (body: {
     query: string;
     days?: number;
@@ -873,6 +1050,28 @@ export const api = {
       citations: Array.isArray(resp?.citations) ? resp.citations : [],
       related_items: Array.isArray(resp?.related_items) ? resp.related_items : [],
     })),
+  getAskInsights: (params?: { limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiFetch<{ insights: AskInsight[] }>(`/ask/insights${qs ? `?${qs}` : ""}`);
+  },
+  saveAskInsight: (body: {
+    title: string;
+    body: string;
+    query?: string;
+    goal_id?: string | null;
+    tags?: string[];
+    item_ids?: string[];
+  }) =>
+    apiFetch<AskInsight>("/ask/insights", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteAskInsight: (id: string) =>
+    apiFetch<void>(`/ask/insights/${id}`, {
+      method: "DELETE",
+    }),
   getItemTopicTrends: (params?: { limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));
@@ -887,6 +1086,22 @@ export const api = {
     return apiFetch<{ days: number; limit: number; items: TopicPulseItem[] }>(`/topics/pulse${qs ? `?${qs}` : ""}`);
   },
   getItem: (id: string) => apiFetch<ItemDetail>(`/items/${id}`),
+  saveItemNote: (id: string, body: { content: string; tags?: string[] }) =>
+    apiFetch<ItemNote>(`/items/${id}/note`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  getItemHighlights: (id: string) =>
+    apiFetch<{ highlights: ItemHighlight[] }>(`/items/${id}/highlights`),
+  createItemHighlight: (id: string, body: { quote_text: string; anchor_text?: string; section?: string }) =>
+    apiFetch<ItemHighlight>(`/items/${id}/highlights`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteItemHighlight: (id: string, highlightId: string) =>
+    apiFetch<void>(`/items/${id}/highlights/${highlightId}`, {
+      method: "DELETE",
+    }),
   getRelatedItems: (id: string, params?: { limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));
@@ -980,6 +1195,9 @@ export const api = {
   getLLMExecutionCurrentMonthSummary: () => {
     return apiFetch<LLMExecutionCurrentMonthSummary[]>("/llm-usage/current-month/execution-summary");
   },
+  getLLMValueMetricsCurrentMonth: () => {
+    return apiFetch<LLMValueMetric[]>("/llm-usage/current-month/value-metrics");
+  },
   getProviderModelUpdates: (params?: { days?: number; limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.days) q.set("days", String(params.days));
@@ -990,6 +1208,11 @@ export const api = {
 
   // Settings
   getSettings: () => apiFetch<UserSettings>("/settings"),
+  updateNotificationPriority: (body: NotificationPriorityRule) =>
+    apiFetch<{ user_id: string; notification_priority: NotificationPriorityRule }>("/settings/notification-priority", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   getLLMCatalog: () => apiFetch<LLMCatalog>("/settings/llm-catalog"),
   updateSettings: (body: {
     monthly_budget_usd: number | null;
@@ -1005,6 +1228,40 @@ export const api = {
     apiFetch<{ user_id: string; reading_plan: UserReadingPlanSettings }>("/settings/reading-plan", {
       method: "PATCH",
       body: JSON.stringify(body),
+    }),
+  getReadingGoals: () =>
+    apiFetch<{ active: ReadingGoal[]; archived: ReadingGoal[] }>("/settings/reading-goals"),
+  createReadingGoal: (body: {
+    title: string;
+    description: string;
+    priority: number;
+    due_date?: string | null;
+  }) =>
+    apiFetch<ReadingGoal>("/settings/reading-goals", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateReadingGoal: (id: string, body: {
+    title: string;
+    description: string;
+    priority: number;
+    due_date?: string | null;
+  }) =>
+    apiFetch<ReadingGoal>(`/settings/reading-goals/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  archiveReadingGoal: (id: string) =>
+    apiFetch<ReadingGoal>(`/settings/reading-goals/${id}/archive`, {
+      method: "POST",
+    }),
+  restoreReadingGoal: (id: string) =>
+    apiFetch<ReadingGoal>(`/settings/reading-goals/${id}/restore`, {
+      method: "POST",
+    }),
+  deleteReadingGoal: (id: string) =>
+    apiFetch<void>(`/settings/reading-goals/${id}`, {
+      method: "DELETE",
     }),
   updateObsidianExport: (body: {
     enabled: boolean;

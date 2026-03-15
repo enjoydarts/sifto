@@ -1249,6 +1249,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 		userSettingsRepo:   repository.NewUserSettingsRepo(db),
 		userRepo:           repository.NewUserRepo(db),
 		pushLogRepo:        repository.NewPushNotificationLogRepo(db),
+		notificationRepo:   repository.NewNotificationPriorityRepo(db),
 		worker:             worker,
 		openAI:             openAI,
 		oneSignal:          oneSignal,

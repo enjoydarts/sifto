@@ -22,9 +22,11 @@ import (
 type ItemHandler struct {
 	repo            *repository.ItemRepo
 	sourceRepo      *repository.SourceRepo
+	readingGoalRepo *repository.ReadingGoalRepo
 	streakRepo      *repository.ReadingStreakRepo
 	snapshotRepo    *repository.BriefingSnapshotRepo
 	prefProfileRepo *repository.PreferenceProfileRepo
+	reviewQueueRepo *repository.ReviewQueueRepo
 	publisher       *service.EventPublisher
 	cache           service.JSONCache
 	detail          *service.ItemDetailService
@@ -39,18 +41,22 @@ const itemDetailCacheTTL = 5 * time.Minute
 func NewItemHandler(
 	repo *repository.ItemRepo,
 	sourceRepo *repository.SourceRepo,
+	readingGoalRepo *repository.ReadingGoalRepo,
 	streakRepo *repository.ReadingStreakRepo,
 	snapshotRepo *repository.BriefingSnapshotRepo,
 	prefProfileRepo *repository.PreferenceProfileRepo,
+	reviewQueueRepo *repository.ReviewQueueRepo,
 	publisher *service.EventPublisher,
 	cache service.JSONCache,
 ) *ItemHandler {
 	return &ItemHandler{
 		repo:            repo,
 		sourceRepo:      sourceRepo,
+		readingGoalRepo: readingGoalRepo,
 		streakRepo:      streakRepo,
 		snapshotRepo:    snapshotRepo,
 		prefProfileRepo: prefProfileRepo,
+		reviewQueueRepo: reviewQueueRepo,
 		publisher:       publisher,
 		cache:           cache,
 		detail:          service.NewItemDetailService(repo),
@@ -345,6 +351,43 @@ func buildFavoritesMarkdown(items []model.FavoriteExportItem, now time.Time, ran
 			b.WriteString("\n\n")
 		} else {
 			b.WriteString("Summary: (not available)\n\n")
+		}
+		if item.Note != nil && strings.TrimSpace(item.Note.Content) != "" {
+			b.WriteString("### Personal Note\n\n")
+			b.WriteString(strings.TrimSpace(item.Note.Content))
+			b.WriteString("\n\n")
+			if len(item.Note.Tags) > 0 {
+				for _, tag := range item.Note.Tags {
+					tag = strings.TrimSpace(tag)
+					if tag == "" {
+						continue
+					}
+					fmt.Fprintf(&b, "- Tag: %s\n", tag)
+				}
+				b.WriteString("\n")
+			}
+		}
+		if len(item.Highlights) > 0 {
+			b.WriteString("### Highlights\n\n")
+			for _, highlight := range item.Highlights {
+				quote := strings.TrimSpace(highlight.QuoteText)
+				if quote == "" {
+					continue
+				}
+				fmt.Fprintf(&b, "- %s", quote)
+				meta := make([]string, 0, 2)
+				if section := strings.TrimSpace(highlight.Section); section != "" {
+					meta = append(meta, "section: "+section)
+				}
+				if anchor := strings.TrimSpace(highlight.AnchorText); anchor != "" {
+					meta = append(meta, "anchor: "+anchor)
+				}
+				if len(meta) > 0 {
+					fmt.Fprintf(&b, " (%s)", strings.Join(meta, ", "))
+				}
+				b.WriteString("\n")
+			}
+			b.WriteString("\n")
 		}
 	}
 	return b.String()
@@ -1187,6 +1230,9 @@ func (h *ItemHandler) SetFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
 		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
+	}
+	if h.reviewQueueRepo != nil && body.IsFavorite {
+		_ = h.reviewQueueRepo.EnqueueDefault(r.Context(), userID, id, "favorite", time.Now())
 	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, fb)

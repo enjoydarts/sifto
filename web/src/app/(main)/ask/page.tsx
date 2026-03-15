@@ -2,11 +2,15 @@
 
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Search } from "lucide-react";
-import { api, AskResponse } from "@/lib/api";
+import { api, AskResponse, ReadingGoal } from "@/lib/api";
+import { InsightSaveDialog } from "@/components/ask/insight-save-dialog";
 import { useI18n } from "@/components/i18n-provider";
+import { useToast } from "@/components/toast-provider";
 
 const EMPTY: AskResponse | null = null;
+const EMPTY_GOALS: ReadingGoal[] = [];
 const PRESET_KEYS = [
   "ask.preset.topics",
   "ask.preset.unread",
@@ -16,17 +20,28 @@ const PRESET_KEYS = [
 
 export default function AskPage() {
   const { t } = useI18n();
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [days, setDays] = useState("30");
   const [unreadOnly, setUnreadOnly] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [savingInsight, setSavingInsight] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AskResponse | null>(EMPTY);
+  const readingGoalsQuery = useQuery({
+    queryKey: ["reading-goals"] as const,
+    queryFn: () => api.getReadingGoals(),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
 
   const canSubmit = query.trim().length > 1 && !loading;
   const relatedItems = useMemo(() => result?.related_items ?? [], [result]);
   const bullets = useMemo(() => result?.bullets ?? [], [result]);
   const citations = useMemo(() => result?.citations ?? [], [result]);
+  const activeGoals = readingGoalsQuery.data?.active ?? EMPTY_GOALS;
   const presets = useMemo(() => PRESET_KEYS.map((key) => t(key)), [t]);
   const scopeLabel = useMemo(
     () => `${days}d / ${unreadOnly ? t("ask.unreadOnly") : t("ask.allItems")} / top 8`,
@@ -50,6 +65,28 @@ export default function AskPage() {
       setError(String(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function saveInsight(input: { title: string; body: string; goal_id?: string | null; tags: string[]; item_ids: string[] }) {
+    if (!result) return;
+    setSavingInsight(true);
+    try {
+      await api.saveAskInsight({
+        title: input.title,
+        body: input.body,
+        goal_id: input.goal_id,
+        tags: input.tags,
+        item_ids: input.item_ids,
+        query: result.query,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["ask-insights"] });
+      setSaveDialogOpen(false);
+      showToast(t("ask.insight.saved"), "success");
+    } catch (err) {
+      showToast(`${t("common.error")}: ${String(err)}`, "error");
+    } finally {
+      setSavingInsight(false);
     }
   }
 
@@ -130,7 +167,16 @@ export default function AskPage() {
           <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">{t("ask.answerLabel")}</p>
-              <p className="text-xs text-zinc-400">{scopeLabel}</p>
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-zinc-400">{scopeLabel}</p>
+                <button
+                  type="button"
+                  onClick={() => setSaveDialogOpen(true)}
+                  className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  {t("ask.insight.cta")}
+                </button>
+              </div>
             </div>
             <p className="mt-3 whitespace-pre-wrap text-[15px] leading-7 text-zinc-900">{result.answer}</p>
             {bullets.length > 0 ? (
@@ -186,6 +232,14 @@ export default function AskPage() {
           {t("ask.empty")}
         </div>
       )}
+      <InsightSaveDialog
+        open={saveDialogOpen}
+        loading={savingInsight}
+        result={result}
+        goals={activeGoals}
+        onClose={() => setSaveDialogOpen(false)}
+        onSave={saveInsight}
+      />
     </div>
   );
 }

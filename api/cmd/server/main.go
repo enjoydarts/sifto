@@ -59,6 +59,12 @@ func main() {
 	userRepo := repository.NewUserRepo(db)
 	userIdentityRepo := repository.NewUserIdentityRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
+	readingGoalRepo := repository.NewReadingGoalRepo(db)
+	reviewQueueRepo := repository.NewReviewQueueRepo(db)
+	askInsightRepo := repository.NewAskInsightRepo(db)
+	weeklyReviewRepo := repository.NewWeeklyReviewRepo(db)
+	sourceOptimizationRepo := repository.NewSourceOptimizationRepo(db)
+	notificationPriorityRepo := repository.NewNotificationPriorityRepo(db)
 	obsidianExportRepo := repository.NewObsidianExportRepo(db)
 	itemExportRepo := repository.NewItemExportRepo(db)
 	sourceRepo := repository.NewSourceRepo(db)
@@ -67,20 +73,25 @@ func main() {
 	digestRepo := repository.NewDigestRepo(db)
 	digestInngestRepo := repository.NewDigestInngestRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	llmValueMetricsRepo := repository.NewLLMValueMetricsRepo(db)
 	llmExecutionRepo := repository.NewLLMExecutionEventRepo(db)
 	providerModelUpdateRepo := repository.NewProviderModelUpdateRepo(db)
 	briefingSnapshotRepo := repository.NewBriefingSnapshotRepo(db)
 	streakRepo := repository.NewReadingStreakRepo(db)
 	prefProfileRepo := repository.NewPreferenceProfileRepo(db)
 	obsidianExportSvc := service.NewObsidianExportService(itemRepo, itemExportRepo, obsidianExportRepo, githubApp)
-	settingsH := handler.NewSettingsHandler(userSettingsRepo, obsidianExportRepo, llmUsageRepo, secretCipher, githubApp, obsidianExportSvc, cache)
+	settingsH := handler.NewSettingsHandler(userSettingsRepo, obsidianExportRepo, notificationPriorityRepo, llmUsageRepo, secretCipher, githubApp, obsidianExportSvc, cache)
+	readingGoalsH := handler.NewReadingGoalsHandler(readingGoalRepo)
+	itemNotesH := handler.NewItemNotesHandler(itemRepo, reviewQueueRepo)
+	reviewsH := handler.NewReviewsHandler(reviewQueueRepo, weeklyReviewRepo)
+	askInsightsH := handler.NewAskInsightsHandler(askInsightRepo)
 	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo)
 
 	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp)
-	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher, cache)
-	itemH := handler.NewItemHandler(itemRepo, sourceRepo, streakRepo, briefingSnapshotRepo, prefProfileRepo, eventPublisher, cache)
+	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, sourceOptimizationRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher, cache)
+	itemH := handler.NewItemHandler(itemRepo, sourceRepo, readingGoalRepo, streakRepo, briefingSnapshotRepo, prefProfileRepo, reviewQueueRepo, eventPublisher, cache)
 	digestH := handler.NewDigestHandler(digestRepo)
-	llmUsageH := handler.NewLLMUsageHandler(llmUsageRepo, llmExecutionRepo, cache)
+	llmUsageH := handler.NewLLMUsageHandlerWithValueMetrics(llmUsageRepo, llmExecutionRepo, llmValueMetricsRepo, cache)
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
 	briefingH := handler.NewBriefingHandler(itemRepo, briefingSnapshotRepo, streakRepo, cache)
 	askH := handler.NewAskHandler(itemRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, openAI, cache)
@@ -126,6 +137,7 @@ func main() {
 			r.Post("/opml/import", sourceH.ImportOPML)
 			r.Post("/inoreader/import", sourceH.ImportInoreader)
 			r.Get("/health", sourceH.Health)
+			r.Get("/optimization", sourceH.Optimization)
 			r.Get("/recommended", sourceH.Recommended)
 			r.Post("/", sourceH.Create)
 			r.Post("/discover", sourceH.Discover)
@@ -143,8 +155,21 @@ func main() {
 			r.Post("/retry-failed", itemH.RetryFailed)
 			r.Get("/reading-plan", itemH.ReadingPlan)
 			r.Get("/focus-queue", itemH.FocusQueue)
+			r.Get("/today-queue", itemH.TodayQueue)
 			r.Get("/triage-all", itemH.TriageAll)
 			r.Get("/{id}/related", itemH.Related)
+			r.Put("/{id}/note", func(w http.ResponseWriter, r *http.Request) {
+				itemNotesH.UpsertNote(w, r, chi.URLParam(r, "id"))
+			})
+			r.Get("/{id}/highlights", func(w http.ResponseWriter, r *http.Request) {
+				itemNotesH.ListHighlights(w, r, chi.URLParam(r, "id"))
+			})
+			r.Post("/{id}/highlights", func(w http.ResponseWriter, r *http.Request) {
+				itemNotesH.CreateHighlight(w, r, chi.URLParam(r, "id"))
+			})
+			r.Delete("/{id}/highlights/{highlightId}", func(w http.ResponseWriter, r *http.Request) {
+				itemNotesH.DeleteHighlight(w, r, chi.URLParam(r, "id"), chi.URLParam(r, "highlightId"))
+			})
 			r.Delete("/{id}", itemH.Delete)
 			r.Get("/{id}", itemH.GetDetail)
 			r.Patch("/{id}/feedback", itemH.SetFeedback)
@@ -163,6 +188,11 @@ func main() {
 		})
 
 		r.Post("/ask", askH.Ask)
+		r.Get("/ask/insights", askInsightsH.ListRecent)
+		r.Post("/ask/insights", askInsightsH.Save)
+		r.Delete("/ask/insights/{id}", func(w http.ResponseWriter, r *http.Request) {
+			askInsightsH.Delete(w, r, chi.URLParam(r, "id"))
+		})
 
 		r.Route("/digests", func(r chi.Router) {
 			r.Get("/", digestH.List)
@@ -178,6 +208,7 @@ func main() {
 			r.Get("/current-month/by-provider", llmUsageH.ProviderSummaryCurrentMonth)
 			r.Get("/current-month/by-purpose", llmUsageH.PurposeSummaryCurrentMonth)
 			r.Get("/current-month/execution-summary", llmUsageH.ExecutionSummaryCurrentMonth)
+			r.Get("/current-month/value-metrics", llmUsageH.ValueMetricsCurrentMonth)
 		})
 
 		r.Route("/provider-model-updates", func(r chi.Router) {
@@ -186,12 +217,29 @@ func main() {
 
 		r.Get("/briefing/today", briefingH.Today)
 		r.Get("/dashboard", dashboardH.Get)
+		r.Route("/reviews", func(r chi.Router) {
+			r.Get("/due", reviewsH.Due)
+			r.Post("/{id}/done", func(w http.ResponseWriter, r *http.Request) {
+				reviewsH.MarkDone(w, r, chi.URLParam(r, "id"))
+			})
+			r.Post("/{id}/snooze", func(w http.ResponseWriter, r *http.Request) {
+				reviewsH.Snooze(w, r, chi.URLParam(r, "id"))
+			})
+			r.Get("/weekly/latest", reviewsH.WeeklyLatest)
+		})
 
 		r.Route("/settings", func(r chi.Router) {
 			r.Get("/", settingsH.Get)
+			r.Get("/reading-goals", readingGoalsH.List)
+			r.Post("/reading-goals", readingGoalsH.Create)
+			r.Patch("/reading-goals/{id}", readingGoalsH.Update)
+			r.Post("/reading-goals/{id}/archive", readingGoalsH.Archive)
+			r.Post("/reading-goals/{id}/restore", readingGoalsH.Restore)
+			r.Delete("/reading-goals/{id}", readingGoalsH.Delete)
 			r.Get("/llm-catalog", settingsH.GetLLMCatalog)
 			r.Patch("/", settingsH.UpdateBudget)
 			r.Patch("/reading-plan", settingsH.UpdateReadingPlan)
+			r.Patch("/notification-priority", settingsH.UpdateNotificationPriority)
 			r.Patch("/llm-models", settingsH.UpdateLLMModels)
 			r.Patch("/obsidian-export", settingsH.UpdateObsidianExport)
 			r.Post("/obsidian-export/run", settingsH.RunObsidianExport)

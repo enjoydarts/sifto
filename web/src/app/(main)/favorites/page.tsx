@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Download, ExternalLink, Star } from "lucide-react";
-import { api, Item } from "@/lib/api";
+import { api, AskInsight, Item, ItemDetail } from "@/lib/api";
 import { ItemCard } from "@/components/items/item-card";
 import { InlineReader } from "@/components/inline-reader";
+import { useConfirm } from "@/components/confirm-provider";
 import { EmptyState } from "@/components/empty-state";
 import { PageTransition } from "@/components/page-transition";
 import { SkeletonItemRow } from "@/components/skeleton";
@@ -34,6 +35,7 @@ function downloadTextFile(text: string, filename: string) {
 export default function FavoritesPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
@@ -41,14 +43,23 @@ export default function FavoritesPage() {
   const [exporting, setExporting] = useState<"copy" | "download" | null>(null);
   const [readUpdatingIds, setReadUpdatingIds] = useState<Record<string, boolean>>({});
   const [favoriteUpdatingIds, setFavoriteUpdatingIds] = useState<Record<string, boolean>>({});
+  const [detailNotes, setDetailNotes] = useState<Record<string, string>>({});
+  const [deletingInsightId, setDeletingInsightId] = useState<string | null>(null);
 
   const favoritesQuery = useQuery({
     queryKey: ["favorites-page", 50] as const,
     queryFn: () => api.getItems({ favorite_only: true, sort: "score", page_size: 50 }),
     placeholderData: (prev) => prev,
   });
+  const insightsQuery = useQuery({
+    queryKey: ["ask-insights", 6] as const,
+    queryFn: () => api.getAskInsights({ limit: 6 }),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
 
-  const items = favoritesQuery.data?.items ?? [];
+  const items = useMemo(() => favoritesQuery.data?.items ?? [], [favoritesQuery.data?.items]);
+  const insights = useMemo(() => insightsQuery.data?.insights ?? [], [insightsQuery.data?.insights]);
   const total = favoritesQuery.data?.total ?? 0;
   const queueItemIds = useMemo(() => items.map((item) => item.id), [items]);
   const loading = !favoritesQuery.data && (favoritesQuery.isLoading || favoritesQuery.isFetching);
@@ -87,6 +98,20 @@ export default function FavoritesPage() {
     }
   };
 
+  const prefetchDetail = async (itemId: string) => {
+    const detail = await queryClient.fetchQuery<ItemDetail>({
+      queryKey: ["item-detail", itemId],
+      queryFn: () => api.getItem(itemId),
+      staleTime: 60_000,
+    });
+    setDetailNotes((prev) => {
+      const nextNote = detail.note?.content?.trim() ?? "";
+      if ((prev[itemId] ?? "") === nextNote) return prev;
+      return { ...prev, [itemId]: nextNote };
+    });
+    return detail;
+  };
+
   const toggleRead = async (item: Item) => {
     setReadUpdatingIds((prev) => ({ ...prev, [item.id]: true }));
     try {
@@ -116,6 +141,27 @@ export default function FavoritesPage() {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
       setFavoriteUpdatingIds((prev) => ({ ...prev, [item.id]: false }));
+    }
+  };
+
+  const deleteInsight = async (insight: AskInsight) => {
+    const ok = await confirm({
+      title: t("ask.insight.delete.title"),
+      message: t("ask.insight.delete.message"),
+      confirmLabel: t("ask.insight.delete.confirm"),
+      cancelLabel: t("common.cancel"),
+      tone: "danger",
+    });
+    if (!ok) return;
+    setDeletingInsightId(insight.id);
+    try {
+      await api.deleteAskInsight(insight.id);
+      await queryClient.invalidateQueries({ queryKey: ["ask-insights"] });
+      showToast(t("ask.insight.delete.done"), "success");
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setDeletingInsightId(null);
     }
   };
 
@@ -218,13 +264,15 @@ export default function FavoritesPage() {
                   onToggleRead={() => void toggleRead(item)}
                   onRetry={() => undefined}
                   onPrefetch={() => {
-                    void queryClient.prefetchQuery({
-                      queryKey: ["item-detail", item.id],
-                      queryFn: () => api.getItem(item.id),
-                    });
+                    void prefetchDetail(item.id);
                   }}
                   t={t}
                 />
+                {detailNotes[item.id] ? (
+                  <div className="px-4 pb-1 text-sm text-zinc-500">
+                    {detailNotes[item.id]}
+                  </div>
+                ) : null}
                 <div className="mt-2 flex justify-end border-t border-zinc-100 px-4 pb-4 pt-3">
                   <button
                     type="button"
@@ -239,6 +287,46 @@ export default function FavoritesPage() {
               </div>
             ))}
         </section>
+
+        {insights.length > 0 ? (
+          <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-zinc-950">{t("favorites.insights.title")}</h2>
+                <p className="mt-1 text-sm text-zinc-500">{t("favorites.insights.subtitle")}</p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3">
+              {insights.map((insight) => (
+                <div key={insight.id} className="rounded-2xl border border-zinc-200 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-zinc-900">{insight.title}</div>
+                      <p className="mt-2 line-clamp-3 text-sm text-zinc-600">{insight.body}</p>
+                      {insight.tags && insight.tags.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {insight.tags.map((tag) => (
+                            <span key={tag} className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-600">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void deleteInsight(insight)}
+                      disabled={deletingInsightId === insight.id}
+                      className="rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 disabled:opacity-60"
+                    >
+                      {deletingInsightId === insight.id ? t("common.loading") : t("common.delete")}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
 
       <InlineReader

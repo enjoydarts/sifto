@@ -7,6 +7,8 @@ import { api, ItemDetail } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { CheckStatusBadges } from "@/components/items/check-status-badges";
+import { ItemNoteEditor } from "@/components/items/item-note-editor";
+import { ItemHighlightList } from "@/components/items/item-highlight-list";
 
 export function InlineReader({
   itemId,
@@ -152,6 +154,42 @@ export function InlineReader({
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
       setFeedbackUpdating(false);
+    }
+  }
+
+  async function saveNote(current: ItemDetail, content: string) {
+    try {
+      const next = await api.saveItemNote(current.id, { content });
+      queryClient.setQueryData<ItemDetail>(["item-detail", current.id], (prev) =>
+        prev ? { ...prev, note: next } : prev
+      );
+      showToast(t("itemNote.saved"), "success");
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    }
+  }
+
+  async function createHighlight(current: ItemDetail, input: { quote_text: string; anchor_text?: string; section?: string }) {
+    try {
+      const next = await api.createItemHighlight(current.id, input);
+      queryClient.setQueryData<ItemDetail>(["item-detail", current.id], (prev) =>
+        prev ? { ...prev, highlights: [next, ...(prev.highlights ?? [])] } : prev
+      );
+      showToast(t("itemHighlight.saved"), "success");
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    }
+  }
+
+  async function deleteHighlight(current: ItemDetail, highlightId: string) {
+    try {
+      await api.deleteItemHighlight(current.id, highlightId);
+      queryClient.setQueryData<ItemDetail>(["item-detail", current.id], (prev) =>
+        prev ? { ...prev, highlights: (prev.highlights ?? []).filter((highlight) => highlight.id !== highlightId) } : prev
+      );
+      showToast(t("itemHighlight.deleted"), "success");
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
     }
   }
 
@@ -424,6 +462,21 @@ export function InlineReader({
                   ))}
                 </ul>
               )}
+            </section>
+
+            <section className="space-y-3 border-t border-zinc-200 pt-4">
+              <div>
+                <h4 className="text-base font-semibold text-zinc-800">{t("itemDetail.savedNotes")}</h4>
+                <p className="mt-1 text-sm text-zinc-500">{t("itemDetail.savedNotesDesc")}</p>
+              </div>
+              <div className="grid items-stretch gap-4 lg:grid-cols-2">
+                <ItemNoteEditor key={item.id} note={item.note ?? null} onSave={(content) => saveNote(item, content)} />
+                <ItemHighlightList
+                  highlights={item.highlights ?? []}
+                  onCreate={(input) => createHighlight(item, input)}
+                  onDelete={(highlightId) => deleteHighlight(item, highlightId)}
+                />
+              </div>
             </section>
           </div>
         )}

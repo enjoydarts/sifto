@@ -104,6 +104,18 @@ type Source struct {
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
+type ReadingGoal struct {
+	ID          string     `json:"id"`
+	UserID      string     `json:"user_id"`
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	Priority    int        `json:"priority"`
+	Status      string     `json:"status"`
+	DueDate     *time.Time `json:"due_date,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
 type SourceHealth struct {
 	SourceID      string     `json:"source_id"`
 	TotalItems    int        `json:"total_items"`
@@ -220,6 +232,8 @@ type ItemDetail struct {
 	Faithfulness    *SummaryFaithfulnessCheck `json:"faithfulness,omitempty"`
 	FaithfulnessLLM *ItemSummaryLLM           `json:"faithfulness_llm,omitempty"`
 	Feedback        *ItemFeedback             `json:"feedback,omitempty"`
+	Note            *ItemNote                 `json:"note,omitempty"`
+	Highlights      []ItemHighlight           `json:"highlights,omitempty"`
 }
 
 type ItemFeedback struct {
@@ -228,6 +242,26 @@ type ItemFeedback struct {
 	Rating     int       `json:"rating"`      // -1 | 0 | 1
 	IsFavorite bool      `json:"is_favorite"` // quick-save
 	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type ItemNote struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	ItemID    string    `json:"item_id"`
+	Content   string    `json:"content"`
+	Tags      []string  `json:"tags,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type ItemHighlight struct {
+	ID         string    `json:"id"`
+	UserID     string    `json:"user_id"`
+	ItemID     string    `json:"item_id"`
+	QuoteText  string    `json:"quote_text"`
+	AnchorText string    `json:"anchor_text,omitempty"`
+	Section    string    `json:"section,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type RelatedItem struct {
@@ -294,6 +328,8 @@ type FavoriteExportItem struct {
 	SummaryLLM      *ItemSummaryLLM `json:"summary_llm,omitempty"`
 	FactsLLM        *ItemSummaryLLM `json:"facts_llm,omitempty"`
 	EmbeddingModel  *string         `json:"embedding_model,omitempty"`
+	Note            *ItemNote       `json:"note,omitempty"`
+	Highlights      []ItemHighlight `json:"highlights,omitempty"`
 }
 
 type ReadingPlanResponse struct {
@@ -320,6 +356,104 @@ type ReadingPlanCluster struct {
 	MaxSimilarity  float64 `json:"max_similarity"`
 	Representative Item    `json:"representative"`
 	Items          []Item  `json:"items"`
+}
+
+type TodayQueueCandidate struct {
+	Item          Item       `json:"item"`
+	LastSkippedAt *time.Time `json:"last_skipped_at,omitempty"`
+}
+
+type TodayQueueItem struct {
+	Item                    Item          `json:"item"`
+	EstimatedReadingMinutes int           `json:"estimated_reading_minutes"`
+	ReasonLabels            []string      `json:"reason_labels"`
+	MatchedGoals            []ReadingGoal `json:"matched_goals,omitempty"`
+}
+
+type TodayQueueResponse struct {
+	Items []TodayQueueItem `json:"items"`
+}
+
+type ReviewQueueItem struct {
+	ID             string     `json:"id"`
+	UserID         string     `json:"user_id"`
+	ItemID         string     `json:"item_id"`
+	SourceSignal   string     `json:"source_signal"`
+	ReviewStage    string     `json:"review_stage"`
+	Status         string     `json:"status"`
+	ReviewDueAt    time.Time  `json:"review_due_at"`
+	LastSurfacedAt *time.Time `json:"last_surfaced_at,omitempty"`
+	CompletedAt    *time.Time `json:"completed_at,omitempty"`
+	SnoozeCount    int        `json:"snooze_count"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	Item           Item       `json:"item"`
+	ReasonLabels   []string   `json:"reason_labels,omitempty"`
+}
+
+type ReviewQueueResponse struct {
+	Items []ReviewQueueItem `json:"items"`
+}
+
+type AskInsightItemRef struct {
+	ItemID string   `json:"item_id"`
+	Title  string   `json:"title"`
+	URL    string   `json:"url"`
+	Topics []string `json:"topics,omitempty"`
+}
+
+type AskInsight struct {
+	ID        string              `json:"id"`
+	UserID    string              `json:"user_id"`
+	Title     string              `json:"title"`
+	Body      string              `json:"body"`
+	Query     string              `json:"query,omitempty"`
+	GoalID    *string             `json:"goal_id,omitempty"`
+	Tags      []string            `json:"tags,omitempty"`
+	Items     []AskInsightItemRef `json:"items,omitempty"`
+	CreatedAt time.Time           `json:"created_at"`
+	UpdatedAt time.Time           `json:"updated_at"`
+}
+
+type WeeklyReviewTopic struct {
+	Topic string `json:"topic"`
+	Count int    `json:"count"`
+}
+
+type WeeklyReviewSnapshot struct {
+	ID              string              `json:"id"`
+	UserID          string              `json:"user_id"`
+	WeekStart       string              `json:"week_start"`
+	WeekEnd         string              `json:"week_end"`
+	ReadCount       int                 `json:"read_count"`
+	NoteCount       int                 `json:"note_count"`
+	InsightCount    int                 `json:"insight_count"`
+	FavoriteCount   int                 `json:"favorite_count"`
+	DominantTopics  []WeeklyReviewTopic `json:"dominant_topics,omitempty"`
+	MissedHighValue []Item              `json:"missed_high_value,omitempty"`
+	CreatedAt       time.Time           `json:"created_at"`
+}
+
+type SourceOptimizationSnapshot struct {
+	ID             string    `json:"id"`
+	UserID         string    `json:"user_id"`
+	SourceID       string    `json:"source_id"`
+	WindowStart    string    `json:"window_start"`
+	WindowEnd      string    `json:"window_end"`
+	Metrics        any       `json:"metrics"`
+	Recommendation string    `json:"recommendation"`
+	Reason         string    `json:"reason"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+type NotificationPriorityRule struct {
+	ID          string    `json:"id"`
+	UserID      string    `json:"user_id"`
+	Sensitivity string    `json:"sensitivity"`
+	DailyCap    int       `json:"daily_cap"`
+	ThemeWeight float64   `json:"theme_weight"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type ItemStatsResponse struct {

@@ -2,10 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { Bell } from "lucide-react";
+import { NotificationPriorityRule } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 
-export default function OneSignalSettings() {
+interface OneSignalSettingsProps {
+  rule?: NotificationPriorityRule | null;
+  onSaveRule?: (rule: NotificationPriorityRule) => Promise<void>;
+}
+
+export default function OneSignalSettings({ rule, onSaveRule }: OneSignalSettingsProps) {
   const { t } = useI18n();
   const { showToast } = useToast();
   const [supported, setSupported] = useState(false);
@@ -13,6 +19,15 @@ export default function OneSignalSettings() {
   const [permission, setPermission] = useState<string>("default");
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+  const [sensitivity, setSensitivity] = useState(rule?.sensitivity ?? "medium");
+  const [dailyCap, setDailyCap] = useState(rule?.daily_cap ?? 3);
+  const [themeWeight, setThemeWeight] = useState(rule?.theme_weight ?? 1);
+
+  useEffect(() => {
+    setSensitivity(rule?.sensitivity ?? "medium");
+    setDailyCap(rule?.daily_cap ?? 3);
+    setThemeWeight(rule?.theme_weight ?? 1);
+  }, [rule?.daily_cap, rule?.sensitivity, rule?.theme_weight]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -125,6 +140,44 @@ export default function OneSignalSettings() {
           {t("settings.pushDisable")}
         </button>
       </div>
+      {onSaveRule ? (
+        <div className="mt-5 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="text-sm text-zinc-700">
+              <span className="mb-1 block">{t("settings.pushSensitivity")}</span>
+              <select value={sensitivity} onChange={(e) => setSensitivity(e.target.value)} className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm">
+                <option value="low">{t("settings.pushSensitivityLow")}</option>
+                <option value="medium">{t("settings.pushSensitivityMedium")}</option>
+                <option value="high">{t("settings.pushSensitivityHigh")}</option>
+              </select>
+            </label>
+            <label className="text-sm text-zinc-700">
+              <span className="mb-1 block">{t("settings.pushDailyCap")}</span>
+              <input type="number" min={0} max={20} value={dailyCap} onChange={(e) => setDailyCap(Number(e.target.value))} className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm" />
+            </label>
+            <label className="text-sm text-zinc-700">
+              <span className="mb-1 block">{t("settings.pushThemeWeight")}</span>
+              <input type="number" min={0.5} max={2} step={0.1} value={themeWeight} onChange={(e) => setThemeWeight(Number(e.target.value))} className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm" />
+            </label>
+          </div>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await onSaveRule({ sensitivity, daily_cap: dailyCap, theme_weight: themeWeight });
+                  showToast(t("settings.pushRuleSaved"), "success");
+                } catch (e) {
+                  showToast(String(e), "error");
+                }
+              }}
+              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700"
+            >
+              {t("settings.pushRuleSave")}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

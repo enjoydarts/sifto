@@ -153,6 +153,44 @@ func BuildObsidianFavoriteMarkdown(item model.FavoriteExportItem, cfg model.Obsi
 	} else {
 		b.WriteString("Summary: (not available)\n\n")
 	}
+	if item.Note != nil && strings.TrimSpace(item.Note.Content) != "" {
+		b.WriteString("## Personal Note\n")
+		b.WriteString(strings.TrimSpace(item.Note.Content))
+		b.WriteString("\n")
+		if len(item.Note.Tags) > 0 {
+			b.WriteString("\n")
+			for _, tag := range item.Note.Tags {
+				tag = strings.TrimSpace(tag)
+				if tag == "" {
+					continue
+				}
+				fmt.Fprintf(&b, "- %s\n", tag)
+			}
+		}
+		b.WriteString("\n")
+	}
+	if len(item.Highlights) > 0 {
+		b.WriteString("## Highlights\n")
+		for _, highlight := range item.Highlights {
+			quote := strings.TrimSpace(highlight.QuoteText)
+			if quote == "" {
+				continue
+			}
+			fmt.Fprintf(&b, "- %s", quote)
+			meta := make([]string, 0, 2)
+			if section := strings.TrimSpace(highlight.Section); section != "" {
+				meta = append(meta, section)
+			}
+			if anchor := strings.TrimSpace(highlight.AnchorText); anchor != "" {
+				meta = append(meta, anchor)
+			}
+			if len(meta) > 0 {
+				fmt.Fprintf(&b, " (%s)", strings.Join(meta, " / "))
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
 	b.WriteString("## Key Topics\n")
 	for _, topic := range item.Topics {
 		if strings.TrimSpace(topic) == "" {

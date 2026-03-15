@@ -29,6 +29,7 @@ type processItemDeps struct {
 	userSettingsRepo   *repository.UserSettingsRepo
 	userRepo           *repository.UserRepo
 	pushLogRepo        *repository.PushNotificationLogRepo
+	notificationRepo   *repository.NotificationPriorityRepo
 	worker             *service.WorkerClient
 	openAI             *service.OpenAIClient
 	oneSignal          *service.OneSignalClient
@@ -418,6 +419,23 @@ func sendPickNotificationIfNeeded(
 			log.Printf("process-item pick-notify count failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
 		}
 		return
+	}
+	if deps.notificationRepo != nil {
+		rule, ruleErr := deps.notificationRepo.EnsureDefaults(ctx, *userIDPtr)
+		if ruleErr == nil && rule != nil {
+			decision := service.RouteNotificationPriority(service.NotificationPriorityInput{
+				ItemScore:           summary.Score,
+				GoalMatch:           false,
+				RecentNotifications: countToday,
+				DuplicateDigestRisk: false,
+				Sensitivity:         rule.Sensitivity,
+				DailyCap:            rule.DailyCap,
+				ThemeWeight:         rule.ThemeWeight,
+			})
+			if decision.Route != "send_now" {
+				return
+			}
+		}
 	}
 	u, err := deps.userRepo.GetByID(ctx, *userIDPtr)
 	if err != nil {

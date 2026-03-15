@@ -146,3 +146,16 @@ func TestComputeTopicInterests_TimeDecay(t *testing.T) {
 		t.Errorf("old should be ~0.25, got %f", interests["old"])
 	}
 }
+
+func TestPreferenceProfileIncludesNewSignals(t *testing.T) {
+	actions := []topicAction{
+		{Topics: []string{"AI"}, Signal: 2.0, DaysAgo: 0},    // note / insight
+		{Topics: []string{"AI"}, Signal: 1.5, DaysAgo: 1},    // review done
+		{Topics: []string{"Infra"}, Signal: 0.4, DaysAgo: 0}, // weak signal
+	}
+
+	interests := computeTopicInterests(actions)
+	if interests["ai"] <= interests["infra"] {
+		t.Fatalf("ai (%f) should be > infra (%f)", interests["ai"], interests["infra"])
+	}
+}

@@ -124,3 +124,33 @@ func TestCalcPersonalScore_EmptyTopics(t *testing.T) {
 		t.Error("reason should not be empty")
 	}
 }
+
+func TestPersonalScoreExplanationDeterministic(t *testing.T) {
+	now := time.Now()
+	profile := &model.UserPreferenceProfile{
+		UserID: "u1",
+		LearnedWeights: map[string]float64{
+			"importance":    0.2,
+			"novelty":       0.1,
+			"actionability": 0.1,
+			"reliability":   0.1,
+			"relevance":     0.5,
+		},
+		TopicInterests: map[string]float64{
+			"agents": 0.95,
+		},
+		FeedbackCount: 30,
+		ComputedAt:    &now,
+	}
+	item := PersonalScoreInput{
+		Topics: []string{"Agents"},
+		ScoreBreakdown: &model.ItemSummaryScoreBreakdown{
+			Relevance: ptr(0.9),
+		},
+	}
+
+	_, reason := CalcPersonalScore(item, profile)
+	if reason != "topic:agents" {
+		t.Fatalf("reason = %q, want %q", reason, "topic:agents")
+	}
+}

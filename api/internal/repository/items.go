@@ -338,6 +338,10 @@ func (r *ItemRepo) FavoriteExportItems(ctx context.Context, userID string, days,
 		if emb, err := loadLatestItemEmbeddingModel(ctx, r.db, item.ID); err == nil {
 			item.EmbeddingModel = emb
 		}
+		if note, highlights, err := r.GetByItem(ctx, userID, item.ID); err == nil {
+			item.Note = note
+			item.Highlights = highlights
+		}
 		out = append(out, item)
 	}
 	return out, rows.Err()
@@ -1291,6 +1295,10 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 	fb, err := r.GetFeedback(ctx, userID, id)
 	if err == nil {
 		d.Feedback = fb
+	}
+	if note, highlights, err := r.GetByItem(ctx, userID, id); err == nil {
+		d.Note = note
+		d.Highlights = highlights
 	}
 
 	return d, nil

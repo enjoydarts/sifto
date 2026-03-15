@@ -9,6 +9,7 @@ import { useToast } from "@/components/toast-provider";
 import { CheckStatusBadges } from "@/components/items/check-status-badges";
 import { ItemNoteEditor } from "@/components/items/item-note-editor";
 import { ItemHighlightList } from "@/components/items/item-highlight-list";
+import { Tabs, TabList, Tab, TabPanel } from "@/components/tabs";
 
 export function InlineReader({
   itemId,
@@ -265,15 +266,19 @@ export function InlineReader({
 
   if (!open || !itemId) return null;
 
+  const feedbackRating = (item?.feedback?.rating ?? item?.feedback_rating ?? 0) as -1 | 0 | 1;
+  const isFavorite = Boolean(item?.feedback?.is_favorite ?? item?.is_favorite ?? false);
+
   return (
     <div className="fixed inset-0 z-40 bg-black/35" onClick={onClose}>
       <div
-        className={`absolute inset-y-0 right-0 w-full max-w-3xl overflow-y-auto overscroll-y-contain border-l border-zinc-200 bg-white p-4 shadow-2xl will-change-transform sm:p-5 ${
+        className={`absolute inset-y-0 right-0 w-full max-w-3xl overflow-y-auto overscroll-y-contain border-l border-zinc-200 bg-white shadow-2xl will-change-transform ${
           dragging ? "transition-none" : "transition-transform duration-200 ease-out"
         }`}
         onClick={(e) => e.stopPropagation()}
         style={{ transform: `translateY(${dragY}px)`, overscrollBehaviorY: "contain" }}
       >
+        {/* Swipe handle (mobile) */}
         <div
           className="-mx-2 mb-2 flex min-h-14 items-center justify-center rounded-lg px-2 py-2 touch-none md:hidden"
           style={{ touchAction: "none" }}
@@ -290,82 +295,69 @@ export function InlineReader({
             }`}
           />
         </div>
-        <div className="mb-2 flex items-center justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded border border-zinc-300 bg-white p-1 text-zinc-700 hover:bg-zinc-50 press focus-ring"
-            aria-label={t("common.close")}
-          >
-            <X className="size-4" aria-hidden="true" />
-          </button>
-        </div>
 
-        {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
-        {error && <p className="text-sm text-red-500">{error}</p>}
-        {!loading && !item && <p className="text-sm text-zinc-500">{t("common.noData")}</p>}
+        {loading && <p className="p-5 text-sm text-zinc-500 sm:p-6">{t("common.loading")}</p>}
+        {error && <p className="p-5 text-sm text-red-500 sm:p-6">{error}</p>}
+        {!loading && !item && <p className="p-5 text-sm text-zinc-500 sm:p-6">{t("common.noData")}</p>}
 
         {item && (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-[1.35rem] font-semibold leading-snug text-zinc-900 sm:text-2xl">
+          <>
+            {/* Header: title + URL + close */}
+            <div className="border-b border-zinc-200 p-5 sm:p-6">
+              <div className="mb-2 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded border border-zinc-300 bg-white p-1 text-zinc-700 hover:bg-zinc-50 press focus-ring"
+                  aria-label={t("common.close")}
+                >
+                  <X className="size-4" aria-hidden="true" />
+                </button>
+              </div>
+              <h3 className="text-2xl font-bold leading-snug text-zinc-900">
                 {item.translated_title || item.title || item.url}
               </h3>
-              <CheckStatusBadges
-                factsCheckResult={item.facts_check?.final_result}
-                faithfulnessResult={item.faithfulness?.final_result}
-                t={t}
-              />
               <a
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-2 block break-all text-sm text-blue-600 hover:underline"
+                className="mt-2 block break-all text-[13px] text-blue-600 hover:underline"
               >
                 {item.url}
               </a>
+              <div className="mt-1 text-xs text-zinc-500">
+                {new Date(item.published_at ?? item.created_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                {t("items.inline.primaryActions")}
-              </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {/* Primary actions + feedback (outside tabs) */}
+            <div className="space-y-3 border-b border-zinc-200 p-5 sm:p-6">
+              {nextQueueItemId && (
+                <button
+                  type="button"
+                  onClick={() => (onOpenItem ? onOpenItem(nextQueueItemId) : onOpenDetail(nextQueueItemId))}
+                  className="flex w-full items-center justify-center gap-2 rounded-[14px] bg-zinc-900 px-4 py-[14px] text-[15px] font-semibold text-white hover:bg-zinc-800 press focus-ring"
+                >
+                  <span>{t("itemDetail.next")}</span>
+                  <span className="text-lg">→</span>
+                </button>
+              )}
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => void toggleRead(item)}
-                  className="min-h-10 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                  className="min-h-10 rounded-[14px] border border-zinc-300 bg-white px-3 py-[10px] text-[14px] font-medium text-zinc-700 hover:bg-zinc-50"
                 >
                   {item.is_read ? t("items.action.markUnread") : t("items.action.markRead")}
                 </button>
                 <button
                   type="button"
                   onClick={() => onOpenDetail(item.id)}
-                  className="inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                  className="inline-flex min-h-10 items-center justify-center gap-1 rounded-[14px] border border-zinc-300 bg-white px-3 py-[10px] text-[14px] font-medium text-zinc-700 hover:bg-zinc-50"
                 >
                   <ExternalLink className="size-3.5" aria-hidden="true" />
                   <span>{t("items.action.openDetail")}</span>
                 </button>
-                {nextQueueItemId ? (
-                  <button
-                    type="button"
-                    onClick={() => (onOpenItem ? onOpenItem(nextQueueItemId) : onOpenDetail(nextQueueItemId))}
-                    className="min-h-10 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100"
-                  >
-                    {t("itemDetail.next")}
-                  </button>
-                ) : (
-                  <div className="hidden sm:block" aria-hidden="true" />
-                )}
-              </div>
-              <div className="text-xs text-zinc-500">
-                {new Date(item.published_at ?? item.created_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
-                {t("items.inline.feedbackActions")}
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <button
@@ -373,16 +365,16 @@ export function InlineReader({
                   disabled={feedbackUpdating}
                   onClick={() =>
                     void updateFeedback(item, {
-                      rating: (item.feedback?.rating ?? item.feedback_rating ?? 0) === 1 ? 0 : 1,
+                      rating: feedbackRating === 1 ? 0 : 1,
                     })
                   }
-                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border px-2 py-2 text-sm font-medium transition-colors ${
-                    (item.feedback?.rating ?? item.feedback_rating ?? 0) === 1
+                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-[12px] border p-3 text-sm font-medium transition-colors ${
+                    feedbackRating === 1
                       ? "border-green-200 bg-green-50 text-green-700"
                       : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
                   }`}
                 >
-                  <ThumbsUp className="size-4" aria-hidden="true" />
+                  <ThumbsUp className="size-[18px]" aria-hidden="true" />
                   <span className="hidden sm:inline">{t("items.feedback.like")}</span>
                 </button>
                 <button
@@ -390,16 +382,16 @@ export function InlineReader({
                   disabled={feedbackUpdating}
                   onClick={() =>
                     void updateFeedback(item, {
-                      rating: (item.feedback?.rating ?? item.feedback_rating ?? 0) === -1 ? 0 : -1,
+                      rating: feedbackRating === -1 ? 0 : -1,
                     })
                   }
-                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border px-2 py-2 text-sm font-medium transition-colors ${
-                    (item.feedback?.rating ?? item.feedback_rating ?? 0) === -1
+                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-[12px] border p-3 text-sm font-medium transition-colors ${
+                    feedbackRating === -1
                       ? "border-rose-200 bg-rose-50 text-rose-700"
                       : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
                   }`}
                 >
-                  <ThumbsDown className="size-4" aria-hidden="true" />
+                  <ThumbsDown className="size-[18px]" aria-hidden="true" />
                   <span className="hidden sm:inline">{t("items.feedback.dislike")}</span>
                 </button>
                 <button
@@ -407,78 +399,109 @@ export function InlineReader({
                   disabled={feedbackUpdating}
                   onClick={() =>
                     void updateFeedback(item, {
-                      is_favorite: !Boolean(item.feedback?.is_favorite ?? item.is_favorite ?? false),
+                      is_favorite: !isFavorite,
                     })
                   }
-                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-lg border px-2 py-2 text-sm font-medium transition-colors ${
-                    Boolean(item.feedback?.is_favorite ?? item.is_favorite ?? false)
+                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-[12px] border p-3 text-sm font-medium transition-colors ${
+                    isFavorite
                       ? "border-amber-200 bg-amber-50 text-amber-700"
                       : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
                   }`}
                 >
-                  <Star className={`size-4 ${Boolean(item.feedback?.is_favorite ?? item.is_favorite ?? false) ? "fill-current" : ""}`} aria-hidden="true" />
+                  <Star className={`size-[18px] ${isFavorite ? "fill-current" : ""}`} aria-hidden="true" />
                   <span className="hidden sm:inline">{t("items.feedback.favorite")}</span>
                 </button>
               </div>
             </div>
 
-            {item.summary && (
-              <section>
-                <h4 className="mb-2 text-base font-semibold text-zinc-800">{t("itemDetail.summary")}</h4>
-                <p className="whitespace-pre-wrap text-[15px] leading-8 text-zinc-700 sm:text-base">
-                  {item.summary.summary}
-                </p>
-              </section>
-            )}
+            {/* Tab navigation + content */}
+            <Tabs defaultValue="summary">
+              <TabList>
+                <Tab value="summary">{t("tabs.summary")}</Tab>
+                <Tab value="facts">{t("tabs.facts")}</Tab>
+                <Tab value="body">{t("tabs.body")}</Tab>
+                <Tab value="related">{t("tabs.related")}</Tab>
+                <Tab value="notes">{t("tabs.notes")}</Tab>
+              </TabList>
 
-            {item.facts && item.facts.facts.length > 0 && (
-              <section>
-                <h4 className="mb-2 text-base font-semibold text-zinc-800">{t("itemDetail.facts")}</h4>
-                <ul className="list-disc space-y-2 pl-5 text-[15px] leading-7 text-zinc-700 sm:text-base">
-                  {item.facts.facts.map((f, idx) => (
-                    <li key={`${item.id}-fact-${idx}`}>{f}</li>
-                  ))}
-                </ul>
-              </section>
-            )}
+              <TabPanel value="summary" className="px-5 py-7 sm:px-6">
+                {item.summary ? (
+                  <div>
+                    <CheckStatusBadges
+                      factsCheckResult={item.facts_check?.final_result}
+                      faithfulnessResult={item.faithfulness?.final_result}
+                      t={t}
+                    />
+                    <p className="mt-3 whitespace-pre-wrap text-base leading-[1.8] text-zinc-800">
+                      {item.summary.summary}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-base text-zinc-500">{t("common.noData")}</p>
+                )}
+              </TabPanel>
 
-            <section>
-              <h4 className="mb-2 text-base font-semibold text-zinc-800">{t("itemDetail.related")}</h4>
-              {related.length === 0 ? (
-                <p className="text-[15px] text-zinc-500 sm:text-base">{t("itemDetail.relatedEmpty")}</p>
-              ) : (
-                <ul className="space-y-2">
-                  {related.map((r) => (
-                    <li key={r.id}>
-                      <button
-                        type="button"
-                        onClick={() => (onOpenItem ? onOpenItem(r.id) : onOpenDetail(r.id))}
-                        className="w-full truncate rounded border border-zinc-200 px-3 py-2 text-left text-[15px] text-zinc-700 hover:bg-zinc-50 sm:text-base"
-                        title={r.title || r.url}
-                      >
-                        {r.title || r.url}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+              <TabPanel value="facts" className="px-5 py-7 sm:px-6">
+                {item.facts && item.facts.facts.length > 0 ? (
+                  <ul className="list-disc space-y-2 pl-5 text-base leading-[1.8] text-zinc-800">
+                    {item.facts.facts.map((f, idx) => (
+                      <li key={`${item.id}-fact-${idx}`}>{f}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-base text-zinc-500">{t("common.noData")}</p>
+                )}
+              </TabPanel>
 
-            <section className="space-y-3 border-t border-zinc-200 pt-4">
-              <div>
-                <h4 className="text-base font-semibold text-zinc-800">{t("itemDetail.savedNotes")}</h4>
-                <p className="mt-1 text-sm text-zinc-500">{t("itemDetail.savedNotesDesc")}</p>
-              </div>
-              <div className="grid items-stretch gap-4 lg:grid-cols-2">
-                <ItemNoteEditor key={item.id} note={item.note ?? null} onSave={(content) => saveNote(item, content)} />
-                <ItemHighlightList
-                  highlights={item.highlights ?? []}
-                  onCreate={(input) => createHighlight(item, input)}
-                  onDelete={(highlightId) => deleteHighlight(item, highlightId)}
-                />
-              </div>
-            </section>
-          </div>
+              <TabPanel value="body" className="px-5 py-7 sm:px-6">
+                {item.content_text ? (
+                  <div className="whitespace-pre-wrap text-base leading-[1.8] max-w-prose text-zinc-800">
+                    {item.content_text}
+                  </div>
+                ) : (
+                  <p className="text-base text-zinc-500">{t("tabs.bodyUnavailable")}</p>
+                )}
+              </TabPanel>
+
+              <TabPanel value="related" className="px-5 py-7 sm:px-6">
+                {related.length === 0 ? (
+                  <p className="text-base text-zinc-500">{t("itemDetail.relatedEmpty")}</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {related.map((r) => (
+                      <li key={r.id}>
+                        <button
+                          type="button"
+                          onClick={() => (onOpenItem ? onOpenItem(r.id) : onOpenDetail(r.id))}
+                          className="w-full truncate rounded-[14px] border border-zinc-200 px-4 py-3 text-left text-base text-zinc-700 hover:bg-zinc-50"
+                          title={r.title || r.url}
+                        >
+                          {r.title || r.url}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </TabPanel>
+
+              <TabPanel value="notes" className="px-5 py-7 sm:px-6">
+                <div className="space-y-3">
+                  <div>
+                    <h4 className="text-base font-semibold text-zinc-800">{t("itemDetail.savedNotes")}</h4>
+                    <p className="mt-1 text-sm text-zinc-500">{t("itemDetail.savedNotesDesc")}</p>
+                  </div>
+                  <div className="grid items-stretch gap-4 lg:grid-cols-2">
+                    <ItemNoteEditor key={item.id} note={item.note ?? null} onSave={(content) => saveNote(item, content)} />
+                    <ItemHighlightList
+                      highlights={item.highlights ?? []}
+                      onCreate={(input) => createHighlight(item, input)}
+                      onDelete={(highlightId) => deleteHighlight(item, highlightId)}
+                    />
+                  </div>
+                </div>
+              </TabPanel>
+            </Tabs>
+          </>
         )}
       </div>
     </div>

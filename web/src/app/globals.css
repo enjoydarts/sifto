@@ -19,6 +19,15 @@
   --color-panel: var(--panel);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* UX improvement tokens */
+  --radius-card: 1rem;       /* 16px */
+  --radius-image: 0.75rem;   /* 12px */
+  --radius-button: 0.625rem; /* 10px */
+  --radius-modal: 1.25rem;   /* 20px */
+  --radius-hero: 1.25rem;    /* 20px */
+  --shadow-card: 0 4px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02);
+  --shadow-dropdown: 0 8px 24px rgba(0,0,0,0.12);
 }
 
 body {

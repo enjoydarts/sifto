@@ -8,6 +8,7 @@ import { AlignLeft, ArrowRight, FileText, Info, Link2, ListChecks, Sparkles, Sta
 import { api, ItemDetail, RelatedItem } from "@/lib/api";
 import { ItemHighlightList } from "@/components/items/item-highlight-list";
 import { ItemNoteEditor } from "@/components/items/item-note-editor";
+import { Tabs, TabList, Tab, TabPanel } from "@/components/tabs";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -605,7 +606,7 @@ export default function ItemDetailPage() {
         ← {t("nav.items")}
       </Link>
 
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+      <section className="rounded-[20px] border border-zinc-200 bg-white p-6 shadow-sm md:p-8">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span
             className={`rounded px-2 py-0.5 text-xs font-medium ${
@@ -620,11 +621,14 @@ export default function ItemDetailPage() {
             </span>
           )}
           <span className="text-xs text-zinc-400">id: {item.id}</span>
+        </div>
+
+        <div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <button
             type="button"
             onClick={toggleRead}
             disabled={readUpdating}
-            className="ml-auto rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {readUpdating
               ? t("items.action.updating")
@@ -636,7 +640,7 @@ export default function ItemDetailPage() {
             type="button"
             onClick={retryItem}
             disabled={retryUpdating}
-            className={`rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+            className={`rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
               item.status === "new" ? "hidden" : ""
             }`}
           >
@@ -646,7 +650,7 @@ export default function ItemDetailPage() {
             type="button"
             onClick={retryFromFacts}
             disabled={retryFromFactsUpdating}
-            className={`rounded border border-zinc-300 bg-white px-3 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+            className={`rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
               item.status === "new" ? "hidden" : ""
             }`}
           >
@@ -656,7 +660,7 @@ export default function ItemDetailPage() {
             type="button"
             onClick={deleteItem}
             disabled={deleteUpdating}
-            className="rounded border border-red-300 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-[10px] border border-red-300 bg-white px-3 py-2 text-[13px] font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {deleteUpdating
               ? t("itemDetail.delete.deleting")
@@ -664,21 +668,21 @@ export default function ItemDetailPage() {
           </button>
         </div>
 
-        <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="mb-3 grid grid-cols-3 gap-2">
           <button
             type="button"
             disabled={feedbackUpdating}
             onClick={() =>
               updateFeedback({ rating: (item.feedback?.rating ?? 0) === 1 ? 0 : 1 })
             }
-            className={`inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs font-medium transition-colors ${
+            className={`inline-flex items-center justify-center gap-1 rounded-[12px] border p-3 text-[14px] font-medium transition-colors ${
               (item.feedback?.rating ?? 0) === 1
                 ? "border-green-200 bg-green-50 text-green-700"
                 : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
             }`}
           >
-            <ThumbsUp className="size-3.5" aria-hidden="true" />
-            <span>{t("items.feedback.like")}</span>
+            <ThumbsUp className="size-[18px]" aria-hidden="true" />
+            <span className="hidden sm:inline">{t("items.feedback.like")}</span>
           </button>
           <button
             type="button"
@@ -686,34 +690,34 @@ export default function ItemDetailPage() {
             onClick={() =>
               updateFeedback({ rating: (item.feedback?.rating ?? 0) === -1 ? 0 : -1 })
             }
-            className={`inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs font-medium transition-colors ${
+            className={`inline-flex items-center justify-center gap-1 rounded-[12px] border p-3 text-[14px] font-medium transition-colors ${
               (item.feedback?.rating ?? 0) === -1
                 ? "border-rose-200 bg-rose-50 text-rose-700"
                 : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
             }`}
           >
-            <ThumbsDown className="size-3.5" aria-hidden="true" />
-            <span>{t("items.feedback.dislike")}</span>
+            <ThumbsDown className="size-[18px]" aria-hidden="true" />
+            <span className="hidden sm:inline">{t("items.feedback.dislike")}</span>
           </button>
           <button
             type="button"
             disabled={feedbackUpdating}
             onClick={() => updateFeedback({ is_favorite: !Boolean(item.feedback?.is_favorite) })}
-            className={`inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs font-medium transition-colors ${
+            className={`inline-flex items-center justify-center gap-1 rounded-[12px] border p-3 text-[14px] font-medium transition-colors ${
               item.feedback?.is_favorite
                 ? "border-amber-200 bg-amber-50 text-amber-700"
                 : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
             }`}
           >
-            <Star className={`size-3.5 ${item.feedback?.is_favorite ? "fill-current" : ""}`} aria-hidden="true" />
-            <span>{t("items.feedback.favorite")}</span>
+            <Star className={`size-[18px] ${item.feedback?.is_favorite ? "fill-current" : ""}`} aria-hidden="true" />
+            <span className="hidden sm:inline">{t("items.feedback.favorite")}</span>
           </button>
         </div>
 
         <div className="mb-2 flex items-start gap-2">
           <FileText className="mt-1 size-5 shrink-0 text-zinc-500" aria-hidden="true" />
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold leading-snug text-zinc-900">{displayTitle}</h1>
+            <h1 className="text-2xl font-bold leading-[1.25] text-zinc-900 md:text-[32px]">{displayTitle}</h1>
             {showOriginalTitle && (
               <p className="mt-1 truncate text-sm text-zinc-500" title={originalTitle}>
                 {t("itemDetail.originalTitle")}: {originalTitle}
@@ -779,371 +783,395 @@ export default function ItemDetailPage() {
       {nextItemHref && (
         <Link
           href={nextItemHref}
-          className="fixed bottom-20 left-4 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-zinc-900 px-5 py-3 text-base font-semibold text-white shadow-lg shadow-zinc-900/20 transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-400 md:bottom-6 md:left-6 md:right-auto md:min-h-0 md:px-4 md:py-2 md:text-sm"
+          className="fixed bottom-20 left-4 z-40 inline-flex min-h-12 items-center gap-2 rounded-[14px] bg-zinc-900 px-4 py-[14px] text-[16px] font-semibold text-white shadow-lg shadow-zinc-900/20 transition hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-400 md:bottom-6 md:left-6 md:right-auto md:min-h-0 md:p-[16px] md:text-[16px]"
         >
           <span>{t("itemDetail.next")}</span>
           <ArrowRight className="size-5 md:size-4" aria-hidden="true" />
         </Link>
       )}
 
-      {(item.summary || item.faithfulness) && (
-        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
-              <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
-              {t("itemDetail.summary")}
-            </h2>
-            {item.summary?.score != null && (
-              <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
-                score {item.summary.score.toFixed(2)}
-              </span>
-            )}
-            {item.summary?.score_policy_version && (
-              <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500">
-                {item.summary.score_policy_version}
-              </span>
-            )}
-            {item.summary_llm && (
-              <span
-                className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
-                title={t("itemDetail.summaryModelTitle")}
-              >
-                {item.summary_llm.provider} / {item.summary_llm.model}
-              </span>
-            )}
-          </div>
-          {item.summary && <p className="whitespace-pre-wrap text-base leading-8 text-zinc-900">{item.summary.summary}</p>}
-          {item.summary?.score_reason && (
-            <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-              <div className="mb-1 text-xs font-semibold text-zinc-500">
-                {t("itemDetail.scoreReason")}
-              </div>
-              <p className="text-sm leading-6 text-zinc-700">{item.summary.score_reason}</p>
-            </div>
-          )}
-          {item.summary?.score_breakdown && (
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {[
-                ["importance", t("itemDetail.score.importance")],
-                ["novelty", t("itemDetail.score.novelty")],
-                ["actionability", t("itemDetail.score.actionability")],
-                ["reliability", t("itemDetail.score.reliability")],
-                ["relevance", t("itemDetail.score.relevance")],
-              ].map(([key, label]) => {
-                const v = item.summary?.score_breakdown?.[key as keyof NonNullable<typeof item.summary.score_breakdown>];
-                if (v == null) return null;
-                return (
-                  <div key={key} className="rounded-lg border border-zinc-200 px-3 py-2">
-                    <div className="text-xs font-medium text-zinc-500">{label}</div>
-                    <div className="mt-1 flex items-center justify-between gap-2">
-                      <div className="h-2 flex-1 rounded-full bg-zinc-100">
-                        <div className="h-2 rounded-full bg-zinc-800" style={{ width: `${Math.max(4, v * 100)}%` }} />
-                      </div>
-                      <span className="w-10 text-right text-xs font-medium text-zinc-700">
-                        {v.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {item.summary && item.summary.topics.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {item.summary.topics.map((topic) => (
-                <span
-                  key={topic}
-                  className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700 ring-1 ring-zinc-200"
-                >
-                  {topic}
-                </span>
-              ))}
-            </div>
-          )}
-          {item.faithfulness && (
-            <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-500">
-                <span>{t("itemDetail.faithfulness")}</span>
-                {item.faithfulness_llm && (
-                  <span
-                    className="rounded bg-white px-2 py-1 text-zinc-600 ring-1 ring-zinc-200"
-                    title={t("itemDetail.faithfulnessModelTitle")}
-                  >
-                    {item.faithfulness_llm.provider} / {item.faithfulness_llm.model}
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="rounded bg-white px-2 py-1 text-zinc-700 ring-1 ring-zinc-200">
-                  {t(`itemDetail.faithfulness.${item.faithfulness.final_result}`, item.faithfulness.final_result)}
-                </span>
-                <span className="text-zinc-500">
-                  {t("itemDetail.faithfulness.retryCount")}: {item.faithfulness.retry_count}
-                </span>
-              </div>
-              {item.faithfulness.short_comment && (
-                <p className="mt-2 text-sm leading-6 text-zinc-700">{item.faithfulness.short_comment}</p>
-              )}
-            </div>
-          )}
-        </section>
-      )}
+      <section className="overflow-hidden rounded-[20px] border border-zinc-200 bg-white shadow-sm">
+        <Tabs defaultValue="summary">
+          <TabList>
+            <Tab value="summary">{t("tabs.summary")}</Tab>
+            <Tab value="facts">{t("tabs.facts")}</Tab>
+            <Tab value="body">{t("tabs.body")}</Tab>
+            <Tab value="related">{t("tabs.related")}</Tab>
+            <Tab value="notes">{t("tabs.notes")}</Tab>
+          </TabList>
 
-      {item.facts && item.facts.facts.length > 0 && (
-        <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
-              <ListChecks className="size-4 text-zinc-500" aria-hidden="true" />
-              {t("itemDetail.facts")}
-            </h2>
-            {item.facts_llm && (
-              <span
-                className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
-                title={t("itemDetail.factsModelTitle")}
-              >
-                {item.facts_llm.provider} / {item.facts_llm.model}
-              </span>
-            )}
-          </div>
-          {item.facts_check && (
-            <div className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-500">
-                <span>{t("itemDetail.factsCheck")}</span>
-                {item.facts_check_llm && (
-                  <span
-                    className="rounded bg-white px-2 py-1 text-zinc-600 ring-1 ring-zinc-200"
-                    title={t("itemDetail.factsCheckModelTitle")}
-                  >
-                    {item.facts_check_llm.provider} / {item.facts_check_llm.model}
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="rounded bg-white px-2 py-1 text-zinc-700 ring-1 ring-zinc-200">
-                  {t(`itemDetail.factsCheck.${item.facts_check.final_result}`, item.facts_check.final_result)}
-                </span>
-                <span className="text-zinc-500">
-                  {t("itemDetail.factsCheck.retryCount")}: {item.facts_check.retry_count}
-                </span>
-              </div>
-              {item.facts_check.short_comment && (
-                <p className="mt-2 text-sm leading-6 text-zinc-700">{item.facts_check.short_comment}</p>
-              )}
-            </div>
-          )}
-          <ul className="space-y-2">
-            {item.facts.facts.map((f, i) => (
-              <li key={i} className="flex gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-                <span className="shrink-0 text-zinc-400">{i + 1}.</span>
-                <span>{f}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {item.content_text && (
-        <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
-            <AlignLeft className="size-4 text-zinc-500" aria-hidden="true" />
-            {t("itemDetail.content")}
-          </h2>
-          <div className="-mx-1 max-h-[40rem] overflow-y-auto px-1 text-[15px] leading-8 whitespace-pre-wrap text-zinc-700 sm:mx-0 sm:rounded-lg sm:border sm:border-zinc-200 sm:bg-zinc-50 sm:p-4 sm:text-sm sm:leading-relaxed">
-            {item.content_text}
-          </div>
-        </section>
-      )}
-
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="mb-4">
-          <h2 className="text-sm font-semibold text-zinc-700">{t("itemDetail.savedNotes")}</h2>
-          <p className="mt-1 text-sm text-zinc-500">{t("itemDetail.savedNotesDesc")}</p>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <ItemNoteEditor note={item.note ?? null} onSave={saveNote} />
-          <ItemHighlightList
-            highlights={item.highlights ?? []}
-            onCreate={createHighlight}
-            onDelete={deleteHighlight}
-          />
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-3">
-            <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
-              <Link2 className="size-4 text-zinc-500" aria-hidden="true" />
-              {t("itemDetail.related")}
-            </h2>
-            <span className="text-xs text-zinc-400">
-              {clusteredRelated.length > 0
-                ? `${clusteredRelated.length} ${t("itemDetail.clusters")} / ${related.length}`
-                : related.length}
-            </span>
-          </div>
-          <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
-            <button
-              type="button"
-              onClick={() => setRelatedSortMode("similarity")}
-              className={`rounded px-2 py-1 text-xs font-medium ${
-                relatedSortMode === "similarity"
-                  ? "bg-zinc-900 text-white"
-                  : "text-zinc-600 hover:bg-zinc-50"
-              }`}
-            >
-              {t("itemDetail.sort.similarity")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setRelatedSortMode("recent")}
-              className={`rounded px-2 py-1 text-xs font-medium ${
-                relatedSortMode === "recent"
-                  ? "bg-zinc-900 text-white"
-                  : "text-zinc-600 hover:bg-zinc-50"
-              }`}
-            >
-              {t("itemDetail.sort.recent")}
-            </button>
-          </div>
-        </div>
-        {related.length === 0 ? (
-          <p className="text-sm text-zinc-500">
-            {relatedError
-              ? t("itemDetail.relatedError")
-              : t("itemDetail.relatedEmpty")}
-          </p>
-        ) : (
-          <div className="space-y-3">
-            {clusteredRelated.map((c) => {
-              const expanded = !!expandedRelatedClusterIds[c.id];
-              const restItems = c.items.slice(1);
-              return (
-                  <div key={c.id} className="rounded-lg border border-zinc-200 p-3">
-                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-700">
-                        {c.label}
-                      </span>
-                      <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
-                        {c.size} {t("common.rows")}
-                      </span>
-                      <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
-                        sim {c.max_similarity.toFixed(3)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedRelatedClusterIds((prev) => ({ ...prev, [c.id]: !prev[c.id] }))
-                        }
-                        className="ml-auto rounded border border-zinc-200 bg-white px-2 py-0.5 text-zinc-600 hover:bg-zinc-50"
-                      >
-                        {expanded
-                          ? t("itemDetail.relatedCollapse")
-                          : `${t("itemDetail.relatedShowPlus")} +${restItems.length}`}
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                      {[c.items[0], ...(expanded ? restItems : [])].map((r, idx) => (
-                        <div key={r.id} className={`rounded-lg p-3 ${idx === 0 ? "bg-zinc-50" : "border border-zinc-200 bg-white"}`}>
-                          <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                            <span className="rounded bg-white px-2 py-0.5 text-zinc-700 ring-1 ring-zinc-200">
-                              sim {r.similarity.toFixed(3)}
-                            </span>
-                            {r.summary_score != null && (
-                              <span className="rounded bg-white px-2 py-0.5 text-zinc-700 ring-1 ring-zinc-200">
-                                score {r.summary_score.toFixed(2)}
-                              </span>
-                            )}
-                            <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
-                          </div>
-                          <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-zinc-900 hover:underline">
-                            {r.title ?? t("itemDetail.noTitle")}
-                          </Link>
-                          <a
-                            href={r.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-1 block break-all text-xs text-blue-600 hover:underline"
-                          >
-                            {r.url}
-                          </a>
-                          {r.summary && (
-                            <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
-                          )}
-                          {r.reason && (
-                            <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs leading-5 text-zinc-600">
-                              <span className="inline-flex items-center gap-1 align-middle font-medium">
-                                <Info className="size-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
-                                <span>{t("itemDetail.relatedReasonPrefix")}</span>
-                              </span>
-                              <span className="ml-1 align-middle">{localizeRelatedReason(r.reason, t)}</span>
-                            </div>
-                          )}
-                          {!!r.topics?.length && (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {r.topics.slice(0, 6).map((topic) => (
-                                <span key={`${r.id}-${topic}`} className="rounded-full bg-white px-2 py-0.5 text-[11px] text-zinc-700 ring-1 ring-zinc-200">
-                                  {topic}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-
-            {singleRelated.map((r) => (
-                <div key={r.id} className="rounded-lg border border-zinc-200 p-3">
-                  <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                    <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
-                      sim {r.similarity.toFixed(3)}
+          <TabPanel value="summary" className="px-6 py-10 md:px-8">
+            {(item.summary || item.faithfulness) ? (
+              <>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+                    <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
+                    {t("itemDetail.summary")}
+                  </h2>
+                  {item.summary?.score != null && (
+                    <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
+                      score {item.summary.score.toFixed(2)}
                     </span>
-                    {r.summary_score != null && (
-                      <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
-                        score {r.summary_score.toFixed(2)}
-                      </span>
-                    )}
-                    <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
-                  </div>
-                  <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-zinc-900 hover:underline">
-                    {r.title ?? t("itemDetail.noTitle")}
-                  </Link>
-                  <a
-                    href={r.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-1 block break-all text-xs text-blue-600 hover:underline"
-                  >
-                    {r.url}
-                  </a>
-                  {r.summary && (
-                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
                   )}
-                  {r.reason && (
-                    <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs leading-5 text-zinc-600">
-                      <span className="inline-flex items-center gap-1 align-middle font-medium">
-                        <Info className="size-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
-                        <span>{t("itemDetail.relatedReasonPrefix")}</span>
-                      </span>
-                      <span className="ml-1 align-middle">{localizeRelatedReason(r.reason, t)}</span>
-                    </div>
+                  {item.summary?.score_policy_version && (
+                    <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500">
+                      {item.summary.score_policy_version}
+                    </span>
                   )}
-                  {!!r.topics?.length && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {r.topics.slice(0, 6).map((topic) => (
-                        <span key={`${r.id}-${topic}`} className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-700">
-                          {topic}
-                        </span>
-                      ))}
-                    </div>
+                  {item.summary_llm && (
+                    <span
+                      className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
+                      title={t("itemDetail.summaryModelTitle")}
+                    >
+                      {item.summary_llm.provider} / {item.summary_llm.model}
+                    </span>
                   )}
                 </div>
-              ))}
-          </div>
-        )}
+                {item.summary && <p className="whitespace-pre-wrap text-[17px] leading-[1.9] text-zinc-900">{item.summary.summary}</p>}
+                {item.summary?.score_reason && (
+                  <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
+                    <div className="mb-1 text-xs font-semibold text-zinc-500">
+                      {t("itemDetail.scoreReason")}
+                    </div>
+                    <p className="text-sm leading-6 text-zinc-700">{item.summary.score_reason}</p>
+                  </div>
+                )}
+                {item.summary?.score_breakdown && (
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {[
+                      ["importance", t("itemDetail.score.importance")],
+                      ["novelty", t("itemDetail.score.novelty")],
+                      ["actionability", t("itemDetail.score.actionability")],
+                      ["reliability", t("itemDetail.score.reliability")],
+                      ["relevance", t("itemDetail.score.relevance")],
+                    ].map(([key, label]) => {
+                      const v = item.summary?.score_breakdown?.[key as keyof NonNullable<typeof item.summary.score_breakdown>];
+                      if (v == null) return null;
+                      return (
+                        <div key={key} className="rounded-lg border border-zinc-200 px-3 py-2">
+                          <div className="text-xs font-medium text-zinc-500">{label}</div>
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <div className="h-2 flex-1 rounded-full bg-zinc-100">
+                              <div className="h-2 rounded-full bg-zinc-800" style={{ width: `${Math.max(4, v * 100)}%` }} />
+                            </div>
+                            <span className="w-10 text-right text-xs font-medium text-zinc-700">
+                              {v.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {item.summary && item.summary.topics.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-1.5">
+                    {item.summary.topics.map((topic) => (
+                      <span
+                        key={topic}
+                        className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700 ring-1 ring-zinc-200"
+                      >
+                        {topic}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {item.faithfulness && (
+                  <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-500">
+                      <span>{t("itemDetail.faithfulness")}</span>
+                      {item.faithfulness_llm && (
+                        <span
+                          className="rounded bg-white px-2 py-1 text-zinc-600 ring-1 ring-zinc-200"
+                          title={t("itemDetail.faithfulnessModelTitle")}
+                        >
+                          {item.faithfulness_llm.provider} / {item.faithfulness_llm.model}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="rounded bg-white px-2 py-1 text-zinc-700 ring-1 ring-zinc-200">
+                        {t(`itemDetail.faithfulness.${item.faithfulness.final_result}`, item.faithfulness.final_result)}
+                      </span>
+                      <span className="text-zinc-500">
+                        {t("itemDetail.faithfulness.retryCount")}: {item.faithfulness.retry_count}
+                      </span>
+                    </div>
+                    {item.faithfulness.short_comment && (
+                      <p className="mt-2 text-sm leading-6 text-zinc-700">{item.faithfulness.short_comment}</p>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-zinc-500">{t("itemDetail.noSummary", "-")}</p>
+            )}
+          </TabPanel>
+
+          <TabPanel value="facts" className="px-6 py-10 md:px-8">
+            {item.facts && item.facts.facts.length > 0 ? (
+              <>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
+                    <ListChecks className="size-4 text-zinc-500" aria-hidden="true" />
+                    {t("itemDetail.facts")}
+                  </h2>
+                  {item.facts_llm && (
+                    <span
+                      className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
+                      title={t("itemDetail.factsModelTitle")}
+                    >
+                      {item.facts_llm.provider} / {item.facts_llm.model}
+                    </span>
+                  )}
+                </div>
+                {item.facts_check && (
+                  <div className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-500">
+                      <span>{t("itemDetail.factsCheck")}</span>
+                      {item.facts_check_llm && (
+                        <span
+                          className="rounded bg-white px-2 py-1 text-zinc-600 ring-1 ring-zinc-200"
+                          title={t("itemDetail.factsCheckModelTitle")}
+                        >
+                          {item.facts_check_llm.provider} / {item.facts_check_llm.model}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="rounded bg-white px-2 py-1 text-zinc-700 ring-1 ring-zinc-200">
+                        {t(`itemDetail.factsCheck.${item.facts_check.final_result}`, item.facts_check.final_result)}
+                      </span>
+                      <span className="text-zinc-500">
+                        {t("itemDetail.factsCheck.retryCount")}: {item.facts_check.retry_count}
+                      </span>
+                    </div>
+                    {item.facts_check.short_comment && (
+                      <p className="mt-2 text-sm leading-6 text-zinc-700">{item.facts_check.short_comment}</p>
+                    )}
+                  </div>
+                )}
+                <ul className="space-y-2">
+                  {item.facts.facts.map((f, i) => (
+                    <li key={i} className="flex gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+                      <span className="shrink-0 text-zinc-400">{i + 1}.</span>
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="text-sm text-zinc-500">{t("itemDetail.noFacts", "-")}</p>
+            )}
+          </TabPanel>
+
+          <TabPanel value="body" className="px-6 py-10 md:px-8">
+            {item.content_text ? (
+              <>
+                <h2 className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
+                  <AlignLeft className="size-4 text-zinc-500" aria-hidden="true" />
+                  {t("itemDetail.content")}
+                </h2>
+                <div className="max-w-prose whitespace-pre-wrap text-[18px] leading-[2] text-zinc-900">
+                  {item.content_text}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-zinc-500">{t("itemDetail.noContent", "-")}</p>
+            )}
+          </TabPanel>
+
+          <TabPanel value="related" className="px-6 py-10 md:px-8">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-3">
+                <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
+                  <Link2 className="size-4 text-zinc-500" aria-hidden="true" />
+                  {t("itemDetail.related")}
+                </h2>
+                <span className="text-xs text-zinc-400">
+                  {clusteredRelated.length > 0
+                    ? `${clusteredRelated.length} ${t("itemDetail.clusters")} / ${related.length}`
+                    : related.length}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => setRelatedSortMode("similarity")}
+                  className={`rounded px-2 py-1 text-xs font-medium ${
+                    relatedSortMode === "similarity"
+                      ? "bg-zinc-900 text-white"
+                      : "text-zinc-600 hover:bg-zinc-50"
+                  }`}
+                >
+                  {t("itemDetail.sort.similarity")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRelatedSortMode("recent")}
+                  className={`rounded px-2 py-1 text-xs font-medium ${
+                    relatedSortMode === "recent"
+                      ? "bg-zinc-900 text-white"
+                      : "text-zinc-600 hover:bg-zinc-50"
+                  }`}
+                >
+                  {t("itemDetail.sort.recent")}
+                </button>
+              </div>
+            </div>
+            {related.length === 0 ? (
+              <p className="text-sm text-zinc-500">
+                {relatedError
+                  ? t("itemDetail.relatedError")
+                  : t("itemDetail.relatedEmpty")}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {clusteredRelated.map((c) => {
+                  const expanded = !!expandedRelatedClusterIds[c.id];
+                  const restItems = c.items.slice(1);
+                  return (
+                    <div key={c.id} className="rounded-lg border border-zinc-200 p-3">
+                      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-700">
+                          {c.label}
+                        </span>
+                        <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                          {c.size} {t("common.rows")}
+                        </span>
+                        <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                          sim {c.max_similarity.toFixed(3)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedRelatedClusterIds((prev) => ({ ...prev, [c.id]: !prev[c.id] }))
+                          }
+                          className="ml-auto rounded border border-zinc-200 bg-white px-2 py-0.5 text-zinc-600 hover:bg-zinc-50"
+                        >
+                          {expanded
+                            ? t("itemDetail.relatedCollapse")
+                            : `${t("itemDetail.relatedShowPlus")} +${restItems.length}`}
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        {[c.items[0], ...(expanded ? restItems : [])].map((r, idx) => (
+                          <div key={r.id} className={`rounded-lg p-3 ${idx === 0 ? "bg-zinc-50" : "border border-zinc-200 bg-white"}`}>
+                            <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                              <span className="rounded bg-white px-2 py-0.5 text-zinc-700 ring-1 ring-zinc-200">
+                                sim {r.similarity.toFixed(3)}
+                              </span>
+                              {r.summary_score != null && (
+                                <span className="rounded bg-white px-2 py-0.5 text-zinc-700 ring-1 ring-zinc-200">
+                                  score {r.summary_score.toFixed(2)}
+                                </span>
+                              )}
+                              <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
+                            </div>
+                            <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-zinc-900 hover:underline">
+                              {r.title ?? t("itemDetail.noTitle")}
+                            </Link>
+                            <a
+                              href={r.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-1 block break-all text-xs text-blue-600 hover:underline"
+                            >
+                              {r.url}
+                            </a>
+                            {r.summary && (
+                              <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
+                            )}
+                            {r.reason && (
+                              <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs leading-5 text-zinc-600">
+                                <span className="inline-flex items-center gap-1 align-middle font-medium">
+                                  <Info className="size-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
+                                  <span>{t("itemDetail.relatedReasonPrefix")}</span>
+                                </span>
+                                <span className="ml-1 align-middle">{localizeRelatedReason(r.reason, t)}</span>
+                              </div>
+                            )}
+                            {!!r.topics?.length && (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {r.topics.slice(0, 6).map((topic) => (
+                                  <span key={`${r.id}-${topic}`} className="rounded-full bg-white px-2 py-0.5 text-[11px] text-zinc-700 ring-1 ring-zinc-200">
+                                    {topic}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {singleRelated.map((r) => (
+                  <div key={r.id} className="rounded-lg border border-zinc-200 p-3">
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                      <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                        sim {r.similarity.toFixed(3)}
+                      </span>
+                      {r.summary_score != null && (
+                        <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                          score {r.summary_score.toFixed(2)}
+                        </span>
+                      )}
+                      <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
+                    </div>
+                    <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-zinc-900 hover:underline">
+                      {r.title ?? t("itemDetail.noTitle")}
+                    </Link>
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 block break-all text-xs text-blue-600 hover:underline"
+                    >
+                      {r.url}
+                    </a>
+                    {r.summary && (
+                      <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
+                    )}
+                    {r.reason && (
+                      <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs leading-5 text-zinc-600">
+                        <span className="inline-flex items-center gap-1 align-middle font-medium">
+                          <Info className="size-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
+                          <span>{t("itemDetail.relatedReasonPrefix")}</span>
+                        </span>
+                        <span className="ml-1 align-middle">{localizeRelatedReason(r.reason, t)}</span>
+                      </div>
+                    )}
+                    {!!r.topics?.length && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {r.topics.slice(0, 6).map((topic) => (
+                          <span key={`${r.id}-${topic}`} className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-700">
+                            {topic}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabPanel>
+
+          <TabPanel value="notes" className="px-6 py-10 md:px-8">
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-zinc-700">{t("itemDetail.savedNotes")}</h2>
+              <p className="mt-1 text-sm text-zinc-500">{t("itemDetail.savedNotesDesc")}</p>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ItemNoteEditor note={item.note ?? null} onSave={saveNote} />
+              <ItemHighlightList
+                highlights={item.highlights ?? []}
+                onCreate={createHighlight}
+                onDelete={deleteHighlight}
+              />
+            </div>
+          </TabPanel>
+        </Tabs>
       </section>
     </div>
   );

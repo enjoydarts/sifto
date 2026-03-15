@@ -348,7 +348,7 @@ export default function BriefingPage() {
         </section>
         )}
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
+        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h1 className="inline-flex items-center gap-2 text-2xl font-bold tracking-tight text-zinc-900">
@@ -465,17 +465,17 @@ export default function BriefingPage() {
                     key={item.id}
                     type="button"
                     onClick={() => setInlineItemId(item.id)}
-                    className="overflow-hidden rounded-2xl border border-zinc-200 bg-white text-left hover:border-zinc-300 hover:bg-zinc-50"
+                    className="overflow-hidden rounded-[16px] border border-zinc-200 bg-white text-left shadow-[0_4px_12px_rgba(0,0,0,0.06)] hover:border-zinc-300 hover:bg-zinc-50"
                   >
-                    <ThumbnailArtwork item={item} className="h-36 w-full" />
-                    <div className="p-4">
+                    <ThumbnailArtwork item={item} className="h-40 w-full" />
+                    <div className="p-5">
                       <div className="flex items-center justify-between gap-2">
                         <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
                           {t("briefing.highlightBadge")} {idx + 1}
                         </span>
                         <span className="text-xs text-zinc-500">{fmtDate(item.published_at || item.created_at, locale)}</span>
                       </div>
-                      <div className="mt-3 line-clamp-3 break-words [overflow-wrap:anywhere] text-sm font-semibold text-zinc-900">
+                      <div className="mt-3 line-clamp-3 break-words [overflow-wrap:anywhere] text-[15px] font-semibold text-zinc-900">
                         {item.translated_title || item.title || item.url}
                       </div>
                     </div>
@@ -495,9 +495,9 @@ export default function BriefingPage() {
               description={t("emptyState.briefing.desc")}
             />
           ) : (
-            <article className="mt-3 overflow-hidden rounded-[24px] border border-zinc-200 bg-white shadow-sm">
-              <div className="grid gap-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_34%),linear-gradient(135deg,_#ffffff_0%,_#f8fafc_52%,_#ffffff_100%)] md:grid-cols-[1.3fr_0.9fr]">
-                <div className="flex flex-col justify-between p-5 md:p-6">
+            <article className="mt-3 overflow-hidden rounded-[20px] border border-zinc-200 bg-white shadow-[0_4px_16px_rgba(0,0,0,0.04),0_0_0_1px_rgba(0,0,0,0.02)]">
+              <div className="grid gap-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_34%),linear-gradient(135deg,_#ffffff_0%,_#f8fafc_52%,_#ffffff_100%)] md:grid-cols-[1fr_1.2fr]">
+                <div className="flex flex-col justify-between p-[28px]">
                   <div>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                       <span className="rounded-full bg-blue-100 px-2.5 py-1 font-semibold text-blue-700">
@@ -513,7 +513,7 @@ export default function BriefingPage() {
                       onClick={() => setInlineItemId(nowReading.id)}
                       className="mt-4 block w-full text-left"
                     >
-                      <h2 className="line-clamp-4 break-words [overflow-wrap:anywhere] text-2xl font-semibold leading-tight text-zinc-950 hover:underline md:text-[2rem]">
+                      <h2 className="line-clamp-4 break-words [overflow-wrap:anywhere] text-[28px] font-bold leading-[1.25] text-zinc-950 hover:underline md:text-[2rem]">
                         {nowReading.translated_title || nowReading.title || nowReading.url}
                       </h2>
                     </button>
@@ -525,14 +525,14 @@ export default function BriefingPage() {
                     <button
                       type="button"
                       onClick={() => setInlineItemId(nowReading.id)}
-                      className="inline-flex items-center gap-1 rounded-lg bg-zinc-950 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring"
+                      className="inline-flex items-center gap-1 rounded-[12px] bg-zinc-950 px-[24px] py-[12px] text-[15px] font-semibold text-white hover:bg-zinc-800 press focus-ring"
                     >
                       <BookOpen className="size-4" aria-hidden="true" />
                       {t("briefing.readNow", "今すぐ読む")}
                     </button>
                     <Link
                       href={`/items/${nowReading.id}?from=${encodeURIComponent("/items?feed=unread&sort=newest")}`}
-                      className="inline-flex items-center gap-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring"
+                      className="inline-flex items-center gap-1 rounded-[12px] border border-zinc-300 bg-white px-[24px] py-[12px] text-[15px] font-semibold text-zinc-700 hover:bg-zinc-50 press focus-ring"
                     >
                       {t("items.action.openDetail")}
                       <ArrowRight className="size-4" aria-hidden="true" />
@@ -544,7 +544,7 @@ export default function BriefingPage() {
                   onClick={() => setInlineItemId(nowReading.id)}
                   className="group relative min-h-[240px] overflow-hidden border-t border-zinc-200 md:min-h-full md:border-l md:border-t-0"
                 >
-                  <ThumbnailArtwork item={nowReading} className="h-full min-h-[240px] w-full md:min-h-[340px]" />
+                  <ThumbnailArtwork item={nowReading} className="h-full min-h-[240px] w-full md:min-h-[280px]" />
                   <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-transparent opacity-80 transition-opacity group-hover:opacity-100" />
                 </button>
               </div>
@@ -572,11 +572,11 @@ export default function BriefingPage() {
                   <button
                     type="button"
                     onClick={() => setInlineItemId(item.id)}
-                    className="grid w-full grid-cols-[92px_1fr] gap-3 rounded-2xl border border-zinc-200 bg-white p-3 text-left hover:border-zinc-300 hover:bg-zinc-50"
+                    className="grid w-full grid-cols-[120px_1fr] gap-3 rounded-[16px] border border-zinc-200 bg-white p-4 text-left shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:border-zinc-300 hover:bg-zinc-50"
                   >
-                    <ThumbnailArtwork item={item} className="h-20 w-full" />
+                    <ThumbnailArtwork item={item} className="h-20 w-full rounded-xl" />
                     <div className="min-w-0">
-                      <div className="line-clamp-2 break-words [overflow-wrap:anywhere] text-sm font-medium text-zinc-900">
+                      <div className="line-clamp-2 break-words [overflow-wrap:anywhere] text-[15px] font-semibold text-zinc-900">
                         {item.translated_title || item.title || item.url}
                       </div>
                       <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
@@ -617,7 +617,7 @@ export default function BriefingPage() {
 
         <WeeklyReviewPanel review={weeklyReview} />
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm md:p-6">
+        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.clusters")}</h2>
             <div className="flex items-center gap-3">
@@ -640,7 +640,7 @@ export default function BriefingPage() {
           ) : (
             <div className="mt-3 grid gap-4 xl:grid-cols-2">
               {clusterRows.slice(0, 6).map((cluster) => (
-                <section key={cluster.id} className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-4">
+                <section key={cluster.id} className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h3 className="truncate text-base font-semibold text-zinc-900">
@@ -678,7 +678,7 @@ export default function BriefingPage() {
                         <button
                           type="button"
                           onClick={() => setInlineItemId(item.id)}
-                          className="grid w-full grid-cols-[84px_1fr] gap-3 rounded-xl border border-zinc-200 bg-white p-3 text-left hover:border-zinc-300 hover:bg-zinc-50"
+                          className="grid w-full grid-cols-[100px_1fr] gap-3 rounded-xl border border-zinc-200 bg-white p-3 text-left hover:border-zinc-300 hover:bg-zinc-50"
                         >
                           <ThumbnailArtwork item={item} className="h-20 w-full" />
                           <div className="min-w-0">

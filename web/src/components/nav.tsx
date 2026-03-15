@@ -106,12 +106,12 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/90 backdrop-blur">
-        <div className="mx-auto max-w-6xl px-4 py-2">
+      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/95 shadow-[0_1px_3px_rgba(0,0,0,0.04)] backdrop-blur">
+        <div className="mx-auto max-w-6xl px-4 py-3">
           <div className="flex min-h-12 items-center gap-3">
             <Link href="/" className="flex items-center gap-2 press focus-ring rounded">
-              <Image src="/logo.png" alt="Sifto" width={28} height={28} priority />
-              <span className="text-lg font-bold tracking-tight text-zinc-900">Sifto</span>
+              <Image src="/logo.png" alt="Sifto" width={32} height={32} priority />
+              <span className="text-[19px] font-bold tracking-tight text-zinc-900">Sifto</span>
             </Link>
 
             <div className="ml-auto flex items-center gap-2">
@@ -160,9 +160,9 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                     key={href}
                     href={href}
                     onClick={() => setMoreOpen(false)}
-                    className={`group inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 press focus-ring ${
+                    className={`group inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[14px] font-medium transition-colors duration-150 press focus-ring ${
                       active
-                        ? "bg-zinc-900 text-white"
+                        ? "bg-zinc-900 text-white font-semibold shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
                         : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
                     }`}
                   >
@@ -175,9 +175,9 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                 <button
                   type="button"
                   onClick={() => setMoreOpen((v) => !v)}
-                  className={`group inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors duration-150 press focus-ring ${
+                  className={`group inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[14px] font-medium transition-colors duration-150 press focus-ring ${
                     secondaryLinks.some((v) => isActive(v.href))
-                      ? "bg-zinc-900 text-white"
+                      ? "bg-zinc-900 text-white font-semibold shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
                       : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
                   }`}
                   aria-expanded={moreOpen}
@@ -186,7 +186,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                   <span>{t("nav.more")}</span>
                 </button>
                 {moreOpen && (
-                  <div className="absolute left-0 top-10 z-30 w-52 rounded-xl border border-zinc-200 bg-white p-1 shadow-lg motion-safe:animate-scale-in">
+                  <div className="absolute left-0 top-10 z-30 w-52 rounded-[20px] border border-zinc-200 bg-white p-3 shadow-[0_8px_24px_rgba(0,0,0,0.12)] motion-safe:animate-scale-in">
                     {secondaryLinks.map(({ href, labelKey, icon: Icon }) => {
                       const active = isActive(href);
                       return (
@@ -194,7 +194,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                           key={href}
                           href={href}
                           onClick={() => setMoreOpen(false)}
-                          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors duration-150 press focus-ring ${
+                          className={`flex items-center gap-2 rounded-[14px] px-4 py-3 text-[14px] transition-colors duration-150 press focus-ring ${
                             active ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-50"
                           }`}
                         >
@@ -223,7 +223,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
           </div>
 
           {menuOpen && (
-            <div className="mt-2 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm md:hidden motion-safe:animate-scale-in">
+            <div className="mt-2 rounded-[20px] border border-zinc-200 bg-white p-3 shadow-sm md:hidden motion-safe:animate-scale-in">
               <nav className="grid gap-1">
                 {primaryLinks.map(({ href, activeHref, labelKey, icon: Icon }) => {
                   const active = isLinkActive(href, activeHref);
@@ -232,7 +232,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                       key={href}
                       href={href}
                       onClick={() => setMenuOpen(false)}
-                      className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 press focus-ring ${
+                      className={`inline-flex items-center gap-2 rounded-[14px] px-4 py-3 text-sm font-medium transition-colors duration-150 press focus-ring ${
                         active
                           ? "bg-zinc-900 text-white"
                           : "text-zinc-700 hover:bg-zinc-50"
@@ -251,7 +251,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                       key={href}
                       href={href}
                       onClick={() => setMenuOpen(false)}
-                      className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150 press focus-ring ${
+                      className={`inline-flex items-center gap-2 rounded-[14px] px-4 py-3 text-sm font-medium transition-colors duration-150 press focus-ring ${
                         active
                           ? "bg-zinc-900 text-white"
                           : "text-zinc-700 hover:bg-zinc-50"

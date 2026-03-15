@@ -243,6 +243,15 @@ export default function BriefingPage() {
   }, []);
 
   const isRefreshing = hydrated && briefingQuery.isFetching;
+  const refreshBriefingData = async () => {
+    const next = await api.getBriefingToday({ size: 18, cache_bust: true });
+    queryClient.setQueryData(["briefing-today", 18], next);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["today-queue"] }),
+      queryClient.invalidateQueries({ queryKey: ["triage-queue"] }),
+      queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
+    ]);
+  };
 
   const saveClusterForLater = async (cluster: BriefingCluster) => {
     const itemIds = Array.from(new Set((cluster.items ?? EMPTY_ITEMS).map((item) => item.id).filter(Boolean)));
@@ -258,10 +267,7 @@ export default function BriefingPage() {
         return;
       }
       showToast(`${res.updated_count}${locale === "ja" ? "" : " "}${t("briefing.clusterLaterDone")}`, "success");
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
-        queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
-      ]);
+      await refreshBriefingData();
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
@@ -284,10 +290,7 @@ export default function BriefingPage() {
         return;
       }
       showToast(`${res.updated_count}${locale === "ja" ? "" : " "}${t("briefing.clusterReadDone")}`, "success");
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
-        queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
-      ]);
+      await refreshBriefingData();
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
@@ -298,11 +301,7 @@ export default function BriefingPage() {
   const markTodayQueueRead = async (itemId: string) => {
     try {
       await api.markItemRead(itemId);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
-        queryClient.invalidateQueries({ queryKey: ["today-queue"] }),
-        queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
-      ]);
+      await refreshBriefingData();
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     }
@@ -311,11 +310,7 @@ export default function BriefingPage() {
   const saveTodayQueueForLater = async (itemId: string) => {
     try {
       await api.markItemLater(itemId);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
-        queryClient.invalidateQueries({ queryKey: ["today-queue"] }),
-        queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
-      ]);
+      await refreshBriefingData();
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     }
@@ -737,11 +732,7 @@ export default function BriefingPage() {
             }}
             onOpenItem={(itemId) => setInlineItemId(itemId)}
             onReadToggled={() => {
-              void Promise.all([
-                queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
-                queryClient.invalidateQueries({ queryKey: ["today-queue"] }),
-                queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
-              ]);
+              void refreshBriefingData();
             }}
           />
         )}

@@ -73,6 +73,19 @@ type LLMUsagePurposeMonthSummaryView struct {
 	EstimatedCostUSD         float64 `json:"estimated_cost_usd"`
 }
 
+type LLMUsageAnalysisSummaryView struct {
+	Provider                 string  `json:"provider"`
+	Model                    string  `json:"model"`
+	Purpose                  string  `json:"purpose"`
+	PricingSource            string  `json:"pricing_source"`
+	Calls                    int     `json:"calls"`
+	InputTokens              int64   `json:"input_tokens"`
+	OutputTokens             int64   `json:"output_tokens"`
+	CacheCreationInputTokens int64   `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int64   `json:"cache_read_input_tokens"`
+	EstimatedCostUSD         float64 `json:"estimated_cost_usd"`
+}
+
 type LLMExecutionCurrentMonthSummaryView struct {
 	MonthJST       string  `json:"month_jst"`
 	Purpose        string  `json:"purpose"`
@@ -128,6 +141,10 @@ func mapPurposeMonthSummaryView(v repository.LLMUsagePurposeMonthSummary) LLMUsa
 	return LLMUsagePurposeMonthSummaryView(v)
 }
 
+func mapAnalysisSummaryView(v repository.LLMUsageAnalysisSummary) LLMUsageAnalysisSummaryView {
+	return LLMUsageAnalysisSummaryView(v)
+}
+
 func mapExecutionMonthSummaryView(v repository.LLMExecutionCurrentMonthSummary) LLMExecutionCurrentMonthSummaryView {
 	return LLMExecutionCurrentMonthSummaryView(v)
 }
@@ -178,4 +195,12 @@ func (s *LLMUsageService) ExecutionSummaryCurrentMonth(ctx context.Context, user
 		return nil, err
 	}
 	return mapSlice(rows, mapExecutionMonthSummaryView), nil
+}
+
+func (s *LLMUsageService) AnalysisSummary(ctx context.Context, userID string, days int) ([]LLMUsageAnalysisSummaryView, error) {
+	rows, err := s.repo.AnalysisSummaryByUser(ctx, userID, days)
+	if err != nil {
+		return nil, err
+	}
+	return mapSlice(rows, mapAnalysisSummaryView), nil
 }

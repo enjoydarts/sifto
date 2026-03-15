@@ -95,6 +95,19 @@ type LLMUsagePurposeMonthSummary struct {
 	EstimatedCostUSD         float64 `json:"estimated_cost_usd"`
 }
 
+type LLMUsageAnalysisSummary struct {
+	Provider                 string  `json:"provider"`
+	Model                    string  `json:"model"`
+	Purpose                  string  `json:"purpose"`
+	PricingSource            string  `json:"pricing_source"`
+	Calls                    int     `json:"calls"`
+	InputTokens              int64   `json:"input_tokens"`
+	OutputTokens             int64   `json:"output_tokens"`
+	CacheCreationInputTokens int64   `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int64   `json:"cache_read_input_tokens"`
+	EstimatedCostUSD         float64 `json:"estimated_cost_usd"`
+}
+
 func (r *LLMUsageLogRepo) Insert(ctx context.Context, in LLMUsageLogInput) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO llm_usage_logs (
@@ -329,6 +342,53 @@ func (r *LLMUsageLogRepo) PurposeSummaryCurrentMonthByUser(ctx context.Context, 
 		var v LLMUsagePurposeMonthSummary
 		if err := rows.Scan(
 			&v.MonthJST, &v.Purpose, &v.Calls,
+			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens,
+			&v.CacheReadInputTokens, &v.EstimatedCostUSD,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+func (r *LLMUsageLogRepo) AnalysisSummaryByUser(ctx context.Context, userID string, days int) ([]LLMUsageAnalysisSummary, error) {
+	if days <= 0 || days > 365 {
+		days = 30
+	}
+	rows, err := r.db.Query(ctx, `
+		WITH bounds AS (
+			SELECT
+				date_trunc('day', NOW() AT TIME ZONE 'Asia/Tokyo') - (($2::int - 1) * INTERVAL '1 day') AS since_jst,
+				date_trunc('day', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 day' AS until_jst
+		)
+		SELECT l.provider,
+		       l.model,
+		       l.purpose,
+		       l.pricing_source,
+		       COUNT(*)::int AS calls,
+		       COALESCE(SUM(l.input_tokens),0)::bigint AS input_tokens,
+		       COALESCE(SUM(l.output_tokens),0)::bigint AS output_tokens,
+		       COALESCE(SUM(l.cache_creation_input_tokens),0)::bigint AS cache_creation_input_tokens,
+		       COALESCE(SUM(l.cache_read_input_tokens),0)::bigint AS cache_read_input_tokens,
+		       COALESCE(SUM(l.estimated_cost_usd),0)::double precision AS estimated_cost_usd
+		FROM llm_usage_logs l
+		CROSS JOIN bounds b
+		WHERE l.user_id = $1
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.since_jst
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.until_jst
+		GROUP BY l.provider, l.model, l.purpose, l.pricing_source
+		ORDER BY estimated_cost_usd DESC, calls DESC, provider ASC, model ASC, purpose ASC`, userID, days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []LLMUsageAnalysisSummary
+	for rows.Next() {
+		var v LLMUsageAnalysisSummary
+		if err := rows.Scan(
+			&v.Provider, &v.Model, &v.Purpose, &v.PricingSource, &v.Calls,
 			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens,
 			&v.CacheReadInputTokens, &v.EstimatedCostUSD,
 		); err != nil {

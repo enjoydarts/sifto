@@ -16,6 +16,8 @@ export default function ModelSelect({
   onChange,
   options,
   labels,
+  showMeta = true,
+  hideLabel = false,
 }: {
   label: string;
   value: string;
@@ -26,6 +28,8 @@ export default function ModelSelect({
     searchPlaceholder: string;
     noResults: string;
   };
+  showMeta?: boolean;
+  hideLabel?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -78,19 +82,21 @@ export default function ModelSelect({
 
   return (
     <div ref={rootRef} className="relative min-w-0">
-      <label className="block text-sm font-medium text-zinc-700">{label}</label>
+      {!hideLabel ? <label className="block text-sm font-medium text-zinc-700">{label}</label> : null}
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="mt-1 flex w-full items-start justify-between gap-3 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-left text-sm text-zinc-900 shadow-sm hover:border-zinc-400"
+        className={`${hideLabel ? "" : "mt-1 "}flex w-full items-start justify-between gap-3 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-left text-sm text-zinc-900 shadow-sm hover:border-zinc-400`}
       >
         <span className="min-w-0">
           <span className={`block truncate font-medium ${selected ? "text-zinc-900" : "text-zinc-500"}`}>
             {selected?.label ?? labels.defaultOption}
           </span>
-          <span className="mt-0.5 block truncate text-xs text-zinc-500">
-            {selected?.note ?? (selected?.provider ?? "")}
-          </span>
+          {showMeta ? (
+            <span className="mt-0.5 block truncate text-xs text-zinc-500">
+              {selected?.note ?? (selected?.provider ?? "")}
+            </span>
+          ) : null}
         </span>
         <ChevronDown className={`mt-0.5 size-4 shrink-0 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>

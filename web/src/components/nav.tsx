@@ -17,6 +17,7 @@ import {
   Newspaper,
   Rss,
   Search,
+  TableProperties,
   Settings as SettingsIcon,
   Sparkles,
   Star,
@@ -40,6 +41,7 @@ const secondaryLinks = [
   { href: "/sources", labelKey: "nav.sources", icon: Rss },
   { href: "/digests", labelKey: "nav.digests", icon: Mail },
   { href: "/llm-usage", labelKey: "nav.llmUsage", icon: Brain },
+  { href: "/llm-analysis", labelKey: "nav.llmAnalysis", icon: TableProperties },
   { href: "/settings", labelKey: "nav.settings", icon: SettingsIcon },
   { href: "/debug/digests", labelKey: "nav.debug", icon: Bug },
 ];

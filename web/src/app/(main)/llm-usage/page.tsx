@@ -197,6 +197,8 @@ export default function LLMUsagePage() {
       share_pct: total > 0 ? (row.estimated_cost_usd / total) * 100 : 0,
       call_share_pct: totalCalls > 0 ? (row.calls / totalCalls) * 100 : 0,
       avg_cost_per_call_usd: row.calls > 0 ? row.estimated_cost_usd / row.calls : 0,
+      avg_input_tokens_per_call: row.calls > 0 ? row.input_tokens / row.calls : 0,
+      avg_output_tokens_per_call: row.calls > 0 ? row.output_tokens / row.calls : 0,
     })).sort((a, b) => {
       const av = a as Record<string, string | number>;
       const bv = b as Record<string, string | number>;
@@ -219,6 +221,8 @@ export default function LLMUsagePage() {
       call_share_pct: totalCalls > 0 ? (row.calls / totalCalls) * 100 : 0,
       share_pct: totalCost > 0 ? (row.estimated_cost_usd / totalCost) * 100 : 0,
       avg_cost_per_call_usd: row.calls > 0 ? row.estimated_cost_usd / row.calls : 0,
+      avg_input_tokens_per_call: row.calls > 0 ? row.input_tokens / row.calls : 0,
+      avg_output_tokens_per_call: row.calls > 0 ? row.output_tokens / row.calls : 0,
     })).sort((a, b) => {
       const av = a as Record<string, string | number>;
       const bv = b as Record<string, string | number>;
@@ -354,7 +358,11 @@ export default function LLMUsagePage() {
   );
 
   const mergedModelRows = useMemo(() => {
-    const m = new Map<string, LLMUsageModelSummary & { pricing_sources: string[] }>();
+    const m = new Map<string, LLMUsageModelSummary & {
+      pricing_sources: string[];
+      avg_input_tokens_per_call?: number;
+      avg_output_tokens_per_call?: number;
+    }>();
     for (const r of visibleModelRows) {
       const key = `${r.provider}:${r.model}`;
       const cur = m.get(key);
@@ -377,6 +385,10 @@ export default function LLMUsagePage() {
       cur.pricing_source =
         cur.pricing_sources.length === 1 ? cur.pricing_sources[0] : `mixed(${cur.pricing_sources.length})`;
     }
+    for (const cur of m.values()) {
+      cur.avg_input_tokens_per_call = cur.calls > 0 ? cur.input_tokens / cur.calls : 0;
+      cur.avg_output_tokens_per_call = cur.calls > 0 ? cur.output_tokens / cur.calls : 0;
+    }
     const dir = modelSortDir === "asc" ? 1 : -1;
     return Array.from(m.values()).sort((a, b) => {
       let cmp = 0;
@@ -393,6 +405,8 @@ export default function LLMUsagePage() {
         case "calls":
         case "input_tokens":
         case "output_tokens":
+        case "avg_input_tokens_per_call":
+        case "avg_output_tokens_per_call":
         case "cache_creation_input_tokens":
         case "cache_read_input_tokens":
         case "estimated_cost_usd":
@@ -964,6 +978,8 @@ export default function LLMUsagePage() {
                     <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("calls", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">calls{modelSortKey === "calls" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
                     <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("input_tokens", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">input{modelSortKey === "input_tokens" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
                     <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("output_tokens", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">output{modelSortKey === "output_tokens" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
+                    <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("avg_input_tokens_per_call", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">avg in/call{modelSortKey === "avg_input_tokens_per_call" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
+                    <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("avg_output_tokens_per_call", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">avg out/call{modelSortKey === "avg_output_tokens_per_call" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
                     <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("cache_creation_input_tokens", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">cache w{modelSortKey === "cache_creation_input_tokens" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
                     <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("cache_read_input_tokens", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">cache r{modelSortKey === "cache_read_input_tokens" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
                     <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("avg_cost_per_call_usd", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">avg/call{modelSortKey === "avg_cost_per_call_usd" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
@@ -1002,6 +1018,8 @@ export default function LLMUsagePage() {
                       <td className="px-3 py-2 text-right">{fmtNum(r.calls)}</td>
                       <td className="px-3 py-2 text-right">{fmtNum(r.input_tokens)}</td>
                       <td className="px-3 py-2 text-right">{fmtNum(r.output_tokens)}</td>
+                      <td className="px-3 py-2 text-right">{fmtNum(Math.round(r.avg_input_tokens_per_call ?? 0))}</td>
+                      <td className="px-3 py-2 text-right">{fmtNum(Math.round(r.avg_output_tokens_per_call ?? 0))}</td>
                       <td className="px-3 py-2 text-right">{fmtNum(r.cache_creation_input_tokens)}</td>
                       <td className="px-3 py-2 text-right">{fmtNum(r.cache_read_input_tokens)}</td>
                       <td className="px-3 py-2 text-right">{fmtUSD(r.calls > 0 ? r.estimated_cost_usd / r.calls : 0)}</td>

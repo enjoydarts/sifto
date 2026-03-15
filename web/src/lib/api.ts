@@ -403,6 +403,19 @@ export interface LLMUsagePurposeMonthSummary {
   estimated_cost_usd: number;
 }
 
+export interface LLMUsageAnalysisSummary {
+  provider: string;
+  model: string;
+  purpose: string;
+  pricing_source: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  estimated_cost_usd: number;
+}
+
 export interface LLMExecutionCurrentMonthSummary {
   month_jst: string;
   purpose: string;
@@ -951,6 +964,12 @@ export const api = {
     if (params?.days) q.set("days", String(params.days));
     const qs = q.toString();
     return apiFetch<LLMUsageModelSummary[]>(`/llm-usage/by-model${qs ? `?${qs}` : ""}`);
+  },
+  getLLMUsageAnalysis: (params?: { days?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.days) q.set("days", String(params.days));
+    const qs = q.toString();
+    return apiFetch<LLMUsageAnalysisSummary[]>(`/llm-usage/analysis${qs ? `?${qs}` : ""}`);
   },
   getLLMUsageCurrentMonthByProvider: () => {
     return apiFetch<LLMUsageProviderMonthSummary[]>("/llm-usage/current-month/by-provider");

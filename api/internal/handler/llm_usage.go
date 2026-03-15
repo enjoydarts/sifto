@@ -146,6 +146,33 @@ func (h *LLMUsageHandler) ModelSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, rows)
 }
 
+func (h *LLMUsageHandler) AnalysisSummary(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	days, ok := parseUsageDays(r)
+	if !ok {
+		http.Error(w, "invalid days", http.StatusBadRequest)
+		return
+	}
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
+	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageAnalysisVersioned(userID, 0, days))
+	if err == nil && h.cache != nil && !cacheBust {
+		var cached []service.LLMUsageAnalysisSummaryView
+		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
+			writeJSON(w, cached)
+			return
+		}
+	}
+	rows, err := h.usage.AnalysisSummary(r.Context(), userID, days)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	if err == nil && h.cache != nil {
+		_ = h.cache.SetJSON(r.Context(), cacheKey, rows, llmUsageModelSummaryCacheTTL)
+	}
+	writeJSON(w, rows)
+}
+
 func (h *LLMUsageHandler) ProviderSummaryCurrentMonth(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"

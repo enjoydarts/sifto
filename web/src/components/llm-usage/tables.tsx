@@ -54,7 +54,13 @@ export function CurrentMonthByProviderTable({
   onSort,
 }: {
   title: string;
-  rows: Array<LLMUsageProviderMonthSummary & { share_pct: number; call_share_pct: number; avg_cost_per_call_usd: number }>;
+  rows: Array<LLMUsageProviderMonthSummary & {
+    share_pct: number;
+    call_share_pct: number;
+    avg_cost_per_call_usd: number;
+    avg_input_tokens_per_call: number;
+    avg_output_tokens_per_call: number;
+  }>;
   monthLabel: string;
   totalCostLabel: string;
   noSummaryLabel: string;
@@ -85,6 +91,8 @@ export function CurrentMonthByProviderTable({
                 <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("calls")} className="inline-flex items-center hover:text-zinc-800">calls{renderSortMark("calls")}</button></th>
                 <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("input_tokens")} className="inline-flex items-center hover:text-zinc-800">input{renderSortMark("input_tokens")}</button></th>
                 <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("output_tokens")} className="inline-flex items-center hover:text-zinc-800">output{renderSortMark("output_tokens")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("avg_input_tokens_per_call")} className="inline-flex items-center hover:text-zinc-800">avg in/call{renderSortMark("avg_input_tokens_per_call")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("avg_output_tokens_per_call")} className="inline-flex items-center hover:text-zinc-800">avg out/call{renderSortMark("avg_output_tokens_per_call")}</button></th>
                 <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("cache_read_input_tokens")} className="inline-flex items-center hover:text-zinc-800">cache r{renderSortMark("cache_read_input_tokens")}</button></th>
                 <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("call_share_pct")} className="inline-flex items-center hover:text-zinc-800">call share{renderSortMark("call_share_pct")}</button></th>
                 <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("share_pct")} className="inline-flex items-center hover:text-zinc-800">share{renderSortMark("share_pct")}</button></th>
@@ -99,6 +107,8 @@ export function CurrentMonthByProviderTable({
                   <td className="px-3 py-2 text-right">{fmtNum(row.calls)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.input_tokens)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.output_tokens)}</td>
+                  <td className="px-3 py-2 text-right">{fmtNum(Math.round(row.avg_input_tokens_per_call))}</td>
+                  <td className="px-3 py-2 text-right">{fmtNum(Math.round(row.avg_output_tokens_per_call))}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.cache_read_input_tokens)}</td>
                   <td className="px-3 py-2 text-right">{row.call_share_pct.toFixed(1)}%</td>
                   <td className="px-3 py-2 text-right">{row.share_pct.toFixed(1)}%</td>
@@ -126,7 +136,13 @@ export function CurrentMonthByPurposeTable({
   onSort,
 }: {
   title: string;
-  rows: Array<LLMUsagePurposeMonthSummary & { share_pct: number; call_share_pct: number; avg_cost_per_call_usd: number }>;
+  rows: Array<LLMUsagePurposeMonthSummary & {
+    share_pct: number;
+    call_share_pct: number;
+    avg_cost_per_call_usd: number;
+    avg_input_tokens_per_call: number;
+    avg_output_tokens_per_call: number;
+  }>;
   monthLabel: string;
   noSummaryLabel: string;
   fmtNum: (v: number) => string;
@@ -156,6 +172,8 @@ export function CurrentMonthByPurposeTable({
                 <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("calls")} className="inline-flex items-center hover:text-zinc-800">calls{renderSortMark("calls")}</button></th>
                 <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("input_tokens")} className="inline-flex items-center hover:text-zinc-800">input{renderSortMark("input_tokens")}</button></th>
                 <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("output_tokens")} className="inline-flex items-center hover:text-zinc-800">output{renderSortMark("output_tokens")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("avg_input_tokens_per_call")} className="inline-flex items-center hover:text-zinc-800">avg in/call{renderSortMark("avg_input_tokens_per_call")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("avg_output_tokens_per_call")} className="inline-flex items-center hover:text-zinc-800">avg out/call{renderSortMark("avg_output_tokens_per_call")}</button></th>
                 <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("cache_read_input_tokens")} className="inline-flex items-center hover:text-zinc-800">cache r{renderSortMark("cache_read_input_tokens")}</button></th>
                 <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("call_share_pct")} className="inline-flex items-center hover:text-zinc-800">call share{renderSortMark("call_share_pct")}</button></th>
                 <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("share_pct")} className="inline-flex items-center hover:text-zinc-800">share{renderSortMark("share_pct")}</button></th>
@@ -170,6 +188,8 @@ export function CurrentMonthByPurposeTable({
                   <td className="px-3 py-2 text-right">{fmtNum(row.calls)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.input_tokens)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.output_tokens)}</td>
+                  <td className="px-3 py-2 text-right">{fmtNum(Math.round(row.avg_input_tokens_per_call))}</td>
+                  <td className="px-3 py-2 text-right">{fmtNum(Math.round(row.avg_output_tokens_per_call))}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.cache_read_input_tokens)}</td>
                   <td className="px-3 py-2 text-right">{row.call_share_pct.toFixed(1)}%</td>
                   <td className="px-3 py-2 text-right">{row.share_pct.toFixed(1)}%</td>

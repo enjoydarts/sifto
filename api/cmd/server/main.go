@@ -174,6 +174,7 @@ func main() {
 			r.Get("/", llmUsageH.List)
 			r.Get("/summary", llmUsageH.DailySummary)
 			r.Get("/by-model", llmUsageH.ModelSummary)
+			r.Get("/analysis", llmUsageH.AnalysisSummary)
 			r.Get("/current-month/by-provider", llmUsageH.ProviderSummaryCurrentMonth)
 			r.Get("/current-month/by-purpose", llmUsageH.PurposeSummaryCurrentMonth)
 			r.Get("/current-month/execution-summary", llmUsageH.ExecutionSummaryCurrentMonth)

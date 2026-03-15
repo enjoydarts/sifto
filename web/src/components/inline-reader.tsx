@@ -272,7 +272,7 @@ export function InlineReader({
   return (
     <div className="fixed inset-0 z-40 bg-black/35" onClick={onClose}>
       <div
-        className={`absolute inset-y-0 right-0 w-full max-w-3xl overflow-y-auto overscroll-y-contain border-l border-zinc-200 bg-white shadow-2xl will-change-transform ${
+        className={`absolute inset-x-0 inset-y-0 w-full overflow-x-hidden overflow-y-auto overscroll-y-contain bg-white shadow-2xl will-change-transform md:left-auto md:right-0 md:max-w-3xl md:border-l md:border-zinc-200 ${
           dragging ? "transition-none" : "transition-transform duration-200 ease-out"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -280,7 +280,7 @@ export function InlineReader({
       >
         {/* Swipe handle (mobile) */}
         <div
-          className="-mx-2 mb-1 flex min-h-9 items-center justify-center rounded-lg px-2 py-1.5 touch-none md:hidden"
+          className="mb-1 flex min-h-9 items-center justify-center px-2 py-1.5 touch-none md:hidden"
           style={{ touchAction: "none" }}
           onPointerDown={onHandlePointerDown}
           onPointerMove={onHandlePointerMove}

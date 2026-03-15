@@ -1379,7 +1379,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-                <div>
+                <div className="min-w-0">
                   <div className="text-sm font-medium text-zinc-800">
                     {t("settings.digestEmailSending")}
                   </div>
@@ -1387,7 +1387,7 @@ export default function SettingsPage() {
                     {t("settings.digestDisabledHint")}
                   </div>
                 </div>
-                <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+                <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap text-sm text-zinc-700">
                   <input
                     type="checkbox"
                     checked={digestEmailEnabled}
@@ -1437,7 +1437,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-sm font-medium text-zinc-800">
                       {t("settings.budgetAlertEmail")}
                     </div>
@@ -1445,7 +1445,7 @@ export default function SettingsPage() {
                       {t("settings.budgetAlertHint")}
                     </div>
                   </div>
-                  <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+                  <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap text-sm text-zinc-700">
                     <input
                       type="checkbox"
                       checked={alertEnabled}
@@ -1559,11 +1559,11 @@ export default function SettingsPage() {
 
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-              <div>
+              <div className="min-w-0">
                 <div className="text-sm font-medium text-zinc-800">{t("settings.obsidianEnabled")}</div>
                 <div className="text-xs text-zinc-500">{t("settings.obsidianEnabledHint")}</div>
               </div>
-              <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+              <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap text-sm text-zinc-700">
                 <input
                   type="checkbox"
                   checked={obsidianEnabled}

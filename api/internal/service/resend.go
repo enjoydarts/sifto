@@ -37,6 +37,14 @@ type BudgetAlertEmail struct {
 	ThresholdPct       int
 }
 
+type BudgetForecastAlertEmail struct {
+	MonthJST         string
+	MonthlyBudgetUSD float64
+	UsedCostUSD      float64
+	ForecastCostUSD  float64
+	ForecastDeltaUSD float64
+}
+
 var digestSubjectPrefixPattern = regexp.MustCompile(`^\s*(?:【[^】]*ダイジェスト】\s*|Sifto\s*Digest\s*[-:]?\s*\d{4}-\d{1,2}-\d{1,2}\s*[-:：]?\s*|Sifto\s*Digest\s*\d{4}-\d{1,2}-\d{1,2}\s*[-:：]?\s*|\d{4}年\d{1,2}月\d{1,2}日ダイジェスト\s*[-:：]?\s*)+`)
 
 func FormatDigestEmailSubject(digestDate string, subject string) string {
@@ -115,6 +123,41 @@ func (r *ResendClient) SendBudgetAlert(ctx context.Context, to string, alert Bud
 
 	subject := fmt.Sprintf("Sifto: 月次LLM予算の残りが%d%%を下回りました", alert.ThresholdPct)
 	htmlBody := buildBudgetAlertHTML(alert)
+
+	body, _ := json.Marshal(map[string]any{
+		"from":    r.formattedFrom(),
+		"to":      []string{to},
+		"subject": subject,
+		"html":    htmlBody,
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://api.resend.com/emails", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := r.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("resend: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (r *ResendClient) SendBudgetForecastAlert(ctx context.Context, to string, alert BudgetForecastAlertEmail) error {
+	if !r.Enabled() {
+		log.Printf("resend disabled (missing RESEND_API_KEY or RESEND_FROM_EMAIL), skip budget forecast alert to %s", to)
+		return nil
+	}
+
+	subject := "Sifto: 月次LLM予算の着地予測が予算を超えそうです"
+	htmlBody := buildBudgetForecastAlertHTML(alert)
 
 	body, _ := json.Marshal(map[string]any{
 		"from":    r.formattedFrom(),
@@ -227,6 +270,22 @@ func buildBudgetAlertHTML(a BudgetAlertEmail) string {
 	sb.WriteString(fmt.Sprintf(`<p style="margin:0;color:#444">残り比率: <strong>%.1f%%</strong></p>`, a.RemainingPct))
 	sb.WriteString(`</div>`)
 	sb.WriteString(`<p style="margin-top:12px;color:#666;line-height:1.6">設定画面で予算・警告しきい値・Anthropic APIキー（ユーザー別）を管理できます。</p>`)
+	sb.WriteString(`</body></html>`)
+	return sb.String()
+}
+
+func buildBudgetForecastAlertHTML(a BudgetForecastAlertEmail) string {
+	var sb strings.Builder
+	sb.WriteString(`<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:640px;margin:0 auto;padding:20px">`)
+	sb.WriteString(`<h1 style="font-size:22px;margin:0 0 12px">Sifto 予算着地アラート</h1>`)
+	sb.WriteString(fmt.Sprintf(`<p style="color:#444;line-height:1.7">%s の月末着地予測が、設定予算を上回っています。</p>`, html.EscapeString(a.MonthJST)))
+	sb.WriteString(`<div style="margin:20px 0;padding:16px;border:1px solid #eee;border-radius:8px;background:#fafafa">`)
+	sb.WriteString(fmt.Sprintf(`<p style="margin:0 0 8px"><strong>月次予算:</strong> $%.2f</p>`, a.MonthlyBudgetUSD))
+	sb.WriteString(fmt.Sprintf(`<p style="margin:0 0 8px"><strong>今月使用額:</strong> $%.4f</p>`, a.UsedCostUSD))
+	sb.WriteString(fmt.Sprintf(`<p style="margin:0 0 8px"><strong>月末着地予測:</strong> $%.4f</p>`, a.ForecastCostUSD))
+	sb.WriteString(fmt.Sprintf(`<p style="margin:0"><strong>予算差分:</strong> +$%.4f</p>`, a.ForecastDeltaUSD))
+	sb.WriteString(`</div>`)
+	sb.WriteString(`<p style="color:#666;line-height:1.7">LLM Usage 画面で直近の利用状況と予測ペースを確認してください。</p>`)
 	sb.WriteString(`</body></html>`)
 	return sb.String()
 }

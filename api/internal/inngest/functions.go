@@ -1628,6 +1628,7 @@ func sendDigestFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wor
 func checkBudgetAlertsFn(client inngestgo.Client, db *pgxpool.Pool, resend *service.ResendClient, oneSignal *service.OneSignalClient) (inngestgo.ServableFunction, error) {
 	settingsRepo := repository.NewUserSettingsRepo(db)
 	alertLogRepo := repository.NewBudgetAlertLogRepo(db)
+	forecastAlertLogRepo := repository.NewBudgetForecastAlertLogRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
 
 	return inngestgo.CreateFunction(
@@ -1635,8 +1636,8 @@ func checkBudgetAlertsFn(client inngestgo.Client, db *pgxpool.Pool, resend *serv
 		inngestgo.FunctionOpts{ID: "check-budget-alerts", Name: "Check Monthly Budget Alerts"},
 		inngestgo.CronTrigger("0 0 * * *"), // 09:00 JST
 		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
-			if !resend.Enabled() {
-				return map[string]any{"status": "skipped", "reason": "resend_disabled"}, nil
+			if (resend == nil || !resend.Enabled()) && (oneSignal == nil || !oneSignal.Enabled()) {
+				return map[string]any{"status": "skipped", "reason": "no_budget_alert_channel"}, nil
 			}
 
 			targets, err := settingsRepo.ListBudgetAlertTargets(ctx)
@@ -1647,6 +1648,8 @@ func checkBudgetAlertsFn(client inngestgo.Client, db *pgxpool.Pool, resend *serv
 			nowJST := timeutil.NowJST()
 			monthStartJST := time.Date(nowJST.Year(), nowJST.Month(), 1, 0, 0, 0, 0, timeutil.JST)
 			nextMonthJST := monthStartJST.AddDate(0, 1, 0)
+			daysInMonth := nextMonthJST.AddDate(0, 0, -1).Day()
+			elapsedDays := nowJST.Day()
 			checked := 0
 			sent := 0
 			skipped := 0
@@ -1664,54 +1667,124 @@ func checkBudgetAlertsFn(client inngestgo.Client, db *pgxpool.Pool, resend *serv
 				}
 				remainingRatio := (tgt.MonthlyBudgetUSD - usedCostUSD) / tgt.MonthlyBudgetUSD
 				thresholdRatio := float64(tgt.BudgetAlertThresholdPct) / 100.0
-				if remainingRatio >= thresholdRatio {
-					skipped++
-					continue
-				}
-				alreadySent, err := alertLogRepo.Exists(ctx, tgt.UserID, monthStartJST, tgt.BudgetAlertThresholdPct)
-				if err != nil {
-					log.Printf("check-budget-alerts exists user_id=%s: %v", tgt.UserID, err)
-					continue
-				}
-				if alreadySent {
-					skipped++
-					continue
-				}
-
 				remainingUSD := tgt.MonthlyBudgetUSD - usedCostUSD
-				if err := resend.SendBudgetAlert(ctx, tgt.Email, service.BudgetAlertEmail{
-					MonthJST:           monthStartJST.Format("2006-01"),
-					MonthlyBudgetUSD:   tgt.MonthlyBudgetUSD,
-					UsedCostUSD:        usedCostUSD,
-					RemainingBudgetUSD: remainingUSD,
-					RemainingPct:       remainingRatio * 100,
-					ThresholdPct:       tgt.BudgetAlertThresholdPct,
-				}); err != nil {
-					log.Printf("check-budget-alerts send user_id=%s email=%s: %v", tgt.UserID, tgt.Email, err)
-					continue
+				monthAvgDailyPace := 0.0
+				if elapsedDays > 0 {
+					monthAvgDailyPace = usedCostUSD / float64(elapsedDays)
 				}
-				if oneSignal != nil && oneSignal.Enabled() {
-					_, pErr := oneSignal.SendToExternalID(
-						ctx,
-						tgt.Email,
-						"Sifto: 月次LLM予算アラート",
-						fmt.Sprintf("残り予算がしきい値(%d%%)を下回りました。", tgt.BudgetAlertThresholdPct),
-						appPageURL("/llm-usage"),
-						map[string]any{
-							"type":          "budget_alert",
-							"month_jst":     monthStartJST.Format("2006-01"),
-							"threshold_pct": tgt.BudgetAlertThresholdPct,
-							"target_url":    appPageURL("/llm-usage"),
-						},
-					)
-					if pErr != nil {
-						log.Printf("check-budget-alerts push user_id=%s email=%s: %v", tgt.UserID, tgt.Email, pErr)
+				forecastCostUSD := monthAvgDailyPace * float64(daysInMonth)
+				forecastDeltaUSD := forecastCostUSD - tgt.MonthlyBudgetUSD
+
+				sentThisTarget := false
+
+				if remainingRatio < thresholdRatio {
+					alreadySent, err := alertLogRepo.Exists(ctx, tgt.UserID, monthStartJST, tgt.BudgetAlertThresholdPct)
+					if err != nil {
+						log.Printf("check-budget-alerts exists user_id=%s: %v", tgt.UserID, err)
+					} else if !alreadySent {
+						emailSent := false
+						pushSent := false
+						if resend != nil && resend.Enabled() {
+							if err := resend.SendBudgetAlert(ctx, tgt.Email, service.BudgetAlertEmail{
+								MonthJST:           monthStartJST.Format("2006-01"),
+								MonthlyBudgetUSD:   tgt.MonthlyBudgetUSD,
+								UsedCostUSD:        usedCostUSD,
+								RemainingBudgetUSD: remainingUSD,
+								RemainingPct:       remainingRatio * 100,
+								ThresholdPct:       tgt.BudgetAlertThresholdPct,
+							}); err != nil {
+								log.Printf("check-budget-alerts send user_id=%s email=%s: %v", tgt.UserID, tgt.Email, err)
+							} else {
+								emailSent = true
+							}
+						}
+						if oneSignal != nil && oneSignal.Enabled() {
+							if _, pErr := oneSignal.SendToExternalID(
+								ctx,
+								tgt.Email,
+								"Sifto: 月次LLM予算アラート",
+								fmt.Sprintf("残り予算がしきい値(%d%%)を下回りました。", tgt.BudgetAlertThresholdPct),
+								appPageURL("/llm-usage"),
+								map[string]any{
+									"type":          "budget_alert",
+									"month_jst":     monthStartJST.Format("2006-01"),
+									"threshold_pct": tgt.BudgetAlertThresholdPct,
+									"target_url":    appPageURL("/llm-usage"),
+								},
+							); pErr != nil {
+								log.Printf("check-budget-alerts push user_id=%s email=%s: %v", tgt.UserID, tgt.Email, pErr)
+							} else {
+								pushSent = true
+							}
+						}
+						if emailSent || pushSent {
+							if err := alertLogRepo.Insert(ctx, tgt.UserID, monthStartJST, tgt.BudgetAlertThresholdPct, tgt.MonthlyBudgetUSD, usedCostUSD, remainingRatio); err != nil {
+								log.Printf("check-budget-alerts log user_id=%s: %v", tgt.UserID, err)
+							}
+							sentThisTarget = true
+						}
 					}
 				}
-				if err := alertLogRepo.Insert(ctx, tgt.UserID, monthStartJST, tgt.BudgetAlertThresholdPct, tgt.MonthlyBudgetUSD, usedCostUSD, remainingRatio); err != nil {
-					log.Printf("check-budget-alerts log user_id=%s: %v", tgt.UserID, err)
+
+				shouldForecastAlert := usedCostUSD > tgt.MonthlyBudgetUSD || (elapsedDays >= 3 && forecastDeltaUSD > 0)
+				if shouldForecastAlert {
+					forecastSent, err := forecastAlertLogRepo.Exists(ctx, tgt.UserID, monthStartJST)
+					if err != nil {
+						log.Printf("check-budget-alerts forecast exists user_id=%s: %v", tgt.UserID, err)
+					} else if !forecastSent {
+						emailSent := false
+						pushSent := false
+						if resend != nil && resend.Enabled() {
+							if err := resend.SendBudgetForecastAlert(ctx, tgt.Email, service.BudgetForecastAlertEmail{
+								MonthJST:         monthStartJST.Format("2006-01"),
+								MonthlyBudgetUSD: tgt.MonthlyBudgetUSD,
+								UsedCostUSD:      usedCostUSD,
+								ForecastCostUSD:  forecastCostUSD,
+								ForecastDeltaUSD: forecastDeltaUSD,
+							}); err != nil {
+								log.Printf("check-budget-alerts forecast email user_id=%s email=%s: %v", tgt.UserID, tgt.Email, err)
+							} else {
+								emailSent = true
+							}
+						}
+						if oneSignal != nil && oneSignal.Enabled() {
+							message := fmt.Sprintf("月末着地予測が予算を $%.4f 上回っています。", forecastDeltaUSD)
+							if usedCostUSD > tgt.MonthlyBudgetUSD {
+								message = "今月のLLM予算をすでに超過しています。"
+							}
+							if _, pErr := oneSignal.SendToExternalID(
+								ctx,
+								tgt.Email,
+								"Sifto: 月次LLM予算の着地予測アラート",
+								message,
+								appPageURL("/llm-usage"),
+								map[string]any{
+									"type":               "budget_forecast_alert",
+									"month_jst":          monthStartJST.Format("2006-01"),
+									"forecast_cost_usd":  forecastCostUSD,
+									"forecast_delta_usd": forecastDeltaUSD,
+									"target_url":         appPageURL("/llm-usage"),
+								},
+							); pErr != nil {
+								log.Printf("check-budget-alerts forecast push user_id=%s email=%s: %v", tgt.UserID, tgt.Email, pErr)
+							} else {
+								pushSent = true
+							}
+						}
+						if emailSent || pushSent {
+							if err := forecastAlertLogRepo.Insert(ctx, tgt.UserID, monthStartJST, tgt.MonthlyBudgetUSD, usedCostUSD, forecastCostUSD, forecastDeltaUSD); err != nil {
+								log.Printf("check-budget-alerts forecast log user_id=%s: %v", tgt.UserID, err)
+							}
+							sentThisTarget = true
+						}
+					}
 				}
-				sent++
+
+				if sentThisTarget {
+					sent++
+				} else {
+					skipped++
+				}
 			}
 
 			return map[string]any{

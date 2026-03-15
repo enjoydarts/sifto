@@ -23,6 +23,7 @@ type processItemEventData struct {
 
 type processItemDeps struct {
 	itemRepo           *repository.ItemInngestRepo
+	itemViewRepo       *repository.ItemRepo
 	llmUsageRepo       *repository.LLMUsageLogRepo
 	llmExecutionRepo   *repository.LLMExecutionEventRepo
 	sourceRepo         *repository.SourceRepo
@@ -30,6 +31,7 @@ type processItemDeps struct {
 	userRepo           *repository.UserRepo
 	pushLogRepo        *repository.PushNotificationLogRepo
 	notificationRepo   *repository.NotificationPriorityRepo
+	readingGoalRepo    *repository.ReadingGoalRepo
 	worker             *service.WorkerClient
 	openAI             *service.OpenAIClient
 	oneSignal          *service.OneSignalClient
@@ -401,11 +403,40 @@ func sendPickNotificationIfNeeded(
 	titleForLLM *string,
 	summary *service.SummarizeResponse,
 ) {
-	if deps.oneSignal == nil || !deps.oneSignal.Enabled() || userIDPtr == nil || *userIDPtr == "" || summary.Score < deps.pickScoreThreshold {
+	if deps.oneSignal == nil || !deps.oneSignal.Enabled() || userIDPtr == nil || *userIDPtr == "" {
 		return
 	}
-
-	alreadyNotified, err := deps.pushLogRepo.ExistsByUserKindItem(ctx, *userIDPtr, "pick_update", itemID)
+	rule := &model.NotificationPriorityRule{
+		Sensitivity:      "medium",
+		DailyCap:         deps.pickMaxPerDay,
+		ThemeWeight:      1,
+		ImmediateEnabled: true,
+		GoalMatchEnabled: true,
+	}
+	if deps.notificationRepo != nil {
+		if next, err := deps.notificationRepo.EnsureDefaults(ctx, *userIDPtr); err == nil && next != nil {
+			rule = next
+		}
+	}
+	var matchedGoals []model.ReadingGoal
+	if deps.itemViewRepo != nil && deps.readingGoalRepo != nil {
+		if detail, err := deps.itemViewRepo.GetDetail(ctx, itemID, *userIDPtr); err == nil && detail != nil {
+			if goals, goalErr := deps.readingGoalRepo.ListByUser(ctx, *userIDPtr); goalErr == nil {
+				matchedGoals = service.MatchReadingGoals(detail.Item, goals)
+			}
+		}
+	}
+	kind := "pick_update"
+	if len(matchedGoals) > 0 {
+		kind = "goal_match"
+	}
+	if kind == "pick_update" && summary.Score < deps.pickScoreThreshold {
+		return
+	}
+	if (kind == "pick_update" && !rule.ImmediateEnabled) || (kind == "goal_match" && !rule.GoalMatchEnabled) {
+		return
+	}
+	alreadyNotified, err := deps.pushLogRepo.ExistsByUserKindItem(ctx, *userIDPtr, kind, itemID)
 	if err != nil || alreadyNotified {
 		if err != nil {
 			log.Printf("process-item pick-notify exists failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
@@ -413,29 +444,24 @@ func sendPickNotificationIfNeeded(
 		return
 	}
 	dayJST := timeutil.StartOfDayJST(timeutil.NowJST())
-	countToday, err := deps.pushLogRepo.CountByUserKindDay(ctx, *userIDPtr, "pick_update", dayJST)
+	countToday, err := deps.pushLogRepo.CountByUserKindsDay(ctx, *userIDPtr, []string{"pick_update", "goal_match"}, dayJST)
 	if err != nil || countToday >= deps.pickMaxPerDay {
 		if err != nil {
 			log.Printf("process-item pick-notify count failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
 		}
 		return
 	}
-	if deps.notificationRepo != nil {
-		rule, ruleErr := deps.notificationRepo.EnsureDefaults(ctx, *userIDPtr)
-		if ruleErr == nil && rule != nil {
-			decision := service.RouteNotificationPriority(service.NotificationPriorityInput{
-				ItemScore:           summary.Score,
-				GoalMatch:           false,
-				RecentNotifications: countToday,
-				DuplicateDigestRisk: false,
-				Sensitivity:         rule.Sensitivity,
-				DailyCap:            rule.DailyCap,
-				ThemeWeight:         rule.ThemeWeight,
-			})
-			if decision.Route != "send_now" {
-				return
-			}
-		}
+	decision := service.RouteNotificationPriority(service.NotificationPriorityInput{
+		ItemScore:           summary.Score,
+		GoalMatch:           len(matchedGoals) > 0,
+		RecentNotifications: countToday,
+		DuplicateDigestRisk: false,
+		Sensitivity:         rule.Sensitivity,
+		DailyCap:            rule.DailyCap,
+		ThemeWeight:         rule.ThemeWeight,
+	})
+	if decision.Route == "suppress" || (decision.Route != "send_now" && len(matchedGoals) == 0) {
+		return
 	}
 	u, err := deps.userRepo.GetByID(ctx, *userIDPtr)
 	if err != nil {
@@ -448,6 +474,10 @@ func sendPickNotificationIfNeeded(
 		itemTitle = strings.TrimSpace(coalescePtrStr(titleForLLM, url))
 	}
 	message := itemTitle
+	if len(matchedGoals) > 0 {
+		title = "Sifto: 読書ゴールに一致する新着があります"
+		message = fmt.Sprintf("「%s」に一致: %s", matchedGoals[0].Title, itemTitle)
+	}
 	if len(message) > 120 {
 		message = message[:120]
 	}
@@ -458,11 +488,12 @@ func sendPickNotificationIfNeeded(
 		message,
 		appPageURL("/items/"+itemID),
 		map[string]any{
-			"type":     "pick_update",
+			"type":     kind,
 			"item_id":  itemID,
 			"item_url": appPageURL("/items/" + itemID),
 			"url":      url,
 			"score":    summary.Score,
+			"reason":   decision.Reason,
 		},
 	)
 	if err != nil {
@@ -480,7 +511,7 @@ func sendPickNotificationIfNeeded(
 	}
 	if err := deps.pushLogRepo.Insert(ctx, repository.PushNotificationLogInput{
 		UserID:                  *userIDPtr,
-		Kind:                    "pick_update",
+		Kind:                    kind,
 		ItemID:                  &itemID,
 		DayJST:                  dayJST,
 		Title:                   title,

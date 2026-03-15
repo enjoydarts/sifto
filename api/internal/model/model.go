@@ -447,13 +447,17 @@ type SourceOptimizationSnapshot struct {
 }
 
 type NotificationPriorityRule struct {
-	ID          string    `json:"id"`
-	UserID      string    `json:"user_id"`
-	Sensitivity string    `json:"sensitivity"`
-	DailyCap    int       `json:"daily_cap"`
-	ThemeWeight float64   `json:"theme_weight"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID               string    `json:"id"`
+	UserID           string    `json:"user_id"`
+	Sensitivity      string    `json:"sensitivity"`
+	DailyCap         int       `json:"daily_cap"`
+	ThemeWeight      float64   `json:"theme_weight"`
+	ImmediateEnabled bool      `json:"immediate_enabled"`
+	BriefingEnabled  bool      `json:"briefing_enabled"`
+	ReviewEnabled    bool      `json:"review_enabled"`
+	GoalMatchEnabled bool      `json:"goal_match_enabled"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type ItemStatsResponse struct {

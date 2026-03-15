@@ -870,6 +870,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(processItemFn(client, db, worker, openAI, oneSignal, secretCipher))
 	register(embedItemFn(client, db, openAI, secretCipher))
 	register(generateBriefingSnapshotsFn(client, db, oneSignal))
+	register(notifyReviewQueueFn(client, db, oneSignal))
 	register(exportObsidianFavoritesFn(client, db, obsidianExport))
 	register(trackProviderModelUpdatesFn(client, db, oneSignal))
 	register(generateDigestFn(client, db))
@@ -913,6 +914,8 @@ func generateBriefingSnapshotsFn(client inngestgo.Client, db *pgxpool.Pool, oneS
 	streakRepo := repository.NewReadingStreakRepo(db)
 	snapshotRepo := repository.NewBriefingSnapshotRepo(db)
 	pushLogRepo := repository.NewPushNotificationLogRepo(db)
+	notificationRepo := repository.NewNotificationPriorityRepo(db)
+	reviewRepo := repository.NewReviewQueueRepo(db)
 
 	return inngestgo.CreateFunction(
 		client,
@@ -941,12 +944,17 @@ func generateBriefingSnapshotsFn(client inngestgo.Client, db *pgxpool.Pool, oneS
 					continue
 				}
 				if oneSignal != nil && oneSignal.Enabled() && (len(payload.HighlightItems) > 0 || len(payload.Clusters) > 0) {
+					rule, _ := notificationRepo.EnsureDefaults(ctx, u.ID)
+					if rule != nil && !rule.BriefingEnabled {
+						continue
+					}
 					alreadyNotified, err := pushLogRepo.CountByUserKindDay(ctx, u.ID, "briefing_ready", today)
 					if err != nil {
 						log.Printf("generate-briefing-snapshots push count user=%s: %v", u.ID, err)
 					} else if alreadyNotified == 0 {
+						dueReviews, _ := reviewRepo.CountDue(ctx, u.ID, timeutil.NowJST())
 						title := "Sifto: 今日のブリーフィングを更新しました"
-						message := fmt.Sprintf("注目%d件・クラスタ%d件を確認できます。", len(payload.HighlightItems), len(payload.Clusters))
+						message := fmt.Sprintf("注目%d件・クラスタ%d件・再訪%d件を確認できます。", len(payload.HighlightItems), len(payload.Clusters), dueReviews)
 						pushRes, pErr := oneSignal.SendToExternalID(
 							ctx,
 							u.Email,
@@ -959,6 +967,7 @@ func generateBriefingSnapshotsFn(client inngestgo.Client, db *pgxpool.Pool, oneS
 								"date":         dateStr,
 								"highlights":   len(payload.HighlightItems),
 								"clusters":     len(payload.Clusters),
+								"reviews":      dueReviews,
 							},
 						)
 						if pErr != nil {
@@ -996,6 +1005,79 @@ func generateBriefingSnapshotsFn(client inngestgo.Client, db *pgxpool.Pool, oneS
 				"updated": updated,
 				"failed":  failed,
 			}, nil
+		},
+	)
+}
+
+func notifyReviewQueueFn(client inngestgo.Client, db *pgxpool.Pool, oneSignal *service.OneSignalClient) (inngestgo.ServableFunction, error) {
+	userRepo := repository.NewUserRepo(db)
+	reviewRepo := repository.NewReviewQueueRepo(db)
+	pushLogRepo := repository.NewPushNotificationLogRepo(db)
+	notificationRepo := repository.NewNotificationPriorityRepo(db)
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "notify-review-queue", Name: "Notify Review Queue"},
+		inngestgo.CronTrigger("0 * * * *"),
+		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
+			if oneSignal == nil || !oneSignal.Enabled() {
+				return map[string]any{"enabled": false}, nil
+			}
+			users, err := userRepo.ListAll(ctx)
+			if err != nil {
+				return nil, err
+			}
+			now := timeutil.NowJST()
+			day := timeutil.StartOfDayJST(now)
+			sent := 0
+			for _, u := range users {
+				rule, _ := notificationRepo.EnsureDefaults(ctx, u.ID)
+				if rule != nil && !rule.ReviewEnabled {
+					continue
+				}
+				count, err := reviewRepo.CountDue(ctx, u.ID, now)
+				if err != nil || count == 0 {
+					continue
+				}
+				already, err := pushLogRepo.CountByUserKindDay(ctx, u.ID, "review_due", day)
+				if err != nil || already > 0 {
+					continue
+				}
+				title := "Sifto: 再訪キューがたまっています"
+				message := fmt.Sprintf("今日見返したい記事が%d件あります。5分で確認できます。", count)
+				pushRes, err := oneSignal.SendToExternalID(ctx, u.Email, title, message, appPageURL("/"), map[string]any{
+					"type":       "review_due",
+					"target_url": appPageURL("/"),
+					"count":      count,
+				})
+				if err != nil {
+					log.Printf("notify-review-queue push user=%s: %v", u.ID, err)
+					continue
+				}
+				var oneSignalID *string
+				recipients := 0
+				if pushRes != nil {
+					if strings.TrimSpace(pushRes.ID) != "" {
+						id := strings.TrimSpace(pushRes.ID)
+						oneSignalID = &id
+					}
+					recipients = pushRes.Recipients
+				}
+				if err := pushLogRepo.Insert(ctx, repository.PushNotificationLogInput{
+					UserID:                  u.ID,
+					Kind:                    "review_due",
+					ItemID:                  nil,
+					DayJST:                  day,
+					Title:                   title,
+					Message:                 message,
+					OneSignalNotificationID: oneSignalID,
+					Recipients:              recipients,
+				}); err != nil {
+					log.Printf("notify-review-queue push log user=%s: %v", u.ID, err)
+				}
+				sent++
+			}
+			return map[string]any{"users": len(users), "sent": sent}, nil
 		},
 	)
 }
@@ -1243,6 +1325,7 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, openAI *service.OpenAIClient, oneSignal *service.OneSignalClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
 	deps := processItemDeps{
 		itemRepo:           repository.NewItemInngestRepo(db),
+		itemViewRepo:       repository.NewItemRepo(db),
 		llmUsageRepo:       repository.NewLLMUsageLogRepo(db),
 		llmExecutionRepo:   repository.NewLLMExecutionEventRepo(db),
 		sourceRepo:         repository.NewSourceRepo(db),
@@ -1250,6 +1333,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 		userRepo:           repository.NewUserRepo(db),
 		pushLogRepo:        repository.NewPushNotificationLogRepo(db),
 		notificationRepo:   repository.NewNotificationPriorityRepo(db),
+		readingGoalRepo:    repository.NewReadingGoalRepo(db),
 		worker:             worker,
 		openAI:             openAI,
 		oneSignal:          oneSignal,

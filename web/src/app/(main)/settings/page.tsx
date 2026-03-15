@@ -149,7 +149,9 @@ export default function SettingsPage() {
   const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
   const [llmSectionOpen, setLLMSectionOpen] = useState(true);
+  const [goalsSectionOpen, setGoalsSectionOpen] = useState(true);
   const [operationsSectionOpen, setOperationsSectionOpen] = useState(true);
+  const [notificationsSectionOpen, setNotificationsSectionOpen] = useState(true);
   const [integrationsSectionOpen, setIntegrationsSectionOpen] = useState(true);
   const [llmExtrasOpen, setLLMExtrasOpen] = useState(false);
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
@@ -167,6 +169,10 @@ export default function SettingsPage() {
     sensitivity: "medium",
     daily_cap: 3,
     theme_weight: 1,
+    immediate_enabled: true,
+    briefing_enabled: true,
+    review_enabled: true,
+    goal_match_enabled: true,
   });
   const [obsidianRepoOwner, setObsidianRepoOwner] = useState("");
   const [obsidianRepoName, setObsidianRepoName] = useState("");
@@ -223,7 +229,7 @@ export default function SettingsPage() {
       setReadingPlanSize(String(rpSize === 7 || rpSize === 15 || rpSize === 25 ? rpSize : 15));
       setReadingPlanDiversifyTopics(Boolean(data.reading_plan?.diversify_topics ?? true));
       setObsidianEnabled(Boolean(data.obsidian_export?.enabled));
-      setNotificationPriority(data.notification_priority ?? { sensitivity: "medium", daily_cap: 3, theme_weight: 1 });
+      setNotificationPriority(data.notification_priority ?? { sensitivity: "medium", daily_cap: 3, theme_weight: 1, immediate_enabled: true, briefing_enabled: true, review_enabled: true, goal_match_enabled: true });
       setObsidianRepoOwner(data.obsidian_export?.github_repo_owner ?? "");
       setObsidianRepoName(data.obsidian_export?.github_repo_name ?? "");
       setObsidianRepoBranch(data.obsidian_export?.github_repo_branch ?? "main");
@@ -1382,6 +1388,153 @@ export default function SettingsPage() {
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <button
             type="button"
+            onClick={() => setGoalsSectionOpen((prev) => !prev)}
+            className="flex w-full items-start justify-between gap-4 text-left"
+          >
+            <div>
+              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+                <Brain className="size-4 text-zinc-500" aria-hidden="true" />
+                {t("settings.section.goals")}
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">{t("settings.section.goalsDescription")}</p>
+            </div>
+            <ChevronDown className={`mt-0.5 size-4 shrink-0 text-zinc-500 transition-transform ${goalsSectionOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          {goalsSectionOpen ? (
+            <div className="mt-4">
+              <form onSubmit={submitReadingGoal} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+                <div className="mb-4">
+                  <h3 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+                    <Brain className="size-4 text-zinc-500" aria-hidden="true" />
+                    {t("settings.readingGoals.title")}
+                  </h3>
+                  <p className="mt-1 text-sm text-zinc-500">{t("settings.readingGoals.description")}</p>
+                </div>
+
+                <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-700">{t("settings.readingGoals.goalTitle")}</label>
+                      <input
+                        value={readingGoalTitle}
+                        onChange={(e) => setReadingGoalTitle(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                        placeholder={t("settings.readingGoals.goalTitlePlaceholder")}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-700">{t("settings.readingGoals.goalDescription")}</label>
+                      <textarea
+                        value={readingGoalDescription}
+                        onChange={(e) => setReadingGoalDescription(e.target.value)}
+                        rows={3}
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                        placeholder={t("settings.readingGoals.goalDescriptionPlaceholder")}
+                      />
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium text-zinc-700">{t("settings.readingGoals.priority")}</label>
+                        <select
+                          value={readingGoalPriority}
+                          onChange={(e) => setReadingGoalPriority(e.target.value)}
+                          className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                        >
+                          {[5, 4, 3, 2, 1].map((value) => (
+                            <option key={value} value={String(value)}>
+                              {value}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-zinc-700">{t("settings.readingGoals.dueDate")}</label>
+                        <input
+                          type="date"
+                          value={readingGoalDueDate}
+                          onChange={(e) => setReadingGoalDueDate(e.target.value)}
+                          className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="submit"
+                        disabled={savingReadingGoal}
+                        className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                      >
+                        {savingReadingGoal ? t("common.saving") : editingReadingGoalId ? t("settings.readingGoals.update") : t("settings.readingGoals.save")}
+                      </button>
+                      {editingReadingGoalId ? (
+                        <button
+                          type="button"
+                          onClick={resetReadingGoalForm}
+                          className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-700"
+                        >
+                          {t("common.cancel")}
+                        </button>
+                      ) : null}
+                      <span className="text-xs text-zinc-500">
+                        {locale === "ja" ? `active ${activeReadingGoals.length}/7` : `${activeReadingGoals.length}/7 active`}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {activeReadingGoals.map((goal) => (
+                      <div key={goal.id} className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <div className="line-clamp-1 text-sm font-semibold text-zinc-900">{goal.title}</div>
+                              <span className="rounded-full bg-white px-2 py-1 text-[11px] text-zinc-600">P{goal.priority}</span>
+                            </div>
+                            {goal.description ? (
+                              <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{goal.description}</p>
+                            ) : null}
+                            {goal.due_date ? (
+                              <p className="mt-1 text-xs text-zinc-500">{t("settings.readingGoals.dueDate")}: {goal.due_date}</p>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 flex-wrap gap-2">
+                            <button type="button" onClick={() => startEditReadingGoal(goal)} className="text-xs text-zinc-600 hover:text-zinc-900">
+                              {t("settings.readingGoals.edit")}
+                            </button>
+                            <button type="button" onClick={() => void archiveReadingGoal(goal.id)} className="text-xs text-zinc-600 hover:text-zinc-900">
+                              {t("settings.readingGoals.archive")}
+                            </button>
+                            <button type="button" onClick={() => void deleteReadingGoal(goal.id)} className="text-xs text-rose-600 hover:text-rose-700">
+                              {t("settings.delete")}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {archivedReadingGoals.length > 0 ? (
+                      <div className="space-y-2 border-t border-zinc-200 pt-3">
+                        <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">{t("settings.readingGoals.archived")}</div>
+                        {archivedReadingGoals.map((goal) => (
+                          <div key={goal.id} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 px-3 py-2">
+                            <div className="min-w-0 text-sm text-zinc-700">{goal.title}</div>
+                            <button type="button" onClick={() => void restoreReadingGoal(goal.id)} className="text-xs text-zinc-600 hover:text-zinc-900">
+                              {t("settings.readingGoals.restore")}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </form>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <button
+            type="button"
             onClick={() => setOperationsSectionOpen((prev) => !prev)}
             className="flex w-full items-start justify-between gap-4 text-left"
           >
@@ -1397,130 +1550,6 @@ export default function SettingsPage() {
 
           {operationsSectionOpen ? (
             <div className="mt-4 grid gap-6 lg:grid-cols-3">
-            <form onSubmit={submitReadingGoal} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-              <div className="mb-4">
-                <h3 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-                  <Brain className="size-4 text-zinc-500" aria-hidden="true" />
-                  {t("settings.readingGoals.title")}
-                </h3>
-                <p className="mt-1 text-sm text-zinc-500">{t("settings.readingGoals.description")}</p>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700">{t("settings.readingGoals.goalTitle")}</label>
-                  <input
-                    value={readingGoalTitle}
-                    onChange={(e) => setReadingGoalTitle(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-                    placeholder={t("settings.readingGoals.goalTitlePlaceholder")}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700">{t("settings.readingGoals.goalDescription")}</label>
-                  <textarea
-                    value={readingGoalDescription}
-                    onChange={(e) => setReadingGoalDescription(e.target.value)}
-                    rows={3}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-                    placeholder={t("settings.readingGoals.goalDescriptionPlaceholder")}
-                  />
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-700">{t("settings.readingGoals.priority")}</label>
-                    <select
-                      value={readingGoalPriority}
-                      onChange={(e) => setReadingGoalPriority(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-                    >
-                      {[5, 4, 3, 2, 1].map((value) => (
-                        <option key={value} value={String(value)}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-700">{t("settings.readingGoals.dueDate")}</label>
-                    <input
-                      type="date"
-                      value={readingGoalDueDate}
-                      onChange={(e) => setReadingGoalDueDate(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button
-                  type="submit"
-                  disabled={savingReadingGoal}
-                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-                >
-                  {savingReadingGoal ? t("common.saving") : editingReadingGoalId ? t("settings.readingGoals.update") : t("settings.readingGoals.save")}
-                </button>
-                {editingReadingGoalId ? (
-                  <button
-                    type="button"
-                    onClick={resetReadingGoalForm}
-                    className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-700"
-                  >
-                    {t("common.cancel")}
-                  </button>
-                ) : null}
-                <span className="text-xs text-zinc-500">
-                  {locale === "ja" ? `active ${activeReadingGoals.length}/7` : `${activeReadingGoals.length}/7 active`}
-                </span>
-              </div>
-
-              <div className="mt-5 space-y-3">
-                {activeReadingGoals.map((goal) => (
-                  <div key={goal.id} className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <div className="line-clamp-1 text-sm font-semibold text-zinc-900">{goal.title}</div>
-                          <span className="rounded-full bg-white px-2 py-1 text-[11px] text-zinc-600">P{goal.priority}</span>
-                        </div>
-                        {goal.description ? (
-                          <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{goal.description}</p>
-                        ) : null}
-                        {goal.due_date ? (
-                          <p className="mt-1 text-xs text-zinc-500">{t("settings.readingGoals.dueDate")}: {goal.due_date}</p>
-                        ) : null}
-                      </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        <button type="button" onClick={() => startEditReadingGoal(goal)} className="text-xs text-zinc-600 hover:text-zinc-900">
-                          {t("settings.readingGoals.edit")}
-                        </button>
-                        <button type="button" onClick={() => void archiveReadingGoal(goal.id)} className="text-xs text-zinc-600 hover:text-zinc-900">
-                          {t("settings.readingGoals.archive")}
-                        </button>
-                        <button type="button" onClick={() => void deleteReadingGoal(goal.id)} className="text-xs text-rose-600 hover:text-rose-700">
-                          {t("settings.delete")}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {archivedReadingGoals.length > 0 ? (
-                  <div className="space-y-2 border-t border-zinc-200 pt-3">
-                    <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">{t("settings.readingGoals.archived")}</div>
-                    {archivedReadingGoals.map((goal) => (
-                      <div key={goal.id} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 px-3 py-2">
-                        <div className="min-w-0 text-sm text-zinc-700">{goal.title}</div>
-                        <button type="button" onClick={() => void restoreReadingGoal(goal.id)} className="text-xs text-zinc-600 hover:text-zinc-900">
-                          {t("settings.readingGoals.restore")}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </form>
-
             <form onSubmit={submitReadingPlan} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
               <div className="mb-4">
                 <h3 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
@@ -1712,6 +1741,36 @@ export default function SettingsPage() {
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <button
             type="button"
+            onClick={() => setNotificationsSectionOpen((prev) => !prev)}
+            className="flex w-full items-start justify-between gap-4 text-left"
+          >
+            <div>
+              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+                <BellRing className="size-4 text-zinc-500" aria-hidden="true" />
+                {t("settings.section.notifications")}
+              </h2>
+              <p className="mt-1 text-sm text-zinc-500">{t("settings.section.notificationsDescription")}</p>
+            </div>
+            <ChevronDown className={`mt-0.5 size-4 shrink-0 text-zinc-500 transition-transform ${notificationsSectionOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          {notificationsSectionOpen ? (
+            <div className="mt-4">
+              <OneSignalSettings
+                rule={notificationPriority}
+                onSaveRule={async (rule) => {
+                  const res = await api.updateNotificationPriority(rule);
+                  setNotificationPriority(res.notification_priority);
+                  setSettings((prev) => (prev ? { ...prev, notification_priority: res.notification_priority } : prev));
+                }}
+              />
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <button
+            type="button"
             onClick={() => setIntegrationsSectionOpen((prev) => !prev)}
             className="flex w-full items-start justify-between gap-4 text-left"
           >
@@ -1761,17 +1820,6 @@ export default function SettingsPage() {
             </button>
           </div>
             </section>
-
-            <div>
-              <OneSignalSettings
-                rule={notificationPriority}
-                onSaveRule={async (rule) => {
-                  const res = await api.updateNotificationPriority(rule);
-                  setNotificationPriority(res.notification_priority);
-                  setSettings((prev) => (prev ? { ...prev, notification_priority: res.notification_priority } : prev));
-                }}
-              />
-            </div>
 
             <form onSubmit={submitObsidianExport} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-2">
           <div className="mb-4">

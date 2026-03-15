@@ -128,6 +128,19 @@ func (r *ReviewQueueRepo) ListDue(ctx context.Context, userID string, now time.T
 	return items, nil
 }
 
+func (r *ReviewQueueRepo) CountDue(ctx context.Context, userID string, now time.Time) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*)::int
+		FROM review_queue
+		WHERE user_id = $1
+		  AND status = 'pending'
+		  AND review_due_at <= $2`,
+		userID, now,
+	).Scan(&count)
+	return count, err
+}
+
 func (r *ReviewQueueRepo) MarkDone(ctx context.Context, userID, queueID string) error {
 	cmd, err := r.db.Exec(ctx, `
 		UPDATE review_queue

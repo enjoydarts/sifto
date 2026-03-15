@@ -69,7 +69,7 @@ func RankTodayQueueItems(candidates []model.TodayQueueCandidate, goals []model.R
 	}
 	ranked := make([]model.TodayQueueItem, 0, len(candidates))
 	for _, candidate := range candidates {
-		matchedGoals := matchReadingGoals(candidate.Item, goals)
+		matchedGoals := MatchReadingGoals(candidate.Item, goals)
 		reasons := make([]string, 0, 3)
 		score := 0.0
 		if candidate.Item.PersonalScore != nil {
@@ -157,7 +157,7 @@ func RankTodayQueueItems(candidates []model.TodayQueueCandidate, goals []model.R
 	return selected
 }
 
-func matchReadingGoals(item model.Item, goals []model.ReadingGoal) []model.ReadingGoal {
+func MatchReadingGoals(item model.Item, goals []model.ReadingGoal) []model.ReadingGoal {
 	matched := make([]model.ReadingGoal, 0, len(goals))
 	title := strings.ToLower(strings.TrimSpace(derefString(item.Title)))
 	reason := strings.ToLower(strings.TrimSpace(derefString(item.RecommendationReason)))

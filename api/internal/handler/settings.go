@@ -325,9 +325,13 @@ func (h *SettingsHandler) UpdateNotificationPriority(w http.ResponseWriter, r *h
 		return
 	}
 	var body struct {
-		Sensitivity string  `json:"sensitivity"`
-		DailyCap    int     `json:"daily_cap"`
-		ThemeWeight float64 `json:"theme_weight"`
+		Sensitivity      string  `json:"sensitivity"`
+		DailyCap         int     `json:"daily_cap"`
+		ThemeWeight      float64 `json:"theme_weight"`
+		ImmediateEnabled bool    `json:"immediate_enabled"`
+		BriefingEnabled  bool    `json:"briefing_enabled"`
+		ReviewEnabled    bool    `json:"review_enabled"`
+		GoalMatchEnabled bool    `json:"goal_match_enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -345,7 +349,7 @@ func (h *SettingsHandler) UpdateNotificationPriority(w http.ResponseWriter, r *h
 		http.Error(w, "invalid theme_weight", http.StatusBadRequest)
 		return
 	}
-	rule, err := h.notificationRepo.Upsert(r.Context(), userID, body.Sensitivity, body.DailyCap, body.ThemeWeight)
+	rule, err := h.notificationRepo.Upsert(r.Context(), userID, body.Sensitivity, body.DailyCap, body.ThemeWeight, body.ImmediateEnabled, body.BriefingEnabled, body.ReviewEnabled, body.GoalMatchEnabled)
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -404,16 +408,24 @@ func serviceMapObsidianExport(settings *model.ObsidianExportSettings, github *se
 func serviceMapNotificationPriority(rule *model.NotificationPriorityRule) map[string]any {
 	if rule == nil {
 		return map[string]any{
-			"sensitivity":  "medium",
-			"daily_cap":    3,
-			"theme_weight": 1.0,
+			"sensitivity":        "medium",
+			"daily_cap":          3,
+			"theme_weight":       1.0,
+			"immediate_enabled":  true,
+			"briefing_enabled":   true,
+			"review_enabled":     true,
+			"goal_match_enabled": true,
 		}
 	}
 	return map[string]any{
-		"id":           rule.ID,
-		"sensitivity":  rule.Sensitivity,
-		"daily_cap":    rule.DailyCap,
-		"theme_weight": rule.ThemeWeight,
+		"id":                 rule.ID,
+		"sensitivity":        rule.Sensitivity,
+		"daily_cap":          rule.DailyCap,
+		"theme_weight":       rule.ThemeWeight,
+		"immediate_enabled":  rule.ImmediateEnabled,
+		"briefing_enabled":   rule.BriefingEnabled,
+		"review_enabled":     rule.ReviewEnabled,
+		"goal_match_enabled": rule.GoalMatchEnabled,
 	}
 }
 

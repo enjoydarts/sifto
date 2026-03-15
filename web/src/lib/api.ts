@@ -606,6 +606,10 @@ export interface NotificationPriorityRule {
   sensitivity: "low" | "medium" | "high" | string;
   daily_cap: number;
   theme_weight: number;
+  immediate_enabled: boolean;
+  briefing_enabled: boolean;
+  review_enabled: boolean;
+  goal_match_enabled: boolean;
 }
 
 export interface LLMCatalogProvider {

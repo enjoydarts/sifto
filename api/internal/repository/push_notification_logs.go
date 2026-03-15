@@ -36,6 +36,21 @@ func (r *PushNotificationLogRepo) CountByUserKindDay(ctx context.Context, userID
 	return n, err
 }
 
+func (r *PushNotificationLogRepo) CountByUserKindsDay(ctx context.Context, userID string, kinds []string, dayJST time.Time) (int, error) {
+	if len(kinds) == 0 {
+		return 0, nil
+	}
+	var n int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*)::int
+		FROM push_notification_logs
+		WHERE user_id = $1
+		  AND kind = ANY($2::text[])
+		  AND day_jst = $3::date
+	`, userID, kinds, dayJST.Format("2006-01-02")).Scan(&n)
+	return n, err
+}
+
 type PushNotificationLogInput struct {
 	UserID                  string
 	Kind                    string

@@ -22,12 +22,20 @@ export default function OneSignalSettings({ rule, onSaveRule }: OneSignalSetting
   const [sensitivity, setSensitivity] = useState(rule?.sensitivity ?? "medium");
   const [dailyCap, setDailyCap] = useState(rule?.daily_cap ?? 3);
   const [themeWeight, setThemeWeight] = useState(rule?.theme_weight ?? 1);
+  const [immediateEnabled, setImmediateEnabled] = useState(rule?.immediate_enabled ?? true);
+  const [briefingEnabled, setBriefingEnabled] = useState(rule?.briefing_enabled ?? true);
+  const [reviewEnabled, setReviewEnabled] = useState(rule?.review_enabled ?? true);
+  const [goalMatchEnabled, setGoalMatchEnabled] = useState(rule?.goal_match_enabled ?? true);
 
   useEffect(() => {
     setSensitivity(rule?.sensitivity ?? "medium");
     setDailyCap(rule?.daily_cap ?? 3);
     setThemeWeight(rule?.theme_weight ?? 1);
-  }, [rule?.daily_cap, rule?.sensitivity, rule?.theme_weight]);
+    setImmediateEnabled(rule?.immediate_enabled ?? true);
+    setBriefingEnabled(rule?.briefing_enabled ?? true);
+    setReviewEnabled(rule?.review_enabled ?? true);
+    setGoalMatchEnabled(rule?.goal_match_enabled ?? true);
+  }, [rule?.briefing_enabled, rule?.daily_cap, rule?.goal_match_enabled, rule?.immediate_enabled, rule?.review_enabled, rule?.sensitivity, rule?.theme_weight]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -160,12 +168,38 @@ export default function OneSignalSettings({ rule, onSaveRule }: OneSignalSetting
               <input type="number" min={0.5} max={2} step={0.1} value={themeWeight} onChange={(e) => setThemeWeight(Number(e.target.value))} className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm" />
             </label>
           </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <label className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700">
+              <input type="checkbox" checked={immediateEnabled} onChange={(e) => setImmediateEnabled(e.target.checked)} />
+              <span>{t("settings.pushTypeImmediate")}</span>
+            </label>
+            <label className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700">
+              <input type="checkbox" checked={goalMatchEnabled} onChange={(e) => setGoalMatchEnabled(e.target.checked)} />
+              <span>{t("settings.pushTypeGoalMatch")}</span>
+            </label>
+            <label className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700">
+              <input type="checkbox" checked={briefingEnabled} onChange={(e) => setBriefingEnabled(e.target.checked)} />
+              <span>{t("settings.pushTypeBriefing")}</span>
+            </label>
+            <label className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700">
+              <input type="checkbox" checked={reviewEnabled} onChange={(e) => setReviewEnabled(e.target.checked)} />
+              <span>{t("settings.pushTypeReview")}</span>
+            </label>
+          </div>
           <div className="mt-3">
             <button
               type="button"
               onClick={async () => {
                 try {
-                  await onSaveRule({ sensitivity, daily_cap: dailyCap, theme_weight: themeWeight });
+                  await onSaveRule({
+                    sensitivity,
+                    daily_cap: dailyCap,
+                    theme_weight: themeWeight,
+                    immediate_enabled: immediateEnabled,
+                    briefing_enabled: briefingEnabled,
+                    review_enabled: reviewEnabled,
+                    goal_match_enabled: goalMatchEnabled,
+                  });
                   showToast(t("settings.pushRuleSaved"), "success");
                 } catch (e) {
                   showToast(String(e), "error");

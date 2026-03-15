@@ -54,6 +54,12 @@ export default function BriefingPage() {
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
+  const settingsQuery = useQuery({
+    queryKey: ["settings"] as const,
+    queryFn: api.getSettings,
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
   const todayQueueQuery = useQuery({
     queryKey: ["today-queue", 6] as const,
     queryFn: () => api.getTodayQueue({ size: 6 }),
@@ -85,9 +91,29 @@ export default function BriefingPage() {
   }, [dismissedModelUpdatesAt, modelUpdates]);
   const highlights = data?.highlight_items ?? EMPTY_ITEMS;
   const activeGoals = readingGoalsQuery.data?.active ?? EMPTY_GOALS;
+  const readingPlanPrefs = settingsQuery.data?.reading_plan;
+  const focusWindow = readingPlanPrefs?.window ?? "24h";
+  const focusSize = readingPlanPrefs?.size ?? 15;
+  const diversifyTopics = Boolean(readingPlanPrefs?.diversify_topics ?? true);
+  const quickTriageQuery = useQuery({
+    queryKey: ["triage-queue", "quick", focusWindow, focusSize, diversifyTopics ? 1 : 0] as const,
+    queryFn: () =>
+      api.getFocusQueue({
+        window: focusWindow === "today_jst" || focusWindow === "7d" ? focusWindow : "24h",
+        size: focusSize,
+        diversify_topics: diversifyTopics,
+        exclude_later: true,
+      }),
+    staleTime: 30_000,
+    placeholderData: (prev) => prev,
+  });
   const todayQueue = todayQueueQuery.data?.items ?? EMPTY_TODAY_QUEUE;
   const reviewQueue = reviewQueueQuery.data?.items ?? EMPTY_REVIEW_QUEUE;
   const weeklyReview = (weeklyReviewQuery.data ?? null) as WeeklyReviewSnapshot | null;
+  const quickTriageCount = useMemo(
+    () => (quickTriageQuery.data?.items ?? EMPTY_ITEMS).filter((item) => !item.is_read).length,
+    [quickTriageQuery.data?.items]
+  );
   const clusters = data?.clusters ?? EMPTY_CLUSTERS;
   const unreadHighlights = useMemo(() => highlights.filter((item) => !item.is_read), [highlights]);
   const nowReading = unreadHighlights[0] ?? highlights[0] ?? null;
@@ -443,7 +469,7 @@ export default function BriefingPage() {
                 {t("briefing.hub.triage")}
               </p>
               <p className="mt-2 text-2xl font-semibold">
-                {String(data?.stats.today_highlight_count ?? 0)}
+                {String(quickTriageCount)}
               </p>
               <p className="mt-1 text-sm text-zinc-300">{t("briefing.hub.start")}</p>
             </Link>

@@ -710,6 +710,13 @@ export default function BriefingPage() {
               router.push(`/items/${itemId}?from=${encodeURIComponent("/items?feed=unread&sort=newest")}`);
             }}
             onOpenItem={(itemId) => setInlineItemId(itemId)}
+            onReadToggled={() => {
+              void Promise.all([
+                queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
+                queryClient.invalidateQueries({ queryKey: ["today-queue"] }),
+                queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
+              ]);
+            }}
           />
         )}
       </div>

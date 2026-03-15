@@ -80,7 +80,10 @@ func (r *LLMValueMetricsRepo) CollectCurrentMonth(ctx context.Context, userID st
 				l.purpose,
 				l.provider,
 				l.model,
-				l.pricing_source,
+				CASE
+					WHEN COUNT(DISTINCT l.pricing_source) = 1 THEN MIN(l.pricing_source)
+					ELSE 'mixed(' || COUNT(DISTINCT l.pricing_source)::text || ')'
+				END AS pricing_source,
 				COUNT(*)::int AS calls,
 				COALESCE(SUM(l.estimated_cost_usd), 0)::double precision AS total_cost_usd
 			FROM llm_usage_logs l
@@ -88,15 +91,14 @@ func (r *LLMValueMetricsRepo) CollectCurrentMonth(ctx context.Context, userID st
 			WHERE l.user_id::text = $1
 			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
 			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
-			GROUP BY l.purpose, l.provider, l.model, l.pricing_source
+			GROUP BY l.purpose, l.provider, l.model
 		),
 		latest_item_usage AS (
-			SELECT DISTINCT ON (l.item_id, l.purpose)
+			SELECT DISTINCT ON (l.item_id, l.purpose, l.provider, l.model)
 				l.item_id,
 				l.purpose,
 				l.provider,
 				l.model,
-				l.pricing_source,
 				l.created_at
 			FROM llm_usage_logs l
 			CROSS JOIN bounds b
@@ -104,14 +106,13 @@ func (r *LLMValueMetricsRepo) CollectCurrentMonth(ctx context.Context, userID st
 			  AND l.item_id IS NOT NULL
 			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
 			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
-			ORDER BY l.item_id, l.purpose, l.created_at DESC
+			ORDER BY l.item_id, l.purpose, l.provider, l.model, l.created_at DESC
 		),
 		item_actions AS (
 			SELECT
 				u.purpose,
 				u.provider,
 				u.model,
-				u.pricing_source,
 				COUNT(DISTINCT u.item_id)::int AS item_count,
 				COUNT(DISTINCT CASE WHEN ir.item_id IS NOT NULL THEN u.item_id END)::int AS read_count,
 				COUNT(DISTINCT CASE WHEN fb.item_id IS NOT NULL THEN u.item_id END)::int AS favorite_count,
@@ -139,7 +140,7 @@ func (r *LLMValueMetricsRepo) CollectCurrentMonth(ctx context.Context, userID st
 				AND ai.created_at >= u.created_at
 				AND (ai.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
 				AND (ai.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
-			GROUP BY u.purpose, u.provider, u.model, u.pricing_source
+			GROUP BY u.purpose, u.provider, u.model
 		)
 		SELECT
 			b.month_start_jst::date,
@@ -161,7 +162,6 @@ func (r *LLMValueMetricsRepo) CollectCurrentMonth(ctx context.Context, userID st
 			ON a.purpose = u.purpose
 			AND a.provider = u.provider
 			AND a.model = u.model
-			AND a.pricing_source = u.pricing_source
 		ORDER BY u.total_cost_usd DESC, u.calls DESC, u.provider ASC, u.model ASC`, userID)
 	if err != nil {
 		return nil, err

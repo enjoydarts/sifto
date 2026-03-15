@@ -589,10 +589,34 @@ function ItemsPageContent() {
                 prev
                   ? {
                       ...prev,
-                      items: prev.items.map((v) => (v.id === itemId ? { ...v, is_read: isRead } : v)),
+                      items: prev.items
+                        .map((v) => (v.id === itemId ? { ...v, is_read: isRead } : v))
+                        .filter((v) => {
+                          if (unreadMode || unreadOnly) return !v.is_read;
+                          if (readMode) return v.is_read;
+                          return true;
+                        }),
+                      total:
+                        (unreadMode || unreadOnly || readMode) && prev.items.some((v) => v.id === itemId)
+                          ? Math.max(
+                              0,
+                              prev.total -
+                                (unreadMode || unreadOnly
+                                  ? isRead
+                                    ? 1
+                                    : 0
+                                  : readMode
+                                    ? isRead
+                                      ? 0
+                                      : 1
+                                    : 0)
+                            )
+                          : prev.total,
                     }
                   : prev
               );
+              void queryClient.invalidateQueries({ queryKey: ["items-feed"] });
+              void queryClient.invalidateQueries({ queryKey: ["focus-queue"] });
             }}
             onFeedbackUpdated={() => {
               void queryClient.invalidateQueries({ queryKey: ["items-feed"] });

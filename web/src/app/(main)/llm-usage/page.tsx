@@ -77,6 +77,8 @@ export default function LLMUsagePage() {
   const [purposeSortDir, setPurposeSortDir] = useState<"asc" | "desc">("desc");
   const [reliabilitySortKey, setReliabilitySortKey] = useState<string>("failures");
   const [reliabilitySortDir, setReliabilitySortDir] = useState<"asc" | "desc">("desc");
+  const [valueMetricSortKey, setValueMetricSortKey] = useState<string>("total_cost_usd");
+  const [valueMetricSortDir, setValueMetricSortDir] = useState<"asc" | "desc">("desc");
   const [modelSortKey, setModelSortKey] = useState<string>("estimated_cost_usd");
   const [modelSortDir, setModelSortDir] = useState<"asc" | "desc">("desc");
   const [logSortKey, setLogSortKey] = useState<string>("created_at");
@@ -239,6 +241,46 @@ export default function LLMUsagePage() {
       return a.purpose.localeCompare(b.purpose);
     });
   }, [currentMonthPurposeRows, purposeSortDir, purposeSortKey]);
+
+  const sortedValueMetricRows = useMemo(() => {
+    const dir = valueMetricSortDir === "asc" ? 1 : -1;
+    const getValueMetricSortValue = (row: LLMValueMetric, key: string): string | number | null | undefined => {
+      switch (key) {
+        case "purpose":
+          return row.purpose;
+        case "model":
+          return `${row.provider}/${row.model}`;
+        case "cost_to_read_usd":
+          return row.cost_to_read_usd;
+        case "cost_to_favorite_usd":
+          return row.cost_to_favorite_usd;
+        case "cost_to_insight_usd":
+          return row.cost_to_insight_usd;
+        case "total_cost_usd":
+          return row.total_cost_usd;
+        case "calls":
+          return row.calls;
+        case "advisory_code":
+          return row.advisory_code;
+        default:
+          return row.total_cost_usd;
+      }
+    };
+    return valueMetricRows.slice().sort((a, b) => {
+      const aVal = getValueMetricSortValue(a, valueMetricSortKey);
+      const bVal = getValueMetricSortValue(b, valueMetricSortKey);
+      let cmp = 0;
+      if (typeof aVal === "number" || typeof bVal === "number") {
+        cmp = Number(aVal ?? -1) - Number(bVal ?? -1);
+      } else {
+        cmp = String(aVal ?? "").localeCompare(String(bVal ?? ""));
+      }
+      if (cmp !== 0) return cmp * dir;
+      if (a.purpose !== b.purpose) return a.purpose.localeCompare(b.purpose);
+      if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+      return a.model.localeCompare(b.model);
+    });
+  }, [valueMetricRows, valueMetricSortDir, valueMetricSortKey]);
 
   const currentMonthExecutionTableRows = useMemo(() => {
     const rows = currentMonthExecutionRows.filter((row) => row.attempts > 0);
@@ -708,9 +750,12 @@ export default function LLMUsagePage() {
       <ValueMetricsPanel
         title={t("llm.valueMetrics.title")}
         subtitle={t("llm.valueMetrics.subtitle")}
-        rows={valueMetricRows}
+        rows={sortedValueMetricRows}
         emptyLabel={t("llm.noSummary")}
         fmtUSD={fmtUSD}
+        sortKey={valueMetricSortKey}
+        sortDir={valueMetricSortDir}
+        onSort={(key) => toggleSort(key, valueMetricSortKey, setValueMetricSortKey, setValueMetricSortDir)}
         advisoryLabels={{
           costToRead: t("llm.valueMetrics.costToRead"),
           costToFavorite: t("llm.valueMetrics.costToFavorite"),

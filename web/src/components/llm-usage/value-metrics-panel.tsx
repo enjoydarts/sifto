@@ -61,6 +61,9 @@ export function ValueMetricsPanel({
   rows,
   emptyLabel,
   fmtUSD,
+  sortKey,
+  sortDir,
+  onSort,
   advisoryLabels,
 }: {
   title: string;
@@ -68,6 +71,9 @@ export function ValueMetricsPanel({
   rows: LLMValueMetric[];
   emptyLabel: string;
   fmtUSD: (v: number) => string;
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  onSort: (key: string) => void;
   advisoryLabels: {
     costToRead: string;
     costToFavorite: string;
@@ -86,6 +92,10 @@ export function ValueMetricsPanel({
     metricInsight: string;
   };
 }) {
+  const renderSortMark = (key: string) => {
+    if (sortKey !== key) return null;
+    return <span className="ml-1 text-zinc-400">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4">
       <div className="mb-3">
@@ -99,14 +109,14 @@ export function ValueMetricsPanel({
           <table className="min-w-full text-sm">
             <thead className="text-xs text-zinc-500">
               <tr className="border-b border-zinc-100">
-                <th className="px-3 py-2 text-left font-medium">purpose</th>
-                <th className="px-3 py-2 text-left font-medium">model</th>
-                <th className="px-3 py-2 text-right font-medium">{advisoryLabels.costToRead}</th>
-                <th className="px-3 py-2 text-right font-medium">{advisoryLabels.costToFavorite}</th>
-                <th className="px-3 py-2 text-right font-medium">{advisoryLabels.costToInsight}</th>
-                <th className="px-3 py-2 text-right font-medium">cost</th>
-                <th className="px-3 py-2 text-right font-medium">calls</th>
-                <th className="px-3 py-2 text-left font-medium">advisory</th>
+                <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => onSort("purpose")} className="inline-flex items-center hover:text-zinc-800">purpose{renderSortMark("purpose")}</button></th>
+                <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => onSort("model")} className="inline-flex items-center hover:text-zinc-800">model{renderSortMark("model")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("cost_to_read_usd")} className="inline-flex items-center hover:text-zinc-800">{advisoryLabels.costToRead}{renderSortMark("cost_to_read_usd")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("cost_to_favorite_usd")} className="inline-flex items-center hover:text-zinc-800">{advisoryLabels.costToFavorite}{renderSortMark("cost_to_favorite_usd")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("cost_to_insight_usd")} className="inline-flex items-center hover:text-zinc-800">{advisoryLabels.costToInsight}{renderSortMark("cost_to_insight_usd")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("total_cost_usd")} className="inline-flex items-center hover:text-zinc-800">cost{renderSortMark("total_cost_usd")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("calls")} className="inline-flex items-center hover:text-zinc-800">calls{renderSortMark("calls")}</button></th>
+                <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => onSort("advisory_code")} className="inline-flex items-center hover:text-zinc-800">advisory{renderSortMark("advisory_code")}</button></th>
               </tr>
             </thead>
             <tbody>

@@ -15,8 +15,8 @@ export function ReadingGoalsPanel({ goals }: { goals: ReadingGoal[] }) {
           <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.goals.title")}</h2>
           <p className="mt-1 text-sm text-zinc-500">{t("briefing.goals.subtitle")}</p>
         </div>
-        <Link href="/settings" className="text-xs text-zinc-500 transition-colors hover:text-zinc-900">
-          {t("briefing.goals.openSettings")}
+        <Link href="/goals" className="text-xs text-zinc-500 transition-colors hover:text-zinc-900">
+          {t("briefing.goals.openGoals")}
         </Link>
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">

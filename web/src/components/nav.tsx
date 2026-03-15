@@ -17,6 +17,7 @@ import {
   Newspaper,
   Rss,
   Search,
+  Target,
   TableProperties,
   Settings as SettingsIcon,
   Sparkles,
@@ -37,6 +38,7 @@ const primaryLinks = [
 const secondaryLinks = [
   { href: "/clusters", labelKey: "nav.clusters", icon: Layers3 },
   { href: "/pulse", labelKey: "nav.pulse", icon: Sparkles },
+  { href: "/goals", labelKey: "nav.goals", icon: Target },
   { href: "/favorites", labelKey: "nav.favorites", icon: Star },
   { href: "/sources", labelKey: "nav.sources", icon: Rss },
   { href: "/digests", labelKey: "nav.digests", icon: Mail },

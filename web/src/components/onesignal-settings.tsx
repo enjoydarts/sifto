@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell } from "lucide-react";
 import { NotificationPriorityRule } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -62,26 +61,13 @@ export default function OneSignalSettings({ rule, onSaveRule }: OneSignalSetting
 
   if (!supported) {
     return (
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-          <Bell className="size-4 text-zinc-500" aria-hidden="true" />
-          {t("settings.pushTitle")}
-        </h2>
-        <p className="mt-2 text-sm text-zinc-500">{t("settings.pushUnsupported")}</p>
-      </section>
+      <p className="text-sm text-zinc-500">{t("settings.pushUnsupported")}</p>
     );
   }
 
   return (
-    <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-      <div className="mb-4">
-        <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-          <Bell className="size-4 text-zinc-500" aria-hidden="true" />
-          {t("settings.pushTitle")}
-        </h2>
-        <p className="mt-1 text-sm text-zinc-500">{t("settings.pushDescription")}</p>
-      </div>
-
+    <div>
+      <p className="text-sm text-zinc-500">{t("settings.pushDescription")}</p>
       <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
         {enabled ? t("settings.pushEnabled") : permission === "denied" ? t("settings.pushDenied") : t("settings.pushDisabled")}
       </div>
@@ -212,6 +198,6 @@ export default function OneSignalSettings({ rule, onSaveRule }: OneSignalSetting
           </div>
         </div>
       ) : null}
-    </section>
+    </div>
   );
 }

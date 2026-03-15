@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BellRing, Brain, ChevronDown, Coins, KeyRound, Link2, Mail, Settings as SettingsIcon } from "lucide-react";
-import { api, LLMCatalog, LLMCatalogModel, NotificationPriorityRule, ProviderModelChangeEvent, ReadingGoal, UserSettings } from "@/lib/api";
+import { api, LLMCatalog, LLMCatalogModel, NotificationPriorityRule, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -99,7 +99,7 @@ function buildCostPerformancePreset(catalog: LLMCatalog | null): NonNullable<Use
 
 
 export default function SettingsPage() {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
   const [loading, setLoading] = useState(true);
@@ -108,7 +108,6 @@ export default function SettingsPage() {
   const [savingReadingPlan, setSavingReadingPlan] = useState(false);
   const [savingObsidianExport, setSavingObsidianExport] = useState(false);
   const [runningObsidianExport, setRunningObsidianExport] = useState(false);
-  const [savingReadingGoal, setSavingReadingGoal] = useState(false);
   const [savingLLMModels, setSavingLLMModels] = useState(false);
   const [savingAnthropicKey, setSavingAnthropicKey] = useState(false);
   const [deletingAnthropicKey, setDeletingAnthropicKey] = useState(false);
@@ -149,7 +148,6 @@ export default function SettingsPage() {
   const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
   const [llmSectionOpen, setLLMSectionOpen] = useState(true);
-  const [goalsSectionOpen, setGoalsSectionOpen] = useState(true);
   const [operationsSectionOpen, setOperationsSectionOpen] = useState(true);
   const [notificationsSectionOpen, setNotificationsSectionOpen] = useState(true);
   const [integrationsSectionOpen, setIntegrationsSectionOpen] = useState(true);
@@ -157,13 +155,6 @@ export default function SettingsPage() {
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
   const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
   const [readingPlanDiversifyTopics, setReadingPlanDiversifyTopics] = useState(true);
-  const [activeReadingGoals, setActiveReadingGoals] = useState<ReadingGoal[]>([]);
-  const [archivedReadingGoals, setArchivedReadingGoals] = useState<ReadingGoal[]>([]);
-  const [editingReadingGoalId, setEditingReadingGoalId] = useState<string | null>(null);
-  const [readingGoalTitle, setReadingGoalTitle] = useState("");
-  const [readingGoalDescription, setReadingGoalDescription] = useState("");
-  const [readingGoalPriority, setReadingGoalPriority] = useState("3");
-  const [readingGoalDueDate, setReadingGoalDueDate] = useState("");
   const [obsidianEnabled, setObsidianEnabled] = useState(false);
   const [notificationPriority, setNotificationPriority] = useState<NotificationPriorityRule>({
     sensitivity: "medium",
@@ -212,10 +203,9 @@ export default function SettingsPage() {
     const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
-      const [data, nextCatalog, readingGoals] = await Promise.all([
+      const [data, nextCatalog] = await Promise.all([
         api.getSettings(),
         api.getLLMCatalog(),
-        api.getReadingGoals(),
       ]);
       if (seq !== loadSeqRef.current) return;
       setSettings(data);
@@ -234,8 +224,6 @@ export default function SettingsPage() {
       setObsidianRepoName(data.obsidian_export?.github_repo_name ?? "");
       setObsidianRepoBranch(data.obsidian_export?.github_repo_branch ?? "main");
       setObsidianRootPath(data.obsidian_export?.vault_root_path ?? "Sifto/Favorites");
-      setActiveReadingGoals(readingGoals.active ?? []);
-      setArchivedReadingGoals(readingGoals.archived ?? []);
       if (!llmModelsDirtyRef.current) {
         syncLLMModelForm(data.llm_models);
       }
@@ -653,83 +641,6 @@ export default function SettingsPage() {
     } finally {
       setSavingReadingPlan(false);
     }
-  }
-
-  function resetReadingGoalForm() {
-    setEditingReadingGoalId(null);
-    setReadingGoalTitle("");
-    setReadingGoalDescription("");
-    setReadingGoalPriority("3");
-    setReadingGoalDueDate("");
-  }
-
-  async function submitReadingGoal(e: FormEvent) {
-    e.preventDefault();
-    setSavingReadingGoal(true);
-    try {
-      const activeLimitReached = activeReadingGoals.length >= 7 && !editingReadingGoalId;
-      if (activeLimitReached) {
-        throw new Error(t("settings.readingGoals.limit"));
-      }
-      const payload = {
-        title: readingGoalTitle,
-        description: readingGoalDescription,
-        priority: Number(readingGoalPriority),
-        due_date: readingGoalDueDate.trim() || null,
-      };
-      if (editingReadingGoalId) {
-        await api.updateReadingGoal(editingReadingGoalId, payload);
-      } else {
-        await api.createReadingGoal(payload);
-      }
-      await load();
-      resetReadingGoalForm();
-      showToast(t("settings.toast.readingGoalSaved"), "success");
-    } catch (e) {
-      showToast(String(e), "error");
-    } finally {
-      setSavingReadingGoal(false);
-    }
-  }
-
-  async function archiveReadingGoal(goalId: string) {
-    try {
-      await api.archiveReadingGoal(goalId);
-      await load();
-      if (editingReadingGoalId === goalId) resetReadingGoalForm();
-      showToast(t("settings.toast.readingGoalArchived"), "success");
-    } catch (e) {
-      showToast(String(e), "error");
-    }
-  }
-
-  async function restoreReadingGoal(goalId: string) {
-    try {
-      await api.restoreReadingGoal(goalId);
-      await load();
-      showToast(t("settings.toast.readingGoalRestored"), "success");
-    } catch (e) {
-      showToast(String(e), "error");
-    }
-  }
-
-  async function deleteReadingGoal(goalId: string) {
-    try {
-      await api.deleteReadingGoal(goalId);
-      await load();
-      if (editingReadingGoalId === goalId) resetReadingGoalForm();
-      showToast(t("settings.toast.readingGoalDeleted"), "success");
-    } catch (e) {
-      showToast(String(e), "error");
-    }
-  }
-
-  function startEditReadingGoal(goal: ReadingGoal) {
-    setEditingReadingGoalId(goal.id);
-    setReadingGoalTitle(goal.title);
-    setReadingGoalDescription(goal.description ?? "");
-    setReadingGoalPriority(String(goal.priority));
-    setReadingGoalDueDate(goal.due_date ?? "");
   }
 
   async function submitObsidianExport(e: FormEvent) {
@@ -1388,153 +1299,6 @@ export default function SettingsPage() {
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <button
             type="button"
-            onClick={() => setGoalsSectionOpen((prev) => !prev)}
-            className="flex w-full items-start justify-between gap-4 text-left"
-          >
-            <div>
-              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-                <Brain className="size-4 text-zinc-500" aria-hidden="true" />
-                {t("settings.section.goals")}
-              </h2>
-              <p className="mt-1 text-sm text-zinc-500">{t("settings.section.goalsDescription")}</p>
-            </div>
-            <ChevronDown className={`mt-0.5 size-4 shrink-0 text-zinc-500 transition-transform ${goalsSectionOpen ? "rotate-180" : ""}`} />
-          </button>
-
-          {goalsSectionOpen ? (
-            <div className="mt-4">
-              <form onSubmit={submitReadingGoal} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-                <div className="mb-4">
-                  <h3 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-                    <Brain className="size-4 text-zinc-500" aria-hidden="true" />
-                    {t("settings.readingGoals.title")}
-                  </h3>
-                  <p className="mt-1 text-sm text-zinc-500">{t("settings.readingGoals.description")}</p>
-                </div>
-
-                <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-zinc-700">{t("settings.readingGoals.goalTitle")}</label>
-                      <input
-                        value={readingGoalTitle}
-                        onChange={(e) => setReadingGoalTitle(e.target.value)}
-                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-                        placeholder={t("settings.readingGoals.goalTitlePlaceholder")}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-zinc-700">{t("settings.readingGoals.goalDescription")}</label>
-                      <textarea
-                        value={readingGoalDescription}
-                        onChange={(e) => setReadingGoalDescription(e.target.value)}
-                        rows={3}
-                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-                        placeholder={t("settings.readingGoals.goalDescriptionPlaceholder")}
-                      />
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <label className="block text-sm font-medium text-zinc-700">{t("settings.readingGoals.priority")}</label>
-                        <select
-                          value={readingGoalPriority}
-                          onChange={(e) => setReadingGoalPriority(e.target.value)}
-                          className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-                        >
-                          {[5, 4, 3, 2, 1].map((value) => (
-                            <option key={value} value={String(value)}>
-                              {value}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-zinc-700">{t("settings.readingGoals.dueDate")}</label>
-                        <input
-                          type="date"
-                          value={readingGoalDueDate}
-                          onChange={(e) => setReadingGoalDueDate(e.target.value)}
-                          className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="submit"
-                        disabled={savingReadingGoal}
-                        className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-                      >
-                        {savingReadingGoal ? t("common.saving") : editingReadingGoalId ? t("settings.readingGoals.update") : t("settings.readingGoals.save")}
-                      </button>
-                      {editingReadingGoalId ? (
-                        <button
-                          type="button"
-                          onClick={resetReadingGoalForm}
-                          className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-700"
-                        >
-                          {t("common.cancel")}
-                        </button>
-                      ) : null}
-                      <span className="text-xs text-zinc-500">
-                        {locale === "ja" ? `active ${activeReadingGoals.length}/7` : `${activeReadingGoals.length}/7 active`}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {activeReadingGoals.map((goal) => (
-                      <div key={goal.id} className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <div className="line-clamp-1 text-sm font-semibold text-zinc-900">{goal.title}</div>
-                              <span className="rounded-full bg-white px-2 py-1 text-[11px] text-zinc-600">P{goal.priority}</span>
-                            </div>
-                            {goal.description ? (
-                              <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{goal.description}</p>
-                            ) : null}
-                            {goal.due_date ? (
-                              <p className="mt-1 text-xs text-zinc-500">{t("settings.readingGoals.dueDate")}: {goal.due_date}</p>
-                            ) : null}
-                          </div>
-                          <div className="flex shrink-0 flex-wrap gap-2">
-                            <button type="button" onClick={() => startEditReadingGoal(goal)} className="text-xs text-zinc-600 hover:text-zinc-900">
-                              {t("settings.readingGoals.edit")}
-                            </button>
-                            <button type="button" onClick={() => void archiveReadingGoal(goal.id)} className="text-xs text-zinc-600 hover:text-zinc-900">
-                              {t("settings.readingGoals.archive")}
-                            </button>
-                            <button type="button" onClick={() => void deleteReadingGoal(goal.id)} className="text-xs text-rose-600 hover:text-rose-700">
-                              {t("settings.delete")}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {archivedReadingGoals.length > 0 ? (
-                      <div className="space-y-2 border-t border-zinc-200 pt-3">
-                        <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">{t("settings.readingGoals.archived")}</div>
-                        {archivedReadingGoals.map((goal) => (
-                          <div key={goal.id} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 px-3 py-2">
-                            <div className="min-w-0 text-sm text-zinc-700">{goal.title}</div>
-                            <button type="button" onClick={() => void restoreReadingGoal(goal.id)} className="text-xs text-zinc-600 hover:text-zinc-900">
-                              {t("settings.readingGoals.restore")}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </form>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <button
-            type="button"
             onClick={() => setOperationsSectionOpen((prev) => !prev)}
             className="flex w-full items-start justify-between gap-4 text-left"
           >
@@ -1785,43 +1549,43 @@ export default function SettingsPage() {
           </button>
 
           {integrationsSectionOpen ? (
-            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <div className="mt-4 space-y-4">
             <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-              <KeyRound className="size-4 text-zinc-500" aria-hidden="true" />
-              {t("settings.inoreaderTitle")}
-            </h2>
-            <p className="mt-1 text-sm text-zinc-500">{t("settings.inoreaderDescription")}</p>
-          </div>
+              <div className="mb-4">
+                <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
+                  <KeyRound className="size-4 text-zinc-500" aria-hidden="true" />
+                  {t("settings.inoreaderTitle")}
+                </h2>
+                <p className="mt-1 text-sm text-zinc-500">{t("settings.inoreaderDescription")}</p>
+              </div>
 
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-            {settings.has_inoreader_oauth ? t("settings.inoreaderConnected") : t("settings.inoreaderNotConnected")}
-          </div>
-          {settings.inoreader_token_expires_at && (
-            <p className="mt-2 text-xs text-zinc-500">
-              {t("settings.inoreaderTokenExpiresAt")}: {new Date(settings.inoreader_token_expires_at).toLocaleString()}
-            </p>
-          )}
-          <div className="mt-4 flex flex-wrap gap-2">
-            <a
-              href="/api/settings/inoreader/connect"
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white"
-            >
-              {t("settings.inoreaderConnect")}
-            </a>
-            <button
-              type="button"
-              disabled={deletingInoreaderOAuth || !settings.has_inoreader_oauth}
-              onClick={handleDeleteInoreaderOAuth}
-              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
-            >
-              {deletingInoreaderOAuth ? t("settings.deleting") : t("settings.inoreaderDisconnect")}
-            </button>
-          </div>
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+                {settings.has_inoreader_oauth ? t("settings.inoreaderConnected") : t("settings.inoreaderNotConnected")}
+              </div>
+              {settings.inoreader_token_expires_at && (
+                <p className="mt-2 break-words text-xs text-zinc-500">
+                  {t("settings.inoreaderTokenExpiresAt")}: {new Date(settings.inoreader_token_expires_at).toLocaleString()}
+                </p>
+              )}
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <a
+                  href="/api/settings/inoreader/connect"
+                  className="inline-flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white sm:w-auto"
+                >
+                  {t("settings.inoreaderConnect")}
+                </a>
+                <button
+                  type="button"
+                  disabled={deletingInoreaderOAuth || !settings.has_inoreader_oauth}
+                  onClick={handleDeleteInoreaderOAuth}
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50 sm:w-auto"
+                >
+                  {deletingInoreaderOAuth ? t("settings.deleting") : t("settings.inoreaderDisconnect")}
+                </button>
+              </div>
             </section>
 
-            <form onSubmit={submitObsidianExport} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm lg:col-span-2">
+            <form onSubmit={submitObsidianExport} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <div className="mb-4">
             <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
               <SettingsIcon className="size-4 text-zinc-500" aria-hidden="true" />

@@ -141,6 +141,7 @@ type RecommendedSource struct {
 type Item struct {
 	ID                    string                     `json:"id"`
 	SourceID              string                     `json:"source_id"`
+	SourceTitle           *string                    `json:"source_title,omitempty"`
 	URL                   string                     `json:"url"`
 	Title                 *string                    `json:"title"`
 	ThumbnailURL          *string                    `json:"thumbnail_url,omitempty"`

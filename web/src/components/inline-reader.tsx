@@ -280,7 +280,7 @@ export function InlineReader({
       >
         {/* Swipe handle (mobile) */}
         <div
-          className="-mx-2 mb-2 flex min-h-14 items-center justify-center rounded-lg px-2 py-2 touch-none md:hidden"
+          className="-mx-2 mb-1 flex min-h-9 items-center justify-center rounded-lg px-2 py-1.5 touch-none md:hidden"
           style={{ touchAction: "none" }}
           onPointerDown={onHandlePointerDown}
           onPointerMove={onHandlePointerMove}
@@ -303,12 +303,19 @@ export function InlineReader({
         {item && (
           <>
             {/* Header: title + URL + close */}
-            <div className="border-b border-zinc-200 p-5 sm:p-6">
-              <div className="mb-2 flex items-center justify-end">
+            <div className="border-b border-zinc-200 px-5 pb-5 pt-3 sm:p-6">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                {item.source_title ? (
+                  <div className="min-w-0 text-xs font-medium tracking-[0.08em] text-zinc-500">
+                    {item.source_title}
+                  </div>
+                ) : (
+                  <div />
+                )}
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded border border-zinc-300 bg-white p-1 text-zinc-700 hover:bg-zinc-50 press focus-ring"
+                  className="shrink-0 rounded border border-zinc-300 bg-white p-1 text-zinc-700 hover:bg-zinc-50 press focus-ring"
                   aria-label={t("common.close")}
                 >
                   <X className="size-4" aria-hidden="true" />

@@ -9,7 +9,7 @@ import (
 func (r *ItemRepo) loadItemDetailBase(ctx context.Context, id, userID string) (*model.ItemDetail, error) {
 	var d model.ItemDetail
 	err := r.db.QueryRow(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
+		SELECT i.id, i.source_id, s.title, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       sm.translated_title,
 		       EXISTS (
 		           SELECT 1 FROM item_reads ir
@@ -20,7 +20,7 @@ func (r *ItemRepo) loadItemDetailBase(ctx context.Context, id, userID string) (*
 		JOIN sources s ON s.id = i.source_id
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
-	).Scan(&d.ID, &d.SourceID, &d.URL, &d.Title, &d.ThumbnailURL, &d.ContentText,
+	).Scan(&d.ID, &d.SourceID, &d.SourceTitle, &d.URL, &d.Title, &d.ThumbnailURL, &d.ContentText,
 		&d.Status, &d.TranslatedTitle, &d.IsRead, &d.ProcessingError, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {
 		return nil, mapDBError(err)

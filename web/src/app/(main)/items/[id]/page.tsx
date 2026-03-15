@@ -607,68 +607,94 @@ export default function ItemDetailPage() {
       </Link>
 
       <section className="rounded-[20px] border border-zinc-200 bg-white p-6 shadow-sm md:p-8">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span
-            className={`rounded px-2 py-0.5 text-xs font-medium ${
-              STATUS_COLOR[item.status] ?? "bg-zinc-100 text-zinc-600"
-            }`}
-          >
-            {t(`status.${item.status}`, item.status)}
-          </span>
-          {item.published_at && (
-            <span className="text-sm text-zinc-500">
-              {new Date(item.published_at).toLocaleString(dateLocale)}
+        <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded px-2 py-0.5 text-xs font-medium ${
+                STATUS_COLOR[item.status] ?? "bg-zinc-100 text-zinc-600"
+              }`}
+            >
+              {t(`status.${item.status}`, item.status)}
             </span>
-          )}
-          <span className="text-xs text-zinc-400">id: {item.id}</span>
+            {item.published_at && (
+              <span className="text-sm text-zinc-500">
+                {new Date(item.published_at).toLocaleString(dateLocale)}
+              </span>
+            )}
+            <span className="text-xs text-zinc-400">id: {item.id}</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:justify-end">
+            <button
+              type="button"
+              onClick={toggleRead}
+              disabled={readUpdating}
+              className="rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {readUpdating
+                ? t("items.action.updating")
+                : item.is_read
+                  ? t("items.action.markUnread")
+                  : t("items.action.markRead")}
+            </button>
+            <button
+              type="button"
+              onClick={retryItem}
+              disabled={retryUpdating}
+              className={`rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+                item.status === "new" ? "hidden" : ""
+              }`}
+            >
+              {retryUpdating ? t("common.saving") : t("itemDetail.retrySummary")}
+            </button>
+            <button
+              type="button"
+              onClick={retryFromFacts}
+              disabled={retryFromFactsUpdating}
+              className={`rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
+                item.status === "new" ? "hidden" : ""
+              }`}
+            >
+              {retryFromFactsUpdating ? t("common.saving") : t("itemDetail.retryFromFacts")}
+            </button>
+            <button
+              type="button"
+              onClick={deleteItem}
+              disabled={deleteUpdating}
+              className="rounded-[10px] border border-red-300 bg-white px-3 py-2 text-[13px] font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {deleteUpdating
+                ? t("itemDetail.delete.deleting")
+                : t("itemDetail.delete.button")}
+            </button>
+          </div>
         </div>
 
-        <div className="mb-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          <button
-            type="button"
-            onClick={toggleRead}
-            disabled={readUpdating}
-            className="rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {readUpdating
-              ? t("items.action.updating")
-              : item.is_read
-                ? t("items.action.markUnread")
-                : t("items.action.markRead")}
-          </button>
-          <button
-            type="button"
-            onClick={retryItem}
-            disabled={retryUpdating}
-            className={`rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
-              item.status === "new" ? "hidden" : ""
-            }`}
-          >
-            {retryUpdating ? t("common.saving") : t("itemDetail.retrySummary")}
-          </button>
-          <button
-            type="button"
-            onClick={retryFromFacts}
-            disabled={retryFromFactsUpdating}
-            className={`rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
-              item.status === "new" ? "hidden" : ""
-            }`}
-          >
-            {retryFromFactsUpdating ? t("common.saving") : t("itemDetail.retryFromFacts")}
-          </button>
-          <button
-            type="button"
-            onClick={deleteItem}
-            disabled={deleteUpdating}
-            className="rounded-[10px] border border-red-300 bg-white px-3 py-2 text-[13px] font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {deleteUpdating
-              ? t("itemDetail.delete.deleting")
-              : t("itemDetail.delete.button")}
-          </button>
+        {item.source_title ? (
+          <div className="mb-2 text-xs font-medium tracking-[0.08em] text-zinc-500">
+            {item.source_title}
+          </div>
+        ) : null}
+        <div className="mb-2 flex items-start gap-2">
+          <FileText className="mt-1 size-5 shrink-0 text-zinc-500" aria-hidden="true" />
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold leading-[1.25] text-zinc-900 md:text-[32px]">{displayTitle}</h1>
+            {showOriginalTitle && (
+              <p className="mt-1 truncate text-sm text-zinc-500" title={originalTitle}>
+                {t("itemDetail.originalTitle")}: {originalTitle}
+              </p>
+            )}
+          </div>
         </div>
-
-        <div className="mb-3 grid grid-cols-3 gap-2">
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block break-all text-sm text-blue-600 hover:underline"
+        >
+          {item.url}
+        </a>
+        <div className="mt-3 grid grid-cols-3 gap-2">
           <button
             type="button"
             disabled={feedbackUpdating}
@@ -713,26 +739,6 @@ export default function ItemDetailPage() {
             <span className="hidden sm:inline">{t("items.feedback.favorite")}</span>
           </button>
         </div>
-
-        <div className="mb-2 flex items-start gap-2">
-          <FileText className="mt-1 size-5 shrink-0 text-zinc-500" aria-hidden="true" />
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold leading-[1.25] text-zinc-900 md:text-[32px]">{displayTitle}</h1>
-            {showOriginalTitle && (
-              <p className="mt-1 truncate text-sm text-zinc-500" title={originalTitle}>
-                {t("itemDetail.originalTitle")}: {originalTitle}
-              </p>
-            )}
-          </div>
-        </div>
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block break-all text-sm text-blue-600 hover:underline"
-        >
-          {item.url}
-        </a>
 
         {item.status === "failed" && item.processing_error && (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">

@@ -9,7 +9,7 @@ func TestCacheKeyVersionKeys(t *testing.T) {
 	if got, want := cacheVersionKeyUserItems("u1"), "cache_version:user_items:u1"; got != want {
 		t.Fatalf("cacheVersionKeyUserItems = %q, want %q", got, want)
 	}
-	if got, want := cacheVersionKeyItemDetail("item-1"), "cache_version:item_detail:item-1"; got != want {
+	if got, want := cacheVersionKeyItemDetail("item-1"), "cache_version:item_detail:v2:item-1"; got != want {
 		t.Fatalf("cacheVersionKeyItemDetail = %q, want %q", got, want)
 	}
 	if got, want := cacheVersionKeyUserSettings("u1"), "cache_version:user_settings:u1"; got != want {

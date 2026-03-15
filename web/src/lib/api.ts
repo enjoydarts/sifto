@@ -75,6 +75,7 @@ export interface ReadingGoal {
 export interface Item {
   id: string;
   source_id: string;
+  source_title?: string | null;
   url: string;
   title: string | null;
   translated_title?: string | null;

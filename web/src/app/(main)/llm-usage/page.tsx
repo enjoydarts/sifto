@@ -67,6 +67,16 @@ function providerLabel(provider: string) {
 
 export default function LLMUsagePage() {
   const { t, locale } = useI18n();
+  const [providerSortKey, setProviderSortKey] = useState<string>("estimated_cost_usd");
+  const [providerSortDir, setProviderSortDir] = useState<"asc" | "desc">("desc");
+  const [purposeSortKey, setPurposeSortKey] = useState<string>("estimated_cost_usd");
+  const [purposeSortDir, setPurposeSortDir] = useState<"asc" | "desc">("desc");
+  const [reliabilitySortKey, setReliabilitySortKey] = useState<string>("failures");
+  const [reliabilitySortDir, setReliabilitySortDir] = useState<"asc" | "desc">("desc");
+  const [modelSortKey, setModelSortKey] = useState<string>("estimated_cost_usd");
+  const [modelSortDir, setModelSortDir] = useState<"asc" | "desc">("desc");
+  const [logSortKey, setLogSortKey] = useState<string>("created_at");
+  const [logSortDir, setLogSortDir] = useState<"asc" | "desc">("desc");
   const [forecastMode, setForecastMode] = useState<"month_avg" | "recent_7d">("month_avg");
   const [forecastMonth, setForecastMonth] = useState<string | null>(null);
   const [daysFilter, setDaysFilter] = useState<"7" | "14" | "30" | "90" | "mtd">("mtd");
@@ -178,39 +188,101 @@ export default function LLMUsagePage() {
   const currentMonthProviderTableRows = useMemo(() => {
     const total = settings?.current_month?.estimated_cost_usd ?? currentMonthProviderRows.reduce((acc, row) => acc + row.estimated_cost_usd, 0);
     const totalCalls = currentMonthProviderRows.reduce((acc, row) => acc + row.calls, 0);
+    const dir = providerSortDir === "asc" ? 1 : -1;
     return currentMonthProviderRows.map((row) => ({
       ...row,
       share_pct: total > 0 ? (row.estimated_cost_usd / total) * 100 : 0,
       call_share_pct: totalCalls > 0 ? (row.calls / totalCalls) * 100 : 0,
       avg_cost_per_call_usd: row.calls > 0 ? row.estimated_cost_usd / row.calls : 0,
-    }));
-  }, [currentMonthProviderRows, settings]);
+    })).sort((a, b) => {
+      const av = a as Record<string, string | number>;
+      const bv = b as Record<string, string | number>;
+      const aVal = av[providerSortKey];
+      const bVal = bv[providerSortKey];
+      let cmp = 0;
+      if (typeof aVal === "number" && typeof bVal === "number") cmp = aVal - bVal;
+      else cmp = String(aVal ?? "").localeCompare(String(bVal ?? ""));
+      if (cmp !== 0) return cmp * dir;
+      return a.provider.localeCompare(b.provider);
+    });
+  }, [currentMonthProviderRows, providerSortDir, providerSortKey, settings]);
 
   const currentMonthPurposeTableRows = useMemo(() => {
     const totalCost = currentMonthPurposeRows.reduce((acc, row) => acc + row.estimated_cost_usd, 0);
     const totalCalls = currentMonthPurposeRows.reduce((acc, row) => acc + row.calls, 0);
+    const dir = purposeSortDir === "asc" ? 1 : -1;
     return currentMonthPurposeRows.map((row) => ({
       ...row,
       call_share_pct: totalCalls > 0 ? (row.calls / totalCalls) * 100 : 0,
       share_pct: totalCost > 0 ? (row.estimated_cost_usd / totalCost) * 100 : 0,
       avg_cost_per_call_usd: row.calls > 0 ? row.estimated_cost_usd / row.calls : 0,
-    }));
-  }, [currentMonthPurposeRows]);
+    })).sort((a, b) => {
+      const av = a as Record<string, string | number>;
+      const bv = b as Record<string, string | number>;
+      const aVal = av[purposeSortKey];
+      const bVal = bv[purposeSortKey];
+      let cmp = 0;
+      if (typeof aVal === "number" && typeof bVal === "number") cmp = aVal - bVal;
+      else cmp = String(aVal ?? "").localeCompare(String(bVal ?? ""));
+      if (cmp !== 0) return cmp * dir;
+      return a.purpose.localeCompare(b.purpose);
+    });
+  }, [currentMonthPurposeRows, purposeSortDir, purposeSortKey]);
 
-  const currentMonthExecutionTableRows = useMemo(
-    () =>
-      currentMonthExecutionRows
-        .filter((row) => row.attempts > 0)
-        .sort((a, b) => {
-          if (b.failures !== a.failures) return b.failures - a.failures;
-          if (b.retries !== a.retries) return b.retries - a.retries;
-          if (b.attempts !== a.attempts) return b.attempts - a.attempts;
-          if (a.purpose !== b.purpose) return a.purpose.localeCompare(b.purpose);
-          if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
-          return a.model.localeCompare(b.model);
-        }),
-    [currentMonthExecutionRows]
-  );
+  const currentMonthExecutionTableRows = useMemo(() => {
+    const rows = currentMonthExecutionRows.filter((row) => row.attempts > 0);
+    const dir = reliabilitySortDir === "asc" ? 1 : -1;
+    return rows.sort((a, b) => {
+      const modelA = `${a.provider}/${a.model}`;
+      const modelB = `${b.provider}/${b.model}`;
+      let cmp = 0;
+      switch (reliabilitySortKey) {
+        case "purpose":
+          cmp = a.purpose.localeCompare(b.purpose);
+          break;
+        case "model":
+          cmp = modelA.localeCompare(modelB);
+          break;
+        case "attempts":
+          cmp = a.attempts - b.attempts;
+          break;
+        case "failures":
+          cmp = a.failures - b.failures;
+          break;
+        case "failure_rate_pct":
+          cmp = a.failure_rate_pct - b.failure_rate_pct;
+          break;
+        case "retries":
+          cmp = a.retries - b.retries;
+          break;
+        case "retry_rate_pct":
+          cmp = a.retry_rate_pct - b.retry_rate_pct;
+          break;
+        case "empty_responses":
+          cmp = a.empty_responses - b.empty_responses;
+          break;
+        case "empty_rate_pct":
+          cmp = a.empty_rate_pct - b.empty_rate_pct;
+          break;
+        default:
+          cmp = a.failures - b.failures;
+          break;
+      }
+      if (cmp !== 0) return cmp * dir;
+      if (a.purpose !== b.purpose) return a.purpose.localeCompare(b.purpose);
+      if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+      return a.model.localeCompare(b.model);
+    });
+  }, [currentMonthExecutionRows, reliabilitySortDir, reliabilitySortKey]);
+
+  const handleReliabilitySort = useCallback((key: string) => {
+    if (reliabilitySortKey === key) {
+      setReliabilitySortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setReliabilitySortKey(key);
+    setReliabilitySortDir(key === "purpose" || key === "model" ? "asc" : "desc");
+  }, [reliabilitySortKey]);
 
   const groupedByDate = useMemo(() => {
     const m = new Map<string, SummaryRow[]>();
@@ -302,13 +374,36 @@ export default function LLMUsagePage() {
       cur.pricing_source =
         cur.pricing_sources.length === 1 ? cur.pricing_sources[0] : `mixed(${cur.pricing_sources.length})`;
     }
+    const dir = modelSortDir === "asc" ? 1 : -1;
     return Array.from(m.values()).sort((a, b) => {
-      if (b.estimated_cost_usd !== a.estimated_cost_usd) return b.estimated_cost_usd - a.estimated_cost_usd;
-      if (b.calls !== a.calls) return b.calls - a.calls;
+      let cmp = 0;
+      switch (modelSortKey) {
+        case "provider":
+          cmp = a.provider.localeCompare(b.provider);
+          break;
+        case "model":
+          cmp = a.model.localeCompare(b.model);
+          break;
+        case "pricing_source":
+          cmp = a.pricing_source.localeCompare(b.pricing_source);
+          break;
+        case "calls":
+        case "input_tokens":
+        case "output_tokens":
+        case "cache_creation_input_tokens":
+        case "cache_read_input_tokens":
+        case "estimated_cost_usd":
+          cmp = (a[modelSortKey] as number) - (b[modelSortKey] as number);
+          break;
+        case "avg_cost_per_call_usd":
+          cmp = (a.calls > 0 ? a.estimated_cost_usd / a.calls : 0) - (b.calls > 0 ? b.estimated_cost_usd / b.calls : 0);
+          break;
+      }
+      if (cmp !== 0) return cmp * dir;
       if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
       return a.model.localeCompare(b.model);
     });
-  }, [visibleModelRows]);
+  }, [modelSortDir, modelSortKey, visibleModelRows]);
 
   const availableForecastMonths = useMemo(() => {
     const months = new Set<string>();
@@ -342,8 +437,58 @@ export default function LLMUsagePage() {
     [mergedModelRows]
   );
 
+  const sortedLogs = useMemo(() => {
+    const dir = logSortDir === "asc" ? 1 : -1;
+    return logs.slice().sort((a, b) => {
+      let cmp = 0;
+      switch (logSortKey) {
+        case "created_at":
+          cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          break;
+        case "purpose":
+          cmp = a.purpose.localeCompare(b.purpose);
+          break;
+        case "model":
+          cmp = a.model.localeCompare(b.model);
+          break;
+        case "pricing_source":
+          cmp = a.pricing_source.localeCompare(b.pricing_source);
+          break;
+        case "input_tokens":
+        case "output_tokens":
+        case "cache_creation_input_tokens":
+        case "cache_read_input_tokens":
+        case "estimated_cost_usd":
+          cmp = (a[logSortKey] as number) - (b[logSortKey] as number);
+          break;
+        case "ref": {
+          const aRef = `${a.item_id ?? ""}${a.digest_id ?? ""}`;
+          const bRef = `${b.item_id ?? ""}${b.digest_id ?? ""}`;
+          cmp = aRef.localeCompare(bRef);
+          break;
+        }
+      }
+      if (cmp !== 0) return cmp * dir;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [logSortDir, logSortKey, logs]);
+
   const logsPageSize = 20;
-  const pagedLogs = logs.slice((logPage - 1) * logsPageSize, logPage * logsPageSize);
+  const pagedLogs = sortedLogs.slice((logPage - 1) * logsPageSize, logPage * logsPageSize);
+
+  const toggleSort = useCallback((
+    key: string,
+    currentKey: string,
+    setKey: (v: string) => void,
+    setDir: (v: "asc" | "desc" | ((prev: "asc" | "desc") => "asc" | "desc")) => void,
+  ) => {
+    if (currentKey === key) {
+      setDir((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setKey(key);
+    setDir(key === "provider" || key === "purpose" || key === "model" || key === "pricing_source" || key === "ref" ? "asc" : "desc");
+  }, []);
 
   const monthlyForecast = useMemo(() => {
     if (!forecastMonth) return null;
@@ -522,6 +667,9 @@ export default function LLMUsagePage() {
         noSummaryLabel={t("llm.noSummary")}
         fmtNum={fmtNum}
         fmtUSD={fmtUSD}
+        sortKey={providerSortKey}
+        sortDir={providerSortDir}
+        onSort={(key) => toggleSort(key, providerSortKey, setProviderSortKey, setProviderSortDir)}
       />
 
       <CurrentMonthByPurposeTable
@@ -531,6 +679,9 @@ export default function LLMUsagePage() {
         noSummaryLabel={t("llm.noSummary")}
         fmtNum={fmtNum}
         fmtUSD={fmtUSD}
+        sortKey={purposeSortKey}
+        sortDir={purposeSortDir}
+        onSort={(key) => toggleSort(key, purposeSortKey, setPurposeSortKey, setPurposeSortDir)}
       />
 
       <ReliabilityTable
@@ -538,6 +689,9 @@ export default function LLMUsagePage() {
         monthLabel={settings?.current_month?.month_jst ?? currentMonthExecutionRows[0]?.month_jst ?? "—"}
         noSummaryLabel={t("llm.noSummary")}
         fmtNum={fmtNum}
+        sortKey={reliabilitySortKey}
+        sortDir={reliabilitySortDir}
+        onSort={handleReliabilitySort}
         labels={{
           title: t("llm.currentMonthReliability"),
           attempts: t("llm.attempts"),
@@ -801,16 +955,16 @@ export default function LLMUsagePage() {
               <table className="min-w-full text-sm">
                 <thead className="text-xs text-zinc-500">
                   <tr className="border-b border-zinc-100">
-                    <th className="px-3 py-2 text-left font-medium">provider</th>
-                    <th className="px-3 py-2 text-left font-medium">model</th>
-                    <th className="px-3 py-2 text-left font-medium">pricing</th>
-                    <th className="px-3 py-2 text-right font-medium">calls</th>
-                    <th className="px-3 py-2 text-right font-medium">input</th>
-                    <th className="px-3 py-2 text-right font-medium">output</th>
-                    <th className="px-3 py-2 text-right font-medium">cache w</th>
-                    <th className="px-3 py-2 text-right font-medium">cache r</th>
-                    <th className="px-3 py-2 text-right font-medium">avg/call</th>
-                    <th className="px-3 py-2 text-right font-medium">cost</th>
+                    <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => toggleSort("provider", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">provider{modelSortKey === "provider" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
+                    <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => toggleSort("model", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">model{modelSortKey === "model" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
+                    <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => toggleSort("pricing_source", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">pricing{modelSortKey === "pricing_source" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
+                    <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("calls", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">calls{modelSortKey === "calls" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
+                    <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("input_tokens", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">input{modelSortKey === "input_tokens" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
+                    <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("output_tokens", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">output{modelSortKey === "output_tokens" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
+                    <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("cache_creation_input_tokens", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">cache w{modelSortKey === "cache_creation_input_tokens" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
+                    <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("cache_read_input_tokens", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">cache r{modelSortKey === "cache_read_input_tokens" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
+                    <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("avg_cost_per_call_usd", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">avg/call{modelSortKey === "avg_cost_per_call_usd" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
+                    <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => toggleSort("estimated_cost_usd", modelSortKey, setModelSortKey, setModelSortDir)} className="inline-flex items-center hover:text-zinc-800">cost{modelSortKey === "estimated_cost_usd" ? <span className="ml-1 text-zinc-400">{modelSortDir === "asc" ? "↑" : "↓"}</span> : null}</button></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -867,7 +1021,7 @@ export default function LLMUsagePage() {
       />
 
       <RecentLogsTable
-        logs={logs}
+        logs={sortedLogs}
         pagedLogs={pagedLogs}
         logPage={logPage}
         setLogPage={setLogPage}
@@ -877,6 +1031,9 @@ export default function LLMUsagePage() {
         labels={{ title: t("llm.recentLogs"), time: t("llm.time") }}
         fmtNum={fmtNum}
         fmtUSD={fmtUSD}
+        sortKey={logSortKey}
+        sortDir={logSortDir}
+        onSort={(key) => toggleSort(key, logSortKey, setLogSortKey, setLogSortDir)}
       />
     </div>
   );

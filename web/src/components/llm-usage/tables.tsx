@@ -26,6 +26,9 @@ export function CurrentMonthByProviderTable({
   noSummaryLabel,
   fmtNum,
   fmtUSD,
+  sortKey,
+  sortDir,
+  onSort,
 }: {
   title: string;
   rows: Array<LLMUsageProviderMonthSummary & { share_pct: number; call_share_pct: number; avg_cost_per_call_usd: number }>;
@@ -34,7 +37,14 @@ export function CurrentMonthByProviderTable({
   noSummaryLabel: string;
   fmtNum: (v: number) => string;
   fmtUSD: (v: number) => string;
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  onSort: (key: string) => void;
 }) {
+  const renderSortMark = (key: string) => {
+    if (sortKey !== key) return null;
+    return <span className="ml-1 text-zinc-400">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -48,15 +58,15 @@ export function CurrentMonthByProviderTable({
           <table className="min-w-full text-sm">
             <thead className="text-xs text-zinc-500">
               <tr className="border-b border-zinc-100">
-                <th className="px-3 py-2 text-left font-medium">provider</th>
-                <th className="px-3 py-2 text-right font-medium">calls</th>
-                <th className="px-3 py-2 text-right font-medium">input</th>
-                <th className="px-3 py-2 text-right font-medium">output</th>
-                <th className="px-3 py-2 text-right font-medium">cache r</th>
-                <th className="px-3 py-2 text-right font-medium">call share</th>
-                <th className="px-3 py-2 text-right font-medium">share</th>
-                <th className="px-3 py-2 text-right font-medium">avg/call</th>
-                <th className="px-3 py-2 text-right font-medium">cost</th>
+                <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => onSort("provider")} className="inline-flex items-center hover:text-zinc-800">provider{renderSortMark("provider")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("calls")} className="inline-flex items-center hover:text-zinc-800">calls{renderSortMark("calls")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("input_tokens")} className="inline-flex items-center hover:text-zinc-800">input{renderSortMark("input_tokens")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("output_tokens")} className="inline-flex items-center hover:text-zinc-800">output{renderSortMark("output_tokens")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("cache_read_input_tokens")} className="inline-flex items-center hover:text-zinc-800">cache r{renderSortMark("cache_read_input_tokens")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("call_share_pct")} className="inline-flex items-center hover:text-zinc-800">call share{renderSortMark("call_share_pct")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("share_pct")} className="inline-flex items-center hover:text-zinc-800">share{renderSortMark("share_pct")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("avg_cost_per_call_usd")} className="inline-flex items-center hover:text-zinc-800">avg/call{renderSortMark("avg_cost_per_call_usd")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("estimated_cost_usd")} className="inline-flex items-center hover:text-zinc-800">cost{renderSortMark("estimated_cost_usd")}</button></th>
               </tr>
             </thead>
             <tbody>
@@ -88,6 +98,9 @@ export function CurrentMonthByPurposeTable({
   noSummaryLabel,
   fmtNum,
   fmtUSD,
+  sortKey,
+  sortDir,
+  onSort,
 }: {
   title: string;
   rows: Array<LLMUsagePurposeMonthSummary & { share_pct: number; call_share_pct: number; avg_cost_per_call_usd: number }>;
@@ -95,7 +108,14 @@ export function CurrentMonthByPurposeTable({
   noSummaryLabel: string;
   fmtNum: (v: number) => string;
   fmtUSD: (v: number) => string;
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  onSort: (key: string) => void;
 }) {
+  const renderSortMark = (key: string) => {
+    if (sortKey !== key) return null;
+    return <span className="ml-1 text-zinc-400">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -109,15 +129,15 @@ export function CurrentMonthByPurposeTable({
           <table className="min-w-full text-sm">
             <thead className="text-xs text-zinc-500">
               <tr className="border-b border-zinc-100">
-                <th className="px-3 py-2 text-left font-medium">purpose</th>
-                <th className="px-3 py-2 text-right font-medium">calls</th>
-                <th className="px-3 py-2 text-right font-medium">input</th>
-                <th className="px-3 py-2 text-right font-medium">output</th>
-                <th className="px-3 py-2 text-right font-medium">cache r</th>
-                <th className="px-3 py-2 text-right font-medium">call share</th>
-                <th className="px-3 py-2 text-right font-medium">share</th>
-                <th className="px-3 py-2 text-right font-medium">avg/call</th>
-                <th className="px-3 py-2 text-right font-medium">cost</th>
+                <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => onSort("purpose")} className="inline-flex items-center hover:text-zinc-800">purpose{renderSortMark("purpose")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("calls")} className="inline-flex items-center hover:text-zinc-800">calls{renderSortMark("calls")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("input_tokens")} className="inline-flex items-center hover:text-zinc-800">input{renderSortMark("input_tokens")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("output_tokens")} className="inline-flex items-center hover:text-zinc-800">output{renderSortMark("output_tokens")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("cache_read_input_tokens")} className="inline-flex items-center hover:text-zinc-800">cache r{renderSortMark("cache_read_input_tokens")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("call_share_pct")} className="inline-flex items-center hover:text-zinc-800">call share{renderSortMark("call_share_pct")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("share_pct")} className="inline-flex items-center hover:text-zinc-800">share{renderSortMark("share_pct")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("avg_cost_per_call_usd")} className="inline-flex items-center hover:text-zinc-800">avg/call{renderSortMark("avg_cost_per_call_usd")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("estimated_cost_usd")} className="inline-flex items-center hover:text-zinc-800">cost{renderSortMark("estimated_cost_usd")}</button></th>
               </tr>
             </thead>
             <tbody>
@@ -148,6 +168,9 @@ export function ReliabilityTable({
   noSummaryLabel,
   fmtNum,
   labels,
+  sortKey,
+  sortDir,
+  onSort,
 }: {
   rows: LLMExecutionCurrentMonthSummary[];
   monthLabel: string;
@@ -163,7 +186,16 @@ export function ReliabilityTable({
     emptyResponses: string;
     emptyRate: string;
   };
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  onSort: (key: string) => void;
 }) {
+  const headerClass = "px-3 py-2 font-medium";
+  const renderSortMark = (key: string) => {
+    if (sortKey !== key) return null;
+    return <span className="ml-1 text-zinc-400">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
+
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -177,15 +209,51 @@ export function ReliabilityTable({
           <table className="min-w-full text-sm">
             <thead className="text-xs text-zinc-500">
               <tr className="border-b border-zinc-100">
-                <th className="px-3 py-2 text-left font-medium">purpose</th>
-                <th className="px-3 py-2 text-left font-medium">model</th>
-                <th className="px-3 py-2 text-right font-medium">{labels.attempts}</th>
-                <th className="px-3 py-2 text-right font-medium">{labels.failures}</th>
-                <th className="px-3 py-2 text-right font-medium">{labels.failureRate}</th>
-                <th className="px-3 py-2 text-right font-medium">{labels.retries}</th>
-                <th className="px-3 py-2 text-right font-medium">{labels.retryRate}</th>
-                <th className="px-3 py-2 text-right font-medium">{labels.emptyResponses}</th>
-                <th className="px-3 py-2 text-right font-medium">{labels.emptyRate}</th>
+                <th className={`${headerClass} text-left`}>
+                  <button type="button" onClick={() => onSort("purpose")} className="inline-flex items-center hover:text-zinc-800">
+                    purpose{renderSortMark("purpose")}
+                  </button>
+                </th>
+                <th className={`${headerClass} text-left`}>
+                  <button type="button" onClick={() => onSort("model")} className="inline-flex items-center hover:text-zinc-800">
+                    model{renderSortMark("model")}
+                  </button>
+                </th>
+                <th className={`${headerClass} text-right`}>
+                  <button type="button" onClick={() => onSort("attempts")} className="inline-flex items-center hover:text-zinc-800">
+                    {labels.attempts}{renderSortMark("attempts")}
+                  </button>
+                </th>
+                <th className={`${headerClass} text-right`}>
+                  <button type="button" onClick={() => onSort("failures")} className="inline-flex items-center hover:text-zinc-800">
+                    {labels.failures}{renderSortMark("failures")}
+                  </button>
+                </th>
+                <th className={`${headerClass} text-right`}>
+                  <button type="button" onClick={() => onSort("failure_rate_pct")} className="inline-flex items-center hover:text-zinc-800">
+                    {labels.failureRate}{renderSortMark("failure_rate_pct")}
+                  </button>
+                </th>
+                <th className={`${headerClass} text-right`}>
+                  <button type="button" onClick={() => onSort("retries")} className="inline-flex items-center hover:text-zinc-800">
+                    {labels.retries}{renderSortMark("retries")}
+                  </button>
+                </th>
+                <th className={`${headerClass} text-right`}>
+                  <button type="button" onClick={() => onSort("retry_rate_pct")} className="inline-flex items-center hover:text-zinc-800">
+                    {labels.retryRate}{renderSortMark("retry_rate_pct")}
+                  </button>
+                </th>
+                <th className={`${headerClass} text-right`}>
+                  <button type="button" onClick={() => onSort("empty_responses")} className="inline-flex items-center hover:text-zinc-800">
+                    {labels.emptyResponses}{renderSortMark("empty_responses")}
+                  </button>
+                </th>
+                <th className={`${headerClass} text-right`}>
+                  <button type="button" onClick={() => onSort("empty_rate_pct")} className="inline-flex items-center hover:text-zinc-800">
+                    {labels.emptyRate}{renderSortMark("empty_rate_pct")}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -294,6 +362,9 @@ export function RecentLogsTable({
   labels,
   fmtNum,
   fmtUSD,
+  sortKey,
+  sortDir,
+  onSort,
 }: {
   logs: LLMUsageLog[];
   pagedLogs: LLMUsageLog[];
@@ -305,7 +376,14 @@ export function RecentLogsTable({
   labels: { title: string; time: string };
   fmtNum: (v: number) => string;
   fmtUSD: (v: number) => string;
+  sortKey: string;
+  sortDir: "asc" | "desc";
+  onSort: (key: string) => void;
 }) {
+  const renderSortMark = (key: string) => {
+    if (sortKey !== key) return null;
+    return <span className="ml-1 text-zinc-400">{sortDir === "asc" ? "↑" : "↓"}</span>;
+  };
   return (
     <section className="rounded-lg border border-zinc-200 bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
@@ -319,16 +397,16 @@ export function RecentLogsTable({
           <table className="min-w-full text-sm">
             <thead className="text-xs text-zinc-500">
               <tr className="border-b border-zinc-100">
-                <th className="px-3 py-2 text-left font-medium">{labels.time}</th>
-                <th className="px-3 py-2 text-left font-medium">purpose</th>
-                <th className="px-3 py-2 text-left font-medium">model</th>
-                <th className="px-3 py-2 text-left font-medium">pricing</th>
-                <th className="px-3 py-2 text-right font-medium">in</th>
-                <th className="px-3 py-2 text-right font-medium">out</th>
-                <th className="px-3 py-2 text-right font-medium">cache w</th>
-                <th className="px-3 py-2 text-right font-medium">cache r</th>
-                <th className="px-3 py-2 text-right font-medium">cost</th>
-                <th className="px-3 py-2 text-left font-medium">ref</th>
+                <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => onSort("created_at")} className="inline-flex items-center hover:text-zinc-800">{labels.time}{renderSortMark("created_at")}</button></th>
+                <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => onSort("purpose")} className="inline-flex items-center hover:text-zinc-800">purpose{renderSortMark("purpose")}</button></th>
+                <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => onSort("model")} className="inline-flex items-center hover:text-zinc-800">model{renderSortMark("model")}</button></th>
+                <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => onSort("pricing_source")} className="inline-flex items-center hover:text-zinc-800">pricing{renderSortMark("pricing_source")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("input_tokens")} className="inline-flex items-center hover:text-zinc-800">in{renderSortMark("input_tokens")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("output_tokens")} className="inline-flex items-center hover:text-zinc-800">out{renderSortMark("output_tokens")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("cache_creation_input_tokens")} className="inline-flex items-center hover:text-zinc-800">cache w{renderSortMark("cache_creation_input_tokens")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("cache_read_input_tokens")} className="inline-flex items-center hover:text-zinc-800">cache r{renderSortMark("cache_read_input_tokens")}</button></th>
+                <th className="px-3 py-2 text-right font-medium"><button type="button" onClick={() => onSort("estimated_cost_usd")} className="inline-flex items-center hover:text-zinc-800">cost{renderSortMark("estimated_cost_usd")}</button></th>
+                <th className="px-3 py-2 text-left font-medium"><button type="button" onClick={() => onSort("ref")} className="inline-flex items-center hover:text-zinc-800">ref{renderSortMark("ref")}</button></th>
               </tr>
             </thead>
             <tbody>

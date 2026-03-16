@@ -476,11 +476,11 @@ function ItemsPageContent() {
             </div>
 
             {!pendingMode && (
-              <div className="flex shrink-0 items-center gap-2 xl:w-[320px] xl:justify-end">
+              <div className="flex shrink-0 items-center gap-2 xl:w-[248px] xl:justify-end">
                 <select
                   value={toolbarAction}
                   onChange={(e) => setToolbarAction(e.target.value as typeof toolbarAction)}
-                  className="min-h-9 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus-ring xl:w-[220px] xl:flex-none"
+                  className="min-h-9 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus-ring xl:w-[168px] xl:flex-none"
                   aria-label={t("items.toolbar.actions")}
                 >
                   <option value="">{t("items.actions.placeholder")}</option>

@@ -18,7 +18,7 @@ export function FeedTabs({
   ];
 
   return (
-    <div className="grid w-full grid-cols-4 gap-1 rounded-lg border border-zinc-200 bg-white p-0.5">
+    <div className="grid w-full grid-cols-[0.95fr_1.2fr_0.9fr_1fr] gap-1 rounded-lg border border-zinc-200 bg-white p-0.5">
       {tabs.map(({ value, labelKey }) => (
         <button
           key={value}

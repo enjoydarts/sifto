@@ -278,6 +278,8 @@ make migrate-version
 | `INTERNAL_API_SECRET` | Web internal route -> API 認証 |
 | `INNGEST_EVENT_KEY` | Inngest イベントキー |
 | `INNGEST_SIGNING_KEY` | Inngest 署名検証キー |
+| `INNGEST_BASE_URL` | self-host Inngest の base URL |
+| `INNGEST_CF_ACCESS_CLIENT_ID` / `INNGEST_CF_ACCESS_CLIENT_SECRET` | Cloudflare Access 配下の self-host Inngest に API から接続するための Service Token |
 | `USER_SECRET_ENCRYPTION_KEY` | ユーザー API キー暗号化 |
 | `NEXT_PUBLIC_API_URL` | ブラウザから見る API ベース URL |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk |

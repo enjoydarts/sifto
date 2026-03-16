@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -898,12 +897,12 @@ func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Reque
 		return "GET /health", 200, nil, err
 	})
 	run("inngest", func(ctx context.Context) (string, int, map[string]any, error) {
-		base := os.Getenv("INNGEST_BASE_URL")
+		base := service.InngestBaseURLFromEnv()
 		if base == "" {
 			return "skipped", 0, map[string]any{"reason": "INNGEST_BASE_URL not set"}, nil
 		}
 		u := strings.TrimRight(base, "/")
-		client := &http.Client{Timeout: 3 * time.Second}
+		client := service.NewInngestHTTPClient(3 * time.Second)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u+"/health", nil)
 		if err != nil {
 			return "", 0, nil, err

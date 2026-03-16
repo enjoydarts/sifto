@@ -12,9 +12,7 @@ type EventPublisher struct {
 }
 
 func NewEventPublisher() (*EventPublisher, error) {
-	client, err := inngestgo.NewClient(inngestgo.ClientOpts{
-		AppID: "sifto-api",
-	})
+	client, err := NewInngestClient("sifto-api")
 	if err != nil {
 		return nil, err
 	}

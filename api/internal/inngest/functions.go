@@ -853,9 +853,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	secretCipher := service.NewSecretCipher()
 	openAI := service.NewOpenAIClient()
 	llmUsageCache = cache
-	client, err := inngestgo.NewClient(inngestgo.ClientOpts{
-		AppID: "sifto-api",
-	})
+	client, err := service.NewInngestClient("sifto-api")
 	if err != nil {
 		log.Fatalf("inngest client: %v", err)
 	}

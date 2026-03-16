@@ -17,7 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api, LLMExecutionCurrentMonthSummary, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary, LLMUsageProviderMonthSummary, LLMUsagePurposeMonthSummary, LLMValueMetric, UserSettings } from "@/lib/api";
+import { api, LLMExecutionCurrentMonthSummary, LLMUsageDailySummary, LLMUsageLog, LLMUsageModelSummary, LLMUsageProviderMonthSummary, LLMUsagePurposeMonthSummary, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import {
   CurrentMonthByProviderTable,
@@ -27,7 +27,6 @@ import {
   RecentLogsTable,
   ReliabilityTable,
 } from "@/components/llm-usage/tables";
-import { ValueMetricsPanel } from "@/components/llm-usage/value-metrics-panel";
 
 function fmtUSD(v: number) {
   return `$${v.toFixed(6)}`;
@@ -77,8 +76,6 @@ export default function LLMUsagePage() {
   const [purposeSortDir, setPurposeSortDir] = useState<"asc" | "desc">("desc");
   const [reliabilitySortKey, setReliabilitySortKey] = useState<string>("failures");
   const [reliabilitySortDir, setReliabilitySortDir] = useState<"asc" | "desc">("desc");
-  const [valueMetricSortKey, setValueMetricSortKey] = useState<string>("total_cost_usd");
-  const [valueMetricSortDir, setValueMetricSortDir] = useState<"asc" | "desc">("desc");
   const [modelSortKey, setModelSortKey] = useState<string>("estimated_cost_usd");
   const [modelSortDir, setModelSortDir] = useState<"asc" | "desc">("desc");
   const [logSortKey, setLogSortKey] = useState<string>("created_at");
@@ -95,7 +92,6 @@ export default function LLMUsagePage() {
   const [currentMonthProviderRows, setCurrentMonthProviderRows] = useState<LLMUsageProviderMonthSummary[]>([]);
   const [currentMonthPurposeRows, setCurrentMonthPurposeRows] = useState<LLMUsagePurposeMonthSummary[]>([]);
   const [currentMonthExecutionRows, setCurrentMonthExecutionRows] = useState<LLMExecutionCurrentMonthSummary[]>([]);
-  const [valueMetricRows, setValueMetricRows] = useState<LLMValueMetric[]>([]);
   const [logs, setLogs] = useState<LLMUsageLog[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
 
@@ -115,13 +111,12 @@ export default function LLMUsagePage() {
   const load = useCallback(async (daysParam: number, limitParam: number) => {
     setLoading(true);
     try {
-      const [summary, byModel, byProviderCurrentMonth, byPurposeCurrentMonth, executionCurrentMonth, valueMetricsCurrentMonth, recent, userSettings] = await Promise.all([
+      const [summary, byModel, byProviderCurrentMonth, byPurposeCurrentMonth, executionCurrentMonth, recent, userSettings] = await Promise.all([
         api.getLLMUsageSummary({ days: daysParam }),
         api.getLLMUsageByModel({ days: daysParam }),
         api.getLLMUsageCurrentMonthByProvider(),
         api.getLLMUsageCurrentMonthByPurpose(),
         api.getLLMExecutionCurrentMonthSummary(),
-        api.getLLMValueMetricsCurrentMonth(),
         api.getLLMUsage({ limit: limitParam }),
         api.getSettings(),
       ]);
@@ -130,7 +125,6 @@ export default function LLMUsagePage() {
       setCurrentMonthProviderRows(byProviderCurrentMonth ?? []);
       setCurrentMonthPurposeRows(byPurposeCurrentMonth ?? []);
       setCurrentMonthExecutionRows(executionCurrentMonth ?? []);
-      setValueMetricRows(valueMetricsCurrentMonth ?? []);
       setLogs(recent ?? []);
       setSettings(userSettings);
       setError(null);
@@ -241,46 +235,6 @@ export default function LLMUsagePage() {
       return a.purpose.localeCompare(b.purpose);
     });
   }, [currentMonthPurposeRows, purposeSortDir, purposeSortKey]);
-
-  const sortedValueMetricRows = useMemo(() => {
-    const dir = valueMetricSortDir === "asc" ? 1 : -1;
-    const getValueMetricSortValue = (row: LLMValueMetric, key: string): string | number | null | undefined => {
-      switch (key) {
-        case "purpose":
-          return row.purpose;
-        case "model":
-          return `${row.provider}/${row.model}`;
-        case "cost_to_read_usd":
-          return row.cost_to_read_usd;
-        case "cost_to_favorite_usd":
-          return row.cost_to_favorite_usd;
-        case "cost_to_insight_usd":
-          return row.cost_to_insight_usd;
-        case "total_cost_usd":
-          return row.total_cost_usd;
-        case "calls":
-          return row.calls;
-        case "advisory_code":
-          return row.advisory_code;
-        default:
-          return row.total_cost_usd;
-      }
-    };
-    return valueMetricRows.slice().sort((a, b) => {
-      const aVal = getValueMetricSortValue(a, valueMetricSortKey);
-      const bVal = getValueMetricSortValue(b, valueMetricSortKey);
-      let cmp = 0;
-      if (typeof aVal === "number" || typeof bVal === "number") {
-        cmp = Number(aVal ?? -1) - Number(bVal ?? -1);
-      } else {
-        cmp = String(aVal ?? "").localeCompare(String(bVal ?? ""));
-      }
-      if (cmp !== 0) return cmp * dir;
-      if (a.purpose !== b.purpose) return a.purpose.localeCompare(b.purpose);
-      if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
-      return a.model.localeCompare(b.model);
-    });
-  }, [valueMetricRows, valueMetricSortDir, valueMetricSortKey]);
 
   const currentMonthExecutionTableRows = useMemo(() => {
     const rows = currentMonthExecutionRows.filter((row) => row.attempts > 0);
@@ -745,34 +699,6 @@ export default function LLMUsagePage() {
         sortKey={purposeSortKey}
         sortDir={purposeSortDir}
         onSort={(key) => toggleSort(key, purposeSortKey, setPurposeSortKey, setPurposeSortDir)}
-      />
-
-      <ValueMetricsPanel
-        title={t("llm.valueMetrics.title")}
-        subtitle={t("llm.valueMetrics.subtitle")}
-        rows={sortedValueMetricRows}
-        emptyLabel={t("llm.noSummary")}
-        fmtUSD={fmtUSD}
-        sortKey={valueMetricSortKey}
-        sortDir={valueMetricSortDir}
-        onSort={(key) => toggleSort(key, valueMetricSortKey, setValueMetricSortKey, setValueMetricSortDir)}
-        advisoryLabels={{
-          costToRead: t("llm.valueMetrics.costToRead"),
-          costToFavorite: t("llm.valueMetrics.costToFavorite"),
-          costToInsight: t("llm.valueMetrics.costToInsight"),
-          lowSignal: t("llm.valueMetrics.advisory.lowSignal"),
-          reviewModel: t("llm.valueMetrics.advisory.reviewModel"),
-          ok: t("llm.valueMetrics.advisory.ok"),
-          benchmarkPrefix: t("llm.valueMetrics.benchmarkPrefix"),
-          keepInsight: t("llm.valueMetrics.reason.keepInsight"),
-          keepFavorite: t("llm.valueMetrics.reason.keepFavorite"),
-          keepRead: t("llm.valueMetrics.reason.keepRead"),
-          keepDefault: t("llm.valueMetrics.reason.keepDefault"),
-          reviewHigher: t("llm.valueMetrics.reason.reviewHigher"),
-          metricRead: t("llm.valueMetrics.reason.metricRead"),
-          metricFavorite: t("llm.valueMetrics.reason.metricFavorite"),
-          metricInsight: t("llm.valueMetrics.reason.metricInsight"),
-        }}
       />
 
       <ReliabilityTable

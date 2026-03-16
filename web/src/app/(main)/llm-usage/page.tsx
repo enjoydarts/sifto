@@ -644,8 +644,10 @@ export default function LLMUsagePage() {
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)]">
         <div className="rounded-lg border border-zinc-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-800">Provider Cost</h2>
-            <span className="text-xs text-zinc-400">{providerCardRows.length} providers</span>
+            <h2 className="text-sm font-semibold text-zinc-800">{t("llm.providerCost")}</h2>
+            <span className="text-xs text-zinc-400">
+              {providerCardRows.length} {t("llm.providers")}
+            </span>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
             {providerCardRows.map((row) => (
@@ -661,65 +663,73 @@ export default function LLMUsagePage() {
 
         <div className="rounded-lg border border-zinc-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-800">Cache</h2>
-            <span className="text-xs text-zinc-400">{totals.input > 0 ? ((totals.cacheRead / totals.input) * 100).toFixed(1) : "0.0"}% read</span>
+            <h2 className="text-sm font-semibold text-zinc-800">{t("llm.cacheTitle")}</h2>
+            <span className="text-xs text-zinc-400">{totals.input > 0 ? ((totals.cacheRead / totals.input) * 100).toFixed(1) : "0.0"}%</span>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-            <MetricCard className="w-full" label="Cache Write Tokens" value={fmtNum(totals.cacheWrite)} />
-            <MetricCard className="w-full" label="Cache Read Tokens" value={fmtNum(totals.cacheRead)} />
+            <MetricCard className="w-full" label={t("llm.cacheWriteTokens")} value={fmtNum(totals.cacheWrite)} />
+            <MetricCard className="w-full" label={t("llm.cacheReadTokens")} value={fmtNum(totals.cacheRead)} />
             <MetricCard
               className="w-full"
-              label="Cache Read Ratio"
+              label={t("llm.cacheReadRatio")}
               value={`${totals.input > 0 ? ((totals.cacheRead / totals.input) * 100).toFixed(1) : "0.0"}%`}
             />
           </div>
         </div>
       </section>
 
-      <CurrentMonthByProviderTable
-        title={t("llm.currentMonthByProvider")}
-        rows={currentMonthProviderTableRows}
-        monthLabel={settings?.current_month?.month_jst ?? currentMonthProviderRows[0]?.month_jst ?? "—"}
-        totalCostLabel={fmtUSD(settings?.current_month?.estimated_cost_usd ?? 0)}
-        noSummaryLabel={t("llm.noSummary")}
-        fmtNum={fmtNum}
-        fmtUSD={fmtUSD}
-        sortKey={providerSortKey}
-        sortDir={providerSortDir}
-        onSort={(key) => toggleSort(key, providerSortKey, setProviderSortKey, setProviderSortDir)}
-      />
-
-      <CurrentMonthByPurposeTable
-        title={t("llm.currentMonthByPurpose")}
-        rows={currentMonthPurposeTableRows}
-        monthLabel={settings?.current_month?.month_jst ?? currentMonthPurposeRows[0]?.month_jst ?? "—"}
-        noSummaryLabel={t("llm.noSummary")}
-        fmtNum={fmtNum}
-        fmtUSD={fmtUSD}
-        sortKey={purposeSortKey}
-        sortDir={purposeSortDir}
-        onSort={(key) => toggleSort(key, purposeSortKey, setPurposeSortKey, setPurposeSortDir)}
-      />
-
-      <ReliabilityTable
-        rows={currentMonthExecutionTableRows}
-        monthLabel={settings?.current_month?.month_jst ?? currentMonthExecutionRows[0]?.month_jst ?? "—"}
-        noSummaryLabel={t("llm.noSummary")}
-        fmtNum={fmtNum}
-        sortKey={reliabilitySortKey}
-        sortDir={reliabilitySortDir}
-        onSort={handleReliabilitySort}
-        labels={{
-          title: t("llm.currentMonthReliability"),
-          attempts: t("llm.attempts"),
-          failures: t("llm.failures"),
-          failureRate: t("llm.failureRate"),
-          retries: t("llm.retries"),
-          retryRate: t("llm.retryRate"),
-          emptyResponses: t("llm.emptyResponses"),
-          emptyRate: t("llm.emptyRate"),
-        }}
-      />
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
+            <CalendarDays className="size-4 text-zinc-500" aria-hidden="true" />
+            <span>{t("llm.dailyCostTrend")}</span>
+          </h2>
+          <span className="text-xs text-zinc-400">{dailyChartRows.length} days</span>
+        </div>
+        {dailyChartRows.length === 0 ? (
+          <p className="text-sm text-zinc-400">{t("llm.noSummary")}</p>
+        ) : (
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={dailyChartRows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#71717a" }} tickLine={false} axisLine={false} />
+                <YAxis
+                  tick={{ fontSize: 12, fill: "#71717a" }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => fmtUSDShort(Number(v))}
+                />
+                <Tooltip
+                  formatter={(value: number | string | undefined, name?: string) => [
+                    fmtUSD(Number(value ?? 0)),
+                    providerLabel(name ?? ""),
+                  ]}
+                  labelFormatter={(label) => `${label}`}
+                  contentStyle={{ borderRadius: 10, borderColor: "#e4e4e7" }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {chartProviders.map((provider) => {
+                  const colors = providerColorMap.get(provider);
+                  if (!colors) return null;
+                  return (
+                    <Area
+                      key={provider}
+                      type="monotone"
+                      dataKey={provider}
+                      name={providerLabel(provider)}
+                      stackId="cost"
+                      stroke={colors.stroke}
+                      fill={colors.fill}
+                      fillOpacity={colors.fillOpacity}
+                    />
+                  );
+                })}
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
@@ -863,58 +873,50 @@ export default function LLMUsagePage() {
         )}
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
-            <CalendarDays className="size-4 text-zinc-500" aria-hidden="true" />
-            <span>{t("llm.dailyCostTrend")}</span>
-          </h2>
-          <span className="text-xs text-zinc-400">{dailyChartRows.length} days</span>
-        </div>
-        {dailyChartRows.length === 0 ? (
-          <p className="text-sm text-zinc-400">{t("llm.noSummary")}</p>
-        ) : (
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={dailyChartRows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#71717a" }} tickLine={false} axisLine={false} />
-                <YAxis
-                  tick={{ fontSize: 12, fill: "#71717a" }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => fmtUSDShort(Number(v))}
-                />
-                <Tooltip
-                  formatter={(value: number | string | undefined, name?: string) => [
-                    fmtUSD(Number(value ?? 0)),
-                    providerLabel(name ?? ""),
-                  ]}
-                  labelFormatter={(label) => `${label}`}
-                  contentStyle={{ borderRadius: 10, borderColor: "#e4e4e7" }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                {chartProviders.map((provider) => {
-                  const colors = providerColorMap.get(provider);
-                  if (!colors) return null;
-                  return (
-                    <Area
-                      key={provider}
-                      type="monotone"
-                      dataKey={provider}
-                      name={providerLabel(provider)}
-                      stackId="cost"
-                      stroke={colors.stroke}
-                      fill={colors.fill}
-                      fillOpacity={colors.fillOpacity}
-                    />
-                  );
-                })}
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </section>
+      <CurrentMonthByProviderTable
+        title={t("llm.currentMonthByProvider")}
+        rows={currentMonthProviderTableRows}
+        monthLabel={settings?.current_month?.month_jst ?? currentMonthProviderRows[0]?.month_jst ?? "—"}
+        totalCostLabel={fmtUSD(settings?.current_month?.estimated_cost_usd ?? 0)}
+        noSummaryLabel={t("llm.noSummary")}
+        fmtNum={fmtNum}
+        fmtUSD={fmtUSD}
+        sortKey={providerSortKey}
+        sortDir={providerSortDir}
+        onSort={(key) => toggleSort(key, providerSortKey, setProviderSortKey, setProviderSortDir)}
+      />
+
+      <CurrentMonthByPurposeTable
+        title={t("llm.currentMonthByPurpose")}
+        rows={currentMonthPurposeTableRows}
+        monthLabel={settings?.current_month?.month_jst ?? currentMonthPurposeRows[0]?.month_jst ?? "—"}
+        noSummaryLabel={t("llm.noSummary")}
+        fmtNum={fmtNum}
+        fmtUSD={fmtUSD}
+        sortKey={purposeSortKey}
+        sortDir={purposeSortDir}
+        onSort={(key) => toggleSort(key, purposeSortKey, setPurposeSortKey, setPurposeSortDir)}
+      />
+
+      <ReliabilityTable
+        rows={currentMonthExecutionTableRows}
+        monthLabel={settings?.current_month?.month_jst ?? currentMonthExecutionRows[0]?.month_jst ?? "—"}
+        noSummaryLabel={t("llm.noSummary")}
+        fmtNum={fmtNum}
+        sortKey={reliabilitySortKey}
+        sortDir={reliabilitySortDir}
+        onSort={handleReliabilitySort}
+        labels={{
+          title: t("llm.currentMonthReliability"),
+          attempts: t("llm.attempts"),
+          failures: t("llm.failures"),
+          failureRate: t("llm.failureRate"),
+          retries: t("llm.retries"),
+          retryRate: t("llm.retryRate"),
+          emptyResponses: t("llm.emptyResponses"),
+          emptyRate: t("llm.emptyRate"),
+        }}
+      />
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">

@@ -354,6 +354,10 @@ function ItemsPageContent() {
     }
     return Array.from(map.entries()).map(([date, sectionItems]) => ({ date, items: sectionItems }));
   }, [locale, sortedItems]);
+  const inlineItemStatus = useMemo(
+    () => sortedItems.find((item) => item.id === inlineItemId)?.status ?? null,
+    [inlineItemId, sortedItems]
+  );
 
   const pageSubtitleKey =
     feedMode === "later"
@@ -586,6 +590,7 @@ function ItemsPageContent() {
             open={!!inlineItemId}
             itemId={inlineItemId}
             locale={locale}
+            itemStatus={inlineItemStatus}
             queueItemIds={sortedItems.map((v) => v.id)}
             onClose={() => setInlineItemId(null)}
             onOpenDetail={(itemId) => {

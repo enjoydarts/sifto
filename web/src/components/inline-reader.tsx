@@ -15,6 +15,7 @@ export function InlineReader({
   itemId,
   open,
   locale,
+  itemStatus,
   onClose,
   onOpenDetail,
   onOpenItem,
@@ -26,6 +27,7 @@ export function InlineReader({
   itemId: string | null;
   open: boolean;
   locale: "ja" | "en";
+  itemStatus?: string | null;
   onClose: () => void;
   onOpenDetail: (itemId: string) => void;
   onOpenItem?: (itemId: string) => void;
@@ -59,7 +61,8 @@ export function InlineReader({
   });
 
   const item = detailQuery.data ?? null;
-  const canMarkRead = item?.status === "summarized";
+  const effectiveStatus = itemStatus ?? item?.status ?? null;
+  const canMarkRead = effectiveStatus === "summarized";
   const related = useMemo(() => relatedQuery.data?.items ?? [], [relatedQuery.data?.items]);
   const nextQueueItemId = useMemo(() => {
     if (!itemId || !queueItemIds || queueItemIds.length === 0) return null;
@@ -73,7 +76,7 @@ export function InlineReader({
     (relatedQuery.error ? String(relatedQuery.error) : null);
 
   async function toggleRead(current: ItemDetail) {
-    if (current.status !== "summarized") return;
+    if (!canMarkRead) return;
     const next = current.is_read ? await api.markItemUnread(current.id) : await api.markItemRead(current.id);
     queryClient.setQueryData<ItemDetail>(["item-detail", current.id], (prev) =>
       prev ? { ...prev, is_read: next.is_read } : prev

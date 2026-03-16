@@ -1,10 +1,11 @@
 package service
 
 import (
-	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/inngest/inngestgo"
@@ -15,10 +16,13 @@ const (
 	inngestCloudflareAccessClientSecretEnv = "INNGEST_CF_ACCESS_CLIENT_SECRET"
 )
 
+var configureInngestDefaultHTTPOnce sync.Once
+
 type ingressHeaderRoundTripper struct {
 	base         http.RoundTripper
 	accessID     string
 	accessSecret string
+	baseURL      *url.URL
 }
 
 func (rt *ingressHeaderRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -26,13 +30,20 @@ func (rt *ingressHeaderRoundTripper) RoundTrip(req *http.Request) (*http.Respons
 	if cloned.Header == nil {
 		cloned.Header = make(http.Header)
 	}
-	if rt.accessID != "" {
+	if rt.shouldDecorate(cloned.URL) && rt.accessID != "" {
 		cloned.Header.Set("CF-Access-Client-Id", rt.accessID)
 	}
-	if rt.accessSecret != "" {
+	if rt.shouldDecorate(cloned.URL) && rt.accessSecret != "" {
 		cloned.Header.Set("CF-Access-Client-Secret", rt.accessSecret)
 	}
 	return rt.base.RoundTrip(cloned)
+}
+
+func (rt *ingressHeaderRoundTripper) shouldDecorate(target *url.URL) bool {
+	if rt.baseURL == nil || target == nil {
+		return true
+	}
+	return strings.EqualFold(rt.baseURL.Scheme, target.Scheme) && strings.EqualFold(rt.baseURL.Host, target.Host)
 }
 
 func InngestBaseURLFromEnv() string {
@@ -41,6 +52,7 @@ func InngestBaseURLFromEnv() string {
 
 func NewInngestHTTPClient(timeout time.Duration) *http.Client {
 	transport := http.DefaultTransport
+	baseURL := parseInngestBaseURL()
 	accessID := strings.TrimSpace(os.Getenv(inngestCloudflareAccessClientIDEnv))
 	accessSecret := strings.TrimSpace(os.Getenv(inngestCloudflareAccessClientSecretEnv))
 	if accessID != "" || accessSecret != "" {
@@ -48,9 +60,9 @@ func NewInngestHTTPClient(timeout time.Duration) *http.Client {
 			base:         transport,
 			accessID:     accessID,
 			accessSecret: accessSecret,
+			baseURL:      baseURL,
 		}
 	}
-	transport = &inngestLoggingRoundTripper{base: transport}
 	return &http.Client{
 		Timeout:   timeout,
 		Transport: transport,
@@ -58,6 +70,7 @@ func NewInngestHTTPClient(timeout time.Duration) *http.Client {
 }
 
 func NewInngestClient(appID string) (inngestgo.Client, error) {
+	configureInngestDefaultHTTPClient()
 	opts := inngestgo.ClientOpts{
 		AppID:      appID,
 		HTTPClient: NewInngestHTTPClient(15 * time.Second),
@@ -66,42 +79,46 @@ func NewInngestClient(appID string) (inngestgo.Client, error) {
 		baseURL = strings.TrimRight(baseURL, "/")
 		opts.APIBaseURL = &baseURL
 		opts.EventAPIBaseURL = &baseURL
-		opts.RegisterURL = &baseURL
+		registerURL := baseURL + "/fn/register"
+		opts.RegisterURL = &registerURL
 	}
 	return inngestgo.NewClient(opts)
 }
 
-type inngestLoggingRoundTripper struct {
-	base http.RoundTripper
+func configureInngestDefaultHTTPClient() {
+	configureInngestDefaultHTTPOnce.Do(func() {
+		http.DefaultTransport = newInngestInstrumentedTransport(http.DefaultTransport)
+		http.DefaultClient.Transport = http.DefaultTransport
+	})
 }
 
-func (rt *inngestLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	start := time.Now()
-	log.Printf(
-		"inngest outbound start method=%s url=%s authorization=%t cf_access_id=%t cf_access_secret=%t",
-		req.Method,
-		req.URL.String(),
-		strings.TrimSpace(req.Header.Get("Authorization")) != "",
-		strings.TrimSpace(req.Header.Get("CF-Access-Client-Id")) != "",
-		strings.TrimSpace(req.Header.Get("CF-Access-Client-Secret")) != "",
-	)
-	resp, err := rt.base.RoundTrip(req)
-	if err != nil {
-		log.Printf(
-			"inngest outbound error method=%s url=%s duration_ms=%d err=%v",
-			req.Method,
-			req.URL.String(),
-			time.Since(start).Milliseconds(),
-			err,
-		)
-		return nil, err
+func newInngestInstrumentedTransport(base http.RoundTripper) http.RoundTripper {
+	if base == nil {
+		base = http.DefaultTransport
 	}
-	log.Printf(
-		"inngest outbound done method=%s url=%s status=%d duration_ms=%d",
-		req.Method,
-		req.URL.String(),
-		resp.StatusCode,
-		time.Since(start).Milliseconds(),
-	)
-	return resp, nil
+	baseURL := parseInngestBaseURL()
+	accessID := strings.TrimSpace(os.Getenv(inngestCloudflareAccessClientIDEnv))
+	accessSecret := strings.TrimSpace(os.Getenv(inngestCloudflareAccessClientSecretEnv))
+	transport := base
+	if accessID != "" || accessSecret != "" {
+		transport = &ingressHeaderRoundTripper{
+			base:         transport,
+			accessID:     accessID,
+			accessSecret: accessSecret,
+			baseURL:      baseURL,
+		}
+	}
+	return transport
+}
+
+func parseInngestBaseURL() *url.URL {
+	base := InngestBaseURLFromEnv()
+	if base == "" {
+		return nil
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return nil
+	}
+	return u
 }

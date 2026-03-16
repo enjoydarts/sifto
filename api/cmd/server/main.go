@@ -1,14 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/handler"
@@ -118,7 +115,7 @@ func main() {
 	})
 
 	// Inngest serve endpoint（認証不要）
-	r.Mount("/api/inngest", logInngestRequests(inngestHandler))
+	r.Mount("/api/inngest", ensureInngestPutNoContent(inngestHandler))
 
 	// Next.js からのみ呼ばれる内部エンドポイント（X-Internal-Secret で保護）
 	r.Post("/api/internal/users/upsert", internalH.UpsertUser)
@@ -304,94 +301,17 @@ func (w *loggingResponseWriter) Write(p []byte) (int, error) {
 	return w.ResponseWriter.Write(p)
 }
 
-func logInngestRequests(next http.Handler) http.Handler {
+func ensureInngestPutNoContent(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		log.Printf("inngest request start method=%s path=%s remote=%s ua=%q", r.Method, r.URL.Path, r.RemoteAddr, r.UserAgent())
-		if r.Method == http.MethodPut {
-			bodyPreview := readBodyPreview(r, 512)
-			log.Printf(
-				"inngest request meta method=%s path=%s content_type=%q content_length=%d transfer_encoding=%q headers=%s body=%q",
-				r.Method,
-				r.URL.Path,
-				r.Header.Get("Content-Type"),
-				r.ContentLength,
-				strings.Join(r.TransferEncoding, ","),
-				formatInngestHeaders(r.Header),
-				bodyPreview,
-			)
-		}
-
 		lrw := &loggingResponseWriter{ResponseWriter: w}
 		defer func() {
-			if rec := recover(); rec != nil {
-				log.Printf("inngest request panic method=%s path=%s remote=%s err=%v", r.Method, r.URL.Path, r.RemoteAddr, rec)
-				panic(rec)
-			}
 			if r.Method == http.MethodPut && !lrw.wroteHeader {
-				if strings.TrimSpace(lrw.Header().Get("X-Inngest-Sync-Kind")) != "" {
+				if lrw.Header().Get("X-Inngest-Sync-Kind") != "" {
 					lrw.WriteHeader(http.StatusNoContent)
 				}
 			}
-			status := lrw.status
-			if status == 0 {
-				status = -1
-			}
-			log.Printf(
-				"inngest request done method=%s path=%s remote=%s status=%d duration_ms=%d wrote_header=%t",
-				r.Method,
-				r.URL.Path,
-				r.RemoteAddr,
-				status,
-				time.Since(start).Milliseconds(),
-				lrw.wroteHeader,
-			)
 		}()
 
 		next.ServeHTTP(lrw, r)
 	})
-}
-
-func readBodyPreview(r *http.Request, limit int64) string {
-	if r.Body == nil || limit <= 0 {
-		return ""
-	}
-	data, err := io.ReadAll(io.LimitReader(r.Body, limit))
-	if err != nil {
-		r.Body = io.NopCloser(bytes.NewReader(nil))
-		return "(read error)"
-	}
-	r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(data), r.Body))
-	return strings.TrimSpace(string(data))
-}
-
-func formatInngestHeaders(header http.Header) string {
-	keys := []string{
-		"Authorization",
-		"Content-Type",
-		"Content-Length",
-		"X-Inngest-Signature",
-		"X-Inngest-Env",
-		"X-Inngest-Framework",
-		"X-Inngest-Expected-Server-Kind",
-		"X-Inngest-Server-Kind",
-		"X-Inngest-SDK",
-		"X-Inngest-Req-Version",
-	}
-	parts := make([]string, 0, len(keys))
-	for _, key := range keys {
-		value := strings.TrimSpace(header.Get(key))
-		if value == "" {
-			continue
-		}
-		if strings.EqualFold(key, "Authorization") {
-			parts = append(parts, key+"=<redacted>")
-			continue
-		}
-		parts = append(parts, key+"="+value)
-	}
-	if len(parts) == 0 {
-		return "(none)"
-	}
-	return strings.Join(parts, " ")
 }

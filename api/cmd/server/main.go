@@ -115,7 +115,7 @@ func main() {
 	})
 
 	// Inngest serve endpoint（認証不要）
-	r.Mount("/api/inngest", inngestHandler)
+	r.Mount("/api/inngest", logInngestRequests(inngestHandler))
 
 	// Next.js からのみ呼ばれる内部エンドポイント（X-Internal-Secret で保護）
 	r.Post("/api/internal/users/upsert", internalH.UpsertUser)
@@ -280,4 +280,53 @@ func main() {
 	if err := http.ListenAndServe(":"+port, sentryHandler.Handle(r)); err != nil {
 		log.Fatal(err)
 	}
+}
+
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+}
+
+func (w *loggingResponseWriter) WriteHeader(status int) {
+	w.status = status
+	w.wroteHeader = true
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *loggingResponseWriter) Write(p []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(p)
+}
+
+func logInngestRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		log.Printf("inngest request start method=%s path=%s remote=%s ua=%q", r.Method, r.URL.Path, r.RemoteAddr, r.UserAgent())
+
+		lrw := &loggingResponseWriter{ResponseWriter: w}
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("inngest request panic method=%s path=%s remote=%s err=%v", r.Method, r.URL.Path, r.RemoteAddr, rec)
+				panic(rec)
+			}
+			status := lrw.status
+			if status == 0 {
+				status = -1
+			}
+			log.Printf(
+				"inngest request done method=%s path=%s remote=%s status=%d duration_ms=%d wrote_header=%t",
+				r.Method,
+				r.URL.Path,
+				r.RemoteAddr,
+				status,
+				time.Since(start).Milliseconds(),
+				lrw.wroteHeader,
+			)
+		}()
+
+		next.ServeHTTP(lrw, r)
+	})
 }

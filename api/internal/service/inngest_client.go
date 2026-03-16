@@ -1,6 +1,7 @@
 package service
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -49,6 +50,7 @@ func NewInngestHTTPClient(timeout time.Duration) *http.Client {
 			accessSecret: accessSecret,
 		}
 	}
+	transport = &inngestLoggingRoundTripper{base: transport}
 	return &http.Client{
 		Timeout:   timeout,
 		Transport: transport,
@@ -67,4 +69,39 @@ func NewInngestClient(appID string) (inngestgo.Client, error) {
 		opts.RegisterURL = &baseURL
 	}
 	return inngestgo.NewClient(opts)
+}
+
+type inngestLoggingRoundTripper struct {
+	base http.RoundTripper
+}
+
+func (rt *inngestLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	start := time.Now()
+	log.Printf(
+		"inngest outbound start method=%s url=%s authorization=%t cf_access_id=%t cf_access_secret=%t",
+		req.Method,
+		req.URL.String(),
+		strings.TrimSpace(req.Header.Get("Authorization")) != "",
+		strings.TrimSpace(req.Header.Get("CF-Access-Client-Id")) != "",
+		strings.TrimSpace(req.Header.Get("CF-Access-Client-Secret")) != "",
+	)
+	resp, err := rt.base.RoundTrip(req)
+	if err != nil {
+		log.Printf(
+			"inngest outbound error method=%s url=%s duration_ms=%d err=%v",
+			req.Method,
+			req.URL.String(),
+			time.Since(start).Milliseconds(),
+			err,
+		)
+		return nil, err
+	}
+	log.Printf(
+		"inngest outbound done method=%s url=%s status=%d duration_ms=%d",
+		req.Method,
+		req.URL.String(),
+		resp.StatusCode,
+		time.Since(start).Milliseconds(),
+	)
+	return resp, nil
 }

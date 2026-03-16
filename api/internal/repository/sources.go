@@ -234,8 +234,8 @@ func (r *SourceRepo) ItemStatsByUser(ctx context.Context, userID string) ([]mode
 		SELECT
 			s.id AS source_id,
 			COUNT(i.id)::int AS total_items,
-			COUNT(*) FILTER (WHERE i.is_read = false)::int AS unread_items,
-			COUNT(*) FILTER (WHERE i.is_read = true)::int AS read_items,
+			COUNT(i.id) FILTER (WHERE ir.item_id IS NULL)::int AS unread_items,
+			COUNT(i.id) FILTER (WHERE ir.item_id IS NOT NULL)::int AS read_items,
 			COALESCE(
 				COUNT(*) FILTER (WHERE i.created_at >= NOW() - INTERVAL '30 days')::float8 /
 					NULLIF(
@@ -249,6 +249,7 @@ func (r *SourceRepo) ItemStatsByUser(ctx context.Context, userID string) ([]mode
 			) AS avg_items_per_day_30d
 		FROM sources s
 		LEFT JOIN items i ON i.source_id = s.id
+		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
 		WHERE s.user_id = $1
 		GROUP BY s.id
 		ORDER BY total_items DESC, s.created_at DESC`, userID)

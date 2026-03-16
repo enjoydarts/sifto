@@ -12,6 +12,7 @@ import ModelGuideTable from "@/components/settings/model-guide-table";
 import ModelSelect, { type ModelOption } from "@/components/settings/model-select";
 import ProviderModelUpdatesPanel from "@/components/settings/provider-model-updates-panel";
 import SettingsMetricCard from "@/components/settings/settings-metric-card";
+import { formatModelDisplayName } from "@/lib/model-display";
 
 const MODEL_UPDATES_DISMISSED_AT_KEY = "provider-model-updates:dismissed-at";
 
@@ -283,7 +284,7 @@ export default function SettingsPage() {
 
   const toModelOption = useCallback((item: LLMCatalogModel): ModelOption => ({
     value: item.id,
-    label: item.id,
+    label: formatModelDisplayName(item.id),
     note: formatModelOptionNote(item),
     provider: t(`settings.modelGuide.provider.${item.provider}`, item.provider),
   }), []);

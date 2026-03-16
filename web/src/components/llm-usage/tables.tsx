@@ -1,6 +1,7 @@
 "use client";
 
 import Pagination from "@/components/pagination";
+import { formatModelDisplayName } from "@/lib/model-display";
 import type {
   LLMExecutionCurrentMonthSummary,
   LLMUsageDailySummary,
@@ -303,7 +304,7 @@ export function ReliabilityTable({
               {rows.map((row) => (
                 <tr key={`${row.month_jst}:${row.purpose}:${row.provider}:${row.model}`} className="border-b border-zinc-100 last:border-0">
                   <td className="px-3 py-2 font-medium text-zinc-800">{row.purpose}</td>
-                  <td className="px-3 py-2 text-zinc-700 whitespace-nowrap">{providerLabel(row.provider)}/{row.model}</td>
+                  <td className="px-3 py-2 text-zinc-700 whitespace-nowrap">{providerLabel(row.provider)}/{formatModelDisplayName(row.model)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.attempts)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.failures)}</td>
                   <td className="px-3 py-2 text-right">{row.failure_rate_pct.toFixed(1)}%</td>

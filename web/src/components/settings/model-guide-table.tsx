@@ -1,6 +1,7 @@
 "use client";
 
 import type { LLMCatalogModel } from "@/lib/api";
+import { formatModelDisplayName } from "@/lib/model-display";
 
 function formatModelPriceCell(
   pricing: LLMCatalogModel["pricing"],
@@ -38,7 +39,7 @@ export default function ModelGuideTable({
         {entries.map((entry) => (
           <tr key={entry.id} className="text-zinc-700">
             <td className="border-b border-zinc-100 px-3 py-3 align-top">
-              <div className="whitespace-nowrap font-medium text-zinc-900">{entry.id}</div>
+              <div className="whitespace-nowrap font-medium text-zinc-900">{formatModelDisplayName(entry.id)}</div>
             </td>
             <td className="border-b border-zinc-100 px-3 py-3 align-top whitespace-nowrap text-zinc-600">
               {t(`settings.modelGuide.provider.${entry.provider}`)}

@@ -1,6 +1,7 @@
 "use client";
 
 import type { LLMValueMetric } from "@/lib/api";
+import { formatModelDisplayName } from "@/lib/model-display";
 
 function providerLabel(provider: string) {
   switch (provider) {
@@ -44,7 +45,7 @@ function buildReason(row: LLMValueMetric, labels: {
         : row.benchmark_metric === "favorite"
           ? labels.metricFavorite
           : labels.metricRead;
-    return `${metric}${labels.reviewHigher}${providerLabel(row.benchmark_provider)}/${row.benchmark_model}`;
+    return `${metric}${labels.reviewHigher}${providerLabel(row.benchmark_provider)}/${formatModelDisplayName(row.benchmark_model)}`;
   }
   if (row.advisory_code === "low_signal") {
     return labels.lowSignal;
@@ -130,7 +131,7 @@ export function ValueMetricsPanel({
                     <td className="px-3 py-2 font-medium text-zinc-800">{row.purpose}</td>
                     <td className="px-3 py-2 text-zinc-700">
                       <div className="font-medium">{providerLabel(row.provider)}</div>
-                      <div className="text-xs text-zinc-500">{row.model}</div>
+                      <div className="text-xs text-zinc-500">{formatModelDisplayName(row.model)}</div>
                     </td>
                     <td className="px-3 py-2 text-right">{row.cost_to_read_usd != null ? fmtUSD(row.cost_to_read_usd) : "—"}</td>
                     <td className="px-3 py-2 text-right">{row.cost_to_favorite_usd != null ? fmtUSD(row.cost_to_favorite_usd) : "—"}</td>

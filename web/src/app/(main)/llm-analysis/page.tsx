@@ -19,6 +19,7 @@ import {
 import { api, ItemDetail, LLMExecutionCurrentMonthSummary, LLMUsageAnalysisSummary } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import ModelSelect, { type ModelOption } from "@/components/settings/model-select";
+import { formatModelDisplayName } from "@/lib/model-display";
 
 function fmtUSD(v: number) {
   return `$${v.toFixed(6)}`;
@@ -182,7 +183,7 @@ export default function LLMAnalysisPage() {
       })
       .map((row) => ({
         value: row.model,
-        label: row.model,
+        label: formatModelDisplayName(row.model),
         provider: providerLabel(row.provider),
         note: row.purpose,
       }))
@@ -245,7 +246,7 @@ export default function LLMAnalysisPage() {
       .slice(0, 10)
       .map((row) => ({
         key: `${row.provider}:${row.model}:${row.purpose}`,
-        label: `${providerLabel(row.provider)} / ${row.model}`,
+        label: `${providerLabel(row.provider)} / ${formatModelDisplayName(row.model)}`,
         purpose: row.purpose,
         avgInput: Math.round(row.avg_input_tokens_per_call),
         avgOutput: Math.round(row.avg_output_tokens_per_call),
@@ -292,7 +293,7 @@ export default function LLMAnalysisPage() {
         totalTokensPerCall: Math.round(row.avg_input_tokens_per_call + row.avg_output_tokens_per_call),
         avgCostPerCall: row.avg_cost_per_call_usd,
         bubbleSize: Math.max(6, Math.min(22, 6 + Math.sqrt(row.calls))),
-        label: `${providerLabel(row.provider)} / ${row.model}`,
+        label: `${providerLabel(row.provider)} / ${formatModelDisplayName(row.model)}`,
         pricingLabel: row.pricingSources.length === 1 ? row.pricingSources[0] : t("llmAnalysis.mixedPricingSources"),
       }))
       .sort((a, b) => b.calls - a.calls)
@@ -439,7 +440,7 @@ export default function LLMAnalysisPage() {
     () =>
       rankingRows.map((row) => ({
         value: `${row.provider}:${row.model}:${row.purpose}`,
-        label: row.model,
+        label: formatModelDisplayName(row.model),
         provider: providerLabel(row.provider),
         note: `${row.purpose} · ${fmtUSD(row.avg_cost_per_call_usd)}`,
       })),
@@ -780,7 +781,7 @@ export default function LLMAnalysisPage() {
                     if (!active || !row) return null;
                     return (
                       <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 shadow-lg">
-                        <div className="text-xs font-semibold text-zinc-900">{providerLabel(row.provider)} / {row.model}</div>
+                        <div className="text-xs font-semibold text-zinc-900">{providerLabel(row.provider)} / {formatModelDisplayName(row.model)}</div>
                         <div className="mt-1 text-xs text-zinc-500">{row.purpose}</div>
                         <div className="mt-2 grid gap-1 text-xs text-zinc-700">
                           <div>{t("llm.totalCalls")}: {fmtNum(row.calls)}</div>
@@ -1076,7 +1077,7 @@ export default function LLMAnalysisPage() {
                     onClick={() => applyRowFilter(row)}
                   >
                     <td className="px-3 py-2">{providerLabel(row.provider)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-xs">{row.model}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs">{formatModelDisplayName(row.model)}</td>
                     <td className="px-3 py-2 text-right">{fmtNum(row.calls)}</td>
                     <td className="px-3 py-2 text-right">{fmtUSD(row.avg_cost_per_call_usd)}</td>
                     <td className={`px-3 py-2 text-right ${row.vs_cheapest_pct > 0 ? "text-amber-700" : "text-emerald-700"}`}>
@@ -1131,7 +1132,7 @@ export default function LLMAnalysisPage() {
               {sortedRows.map((row) => (
                 <tr key={`${row.provider}:${row.model}:${row.purpose}:${row.pricing_source}`} className="border-b border-zinc-100 last:border-0">
                   <td className="px-3 py-2">{providerLabel(row.provider)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs">{row.model}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-xs">{formatModelDisplayName(row.model)}</td>
                   <td className="px-3 py-2">{row.purpose}</td>
                   <td className="px-3 py-2 text-xs">{row.pricing_source}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.calls)}</td>

@@ -467,54 +467,6 @@ export default function SourcesPage() {
             </div>
           </section>
 
-          {!loading && sources.length > 0 && (
-            <section className="rounded-lg border border-zinc-200 bg-white p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-zinc-700">{t("sources.stats.title")}</h2>
-                  <p className="mt-1 text-xs text-zinc-500">{t("sources.stats.subtitle")}</p>
-                </div>
-              </div>
-              <div className="mt-3 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="text-xs uppercase tracking-wide text-zinc-500">
-                    <tr className="border-b border-zinc-200">
-                      <th className="px-3 py-2 font-medium">{t("sources.stats.source")}</th>
-                      <th className="px-3 py-2 text-right font-medium">{t("sources.stats.unread")}</th>
-                      <th className="px-3 py-2 text-right font-medium">{t("sources.stats.read")}</th>
-                      <th className="px-3 py-2 text-right font-medium">{t("sources.stats.total")}</th>
-                      <th className="px-3 py-2 text-right font-medium">{t("sources.stats.avgPerDay30d")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sources.map((src) => {
-                      const stat = sourceItemStatsByID[src.id];
-                      return (
-                        <tr key={`stats-${src.id}`} className="border-b border-zinc-100 last:border-b-0">
-                          <td className="px-3 py-2 align-top">
-                            <div className="min-w-[220px]">
-                              <Link
-                                href={`/items?feed=unread&sort=newest&source_id=${src.id}`}
-                                className="truncate font-medium text-zinc-800 hover:text-zinc-950 hover:underline"
-                              >
-                                {src.title ?? src.url}
-                              </Link>
-                              {src.title ? <div className="truncate text-xs text-zinc-400">{src.url}</div> : null}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums text-zinc-700">{(stat?.unread_items ?? 0).toLocaleString()}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-zinc-700">{(stat?.read_items ?? 0).toLocaleString()}</td>
-                          <td className="px-3 py-2 text-right tabular-nums font-medium text-zinc-900">{(stat?.total_items ?? 0).toLocaleString()}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-zinc-700">{(stat?.avg_items_per_day_30d ?? 0).toFixed(1)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
           {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
           {error && <p className="text-sm text-red-500">{error}</p>}
           {!loading && sources.length === 0 && (
@@ -527,12 +479,12 @@ export default function SourcesPage() {
             {pagedSources.map((src) => (
               <li
                 key={src.id}
-                className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm"
+                className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-start"
               >
                 <button
                   onClick={() => handleToggle(src.id, src.enabled)}
                   aria-label={src.enabled ? t("sources.toggle.disable") : t("sources.toggle.enable")}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors md:mt-1 ${
                     src.enabled ? "bg-blue-500" : "bg-zinc-300"
                   }`}
                 >
@@ -544,9 +496,12 @@ export default function SourcesPage() {
                 </button>
 
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-zinc-900">
+                  <Link
+                    href={`/items?feed=unread&sort=newest&source_id=${src.id}`}
+                    className="block truncate text-sm font-medium text-zinc-900 hover:text-zinc-950 hover:underline"
+                  >
                     {src.title ?? src.url}
-                  </div>
+                  </Link>
                   {sourceHealthByID[src.id] && (
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
                       <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${
@@ -575,15 +530,62 @@ export default function SourcesPage() {
                       {new Date(src.last_fetched_at).toLocaleString(dateLocale)}
                     </div>
                   )}
+                  <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-zinc-500 md:hidden">
+                    <div>
+                      <dt>{t("sources.stats.unread")}</dt>
+                      <dd className="mt-0.5 tabular-nums text-sm font-semibold text-zinc-900">
+                        {(sourceItemStatsByID[src.id]?.unread_items ?? 0).toLocaleString()}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t("sources.stats.read")}</dt>
+                      <dd className="mt-0.5 tabular-nums text-sm font-semibold text-zinc-900">
+                        {(sourceItemStatsByID[src.id]?.read_items ?? 0).toLocaleString()}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t("sources.stats.total")}</dt>
+                      <dd className="mt-0.5 tabular-nums text-sm font-semibold text-zinc-900">
+                        {(sourceItemStatsByID[src.id]?.total_items ?? 0).toLocaleString()}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t("sources.stats.avgPerDay30d")}</dt>
+                      <dd className="mt-0.5 tabular-nums text-sm font-semibold text-zinc-900">
+                        {(sourceItemStatsByID[src.id]?.avg_items_per_day_30d ?? 0).toFixed(1)}
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-3">
-                  <Link
-                    href={`/items?feed=all&source_id=${encodeURIComponent(src.id)}`}
-                    className="text-xs text-blue-600 hover:text-blue-800"
-                  >
-                    {t("sources.openItems")}
-                  </Link>
+                <dl className="hidden shrink-0 grid-cols-4 gap-6 self-center md:grid">
+                  <div className="min-w-[72px] text-right">
+                    <dt className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.stats.unread")}</dt>
+                    <dd className="mt-1 tabular-nums text-sm font-semibold text-zinc-900">
+                      {(sourceItemStatsByID[src.id]?.unread_items ?? 0).toLocaleString()}
+                    </dd>
+                  </div>
+                  <div className="min-w-[72px] text-right">
+                    <dt className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.stats.read")}</dt>
+                    <dd className="mt-1 tabular-nums text-sm font-semibold text-zinc-900">
+                      {(sourceItemStatsByID[src.id]?.read_items ?? 0).toLocaleString()}
+                    </dd>
+                  </div>
+                  <div className="min-w-[72px] text-right">
+                    <dt className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.stats.total")}</dt>
+                    <dd className="mt-1 tabular-nums text-sm font-semibold text-zinc-900">
+                      {(sourceItemStatsByID[src.id]?.total_items ?? 0).toLocaleString()}
+                    </dd>
+                  </div>
+                  <div className="min-w-[96px] text-right">
+                    <dt className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.stats.avgPerDay30d")}</dt>
+                    <dd className="mt-1 tabular-nums text-sm font-semibold text-zinc-900">
+                      {(sourceItemStatsByID[src.id]?.avg_items_per_day_30d ?? 0).toFixed(1)}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="flex shrink-0 items-center gap-3 md:self-center">
                   <button
                     type="button"
                     onClick={() => openEditDialog(src)}

@@ -1342,7 +1342,20 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 
 	return inngestgo.CreateFunction(
 		client,
-		inngestgo.FunctionOpts{ID: "process-item", Name: "Process Item"},
+		inngestgo.FunctionOpts{
+			ID:   "process-item",
+			Name: "Process Item",
+			Concurrency: []inngestgo.ConfigStepConcurrency{
+				{
+					Limit: 6,
+				},
+			},
+			Throttle: &inngestgo.ConfigThrottle{
+				Limit:  30,
+				Period: time.Minute,
+				Burst:  6,
+			},
+		},
 		inngestgo.EventTrigger("item/created", nil),
 		func(ctx context.Context, input inngestgo.Input[processItemEventData]) (any, error) {
 			data := input.Event.Data

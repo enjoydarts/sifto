@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/inngest/inngestgo v0.15.0
+	github.com/inngest/inngestgo v0.15.1
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/mmcdole/gofeed v1.3.0
 	github.com/redis/go-redis/v9 v9.18.0

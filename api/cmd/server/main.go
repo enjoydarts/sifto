@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/handler"
@@ -305,6 +306,17 @@ func logInngestRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		log.Printf("inngest request start method=%s path=%s remote=%s ua=%q", r.Method, r.URL.Path, r.RemoteAddr, r.UserAgent())
+		if r.Method == http.MethodPut {
+			log.Printf(
+				"inngest request meta method=%s path=%s content_type=%q content_length=%d transfer_encoding=%q headers=%s",
+				r.Method,
+				r.URL.Path,
+				r.Header.Get("Content-Type"),
+				r.ContentLength,
+				strings.Join(r.TransferEncoding, ","),
+				formatInngestHeaders(r.Header),
+			)
+		}
 
 		lrw := &loggingResponseWriter{ResponseWriter: w}
 		defer func() {
@@ -329,4 +341,35 @@ func logInngestRequests(next http.Handler) http.Handler {
 
 		next.ServeHTTP(lrw, r)
 	})
+}
+
+func formatInngestHeaders(header http.Header) string {
+	keys := []string{
+		"Authorization",
+		"Content-Type",
+		"Content-Length",
+		"X-Inngest-Signature",
+		"X-Inngest-Env",
+		"X-Inngest-Framework",
+		"X-Inngest-Expected-Server-Kind",
+		"X-Inngest-Server-Kind",
+		"X-Inngest-SDK",
+		"X-Inngest-Req-Version",
+	}
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		value := strings.TrimSpace(header.Get(key))
+		if value == "" {
+			continue
+		}
+		if strings.EqualFold(key, "Authorization") {
+			parts = append(parts, key+"=<redacted>")
+			continue
+		}
+		parts = append(parts, key+"="+value)
+	}
+	if len(parts) == 0 {
+		return "(none)"
+	}
+	return strings.Join(parts, " ")
 }

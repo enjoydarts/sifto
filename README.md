@@ -231,6 +231,7 @@ make migrate-up
 | API | http://localhost:8081 |
 | Worker | http://localhost:8000 |
 | Inngest Dev Server | http://localhost:8288 |
+| Inngest Start Test | http://localhost:8289 |
 
 ### よく使うコマンド
 
@@ -303,6 +304,8 @@ make migrate-version
 ### ローカル認証
 
 `.env.example` では `ALLOW_DEV_AUTH_BYPASS=true` が入っていますが、Clerk 前提の動作確認をする場合は Clerk 関連 env を埋めてください。
+
+ローカルで self-host `start` モードを切り分ける時は、`docker compose --profile inngest-start up -d inngest-start` を使い、`.env` で `INNGEST_DEV=false` と `DOCKER_INNGEST_BASE_URL=http://inngest-start:8288` に切り替えてください。
 
 ## データと集計の考え方
 

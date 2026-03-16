@@ -328,6 +328,11 @@ func logInngestRequests(next http.Handler) http.Handler {
 				log.Printf("inngest request panic method=%s path=%s remote=%s err=%v", r.Method, r.URL.Path, r.RemoteAddr, rec)
 				panic(rec)
 			}
+			if r.Method == http.MethodPut && !lrw.wroteHeader {
+				if strings.TrimSpace(lrw.Header().Get("X-Inngest-Sync-Kind")) != "" {
+					lrw.WriteHeader(http.StatusNoContent)
+				}
+			}
 			status := lrw.status
 			if status == 0 {
 				status = -1

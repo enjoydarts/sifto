@@ -3,6 +3,7 @@
 import { Clock3 } from "lucide-react";
 import { TodayQueueItem } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
+import { Thumbnail } from "@/components/thumbnail";
 
 type TodayQueueProps = {
   items: TodayQueueItem[];
@@ -32,7 +33,15 @@ export function TodayQueue({ items, onOpen, onRead, onLater }: TodayQueueProps) 
       <div className="mt-4 space-y-3">
         {items.map((entry, index) => (
           <article key={entry.item.id} className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4">
-            <div className="min-w-0">
+            <div className="flex min-w-0 gap-3">
+              <div className="hidden sm:block">
+                <Thumbnail
+                  src={entry.item.thumbnail_url}
+                  title={entry.item.translated_title || entry.item.title || entry.item.url}
+                  size="md"
+                />
+              </div>
+              <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                 <span className="rounded-full bg-blue-100 px-2 py-1 font-semibold text-blue-700">
                   {t("briefing.todayQueue.rank")} {index + 1}
@@ -48,6 +57,14 @@ export function TodayQueue({ items, onOpen, onRead, onLater }: TodayQueueProps) 
                   {entry.item.translated_title || entry.item.title || entry.item.url}
                 </h3>
               </button>
+              <div className="mt-2 sm:hidden">
+                <Thumbnail
+                  src={entry.item.thumbnail_url}
+                  title={entry.item.translated_title || entry.item.title || entry.item.url}
+                  size="md"
+                  className="h-14 w-14 rounded-xl"
+                />
+              </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {entry.reason_labels.map((reason) => (
                   <span key={`${entry.item.id}-${reason}`} className="rounded-full border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-600">
@@ -83,6 +100,7 @@ export function TodayQueue({ items, onOpen, onRead, onLater }: TodayQueueProps) 
                   {t("briefing.todayQueue.later")}
                 </button>
               </div>
+            </div>
             </div>
           </article>
         ))}

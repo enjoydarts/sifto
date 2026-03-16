@@ -528,9 +528,11 @@ function ItemsPageContent() {
                   </span>
                 )}
                 {filter && (
+                  filter !== "pending" && (
                   <span className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700">
                     {t(`items.filter.${filter}`)}
                   </span>
+                  )
                 )}
               </div>
             )}

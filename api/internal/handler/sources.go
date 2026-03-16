@@ -331,6 +331,19 @@ func (h *SourceHandler) ItemStats(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *SourceHandler) DailyStats(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	days := parseIntOrDefault(r.URL.Query().Get("days"), 30)
+	rows, err := h.repo.DailyStatsByUser(r.Context(), userID, days)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"items": rows,
+	})
+}
+
 func (h *SourceHandler) Recommended(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	limit := parseIntOrDefault(r.URL.Query().Get("limit"), 8)

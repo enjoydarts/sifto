@@ -53,6 +53,22 @@ export interface SourceItemStats {
   avg_items_per_day_30d: number;
 }
 
+export interface SourceDailyCount {
+  day: string;
+  count: number;
+}
+
+export interface SourceDailyStats {
+  source_id: string;
+  today_count: number;
+  yesterday_count: number;
+  last_7d_total: number;
+  last_30d_total: number;
+  active_days_30d: number;
+  avg_items_per_active_day_30d: number;
+  daily_counts: SourceDailyCount[];
+}
+
 export interface SourceOptimizationMetrics {
   unread_backlog: number;
   read_rate: number;
@@ -882,6 +898,7 @@ export const api = {
   // Sources
   getSources: () => apiFetch<Source[]>("/sources"),
   getSourceItemStats: () => apiFetch<{ items: SourceItemStats[] }>("/sources/stats"),
+  getSourceDailyStats: (days = 30) => apiFetch<{ items: SourceDailyStats[] }>(`/sources/daily-stats?days=${days}`),
   getSourceHealth: () => apiFetch<{ items: SourceHealth[] }>("/sources/health"),
   getSourceOptimization: () => apiFetch<{ items: SourceOptimizationItem[] }>("/sources/optimization"),
   exportSourcesOPML: async () => {

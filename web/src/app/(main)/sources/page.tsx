@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Activity, Download, Lightbulb, Sparkles, Upload } from "lucide-react";
-import { api, Source, SourceHealth, SourceItemStats, SourceOptimizationItem, SourceSuggestion } from "@/lib/api";
+import { api, Source, SourceDailyStats, SourceHealth, SourceItemStats, SourceOptimizationItem, SourceSuggestion } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -15,11 +15,13 @@ export default function SourcesPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
-  const [activeTab, setActiveTab] = useState<"manage" | "improve" | "discover">("manage");
+  const [activeTab, setActiveTab] = useState<"manage" | "activity" | "improve" | "discover">("manage");
   const [sources, setSources] = useState<Source[]>([]);
   const [sourceHealthByID, setSourceHealthByID] = useState<Record<string, SourceHealth>>({});
   const [sourceItemStatsByID, setSourceItemStatsByID] = useState<Record<string, SourceItemStats>>({});
+  const [sourceDailyStatsByID, setSourceDailyStatsByID] = useState<Record<string, SourceDailyStats>>({});
   const [sourceOptimization, setSourceOptimization] = useState<SourceOptimizationItem[]>([]);
+  const [loadingDailyStats, setLoadingDailyStats] = useState(false);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +87,26 @@ export default function SourcesPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const loadDailyStats = useCallback(async () => {
+    setLoadingDailyStats(true);
+    try {
+      const data = await api.getSourceDailyStats(30);
+      const next: Record<string, SourceDailyStats> = {};
+      for (const row of data.items ?? []) next[row.source_id] = row;
+      setSourceDailyStatsByID(next);
+    } catch (e) {
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setLoadingDailyStats(false);
+    }
+  }, [showToast, t]);
+
+  useEffect(() => {
+    if (activeTab === "activity" && !loadingDailyStats && Object.keys(sourceDailyStatsByID).length === 0) {
+      void loadDailyStats();
+    }
+  }, [activeTab, loadDailyStats, loadingDailyStats, sourceDailyStatsByID]);
 
   const registerSource = async (feedUrl: string) => {
     await api.createSource({
@@ -227,11 +249,20 @@ export default function SourcesPage() {
   };
 
   const pagedSources = sources.slice((page - 1) * pageSize, page * pageSize);
-  const tabs: Array<{ key: "manage" | "improve" | "discover"; label: string; count?: number }> = [
+  const tabs: Array<{ key: "manage" | "activity" | "improve" | "discover"; label: string; count?: number }> = [
     { key: "manage", label: t("sources.tabs.manage"), count: sources.length },
+    { key: "activity", label: t("sources.tabs.activity"), count: Object.keys(sourceDailyStatsByID).length || undefined },
     { key: "improve", label: t("sources.tabs.improve"), count: sourceOptimization.length },
     { key: "discover", label: t("sources.tabs.discover"), count: recommendations.length || undefined },
   ];
+  const activityRows = useMemo(() => {
+    return sources
+      .map((src) => ({
+        source: src,
+        daily: sourceDailyStatsByID[src.id],
+      }))
+      .sort((a, b) => (b.daily?.last_30d_total ?? 0) - (a.daily?.last_30d_total ?? 0));
+  }, [sourceDailyStatsByID, sources]);
   const handleExportOPML = async () => {
     setExportingOPML(true);
     try {
@@ -284,6 +315,11 @@ export default function SourcesPage() {
       setImportingInoreader(false);
     }
   };
+  const formatShortDate = useCallback((value: string) => {
+    const [y, m, d] = value.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
+    return dt.toLocaleDateString(dateLocale, { month: "numeric", day: "numeric", timeZone: "UTC" });
+  }, [dateLocale]);
 
   return (
     <div className="space-y-4">
@@ -297,7 +333,7 @@ export default function SourcesPage() {
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-        <Tabs defaultValue="manage" value={activeTab} onChange={(value) => setActiveTab(value as "manage" | "improve" | "discover")}>
+        <Tabs defaultValue="manage" value={activeTab} onChange={(value) => setActiveTab(value as "manage" | "activity" | "improve" | "discover")}>
           <TabList className="px-3 pt-3 md:px-4 md:pt-4">
             {tabs.map((tab) => (
               <Tab key={tab.key} value={tab.key}>
@@ -605,6 +641,89 @@ export default function SourcesPage() {
             ))}
           </ul>
           <Pagination total={sources.length} page={page} pageSize={pageSize} onPageChange={setPage} />
+          </TabPanel>
+
+          <TabPanel value="activity" className="space-y-4 px-4 py-4 md:px-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm text-zinc-500">{t("sources.tabs.activityDesc")}</p>
+                <p className="mt-1 text-xs text-zinc-400">{t("sources.activity.note")}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadDailyStats()}
+                disabled={loadingDailyStats}
+                className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                <Activity className="size-4" aria-hidden="true" />
+                {loadingDailyStats ? t("common.loading") : t("sources.activity.refresh")}
+              </button>
+            </div>
+
+            <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+                    <tr className="border-b border-zinc-200">
+                      <th className="px-4 py-3 font-medium">{t("sources.activity.source")}</th>
+                      <th className="px-3 py-3 text-right font-medium">{t("sources.activity.today")}</th>
+                      <th className="px-3 py-3 text-right font-medium">{t("sources.activity.yesterday")}</th>
+                      <th className="px-3 py-3 text-right font-medium">{t("sources.activity.last7d")}</th>
+                      <th className="px-3 py-3 text-right font-medium">{t("sources.activity.last30d")}</th>
+                      <th className="px-3 py-3 text-right font-medium">{t("sources.activity.activeDays")}</th>
+                      <th className="px-3 py-3 text-right font-medium">{t("sources.activity.avgActiveDay")}</th>
+                      <th className="px-4 py-3 font-medium">{t("sources.activity.dailyBars")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activityRows.map(({ source, daily }) => {
+                      const dailyCounts = daily?.daily_counts ?? [];
+                      const recentBars = dailyCounts.slice(-14);
+                      const maxCount = Math.max(1, ...recentBars.map((v) => v.count));
+                      return (
+                        <tr key={`activity-${source.id}`} className="border-b border-zinc-100 last:border-b-0">
+                          <td className="px-4 py-3 align-top">
+                            <div className="min-w-[220px]">
+                              <Link
+                                href={`/items?feed=unread&sort=newest&source_id=${source.id}`}
+                                className="block truncate font-medium text-zinc-900 hover:text-zinc-950 hover:underline"
+                              >
+                                {source.title ?? source.url}
+                              </Link>
+                              {source.title ? <div className="truncate text-xs text-zinc-400">{source.url}</div> : null}
+                            </div>
+                          </td>
+                          <td className="px-3 py-3 text-right tabular-nums text-zinc-900">{(daily?.today_count ?? 0).toLocaleString()}</td>
+                          <td className="px-3 py-3 text-right tabular-nums text-zinc-700">{(daily?.yesterday_count ?? 0).toLocaleString()}</td>
+                          <td className="px-3 py-3 text-right tabular-nums text-zinc-700">{(daily?.last_7d_total ?? 0).toLocaleString()}</td>
+                          <td className="px-3 py-3 text-right tabular-nums font-medium text-zinc-900">{(daily?.last_30d_total ?? 0).toLocaleString()}</td>
+                          <td className="px-3 py-3 text-right tabular-nums text-zinc-700">{(daily?.active_days_30d ?? 0).toLocaleString()}</td>
+                          <td className="px-3 py-3 text-right tabular-nums text-zinc-700">{(daily?.avg_items_per_active_day_30d ?? 0).toFixed(1)}</td>
+                          <td className="px-4 py-3">
+                            <div className="min-w-[180px]">
+                              <div className="flex h-12 items-end gap-1">
+                                {recentBars.map((entry) => (
+                                  <div
+                                    key={`${source.id}-${entry.day}`}
+                                    title={`${formatShortDate(entry.day)}: ${entry.count.toLocaleString()}`}
+                                    className="flex-1 rounded-t bg-zinc-900/80"
+                                    style={{ height: `${Math.max(8, Math.round((entry.count / maxCount) * 100))}%` }}
+                                  />
+                                ))}
+                              </div>
+                              <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-400">
+                                <span>{recentBars[0] ? formatShortDate(recentBars[0].day) : "-"}</span>
+                                <span>{recentBars[recentBars.length - 1] ? formatShortDate(recentBars[recentBars.length - 1].day) : "-"}</span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </TabPanel>
 
           <TabPanel value="improve" className="space-y-4 px-4 py-4 md:px-5">

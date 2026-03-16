@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
@@ -273,6 +274,106 @@ func (r *SourceRepo) ItemStatsByUser(ctx context.Context, userID string) ([]mode
 		out = append(out, stat)
 	}
 	return out, rows.Err()
+}
+
+func (r *SourceRepo) DailyStatsByUser(ctx context.Context, userID string, days int) ([]model.SourceDailyStats, error) {
+	if days <= 0 {
+		days = 30
+	}
+	if days > 90 {
+		days = 90
+	}
+
+	type dayRow struct {
+		SourceID string
+		Day      time.Time
+		Count    int
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT
+			i.source_id,
+			(i.created_at AT TIME ZONE 'Asia/Tokyo')::date AS day,
+			COUNT(*)::int AS item_count
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		WHERE s.user_id = $1
+		  AND (i.created_at AT TIME ZONE 'Asia/Tokyo')::date >= ((NOW() AT TIME ZONE 'Asia/Tokyo')::date - ($2::int - 1))
+		GROUP BY i.source_id, day
+		ORDER BY day ASC`, userID, days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	seriesBySource := map[string]map[string]int{}
+	for rows.Next() {
+		var row dayRow
+		if err := rows.Scan(&row.SourceID, &row.Day, &row.Count); err != nil {
+			return nil, err
+		}
+		if _, ok := seriesBySource[row.SourceID]; !ok {
+			seriesBySource[row.SourceID] = map[string]int{}
+		}
+		seriesBySource[row.SourceID][row.Day.Format("2006-01-02")] = row.Count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	sources, err := r.List(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	jst := time.FixedZone("Asia/Tokyo", 9*60*60)
+	now := time.Now().In(jst)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, jst)
+	start := today.AddDate(0, 0, -(days - 1))
+
+	out := make([]model.SourceDailyStats, 0, len(sources))
+	for _, src := range sources {
+		countsByDay := seriesBySource[src.ID]
+		stats := model.SourceDailyStats{SourceID: src.ID}
+		if countsByDay == nil {
+			countsByDay = map[string]int{}
+		}
+		stats.DailyCounts = make([]model.SourceDailyCount, 0, days)
+		for i := 0; i < days; i++ {
+			day := start.AddDate(0, 0, i)
+			key := day.Format("2006-01-02")
+			count := countsByDay[key]
+			stats.DailyCounts = append(stats.DailyCounts, model.SourceDailyCount{
+				Day:   key,
+				Count: count,
+			})
+			if i == days-1 {
+				stats.TodayCount = count
+			}
+			if i == days-2 {
+				stats.YesterdayCount = count
+			}
+			if count > 0 {
+				stats.ActiveDays30d++
+			}
+			stats.Last30DaysTotal += count
+			if i >= days-7 {
+				stats.Last7DaysTotal += count
+			}
+		}
+		if stats.ActiveDays30d > 0 {
+			stats.AvgItemsPerActiveDay30 = float64(stats.Last30DaysTotal) / float64(stats.ActiveDays30d)
+		}
+		out = append(out, stats)
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Last30DaysTotal == out[j].Last30DaysTotal {
+			return out[i].SourceID < out[j].SourceID
+		}
+		return out[i].Last30DaysTotal > out[j].Last30DaysTotal
+	})
+	return out, nil
 }
 
 func (r *SourceRepo) RefreshHealthSnapshot(ctx context.Context, sourceID string, reason *string) error {

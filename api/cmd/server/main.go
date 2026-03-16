@@ -137,6 +137,7 @@ func main() {
 			r.Post("/opml/import", sourceH.ImportOPML)
 			r.Post("/inoreader/import", sourceH.ImportInoreader)
 			r.Get("/stats", sourceH.ItemStats)
+			r.Get("/daily-stats", sourceH.DailyStats)
 			r.Get("/health", sourceH.Health)
 			r.Get("/optimization", sourceH.Optimization)
 			r.Get("/recommended", sourceH.Recommended)

@@ -135,6 +135,22 @@ type SourceItemStats struct {
 	AvgItemsPerDay30Days float64 `json:"avg_items_per_day_30d"`
 }
 
+type SourceDailyCount struct {
+	Day   string `json:"day"`
+	Count int    `json:"count"`
+}
+
+type SourceDailyStats struct {
+	SourceID               string             `json:"source_id"`
+	TodayCount             int                `json:"today_count"`
+	YesterdayCount         int                `json:"yesterday_count"`
+	Last7DaysTotal         int                `json:"last_7d_total"`
+	Last30DaysTotal        int                `json:"last_30d_total"`
+	ActiveDays30d          int                `json:"active_days_30d"`
+	AvgItemsPerActiveDay30 float64            `json:"avg_items_per_active_day_30d"`
+	DailyCounts            []SourceDailyCount `json:"daily_counts"`
+}
+
 type RecommendedSource struct {
 	SourceID         string     `json:"source_id"`
 	URL              string     `json:"url"`

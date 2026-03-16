@@ -319,6 +319,18 @@ func (h *SourceHandler) Health(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *SourceHandler) ItemStats(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	rows, err := h.repo.ItemStatsByUser(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"items": rows,
+	})
+}
+
 func (h *SourceHandler) Recommended(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	limit := parseIntOrDefault(r.URL.Query().Get("limit"), 8)

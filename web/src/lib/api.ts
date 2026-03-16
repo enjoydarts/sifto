@@ -45,6 +45,14 @@ export interface SourceHealth {
   status: "ok" | "stale" | "error" | "new" | "disabled" | string;
 }
 
+export interface SourceItemStats {
+  source_id: string;
+  total_items: number;
+  unread_items: number;
+  read_items: number;
+  avg_items_per_day_30d: number;
+}
+
 export interface SourceOptimizationMetrics {
   unread_backlog: number;
   read_rate: number;
@@ -873,6 +881,7 @@ async function resolveClerkIdentityIfNeeded(): Promise<void> {
 export const api = {
   // Sources
   getSources: () => apiFetch<Source[]>("/sources"),
+  getSourceItemStats: () => apiFetch<{ items: SourceItemStats[] }>("/sources/stats"),
   getSourceHealth: () => apiFetch<{ items: SourceHealth[] }>("/sources/health"),
   getSourceOptimization: () => apiFetch<{ items: SourceOptimizationItem[] }>("/sources/optimization"),
   exportSourcesOPML: async () => {

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Activity, Download, Lightbulb, Sparkles, Upload } from "lucide-react";
-import { api, Source, SourceHealth, SourceOptimizationItem, SourceSuggestion } from "@/lib/api";
+import { api, Source, SourceHealth, SourceItemStats, SourceOptimizationItem, SourceSuggestion } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -18,6 +18,7 @@ export default function SourcesPage() {
   const [activeTab, setActiveTab] = useState<"manage" | "improve" | "discover">("manage");
   const [sources, setSources] = useState<Source[]>([]);
   const [sourceHealthByID, setSourceHealthByID] = useState<Record<string, SourceHealth>>({});
+  const [sourceItemStatsByID, setSourceItemStatsByID] = useState<Record<string, SourceItemStats>>({});
   const [sourceOptimization, setSourceOptimization] = useState<SourceOptimizationItem[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -59,14 +60,18 @@ export default function SourcesPage() {
   const load = useCallback(async () => {
     try {
       setSuggestionsError(null);
-      const [data, health, optimization] = await Promise.all([
+      const [data, stats, health, optimization] = await Promise.all([
         api.getSources(),
+        api.getSourceItemStats().catch(() => ({ items: [] as SourceItemStats[] })),
         api.getSourceHealth().catch(() => ({ items: [] as SourceHealth[] })),
         api.getSourceOptimization().catch(() => ({ items: [] as SourceOptimizationItem[] })),
       ]);
       setSources(data ?? []);
+      const statsMap: Record<string, SourceItemStats> = {};
       const healthMap: Record<string, SourceHealth> = {};
+      for (const stat of stats.items ?? []) statsMap[stat.source_id] = stat;
       for (const h of health.items ?? []) healthMap[h.source_id] = h;
+      setSourceItemStatsByID(statsMap);
       setSourceHealthByID(healthMap);
       setSourceOptimization(optimization.items ?? []);
       setError(null);
@@ -461,6 +466,54 @@ export default function SourcesPage() {
               </div>
             </div>
           </section>
+
+          {!loading && sources.length > 0 && (
+            <section className="rounded-lg border border-zinc-200 bg-white p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-zinc-700">{t("sources.stats.title")}</h2>
+                  <p className="mt-1 text-xs text-zinc-500">{t("sources.stats.subtitle")}</p>
+                </div>
+              </div>
+              <div className="mt-3 overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-zinc-500">
+                    <tr className="border-b border-zinc-200">
+                      <th className="px-3 py-2 font-medium">{t("sources.stats.source")}</th>
+                      <th className="px-3 py-2 text-right font-medium">{t("sources.stats.unread")}</th>
+                      <th className="px-3 py-2 text-right font-medium">{t("sources.stats.read")}</th>
+                      <th className="px-3 py-2 text-right font-medium">{t("sources.stats.total")}</th>
+                      <th className="px-3 py-2 text-right font-medium">{t("sources.stats.avgPerDay30d")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sources.map((src) => {
+                      const stat = sourceItemStatsByID[src.id];
+                      return (
+                        <tr key={`stats-${src.id}`} className="border-b border-zinc-100 last:border-b-0">
+                          <td className="px-3 py-2 align-top">
+                            <div className="min-w-[220px]">
+                              <Link
+                                href={`/items?feed=unread&sort=newest&source_id=${src.id}`}
+                                className="truncate font-medium text-zinc-800 hover:text-zinc-950 hover:underline"
+                              >
+                                {src.title ?? src.url}
+                              </Link>
+                              {src.title ? <div className="truncate text-xs text-zinc-400">{src.url}</div> : null}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-zinc-700">{(stat?.unread_items ?? 0).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-zinc-700">{(stat?.read_items ?? 0).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-medium text-zinc-900">{(stat?.total_items ?? 0).toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-zinc-700">{(stat?.avg_items_per_day_30d ?? 0).toFixed(1)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
           {error && <p className="text-sm text-red-500">{error}</p>}

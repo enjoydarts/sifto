@@ -127,6 +127,14 @@ type SourceHealth struct {
 	Status        string     `json:"status"` // ok | stale | error | new | disabled
 }
 
+type SourceItemStats struct {
+	SourceID             string  `json:"source_id"`
+	TotalItems           int     `json:"total_items"`
+	UnreadItems          int     `json:"unread_items"`
+	ReadItems            int     `json:"read_items"`
+	AvgItemsPerDay30Days float64 `json:"avg_items_per_day_30d"`
+}
+
 type RecommendedSource struct {
 	SourceID         string     `json:"source_id"`
 	URL              string     `json:"url"`

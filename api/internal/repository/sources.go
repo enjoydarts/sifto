@@ -229,6 +229,51 @@ func (r *SourceRepo) HealthByUser(ctx context.Context, userID string) ([]model.S
 	return out, nil
 }
 
+func (r *SourceRepo) ItemStatsByUser(ctx context.Context, userID string) ([]model.SourceItemStats, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT
+			s.id AS source_id,
+			COUNT(i.id)::int AS total_items,
+			COUNT(*) FILTER (WHERE i.is_read = false)::int AS unread_items,
+			COUNT(*) FILTER (WHERE i.is_read = true)::int AS read_items,
+			COALESCE(
+				COUNT(*) FILTER (WHERE i.created_at >= NOW() - INTERVAL '30 days')::float8 /
+					NULLIF(
+						COUNT(DISTINCT CASE
+							WHEN i.created_at >= NOW() - INTERVAL '30 days'
+							THEN (i.created_at AT TIME ZONE 'Asia/Tokyo')::date
+						END),
+						0
+					),
+				0
+			) AS avg_items_per_day_30d
+		FROM sources s
+		LEFT JOIN items i ON i.source_id = s.id
+		WHERE s.user_id = $1
+		GROUP BY s.id
+		ORDER BY total_items DESC, s.created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []model.SourceItemStats{}
+	for rows.Next() {
+		var stat model.SourceItemStats
+		if err := rows.Scan(
+			&stat.SourceID,
+			&stat.TotalItems,
+			&stat.UnreadItems,
+			&stat.ReadItems,
+			&stat.AvgItemsPerDay30Days,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, stat)
+	}
+	return out, rows.Err()
+}
+
 func (r *SourceRepo) RefreshHealthSnapshot(ctx context.Context, sourceID string, reason *string) error {
 	var (
 		h       model.SourceHealth

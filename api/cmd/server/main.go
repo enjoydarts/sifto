@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -307,14 +309,16 @@ func logInngestRequests(next http.Handler) http.Handler {
 		start := time.Now()
 		log.Printf("inngest request start method=%s path=%s remote=%s ua=%q", r.Method, r.URL.Path, r.RemoteAddr, r.UserAgent())
 		if r.Method == http.MethodPut {
+			bodyPreview := readBodyPreview(r, 512)
 			log.Printf(
-				"inngest request meta method=%s path=%s content_type=%q content_length=%d transfer_encoding=%q headers=%s",
+				"inngest request meta method=%s path=%s content_type=%q content_length=%d transfer_encoding=%q headers=%s body=%q",
 				r.Method,
 				r.URL.Path,
 				r.Header.Get("Content-Type"),
 				r.ContentLength,
 				strings.Join(r.TransferEncoding, ","),
 				formatInngestHeaders(r.Header),
+				bodyPreview,
 			)
 		}
 
@@ -341,6 +345,19 @@ func logInngestRequests(next http.Handler) http.Handler {
 
 		next.ServeHTTP(lrw, r)
 	})
+}
+
+func readBodyPreview(r *http.Request, limit int64) string {
+	if r.Body == nil || limit <= 0 {
+		return ""
+	}
+	data, err := io.ReadAll(io.LimitReader(r.Body, limit))
+	if err != nil {
+		r.Body = io.NopCloser(bytes.NewReader(nil))
+		return "(read error)"
+	}
+	r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(data), r.Body))
+	return strings.TrimSpace(string(data))
 }
 
 func formatInngestHeaders(header http.Header) string {

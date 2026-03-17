@@ -802,6 +802,8 @@ export const jaDict: Dict = {
   "settings.modelSelect.providerColumn": "提供元",
   "settings.modelSelect.modelColumn": "モデル",
   "settings.modelSelect.pricingColumn": "価格",
+  "settings.modelUnavailable.title": "現在の設定に、使えなくなった OpenRouter モデルがあります",
+  "settings.modelUnavailable.message": "{{field}} は {{model}} のままですが、このモデルは現在の Sifto では選択対象から外れています。別のモデルへ変更してください。",
   "settings.saveModels": "モデル設定を保存",
   "settings.error.modelMissingCapability": "{{field}} に必要な機能に対応していないモデルです。",
   "settings.error.invalidModelForPurpose": "{{field}} では使えないモデルです。",

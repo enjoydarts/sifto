@@ -139,6 +139,10 @@ function localizeSettingsErrorMessage(raw: unknown, t: (key: string, fallback?: 
   return message;
 }
 
+function isUnavailableOpenRouterModel(item: LLMCatalogModel): boolean {
+  return item.provider === "openrouter" && item.capabilities?.supports_structured_output === false;
+}
+
 
 export default function SettingsPage() {
   const { t } = useI18n();
@@ -367,14 +371,49 @@ export default function SettingsPage() {
   }, [catalog]);
 
   const optionsForPurpose = useCallback(
-    (purpose: string): ModelOption[] =>
+    (purpose: string, currentValue?: string): ModelOption[] =>
       (catalog?.chat_models ?? [])
-        .filter((item) => (item.available_purposes ?? []).includes(purpose))
+        .filter((item) => {
+          if (!(item.available_purposes ?? []).includes(purpose)) return false;
+          if (item.id === currentValue) return true;
+          return !isUnavailableOpenRouterModel(item);
+        })
         .map(toModelOption),
     [catalog?.chat_models, toModelOption]
   );
 
-  const sourceSuggestionModelOptions = useMemo(() => optionsForPurpose("source_suggestion"), [optionsForPurpose]);
+  const unavailableSelectedModelWarnings = useMemo(() => {
+    const chatModels = catalog?.chat_models ?? [];
+    const byID = new Map(chatModels.map((item) => [item.id, item] as const));
+    const entries: Array<{ key: string; label: string; modelLabel: string }> = [];
+    const llmModels = settings?.llm_models ?? {};
+    const candidates: Array<[string, string | null | undefined]> = [
+      ["facts", llmModels.facts],
+      ["summary", llmModels.summary],
+      ["digest_cluster", llmModels.digest_cluster],
+      ["digest", llmModels.digest],
+      ["ask", llmModels.ask],
+      ["source_suggestion", llmModels.source_suggestion],
+      ["facts_check", llmModels.facts_check],
+      ["faithfulness_check", llmModels.faithfulness_check],
+    ];
+    for (const [settingKey, modelID] of candidates) {
+      if (!modelID) continue;
+      const item = byID.get(modelID);
+      if (!item || !isUnavailableOpenRouterModel(item)) continue;
+      entries.push({
+        key: settingKey,
+        label: localizeLLMSettingKey(settingKey, t),
+        modelLabel: formatModelDisplayName(modelID),
+      });
+    }
+    return entries;
+  }, [catalog?.chat_models, settings?.llm_models, t]);
+
+  const sourceSuggestionModelOptions = useMemo(
+    () => optionsForPurpose("source_suggestion", anthropicSourceSuggestionModel),
+    [anthropicSourceSuggestionModel, optionsForPurpose]
+  );
   const openAIEmbeddingModelOptions = useMemo(
     () => (catalog?.embedding_models ?? []).map(toModelOption),
     [catalog?.embedding_models, toModelOption]
@@ -1333,6 +1372,21 @@ export default function SettingsPage() {
               <p className="mt-1 text-xs text-zinc-400">{t("settings.pricingDescription")}</p>
             </div>
 
+            {unavailableSelectedModelWarnings.length > 0 ? (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <div className="font-medium">{t("settings.modelUnavailable.title")}</div>
+                <div className="mt-2 space-y-1 text-amber-800">
+                  {unavailableSelectedModelWarnings.map((entry) => (
+                    <p key={entry.key}>
+                      {t("settings.modelUnavailable.message")
+                        .replace("{{field}}", entry.label)
+                        .replace("{{model}}", entry.modelLabel)}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <div className="space-y-4">
               <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
                 <h4 className="text-sm font-semibold text-zinc-900">{t("settings.group.summary")}</h4>
@@ -1341,7 +1395,7 @@ export default function SettingsPage() {
                     label={t("settings.model.facts")}
                     value={anthropicFactsModel}
                     onChange={(value) => onChangeLLMModel(setAnthropicFactsModel, value)}
-                    options={optionsForPurpose("facts")}
+                    options={optionsForPurpose("facts", anthropicFactsModel)}
                     labels={modelSelectLabels}
                     variant="modal"
                   />
@@ -1349,7 +1403,7 @@ export default function SettingsPage() {
                     label={t("settings.model.summary")}
                     value={anthropicSummaryModel}
                     onChange={(value) => onChangeLLMModel(setAnthropicSummaryModel, value)}
-                    options={optionsForPurpose("summary")}
+                    options={optionsForPurpose("summary", anthropicSummaryModel)}
                     labels={modelSelectLabels}
                     variant="modal"
                   />
@@ -1363,7 +1417,7 @@ export default function SettingsPage() {
                     label={t("settings.model.digestCluster")}
                     value={anthropicDigestClusterModel}
                     onChange={(value) => onChangeLLMModel(setAnthropicDigestClusterModel, value)}
-                    options={optionsForPurpose("digest_cluster_draft")}
+                    options={optionsForPurpose("digest_cluster_draft", anthropicDigestClusterModel)}
                     labels={modelSelectLabels}
                     variant="modal"
                   />
@@ -1371,7 +1425,7 @@ export default function SettingsPage() {
                     label={t("settings.model.digest")}
                     value={anthropicDigestModel}
                     onChange={(value) => onChangeLLMModel(setAnthropicDigestModel, value)}
-                    options={optionsForPurpose("digest")}
+                    options={optionsForPurpose("digest", anthropicDigestModel)}
                     labels={modelSelectLabels}
                     variant="modal"
                   />
@@ -1385,7 +1439,7 @@ export default function SettingsPage() {
                     label={t("settings.model.factsCheck")}
                     value={factsCheckModel}
                     onChange={(value) => onChangeLLMModel(setFactsCheckModel, value)}
-                    options={optionsForPurpose("facts")}
+                    options={optionsForPurpose("facts", factsCheckModel)}
                     labels={modelSelectLabels}
                     variant="modal"
                   />
@@ -1393,7 +1447,7 @@ export default function SettingsPage() {
                     label={t("settings.model.faithfulnessCheck")}
                     value={faithfulnessCheckModel}
                     onChange={(value) => onChangeLLMModel(setFaithfulnessCheckModel, value)}
-                    options={optionsForPurpose("summary")}
+                    options={optionsForPurpose("summary", faithfulnessCheckModel)}
                     labels={modelSelectLabels}
                     variant="modal"
                   />
@@ -1415,7 +1469,7 @@ export default function SettingsPage() {
                     label={t("settings.model.ask")}
                     value={anthropicAskModel}
                     onChange={(value) => onChangeLLMModel(setAnthropicAskModel, value)}
-                    options={optionsForPurpose("ask")}
+                    options={optionsForPurpose("ask", anthropicAskModel)}
                     labels={modelSelectLabels}
                     variant="modal"
                   />

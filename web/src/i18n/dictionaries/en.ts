@@ -802,6 +802,8 @@ export const enDict: Dict = {
   "settings.modelSelect.providerColumn": "Provider",
   "settings.modelSelect.modelColumn": "Model",
   "settings.modelSelect.pricingColumn": "Pricing",
+  "settings.modelUnavailable.title": "Your current settings include OpenRouter models that are no longer selectable",
+  "settings.modelUnavailable.message": "{{field}} is still set to {{model}}, but this model is currently excluded from Sifto's selectable list. Please switch to another model.",
   "settings.saveModels": "Save model settings",
   "settings.error.modelMissingCapability": "This model does not support the required capability for {{field}}.",
   "settings.error.invalidModelForPurpose": "This model cannot be used for {{field}}.",

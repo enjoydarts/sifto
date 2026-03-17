@@ -98,7 +98,7 @@ function buildCostPerformancePreset(catalog: LLMCatalog | null): NonNullable<Use
   };
 }
 
-function localizeLLMSettingKey(settingKey: string, t: (key: string, vars?: Record<string, string | number>) => string): string {
+function localizeLLMSettingKey(settingKey: string, t: (key: string, fallback?: string) => string): string {
   switch (settingKey) {
     case "facts":
       return t("settings.model.facts");
@@ -123,19 +123,15 @@ function localizeLLMSettingKey(settingKey: string, t: (key: string, vars?: Recor
   }
 }
 
-function localizeSettingsErrorMessage(raw: unknown, t: (key: string, vars?: Record<string, string | number>) => string): string {
+function localizeSettingsErrorMessage(raw: unknown, t: (key: string, fallback?: string) => string): string {
   const message = String(raw);
   const capabilityMatch = message.match(/model missing required capability for ([a-z_]+)/);
   if (capabilityMatch) {
-    return t("settings.error.modelMissingCapability", {
-      field: localizeLLMSettingKey(capabilityMatch[1], t),
-    });
+    return t("settings.error.modelMissingCapability").replace("{{field}}", localizeLLMSettingKey(capabilityMatch[1], t));
   }
   const invalidModelMatch = message.match(/invalid model for ([a-z_]+)/);
   if (invalidModelMatch) {
-    return t("settings.error.invalidModelForPurpose", {
-      field: localizeLLMSettingKey(invalidModelMatch[1], t),
-    });
+    return t("settings.error.invalidModelForPurpose").replace("{{field}}", localizeLLMSettingKey(invalidModelMatch[1], t));
   }
   if (message.includes("invalid embedding model")) {
     return t("settings.error.invalidEmbeddingModel");

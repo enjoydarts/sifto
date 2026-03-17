@@ -239,8 +239,16 @@ def extract_facts(title: str | None, content: str, model: str, api_key: str) -> 
 
 def summarize(title: str | None, facts: list[str], source_text_chars: int | None, model: str, api_key: str) -> dict:
     return wrap_json_transport(
-        build_task=lambda: build_summary_task(title, facts, source_text_chars=source_text_chars, output_mode="object"),
-        transport=lambda task: _chat_json(task["prompt"], model, api_key, system_instruction=task["system"], max_output_tokens=task["max_tokens"], response_schema=task["schema"], schema_name="summary"),
+        build_task=lambda: build_summary_task(title, facts, source_text_chars=source_text_chars),
+        transport=lambda task: _chat_json(
+            task["prompt"],
+            model,
+            api_key,
+            system_instruction=task["system_instruction"],
+            max_output_tokens=task["max_tokens"],
+            response_schema=task["schema"],
+            schema_name="summary",
+        ),
         parser=lambda text: finalize_summary_result(text, title=title, facts=facts, source_text_chars=source_text_chars, error_prefix="fireworks summarize parse failed"),
         meta_builder=lambda usage: _llm_meta(model, "summary", usage),
     )
@@ -314,55 +322,111 @@ def translate_title(title: str, model: str, api_key: str) -> dict:
 
 
 def compose_digest(digest_date: str, items: list[dict], model: str, api_key: str) -> dict:
-    task = build_digest_task(digest_date, items, output_mode="object")
-    text, usage = _chat_json(task["prompt"], model, api_key, system_instruction=task["system"], max_output_tokens=task["max_tokens"], response_schema=task["schema"], schema_name="digest")
+    if not items:
+        return {
+            "subject": f"Sifto Digest - {digest_date}",
+            "body": "本日のダイジェスト対象記事はありませんでした。",
+            "llm": _llm_meta(model, "digest", {"input_tokens": 0, "output_tokens": 0}),
+        }
+    task = build_digest_task(digest_date, len(items), build_simple_digest_input(items))
+    text, usage = _chat_json(
+        task["prompt"],
+        model,
+        api_key,
+        system_instruction=task["system_instruction"],
+        max_output_tokens=8000,
+        response_schema=task["schema"],
+        schema_name="digest",
+        timeout_sec=_env_timeout_seconds("FIREWORKS_COMPOSE_DIGEST_TIMEOUT_SEC", 240.0),
+    )
     subject, body = parse_digest_result(text, error_prefix="fireworks compose_digest parse failed")
     return {"subject": subject, "body": body, "llm": _llm_meta(model, "digest", usage)}
 
 
-def compose_digest_cluster_draft(digest_date: str, topic_label: str, source_lines: list[str], model: str, api_key: str) -> dict:
-    task = build_cluster_draft_task(digest_date, topic_label, source_lines, output_mode="object")
+def compose_digest_cluster_draft(cluster_label: str, item_count: int, topics: list[str], source_lines: list[str], model: str, api_key: str) -> dict:
+    task = build_cluster_draft_task(str(cluster_label or "話題").strip() or "話題", item_count, topics, source_lines)
+    if not task["source_lines"]:
+        return {"draft_summary": "", "llm": _llm_meta(model, "digest_cluster_draft", {"input_tokens": 0, "output_tokens": 0})}
     try:
-        text, usage = _chat_json(task["prompt"], model, api_key, system_instruction=task["system"], max_output_tokens=task["max_tokens"], response_schema=task["schema"], schema_name="digest_cluster_draft")
-        title, bullets = parse_cluster_draft_result(text)
-        return {"title": title, "bullets": bullets, "llm": _llm_meta(model, "digest_cluster_draft", usage)}
+        text, usage = _chat_json(
+            task["prompt"],
+            model,
+            api_key,
+            system_instruction=task["system_instruction"],
+            max_output_tokens=900,
+            response_schema=task["schema"],
+            schema_name="digest_cluster_draft",
+        )
     except Exception as exc:
         _log.warning("fireworks compose_digest_cluster_draft primary attempt failed: %s", exc)
         try:
-            fallback_input = build_simple_digest_input(digest_date, topic_label, source_lines)
-            title, bullets = fallback_cluster_draft_from_source_lines(topic_label, source_lines)
-            return {"title": title, "bullets": bullets, "source": fallback_input}
+            text, usage = _chat_json(task["fallback_prompt"], model, api_key, max_output_tokens=500, response_schema=None)
         except Exception as retry_exc:
             _log.warning("fireworks compose_digest_cluster_draft fallback failed: %s", retry_exc)
-            raise
+            return {"draft_summary": fallback_cluster_draft_from_source_lines(task["source_lines"]), "llm": _llm_meta(model, "digest_cluster_draft", {"input_tokens": 0, "output_tokens": 0})}
+
+    draft = parse_cluster_draft_result(text, task["source_lines"])
+    return {"draft_summary": draft, "llm": _llm_meta(model, "digest_cluster_draft", usage)}
 
 
 def ask_question(query: str, candidates: list[dict], model: str, api_key: str) -> dict:
-    task = build_ask_task(query, candidates, output_mode="object")
-    text, usage = _chat_json(task["prompt"], model, api_key, system_instruction=task["system"], max_output_tokens=task["max_tokens"], response_schema=task["schema"], schema_name="ask")
+    if not candidates:
+        return {
+            "answer": "該当する記事は見つかりませんでした。",
+            "bullets": [],
+            "citations": [],
+            "llm": _llm_meta(model, "ask", {"input_tokens": 0, "output_tokens": 0}),
+        }
+    task = build_ask_task(query, candidates)
+    text, usage = _chat_json(
+        task["prompt"],
+        model,
+        api_key,
+        system_instruction=task["system_instruction"],
+        max_output_tokens=3200,
+        response_schema=task["schema"],
+        schema_name="ask",
+    )
     result = parse_ask_result(text, candidates, error_prefix="fireworks ask missing answer")
-    result["llm"] = _llm_meta(model, "ask", usage)
-    return result
+    return {**result, "llm": _llm_meta(model, "ask", usage)}
 
 
-def rank_feed_suggestions(existing_sources: list[str], preferred_topics: list[str], suggestions: list[dict], model: str, api_key: str) -> dict:
-    task = build_rank_feed_task(existing_sources, preferred_topics, suggestions, output_mode="object")
-    text, usage = _chat_json(task["prompt"], model, api_key, system_instruction=task["system"], max_output_tokens=task["max_tokens"], response_schema=task["schema"], schema_name="feed_suggestions")
-    result = parse_rank_feed_result(text, suggestions)
-    result["llm"] = _llm_meta(model, "source_suggestion", usage)
-    return result
+def rank_feed_suggestions(existing_sources: list[dict], preferred_topics: list[str], candidates: list[dict], positive_examples: list[dict] | None, negative_examples: list[dict] | None, model: str, api_key: str) -> dict:
+    task = build_rank_feed_task(existing_sources, preferred_topics, candidates, positive_examples, negative_examples)
+    text, usage = _chat_json(
+        task["prompt"],
+        model,
+        api_key,
+        max_output_tokens=2800,
+        response_schema=task["schema"],
+        schema_name="rank_feed_suggestions",
+    )
+    return {"items": parse_rank_feed_result(text, task["candidates"]), "llm": _llm_meta(model, "source_suggestion", usage)}
 
 
-def suggest_feed_seed_sites(existing_sources: list[str], preferred_topics: list[str], positive_examples: list[str], negative_examples: list[str], model: str, api_key: str) -> dict:
-    task = build_seed_sites_task(existing_sources, preferred_topics, positive_examples, negative_examples, output_mode="object")
-    text, usage = _chat_json(task["prompt"], model, api_key, system_instruction=task["system"], max_output_tokens=task["max_tokens"], response_schema=task["schema"], schema_name="feed_seed_suggestions")
-    result = parse_seed_sites_result(text)
-    result["llm"] = _llm_meta(model, "source_suggestion", usage)
-    return result
+def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list[str], positive_examples: list[dict] | None, negative_examples: list[dict] | None, model: str, api_key: str) -> dict:
+    task = build_seed_sites_task(existing_sources, preferred_topics=preferred_topics, positive_examples=positive_examples, negative_examples=negative_examples)
+    text, usage = _chat_json(
+        task["prompt"],
+        model,
+        api_key,
+        max_output_tokens=2200,
+        response_schema=task["schema"],
+        schema_name="suggest_feed_seed_sites",
+    )
+    return {"items": parse_seed_sites_result(text, task["existing_sources"]), "llm": _llm_meta(model, "source_suggestion", usage)}
 
 
 def localize_facts_to_japanese(title: str | None, facts: list[str], model: str, api_key: str) -> dict:
-    task = build_facts_localization_task(title, facts, output_mode="object")
-    text, usage = _chat_json(task["prompt"], model, api_key, system_instruction=task["system"], max_output_tokens=task["max_tokens"], response_schema=task["schema"], schema_name="localized_facts")
+    task = build_facts_localization_task(title, facts)
+    text, usage = _chat_json(
+        task["prompt"],
+        model,
+        api_key,
+        system_instruction=task["system_instruction"],
+        max_output_tokens=1200,
+        response_schema=task["schema"],
+        schema_name="localized_facts",
+    )
     localized = parse_facts_result(text)
     return {"facts": localized, "llm": _llm_meta(model, "facts", usage)}

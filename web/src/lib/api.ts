@@ -74,9 +74,16 @@ export interface OpenRouterSyncRun {
   started_at: string;
   finished_at?: string | null;
   status: string;
+  trigger_type: string;
   fetched_count: number;
   accepted_count: number;
+  translation_target_count: number;
+  translation_completed_count: number;
   error_message?: string | null;
+}
+
+export interface OpenRouterSyncStatusResponse {
+  run: OpenRouterSyncRun | null;
 }
 
 export interface OpenRouterModelSnapshot {
@@ -1475,6 +1482,8 @@ export const api = {
     ),
   getOpenRouterModels: () =>
     apiFetch<OpenRouterModelsResponse>("/openrouter-models"),
+  getOpenRouterSyncStatus: () =>
+    apiFetch<OpenRouterSyncStatusResponse>("/openrouter-models/status"),
   syncOpenRouterModels: () =>
     apiFetch<OpenRouterModelsResponse>("/openrouter-models/sync", { method: "POST" }),
   deleteInoreaderOAuth: () =>

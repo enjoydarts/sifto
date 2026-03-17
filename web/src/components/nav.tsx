@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import PWAInstallButton from "@/components/pwa-install";
-import { enableForceFreshReload } from "@/lib/api";
+import { api, enableForceFreshReload, OpenRouterSyncRun } from "@/lib/api";
 
 const primaryLinks = [
   { href: "/", labelKey: "nav.briefing", icon: Sparkles },
@@ -100,6 +100,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [openRouterSyncRun, setOpenRouterSyncRun] = useState<OpenRouterSyncRun | null>(null);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
@@ -117,6 +118,37 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [moreOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let interval: number | null = null;
+
+    const loadStatus = async () => {
+      try {
+        const next = await api.getOpenRouterSyncStatus();
+        if (!cancelled) {
+          setOpenRouterSyncRun(next.run);
+        }
+      } catch {
+        if (!cancelled) {
+          setOpenRouterSyncRun(null);
+        }
+      }
+    };
+
+    const onStarted = () => {
+      loadStatus();
+    };
+
+    loadStatus();
+    interval = window.setInterval(loadStatus, openRouterSyncRun ? 3000 : 15000);
+    window.addEventListener("openrouter-sync-started", onStarted);
+    return () => {
+      cancelled = true;
+      if (interval != null) window.clearInterval(interval);
+      window.removeEventListener("openrouter-sync-started", onStarted);
+    };
+  }, [openRouterSyncRun]);
 
   const handleForceRefresh = () => {
     if (refreshing) return;
@@ -316,6 +348,22 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
             </div>
           )}
         </div>
+        {openRouterSyncRun ? (
+          <div className="border-t border-amber-200 bg-amber-50/95">
+            <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 text-xs text-amber-900">
+              <Link href="/openrouter-models" className="inline-flex min-w-0 items-center gap-2 rounded hover:underline">
+                <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
+                <span className="truncate">
+                  {openRouterSyncRun.translation_target_count > 0
+                    ? t("openrouterModels.progressGlobal")
+                        .replace("{{completed}}", String(openRouterSyncRun.translation_completed_count))
+                        .replace("{{total}}", String(openRouterSyncRun.translation_target_count))
+                    : t("openrouterModels.progressPreparing")}
+                </span>
+              </Link>
+            </div>
+          </div>
+        ) : null}
       </header>
       <nav
         className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-2 backdrop-blur md:hidden"

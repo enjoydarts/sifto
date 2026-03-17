@@ -227,6 +227,7 @@ func main() {
 		})
 		r.Route("/openrouter-models", func(r chi.Router) {
 			r.Get("/", openRouterModelsH.List)
+			r.Get("/status", openRouterModelsH.Status)
 			r.Post("/sync", openRouterModelsH.Sync)
 		})
 

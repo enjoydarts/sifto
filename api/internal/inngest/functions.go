@@ -1321,7 +1321,7 @@ func syncOpenRouterModelsFn(client inngestgo.Client, db *pgxpool.Pool, resend *s
 		inngestgo.FunctionOpts{ID: "sync-openrouter-models", Name: "Sync OpenRouter Models"},
 		inngestgo.CronTrigger("0 3 * * *"),
 		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
-			syncRunID, err := modelRepo.StartSyncRun(ctx)
+			syncRunID, err := modelRepo.StartSyncRun(ctx, "cron")
 			if err != nil {
 				return nil, err
 			}
@@ -1336,6 +1336,15 @@ func syncOpenRouterModelsFn(client inngestgo.Client, db *pgxpool.Pool, resend *s
 			if err := modelRepo.InsertSnapshots(ctx, syncRunID, fetchedAt, models); err != nil {
 				msg := err.Error()
 				_ = modelRepo.FinishSyncRun(ctx, syncRunID, len(models), 0, &msg)
+				return nil, err
+			}
+			total := 0
+			for _, item := range models {
+				if item.DescriptionEN != nil && strings.TrimSpace(*item.DescriptionEN) != "" {
+					total++
+				}
+			}
+			if err := modelRepo.UpdateTranslationProgress(ctx, syncRunID, total, total); err != nil {
 				return nil, err
 			}
 			if err := modelRepo.FinishSyncRun(ctx, syncRunID, len(models), len(models), nil); err != nil {

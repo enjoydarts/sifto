@@ -60,6 +60,13 @@ function pricingSummary(model: OpenRouterModelSnapshot) {
   return parts.length > 0 ? `${parts.join(" / ")} / 1M tok` : null;
 }
 
+function syncProgressLabel(t: (key: string, fallback?: string) => string, run: OpenRouterModelsResponse["latest_run"]) {
+  if (!run || run.translation_target_count <= 0) return null;
+  return t("openrouterModels.progressLabel")
+    .replace("{{completed}}", String(run.translation_completed_count))
+    .replace("{{total}}", String(run.translation_target_count));
+}
+
 type SortKey = "provider" | "model" | "context" | "pricing" | "params";
 type SortDirection = "asc" | "desc";
 
@@ -104,12 +111,21 @@ export default function OpenRouterModelsPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (data?.latest_run?.status !== "running" || data.latest_run.trigger_type !== "manual") return;
+    const timer = window.setInterval(() => {
+      load();
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [data?.latest_run, load]);
+
   const handleSync = useCallback(async () => {
     setSyncing(true);
     try {
       const next = await api.syncOpenRouterModels();
       setData(next);
       setError(null);
+      window.dispatchEvent(new Event("openrouter-sync-started"));
       showToast(t("openrouterModels.syncCompleted"), "success");
     } catch (e) {
       showToast(String(e), "error");
@@ -233,6 +249,14 @@ export default function OpenRouterModelsPage() {
             <div className="mt-1 text-sm font-semibold text-zinc-900">{data?.latest_run?.accepted_count ?? 0}</div>
           </div>
         </div>
+        {data?.latest_run?.status === "running" && data.latest_run.trigger_type === "manual" ? (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="font-medium">{t("openrouterModels.progressRunning")}</div>
+            <div className="mt-1 text-amber-800">
+              {syncProgressLabel(t, data.latest_run) ?? t("openrouterModels.progressPreparing")}
+            </div>
+          </div>
+        ) : null}
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <label className="flex shrink-0 items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
             <span className="whitespace-nowrap text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">

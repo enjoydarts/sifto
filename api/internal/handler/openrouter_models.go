@@ -32,8 +32,17 @@ func (h *OpenRouterModelsHandler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *OpenRouterModelsHandler) Status(w http.ResponseWriter, r *http.Request) {
+	run, err := h.repo.GetLatestManualRunningSyncRun(r.Context())
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{"run": run})
+}
+
 func (h *OpenRouterModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
-	syncRunID, err := h.repo.StartSyncRun(r.Context())
+	syncRunID, err := h.repo.StartSyncRun(r.Context(), "manual")
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -52,7 +61,8 @@ func (h *OpenRouterModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
-	if err := h.repo.FinishSyncRun(r.Context(), syncRunID, len(models), len(models), nil); err != nil {
+	total, completed := openRouterTranslationProgress(models)
+	if err := h.repo.UpdateTranslationProgress(r.Context(), syncRunID, total, completed); err != nil {
 		writeRepoError(w, err)
 		return
 	}
@@ -74,6 +84,7 @@ func (h *OpenRouterModelsHandler) translateDescriptions(syncRunID string, models
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	openAI := service.NewOpenAIClient()
+	total, completed := openRouterTranslationProgress(models)
 	for i := range models {
 		descEN := strings.TrimSpace(derefOptionalString(models[i].DescriptionEN))
 		if descEN == "" {
@@ -85,15 +96,24 @@ func (h *OpenRouterModelsHandler) translateDescriptions(syncRunID string, models
 		}
 		ja := strings.TrimSpace(derefOptionalString(enriched[0].DescriptionJA))
 		if ja == "" || ja == descEN {
+			completed++
+			_ = h.repo.UpdateTranslationProgress(ctx, syncRunID, total, completed)
 			continue
 		}
 		models[i].DescriptionJA = &ja
 		if err := h.repo.UpdateDescriptionsJA(ctx, syncRunID, map[string]string{models[i].ModelID: ja}); err != nil {
 			log.Printf("openrouter description translation update failed sync_run_id=%s model_id=%s err=%v", syncRunID, models[i].ModelID, err)
+			msg := err.Error()
+			_ = h.repo.FinishSyncRun(ctx, syncRunID, len(models), len(models), &msg)
 			return
 		}
+		completed++
+		_ = h.repo.UpdateTranslationProgress(ctx, syncRunID, total, completed)
 	}
 	service.SetDynamicChatModels(service.OpenRouterSnapshotsToCatalogModels(models))
+	if err := h.repo.FinishSyncRun(ctx, syncRunID, len(models), len(models), nil); err != nil {
+		log.Printf("openrouter sync finish failed sync_run_id=%s err=%v", syncRunID, err)
+	}
 }
 
 func derefOptionalString(v *string) string {
@@ -101,4 +121,19 @@ func derefOptionalString(v *string) string {
 		return ""
 	}
 	return *v
+}
+
+func openRouterTranslationProgress(models []repository.OpenRouterModelSnapshot) (total int, completed int) {
+	for _, model := range models {
+		descEN := strings.TrimSpace(derefOptionalString(model.DescriptionEN))
+		if descEN == "" {
+			continue
+		}
+		total++
+		descJA := strings.TrimSpace(derefOptionalString(model.DescriptionJA))
+		if descJA != "" && descJA != descEN {
+			completed++
+		}
+	}
+	return total, completed
 }

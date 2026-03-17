@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+type workerErrorDetailPayload struct {
+	Detail any `json:"detail"`
+}
+
 type workerTraceMetaKey string
 
 const (
@@ -572,6 +576,9 @@ func postWithHeaders[T any](ctx context.Context, w *WorkerClient, path string, b
 	if resp.StatusCode >= 400 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		if len(b) > 0 {
+			if detail := extractWorkerErrorDetail(b); detail != "" {
+				return nil, fmt.Errorf("worker %s: status %d detail=%s", path, resp.StatusCode, detail)
+			}
 			return nil, fmt.Errorf("worker %s: status %d body=%s", path, resp.StatusCode, string(b))
 		}
 		return nil, fmt.Errorf("worker %s: status %d", path, resp.StatusCode)
@@ -582,4 +589,28 @@ func postWithHeaders[T any](ctx context.Context, w *WorkerClient, path string, b
 		return nil, err
 	}
 	return &result, nil
+}
+
+func extractWorkerErrorDetail(body []byte) string {
+	raw := strings.TrimSpace(string(body))
+	if raw == "" {
+		return ""
+	}
+
+	var payload workerErrorDetailPayload
+	if err := json.Unmarshal(body, &payload); err == nil && payload.Detail != nil {
+		switch v := payload.Detail.(type) {
+		case string:
+			return strings.TrimSpace(v)
+		default:
+			if b, err := json.Marshal(v); err == nil {
+				return strings.TrimSpace(string(b))
+			}
+		}
+	}
+
+	if strings.EqualFold(raw, "Internal Server Error") {
+		return ""
+	}
+	return raw
 }

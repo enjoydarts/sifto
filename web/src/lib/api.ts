@@ -139,6 +139,7 @@ export interface Item {
   thumbnail_url?: string | null;
   content_text: string | null;
   status: "new" | "fetched" | "facts_extracted" | "summarized" | "failed";
+  processing_error?: string | null;
   facts_check_result?: "pass" | "warn" | "fail" | string | null;
   faithfulness_result?: "pass" | "warn" | "fail" | string | null;
   is_read: boolean;

@@ -176,6 +176,7 @@ type Item struct {
 	ContentText           *string                    `json:"content_text,omitempty"`
 	Summary               *string                    `json:"summary,omitempty"`
 	Status                string                     `json:"status"` // new | fetched | facts_extracted | summarized | failed
+	ProcessingError       *string                    `json:"processing_error,omitempty"`
 	FactsCheckResult      *string                    `json:"facts_check_result,omitempty"`
 	FaithfulnessResult    *string                    `json:"faithfulness_result,omitempty"`
 	IsRead                bool                       `json:"is_read"`
@@ -251,7 +252,6 @@ type ItemSummaryScoreBreakdown struct {
 
 type ItemDetail struct {
 	Item
-	ProcessingError *string                   `json:"processing_error,omitempty"`
 	Facts           *ItemFacts                `json:"facts,omitempty"`
 	FactsLLM        *ItemSummaryLLM           `json:"facts_llm,omitempty"`
 	FactsCheck      *FactsCheck               `json:"facts_check,omitempty"`

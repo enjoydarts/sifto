@@ -6,6 +6,21 @@ import { Thumbnail } from "@/components/thumbnail";
 import { ScoreIndicator } from "@/components/score-indicator";
 import { CheckStatusBadges } from "@/components/items/check-status-badges";
 
+function processingStatusLabel(status: Item["status"], t: (key: string) => string) {
+  switch (status) {
+    case "new":
+      return t("items.processing.new");
+    case "fetched":
+      return t("items.processing.fetched");
+    case "facts_extracted":
+      return t("items.processing.factsExtracted");
+    case "failed":
+      return t("items.processing.failed");
+    default:
+      return status;
+  }
+}
+
 export function ItemCard({
   item,
   featured = false,
@@ -38,6 +53,11 @@ export function ItemCard({
   const displayTitle = item.translated_title?.trim() ? item.translated_title : item.title;
   const isRead = item.is_read;
   const canToggleRead = item.status === "summarized";
+  const pendingState = item.status !== "summarized";
+  const isFailed = item.status === "failed";
+  const processingErrorSnippet = item.processing_error?.trim()
+    ? item.processing_error.trim().slice(0, 160)
+    : null;
 
   const reactionPill = item.is_favorite
     ? { icon: <Star className="size-3 fill-current" aria-hidden="true" />, label: t("items.feedback.favorite"), className: "border-amber-200 bg-amber-50 text-amber-700" }
@@ -162,6 +182,24 @@ export function ItemCard({
                     </span>
                   )}
                 </div>
+                {pendingState && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                        isFailed
+                          ? "border-rose-200 bg-rose-50 text-rose-700"
+                          : "border-sky-200 bg-sky-50 text-sky-700"
+                      }`}
+                    >
+                      {processingStatusLabel(item.status, t)}
+                    </span>
+                    {!isFailed && (
+                      <span className="text-[11px] text-zinc-500">
+                        {t("items.processing.pendingHint")}
+                      </span>
+                    )}
+                  </div>
+                )}
                 <div className="mt-1">
                   <CheckStatusBadges
                     factsCheckResult={item.facts_check_result}
@@ -170,6 +208,11 @@ export function ItemCard({
                     compact
                   />
                 </div>
+                {isFailed && processingErrorSnippet && (
+                  <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-rose-700 sm:text-xs">
+                    {processingErrorSnippet}
+                  </p>
+                )}
               </div>
               {!featured && (
                 <div className="hidden sm:block">

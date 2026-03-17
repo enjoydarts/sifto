@@ -126,6 +126,8 @@ export default function SettingsPage() {
   const [deletingMistralKey, setDeletingMistralKey] = useState(false);
   const [savingXAIKey, setSavingXAIKey] = useState(false);
   const [deletingXAIKey, setDeletingXAIKey] = useState(false);
+  const [savingZAIKey, setSavingZAIKey] = useState(false);
+  const [deletingZAIKey, setDeletingZAIKey] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -147,6 +149,7 @@ export default function SettingsPage() {
   const [alibabaApiKeyInput, setAlibabaApiKeyInput] = useState("");
   const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
   const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
+  const [zaiApiKeyInput, setZaiApiKeyInput] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
   const [llmSectionOpen, setLLMSectionOpen] = useState(true);
   const [operationsSectionOpen, setOperationsSectionOpen] = useState(true);
@@ -473,6 +476,21 @@ export default function SettingsPage() {
       deleting: deletingXAIKey,
       notSet: t("settings.xaiNotSet"),
     },
+    {
+      id: "zai",
+      title: t("settings.zaiTitle"),
+      description: t("settings.zaiDescription"),
+      configured: settings.has_zai_api_key,
+      last4: settings.zai_api_key_last4,
+      value: zaiApiKeyInput,
+      onChange: setZaiApiKeyInput,
+      onSubmit: submitZAIApiKey,
+      onDelete: handleDeleteZAIApiKey,
+      placeholder: "zai-...",
+      saving: savingZAIKey,
+      deleting: deletingZAIKey,
+      notSet: t("settings.zaiNotSet"),
+    },
   ];
   }, [
     t,
@@ -485,6 +503,7 @@ export default function SettingsPage() {
     alibabaApiKeyInput,
     mistralApiKeyInput,
     xaiApiKeyInput,
+    zaiApiKeyInput,
     savingAnthropicKey,
     deletingAnthropicKey,
     savingOpenAIKey,
@@ -501,6 +520,8 @@ export default function SettingsPage() {
     deletingMistralKey,
     savingXAIKey,
     deletingXAIKey,
+    savingZAIKey,
+    deletingZAIKey,
   ]);
   const configuredProviderCount = useMemo(
     () => accessCards.filter((card) => card.configured).length,
@@ -993,6 +1014,45 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setDeletingXAIKey(false);
+    }
+  }
+
+  async function submitZAIApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingZAIKey(true);
+    try {
+      if (!zaiApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setZAIApiKey(zaiApiKeyInput.trim());
+      setZaiApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.zaiSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingZAIKey(false);
+    }
+  }
+
+  async function handleDeleteZAIApiKey() {
+    if (!(await confirm({
+      title: t("settings.zaiDeleteTitle"),
+      message: t("settings.zaiDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingZAIKey(true);
+    try {
+      await api.deleteZAIApiKey();
+      await load();
+      showToast(t("settings.toast.zaiDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingZAIKey(false);
     }
   }
 

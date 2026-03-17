@@ -39,6 +39,8 @@ type UserSettings struct {
 	HasMistralAPIKey           bool       `json:"has_mistral_api_key"`
 	XAIAPIKeyLast4             *string    `json:"xai_api_key_last4,omitempty"`
 	HasXAIAPIKey               bool       `json:"has_xai_api_key"`
+	ZAIAPIKeyLast4             *string    `json:"zai_api_key_last4,omitempty"`
+	HasZAIAPIKey               bool       `json:"has_zai_api_key"`
 	MonthlyBudgetUSD           *float64   `json:"monthly_budget_usd,omitempty"`
 	BudgetAlertEnabled         bool       `json:"budget_alert_enabled"`
 	BudgetAlertThresholdPct    int        `json:"budget_alert_threshold_pct"`

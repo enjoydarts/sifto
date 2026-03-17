@@ -264,6 +264,8 @@ func main() {
 			r.Delete("/mistral-key", settingsH.DeleteMistralAPIKey)
 			r.Post("/xai-key", settingsH.SetXAIAPIKey)
 			r.Delete("/xai-key", settingsH.DeleteXAIAPIKey)
+			r.Post("/zai-key", settingsH.SetZAIAPIKey)
+			r.Delete("/zai-key", settingsH.DeleteZAIAPIKey)
 		})
 	})
 

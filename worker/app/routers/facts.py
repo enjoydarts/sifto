@@ -9,6 +9,7 @@ from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import extract_facts as extract_facts_mistral
 from app.services.openai_service import extract_facts as extract_facts_openai
 from app.services.xai_service import extract_facts as extract_facts_xai
+from app.services.zai_service import extract_facts as extract_facts_zai
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
@@ -42,6 +43,7 @@ def extract_facts_endpoint(req: FactsRequest, request: Request):
                 "alibaba": lambda api_key: extract_facts_alibaba(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                 "mistral": lambda api_key: extract_facts_mistral(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                 "xai": lambda api_key: extract_facts_xai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
+                "zai": lambda api_key: extract_facts_zai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                 "openai": lambda api_key: extract_facts_openai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
             },
         ),

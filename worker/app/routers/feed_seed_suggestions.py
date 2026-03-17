@@ -10,6 +10,7 @@ from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import suggest_feed_seed_sites as suggest_feed_seed_sites_mistral
 from app.services.openai_service import suggest_feed_seed_sites as suggest_feed_seed_sites_openai
 from app.services.xai_service import suggest_feed_seed_sites as suggest_feed_seed_sites_xai
+from app.services.zai_service import suggest_feed_seed_sites as suggest_feed_seed_sites_zai
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
@@ -106,6 +107,14 @@ def suggest_feed_seed_sites_endpoint(req: FeedSeedSuggestionRequest, request: Re
                     api_key=api_key or "",
                 ),
                 "xai": lambda api_key: suggest_feed_seed_sites_xai(
+                    existing_sources=existing_sources,
+                    preferred_topics=req.preferred_topics,
+                    positive_examples=positive_examples,
+                    negative_examples=negative_examples,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "zai": lambda api_key: suggest_feed_seed_sites_zai(
                     existing_sources=existing_sources,
                     preferred_topics=req.preferred_topics,
                     positive_examples=positive_examples,

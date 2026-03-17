@@ -625,3 +625,17 @@ func (h *SettingsHandler) DeleteXAIAPIKey(w http.ResponseWriter, r *http.Request
 		"xai_api_key_last4": func(s *model.UserSettings) any { return s.XAIAPIKeyLast4 },
 	})
 }
+
+func (h *SettingsHandler) SetZAIAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "zai", map[string]func(*model.UserSettings) any{
+		"has_zai_api_key":   func(s *model.UserSettings) any { return s.HasZAIAPIKey },
+		"zai_api_key_last4": func(s *model.UserSettings) any { return s.ZAIAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteZAIAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "zai", map[string]func(*model.UserSettings) any{
+		"has_zai_api_key":   func(s *model.UserSettings) any { return s.HasZAIAPIKey },
+		"zai_api_key_last4": func(s *model.UserSettings) any { return s.ZAIAPIKeyLast4 },
+	})
+}

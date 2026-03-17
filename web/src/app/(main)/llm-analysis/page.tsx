@@ -47,6 +47,8 @@ function providerLabel(provider: string) {
       return "Mistral";
     case "xai":
       return "xAI";
+    case "zai":
+      return "Z.ai";
     default:
       return provider;
   }
@@ -70,6 +72,8 @@ function providerColor(provider: string) {
       return "#fb7185";
     case "xai":
       return "#818cf8";
+    case "zai":
+      return "#22d3ee";
     default:
       return "#71717a";
   }

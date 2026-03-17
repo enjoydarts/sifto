@@ -10,6 +10,7 @@ from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import rank_feed_suggestions as rank_feed_suggestions_mistral
 from app.services.openai_service import rank_feed_suggestions as rank_feed_suggestions_openai
 from app.services.xai_service import rank_feed_suggestions as rank_feed_suggestions_xai
+from app.services.zai_service import rank_feed_suggestions as rank_feed_suggestions_zai
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
@@ -133,6 +134,15 @@ def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Requ
                     api_key=api_key or "",
                 ),
                 "xai": lambda api_key: rank_feed_suggestions_xai(
+                    existing_sources=existing_sources,
+                    preferred_topics=req.preferred_topics,
+                    candidates=candidates,
+                    positive_examples=positive_examples,
+                    negative_examples=negative_examples,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "zai": lambda api_key: rank_feed_suggestions_zai(
                     existing_sources=existing_sources,
                     preferred_topics=req.preferred_topics,
                     candidates=candidates,

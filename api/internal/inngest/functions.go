@@ -429,6 +429,27 @@ func loadUserXAIAPIKey(ctx context.Context, settingsRepo *repository.UserSetting
 	return &plain, nil
 }
 
+func loadUserZAIAPIKey(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string) (*string, error) {
+	if settingsRepo == nil || userID == nil || *userID == "" {
+		return nil, fmt.Errorf("user zai api key is required")
+	}
+	enc, err := settingsRepo.GetZAIAPIKeyEncrypted(ctx, *userID)
+	if err != nil || enc == nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("user zai api key is required")
+	}
+	if cipher == nil || !cipher.Enabled() {
+		return nil, fmt.Errorf("user secret encryption is not configured")
+	}
+	plain, err := cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt user zai key: %w", err)
+	}
+	return &plain, nil
+}
+
 func ptrStringOrNil(v *string) *string {
 	if v == nil || *v == "" {
 		return nil
@@ -437,7 +458,7 @@ func ptrStringOrNil(v *string) *string {
 	return &s
 }
 
-func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string, model *string, purpose string) (*string, *string, *string, *string, *string, *string, *string, *string, *string, error) {
+func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string, model *string, purpose string) (*string, *string, *string, *string, *string, *string, *string, *string, *string, *string, error) {
 	provider := service.LLMProviderForModel(model)
 	resolvedModel := model
 	if resolvedModel == nil || strings.TrimSpace(*resolvedModel) == "" {
@@ -448,42 +469,47 @@ func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSetti
 				case "groq":
 					if key, err := loadUserGroqAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
-						return nil, nil, key, nil, nil, nil, nil, nil, &fallback, nil
+						return nil, nil, key, nil, nil, nil, nil, nil, nil, &fallback, nil
 					}
 				case "google":
 					if key, err := loadUserGoogleAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
-						return nil, key, nil, nil, nil, nil, nil, nil, &fallback, nil
+						return nil, key, nil, nil, nil, nil, nil, nil, nil, &fallback, nil
 					}
 				case "deepseek":
 					if key, err := loadUserDeepSeekAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
-						return nil, nil, nil, key, nil, nil, nil, nil, &fallback, nil
+						return nil, nil, nil, key, nil, nil, nil, nil, nil, &fallback, nil
 					}
 				case "alibaba":
 					if key, err := loadUserAlibabaAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
-						return nil, nil, nil, nil, key, nil, nil, nil, &fallback, nil
+						return nil, nil, nil, nil, key, nil, nil, nil, nil, &fallback, nil
 					}
 				case "mistral":
 					if key, err := loadUserMistralAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
-						return nil, nil, nil, nil, nil, key, nil, nil, &fallback, nil
+						return nil, nil, nil, nil, nil, key, nil, nil, nil, &fallback, nil
 					}
 				case "xai":
 					if key, err := loadUserXAIAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
-						return nil, nil, nil, nil, nil, nil, key, nil, &fallback, nil
+						return nil, nil, nil, nil, nil, nil, key, nil, nil, &fallback, nil
+					}
+				case "zai":
+					if key, err := loadUserZAIAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
+						return nil, nil, nil, nil, nil, nil, nil, key, nil, &fallback, nil
 					}
 				case "openai":
 					if key, err := loadUserOpenAIAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
-						return nil, nil, nil, nil, nil, nil, nil, key, &fallback, nil
+						return nil, nil, nil, nil, nil, nil, nil, nil, key, &fallback, nil
 					}
 				case "anthropic":
 					if key, err := loadUserAnthropicAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
-						return key, nil, nil, nil, nil, nil, nil, nil, &fallback, nil
+						return key, nil, nil, nil, nil, nil, nil, nil, nil, &fallback, nil
 					}
 				}
 			}
@@ -492,28 +518,31 @@ func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSetti
 	switch provider {
 	case "google":
 		key, err := loadUserGoogleAPIKey(ctx, settingsRepo, cipher, userID)
-		return nil, key, nil, nil, nil, nil, nil, nil, model, err
+		return nil, key, nil, nil, nil, nil, nil, nil, nil, model, err
 	case "groq":
 		key, err := loadUserGroqAPIKey(ctx, settingsRepo, cipher, userID)
-		return nil, nil, key, nil, nil, nil, nil, nil, model, err
+		return nil, nil, key, nil, nil, nil, nil, nil, nil, model, err
 	case "deepseek":
 		key, err := loadUserDeepSeekAPIKey(ctx, settingsRepo, cipher, userID)
-		return nil, nil, nil, key, nil, nil, nil, nil, model, err
+		return nil, nil, nil, key, nil, nil, nil, nil, nil, model, err
 	case "alibaba":
 		key, err := loadUserAlibabaAPIKey(ctx, settingsRepo, cipher, userID)
-		return nil, nil, nil, nil, key, nil, nil, nil, model, err
+		return nil, nil, nil, nil, key, nil, nil, nil, nil, model, err
 	case "mistral":
 		key, err := loadUserMistralAPIKey(ctx, settingsRepo, cipher, userID)
-		return nil, nil, nil, nil, nil, key, nil, nil, model, err
+		return nil, nil, nil, nil, nil, key, nil, nil, nil, model, err
 	case "xai":
 		key, err := loadUserXAIAPIKey(ctx, settingsRepo, cipher, userID)
-		return nil, nil, nil, nil, nil, nil, key, nil, model, err
+		return nil, nil, nil, nil, nil, nil, key, nil, nil, model, err
+	case "zai":
+		key, err := loadUserZAIAPIKey(ctx, settingsRepo, cipher, userID)
+		return nil, nil, nil, nil, nil, nil, nil, key, nil, model, err
 	case "openai":
 		key, err := loadUserOpenAIAPIKey(ctx, settingsRepo, cipher, userID)
-		return nil, nil, nil, nil, nil, nil, nil, key, model, err
+		return nil, nil, nil, nil, nil, nil, nil, nil, key, model, err
 	default:
 		key, err := loadUserAnthropicAPIKey(ctx, settingsRepo, cipher, userID)
-		return key, nil, nil, nil, nil, nil, nil, nil, model, err
+		return key, nil, nil, nil, nil, nil, nil, nil, nil, model, err
 	}
 }
 

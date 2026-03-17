@@ -664,7 +664,7 @@ export interface LLMCatalogModelPricing {
 
 export interface LLMCatalogModel {
   id: string;
-  provider: "anthropic" | "google" | "groq" | "openai" | "deepseek" | "alibaba" | "mistral" | "xai" | string;
+  provider: "anthropic" | "google" | "groq" | "openai" | "deepseek" | "alibaba" | "mistral" | "xai" | "zai" | string;
   available_purposes: string[];
   recommendation?: "recommended" | "strong" | "experimental" | string;
   best_for?: "facts" | "summary" | "ask" | "digest" | "embedding" | "balanced" | string;
@@ -698,6 +698,8 @@ export interface UserSettings {
   mistral_api_key_last4: string | null;
   has_xai_api_key: boolean;
   xai_api_key_last4: string | null;
+  has_zai_api_key: boolean;
+  zai_api_key_last4: string | null;
   has_inoreader_oauth?: boolean;
   inoreader_token_expires_at?: string | null;
   monthly_budget_usd: number | null;
@@ -1413,6 +1415,16 @@ export const api = {
   deleteXAIApiKey: () =>
     apiFetch<{ user_id: string; has_xai_api_key: boolean; xai_api_key_last4: string | null }>(
       "/settings/xai-key",
+      { method: "DELETE" }
+    ),
+  setZAIApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_zai_api_key: boolean; zai_api_key_last4: string | null }>(
+      "/settings/zai-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteZAIApiKey: () =>
+    apiFetch<{ user_id: string; has_zai_api_key: boolean; zai_api_key_last4: string | null }>(
+      "/settings/zai-key",
       { method: "DELETE" }
     ),
   deleteInoreaderOAuth: () =>

@@ -28,6 +28,8 @@ function providerLabel(provider: string) {
       return "Mistral";
     case "xai":
       return "xAI";
+    case "zai":
+      return "Z.ai";
     default:
       return provider;
   }

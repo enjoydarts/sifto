@@ -31,6 +31,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var alibabaAPIKeyEnc *string
 	var mistralAPIKeyEnc *string
 	var xaiAPIKeyEnc *string
+	var zaiAPIKeyEnc *string
 	var inoreaderAccessTokenEnc *string
 	err := r.db.QueryRow(ctx, `
 		SELECT user_id,
@@ -50,6 +51,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       mistral_api_key_last4,
 		       xai_api_key_enc,
 		       xai_api_key_last4,
+		       zai_api_key_enc,
+		       zai_api_key_last4,
 		       monthly_budget_usd,
 		       budget_alert_enabled,
 		       budget_alert_threshold_pct,
@@ -92,6 +95,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.MistralAPIKeyLast4,
 		&xaiAPIKeyEnc,
 		&v.XAIAPIKeyLast4,
+		&zaiAPIKeyEnc,
+		&v.ZAIAPIKeyLast4,
 		&v.MonthlyBudgetUSD,
 		&v.BudgetAlertEnabled,
 		&v.BudgetAlertThresholdPct,
@@ -125,6 +130,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasAlibabaAPIKey = alibabaAPIKeyEnc != nil && *alibabaAPIKeyEnc != ""
 	v.HasMistralAPIKey = mistralAPIKeyEnc != nil && *mistralAPIKeyEnc != ""
 	v.HasXAIAPIKey = xaiAPIKeyEnc != nil && *xaiAPIKeyEnc != ""
+	v.HasZAIAPIKey = zaiAPIKeyEnc != nil && *zaiAPIKeyEnc != ""
 	v.HasInoreaderOAuth = inoreaderAccessTokenEnc != nil && *inoreaderAccessTokenEnc != ""
 	return &v, nil
 }
@@ -409,6 +415,26 @@ func (r *UserSettingsRepo) GetXAIAPIKeyEncrypted(ctx context.Context, userID str
 	return v, nil
 }
 
+func (r *UserSettingsRepo) GetZAIAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT zai_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1`,
+		userID,
+	).Scan(&v)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
 func (r *UserSettingsRepo) GetInoreaderTokensEncrypted(ctx context.Context, userID string) (accessTokenEnc, refreshTokenEnc *string, expiresAt *time.Time, err error) {
 	err = r.db.QueryRow(ctx, `
 		SELECT inoreader_access_token_enc, inoreader_refresh_token_enc, inoreader_token_expires_at
@@ -587,6 +613,22 @@ func (r *UserSettingsRepo) SetXAIAPIKey(ctx context.Context, userID, encryptedKe
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetZAIAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, zai_api_key_enc, zai_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET zai_api_key_enc = EXCLUDED.zai_api_key_enc,
+		    zai_api_key_last4 = EXCLUDED.zai_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) ClearAnthropicAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, anthropic_api_key_enc, anthropic_api_key_last4)
@@ -706,6 +748,22 @@ func (r *UserSettingsRepo) ClearXAIAPIKey(ctx context.Context, userID string) (*
 		ON CONFLICT (user_id) DO UPDATE
 		SET xai_api_key_enc = NULL,
 		    xai_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearZAIAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, zai_api_key_enc, zai_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET zai_api_key_enc = NULL,
+		    zai_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

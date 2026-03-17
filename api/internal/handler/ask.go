@@ -96,10 +96,11 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		settings.HasAlibabaAPIKey,
 		settings.HasMistralAPIKey,
 		settings.HasXAIAPIKey,
+		settings.HasZAIAPIKey,
 		settings.HasOpenAIAPIKey,
 	)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or groq or deepseek or alibaba or mistral or xai or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or groq or deepseek or alibaba or mistral or xai or zai or openai api key is required", http.StatusBadRequest)
 		return
 	}
 	cacheKey := cacheKeyAsk(userID, query, *modelName, embeddingModel, body.Days, body.UnreadOnly, body.Limit, body.SourceIDs)
@@ -155,10 +156,11 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	alibabaKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
 	mistralKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
+	zaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
 	openAIChatKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
-	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, groqKey != nil, deepseekKey != nil, alibabaKey != nil, mistralKey != nil, xaiKey != nil, openAIChatKey != nil)
+	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, groqKey != nil, deepseekKey != nil, alibabaKey != nil, mistralKey != nil, xaiKey != nil, zaiKey != nil, openAIChatKey != nil)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or groq or deepseek or alibaba or mistral or xai or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or groq or deepseek or alibaba or mistral or xai or zai or openai api key is required", http.StatusBadRequest)
 		return
 	}
 
@@ -181,7 +183,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 			Similarity:      c.Similarity,
 		})
 	}
-	askResp, err := h.worker.AskWithModel(r.Context(), query, workerCandidates, anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, xaiKey, openAIChatKey, modelName)
+	askResp, err := h.worker.AskWithModel(r.Context(), query, workerCandidates, anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, xaiKey, zaiKey, openAIChatKey, modelName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("ask worker: %v", err), http.StatusBadGateway)
 		return
@@ -296,7 +298,7 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 	return &v
 }
 
-func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasXAI, hasOpenAI bool) *string {
+func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasXAI, hasZAI, hasOpenAI bool) *string {
 	if settings != nil && settings.AskModel != nil && strings.TrimSpace(*settings.AskModel) != "" {
 		v := strings.TrimSpace(*settings.AskModel)
 		switch service.LLMProviderForModel(&v) {
@@ -322,6 +324,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			}
 		case "xai":
 			if hasXAI {
+				return &v
+			}
+		case "zai":
+			if hasZAI {
 				return &v
 			}
 		case "openai":
@@ -361,6 +367,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			if hasXAI {
 				return &v
 			}
+		case "zai":
+			if hasZAI {
+				return &v
+			}
 		case "openai":
 			if hasOpenAI {
 				return &v
@@ -398,6 +408,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			if hasXAI {
 				return &v
 			}
+		case "zai":
+			if hasZAI {
+				return &v
+			}
 		case "openai":
 			if hasOpenAI {
 				return &v
@@ -432,6 +446,11 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			}
 		case "xai":
 			if hasXAI {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				return &v
+			}
+		case "zai":
+			if hasZAI {
 				v := service.DefaultLLMModelForPurpose(provider, "ask")
 				return &v
 			}

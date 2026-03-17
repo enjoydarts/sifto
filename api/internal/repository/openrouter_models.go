@@ -19,12 +19,15 @@ type OpenRouterSyncRun struct {
 	ID                        string     `json:"id"`
 	StartedAt                 time.Time  `json:"started_at"`
 	FinishedAt                *time.Time `json:"finished_at,omitempty"`
+	LastProgressAt            *time.Time `json:"last_progress_at,omitempty"`
 	Status                    string     `json:"status"`
 	TriggerType               string     `json:"trigger_type"`
 	FetchedCount              int        `json:"fetched_count"`
 	AcceptedCount             int        `json:"accepted_count"`
 	TranslationTargetCount    int        `json:"translation_target_count"`
 	TranslationCompletedCount int        `json:"translation_completed_count"`
+	TranslationFailedCount    int        `json:"translation_failed_count"`
+	LastErrorMessage          *string    `json:"last_error_message,omitempty"`
 	ErrorMessage              *string    `json:"error_message,omitempty"`
 }
 
@@ -65,6 +68,7 @@ func (r *OpenRouterModelRepo) FinishSyncRun(ctx context.Context, syncRunID strin
 	_, err := r.db.Exec(ctx, `
 		UPDATE openrouter_model_sync_runs
 		SET finished_at = NOW(),
+		    last_progress_at = COALESCE(last_progress_at, NOW()),
 		    status = $2,
 		    fetched_count = $3,
 		    accepted_count = $4,
@@ -80,9 +84,36 @@ func (r *OpenRouterModelRepo) UpdateTranslationProgress(ctx context.Context, syn
 	_, err := r.db.Exec(ctx, `
 		UPDATE openrouter_model_sync_runs
 		SET translation_target_count = $2,
-		    translation_completed_count = $3
+		    translation_completed_count = $3,
+		    last_progress_at = NOW()
 		WHERE id = $1`,
 		syncRunID, total, completed,
+	)
+	return err
+}
+
+func (r *OpenRouterModelRepo) RecordTranslationFailure(ctx context.Context, syncRunID, modelID, errMsg string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE openrouter_model_sync_runs
+		SET translation_failed_count = translation_failed_count + 1,
+		    last_error_message = $2,
+		    last_progress_at = NOW()
+		WHERE id = $1`,
+		syncRunID, errMsg,
+	)
+	return err
+}
+
+func (r *OpenRouterModelRepo) FailSyncRun(ctx context.Context, syncRunID, errMsg string) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE openrouter_model_sync_runs
+		SET finished_at = NOW(),
+		    last_progress_at = COALESCE(last_progress_at, NOW()),
+		    status = 'failed',
+		    error_message = $2,
+		    last_error_message = $2
+		WHERE id = $1`,
+		syncRunID, errMsg,
 	)
 	return err
 }
@@ -145,12 +176,12 @@ func (r *OpenRouterModelRepo) UpdateDescriptionsJA(ctx context.Context, syncRunI
 func (r *OpenRouterModelRepo) ListLatestSnapshots(ctx context.Context) ([]OpenRouterModelSnapshot, *OpenRouterSyncRun, error) {
 	var run OpenRouterSyncRun
 	err := r.db.QueryRow(ctx, `
-		SELECT id, started_at, finished_at, status, trigger_type, fetched_count, accepted_count,
-		       translation_target_count, translation_completed_count, error_message
+		SELECT id, started_at, finished_at, last_progress_at, status, trigger_type, fetched_count, accepted_count,
+		       translation_target_count, translation_completed_count, translation_failed_count, last_error_message, error_message
 		FROM openrouter_model_sync_runs
 		ORDER BY started_at DESC
 		LIMIT 1`,
-	).Scan(&run.ID, &run.StartedAt, &run.FinishedAt, &run.Status, &run.TriggerType, &run.FetchedCount, &run.AcceptedCount, &run.TranslationTargetCount, &run.TranslationCompletedCount, &run.ErrorMessage)
+	).Scan(&run.ID, &run.StartedAt, &run.FinishedAt, &run.LastProgressAt, &run.Status, &run.TriggerType, &run.FetchedCount, &run.AcceptedCount, &run.TranslationTargetCount, &run.TranslationCompletedCount, &run.TranslationFailedCount, &run.LastErrorMessage, &run.ErrorMessage)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil, nil
@@ -186,13 +217,13 @@ func (r *OpenRouterModelRepo) ListLatestSnapshots(ctx context.Context) ([]OpenRo
 func (r *OpenRouterModelRepo) GetLatestManualRunningSyncRun(ctx context.Context) (*OpenRouterSyncRun, error) {
 	var run OpenRouterSyncRun
 	err := r.db.QueryRow(ctx, `
-		SELECT id, started_at, finished_at, status, trigger_type, fetched_count, accepted_count,
-		       translation_target_count, translation_completed_count, error_message
+		SELECT id, started_at, finished_at, last_progress_at, status, trigger_type, fetched_count, accepted_count,
+		       translation_target_count, translation_completed_count, translation_failed_count, last_error_message, error_message
 		FROM openrouter_model_sync_runs
 		WHERE trigger_type = 'manual' AND status = 'running'
 		ORDER BY started_at DESC
 		LIMIT 1`,
-	).Scan(&run.ID, &run.StartedAt, &run.FinishedAt, &run.Status, &run.TriggerType, &run.FetchedCount, &run.AcceptedCount, &run.TranslationTargetCount, &run.TranslationCompletedCount, &run.ErrorMessage)
+	).Scan(&run.ID, &run.StartedAt, &run.FinishedAt, &run.LastProgressAt, &run.Status, &run.TriggerType, &run.FetchedCount, &run.AcceptedCount, &run.TranslationTargetCount, &run.TranslationCompletedCount, &run.TranslationFailedCount, &run.LastErrorMessage, &run.ErrorMessage)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil

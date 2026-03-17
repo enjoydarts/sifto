@@ -38,6 +38,13 @@ func (h *OpenRouterModelsHandler) Status(w http.ResponseWriter, r *http.Request)
 		writeRepoError(w, err)
 		return
 	}
+	if openRouterSyncRunIsStale(run, time.Now().UTC()) {
+		if err := h.repo.FailSyncRun(r.Context(), run.ID, "OpenRouter description translation stalled"); err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		run = nil
+	}
 	writeJSON(w, map[string]any{"run": run})
 }
 
@@ -86,6 +93,13 @@ func (h *OpenRouterModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 func (h *OpenRouterModelsHandler) translateDescriptions(syncRunID string, models []repository.OpenRouterModelSnapshot) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			msg := "OpenRouter description translation panicked"
+			log.Printf("openrouter description translation panic sync_run_id=%s panic=%v", syncRunID, recovered)
+			_ = h.repo.FailSyncRun(context.Background(), syncRunID, msg)
+		}
+	}()
 	openAI := service.NewOpenAIClient()
 	total, completed := openRouterTranslationProgress(models)
 	for i := range models {
@@ -95,10 +109,12 @@ func (h *OpenRouterModelsHandler) translateDescriptions(syncRunID string, models
 		}
 		enriched := service.EnrichOpenRouterDescriptionsJA(ctx, h.repo, openAI, []repository.OpenRouterModelSnapshot{models[i]})
 		if len(enriched) == 0 {
+			_ = h.repo.RecordTranslationFailure(ctx, syncRunID, models[i].ModelID, "empty translation response")
 			continue
 		}
 		ja := strings.TrimSpace(derefOptionalString(enriched[0].DescriptionJA))
 		if ja == "" || ja == descEN {
+			_ = h.repo.RecordTranslationFailure(ctx, syncRunID, models[i].ModelID, "translation unavailable")
 			completed++
 			_ = h.repo.UpdateTranslationProgress(ctx, syncRunID, total, completed)
 			continue
@@ -124,6 +140,17 @@ func derefOptionalString(v *string) string {
 		return ""
 	}
 	return *v
+}
+
+func openRouterSyncRunIsStale(run *repository.OpenRouterSyncRun, now time.Time) bool {
+	if run == nil || run.Status != "running" {
+		return false
+	}
+	ref := run.StartedAt
+	if run.LastProgressAt != nil {
+		ref = *run.LastProgressAt
+	}
+	return now.Sub(ref) > 2*time.Minute
 }
 
 func openRouterTranslationProgress(models []repository.OpenRouterModelSnapshot) (total int, completed int) {

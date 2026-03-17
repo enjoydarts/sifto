@@ -1179,9 +1179,9 @@
       },
       "pricing": {
         "pricing_source": "fireworks_static_2026_03",
-        "input_per_mtok_usd": 0.9,
-        "output_per_mtok_usd": 0.9,
-        "cache_read_per_mtok_usd": 0.45
+        "input_per_mtok_usd": 1.2,
+        "output_per_mtok_usd": 1.2,
+        "cache_read_per_mtok_usd": 0.6
       }
     },
     {
@@ -1204,7 +1204,7 @@
         "pricing_source": "fireworks_static_2026_03",
         "input_per_mtok_usd": 0.07,
         "output_per_mtok_usd": 0.3,
-        "cache_read_per_mtok_usd": 0.035
+        "cache_read_per_mtok_usd": 0.04
       }
     },
     {
@@ -1227,7 +1227,7 @@
         "pricing_source": "fireworks_static_2026_03",
         "input_per_mtok_usd": 0.15,
         "output_per_mtok_usd": 0.6,
-        "cache_read_per_mtok_usd": 0.075
+        "cache_read_per_mtok_usd": 0.01
       }
     },
     {
@@ -1323,7 +1323,7 @@
       }
     },
     {
-      "id": "accounts/fireworks/models/kimi-k2p5",
+      "id": "fireworks/kimi-k2p5",
       "provider": "fireworks",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
       "recommendation": "experimental",
@@ -1341,8 +1341,31 @@
       "pricing": {
         "pricing_source": "fireworks_static_2026_03",
         "input_per_mtok_usd": 0.6,
-        "output_per_mtok_usd": 2.5,
-        "cache_read_per_mtok_usd": 0.3
+        "output_per_mtok_usd": 3.0,
+        "cache_read_per_mtok_usd": 0.1
+      }
+    },
+    {
+      "id": "fireworks/qwen3-vl-30b-a3b-instruct",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "summary",
+      "highlights": ["multimodal"],
+      "comment": "Qwen3 VL の instruct 枠。今の Sifto ではテキスト前提だが、長めの要約や Ask の比較用実験モデルとして追加。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.6,
+        "cache_read_per_mtok_usd": 0.08
       }
     },
     {
@@ -1352,7 +1375,7 @@
       "recommendation": "experimental",
       "best_for": "summary",
       "highlights": [],
-      "comment": "Meta 系の標準比較枠。重めだが、要約や RAG の読み味を見たい時に入れておく価値がある。",
+      "comment": "Meta 系の標準比較枠。要約や RAG の読み味を Fireworks 経由で見たい時の比較候補。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -1421,7 +1444,7 @@
       "recommendation": "experimental",
       "best_for": "facts",
       "highlights": ["fast"],
-      "comment": "軽量な Qwen3 比較枠。小さめの事実抽出やソース提案を安く試したい時向け。",
+      "comment": "軽量な Qwen3 比較枠。小さめの事実抽出やソース提案を Fireworks 経由で試したい時向け。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,

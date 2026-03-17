@@ -71,6 +71,7 @@ func (r *SourceOptimizationRepo) CollectMetrics(ctx context.Context, userID, sou
 			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 			WHERE s.user_id = $1
 			  AND i.source_id = $2
+			  AND i.deleted_at IS NULL
 			  AND i.created_at >= $3
 		)
 		SELECT

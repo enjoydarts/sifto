@@ -36,6 +36,7 @@ func (r *DigestRepo) queryDigestItems(ctx context.Context, digestID string) ([]m
 		JOIN item_summaries s ON s.item_id = i.id
 		LEFT JOIN item_facts f ON f.item_id = i.id
 		WHERE di.digest_id = $1
+		  AND i.deleted_at IS NULL
 		ORDER BY di.rank`, digestID)
 	if err != nil {
 		return nil, err

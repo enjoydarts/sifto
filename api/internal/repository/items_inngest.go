@@ -194,7 +194,8 @@ func (r *ItemInngestRepo) GetEmbeddingCandidate(ctx context.Context, itemID stri
 		JOIN item_summaries sm ON sm.item_id = i.id
 		LEFT JOIN item_facts f ON f.item_id = i.id
 		WHERE i.id = $1
-		  AND i.status = 'summarized'`, itemID).
+		  AND i.status = 'summarized'
+		  AND i.deleted_at IS NULL`, itemID).
 		Scan(&v.ItemID, &v.SourceID, &v.UserID, &v.Title, &v.Summary, &v.Topics, jsonStringArrayScanner{dst: &v.Facts})
 	if err != nil {
 		return nil, err
@@ -216,6 +217,7 @@ func (r *ItemInngestRepo) ListEmbeddingBackfillTargets(ctx context.Context, user
 		JOIN item_summaries sm ON sm.item_id = i.id
 		LEFT JOIN item_embeddings ie ON ie.item_id = i.id
 		WHERE i.status = 'summarized'
+		  AND i.deleted_at IS NULL
 		  AND ie.item_id IS NULL`
 	args := []any{}
 	if userID != nil && *userID != "" {
@@ -258,6 +260,7 @@ func (r *ItemInngestRepo) ListSummarizedForUser(ctx context.Context, userID stri
 			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 		WHERE src.user_id = $1
 		  AND i.status = 'summarized'
+		  AND i.deleted_at IS NULL
 		  AND i.published_at IS NOT NULL
 		  AND i.published_at >= $2
 		  AND i.published_at < $3
@@ -306,6 +309,7 @@ func (r *ItemInngestRepo) ListTranslatedTitleBackfillTargets(ctx context.Context
 		JOIN sources src ON src.id = i.source_id
 		JOIN item_summaries sm ON sm.item_id = i.id
 		WHERE i.status = 'summarized'
+		  AND i.deleted_at IS NULL
 		  AND COALESCE(sm.translated_title, '') = ''
 		  AND COALESCE(i.title, '') <> ''
 		  AND COALESCE(i.title, '') ~ '[A-Za-z]'`

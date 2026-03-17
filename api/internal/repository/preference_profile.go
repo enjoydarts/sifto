@@ -268,6 +268,7 @@ func (r *PreferenceProfileRepo) loadFeedbackBreakdowns(ctx context.Context, user
 		JOIN item_summaries isb ON isb.item_id = i.id
 		WHERE fb.user_id = $1
 		  AND s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND (fb.rating <> 0 OR fb.is_favorite = true)
 		  AND isb.score_breakdown IS NOT NULL`, userID)
 	if err != nil {
@@ -313,6 +314,7 @@ func (r *PreferenceProfileRepo) loadTopicActions(ctx context.Context, userID str
 			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
 			LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
 			WHERE s.user_id = $1
+			  AND i.deleted_at IS NULL
 			  AND isb.topics IS NOT NULL
 			  AND array_length(isb.topics, 1) > 0
 			  AND COALESCE(fb.updated_at, ir.read_at, i.created_at) >= NOW() - INTERVAL '90 days'
@@ -324,6 +326,7 @@ func (r *PreferenceProfileRepo) loadTopicActions(ctx context.Context, userID str
 			JOIN sources s ON s.id = i.source_id AND s.user_id = n.user_id
 			JOIN item_summaries isb ON isb.item_id = i.id
 			WHERE n.user_id = $1
+			  AND i.deleted_at IS NULL
 			  AND n.updated_at >= NOW() - INTERVAL '90 days'
 			UNION ALL
 			SELECT isb.topics, 1.8::double precision AS signal, ai.created_at AS acted_at
@@ -332,12 +335,14 @@ func (r *PreferenceProfileRepo) loadTopicActions(ctx context.Context, userID str
 			JOIN items i ON i.id = aii.item_id
 			JOIN item_summaries isb ON isb.item_id = i.id
 			WHERE ai.created_at >= NOW() - INTERVAL '90 days'
+			  AND i.deleted_at IS NULL
 			UNION ALL
 			SELECT isb.topics, 1.5::double precision AS signal, rq.completed_at AS acted_at
 			FROM review_queue rq
 			JOIN items i ON i.id = rq.item_id
 			JOIN item_summaries isb ON isb.item_id = i.id
 			WHERE rq.user_id = $1
+			  AND i.deleted_at IS NULL
 			  AND rq.status = 'done'
 			  AND rq.completed_at IS NOT NULL
 			  AND rq.completed_at >= NOW() - INTERVAL '90 days'
@@ -389,6 +394,7 @@ func (r *PreferenceProfileRepo) loadSourceAffinities(ctx context.Context, userID
 			FROM sources s
 			LEFT JOIN items i
 			       ON i.source_id = s.id
+			      AND i.deleted_at IS NULL
 			      AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '30 days'
 			LEFT JOIN item_reads ir
 			       ON ir.item_id = i.id
@@ -446,6 +452,13 @@ func (r *PreferenceProfileRepo) loadSourceAffinities(ctx context.Context, userID
 
 func (r *PreferenceProfileRepo) countReads(ctx context.Context, userID string) (int, error) {
 	var n int
-	err := r.db.QueryRow(ctx, `SELECT COUNT(*)::int FROM item_reads WHERE user_id = $1`, userID).Scan(&n)
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*)::int
+		FROM item_reads ir
+		JOIN items i ON i.id = ir.item_id
+		WHERE ir.user_id = $1
+		  AND i.deleted_at IS NULL`,
+		userID,
+	).Scan(&n)
 	return n, err
 }

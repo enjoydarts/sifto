@@ -70,6 +70,7 @@ func (r *ReviewQueueRepo) ListDue(ctx context.Context, userID string, now time.T
 		WHERE rq.user_id = $1
 		  AND rq.status = 'pending'
 		  AND rq.review_due_at <= $2
+		  AND i.deleted_at IS NULL
 		ORDER BY
 		  CASE WHEN COALESCE(fb.is_favorite, false) THEN 0 ELSE 1 END,
 		  CASE WHEN n.item_id IS NOT NULL THEN 0 ELSE 1 END,
@@ -132,10 +133,12 @@ func (r *ReviewQueueRepo) CountDue(ctx context.Context, userID string, now time.
 	var count int
 	err := r.db.QueryRow(ctx, `
 		SELECT COUNT(*)::int
-		FROM review_queue
-		WHERE user_id = $1
-		  AND status = 'pending'
-		  AND review_due_at <= $2`,
+		FROM review_queue rq
+		JOIN items i ON i.id = rq.item_id
+		WHERE rq.user_id = $1
+		  AND rq.status = 'pending'
+		  AND rq.review_due_at <= $2
+		  AND i.deleted_at IS NULL`,
 		userID, now,
 	).Scan(&count)
 	return count, err

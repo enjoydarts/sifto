@@ -102,7 +102,8 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
 		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
-		WHERE s.user_id = $1`
+		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL`
 	args := []any{userID}
 
 	if status != nil {
@@ -152,7 +153,8 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 
 	baseWhere := ` FROM items i
 		JOIN sources s ON s.id = i.source_id
-		WHERE s.user_id = $1`
+		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL`
 	args := []any{userID}
 	if p.Status != nil {
 		baseWhere, args = appendItemStatusFilter(baseWhere, args, p.Status)
@@ -226,7 +228,8 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
 		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
-		WHERE s.user_id = $1`+
+		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL`+
 		func() string {
 			q := ""
 			nextIdx := 2
@@ -310,6 +313,7 @@ func (r *ItemRepo) FavoriteExportItems(ctx context.Context, userID string, days,
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		WHERE fb.user_id = $1
 		  AND s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND fb.is_favorite = true`
 	args := []any{userID}
 	if days > 0 {
@@ -448,6 +452,7 @@ func (r *ItemRepo) MarkReadBulkByIDs(ctx context.Context, userID string, itemIDs
 			FROM items i
 			JOIN sources s ON s.id = i.source_id
 			WHERE s.user_id = $1
+			  AND i.deleted_at IS NULL
 			  AND i.id = ANY($2::uuid[])
 		), inserted_rows AS (
 			INSERT INTO item_reads (user_id, item_id, read_at)
@@ -505,6 +510,7 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 		JOIN sources s ON s.id = i.source_id
 		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND i.status = 'summarized'`+filterSQL, userID).Scan(&poolCount); err != nil {
 		return nil, err
 	}
@@ -526,6 +532,7 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
 		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND i.status = 'summarized'`+filterSQL+`
 		ORDER BY sm.score DESC NULLS LAST, i.created_at DESC
 		LIMIT $2`, userID, candidateLimit)
@@ -646,6 +653,7 @@ func (r *ItemRepo) BriefingClusters24h(ctx context.Context, userID string, limit
 		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
 		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND i.status = 'summarized'
 		  AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '24 hours'
 		  AND ir.item_id IS NULL
@@ -705,6 +713,7 @@ func (r *ItemRepo) readingPlanTopics(ctx context.Context, userID string, p Readi
 				END
 			) AS t(topic)
 			WHERE s.user_id = $1
+			  AND i.deleted_at IS NULL
 			  AND i.status = 'summarized'`+filterSQL+`
 		)
 		SELECT topic_key, COUNT(*)::int, MAX(score)::double precision
@@ -737,6 +746,7 @@ func (r *ItemRepo) Stats(ctx context.Context, userID string) (*model.ItemStatsRe
 		JOIN sources s ON s.id = i.source_id
 		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		GROUP BY i.status`, userID)
 	if err != nil {
 		return nil, err
@@ -785,6 +795,7 @@ func (r *ItemRepo) HighlightItems24h(ctx context.Context, userID string, minScor
 		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
 		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND i.status = 'summarized'
 		  AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '24 hours'
 		  AND COALESCE(sm.score, 0) >= $2
@@ -809,6 +820,7 @@ func (r *ItemRepo) SummariesByItemIDs(ctx context.Context, userID string, itemID
 		JOIN sources s ON s.id = i.source_id
 		JOIN item_summaries sm ON sm.item_id = i.id
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND i.id = ANY($2::uuid[])`,
 		userID, itemIDs,
 	)
@@ -835,6 +847,7 @@ func (r *ItemRepo) CountSummarizedOnDateJST(ctx context.Context, userID, date st
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND i.status = 'summarized'
 		  AND (COALESCE(i.published_at, i.created_at) AT TIME ZONE 'Asia/Tokyo')::date = $2::date`,
 		userID, date,
@@ -871,6 +884,7 @@ func (r *ItemRepo) CountNewOnDateJST(ctx context.Context, userID, date string) (
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND (COALESCE(i.published_at, i.created_at) AT TIME ZONE 'Asia/Tokyo')::date = $2::date`,
 		userID, date,
 	).Scan(&count)
@@ -888,6 +902,7 @@ func (r *ItemRepo) CountReadOnDateJST(ctx context.Context, userID, date string) 
 		JOIN items i ON i.id = ir.item_id
 		JOIN sources s ON s.id = i.source_id
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND (ir.read_at AT TIME ZONE 'Asia/Tokyo')::date = $2::date`,
 		userID, date,
 	).Scan(&count)
@@ -905,6 +920,7 @@ func (r *ItemRepo) ReadActivityInRangeJST(ctx context.Context, userID string, fr
 			JOIN items i ON i.id = ir.item_id
 			JOIN sources s ON s.id = i.source_id
 			WHERE s.user_id = $1
+			  AND i.deleted_at IS NULL
 			  AND (ir.read_at AT TIME ZONE 'Asia/Tokyo')::date >= $2::date
 			  AND (ir.read_at AT TIME ZONE 'Asia/Tokyo')::date <= $3::date
 		)
@@ -940,6 +956,7 @@ func (r *ItemRepo) TopicTrends(ctx context.Context, userID string, limit int) ([
 				END
 			) AS t(topic)
 			WHERE s.user_id = $1
+			  AND i.deleted_at IS NULL
 			  AND i.status = 'summarized'
 			  AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '48 hours'
 		)
@@ -1064,6 +1081,7 @@ func (r *ItemRepo) topicPulseFromLiveData(ctx context.Context, userID string, da
 				END
 			) AS t(topic)
 			WHERE s.user_id = $1
+			  AND i.deleted_at IS NULL
 			  AND i.status = 'summarized'
 			  AND COALESCE(i.published_at, i.created_at) >= NOW() - make_interval(days => $2::int)
 		),
@@ -1225,6 +1243,7 @@ func (r *ItemRepo) PositiveFeedbackTopics(ctx context.Context, userID string, li
 			CROSS JOIN LATERAL unnest(COALESCE(sm.topics, '{}'::text[])) AS t(topic)
 			WHERE fb.user_id = $1
 			  AND s.user_id = $1
+			  AND i.deleted_at IS NULL
 			  AND (fb.rating > 0 OR fb.is_favorite = true)
 		)
 		SELECT topic
@@ -1389,6 +1408,7 @@ func (r *ItemRepo) ListRelated(ctx context.Context, id, userID string, limit int
 			JOIN sources s ON s.id = i.source_id
 			LEFT JOIN item_summaries sm ON sm.item_id = i.id
 			WHERE s.user_id = $2
+			  AND i.deleted_at IS NULL
 			  AND i.status = 'summarized'
 			  AND i.id <> $1
 			ORDER BY COALESCE(i.published_at, i.created_at) DESC, sm.score DESC NULLS LAST
@@ -1488,6 +1508,7 @@ func (r *ItemRepo) AskCandidatesByEmbedding(
 			JOIN item_summaries sm ON sm.item_id = i.id
 			LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
 			WHERE s.user_id = $1
+			  AND i.deleted_at IS NULL
 			  AND i.status = 'summarized'
 			  AND COALESCE(i.published_at, i.created_at) >= NOW() - make_interval(days => $3::int)
 	`
@@ -1695,7 +1716,7 @@ func (r *ItemRepo) GetForRetry(ctx context.Context, id, userID string) (*model.I
 		FROM items i
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		JOIN sources s ON s.id = i.source_id
-		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
+		WHERE i.id = $1 AND s.user_id = $2 AND i.deleted_at IS NULL`, id, userID,
 	).Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText, &it.Summary,
 		&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt)
 	if err != nil {
@@ -1721,7 +1742,7 @@ func (r *ItemRepo) ResetForFactsRetry(ctx context.Context, id, userID string) (*
 		FROM items i
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		JOIN sources s ON s.id = i.source_id
-		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
+		WHERE i.id = $1 AND s.user_id = $2 AND i.deleted_at IS NULL`, id, userID,
 	).Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText, &it.Summary,
 		&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt)
 	if err != nil {
@@ -1774,6 +1795,7 @@ func (r *ItemRepo) ListFailedForRetry(ctx context.Context, userID string, source
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		JOIN sources s ON s.id = i.source_id
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND (
 		    i.status IN ('new', 'fetched', 'facts_extracted', 'failed')
 		    OR (i.status = 'summarized' AND NULLIF(BTRIM(sm.summary), '') IS NULL)
@@ -1893,6 +1915,7 @@ func (r *ItemRepo) MarkLaterBulk(ctx context.Context, userID string, itemIDs []s
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND i.id = ANY($2::uuid[])
 		ON CONFLICT (user_id, item_id) DO UPDATE
 		SET updated_at = NOW()`,
@@ -1919,7 +1942,7 @@ func (r *ItemRepo) ensureOwned(ctx context.Context, userID, itemID string) error
 			SELECT 1
 			FROM items i
 			JOIN sources s ON s.id = i.source_id
-			WHERE i.id = $1 AND s.user_id = $2
+			WHERE i.id = $1 AND s.user_id = $2 AND i.deleted_at IS NULL
 		)`,
 		itemID, userID,
 	).Scan(&exists)
@@ -1936,7 +1959,11 @@ func (r *ItemRepo) Delete(ctx context.Context, itemID, userID string) error {
 	if err := r.ensureOwned(ctx, userID, itemID); err != nil {
 		return err
 	}
-	_, err := r.db.Exec(ctx, `DELETE FROM items WHERE id = $1`, itemID)
+	_, err := r.db.Exec(ctx, `
+		UPDATE items
+		SET deleted_at = NOW(),
+		    updated_at = NOW()
+		WHERE id = $1`, itemID)
 	return err
 }
 

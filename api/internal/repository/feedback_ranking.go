@@ -34,6 +34,7 @@ func loadFeedbackPreferenceProfile(ctx context.Context, db *pgxpool.Pool, userID
 		JOIN item_embeddings ie ON ie.item_id = i.id
 		WHERE fb.user_id = $1
 		  AND s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND (fb.rating <> 0 OR fb.is_favorite = true)
 		ORDER BY fb.updated_at DESC`, userID)
 	if err != nil {

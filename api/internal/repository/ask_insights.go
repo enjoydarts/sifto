@@ -56,7 +56,7 @@ func (r *AskInsightRepo) Save(ctx context.Context, insight model.AskInsight, ite
 			SELECT $1, i.id, $3
 			FROM items i
 			JOIN sources s ON s.id = i.source_id
-			WHERE i.id = $2::uuid AND s.user_id::text = $4`,
+			WHERE i.id = $2::uuid AND s.user_id::text = $4 AND i.deleted_at IS NULL`,
 			insight.ID, itemID, position, insight.UserID,
 		); err != nil {
 			return model.AskInsight{}, err
@@ -135,6 +135,7 @@ func (r *AskInsightRepo) listInsightItems(ctx context.Context, userID string, in
 		JOIN sources s ON s.id = i.source_id AND s.user_id::text = ai.user_id
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		WHERE ai.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND aii.insight_id = ANY($2::uuid[])
 		ORDER BY aii.position ASC`, userID, insightIDs)
 	if err != nil {

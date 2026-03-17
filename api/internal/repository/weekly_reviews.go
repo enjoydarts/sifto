@@ -78,6 +78,7 @@ func (r *WeeklyReviewRepo) CollectInputs(ctx context.Context, userID, weekStart,
 		JOIN sources s ON s.id = i.source_id
 		WHERE ir.user_id = $1
 		  AND s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND (ir.created_at AT TIME ZONE 'Asia/Tokyo')::date BETWEEN $2::date AND $3::date`,
 		userID, weekStart, weekEnd,
 	).Scan(&readCount); err != nil {
@@ -122,6 +123,7 @@ func (r *WeeklyReviewRepo) CollectInputs(ctx context.Context, userID, weekStart,
 			LEFT JOIN item_summaries sm ON sm.item_id = i.id
 			WHERE ir.user_id = $1
 			  AND s.user_id = $1
+			  AND i.deleted_at IS NULL
 			  AND (ir.created_at AT TIME ZONE 'Asia/Tokyo')::date BETWEEN $2::date AND $3::date
 		) t
 		WHERE topic <> ''
@@ -159,6 +161,7 @@ func (r *WeeklyReviewRepo) CollectInputs(ctx context.Context, userID, weekStart,
 		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
 		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND ir.item_id IS NULL
 		  AND COALESCE(sm.score, 0) >= 0.75
 		  AND (i.created_at AT TIME ZONE 'Asia/Tokyo')::date BETWEEN $2::date AND $3::date

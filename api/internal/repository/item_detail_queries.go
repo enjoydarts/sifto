@@ -19,7 +19,7 @@ func (r *ItemRepo) loadItemDetailBase(ctx context.Context, id, userID string) (*
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
-		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
+		WHERE i.id = $1 AND s.user_id = $2 AND `+visibleItemCondition, id, userID,
 	).Scan(&d.ID, &d.SourceID, &d.SourceTitle, &d.URL, &d.Title, &d.ThumbnailURL, &d.ContentText,
 		&d.Status, &d.TranslatedTitle, &d.IsRead, &d.ProcessingError, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {

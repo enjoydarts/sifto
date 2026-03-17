@@ -174,7 +174,7 @@ func (r *SourceRepo) HealthByUser(ctx context.Context, userID string) ([]model.S
 			COUNT(*) FILTER (WHERE i.status = 'summarized')::int AS summarized_items,
 			MAX(i.created_at) AS last_item_at
 		FROM sources s
-		LEFT JOIN items i ON i.source_id = s.id
+		LEFT JOIN items i ON i.source_id = s.id AND i.deleted_at IS NULL
 		WHERE s.user_id = $1
 		GROUP BY s.id, s.enabled, s.last_fetched_at`, userID)
 	if err != nil {
@@ -249,7 +249,7 @@ func (r *SourceRepo) ItemStatsByUser(ctx context.Context, userID string) ([]mode
 				0
 			) AS avg_items_per_day_30d
 		FROM sources s
-		LEFT JOIN items i ON i.source_id = s.id
+		LEFT JOIN items i ON i.source_id = s.id AND i.deleted_at IS NULL
 		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
 		WHERE s.user_id = $1
 		GROUP BY s.id
@@ -298,6 +298,7 @@ func (r *SourceRepo) DailyStatsByUser(ctx context.Context, userID string, days i
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
 		  AND (i.created_at AT TIME ZONE 'Asia/Tokyo')::date >= ((NOW() AT TIME ZONE 'Asia/Tokyo')::date - ($2::int - 1))
 		GROUP BY i.source_id, day
 		ORDER BY day ASC`, userID, days)
@@ -391,7 +392,7 @@ func (r *SourceRepo) RefreshHealthSnapshot(ctx context.Context, sourceID string,
 			COUNT(*) FILTER (WHERE i.status = 'summarized')::int AS summarized_items,
 			MAX(i.created_at) AS last_item_at
 		FROM sources s
-		LEFT JOIN items i ON i.source_id = s.id
+		LEFT JOIN items i ON i.source_id = s.id AND i.deleted_at IS NULL
 		WHERE s.id = $1
 		GROUP BY s.id, s.enabled, s.last_fetched_at`, sourceID,
 	).Scan(
@@ -481,6 +482,7 @@ func (r *SourceRepo) affinityByUser(ctx context.Context, userID string, limit in
 			FROM sources s
 			LEFT JOIN items i
 			       ON i.source_id = s.id
+			      AND i.deleted_at IS NULL
 			      AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '30 days'
 			LEFT JOIN item_reads ir
 			       ON ir.item_id = i.id

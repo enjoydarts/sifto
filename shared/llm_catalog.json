@@ -115,6 +115,26 @@
       }
     },
     {
+      "id": "zai",
+      "api_key_header": "x-zai-api-key",
+      "match_exact": [
+        "glm-5-turbo",
+        "glm-5",
+        "glm-4.7",
+        "glm-4.5-air",
+        "glm-4.7-flashx",
+        "glm-4.7-flash"
+      ],
+      "default_models": {
+        "facts": "glm-4.7-flash",
+        "summary": "glm-4.7",
+        "digest_cluster_draft": "glm-5",
+        "digest": "glm-5",
+        "ask": "glm-5-turbo",
+        "source_suggestion": "glm-4.7-flashx"
+      }
+    },
+    {
       "id": "openai",
       "api_key_header": "x-openai-api-key",
       "match_prefixes": ["gpt-5"],
@@ -915,6 +935,143 @@
         "pricing_source": "xai_static_2026_03",
         "input_per_mtok_usd": 2.0,
         "output_per_mtok_usd": 6.0
+      }
+    },
+    {
+      "id": "glm-5-turbo",
+      "provider": "zai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "ask",
+      "highlights": ["fast"],
+      "comment": "GLM-5 系の高速候補。質問応答や通常要約で速度と品質のバランスを見たい時に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "zai_static_2026_03",
+        "input_per_mtok_usd": 1.2,
+        "output_per_mtok_usd": 4.0,
+        "cache_read_per_mtok_usd": 0.24
+      }
+    },
+    {
+      "id": "glm-5",
+      "provider": "zai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "GLM の上位候補。長めの整理やダイジェスト生成で品質を見たい時の比較枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "zai_static_2026_03",
+        "input_per_mtok_usd": 1.0,
+        "output_per_mtok_usd": 3.2,
+        "cache_read_per_mtok_usd": 0.2
+      }
+    },
+    {
+      "id": "glm-4.7",
+      "provider": "zai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "summary",
+      "highlights": [],
+      "comment": "GLM の標準候補。要約や一般用途を比較的安定して回しやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "zai_static_2026_03",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 2.2,
+        "cache_read_per_mtok_usd": 0.11
+      }
+    },
+    {
+      "id": "glm-4.5-air",
+      "provider": "zai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["fast"],
+      "comment": "軽快で安い Air 枠。コストを抑えつつ要約や質問応答を回したい時の比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "zai_static_2026_03",
+        "input_per_mtok_usd": 0.2,
+        "output_per_mtok_usd": 1.1,
+        "cache_read_per_mtok_usd": 0.03
+      }
+    },
+    {
+      "id": "glm-4.7-flashx",
+      "provider": "zai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["fast"],
+      "comment": "Flash より一段上の高速枠。抽出や候補生成を低コストで広く回したい時に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "zai_static_2026_03",
+        "input_per_mtok_usd": 0.07,
+        "output_per_mtok_usd": 0.4,
+        "cache_read_per_mtok_usd": 0.01
+      }
+    },
+    {
+      "id": "glm-4.7-flash",
+      "provider": "zai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "fast"],
+      "comment": "無料で使える軽量 GLM 枠。大量の事実抽出や軽い質問応答をまず試すには最有力。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "zai_static_2026_03",
+        "input_per_mtok_usd": 0.0,
+        "output_per_mtok_usd": 0.0
       }
     },
     {

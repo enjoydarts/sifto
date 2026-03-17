@@ -55,6 +55,9 @@ func (h *OpenRouterModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fetchErr.Error(), http.StatusBadGateway)
 		return
 	}
+	if cache, err := h.repo.ListLatestDescriptionCache(r.Context()); err == nil {
+		models, _ = service.ApplyOpenRouterDescriptionCache(models, cache)
+	}
 	if err := h.repo.InsertSnapshots(r.Context(), syncRunID, fetchedAt, models); err != nil {
 		msg := err.Error()
 		_ = h.repo.FinishSyncRun(r.Context(), syncRunID, len(models), 0, &msg)

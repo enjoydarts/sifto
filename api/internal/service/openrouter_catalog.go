@@ -126,20 +126,7 @@ func EnrichOpenRouterDescriptionsJA(ctx context.Context, repo *repository.OpenRo
 			cache = cached
 		}
 	}
-	missing := make(map[string]string)
-	for i := range models {
-		descEN := strings.TrimSpace(derefOptionalString(models[i].DescriptionEN))
-		if descEN == "" {
-			continue
-		}
-		if cached, ok := cache[models[i].ModelID]; ok && strings.TrimSpace(derefOptionalString(cached.DescriptionEN)) == descEN {
-			if translated := strings.TrimSpace(derefOptionalString(cached.DescriptionJA)); translated != "" && translated != descEN {
-				models[i].DescriptionJA = &translated
-				continue
-			}
-		}
-		missing[models[i].ModelID] = descEN
-	}
+	models, missing := ApplyOpenRouterDescriptionCache(models, cache)
 	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	if openAI == nil || apiKey == "" || len(missing) == 0 {
 		return models
@@ -164,6 +151,27 @@ func EnrichOpenRouterDescriptionsJA(ctx context.Context, repo *repository.OpenRo
 		}
 	}
 	return models
+}
+
+func ApplyOpenRouterDescriptionCache(
+	models []repository.OpenRouterModelSnapshot,
+	cache map[string]repository.OpenRouterDescriptionCacheEntry,
+) ([]repository.OpenRouterModelSnapshot, map[string]string) {
+	missing := make(map[string]string)
+	for i := range models {
+		descEN := strings.TrimSpace(derefOptionalString(models[i].DescriptionEN))
+		if descEN == "" {
+			continue
+		}
+		if cached, ok := cache[models[i].ModelID]; ok && strings.TrimSpace(derefOptionalString(cached.DescriptionEN)) == descEN {
+			if translated := strings.TrimSpace(derefOptionalString(cached.DescriptionJA)); translated != "" && translated != descEN {
+				models[i].DescriptionJA = &translated
+				continue
+			}
+		}
+		missing[models[i].ModelID] = descEN
+	}
+	return models, missing
 }
 
 func openRouterModelsURL() string {

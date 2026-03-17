@@ -19,6 +19,30 @@ const PRESET_KEYS = [
   "ask.preset.followups",
 ] as const;
 const ASK_LIMIT = 12;
+const ASK_CITATION_MARKER = /(\[\d+\])/g;
+
+function renderAnswerWithCitationSuperscript(text: string) {
+  return text.split("\n").map((line, lineIndex) => {
+    if (line.trim() === "") {
+      return <div key={`line-${lineIndex}`} className="h-4" />;
+    }
+    const parts = line.split(ASK_CITATION_MARKER);
+    return (
+      <p key={`line-${lineIndex}`} className="mt-3 text-[15px] leading-7 text-zinc-900 first:mt-0">
+        {parts.map((part, partIndex) => {
+          if (/^\[\d+\]$/.test(part)) {
+            return (
+              <sup key={`part-${partIndex}`} className="ml-0.5 align-super text-[0.68em] font-semibold leading-none text-zinc-500">
+                {part}
+              </sup>
+            );
+          }
+          return <span key={`part-${partIndex}`}>{part}</span>;
+        })}
+      </p>
+    );
+  });
+}
 
 export default function AskPage() {
   const { t } = useI18n();
@@ -185,7 +209,7 @@ export default function AskPage() {
                 </button>
               </div>
             </div>
-            <p className="mt-3 whitespace-pre-wrap text-[15px] leading-7 text-zinc-900">{result.answer}</p>
+            <div className="mt-3 whitespace-pre-wrap">{renderAnswerWithCitationSuperscript(result.answer)}</div>
             {bullets.length > 0 ? (
               <ul className="mt-4 space-y-2">
                 {bullets.map((bullet, idx) => (

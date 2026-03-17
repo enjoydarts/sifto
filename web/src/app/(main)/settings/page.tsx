@@ -98,6 +98,51 @@ function buildCostPerformancePreset(catalog: LLMCatalog | null): NonNullable<Use
   };
 }
 
+function localizeLLMSettingKey(settingKey: string, t: (key: string, vars?: Record<string, string | number>) => string): string {
+  switch (settingKey) {
+    case "facts":
+      return t("settings.model.facts");
+    case "summary":
+      return t("settings.model.summary");
+    case "digest_cluster":
+      return t("settings.model.digestCluster");
+    case "digest":
+      return t("settings.model.digest");
+    case "ask":
+      return t("settings.model.ask");
+    case "source_suggestion":
+      return t("settings.model.sourceSuggestion");
+    case "facts_check":
+      return t("settings.model.factsCheck");
+    case "faithfulness_check":
+      return t("settings.model.faithfulnessCheck");
+    case "embedding":
+      return t("settings.model.embeddings");
+    default:
+      return settingKey;
+  }
+}
+
+function localizeSettingsErrorMessage(raw: unknown, t: (key: string, vars?: Record<string, string | number>) => string): string {
+  const message = String(raw);
+  const capabilityMatch = message.match(/model missing required capability for ([a-z_]+)/);
+  if (capabilityMatch) {
+    return t("settings.error.modelMissingCapability", {
+      field: localizeLLMSettingKey(capabilityMatch[1], t),
+    });
+  }
+  const invalidModelMatch = message.match(/invalid model for ([a-z_]+)/);
+  if (invalidModelMatch) {
+    return t("settings.error.invalidModelForPurpose", {
+      field: localizeLLMSettingKey(invalidModelMatch[1], t),
+    });
+  }
+  if (message.includes("invalid embedding model")) {
+    return t("settings.error.invalidEmbeddingModel");
+  }
+  return message;
+}
+
 
 export default function SettingsPage() {
   const { t } = useI18n();
@@ -648,7 +693,7 @@ export default function SettingsPage() {
       llmModelsDirtyRef.current = false;
       showToast(t("settings.toast.modelsSaved"), "success");
     } catch (e) {
-      showToast(String(e), "error");
+      showToast(localizeSettingsErrorMessage(e, t), "error");
     } finally {
       setSavingLLMModels(false);
     }

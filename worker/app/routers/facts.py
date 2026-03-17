@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from app.services.claude_service import extract_facts
 from app.services.alibaba_service import extract_facts as extract_facts_alibaba
 from app.services.deepseek_service import extract_facts as extract_facts_deepseek
+from app.services.fireworks_service import extract_facts as extract_facts_fireworks
 from app.services.gemini_service import extract_facts as extract_facts_gemini
 from app.services.groq_service import extract_facts as extract_facts_groq
 from app.services.llm_dispatch import dispatch_by_model
@@ -40,6 +41,7 @@ def extract_facts_endpoint(req: FactsRequest, request: Request):
                 handlers={
                     "anthropic": lambda api_key: extract_facts(req.title, req.content, api_key=api_key, model=req.model),
                     "google": lambda api_key: extract_facts_gemini(req.title, req.content, model=str(req.model), api_key=api_key or ""),
+                    "fireworks": lambda api_key: extract_facts_fireworks(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "groq": lambda api_key: extract_facts_groq(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "deepseek": lambda api_key: extract_facts_deepseek(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "alibaba": lambda api_key: extract_facts_alibaba(req.title, req.content, model=str(req.model), api_key=api_key or ""),

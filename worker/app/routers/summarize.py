@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from app.services.alibaba_service import summarize as summarize_alibaba
 from app.services.claude_service import summarize
 from app.services.deepseek_service import summarize as summarize_deepseek
+from app.services.fireworks_service import summarize as summarize_fireworks
 from app.services.gemini_service import summarize as summarize_gemini
 from app.services.groq_service import summarize as summarize_groq
 from app.services.llm_dispatch import dispatch_by_model
@@ -53,6 +54,13 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
                         model=req.model,
                     ),
                     "google": lambda api_key: summarize_gemini(
+                        req.title,
+                        req.facts,
+                        source_text_chars=req.source_text_chars,
+                        model=str(req.model),
+                        api_key=api_key or "",
+                    ),
+                    "fireworks": lambda api_key: summarize_fireworks(
                         req.title,
                         req.facts,
                         source_text_chars=req.source_text_chars,

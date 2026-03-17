@@ -31,6 +31,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "mistral-small-2506", provider: "mistral"},
 		{model: "grok-4-fast-non-reasoning", provider: "xai"},
 		{model: "glm-4.7-flash", provider: "zai"},
+		{model: "fireworks/gpt-oss-20b", provider: "fireworks"},
 		{model: "gpt-5-mini", provider: "openai"},
 		{model: "openrouter::openai/gpt-oss-120b", provider: "openrouter"},
 	}
@@ -54,6 +55,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{provider: "mistral", purpose: "digest", want: "mistral-medium-2508"},
 		{provider: "xai", purpose: "facts", want: "grok-4-fast-non-reasoning"},
 		{provider: "zai", purpose: "ask", want: "glm-5-turbo"},
+		{provider: "fireworks", purpose: "ask", want: "fireworks/kimi-k2-instruct-0905"},
 	}
 	for _, tt := range defaults {
 		if got := DefaultLLMModelForPurpose(tt.provider, tt.purpose); got != tt.want {

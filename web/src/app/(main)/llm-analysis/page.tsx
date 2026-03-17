@@ -49,6 +49,8 @@ function providerLabel(provider: string) {
       return "xAI";
     case "zai":
       return "Z.ai";
+    case "fireworks":
+      return "Fireworks";
     case "openrouter":
       return "OpenRouter";
     default:
@@ -76,6 +78,8 @@ function providerColor(provider: string) {
       return "#818cf8";
     case "zai":
       return "#22d3ee";
+    case "fireworks":
+      return "#f97316";
     default:
       return "#71717a";
   }

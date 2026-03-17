@@ -173,6 +173,8 @@ export default function SettingsPage() {
   const [deletingXAIKey, setDeletingXAIKey] = useState(false);
   const [savingZAIKey, setSavingZAIKey] = useState(false);
   const [deletingZAIKey, setDeletingZAIKey] = useState(false);
+  const [savingFireworksKey, setSavingFireworksKey] = useState(false);
+  const [deletingFireworksKey, setDeletingFireworksKey] = useState(false);
   const [savingOpenRouterKey, setSavingOpenRouterKey] = useState(false);
   const [deletingOpenRouterKey, setDeletingOpenRouterKey] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
@@ -197,6 +199,7 @@ export default function SettingsPage() {
   const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
   const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
   const [zaiApiKeyInput, setZaiApiKeyInput] = useState("");
+  const [fireworksApiKeyInput, setFireworksApiKeyInput] = useState("");
   const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
   const [llmSectionOpen, setLLMSectionOpen] = useState(true);
@@ -585,6 +588,21 @@ export default function SettingsPage() {
       notSet: t("settings.zaiNotSet"),
     },
     {
+      id: "fireworks",
+      title: t("settings.fireworksTitle"),
+      description: t("settings.fireworksDescription"),
+      configured: settings.has_fireworks_api_key,
+      last4: settings.fireworks_api_key_last4,
+      value: fireworksApiKeyInput,
+      onChange: setFireworksApiKeyInput,
+      onSubmit: submitFireworksApiKey,
+      onDelete: handleDeleteFireworksApiKey,
+      placeholder: "fw_...",
+      saving: savingFireworksKey,
+      deleting: deletingFireworksKey,
+      notSet: t("settings.fireworksNotSet"),
+    },
+    {
       id: "openrouter",
       title: t("settings.openrouterTitle"),
       description: t("settings.openrouterDescription"),
@@ -612,6 +630,7 @@ export default function SettingsPage() {
     mistralApiKeyInput,
     xaiApiKeyInput,
     zaiApiKeyInput,
+    fireworksApiKeyInput,
     openRouterApiKeyInput,
     savingAnthropicKey,
     deletingAnthropicKey,
@@ -631,6 +650,8 @@ export default function SettingsPage() {
     deletingXAIKey,
     savingZAIKey,
     deletingZAIKey,
+    savingFireworksKey,
+    deletingFireworksKey,
     savingOpenRouterKey,
     deletingOpenRouterKey,
   ]);
@@ -1164,6 +1185,45 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setDeletingZAIKey(false);
+    }
+  }
+
+  async function submitFireworksApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingFireworksKey(true);
+    try {
+      if (!fireworksApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setFireworksApiKey(fireworksApiKeyInput.trim());
+      setFireworksApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.fireworksSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingFireworksKey(false);
+    }
+  }
+
+  async function handleDeleteFireworksApiKey() {
+    if (!(await confirm({
+      title: t("settings.fireworksDeleteTitle"),
+      message: t("settings.fireworksDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingFireworksKey(true);
+    try {
+      await api.deleteFireworksApiKey();
+      await load();
+      showToast(t("settings.toast.fireworksDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingFireworksKey(false);
     }
   }
 

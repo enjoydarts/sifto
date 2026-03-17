@@ -23,6 +23,8 @@ function providerLabel(provider: string) {
       return "xAI";
     case "zai":
       return "Z.ai";
+    case "fireworks":
+      return "Fireworks";
     case "openrouter":
       return "OpenRouter";
     default:

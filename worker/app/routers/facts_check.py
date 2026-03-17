@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from app.services.alibaba_service import check_facts as check_facts_alibaba
 from app.services.claude_service import check_facts
 from app.services.deepseek_service import check_facts as check_facts_deepseek
+from app.services.fireworks_service import check_facts as check_facts_fireworks
 from app.services.gemini_service import check_facts as check_facts_gemini
 from app.services.groq_service import check_facts as check_facts_groq
 from app.services.llm_dispatch import dispatch_by_model
@@ -43,6 +44,7 @@ def check_facts_endpoint(req: FactsCheckRequest, request: Request):
                 handlers={
                     "anthropic": lambda api_key: check_facts(req.title, req.content, req.facts, api_key=api_key, model=req.model),
                     "google": lambda api_key: check_facts_gemini(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
+                    "fireworks": lambda api_key: check_facts_fireworks(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
                     "groq": lambda api_key: check_facts_groq(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
                     "deepseek": lambda api_key: check_facts_deepseek(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
                     "alibaba": lambda api_key: check_facts_alibaba(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),

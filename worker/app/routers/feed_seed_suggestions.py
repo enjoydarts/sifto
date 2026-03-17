@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from app.services.alibaba_service import suggest_feed_seed_sites as suggest_feed_seed_sites_alibaba
 from app.services.claude_service import suggest_feed_seed_sites
 from app.services.deepseek_service import suggest_feed_seed_sites as suggest_feed_seed_sites_deepseek
+from app.services.fireworks_service import suggest_feed_seed_sites as suggest_feed_seed_sites_fireworks
 from app.services.gemini_service import suggest_feed_seed_sites as suggest_feed_seed_sites_gemini
 from app.services.groq_service import suggest_feed_seed_sites as suggest_feed_seed_sites_groq
 from app.services.llm_dispatch import dispatch_by_model
@@ -68,6 +69,14 @@ def suggest_feed_seed_sites_endpoint(req: FeedSeedSuggestionRequest, request: Re
                     model=req.model,
                 ),
                 "google": lambda api_key: suggest_feed_seed_sites_gemini(
+                    existing_sources=existing_sources,
+                    preferred_topics=req.preferred_topics,
+                    positive_examples=positive_examples,
+                    negative_examples=negative_examples,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "fireworks": lambda api_key: suggest_feed_seed_sites_fireworks(
                     existing_sources=existing_sources,
                     preferred_topics=req.preferred_topics,
                     positive_examples=positive_examples,

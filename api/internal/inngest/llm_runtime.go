@@ -17,12 +17,13 @@ type llmRuntime struct {
 	MistralKey   *string
 	XAIKey       *string
 	ZAIKey       *string
+	FireworksKey *string
 	OpenAIKey    *string
 	Model        *string
 }
 
 func resolveLLMRuntime(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string, model *string, purpose string) (*llmRuntime, error) {
-	anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, xaiKey, zaiKey, openAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, settingsRepo, cipher, userID, model, purpose)
+	anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, xaiKey, zaiKey, fireworksKey, openAIKey, resolvedModel, err := loadLLMKeysForModel(ctx, settingsRepo, cipher, userID, model, purpose)
 	if err != nil {
 		return nil, err
 	}
@@ -35,6 +36,7 @@ func resolveLLMRuntime(ctx context.Context, settingsRepo *repository.UserSetting
 		MistralKey:   mistralKey,
 		XAIKey:       xaiKey,
 		ZAIKey:       zaiKey,
+		FireworksKey: fireworksKey,
 		OpenAIKey:    openAIKey,
 		Model:        resolvedModel,
 	}, nil

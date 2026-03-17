@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from app.services.alibaba_service import translate_title as translate_title_alibaba
 from app.services.claude_service import translate_title as translate_title_claude
 from app.services.deepseek_service import translate_title as translate_title_deepseek
+from app.services.fireworks_service import translate_title as translate_title_fireworks
 from app.services.gemini_service import translate_title as translate_title_gemini
 from app.services.groq_service import translate_title as translate_title_groq
 from app.services.llm_dispatch import dispatch_by_model
@@ -39,6 +40,7 @@ def translate_title_endpoint(req: TranslateTitleRequest, request: Request):
             handlers={
                 "anthropic": lambda api_key: translate_title_claude(req.title, api_key=api_key, model=req.model),
                 "google": lambda api_key: translate_title_gemini(req.title, model=str(req.model), api_key=api_key or ""),
+                "fireworks": lambda api_key: translate_title_fireworks(req.title, model=str(req.model), api_key=api_key or ""),
                 "groq": lambda api_key: translate_title_groq(req.title, model=str(req.model), api_key=api_key or ""),
                 "deepseek": lambda api_key: translate_title_deepseek(req.title, model=str(req.model), api_key=api_key or ""),
                 "alibaba": lambda api_key: translate_title_alibaba(req.title, model=str(req.model), api_key=api_key or ""),

@@ -6,6 +6,8 @@ from app.services.alibaba_service import compose_digest_cluster_draft as compose
 from app.services.claude_service import compose_digest, compose_digest_cluster_draft
 from app.services.deepseek_service import compose_digest as compose_digest_deepseek
 from app.services.deepseek_service import compose_digest_cluster_draft as compose_digest_cluster_draft_deepseek
+from app.services.fireworks_service import compose_digest as compose_digest_fireworks
+from app.services.fireworks_service import compose_digest_cluster_draft as compose_digest_cluster_draft_fireworks
 from app.services.gemini_service import compose_digest as compose_digest_gemini
 from app.services.gemini_service import compose_digest_cluster_draft as compose_digest_cluster_draft_gemini
 from app.services.groq_service import compose_digest as compose_digest_groq
@@ -89,6 +91,7 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
                         model=req.model,
                     ),
                     "google": lambda api_key: compose_digest_gemini(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
+                    "fireworks": lambda api_key: compose_digest_fireworks(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "groq": lambda api_key: compose_digest_groq(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "deepseek": lambda api_key: compose_digest_deepseek(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "alibaba": lambda api_key: compose_digest_alibaba(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
@@ -130,6 +133,14 @@ def compose_digest_cluster_draft_endpoint(req: ComposeDigestClusterDraftRequest,
                         model=req.model,
                     ),
                     "google": lambda api_key: compose_digest_cluster_draft_gemini(
+                        cluster_label=req.cluster_label,
+                        item_count=req.item_count,
+                        topics=req.topics,
+                        source_lines=req.source_lines,
+                        model=str(req.model),
+                        api_key=api_key or "",
+                    ),
+                    "fireworks": lambda api_key: compose_digest_cluster_draft_fireworks(
                         cluster_label=req.cluster_label,
                         item_count=req.item_count,
                         topics=req.topics,

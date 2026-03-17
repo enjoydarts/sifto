@@ -135,6 +135,19 @@
       }
     },
     {
+      "id": "fireworks",
+      "api_key_header": "x-fireworks-api-key",
+      "match_prefixes": ["fireworks/", "cogito/"],
+      "default_models": {
+        "facts": "fireworks/glm-4p7",
+        "summary": "fireworks/deepseek-v3p1",
+        "digest_cluster_draft": "fireworks/glm-5",
+        "digest": "fireworks/glm-5",
+        "ask": "fireworks/kimi-k2-instruct-0905",
+        "source_suggestion": "fireworks/gpt-oss-20b"
+      }
+    },
+    {
       "id": "openrouter",
       "api_key_header": "x-openai-api-key",
       "default_models": {}
@@ -1100,6 +1113,305 @@
         "pricing_source": "zai_static_2026_03",
         "input_per_mtok_usd": 0.0,
         "output_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "fireworks/deepseek-v3p1",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": ["fast"],
+      "comment": "Fireworks の Serverless で使える DeepSeek V3.1 系。要約や質問応答の比較候補として試しやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.56,
+        "output_per_mtok_usd": 1.68,
+        "cache_read_per_mtok_usd": 0.28
+      }
+    },
+    {
+      "id": "fireworks/deepseek-v3p2",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "ask",
+      "highlights": ["fast"],
+      "comment": "DeepSeek V3.2 系の実験枠。最新寄りの推論品質を Fireworks 経由で試したい時の候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.56,
+        "output_per_mtok_usd": 1.68,
+        "cache_read_per_mtok_usd": 0.28
+      }
+    },
+    {
+      "id": "cogito/cogito-671b-v2-p1",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "超大型 dense 系の比較枠。複雑な整理や長めのダイジェストでどこまで伸びるかを見る用途向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.9,
+        "output_per_mtok_usd": 0.9,
+        "cache_read_per_mtok_usd": 0.45
+      }
+    },
+    {
+      "id": "fireworks/gpt-oss-20b",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "facts",
+      "highlights": ["jsonStable", "fast"],
+      "comment": "Fireworks 経由で使う GPT-OSS 20B。事実抽出や軽い質問応答を低コストで回したい時の主力候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.07,
+        "output_per_mtok_usd": 0.3,
+        "cache_read_per_mtok_usd": 0.035
+      }
+    },
+    {
+      "id": "fireworks/gpt-oss-120b",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["jsonStable"],
+      "comment": "Fireworks の高品質 GPT-OSS 枠。要約やダイジェストまで広く比較しやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.6,
+        "cache_read_per_mtok_usd": 0.075
+      }
+    },
+    {
+      "id": "fireworks/glm-4p7",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "facts",
+      "highlights": [],
+      "comment": "Z.ai 直結とは別経路で試せる GLM 4.7。事実抽出や structured output の比較に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 2.2,
+        "cache_read_per_mtok_usd": 0.3
+      }
+    },
+    {
+      "id": "fireworks/glm-5",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": [],
+      "comment": "Fireworks の GLM-5 上位枠。長めの要約やダイジェストの比較対象として有力。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 1.0,
+        "output_per_mtok_usd": 3.2,
+        "cache_read_per_mtok_usd": 0.2
+      }
+    },
+    {
+      "id": "fireworks/kimi-k2-instruct-0905",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "ask",
+      "highlights": ["fast"],
+      "comment": "長文 RAG と応答品質のバランスが良い Kimi K2 instruct。Ask の有力候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 2.5,
+        "cache_read_per_mtok_usd": 0.3
+      }
+    },
+    {
+      "id": "fireworks/kimi-k2-thinking",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "ask",
+      "highlights": [],
+      "comment": "thinking 系の Kimi 比較枠。長考寄りの応答を試したい時向けだが、安定性は実測前提。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 2.5,
+        "cache_read_per_mtok_usd": 0.3
+      }
+    },
+    {
+      "id": "fireworks/llama-v3p3-70b-instruct",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "summary",
+      "highlights": [],
+      "comment": "Meta 系の標準比較枠。重めだが、要約や RAG の読み味を見たい時に入れておく価値がある。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.9,
+        "output_per_mtok_usd": 0.9,
+        "cache_read_per_mtok_usd": 0.45
+      }
+    },
+    {
+      "id": "fireworks/minimax-m2p1",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "summary",
+      "highlights": ["fast"],
+      "comment": "MiniMax M2.1 の比較枠。中長文の要約や汎用応答を Fireworks 経由で試したい時向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 1.2,
+        "cache_read_per_mtok_usd": 0.03
+      }
+    },
+    {
+      "id": "fireworks/minimax-m2p5",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "balanced",
+      "highlights": ["fast"],
+      "comment": "MiniMax M2.5 の上位実験枠。Ask や要約でのバランス比較向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 1.2,
+        "cache_read_per_mtok_usd": 0.03
+      }
+    },
+    {
+      "id": "fireworks/qwen3-8b",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "facts",
+      "highlights": ["fast"],
+      "comment": "軽量な Qwen3 比較枠。小さめの事実抽出やソース提案を安く試したい時向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_static_2026_03",
+        "input_per_mtok_usd": 0.2,
+        "output_per_mtok_usd": 0.2,
+        "cache_read_per_mtok_usd": 0.1
       }
     },
     {

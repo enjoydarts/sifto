@@ -39,6 +39,8 @@ type SettingsGetPayload struct {
 	XAIAPIKeyLast4          *string        `json:"xai_api_key_last4,omitempty"`
 	HasZAIAPIKey            bool           `json:"has_zai_api_key"`
 	ZAIAPIKeyLast4          *string        `json:"zai_api_key_last4,omitempty"`
+	HasFireworksAPIKey      bool           `json:"has_fireworks_api_key"`
+	FireworksAPIKeyLast4    *string        `json:"fireworks_api_key_last4,omitempty"`
 	HasOpenRouterAPIKey     bool           `json:"has_openrouter_api_key"`
 	OpenRouterAPIKeyLast4   *string        `json:"openrouter_api_key_last4,omitempty"`
 	HasInoreaderOAuth       bool           `json:"has_inoreader_oauth"`
@@ -178,6 +180,8 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		XAIAPIKeyLast4:          settings.XAIAPIKeyLast4,
 		HasZAIAPIKey:            settings.HasZAIAPIKey,
 		ZAIAPIKeyLast4:          settings.ZAIAPIKeyLast4,
+		HasFireworksAPIKey:      settings.HasFireworksAPIKey,
+		FireworksAPIKeyLast4:    settings.FireworksAPIKeyLast4,
 		HasOpenRouterAPIKey:     settings.HasOpenRouterAPIKey,
 		OpenRouterAPIKeyLast4:   settings.OpenRouterAPIKeyLast4,
 		HasInoreaderOAuth:       settings.HasInoreaderOAuth,
@@ -363,6 +367,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetXAIAPIKey(ctx, userID, enc, last4)
 	case "zai":
 		return s.repo.SetZAIAPIKey(ctx, userID, enc, last4)
+	case "fireworks":
+		return s.repo.SetFireworksAPIKey(ctx, userID, enc, last4)
 	case "openrouter":
 		return s.repo.SetOpenRouterAPIKey(ctx, userID, enc, last4)
 	default:
@@ -390,6 +396,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearXAIAPIKey(ctx, userID)
 	case "zai":
 		return s.repo.ClearZAIAPIKey(ctx, userID)
+	case "fireworks":
+		return s.repo.ClearFireworksAPIKey(ctx, userID)
 	case "openrouter":
 		return s.repo.ClearOpenRouterAPIKey(ctx, userID)
 	default:

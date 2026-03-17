@@ -140,6 +140,7 @@ func extractAndPersistFacts(
 				runtime.MistralKey,
 				runtime.XAIKey,
 				runtime.ZAIKey,
+				runtime.FireworksKey,
 				runtime.OpenAIKey,
 				runtime.Model,
 			)
@@ -199,6 +200,7 @@ func extractAndPersistFacts(
 					runtime.MistralKey,
 					runtime.XAIKey,
 					runtime.ZAIKey,
+					runtime.FireworksKey,
 					runtime.OpenAIKey,
 					runtime.Model,
 				)
@@ -283,7 +285,7 @@ func summarizeAndPersistItem(
 			}
 			sourceChars := len(sourceContent)
 			workerCtx := service.WithWorkerTraceMetadata(ctx, "summary", userIDPtr, &data.SourceID, &itemID, nil)
-			resp, err := deps.worker.SummarizeWithModel(workerCtx, titleForLLM, facts, &sourceChars, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.AlibabaKey, runtime.MistralKey, runtime.XAIKey, runtime.ZAIKey, runtime.OpenAIKey, runtime.Model)
+			resp, err := deps.worker.SummarizeWithModel(workerCtx, titleForLLM, facts, &sourceChars, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.AlibabaKey, runtime.MistralKey, runtime.XAIKey, runtime.ZAIKey, runtime.FireworksKey, runtime.OpenAIKey, runtime.Model)
 			if err != nil {
 				return nil, err
 			}
@@ -340,6 +342,7 @@ func summarizeAndPersistItem(
 					runtime.MistralKey,
 					runtime.XAIKey,
 					runtime.ZAIKey,
+					runtime.FireworksKey,
 					runtime.OpenAIKey,
 					runtime.Model,
 				)

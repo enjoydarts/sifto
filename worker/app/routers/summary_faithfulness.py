@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from app.services.alibaba_service import check_summary_faithfulness as check_summary_faithfulness_alibaba
 from app.services.claude_service import check_summary_faithfulness
 from app.services.deepseek_service import check_summary_faithfulness as check_summary_faithfulness_deepseek
+from app.services.fireworks_service import check_summary_faithfulness as check_summary_faithfulness_fireworks
 from app.services.gemini_service import check_summary_faithfulness as check_summary_faithfulness_gemini
 from app.services.groq_service import check_summary_faithfulness as check_summary_faithfulness_groq
 from app.services.llm_dispatch import dispatch_by_model
@@ -43,6 +44,7 @@ def check_summary_faithfulness_endpoint(req: SummaryFaithfulnessRequest, request
                 handlers={
                     "anthropic": lambda api_key: check_summary_faithfulness(req.title, req.facts, req.summary, api_key=api_key, model=req.model),
                     "google": lambda api_key: check_summary_faithfulness_gemini(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
+                    "fireworks": lambda api_key: check_summary_faithfulness_fireworks(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "groq": lambda api_key: check_summary_faithfulness_groq(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "deepseek": lambda api_key: check_summary_faithfulness_deepseek(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "alibaba": lambda api_key: check_summary_faithfulness_alibaba(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),

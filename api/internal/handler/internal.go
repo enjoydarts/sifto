@@ -611,6 +611,7 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 			var mistralKey *string
 			var xaiKey *string
 			var zaiKey *string
+			var fireworksKey *string
 			var openAIKey *string
 			switch service.LLMProviderForModel(model) {
 			case "google":
@@ -627,6 +628,8 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				xaiKey, err = h.loadXAIAPIKey(r.Context(), t.UserID)
 			case "zai":
 				zaiKey, err = h.loadZAIAPIKey(r.Context(), t.UserID)
+			case "fireworks":
+				fireworksKey, err = h.loadFireworksAPIKey(r.Context(), t.UserID)
 			case "openai":
 				openAIKey, err = h.loadOpenAIAPIKey(r.Context(), t.UserID)
 			default:
@@ -643,7 +646,7 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				}
 				continue
 			}
-			resp, err := h.worker.TranslateTitleWithModel(r.Context(), t.Title, anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, xaiKey, zaiKey, openAIKey, model)
+			resp, err := h.worker.TranslateTitleWithModel(r.Context(), t.Title, anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, xaiKey, zaiKey, fireworksKey, openAIKey, model)
 			if err != nil {
 				failed++
 				if len(errorSamples) < 10 {
@@ -833,6 +836,24 @@ func (h *InternalHandler) loadZAIAPIKey(ctx context.Context, userID string) (*st
 	}
 	if enc == nil || *enc == "" {
 		return nil, fmt.Errorf("zai api key is not set")
+	}
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+func (h *InternalHandler) loadFireworksAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetFireworksAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("fireworks api key is not set")
 	}
 	if !h.cipher.Enabled() {
 		return nil, fmt.Errorf("secret cipher is not configured")

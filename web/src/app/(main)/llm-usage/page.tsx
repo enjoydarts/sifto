@@ -56,6 +56,7 @@ const PROVIDER_COLORS: Record<string, { stroke: string; fill: string; fillOpacit
   mistral: { stroke: "#be123c", fill: "#fb7185", fillOpacity: 0.55, label: "Mistral" },
   xai: { stroke: "#4338ca", fill: "#818cf8", fillOpacity: 0.55, label: "xAI" },
   zai: { stroke: "#0891b2", fill: "#22d3ee", fillOpacity: 0.55, label: "Z.ai" },
+  fireworks: { stroke: "#c2410c", fill: "#fb923c", fillOpacity: 0.55, label: "Fireworks" },
   openrouter: { stroke: "#7c3aed", fill: "#c4b5fd", fillOpacity: 0.55, label: "OpenRouter" },
 };
 

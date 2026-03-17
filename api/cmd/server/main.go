@@ -280,6 +280,8 @@ func main() {
 			r.Delete("/xai-key", settingsH.DeleteXAIAPIKey)
 			r.Post("/zai-key", settingsH.SetZAIAPIKey)
 			r.Delete("/zai-key", settingsH.DeleteZAIAPIKey)
+			r.Post("/fireworks-key", settingsH.SetFireworksAPIKey)
+			r.Delete("/fireworks-key", settingsH.DeleteFireworksAPIKey)
 			r.Post("/openrouter-key", settingsH.SetOpenRouterAPIKey)
 			r.Delete("/openrouter-key", settingsH.DeleteOpenRouterAPIKey)
 		})

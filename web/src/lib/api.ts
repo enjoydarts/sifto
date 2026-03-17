@@ -747,6 +747,8 @@ export interface UserSettings {
   xai_api_key_last4: string | null;
   has_zai_api_key: boolean;
   zai_api_key_last4: string | null;
+  has_fireworks_api_key: boolean;
+  fireworks_api_key_last4: string | null;
   has_openrouter_api_key: boolean;
   openrouter_api_key_last4: string | null;
   has_inoreader_oauth?: boolean;
@@ -1474,6 +1476,16 @@ export const api = {
   deleteZAIApiKey: () =>
     apiFetch<{ user_id: string; has_zai_api_key: boolean; zai_api_key_last4: string | null }>(
       "/settings/zai-key",
+      { method: "DELETE" }
+    ),
+  setFireworksApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_fireworks_api_key: boolean; fireworks_api_key_last4: string | null }>(
+      "/settings/fireworks-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteFireworksApiKey: () =>
+    apiFetch<{ user_id: string; has_fireworks_api_key: boolean; fireworks_api_key_last4: string | null }>(
+      "/settings/fireworks-key",
       { method: "DELETE" }
     ),
   setOpenRouterApiKey: (apiKey: string) =>

@@ -8,7 +8,7 @@ import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import OneSignalSettings from "@/components/onesignal-settings";
 import ApiKeyCard from "@/components/settings/api-key-card";
-import ModelGuideTable from "@/components/settings/model-guide-table";
+import ModelGuideModal from "@/components/settings/model-guide-modal";
 import ModelSelect, { type ModelOption } from "@/components/settings/model-select";
 import ProviderModelUpdatesPanel from "@/components/settings/provider-model-updates-panel";
 import SettingsMetricCard from "@/components/settings/settings-metric-card";
@@ -207,6 +207,7 @@ export default function SettingsPage() {
   const [notificationsSectionOpen, setNotificationsSectionOpen] = useState(true);
   const [integrationsSectionOpen, setIntegrationsSectionOpen] = useState(true);
   const [llmExtrasOpen, setLLMExtrasOpen] = useState(false);
+  const [modelGuideOpen, setModelGuideOpen] = useState(false);
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
   const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
   const [readingPlanDiversifyTopics, setReadingPlanDiversifyTopics] = useState(true);
@@ -1576,12 +1577,18 @@ export default function SettingsPage() {
                       }}
                     />
                     <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-                      <div className="mb-3">
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <div>
                         <h3 className="text-sm font-semibold text-zinc-900">{t("settings.modelGuide.title")}</h3>
                         <p className="mt-1 text-xs text-zinc-500">{t("settings.modelGuide.description")}</p>
-                      </div>
-                      <div className="overflow-auto">
-                        <ModelGuideTable entries={modelComparisonEntries} t={t} />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setModelGuideOpen(true)}
+                          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
+                        >
+                          {t("settings.modelGuide.open")}
+                        </button>
                       </div>
                     </section>
                   </div>
@@ -1590,6 +1597,13 @@ export default function SettingsPage() {
             </>
           ) : null}
         </section>
+
+        <ModelGuideModal
+          open={modelGuideOpen}
+          onClose={() => setModelGuideOpen(false)}
+          entries={modelComparisonEntries}
+          t={t}
+        />
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <button

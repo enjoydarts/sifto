@@ -96,6 +96,7 @@ type LLMExecutionCurrentMonthSummaryView struct {
 	Failures       int     `json:"failures"`
 	Retries        int     `json:"retries"`
 	EmptyResponses int     `json:"empty_responses"`
+	EstimatedCostUSD float64 `json:"estimated_cost_usd"`
 	FailureRatePct float64 `json:"failure_rate_pct"`
 	RetryRatePct   float64 `json:"retry_rate_pct"`
 	EmptyRatePct   float64 `json:"empty_rate_pct"`

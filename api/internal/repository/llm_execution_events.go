@@ -37,6 +37,7 @@ type LLMExecutionCurrentMonthSummary struct {
 	Failures       int     `json:"failures"`
 	Retries        int     `json:"retries"`
 	EmptyResponses int     `json:"empty_responses"`
+	EstimatedCostUSD float64 `json:"estimated_cost_usd"`
 	FailureRatePct float64 `json:"failure_rate_pct"`
 	RetryRatePct   float64 `json:"retry_rate_pct"`
 	EmptyRatePct   float64 `json:"empty_rate_pct"`
@@ -63,6 +64,20 @@ func (r *LLMExecutionEventRepo) CurrentMonthSummaryByUser(ctx context.Context, u
 			SELECT
 				date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo') AS month_start_jst,
 				date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 month' AS next_month_start_jst
+		),
+		usage_costs AS (
+			SELECT
+				l.user_id,
+				l.purpose,
+				l.provider,
+				l.model,
+				COALESCE(SUM(l.estimated_cost_usd), 0)::double precision AS estimated_cost_usd
+			FROM llm_usage_logs l
+			CROSS JOIN bounds b
+			WHERE l.user_id = $1
+			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
+			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
+			GROUP BY l.user_id, l.purpose, l.provider, l.model
 		)
 		SELECT TO_CHAR(b.month_start_jst, 'YYYY-MM') AS month_jst,
 		       e.purpose,
@@ -73,16 +88,22 @@ func (r *LLMExecutionEventRepo) CurrentMonthSummaryByUser(ctx context.Context, u
 		       COUNT(*) FILTER (WHERE e.status = 'failure')::int AS failures,
 		       COUNT(*) FILTER (WHERE e.attempt_index > 0)::int AS retries,
 		       COUNT(*) FILTER (WHERE e.empty_response)::int AS empty_responses,
+		       COALESCE(MAX(u.estimated_cost_usd), 0)::double precision AS estimated_cost_usd,
 		       CASE WHEN COUNT(*) = 0 THEN 0 ELSE ROUND((COUNT(*) FILTER (WHERE e.status = 'failure')::numeric * 100.0) / COUNT(*), 1) END::double precision AS failure_rate_pct,
 		       CASE WHEN COUNT(*) = 0 THEN 0 ELSE ROUND((COUNT(*) FILTER (WHERE e.attempt_index > 0)::numeric * 100.0) / COUNT(*), 1) END::double precision AS retry_rate_pct,
 		       CASE WHEN COUNT(*) = 0 THEN 0 ELSE ROUND((COUNT(*) FILTER (WHERE e.empty_response)::numeric * 100.0) / COUNT(*), 1) END::double precision AS empty_rate_pct
 		FROM llm_execution_events e
 		CROSS JOIN bounds b
+		LEFT JOIN usage_costs u
+		  ON u.user_id = e.user_id
+		 AND u.purpose = e.purpose
+		 AND u.provider = e.provider
+		 AND u.model = e.model
 		WHERE e.user_id = $1
 		  AND (e.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
 		  AND (e.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
 		GROUP BY 1,2,3,4
-		ORDER BY failures DESC, retries DESC, attempts DESC, purpose ASC, provider ASC, model ASC
+		ORDER BY estimated_cost_usd DESC, failures DESC, retries DESC, attempts DESC, purpose ASC, provider ASC, model ASC
 	`, userID)
 	if err != nil {
 		return nil, err
@@ -95,6 +116,7 @@ func (r *LLMExecutionEventRepo) CurrentMonthSummaryByUser(ctx context.Context, u
 		if err := rows.Scan(
 			&v.MonthJST, &v.Purpose, &v.Provider, &v.Model,
 			&v.Attempts, &v.Successes, &v.Failures, &v.Retries, &v.EmptyResponses,
+			&v.EstimatedCostUSD,
 			&v.FailureRatePct, &v.RetryRatePct, &v.EmptyRatePct,
 		); err != nil {
 			return nil, err

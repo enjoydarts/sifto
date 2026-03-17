@@ -618,6 +618,7 @@ export interface LLMExecutionCurrentMonthSummary {
   failures: number;
   retries: number;
   empty_responses: number;
+  estimated_cost_usd: number;
   failure_rate_pct: number;
   retry_rate_pct: number;
   empty_rate_pct: number;

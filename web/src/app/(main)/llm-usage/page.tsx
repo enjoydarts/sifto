@@ -256,6 +256,9 @@ export default function LLMUsagePage() {
         case "attempts":
           cmp = a.attempts - b.attempts;
           break;
+        case "estimated_cost_usd":
+          cmp = a.estimated_cost_usd - b.estimated_cost_usd;
+          break;
         case "failures":
           cmp = a.failures - b.failures;
           break;
@@ -355,18 +358,13 @@ export default function LLMUsagePage() {
     return map;
   }, [chartProviders]);
 
-  const visibleModelRows = useMemo(
-    () => modelRows.filter((r) => r.estimated_cost_usd > 0),
-    [modelRows]
-  );
-
   const mergedModelRows = useMemo(() => {
     const m = new Map<string, LLMUsageModelSummary & {
       pricing_sources: string[];
       avg_input_tokens_per_call?: number;
       avg_output_tokens_per_call?: number;
     }>();
-    for (const r of visibleModelRows) {
+    for (const r of modelRows) {
       const key = `${r.provider}:${r.model}`;
       const cur = m.get(key);
       if (!cur) {
@@ -423,7 +421,7 @@ export default function LLMUsagePage() {
       if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
       return a.model.localeCompare(b.model);
     });
-  }, [modelSortDir, modelSortKey, visibleModelRows]);
+  }, [modelRows, modelSortDir, modelSortKey]);
 
   const availableForecastMonths = useMemo(() => {
     const months = new Set<string>();
@@ -906,15 +904,17 @@ export default function LLMUsagePage() {
         monthLabel={settings?.current_month?.month_jst ?? currentMonthExecutionRows[0]?.month_jst ?? "—"}
         noSummaryLabel={t("llm.noSummary")}
         fmtNum={fmtNum}
+        fmtUSD={fmtUSD}
         sortKey={reliabilitySortKey}
         sortDir={reliabilitySortDir}
         onSort={handleReliabilitySort}
         labels={{
-          title: t("llm.currentMonthReliability"),
-          attempts: t("llm.attempts"),
-          failures: t("llm.failures"),
-          failureRate: t("llm.failureRate"),
-          retries: t("llm.retries"),
+        title: t("llm.currentMonthReliability"),
+        attempts: t("llm.attempts"),
+        cost: t("llm.totalCost"),
+        failures: t("llm.failures"),
+        failureRate: t("llm.failureRate"),
+        retries: t("llm.retries"),
           retryRate: t("llm.retryRate"),
           emptyResponses: t("llm.emptyResponses"),
           emptyRate: t("llm.emptyRate"),

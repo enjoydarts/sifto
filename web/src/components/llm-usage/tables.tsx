@@ -217,6 +217,7 @@ export function ReliabilityTable({
   monthLabel,
   noSummaryLabel,
   fmtNum,
+  fmtUSD,
   labels,
   sortKey,
   sortDir,
@@ -226,9 +227,11 @@ export function ReliabilityTable({
   monthLabel: string;
   noSummaryLabel: string;
   fmtNum: (v: number) => string;
+  fmtUSD: (v: number) => string;
   labels: {
     title: string;
     attempts: string;
+    cost: string;
     failures: string;
     failureRate: string;
     retries: string;
@@ -275,6 +278,11 @@ export function ReliabilityTable({
                   </button>
                 </th>
                 <th className={`${headerClass} text-right`}>
+                  <button type="button" onClick={() => onSort("estimated_cost_usd")} className="inline-flex items-center hover:text-zinc-800">
+                    {labels.cost}{renderSortMark("estimated_cost_usd")}
+                  </button>
+                </th>
+                <th className={`${headerClass} text-right`}>
                   <button type="button" onClick={() => onSort("failures")} className="inline-flex items-center hover:text-zinc-800">
                     {labels.failures}{renderSortMark("failures")}
                   </button>
@@ -312,6 +320,7 @@ export function ReliabilityTable({
                   <td className="px-3 py-2 font-medium text-zinc-800">{row.purpose}</td>
                   <td className="px-3 py-2 text-zinc-700 whitespace-nowrap">{providerLabel(row.provider)}/{formatModelDisplayName(row.model)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.attempts)}</td>
+                  <td className="px-3 py-2 text-right">{fmtUSD(row.estimated_cost_usd)}</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.failures)}</td>
                   <td className="px-3 py-2 text-right">{row.failure_rate_pct.toFixed(1)}%</td>
                   <td className="px-3 py-2 text-right">{fmtNum(row.retries)}</td>

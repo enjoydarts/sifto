@@ -32,6 +32,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var mistralAPIKeyEnc *string
 	var xaiAPIKeyEnc *string
 	var zaiAPIKeyEnc *string
+	var openrouterAPIKeyEnc *string
 	var inoreaderAccessTokenEnc *string
 	err := r.db.QueryRow(ctx, `
 		SELECT user_id,
@@ -53,6 +54,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       xai_api_key_last4,
 		       zai_api_key_enc,
 		       zai_api_key_last4,
+		       openrouter_api_key_enc,
+		       openrouter_api_key_last4,
 		       monthly_budget_usd,
 		       budget_alert_enabled,
 		       budget_alert_threshold_pct,
@@ -97,6 +100,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.XAIAPIKeyLast4,
 		&zaiAPIKeyEnc,
 		&v.ZAIAPIKeyLast4,
+		&openrouterAPIKeyEnc,
+		&v.OpenRouterAPIKeyLast4,
 		&v.MonthlyBudgetUSD,
 		&v.BudgetAlertEnabled,
 		&v.BudgetAlertThresholdPct,
@@ -131,6 +136,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasMistralAPIKey = mistralAPIKeyEnc != nil && *mistralAPIKeyEnc != ""
 	v.HasXAIAPIKey = xaiAPIKeyEnc != nil && *xaiAPIKeyEnc != ""
 	v.HasZAIAPIKey = zaiAPIKeyEnc != nil && *zaiAPIKeyEnc != ""
+	v.HasOpenRouterAPIKey = openrouterAPIKeyEnc != nil && *openrouterAPIKeyEnc != ""
 	v.HasInoreaderOAuth = inoreaderAccessTokenEnc != nil && *inoreaderAccessTokenEnc != ""
 	return &v, nil
 }
@@ -435,6 +441,26 @@ func (r *UserSettingsRepo) GetZAIAPIKeyEncrypted(ctx context.Context, userID str
 	return v, nil
 }
 
+func (r *UserSettingsRepo) GetOpenRouterAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT openrouter_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1`,
+		userID,
+	).Scan(&v)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
 func (r *UserSettingsRepo) GetInoreaderTokensEncrypted(ctx context.Context, userID string) (accessTokenEnc, refreshTokenEnc *string, expiresAt *time.Time, err error) {
 	err = r.db.QueryRow(ctx, `
 		SELECT inoreader_access_token_enc, inoreader_refresh_token_enc, inoreader_token_expires_at
@@ -629,6 +655,22 @@ func (r *UserSettingsRepo) SetZAIAPIKey(ctx context.Context, userID, encryptedKe
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetOpenRouterAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, openrouter_api_key_enc, openrouter_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET openrouter_api_key_enc = EXCLUDED.openrouter_api_key_enc,
+		    openrouter_api_key_last4 = EXCLUDED.openrouter_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) ClearAnthropicAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, anthropic_api_key_enc, anthropic_api_key_last4)
@@ -764,6 +806,22 @@ func (r *UserSettingsRepo) ClearZAIAPIKey(ctx context.Context, userID string) (*
 		ON CONFLICT (user_id) DO UPDATE
 		SET zai_api_key_enc = NULL,
 		    zai_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearOpenRouterAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, openrouter_api_key_enc, openrouter_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET openrouter_api_key_enc = NULL,
+		    openrouter_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

@@ -27,6 +27,7 @@ type LLMProviderCatalog struct {
 type LLMModelCatalog struct {
 	ID                string                `json:"id"`
 	Provider          string                `json:"provider"`
+	SourceProvider    string                `json:"source_provider,omitempty"`
 	AvailablePurposes []string              `json:"available_purposes"`
 	Recommendation    string                `json:"recommendation"`
 	BestFor           string                `json:"best_for"`
@@ -58,7 +59,31 @@ var (
 	llmCatalogData     LLMCatalog
 	llmCatalogLoadedAt time.Time
 	llmCatalogPath     string
+	dynamicCatalogMu   sync.RWMutex
+	dynamicChatModels  []LLMModelCatalog
 )
+
+const openRouterAliasPrefix = "openrouter::"
+
+func OpenRouterAliasModelID(model string) string {
+	m := strings.TrimSpace(model)
+	if m == "" {
+		return ""
+	}
+	if strings.HasPrefix(m, openRouterAliasPrefix) {
+		return m
+	}
+	return openRouterAliasPrefix + m
+}
+
+func ResolveOpenRouterModelID(model string) string {
+	m := strings.TrimSpace(model)
+	return strings.TrimPrefix(m, openRouterAliasPrefix)
+}
+
+func IsOpenRouterAliasedModel(model string) bool {
+	return strings.HasPrefix(strings.TrimSpace(model), openRouterAliasPrefix)
+}
 
 func LLMCatalogData() *LLMCatalog {
 	path := catalogPath()
@@ -70,7 +95,8 @@ func LLMCatalogData() *LLMCatalog {
 		llmCatalogLoadedAt = time.Time{}
 		llmCatalogPath = path
 		llmCatalogMu.Unlock()
-		return &llmCatalogData
+		snapshot := llmCatalogData
+		return mergedCatalog(&snapshot)
 	}
 
 	llmCatalogMu.RLock()
@@ -79,7 +105,7 @@ func LLMCatalogData() *LLMCatalog {
 	if !loaded.IsZero() && loadedPath == path && !info.ModTime().After(loaded) {
 		snapshot := llmCatalogData
 		llmCatalogMu.RUnlock()
-		return &snapshot
+		return mergedCatalog(&snapshot)
 	}
 	llmCatalogMu.RUnlock()
 
@@ -89,7 +115,7 @@ func LLMCatalogData() *LLMCatalog {
 		llmCatalogMu.RLock()
 		snapshot := llmCatalogData
 		llmCatalogMu.RUnlock()
-		return &snapshot
+		return mergedCatalog(&snapshot)
 	}
 	var next LLMCatalog
 	if err := json.Unmarshal(raw, &next); err != nil {
@@ -97,7 +123,7 @@ func LLMCatalogData() *LLMCatalog {
 		llmCatalogMu.RLock()
 		snapshot := llmCatalogData
 		llmCatalogMu.RUnlock()
-		return &snapshot
+		return mergedCatalog(&snapshot)
 	}
 
 	llmCatalogMu.Lock()
@@ -106,7 +132,44 @@ func LLMCatalogData() *LLMCatalog {
 	llmCatalogPath = path
 	llmCatalogMu.Unlock()
 
-	return &next
+	return mergedCatalog(&next)
+}
+
+func mergedCatalog(base *LLMCatalog) *LLMCatalog {
+	if base == nil {
+		return &LLMCatalog{}
+	}
+	dynamicCatalogMu.RLock()
+	defer dynamicCatalogMu.RUnlock()
+	if len(dynamicChatModels) == 0 {
+		snapshot := *base
+		return &snapshot
+	}
+	merged := *base
+	seen := make(map[string]struct{}, len(base.ChatModels)+len(dynamicChatModels))
+	merged.ChatModels = make([]LLMModelCatalog, 0, len(base.ChatModels)+len(dynamicChatModels))
+	for _, model := range base.ChatModels {
+		merged.ChatModels = append(merged.ChatModels, model)
+		seen[model.ID] = struct{}{}
+	}
+	for _, model := range dynamicChatModels {
+		if _, exists := seen[model.ID]; exists {
+			continue
+		}
+		merged.ChatModels = append(merged.ChatModels, model)
+		seen[model.ID] = struct{}{}
+	}
+	return &merged
+}
+
+func SetDynamicChatModels(models []LLMModelCatalog) {
+	dynamicCatalogMu.Lock()
+	defer dynamicCatalogMu.Unlock()
+	if len(models) == 0 {
+		dynamicChatModels = nil
+		return
+	}
+	dynamicChatModels = append([]LLMModelCatalog{}, models...)
 }
 
 func catalogPath() string {
@@ -169,6 +232,9 @@ func CatalogProviderForModel(model string) string {
 	m := strings.TrimSpace(model)
 	if m == "" {
 		return ""
+	}
+	if IsOpenRouterAliasedModel(m) {
+		return "openrouter"
 	}
 	if entry := findModelCatalog(m); entry != nil && entry.Provider != "" {
 		return entry.Provider

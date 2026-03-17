@@ -76,6 +76,7 @@ func main() {
 	llmValueMetricsRepo := repository.NewLLMValueMetricsRepo(db)
 	llmExecutionRepo := repository.NewLLMExecutionEventRepo(db)
 	providerModelUpdateRepo := repository.NewProviderModelUpdateRepo(db)
+	openRouterModelRepo := repository.NewOpenRouterModelRepo(db)
 	briefingSnapshotRepo := repository.NewBriefingSnapshotRepo(db)
 	streakRepo := repository.NewReadingStreakRepo(db)
 	prefProfileRepo := repository.NewPreferenceProfileRepo(db)
@@ -86,6 +87,8 @@ func main() {
 	reviewsH := handler.NewReviewsHandler(reviewQueueRepo, weeklyReviewRepo)
 	askInsightsH := handler.NewAskInsightsHandler(askInsightRepo)
 	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo)
+	openRouterCatalogSvc := service.NewOpenRouterCatalogService()
+	openRouterModelsH := handler.NewOpenRouterModelsHandler(openRouterModelRepo, openRouterCatalogSvc)
 
 	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, sourceOptimizationRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher, cache)
@@ -95,6 +98,12 @@ func main() {
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
 	briefingH := handler.NewBriefingHandler(itemRepo, briefingSnapshotRepo, streakRepo, cache)
 	askH := handler.NewAskHandler(itemRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, openAI, cache)
+
+	if latestModels, _, err := openRouterModelRepo.ListLatestSnapshots(ctx); err != nil {
+		log.Printf("openrouter snapshot preload failed: %v", err)
+	} else {
+		service.SetDynamicChatModels(service.OpenRouterSnapshotsToCatalogModels(latestModels))
+	}
 
 	inngestHandler := inngestfn.NewHandler(db, worker, resend, oneSignal, obsidianExportSvc, cache)
 
@@ -216,6 +225,10 @@ func main() {
 		r.Route("/provider-model-updates", func(r chi.Router) {
 			r.Get("/", providerModelUpdateH.ListRecent)
 		})
+		r.Route("/openrouter-models", func(r chi.Router) {
+			r.Get("/", openRouterModelsH.List)
+			r.Post("/sync", openRouterModelsH.Sync)
+		})
 
 		r.Get("/briefing/today", briefingH.Today)
 		r.Get("/dashboard", dashboardH.Get)
@@ -266,6 +279,8 @@ func main() {
 			r.Delete("/xai-key", settingsH.DeleteXAIAPIKey)
 			r.Post("/zai-key", settingsH.SetZAIAPIKey)
 			r.Delete("/zai-key", settingsH.DeleteZAIAPIKey)
+			r.Post("/openrouter-key", settingsH.SetOpenRouterAPIKey)
+			r.Delete("/openrouter-key", settingsH.DeleteOpenRouterAPIKey)
 		})
 	})
 

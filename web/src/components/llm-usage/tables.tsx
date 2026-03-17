@@ -30,6 +30,8 @@ function providerLabel(provider: string) {
       return "xAI";
     case "zai":
       return "Z.ai";
+    case "openrouter":
+      return "OpenRouter";
     default:
       return provider;
   }

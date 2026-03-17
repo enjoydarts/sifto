@@ -12,7 +12,7 @@ def dispatch_by_model(
     handlers: dict[str, Callable[[str | None], dict]],
     default_provider: str = "anthropic",
 ) -> dict:
-    provider = provider_for_model(model) or default_provider
+    provider = str(request.headers.get("X-Sifto-LLM-Provider") or "").strip().lower() or provider_for_model(model) or default_provider
     handler = handlers.get(provider) or handlers.get(default_provider)
     if handler is None:
         raise RuntimeError(f"no handler registered for provider={provider}")

@@ -45,6 +45,12 @@ type BudgetForecastAlertEmail struct {
 	ForecastDeltaUSD float64
 }
 
+type OpenRouterModelAlertEmail struct {
+	ModelCount int
+	Models     []string
+	TargetURL  string
+}
+
 var digestSubjectPrefixPattern = regexp.MustCompile(`^\s*(?:【[^】]*ダイジェスト】\s*|Sifto\s*Digest\s*[-:]?\s*\d{4}-\d{1,2}-\d{1,2}\s*[-:：]?\s*|Sifto\s*Digest\s*\d{4}-\d{1,2}-\d{1,2}\s*[-:：]?\s*|\d{4}年\d{1,2}月\d{1,2}日ダイジェスト\s*[-:：]?\s*)+`)
 
 func FormatDigestEmailSubject(digestDate string, subject string) string {
@@ -185,6 +191,37 @@ func (r *ResendClient) SendBudgetForecastAlert(ctx context.Context, to string, a
 	return nil
 }
 
+func (r *ResendClient) SendOpenRouterModelAlert(ctx context.Context, to string, alert OpenRouterModelAlertEmail) error {
+	if !r.Enabled() {
+		log.Printf("resend disabled (missing RESEND_API_KEY or RESEND_FROM_EMAIL), skip openrouter alert to %s", to)
+		return nil
+	}
+	subject := fmt.Sprintf("Sifto: OpenRouter に新規モデルが %d 件追加されました", alert.ModelCount)
+	htmlBody := buildOpenRouterModelAlertHTML(alert)
+	body, _ := json.Marshal(map[string]any{
+		"from":    r.formattedFrom(),
+		"to":      []string{to},
+		"subject": subject,
+		"html":    htmlBody,
+	})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://api.resend.com/emails", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+r.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := r.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("resend: status %d", resp.StatusCode)
+	}
+	return nil
+}
+
 func (r *ResendClient) formattedFrom() string {
 	if r == nil {
 		return ""
@@ -286,6 +323,25 @@ func buildBudgetForecastAlertHTML(a BudgetForecastAlertEmail) string {
 	sb.WriteString(fmt.Sprintf(`<p style="margin:0"><strong>予算差分:</strong> +$%.4f</p>`, a.ForecastDeltaUSD))
 	sb.WriteString(`</div>`)
 	sb.WriteString(`<p style="color:#666;line-height:1.7">LLM Usage 画面で直近の利用状況と予測ペースを確認してください。</p>`)
+	sb.WriteString(`</body></html>`)
+	return sb.String()
+}
+
+func buildOpenRouterModelAlertHTML(a OpenRouterModelAlertEmail) string {
+	var sb strings.Builder
+	sb.WriteString(`<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:640px;margin:0 auto;padding:20px">`)
+	sb.WriteString(`<h1 style="font-size:24px;border-bottom:2px solid #eee;padding-bottom:8px">OpenRouter に新規モデルが追加されました</h1>`)
+	sb.WriteString(fmt.Sprintf(`<p style="color:#444;line-height:1.7">%d件の新規モデルを検知しました。</p>`, a.ModelCount))
+	if len(a.Models) > 0 {
+		sb.WriteString(`<ul style="padding-left:20px;color:#333;line-height:1.7">`)
+		for _, modelID := range a.Models {
+			sb.WriteString(fmt.Sprintf(`<li>%s</li>`, html.EscapeString(modelID)))
+		}
+		sb.WriteString(`</ul>`)
+	}
+	if strings.TrimSpace(a.TargetURL) != "" {
+		sb.WriteString(fmt.Sprintf(`<p style="margin-top:20px"><a href="%s" style="display:inline-block;background:#18181b;color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none">OpenRouter Models を開く</a></p>`, html.EscapeString(a.TargetURL)))
+	}
 	sb.WriteString(`</body></html>`)
 	return sb.String()
 }

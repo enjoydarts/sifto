@@ -49,6 +49,8 @@ function providerLabel(provider: string) {
       return "xAI";
     case "zai":
       return "Z.ai";
+    case "openrouter":
+      return "OpenRouter";
     default:
       return provider;
   }
@@ -617,6 +619,16 @@ export default function LLMAnalysisPage() {
                 defaultOption: t("llmAnalysis.modelSearchDefault"),
                 searchPlaceholder: t("settings.modelSelect.searchPlaceholder"),
                 noResults: t("settings.modelSelect.noResults"),
+                providerAll: t("settings.modelSelect.providerAll"),
+                modalChoose: t("settings.modelSelect.modalChoose"),
+                close: t("common.close"),
+                confirmTitle: t("settings.modelSelect.confirmTitle"),
+                confirmYes: t("settings.modelSelect.confirmYes"),
+                confirmNo: t("settings.modelSelect.confirmNo"),
+                confirmSuffix: t("settings.modelSelect.confirmSuffix"),
+                providerColumn: t("settings.modelSelect.providerColumn"),
+                modelColumn: t("settings.modelSelect.modelColumn"),
+                pricingColumn: t("settings.modelSelect.pricingColumn"),
               }}
             />
           </label>
@@ -960,6 +972,16 @@ export default function LLMAnalysisPage() {
                 defaultOption: t("llmAnalysis.diff.selectPlaceholder"),
                 searchPlaceholder: t("settings.modelSelect.searchPlaceholder"),
                 noResults: t("settings.modelSelect.noResults"),
+                providerAll: t("settings.modelSelect.providerAll"),
+                modalChoose: t("settings.modelSelect.modalChoose"),
+                close: t("common.close"),
+                confirmTitle: t("settings.modelSelect.confirmTitle"),
+                confirmYes: t("settings.modelSelect.confirmYes"),
+                confirmNo: t("settings.modelSelect.confirmNo"),
+                confirmSuffix: t("settings.modelSelect.confirmSuffix"),
+                providerColumn: t("settings.modelSelect.providerColumn"),
+                modelColumn: t("settings.modelSelect.modelColumn"),
+                pricingColumn: t("settings.modelSelect.pricingColumn"),
               }}
             />
             <p className="text-xs text-zinc-500 lg:pb-2">{t("llmAnalysis.diff.selectHelp")}</p>

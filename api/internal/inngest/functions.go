@@ -28,6 +28,7 @@ import (
 var llmUsageCache service.JSONCache
 
 func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpose string, usage *service.LLMUsage, userID, sourceID, itemID, digestID *string) {
+	usage = service.NormalizeCatalogPricedUsage(purpose, usage)
 	if repo == nil || usage == nil {
 		return
 	}
@@ -450,6 +451,27 @@ func loadUserZAIAPIKey(ctx context.Context, settingsRepo *repository.UserSetting
 	return &plain, nil
 }
 
+func loadUserOpenRouterAPIKey(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string) (*string, error) {
+	if settingsRepo == nil || userID == nil || *userID == "" {
+		return nil, fmt.Errorf("user openrouter api key is required")
+	}
+	enc, err := settingsRepo.GetOpenRouterAPIKeyEncrypted(ctx, *userID)
+	if err != nil || enc == nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("user openrouter api key is required")
+	}
+	if cipher == nil || !cipher.Enabled() {
+		return nil, fmt.Errorf("user secret encryption is not configured")
+	}
+	plain, err := cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt user openrouter key: %w", err)
+	}
+	return &plain, nil
+}
+
 func ptrStringOrNil(v *string) *string {
 	if v == nil || *v == "" {
 		return nil
@@ -506,6 +528,11 @@ func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSetti
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
 						return nil, nil, nil, nil, nil, nil, nil, nil, key, &fallback, nil
 					}
+				case "openrouter":
+					if key, err := loadUserOpenRouterAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
+						return nil, nil, nil, nil, nil, nil, nil, nil, key, &fallback, nil
+					}
 				case "anthropic":
 					if key, err := loadUserAnthropicAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
@@ -539,6 +566,9 @@ func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSetti
 		return nil, nil, nil, nil, nil, nil, nil, key, nil, model, err
 	case "openai":
 		key, err := loadUserOpenAIAPIKey(ctx, settingsRepo, cipher, userID)
+		return nil, nil, nil, nil, nil, nil, nil, nil, key, model, err
+	case "openrouter":
+		key, err := loadUserOpenRouterAPIKey(ctx, settingsRepo, cipher, userID)
 		return nil, nil, nil, nil, nil, nil, nil, nil, key, model, err
 	default:
 		key, err := loadUserAnthropicAPIKey(ctx, settingsRepo, cipher, userID)
@@ -900,6 +930,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(notifyReviewQueueFn(client, db, oneSignal))
 	register(exportObsidianFavoritesFn(client, db, obsidianExport))
 	register(trackProviderModelUpdatesFn(client, db, oneSignal))
+	register(syncOpenRouterModelsFn(client, db, resend, oneSignal))
 	register(generateDigestFn(client, db))
 	register(composeDigestCopyFn(client, db, worker, secretCipher))
 	register(sendDigestFn(client, db, worker, resend, oneSignal, secretCipher))
@@ -1278,6 +1309,156 @@ func trackProviderModelUpdatesFn(client inngestgo.Client, db *pgxpool.Pool, oneS
 			return map[string]any{"providers": len(results), "changes": len(events)}, nil
 		},
 	)
+}
+
+func syncOpenRouterModelsFn(client inngestgo.Client, db *pgxpool.Pool, resend *service.ResendClient, oneSignal *service.OneSignalClient) (inngestgo.ServableFunction, error) {
+	userRepo := repository.NewUserRepo(db)
+	modelRepo := repository.NewOpenRouterModelRepo(db)
+	openrouterSvc := service.NewOpenRouterCatalogService()
+	openAI := service.NewOpenAIClient()
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "sync-openrouter-models", Name: "Sync OpenRouter Models"},
+		inngestgo.CronTrigger("0 3 * * *"),
+		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
+			syncRunID, err := modelRepo.StartSyncRun(ctx)
+			if err != nil {
+				return nil, err
+			}
+			fetchedAt := time.Now().UTC()
+			models, fetchErr := openrouterSvc.FetchTextGenerationModels(ctx)
+			if fetchErr != nil {
+				msg := fetchErr.Error()
+				_ = modelRepo.FinishSyncRun(ctx, syncRunID, 0, 0, &msg)
+				return nil, fetchErr
+			}
+			models = service.EnrichOpenRouterDescriptionsJA(ctx, modelRepo, openAI, models)
+			if err := modelRepo.InsertSnapshots(ctx, syncRunID, fetchedAt, models); err != nil {
+				msg := err.Error()
+				_ = modelRepo.FinishSyncRun(ctx, syncRunID, len(models), 0, &msg)
+				return nil, err
+			}
+			if err := modelRepo.FinishSyncRun(ctx, syncRunID, len(models), len(models), nil); err != nil {
+				return nil, err
+			}
+			service.SetDynamicChatModels(service.OpenRouterSnapshotsToCatalogModels(models))
+
+			prevModelIDs, err := modelRepo.ListPreviousSuccessfulModelIDs(ctx, syncRunID)
+			if err != nil {
+				return nil, err
+			}
+			prevSet := make(map[string]struct{}, len(prevModelIDs))
+			for _, modelID := range prevModelIDs {
+				prevSet[modelID] = struct{}{}
+			}
+			newModelIDs := make([]string, 0)
+			for _, item := range models {
+				if _, ok := prevSet[item.ModelID]; ok {
+					continue
+				}
+				newModelIDs = append(newModelIDs, item.ModelID)
+			}
+			if len(newModelIDs) == 0 {
+				return map[string]any{"fetched": len(models), "new_models": 0}, nil
+			}
+
+			nowJST := timeutil.NowJST()
+			if err := modelRepo.InsertNotificationLogs(ctx, syncRunID, timeutil.StartOfDayJST(nowJST), newModelIDs); err != nil {
+				return nil, err
+			}
+
+			users, err := userRepo.ListAll(ctx)
+			if err != nil {
+				return nil, err
+			}
+			title := fmt.Sprintf("Sifto: OpenRouter に新規モデルが %d 件追加されました", len(newModelIDs))
+			message := buildOpenRouterModelMessage(newModelIDs)
+			targetURL := appPageURL("/openrouter-models")
+			modelsForMail := newModelIDs
+			if len(modelsForMail) > 12 {
+				modelsForMail = modelsForMail[:12]
+			}
+			day := timeutil.StartOfDayJST(nowJST)
+			pushLogRepo := repository.NewPushNotificationLogRepo(db)
+			for _, u := range users {
+				alreadyNotified, err := pushLogRepo.CountByUserKindDay(ctx, u.ID, "openrouter_model_added", day)
+				if err != nil || alreadyNotified > 0 {
+					continue
+				}
+				var oneSignalID *string
+				recipients := 0
+				notified := false
+				if oneSignal != nil && oneSignal.Enabled() {
+					pushRes, pErr := oneSignal.SendToExternalID(
+						ctx,
+						u.Email,
+						title,
+						message,
+						targetURL,
+						map[string]any{
+							"type":        "openrouter_model_added",
+							"url":         targetURL,
+							"model_count": len(newModelIDs),
+						},
+					)
+					if pErr != nil {
+						log.Printf("sync-openrouter-models push user=%s: %v", u.ID, pErr)
+					} else {
+						notified = true
+						if pushRes != nil {
+							if strings.TrimSpace(pushRes.ID) != "" {
+								id := strings.TrimSpace(pushRes.ID)
+								oneSignalID = &id
+							}
+							recipients = pushRes.Recipients
+						}
+					}
+				}
+				if resend != nil && resend.Enabled() && strings.TrimSpace(u.Email) != "" {
+					if err := resend.SendOpenRouterModelAlert(ctx, u.Email, service.OpenRouterModelAlertEmail{
+						ModelCount: len(newModelIDs),
+						Models:     modelsForMail,
+						TargetURL:  targetURL,
+					}); err != nil {
+						log.Printf("sync-openrouter-models email user=%s: %v", u.ID, err)
+					} else {
+						notified = true
+					}
+				}
+				if !notified {
+					continue
+				}
+				if err := pushLogRepo.Insert(ctx, repository.PushNotificationLogInput{
+					UserID:                  u.ID,
+					Kind:                    "openrouter_model_added",
+					ItemID:                  nil,
+					DayJST:                  day,
+					Title:                   title,
+					Message:                 message,
+					OneSignalNotificationID: oneSignalID,
+					Recipients:              recipients,
+				}); err != nil {
+					log.Printf("sync-openrouter-models notify log user=%s: %v", u.ID, err)
+				}
+			}
+			return map[string]any{"fetched": len(models), "new_models": len(newModelIDs)}, nil
+		},
+	)
+}
+
+func buildOpenRouterModelMessage(modelIDs []string) string {
+	if len(modelIDs) == 0 {
+		return "OpenRouter の新規モデルを検知しました。"
+	}
+	preview := modelIDs
+	if len(preview) > 3 {
+		preview = preview[:3]
+	}
+	msg := strings.Join(preview, " / ")
+	if len(modelIDs) > len(preview) {
+		return fmt.Sprintf("%s ほか %d 件", msg, len(modelIDs)-len(preview))
+	}
+	return msg
 }
 
 // ① cron/fetch-rss — 10分ごとにRSSを取得し新規アイテムを登録

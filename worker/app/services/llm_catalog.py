@@ -3,6 +3,15 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+OPENROUTER_ALIAS_PREFIX = "openrouter::"
+
+
+def resolve_model_id(model: str | None) -> str:
+    m = str(model or "").strip()
+    if m.startswith(OPENROUTER_ALIAS_PREFIX):
+        return m[len(OPENROUTER_ALIAS_PREFIX) :]
+    return m
+
 
 def _catalog_path() -> Path:
     env_path = str(os.getenv("LLM_CATALOG_PATH") or "").strip()
@@ -33,6 +42,8 @@ def provider_for_model(model: str | None) -> str:
     m = str(model or "").strip()
     if not m:
         return ""
+    if m.startswith(OPENROUTER_ALIAS_PREFIX):
+        return "openrouter"
     catalog = load_llm_catalog()
     for group in ("chat_models", "embedding_models"):
         for item in catalog.get(group, []):
@@ -65,10 +76,14 @@ def model_pricing(model: str | None) -> dict | None:
     m = str(model or "").strip()
     if not m:
         return None
+    resolved = resolve_model_id(m)
     catalog = load_llm_catalog()
     for group in ("chat_models", "embedding_models"):
         for item in catalog.get(group, []):
             if str(item.get("id") or "").strip() == m:
+                pricing = item.get("pricing")
+                return dict(pricing) if isinstance(pricing, dict) else None
+            if resolved != m and str(item.get("id") or "").strip() == resolved:
                 pricing = item.get("pricing")
                 return dict(pricing) if isinstance(pricing, dict) else None
     return None
@@ -78,10 +93,14 @@ def model_capabilities(model: str | None) -> dict | None:
     m = str(model or "").strip()
     if not m:
         return None
+    resolved = resolve_model_id(m)
     catalog = load_llm_catalog()
     for group in ("chat_models", "embedding_models"):
         for item in catalog.get(group, []):
             if str(item.get("id") or "").strip() == m:
+                capabilities = item.get("capabilities")
+                return dict(capabilities) if isinstance(capabilities, dict) else None
+            if resolved != m and str(item.get("id") or "").strip() == resolved:
                 capabilities = item.get("capabilities")
                 return dict(capabilities) if isinstance(capabilities, dict) else None
     return None

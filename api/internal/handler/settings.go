@@ -639,3 +639,17 @@ func (h *SettingsHandler) DeleteZAIAPIKey(w http.ResponseWriter, r *http.Request
 		"zai_api_key_last4": func(s *model.UserSettings) any { return s.ZAIAPIKeyLast4 },
 	})
 }
+
+func (h *SettingsHandler) SetOpenRouterAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "openrouter", map[string]func(*model.UserSettings) any{
+		"has_openrouter_api_key":   func(s *model.UserSettings) any { return s.HasOpenRouterAPIKey },
+		"openrouter_api_key_last4": func(s *model.UserSettings) any { return s.OpenRouterAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteOpenRouterAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "openrouter", map[string]func(*model.UserSettings) any{
+		"has_openrouter_api_key":   func(s *model.UserSettings) any { return s.HasOpenRouterAPIKey },
+		"openrouter_api_key_last4": func(s *model.UserSettings) any { return s.OpenRouterAPIKeyLast4 },
+	})
+}

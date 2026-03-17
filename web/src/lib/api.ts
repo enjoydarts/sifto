@@ -69,6 +69,39 @@ export interface SourceDailyStats {
   daily_counts: SourceDailyCount[];
 }
 
+export interface OpenRouterSyncRun {
+  id: string;
+  started_at: string;
+  finished_at?: string | null;
+  status: string;
+  fetched_count: number;
+  accepted_count: number;
+  error_message?: string | null;
+}
+
+export interface OpenRouterModelSnapshot {
+  model_id: string;
+  canonical_slug?: string | null;
+  provider_slug: string;
+  display_name: string;
+  description_en?: string | null;
+  description_ja?: string | null;
+  context_length?: number | null;
+  pricing_json: Record<string, unknown> | string;
+  supported_parameters_json: string[] | string;
+  architecture_json: Record<string, unknown> | string;
+  top_provider_json: Record<string, unknown> | string;
+  modality_flags_json: Record<string, unknown> | string;
+  is_text_generation: boolean;
+  is_active: boolean;
+  fetched_at: string;
+}
+
+export interface OpenRouterModelsResponse {
+  latest_run: OpenRouterSyncRun | null;
+  models: OpenRouterModelSnapshot[];
+}
+
 export interface SourceOptimizationMetrics {
   unread_backlog: number;
   read_rate: number;
@@ -700,6 +733,8 @@ export interface UserSettings {
   xai_api_key_last4: string | null;
   has_zai_api_key: boolean;
   zai_api_key_last4: string | null;
+  has_openrouter_api_key: boolean;
+  openrouter_api_key_last4: string | null;
   has_inoreader_oauth?: boolean;
   inoreader_token_expires_at?: string | null;
   monthly_budget_usd: number | null;
@@ -1427,6 +1462,20 @@ export const api = {
       "/settings/zai-key",
       { method: "DELETE" }
     ),
+  setOpenRouterApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_openrouter_api_key: boolean; openrouter_api_key_last4: string | null }>(
+      "/settings/openrouter-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteOpenRouterApiKey: () =>
+    apiFetch<{ user_id: string; has_openrouter_api_key: boolean; openrouter_api_key_last4: string | null }>(
+      "/settings/openrouter-key",
+      { method: "DELETE" }
+    ),
+  getOpenRouterModels: () =>
+    apiFetch<OpenRouterModelsResponse>("/openrouter-models"),
+  syncOpenRouterModels: () =>
+    apiFetch<OpenRouterModelsResponse>("/openrouter-models/sync", { method: "POST" }),
   deleteInoreaderOAuth: () =>
     apiFetch<{ user_id: string; has_inoreader_oauth: boolean; inoreader_token_expires: string | null }>(
       "/settings/inoreader-oauth",

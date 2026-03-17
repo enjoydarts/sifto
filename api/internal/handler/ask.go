@@ -97,10 +97,11 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		settings.HasMistralAPIKey,
 		settings.HasXAIAPIKey,
 		settings.HasZAIAPIKey,
+		settings.HasOpenRouterAPIKey,
 		settings.HasOpenAIAPIKey,
 	)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or groq or deepseek or alibaba or mistral or xai or zai or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or groq or deepseek or alibaba or mistral or xai or zai or openrouter or openai api key is required", http.StatusBadRequest)
 		return
 	}
 	cacheKey := cacheKeyAsk(userID, query, *modelName, embeddingModel, body.Days, body.UnreadOnly, body.Limit, body.SourceIDs)
@@ -157,11 +158,15 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	mistralKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
+	openRouterKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
 	openAIChatKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
-	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, groqKey != nil, deepseekKey != nil, alibabaKey != nil, mistralKey != nil, xaiKey != nil, zaiKey != nil, openAIChatKey != nil)
+	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, groqKey != nil, deepseekKey != nil, alibabaKey != nil, mistralKey != nil, xaiKey != nil, zaiKey != nil, openRouterKey != nil, openAIChatKey != nil)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or groq or deepseek or alibaba or mistral or xai or zai or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or groq or deepseek or alibaba or mistral or xai or zai or openrouter or openai api key is required", http.StatusBadRequest)
 		return
+	}
+	if service.LLMProviderForModel(modelName) == "openrouter" {
+		openAIChatKey = openRouterKey
 	}
 
 	workerCandidates := make([]service.AskCandidate, 0, len(candidates))
@@ -188,6 +193,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("ask worker: %v", err), http.StatusBadGateway)
 		return
 	}
+	askResp.LLM = service.NormalizeCatalogPricedUsage("ask", askResp.LLM)
 	recordAskLLMUsage(r.Context(), h.llmUsageRepo, h.cache, "ask", askResp.LLM, &userID)
 
 	citationMap := make(map[string]model.AskCandidate, len(candidates))
@@ -298,7 +304,7 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 	return &v
 }
 
-func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasXAI, hasZAI, hasOpenAI bool) *string {
+func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasXAI, hasZAI, hasOpenRouter, hasOpenAI bool) *string {
 	if settings != nil && settings.AskModel != nil && strings.TrimSpace(*settings.AskModel) != "" {
 		v := strings.TrimSpace(*settings.AskModel)
 		switch service.LLMProviderForModel(&v) {
@@ -332,6 +338,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			}
 		case "openai":
 			if hasOpenAI {
+				return &v
+			}
+		case "openrouter":
+			if hasOpenRouter {
 				return &v
 			}
 		default:
@@ -375,6 +385,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			if hasOpenAI {
 				return &v
 			}
+		case "openrouter":
+			if hasOpenRouter {
+				return &v
+			}
 		default:
 			if hasAnthropic {
 				return &v
@@ -414,6 +428,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 			}
 		case "openai":
 			if hasOpenAI {
+				return &v
+			}
+		case "openrouter":
+			if hasOpenRouter {
 				return &v
 			}
 		default:
@@ -464,6 +482,14 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasGr
 				v := service.DefaultLLMModelForPurpose(provider, "ask")
 				return &v
 			}
+		case "openrouter":
+			if hasOpenRouter {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				if strings.TrimSpace(v) == "" {
+					continue
+				}
+				return &v
+			}
 		case "anthropic":
 			if hasAnthropic {
 				v := service.DefaultLLMModelForPurpose(provider, "ask")
@@ -505,6 +531,7 @@ func loadAndDecryptUserSecret(
 }
 
 func recordAskLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, cache service.JSONCache, purpose string, usage *service.LLMUsage, userID *string) {
+	usage = service.NormalizeCatalogPricedUsage(purpose, usage)
 	if repo == nil || usage == nil || userID == nil || *userID == "" {
 		return
 	}

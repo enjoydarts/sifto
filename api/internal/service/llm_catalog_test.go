@@ -32,6 +32,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "grok-4-fast-non-reasoning", provider: "xai"},
 		{model: "glm-4.7-flash", provider: "zai"},
 		{model: "gpt-5-mini", provider: "openai"},
+		{model: "openrouter::openai/gpt-oss-120b", provider: "openrouter"},
 	}
 	for _, tt := range tests {
 		if got := CatalogProviderForModel(tt.model); got != tt.provider {

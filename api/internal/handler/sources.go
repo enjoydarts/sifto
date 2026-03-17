@@ -630,6 +630,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 	mistralAPIKey := h.getUserMistralAPIKey(ctx, userID)
 	xaiAPIKey := h.getUserXAIAPIKey(ctx, userID)
 	zaiAPIKey := h.getUserZAIAPIKey(ctx, userID)
+	openRouterAPIKey := h.getUserOpenRouterAPIKey(ctx, userID)
 	openAIAPIKey := h.getUserOpenAIAPIKey(ctx, userID)
 	anthropicSourceSuggestionModel := h.getUserSourceSuggestionModel(ctx, userID)
 	anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, openAIAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
@@ -641,6 +642,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 		mistralAPIKey,
 		xaiAPIKey,
 		zaiAPIKey,
+		openRouterAPIKey,
 		openAIAPIKey,
 		anthropicSourceSuggestionModel,
 	)
@@ -983,6 +985,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 			"stage": "rank",
 		}
 	}
+	resp.LLM = service.NormalizeCatalogPricedUsage("source_suggestion", resp.LLM)
 	h.recordSourceSuggestionLLMUsage(ctx, userID, resp.LLM)
 	if len(resp.Items) == 0 {
 		if resp.LLM != nil {
@@ -1237,6 +1240,25 @@ func (h *SourceHandler) getUserZAIAPIKey(ctx context.Context, userID string) *st
 	return &plain
 }
 
+func (h *SourceHandler) getUserOpenRouterAPIKey(ctx context.Context, userID string) *string {
+	if h.settingsRepo == nil || h.cipher == nil {
+		return nil
+	}
+	enc, err := h.settingsRepo.GetOpenRouterAPIKeyEncrypted(ctx, userID)
+	if err != nil || enc == nil || *enc == "" {
+		return nil
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil
+	}
+	plain = strings.TrimSpace(plain)
+	if plain == "" {
+		return nil
+	}
+	return &plain
+}
+
 func (h *SourceHandler) getUserOpenAIAPIKey(ctx context.Context, userID string) *string {
 	if h.settingsRepo == nil || h.cipher == nil {
 		return nil
@@ -1256,7 +1278,7 @@ func (h *SourceHandler) getUserOpenAIAPIKey(ctx context.Context, userID string) 
 	return &plain
 }
 
-func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, openAIAPIKey, model *string) (*string, *string, *string, *string, *string, *string, *string, *string, *string, *string) {
+func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, openAIAPIKey, model *string) (*string, *string, *string, *string, *string, *string, *string, *string, *string, *string) {
 	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
 	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
 	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
@@ -1265,6 +1287,7 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, deepse
 	hasMistral := mistralAPIKey != nil && strings.TrimSpace(*mistralAPIKey) != ""
 	hasXAI := xaiAPIKey != nil && strings.TrimSpace(*xaiAPIKey) != ""
 	hasZAI := zaiAPIKey != nil && strings.TrimSpace(*zaiAPIKey) != ""
+	hasOpenRouter := openRouterAPIKey != nil && strings.TrimSpace(*openRouterAPIKey) != ""
 	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
 	purpose := "source_suggestion"
 
@@ -1302,6 +1325,10 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, deepse
 		case "zai":
 			if hasZAI {
 				return nil, nil, nil, nil, nil, nil, nil, zaiAPIKey, nil, resolved
+			}
+		case "openrouter":
+			if hasOpenRouter {
+				return nil, nil, nil, nil, nil, nil, nil, nil, openRouterAPIKey, resolved
 			}
 		case "openai":
 			if hasOpenAI {
@@ -1417,6 +1444,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	if err != nil || resp == nil {
 		return
 	}
+	resp.LLM = service.NormalizeCatalogPricedUsage("source_suggestion", resp.LLM)
 	h.recordSourceSuggestionLLMUsage(ctx, userID, resp.LLM)
 	seedItems := resp.Items
 	if len(seedItems) > 10 {
@@ -1565,6 +1593,7 @@ func minInt(a, b int) int {
 }
 
 func (h *SourceHandler) recordSourceSuggestionLLMUsage(ctx context.Context, userID string, llm *service.LLMUsage) {
+	llm = service.NormalizeCatalogPricedUsage("source_suggestion", llm)
 	if h.llmUsageRepo == nil || llm == nil {
 		return
 	}

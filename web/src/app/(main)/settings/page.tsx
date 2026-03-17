@@ -128,6 +128,8 @@ export default function SettingsPage() {
   const [deletingXAIKey, setDeletingXAIKey] = useState(false);
   const [savingZAIKey, setSavingZAIKey] = useState(false);
   const [deletingZAIKey, setDeletingZAIKey] = useState(false);
+  const [savingOpenRouterKey, setSavingOpenRouterKey] = useState(false);
+  const [deletingOpenRouterKey, setDeletingOpenRouterKey] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -150,6 +152,7 @@ export default function SettingsPage() {
   const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
   const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
   const [zaiApiKeyInput, setZaiApiKeyInput] = useState("");
+  const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
   const [llmSectionOpen, setLLMSectionOpen] = useState(true);
   const [operationsSectionOpen, setOperationsSectionOpen] = useState(true);
@@ -296,6 +299,16 @@ export default function SettingsPage() {
     defaultOption: t("settings.modelSelect.default"),
     searchPlaceholder: t("settings.modelSelect.searchPlaceholder"),
     noResults: t("settings.modelSelect.noResults"),
+    providerAll: t("settings.modelSelect.providerAll"),
+    modalChoose: t("settings.modelSelect.modalChoose"),
+    close: t("common.close"),
+    confirmTitle: t("settings.modelSelect.confirmTitle"),
+    confirmYes: t("settings.modelSelect.confirmYes"),
+    confirmNo: t("settings.modelSelect.confirmNo"),
+    confirmSuffix: t("settings.modelSelect.confirmSuffix"),
+    providerColumn: t("settings.modelSelect.providerColumn"),
+    modelColumn: t("settings.modelSelect.modelColumn"),
+    pricingColumn: t("settings.modelSelect.pricingColumn"),
   }), [t]);
 
   const applyCostPerformancePreset = useCallback(() => {
@@ -491,6 +504,21 @@ export default function SettingsPage() {
       deleting: deletingZAIKey,
       notSet: t("settings.zaiNotSet"),
     },
+    {
+      id: "openrouter",
+      title: t("settings.openrouterTitle"),
+      description: t("settings.openrouterDescription"),
+      configured: settings.has_openrouter_api_key,
+      last4: settings.openrouter_api_key_last4,
+      value: openRouterApiKeyInput,
+      onChange: setOpenRouterApiKeyInput,
+      onSubmit: submitOpenRouterApiKey,
+      onDelete: handleDeleteOpenRouterApiKey,
+      placeholder: "sk-or-v1-...",
+      saving: savingOpenRouterKey,
+      deleting: deletingOpenRouterKey,
+      notSet: t("settings.openrouterNotSet"),
+    },
   ];
   }, [
     t,
@@ -504,6 +532,7 @@ export default function SettingsPage() {
     mistralApiKeyInput,
     xaiApiKeyInput,
     zaiApiKeyInput,
+    openRouterApiKeyInput,
     savingAnthropicKey,
     deletingAnthropicKey,
     savingOpenAIKey,
@@ -522,6 +551,8 @@ export default function SettingsPage() {
     deletingXAIKey,
     savingZAIKey,
     deletingZAIKey,
+    savingOpenRouterKey,
+    deletingOpenRouterKey,
   ]);
   const configuredProviderCount = useMemo(
     () => accessCards.filter((card) => card.configured).length,
@@ -1056,6 +1087,45 @@ export default function SettingsPage() {
     }
   }
 
+  async function submitOpenRouterApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingOpenRouterKey(true);
+    try {
+      if (!openRouterApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setOpenRouterApiKey(openRouterApiKeyInput.trim());
+      setOpenRouterApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.openrouterSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingOpenRouterKey(false);
+    }
+  }
+
+  async function handleDeleteOpenRouterApiKey() {
+    if (!(await confirm({
+      title: t("settings.openrouterDeleteTitle"),
+      message: t("settings.openrouterDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingOpenRouterKey(true);
+    try {
+      await api.deleteOpenRouterApiKey();
+      await load();
+      showToast(t("settings.toast.openrouterDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingOpenRouterKey(false);
+    }
+  }
+
   async function handleDeleteInoreaderOAuth() {
     if (!(await confirm({
       title: t("settings.inoreaderDeleteTitle"),
@@ -1232,6 +1302,7 @@ export default function SettingsPage() {
                     onChange={(value) => onChangeLLMModel(setAnthropicFactsModel, value)}
                     options={optionsForPurpose("facts")}
                     labels={modelSelectLabels}
+                    variant="modal"
                   />
                   <ModelSelect
                     label={t("settings.model.summary")}
@@ -1239,6 +1310,7 @@ export default function SettingsPage() {
                     onChange={(value) => onChangeLLMModel(setAnthropicSummaryModel, value)}
                     options={optionsForPurpose("summary")}
                     labels={modelSelectLabels}
+                    variant="modal"
                   />
                 </div>
               </section>
@@ -1252,6 +1324,7 @@ export default function SettingsPage() {
                     onChange={(value) => onChangeLLMModel(setAnthropicDigestClusterModel, value)}
                     options={optionsForPurpose("digest_cluster_draft")}
                     labels={modelSelectLabels}
+                    variant="modal"
                   />
                   <ModelSelect
                     label={t("settings.model.digest")}
@@ -1259,6 +1332,7 @@ export default function SettingsPage() {
                     onChange={(value) => onChangeLLMModel(setAnthropicDigestModel, value)}
                     options={optionsForPurpose("digest")}
                     labels={modelSelectLabels}
+                    variant="modal"
                   />
                 </div>
               </section>
@@ -1272,6 +1346,7 @@ export default function SettingsPage() {
                     onChange={(value) => onChangeLLMModel(setFactsCheckModel, value)}
                     options={optionsForPurpose("facts")}
                     labels={modelSelectLabels}
+                    variant="modal"
                   />
                   <ModelSelect
                     label={t("settings.model.faithfulnessCheck")}
@@ -1279,6 +1354,7 @@ export default function SettingsPage() {
                     onChange={(value) => onChangeLLMModel(setFaithfulnessCheckModel, value)}
                     options={optionsForPurpose("summary")}
                     labels={modelSelectLabels}
+                    variant="modal"
                   />
                 </div>
               </section>
@@ -1292,6 +1368,7 @@ export default function SettingsPage() {
                     onChange={(value) => onChangeLLMModel(setAnthropicSourceSuggestionModel, value)}
                     options={sourceSuggestionModelOptions}
                     labels={modelSelectLabels}
+                    variant="modal"
                   />
                   <ModelSelect
                     label={t("settings.model.ask")}
@@ -1299,6 +1376,7 @@ export default function SettingsPage() {
                     onChange={(value) => onChangeLLMModel(setAnthropicAskModel, value)}
                     options={optionsForPurpose("ask")}
                     labels={modelSelectLabels}
+                    variant="modal"
                   />
                   <ModelSelect
                     label={t("settings.model.embeddings")}
@@ -1306,6 +1384,7 @@ export default function SettingsPage() {
                     onChange={(value) => onChangeLLMModel(setOpenAIEmbeddingModel, value)}
                     options={openAIEmbeddingModelOptions}
                     labels={modelSelectLabels}
+                    variant="modal"
                   />
                 </div>
               </section>

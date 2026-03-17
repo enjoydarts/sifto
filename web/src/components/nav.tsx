@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   Layers3,
+  Link2,
   Mail,
   Newspaper,
   Rss,
@@ -44,6 +45,7 @@ const secondaryLinks = [
   { href: "/digests", labelKey: "nav.digests", icon: Mail },
   { href: "/llm-usage", labelKey: "nav.llmUsage", icon: Brain },
   { href: "/llm-analysis", labelKey: "nav.llmAnalysis", icon: TableProperties },
+  { href: "/openrouter-models", labelKey: "nav.openrouterModels", icon: Link2 },
   { href: "/settings", labelKey: "nav.settings", icon: SettingsIcon },
   { href: "/debug/digests", labelKey: "nav.debug", icon: Bug },
 ];
@@ -59,11 +61,11 @@ const secondaryLinkGroups = [
   },
   {
     labelKey: "nav.group.llm",
-    items: secondaryLinks.slice(6, 8),
+    items: secondaryLinks.slice(6, 9),
   },
   {
     labelKey: "nav.group.system",
-    items: secondaryLinks.slice(8),
+    items: secondaryLinks.slice(9),
   },
 ];
 

@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlignLeft, ArrowRight, FileText, Info, Link2, ListChecks, Sparkles, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, ItemDetail, RelatedItem } from "@/lib/api";
+import { formatModelDisplayName } from "@/lib/model-display";
 import { ItemHighlightList } from "@/components/items/item-highlight-list";
 import { ItemNoteEditor } from "@/components/items/item-note-editor";
 import { Tabs, TabList, Tab, TabPanel } from "@/components/tabs";
@@ -832,7 +833,7 @@ export default function ItemDetailPage() {
                       className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
                       title={t("itemDetail.summaryModelTitle")}
                     >
-                      {item.summary_llm.provider} / {item.summary_llm.model}
+                      {item.summary_llm.provider} / {formatModelDisplayName(item.summary_llm.model)}
                     </span>
                   )}
                 </div>
@@ -893,7 +894,7 @@ export default function ItemDetailPage() {
                           className="rounded bg-white px-2 py-1 text-zinc-600 ring-1 ring-zinc-200"
                           title={t("itemDetail.faithfulnessModelTitle")}
                         >
-                          {item.faithfulness_llm.provider} / {item.faithfulness_llm.model}
+                          {item.faithfulness_llm.provider} / {formatModelDisplayName(item.faithfulness_llm.model)}
                         </span>
                       )}
                     </div>
@@ -929,7 +930,7 @@ export default function ItemDetailPage() {
                       className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
                       title={t("itemDetail.factsModelTitle")}
                     >
-                      {item.facts_llm.provider} / {item.facts_llm.model}
+                      {item.facts_llm.provider} / {formatModelDisplayName(item.facts_llm.model)}
                     </span>
                   )}
                 </div>
@@ -942,7 +943,7 @@ export default function ItemDetailPage() {
                           className="rounded bg-white px-2 py-1 text-zinc-600 ring-1 ring-zinc-200"
                           title={t("itemDetail.factsCheckModelTitle")}
                         >
-                          {item.facts_check_llm.provider} / {item.facts_check_llm.model}
+                          {item.facts_check_llm.provider} / {formatModelDisplayName(item.facts_check_llm.model)}
                         </span>
                       )}
                     </div>

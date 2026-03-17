@@ -72,7 +72,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		body.Days = 30
 	}
 	if body.Limit <= 0 {
-		body.Limit = 8
+		body.Limit = 12
 	}
 	if body.Limit > 12 {
 		body.Limit = 12
@@ -261,6 +261,13 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		Bullets:      bullets,
 		Citations:    citations,
 		RelatedItems: candidates,
+	}
+	if askResp.LLM != nil {
+		resp.AskLLM = &model.AskLLM{
+			Provider:      askResp.LLM.Provider,
+			Model:         askResp.LLM.Model,
+			PricingSource: askResp.LLM.PricingSource,
+		}
 	}
 	if h.cache != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, askCacheTTL); err != nil {
@@ -538,8 +545,23 @@ func formatAskCitationMarkers(text string, citationIndexByItemID map[string]int)
 		used[n] = struct{}{}
 		return fmt.Sprintf("[%d]", n)
 	})
-	out = strings.Join(strings.Fields(out), " ")
-	out = strings.ReplaceAll(out, " 。", "。")
-	out = strings.ReplaceAll(out, " 、", "、")
-	return strings.TrimSpace(out)
+	lines := strings.Split(out, "\n")
+	normalized := make([]string, 0, len(lines))
+	prevBlank := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if !prevBlank && len(normalized) > 0 {
+				normalized = append(normalized, "")
+			}
+			prevBlank = true
+			continue
+		}
+		trimmed = strings.Join(strings.Fields(trimmed), " ")
+		trimmed = strings.ReplaceAll(trimmed, " 。", "。")
+		trimmed = strings.ReplaceAll(trimmed, " 、", "、")
+		normalized = append(normalized, trimmed)
+		prevBlank = false
+	}
+	return strings.TrimSpace(strings.Join(normalized, "\n"))
 }

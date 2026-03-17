@@ -326,6 +326,13 @@ type AskResponse struct {
 	Bullets      []string       `json:"bullets,omitempty"`
 	Citations    []AskCitation  `json:"citations"`
 	RelatedItems []AskCandidate `json:"related_items"`
+	AskLLM       *AskLLM        `json:"ask_llm,omitempty"`
+}
+
+type AskLLM struct {
+	Provider      string `json:"provider"`
+	Model         string `json:"model"`
+	PricingSource string `json:"pricing_source,omitempty"`
 }
 
 type ItemListResponse struct {

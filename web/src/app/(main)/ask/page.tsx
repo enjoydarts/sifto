@@ -5,6 +5,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Search } from "lucide-react";
 import { api, AskResponse, ReadingGoal } from "@/lib/api";
+import { formatModelDisplayName } from "@/lib/model-display";
 import { InsightSaveDialog } from "@/components/ask/insight-save-dialog";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -17,6 +18,7 @@ const PRESET_KEYS = [
   "ask.preset.ai",
   "ask.preset.followups",
 ] as const;
+const ASK_LIMIT = 12;
 
 export default function AskPage() {
   const { t } = useI18n();
@@ -44,7 +46,7 @@ export default function AskPage() {
   const activeGoals = readingGoalsQuery.data?.active ?? EMPTY_GOALS;
   const presets = useMemo(() => PRESET_KEYS.map((key) => t(key)), [t]);
   const scopeLabel = useMemo(
-    () => `${days}d / ${unreadOnly ? t("ask.unreadOnly") : t("ask.allItems")} / top 8`,
+    () => `${days}d / ${unreadOnly ? t("ask.unreadOnly") : t("ask.allItems")} / top ${ASK_LIMIT}`,
     [days, unreadOnly, t]
   );
 
@@ -58,7 +60,7 @@ export default function AskPage() {
         query: query.trim(),
         days: Number(days),
         unread_only: unreadOnly,
-        limit: 8,
+        limit: ASK_LIMIT,
       });
       setResult(next);
     } catch (err) {
@@ -168,6 +170,11 @@ export default function AskPage() {
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-400">{t("ask.answerLabel")}</p>
               <div className="flex items-center gap-3">
+                {result.ask_llm ? (
+                  <p className="text-xs text-zinc-400">
+                    {result.ask_llm.provider} / {formatModelDisplayName(result.ask_llm.model)}
+                  </p>
+                ) : null}
                 <p className="text-xs text-zinc-400">{scopeLabel}</p>
                 <button
                   type="button"

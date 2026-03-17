@@ -21,10 +21,14 @@ ASK_SYSTEM_INSTRUCTION = """# Role
 - 根拠は候補記事だけに限定してください。
 - 候補記事から判断できないことは「候補記事からは判断できない」と明記してください。
 - 出力はJSONオブジェクトのみとし、余計な説明文は書かないでください。
-- answer は2〜3文にしてください。
-- bullets は2〜3件にしてください。
-- citations は2〜3件に絞ってください。
+- answer は質問の複雑さに応じて3〜10文にしてください。
+- 短く答えられる質問では冗長にせず、比較・整理・時系列説明が必要な質問では十分な文数を使ってください。
+- answer は読みやすさを優先し、話題や論点の切れ目で適時改行してください。
+- 1段落あたり1〜3文を目安にし、必要に応じて空行を入れてください。
+- bullets は3〜5件にしてください。
+- citations は3〜5件にしてください。
 - citations は同じ話題に偏らせず、回答の主要な論点を支える記事を優先してください。
+- citations の reason は「その記事が回答のどの論点を支えるか」が分かるよう、1文で具体的に書いてください。
 - answer の各文末には対応する item_id を [[item_id]] 形式で付けてください。
 - bullets には citation マーカーを付けないでください。
 - answer で使う [[item_id]] は citations に含まれる item_id だけを使ってください。
@@ -109,10 +113,10 @@ def build_ask_task(query: str, candidates: list[dict]) -> dict:
         )
     prompt = f"""# Output
 {{
-  "answer": "2〜3文の回答 [[item_id]]",
-  "bullets": ["補足ポイント1", "補足ポイント2"],
+  "answer": "必要に応じて3〜10文の回答 [[item_id]]。話題の切れ目で適時改行する",
+  "bullets": ["補足ポイント1", "補足ポイント2", "補足ポイント3"],
   "citations": [
-    {{"item_id": "uuid", "reason": "この観点の根拠"}}
+    {{"item_id": "uuid", "reason": "この観点を支える理由"}}
   ]
 }}
 
@@ -152,7 +156,7 @@ def parse_ask_result(text: str, candidates: list[dict], *, error_prefix: str) ->
             )
     if not answer:
         raise RuntimeError(f"{error_prefix}: response_snippet={text[:500]}")
-    if len(citations) < min(3, len(candidates)):
+    if len(citations) < min(4, len(candidates)):
         seen = {str(c.get('item_id') or '').strip() for c in citations}
         for item in candidates:
             item_id = str(item.get('item_id') or '').strip()
@@ -160,9 +164,9 @@ def parse_ask_result(text: str, candidates: list[dict], *, error_prefix: str) ->
                 continue
             citations.append({"item_id": item_id, "reason": "回答に関連する候補記事"})
             seen.add(item_id)
-            if len(citations) >= min(5, len(candidates)):
+            if len(citations) >= min(6, len(candidates)):
                 break
-    return {"answer": answer, "bullets": bullets[:3], "citations": citations[:3]}
+    return {"answer": answer, "bullets": bullets[:5], "citations": citations[:5]}
 
 
 def build_rank_feed_task(

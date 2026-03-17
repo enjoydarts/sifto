@@ -795,12 +795,19 @@ export interface AskCandidate extends Item {
   similarity: number;
 }
 
+export interface AskLLM {
+  provider: string;
+  model: string;
+  pricing_source?: string;
+}
+
 export interface AskResponse {
   query: string;
   answer: string;
   bullets?: string[];
   citations?: AskCitation[];
   related_items?: AskCandidate[];
+  ask_llm?: AskLLM | null;
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {

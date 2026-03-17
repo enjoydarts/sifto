@@ -15,6 +15,14 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/repository"
 )
 
+type OpenRouterModelAvailability string
+
+const (
+	OpenRouterModelAvailable   OpenRouterModelAvailability = "available"
+	OpenRouterModelConstrained OpenRouterModelAvailability = "constrained"
+	OpenRouterModelRemoved     OpenRouterModelAvailability = "removed"
+)
+
 type OpenRouterCatalogService struct {
 	http *http.Client
 }
@@ -98,7 +106,7 @@ func OpenRouterSnapshotsToCatalogModels(models []repository.OpenRouterModelSnaps
 			Highlights:        []string{"experimental"},
 			Comment:           comment,
 			Capabilities: &LLMModelCapabilities{
-				SupportsStructuredOutput:  supportsAnyParam(supportedParams, "response_format", "structured_outputs"),
+				SupportsStructuredOutput:  OpenRouterSnapshotSupportsStructuredOutput(item),
 				SupportsStrictJSONSchema:  false,
 				SupportsReasoning:         supportsAnyParam(supportedParams, "reasoning"),
 				SupportsToolCalling:       supportsAnyParam(supportedParams, "tools"),
@@ -114,6 +122,18 @@ func OpenRouterSnapshotsToCatalogModels(models []repository.OpenRouterModelSnaps
 		})
 	}
 	return out
+}
+
+func OpenRouterSnapshotSupportsStructuredOutput(item repository.OpenRouterModelSnapshot) bool {
+	supportedParams := parseJSONArray(item.SupportedParametersJSON)
+	return supportsAnyParam(supportedParams, "response_format", "structured_outputs")
+}
+
+func OpenRouterSnapshotAvailability(item repository.OpenRouterModelSnapshot) (OpenRouterModelAvailability, string) {
+	if !OpenRouterSnapshotSupportsStructuredOutput(item) {
+		return OpenRouterModelConstrained, "structured_output"
+	}
+	return OpenRouterModelAvailable, ""
 }
 
 func EnrichOpenRouterDescriptionsJA(ctx context.Context, repo *repository.OpenRouterModelRepo, openAI *OpenAIClient, models []repository.OpenRouterModelSnapshot) []repository.OpenRouterModelSnapshot {

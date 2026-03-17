@@ -1352,45 +1352,28 @@ func syncOpenRouterModelsFn(client inngestgo.Client, db *pgxpool.Pool, resend *s
 			}
 			service.SetDynamicChatModels(service.OpenRouterSnapshotsToCatalogModels(models))
 
-			prevModelIDs, err := modelRepo.ListPreviousSuccessfulModelIDs(ctx, syncRunID)
+			prevModels, err := modelRepo.ListPreviousSuccessfulSnapshots(ctx, syncRunID)
 			if err != nil {
 				return nil, err
 			}
-			prevSet := make(map[string]struct{}, len(prevModelIDs))
-			for _, modelID := range prevModelIDs {
-				prevSet[modelID] = struct{}{}
-			}
-			newModelIDs := make([]string, 0)
-			for _, item := range models {
-				if _, ok := prevSet[item.ModelID]; ok {
-					continue
-				}
-				newModelIDs = append(newModelIDs, item.ModelID)
-			}
-			if len(newModelIDs) == 0 {
-				return map[string]any{"fetched": len(models), "new_models": 0}, nil
+			addedModelIDs, constrainedModelIDs, removedModelIDs := diffOpenRouterModelAvailability(prevModels, models)
+			if len(addedModelIDs) == 0 && len(constrainedModelIDs) == 0 && len(removedModelIDs) == 0 {
+				return map[string]any{"fetched": len(models), "added_models": 0, "constrained_models": 0, "removed_models": 0}, nil
 			}
 
 			nowJST := timeutil.NowJST()
-			if err := modelRepo.InsertNotificationLogs(ctx, syncRunID, timeutil.StartOfDayJST(nowJST), newModelIDs); err != nil {
-				return nil, err
-			}
 
 			users, err := userRepo.ListAll(ctx)
 			if err != nil {
 				return nil, err
 			}
-			title := fmt.Sprintf("Sifto: OpenRouter に新規モデルが %d 件追加されました", len(newModelIDs))
-			message := buildOpenRouterModelMessage(newModelIDs)
+			title := buildOpenRouterModelAlertTitle(addedModelIDs, constrainedModelIDs, removedModelIDs)
+			message := buildOpenRouterModelMessage(addedModelIDs, constrainedModelIDs, removedModelIDs)
 			targetURL := appPageURL("/openrouter-models")
-			modelsForMail := newModelIDs
-			if len(modelsForMail) > 12 {
-				modelsForMail = modelsForMail[:12]
-			}
 			day := timeutil.StartOfDayJST(nowJST)
 			pushLogRepo := repository.NewPushNotificationLogRepo(db)
 			for _, u := range users {
-				alreadyNotified, err := pushLogRepo.CountByUserKindDay(ctx, u.ID, "openrouter_model_added", day)
+				alreadyNotified, err := pushLogRepo.CountByUserKindDay(ctx, u.ID, "openrouter_model_update", day)
 				if err != nil || alreadyNotified > 0 {
 					continue
 				}
@@ -1405,9 +1388,11 @@ func syncOpenRouterModelsFn(client inngestgo.Client, db *pgxpool.Pool, resend *s
 						message,
 						targetURL,
 						map[string]any{
-							"type":        "openrouter_model_added",
-							"url":         targetURL,
-							"model_count": len(newModelIDs),
+							"type":              "openrouter_model_update",
+							"url":               targetURL,
+							"added_count":       len(addedModelIDs),
+							"constrained_count": len(constrainedModelIDs),
+							"removed_count":     len(removedModelIDs),
 						},
 					)
 					if pErr != nil {
@@ -1425,9 +1410,10 @@ func syncOpenRouterModelsFn(client inngestgo.Client, db *pgxpool.Pool, resend *s
 				}
 				if resend != nil && resend.Enabled() && strings.TrimSpace(u.Email) != "" {
 					if err := resend.SendOpenRouterModelAlert(ctx, u.Email, service.OpenRouterModelAlertEmail{
-						ModelCount: len(newModelIDs),
-						Models:     modelsForMail,
-						TargetURL:  targetURL,
+						Added:       limitStrings(addedModelIDs, 12),
+						Constrained: limitStrings(constrainedModelIDs, 12),
+						Removed:     limitStrings(removedModelIDs, 12),
+						TargetURL:   targetURL,
 					}); err != nil {
 						log.Printf("sync-openrouter-models email user=%s: %v", u.ID, err)
 					} else {
@@ -1439,7 +1425,7 @@ func syncOpenRouterModelsFn(client inngestgo.Client, db *pgxpool.Pool, resend *s
 				}
 				if err := pushLogRepo.Insert(ctx, repository.PushNotificationLogInput{
 					UserID:                  u.ID,
-					Kind:                    "openrouter_model_added",
+					Kind:                    "openrouter_model_update",
 					ItemID:                  nil,
 					DayJST:                  day,
 					Title:                   title,
@@ -1450,24 +1436,72 @@ func syncOpenRouterModelsFn(client inngestgo.Client, db *pgxpool.Pool, resend *s
 					log.Printf("sync-openrouter-models notify log user=%s: %v", u.ID, err)
 				}
 			}
-			return map[string]any{"fetched": len(models), "new_models": len(newModelIDs)}, nil
+			return map[string]any{
+				"fetched":            len(models),
+				"added_models":       len(addedModelIDs),
+				"constrained_models": len(constrainedModelIDs),
+				"removed_models":     len(removedModelIDs),
+			}, nil
 		},
 	)
 }
 
-func buildOpenRouterModelMessage(modelIDs []string) string {
-	if len(modelIDs) == 0 {
-		return "OpenRouter の新規モデルを検知しました。"
+func buildOpenRouterModelAlertTitle(added, constrained, removed []string) string {
+	total := len(added) + len(constrained) + len(removed)
+	return fmt.Sprintf("Sifto: OpenRouter モデル更新 %d 件", total)
+}
+
+func buildOpenRouterModelMessage(added, constrained, removed []string) string {
+	parts := make([]string, 0, 3)
+	if len(added) > 0 {
+		parts = append(parts, fmt.Sprintf("追加 %d件", len(added)))
 	}
-	preview := modelIDs
-	if len(preview) > 3 {
-		preview = preview[:3]
+	if len(constrained) > 0 {
+		parts = append(parts, fmt.Sprintf("制約あり %d件", len(constrained)))
 	}
-	msg := strings.Join(preview, " / ")
-	if len(modelIDs) > len(preview) {
-		return fmt.Sprintf("%s ほか %d 件", msg, len(modelIDs)-len(preview))
+	if len(removed) > 0 {
+		parts = append(parts, fmt.Sprintf("削除 %d件", len(removed)))
 	}
-	return msg
+	if len(parts) == 0 {
+		return "OpenRouter のモデル更新を検知しました。"
+	}
+	return strings.Join(parts, " / ")
+}
+
+func limitStrings(in []string, limit int) []string {
+	if len(in) <= limit {
+		return append([]string{}, in...)
+	}
+	return append([]string{}, in[:limit]...)
+}
+
+func diffOpenRouterModelAvailability(previous, current []repository.OpenRouterModelSnapshot) (added, constrained, removed []string) {
+	prevMap := make(map[string]service.OpenRouterModelAvailability, len(previous))
+	for _, item := range previous {
+		state, _ := service.OpenRouterSnapshotAvailability(item)
+		prevMap[item.ModelID] = state
+	}
+	currMap := make(map[string]service.OpenRouterModelAvailability, len(current))
+	for _, item := range current {
+		state, _ := service.OpenRouterSnapshotAvailability(item)
+		currMap[item.ModelID] = state
+		if _, existed := prevMap[item.ModelID]; !existed {
+			added = append(added, item.ModelID)
+			continue
+		}
+		if prevMap[item.ModelID] == service.OpenRouterModelAvailable && state == service.OpenRouterModelConstrained {
+			constrained = append(constrained, item.ModelID)
+		}
+	}
+	for _, item := range previous {
+		if _, exists := currMap[item.ModelID]; !exists {
+			removed = append(removed, item.ModelID)
+		}
+	}
+	sort.Strings(added)
+	sort.Strings(constrained)
+	sort.Strings(removed)
+	return added, constrained, removed
 }
 
 // ① cron/fetch-rss — 10分ごとにRSSを取得し新規アイテムを登録

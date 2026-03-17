@@ -4,12 +4,19 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
 )
+
+type openRouterModelListEntry struct {
+	repository.OpenRouterModelSnapshot
+	Availability string  `json:"availability"`
+	Reason       *string `json:"reason,omitempty"`
+}
 
 type OpenRouterModelsHandler struct {
 	repo    *repository.OpenRouterModelRepo
@@ -26,9 +33,19 @@ func (h *OpenRouterModelsHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	prevModels := []repository.OpenRouterModelSnapshot{}
+	if latestRun != nil {
+		prevModels, err = h.repo.ListPreviousSuccessfulSnapshots(r.Context(), latestRun.ID)
+		if err != nil {
+			writeRepoError(w, err)
+			return
+		}
+	}
+	available, unavailable := splitOpenRouterModelEntries(models, prevModels)
 	writeJSON(w, map[string]any{
-		"latest_run": latestRun,
-		"models":     models,
+		"latest_run":         latestRun,
+		"models":             available,
+		"unavailable_models": unavailable,
 	})
 }
 
@@ -82,9 +99,16 @@ func (h *OpenRouterModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	prevModels, err := h.repo.ListPreviousSuccessfulSnapshots(r.Context(), latestRun.ID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	available, unavailable := splitOpenRouterModelEntries(latest, prevModels)
 	writeJSON(w, map[string]any{
-		"latest_run": latestRun,
-		"models":     latest,
+		"latest_run":         latestRun,
+		"models":             available,
+		"unavailable_models": unavailable,
 	})
 
 	go h.translateDescriptions(syncRunID, models)
@@ -166,4 +190,54 @@ func openRouterTranslationProgress(models []repository.OpenRouterModelSnapshot) 
 		}
 	}
 	return total, completed
+}
+
+func splitOpenRouterModelEntries(current, previous []repository.OpenRouterModelSnapshot) ([]openRouterModelListEntry, []openRouterModelListEntry) {
+	available := make([]openRouterModelListEntry, 0, len(current))
+	unavailable := make([]openRouterModelListEntry, 0)
+	currentMap := make(map[string]repository.OpenRouterModelSnapshot, len(current))
+	for _, model := range current {
+		currentMap[model.ModelID] = model
+		availability, reason := service.OpenRouterSnapshotAvailability(model)
+		entry := openRouterModelListEntry{
+			OpenRouterModelSnapshot: model,
+			Availability:            string(availability),
+		}
+		if reason != "" {
+			r := reason
+			entry.Reason = &r
+		}
+		if availability == service.OpenRouterModelAvailable {
+			available = append(available, entry)
+		} else {
+			unavailable = append(unavailable, entry)
+		}
+	}
+	for _, model := range previous {
+		if _, exists := currentMap[model.ModelID]; exists {
+			continue
+		}
+		reason := "removed"
+		unavailable = append(unavailable, openRouterModelListEntry{
+			OpenRouterModelSnapshot: model,
+			Availability:            string(service.OpenRouterModelRemoved),
+			Reason:                  &reason,
+		})
+	}
+	sort.Slice(available, func(i, j int) bool {
+		if available[i].ProviderSlug == available[j].ProviderSlug {
+			return available[i].DisplayName < available[j].DisplayName
+		}
+		return available[i].ProviderSlug < available[j].ProviderSlug
+	})
+	sort.Slice(unavailable, func(i, j int) bool {
+		if unavailable[i].Availability == unavailable[j].Availability {
+			if unavailable[i].ProviderSlug == unavailable[j].ProviderSlug {
+				return unavailable[i].DisplayName < unavailable[j].DisplayName
+			}
+			return unavailable[i].ProviderSlug < unavailable[j].ProviderSlug
+		}
+		return unavailable[i].Availability < unavailable[j].Availability
+	})
+	return available, unavailable
 }

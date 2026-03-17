@@ -104,9 +104,15 @@ export interface OpenRouterModelSnapshot {
   fetched_at: string;
 }
 
+export interface OpenRouterModelListEntry extends OpenRouterModelSnapshot {
+  availability: "available" | "constrained" | "removed";
+  reason?: string | null;
+}
+
 export interface OpenRouterModelsResponse {
   latest_run: OpenRouterSyncRun | null;
-  models: OpenRouterModelSnapshot[];
+  models: OpenRouterModelListEntry[];
+  unavailable_models: OpenRouterModelListEntry[];
 }
 
 export interface SourceOptimizationMetrics {

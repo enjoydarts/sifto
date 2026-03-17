@@ -46,9 +46,10 @@ type BudgetForecastAlertEmail struct {
 }
 
 type OpenRouterModelAlertEmail struct {
-	ModelCount int
-	Models     []string
-	TargetURL  string
+	Added       []string
+	Constrained []string
+	Removed     []string
+	TargetURL   string
 }
 
 var digestSubjectPrefixPattern = regexp.MustCompile(`^\s*(?:【[^】]*ダイジェスト】\s*|Sifto\s*Digest\s*[-:]?\s*\d{4}-\d{1,2}-\d{1,2}\s*[-:：]?\s*|Sifto\s*Digest\s*\d{4}-\d{1,2}-\d{1,2}\s*[-:：]?\s*|\d{4}年\d{1,2}月\d{1,2}日ダイジェスト\s*[-:：]?\s*)+`)
@@ -196,7 +197,8 @@ func (r *ResendClient) SendOpenRouterModelAlert(ctx context.Context, to string, 
 		log.Printf("resend disabled (missing RESEND_API_KEY or RESEND_FROM_EMAIL), skip openrouter alert to %s", to)
 		return nil
 	}
-	subject := fmt.Sprintf("Sifto: OpenRouter に新規モデルが %d 件追加されました", alert.ModelCount)
+	total := len(alert.Added) + len(alert.Constrained) + len(alert.Removed)
+	subject := fmt.Sprintf("Sifto: OpenRouter モデル更新 %d 件", total)
 	htmlBody := buildOpenRouterModelAlertHTML(alert)
 	body, _ := json.Marshal(map[string]any{
 		"from":    r.formattedFrom(),
@@ -330,15 +332,22 @@ func buildBudgetForecastAlertHTML(a BudgetForecastAlertEmail) string {
 func buildOpenRouterModelAlertHTML(a OpenRouterModelAlertEmail) string {
 	var sb strings.Builder
 	sb.WriteString(`<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:640px;margin:0 auto;padding:20px">`)
-	sb.WriteString(`<h1 style="font-size:24px;border-bottom:2px solid #eee;padding-bottom:8px">OpenRouter に新規モデルが追加されました</h1>`)
-	sb.WriteString(fmt.Sprintf(`<p style="color:#444;line-height:1.7">%d件の新規モデルを検知しました。</p>`, a.ModelCount))
-	if len(a.Models) > 0 {
+	sb.WriteString(`<h1 style="font-size:24px;border-bottom:2px solid #eee;padding-bottom:8px">OpenRouter モデル更新</h1>`)
+	sb.WriteString(`<p style="color:#444;line-height:1.7">OpenRouter のモデル状態に変化がありました。</p>`)
+	appendList := func(title string, models []string) {
+		if len(models) == 0 {
+			return
+		}
+		sb.WriteString(fmt.Sprintf(`<h2 style="font-size:18px;margin-top:20px">%s</h2>`, html.EscapeString(title)))
 		sb.WriteString(`<ul style="padding-left:20px;color:#333;line-height:1.7">`)
-		for _, modelID := range a.Models {
+		for _, modelID := range models {
 			sb.WriteString(fmt.Sprintf(`<li>%s</li>`, html.EscapeString(modelID)))
 		}
 		sb.WriteString(`</ul>`)
 	}
+	appendList("新規追加", a.Added)
+	appendList("制約ありに変更", a.Constrained)
+	appendList("削除・非公開", a.Removed)
 	if strings.TrimSpace(a.TargetURL) != "" {
 		sb.WriteString(fmt.Sprintf(`<p style="margin-top:20px"><a href="%s" style="display:inline-block;background:#18181b;color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none">OpenRouter Models を開く</a></p>`, html.EscapeString(a.TargetURL)))
 	}

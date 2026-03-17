@@ -31,6 +31,12 @@ type OpenRouterSyncRun struct {
 	ErrorMessage              *string    `json:"error_message,omitempty"`
 }
 
+type OpenRouterModelNotificationChange struct {
+	ModelID      string `json:"model_id"`
+	ProviderSlug string `json:"provider_slug"`
+	DisplayName  string `json:"display_name"`
+}
+
 type OpenRouterModelSnapshot struct {
 	ModelID                 string          `json:"model_id"`
 	CanonicalSlug           *string         `json:"canonical_slug,omitempty"`
@@ -256,6 +262,40 @@ func (r *OpenRouterModelRepo) ListPreviousSuccessfulModelIDs(ctx context.Context
 			return nil, err
 		}
 		out = append(out, modelID)
+	}
+	return out, rows.Err()
+}
+
+func (r *OpenRouterModelRepo) ListPreviousSuccessfulSnapshots(ctx context.Context, beforeSyncRunID string) ([]OpenRouterModelSnapshot, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT model_id, canonical_slug, provider_slug, display_name, description_en, description_ja,
+		       context_length, pricing_json, supported_parameters_json, architecture_json,
+		       top_provider_json, modality_flags_json, is_text_generation, is_active, fetched_at
+		FROM openrouter_model_snapshots
+		WHERE sync_run_id = (
+			SELECT id
+			FROM openrouter_model_sync_runs
+			WHERE status = 'success' AND id <> $1
+			ORDER BY started_at DESC
+			LIMIT 1
+		)
+		ORDER BY provider_slug, display_name
+	`, beforeSyncRunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]OpenRouterModelSnapshot, 0)
+	for rows.Next() {
+		var m OpenRouterModelSnapshot
+		if err := rows.Scan(
+			&m.ModelID, &m.CanonicalSlug, &m.ProviderSlug, &m.DisplayName, &m.DescriptionEN, &m.DescriptionJA,
+			&m.ContextLength, &m.PricingJSON, &m.SupportedParametersJSON, &m.ArchitectureJSON,
+			&m.TopProviderJSON, &m.ModalityFlagsJSON, &m.IsTextGeneration, &m.IsActive, &m.FetchedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
 	}
 	return out, rows.Err()
 }

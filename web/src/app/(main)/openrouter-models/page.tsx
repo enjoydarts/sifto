@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link2, RefreshCw, Search, X } from "lucide-react";
-import { api, OpenRouterModelSnapshot, OpenRouterModelsResponse } from "@/lib/api";
+import { api, OpenRouterModelListEntry, OpenRouterModelsResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
+import { Tabs, TabList, Tab, TabPanel } from "@/components/tabs";
 
 function parseObject(raw: unknown): Record<string, unknown> {
   if (!raw) return {};
@@ -47,7 +48,7 @@ function formatPrice(value: unknown) {
   return `$${perMillion.toFixed(4)}`;
 }
 
-function pricingSummary(model: OpenRouterModelSnapshot) {
+function pricingSummary(model: OpenRouterModelListEntry) {
   const pricing = parseObject(model.pricing_json);
   const input = formatPrice(pricing.prompt);
   const output = formatPrice(pricing.completion);
@@ -70,7 +71,7 @@ function syncProgressLabel(t: (key: string, fallback?: string) => string, run: O
 type SortKey = "provider" | "model" | "context" | "pricing" | "params";
 type SortDirection = "asc" | "desc";
 
-function pricingScore(model: OpenRouterModelSnapshot) {
+function pricingScore(model: OpenRouterModelListEntry) {
   const pricing = parseObject(model.pricing_json);
   const prompt = typeof pricing.prompt === "number" ? pricing.prompt : typeof pricing.prompt === "string" ? Number(pricing.prompt) : NaN;
   const completion =
@@ -90,7 +91,8 @@ export default function OpenRouterModelsPage() {
   const [query, setQuery] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
   const [data, setData] = useState<OpenRouterModelsResponse | null>(null);
-  const [selectedModel, setSelectedModel] = useState<OpenRouterModelSnapshot | null>(null);
+  const [selectedModel, setSelectedModel] = useState<OpenRouterModelListEntry | null>(null);
+  const [activeTab, setActiveTab] = useState<"available" | "unavailable">("available");
   const [sortKey, setSortKey] = useState<SortKey>("provider");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
@@ -136,21 +138,21 @@ export default function OpenRouterModelsPage() {
 
   const providerOptions = useMemo(() => {
     const values = new Set<string>();
-    for (const model of data?.models ?? []) {
+    for (const model of [...(data?.models ?? []), ...(data?.unavailable_models ?? [])]) {
       if (model.provider_slug) values.add(model.provider_slug);
     }
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [data?.models]);
+  }, [data?.models, data?.unavailable_models]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const models = data?.models ?? [];
+    const models = [...(data?.models ?? []), ...(data?.unavailable_models ?? [])];
     return models.filter((model) => {
       if (providerFilter && model.provider_slug !== providerFilter) return false;
       if (!q) return true;
       return [model.model_id, model.display_name, model.provider_slug].join(" ").toLowerCase().includes(q);
     });
-  }, [data?.models, providerFilter, query]);
+  }, [data?.models, data?.unavailable_models, providerFilter, query]);
 
   const sorted = useMemo(() => {
     const models = [...filtered];
@@ -180,6 +182,9 @@ export default function OpenRouterModelsPage() {
     });
     return models;
   }, [filtered, sortDirection, sortKey]);
+
+  const availableModels = useMemo(() => sorted.filter((model) => model.availability === "available"), [sorted]);
+  const unavailableModels = useMemo(() => sorted.filter((model) => model.availability !== "available"), [sorted]);
 
   const setSort = useCallback(
     (nextKey: SortKey) => {
@@ -301,17 +306,33 @@ export default function OpenRouterModelsPage() {
           {t("openrouterModels.noModels")}
         </section>
       ) : (
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-2">
-            <div>
-              <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-400">{t("openrouterModels.providerGroup")}</div>
-              <h2 className="mt-1 text-lg font-semibold text-zinc-900">{t("openrouterModels.table.allModels")}</h2>
-            </div>
-            <div className="text-xs text-zinc-500">{sorted.length} {t("common.rows")}</div>
-          </div>
-          <div className="overflow-hidden rounded-xl border border-zinc-200">
-            <div className="overflow-x-auto">
-              <table className="min-w-[1120px] divide-y divide-zinc-200 text-sm">
+        <div className="space-y-6">
+          <section className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+            <Tabs defaultValue="available" value={activeTab} onChange={(value) => setActiveTab(value as "available" | "unavailable")}>
+              <div className="flex items-center justify-between gap-3 px-4 pt-4 md:px-5">
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-400">{t("openrouterModels.providerGroup")}</div>
+                  <h2 className="mt-1 text-lg font-semibold text-zinc-900">
+                    {activeTab === "available" ? t("openrouterModels.table.availableModels") : t("openrouterModels.table.unavailableModels")}
+                  </h2>
+                </div>
+                <div className="text-xs text-zinc-500">
+                  {(activeTab === "available" ? availableModels.length : unavailableModels.length)} {t("common.rows")}
+                </div>
+              </div>
+              <TabList className="px-4 pt-3 md:px-5">
+                <Tab value="available">{t("openrouterModels.table.availableModels")}</Tab>
+                <Tab value="unavailable">{t("openrouterModels.table.unavailableModels")}</Tab>
+              </TabList>
+              <TabPanel value="available" className="px-4 py-4 md:px-5">
+                {availableModels.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-sm text-zinc-500">
+                    {t("openrouterModels.noAvailableModels")}
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-zinc-200">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-[1120px] divide-y divide-zinc-200 text-sm">
                 <thead className="bg-zinc-50">
                   <tr className="text-left text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
                     <th className="px-4 py-3">
@@ -342,7 +363,7 @@ export default function OpenRouterModelsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200 bg-white">
-                  {sorted.map((model) => {
+                  {availableModels.map((model) => {
                     const supported = parseStringArray(model.supported_parameters_json);
                     const pricing = pricingSummary(model);
                     return (
@@ -385,10 +406,96 @@ export default function OpenRouterModelsPage() {
                     );
                   })}
                 </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </TabPanel>
+              <TabPanel value="unavailable" className="px-4 py-4 md:px-5">
+                {unavailableModels.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-sm text-zinc-500">
+                    {t("openrouterModels.noUnavailableModels")}
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-zinc-200">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-[1240px] divide-y divide-zinc-200 text-sm">
+                  <thead className="bg-zinc-50">
+                    <tr className="text-left text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
+                      <th className="px-4 py-3">{t("openrouterModels.table.state")}</th>
+                      <th className="px-4 py-3">
+                        <button type="button" className="hover:text-zinc-700" onClick={() => setSort("provider")}>
+                          {t("openrouterModels.table.provider")}{sortMarker("provider")}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3">
+                        <button type="button" className="hover:text-zinc-700" onClick={() => setSort("model")}>
+                          {t("openrouterModels.table.model")}{sortMarker("model")}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3">{t("openrouterModels.table.reason")}</th>
+                      <th className="px-4 py-3">
+                        <button type="button" className="hover:text-zinc-700" onClick={() => setSort("context")}>
+                          {t("openrouterModels.table.context")}{sortMarker("context")}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3">
+                        <button type="button" className="hover:text-zinc-700" onClick={() => setSort("pricing")}>
+                          {t("openrouterModels.table.pricing")}{sortMarker("pricing")}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3">
+                        <button type="button" className="hover:text-zinc-700" onClick={() => setSort("params")}>
+                          {t("openrouterModels.table.params")}{sortMarker("params")}
+                        </button>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-200 bg-white">
+                    {unavailableModels.map((model) => {
+                      const supported = parseStringArray(model.supported_parameters_json);
+                      const pricing = pricingSummary(model);
+                      const stateKey = model.availability === "removed" ? "openrouterModels.state.removed" : "openrouterModels.state.constrained";
+                      const reasonKey = model.reason === "removed" ? "openrouterModels.reason.removed" : "openrouterModels.reason.structuredOutput";
+                      return (
+                        <tr key={model.model_id} className="cursor-pointer transition hover:bg-zinc-50" onClick={() => setSelectedModel(model)}>
+                          <td className="whitespace-nowrap px-4 py-3 align-top">
+                            <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] text-zinc-700">{t(stateKey)}</span>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{model.provider_slug || "—"}</td>
+                          <td className="whitespace-nowrap px-4 py-3 align-top">
+                            <div className="whitespace-nowrap font-medium text-zinc-900">{model.display_name || model.model_id}</div>
+                            <div className="mt-1 whitespace-nowrap text-xs text-zinc-500">{model.model_id}</div>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{t(reasonKey)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{model.context_length ? model.context_length.toLocaleString() : "—"}</td>
+                          <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{pricing ?? "—"}</td>
+                          <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">
+                            {supported.length > 0 ? (
+                              <div className="flex flex-nowrap gap-1.5">
+                                {supported.slice(0, 4).map((param) => (
+                                  <span key={param} className="whitespace-nowrap rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] text-zinc-600">
+                                    {param}
+                                  </span>
+                                ))}
+                                {supported.length > 4 ? <span className="whitespace-nowrap rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] text-zinc-500">+{supported.length - 4}</span> : null}
+                              </div>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </TabPanel>
+            </Tabs>
+          </section>
+        </div>
       )}
 
       {selectedModel ? (

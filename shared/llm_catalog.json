@@ -503,6 +503,29 @@
       }
     },
     {
+      "id": "moonshotai/kimi-k2-instruct-0905",
+      "provider": "groq",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "ask",
+      "highlights": ["fast"],
+      "comment": "長文コンテキストと JSON Schema に対応した Groq の実験枠。質問応答や要約の比較候補として入れておく価値がある。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "groq_static_2026_03",
+        "input_per_mtok_usd": 1.0,
+        "output_per_mtok_usd": 3.0,
+        "cache_read_per_mtok_usd": 0.5
+      }
+    },
+    {
       "id": "qwen3-max",
       "provider": "alibaba",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],

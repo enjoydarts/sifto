@@ -110,8 +110,12 @@ function localizeLLMSettingKey(settingKey: string, t: (key: string, fallback?: s
   switch (settingKey) {
     case "facts":
       return t("settings.model.facts");
+    case "facts_fallback":
+      return t("settings.model.factsFallback");
     case "summary":
       return t("settings.model.summary");
+    case "summary_fallback":
+      return t("settings.model.summaryFallback");
     case "digest_cluster":
       return t("settings.model.digestCluster");
     case "digest":
@@ -234,7 +238,9 @@ export default function SettingsPage() {
   const [obsidianRepoBranch, setObsidianRepoBranch] = useState("main");
   const [obsidianRootPath, setObsidianRootPath] = useState("Sifto/Favorites");
   const [anthropicFactsModel, setAnthropicFactsModel] = useState("");
+  const [anthropicFactsFallbackModel, setAnthropicFactsFallbackModel] = useState("");
   const [anthropicSummaryModel, setAnthropicSummaryModel] = useState("");
+  const [anthropicSummaryFallbackModel, setAnthropicSummaryFallbackModel] = useState("");
   const [anthropicDigestClusterModel, setAnthropicDigestClusterModel] = useState("");
   const [anthropicDigestModel, setAnthropicDigestModel] = useState("");
   const [anthropicAskModel, setAnthropicAskModel] = useState("");
@@ -248,7 +254,9 @@ export default function SettingsPage() {
 
   const syncLLMModelForm = useCallback((llmModels?: UserSettings["llm_models"] | null) => {
     setAnthropicFactsModel(llmModels?.facts ?? "");
+    setAnthropicFactsFallbackModel(llmModels?.facts_fallback ?? "");
     setAnthropicSummaryModel(llmModels?.summary ?? "");
+    setAnthropicSummaryFallbackModel(llmModels?.summary_fallback ?? "");
     setAnthropicDigestClusterModel(llmModels?.digest_cluster ?? "");
     setAnthropicDigestModel(llmModels?.digest ?? "");
     setAnthropicAskModel(llmModels?.ask ?? "");
@@ -372,7 +380,9 @@ export default function SettingsPage() {
     const preset = buildCostPerformancePreset(catalog);
     llmModelsDirtyRef.current = true;
     setAnthropicFactsModel(preset.facts ?? "");
+    setAnthropicFactsFallbackModel("");
     setAnthropicSummaryModel(preset.summary ?? "");
+    setAnthropicSummaryFallbackModel("");
     setAnthropicDigestClusterModel(preset.digest_cluster ?? "");
     setAnthropicDigestModel(preset.digest ?? "");
     setAnthropicAskModel(preset.ask ?? "");
@@ -401,7 +411,9 @@ export default function SettingsPage() {
     const llmModels = settings?.llm_models ?? {};
     const candidates: Array<[string, string | null | undefined]> = [
       ["facts", llmModels.facts],
+      ["facts_fallback", llmModels.facts_fallback],
       ["summary", llmModels.summary],
+      ["summary_fallback", llmModels.summary_fallback],
       ["digest_cluster", llmModels.digest_cluster],
       ["digest", llmModels.digest],
       ["ask", llmModels.ask],
@@ -734,7 +746,9 @@ export default function SettingsPage() {
       };
       const nextModels = {
         facts: emptyToNull(anthropicFactsModel),
+        facts_fallback: emptyToNull(anthropicFactsFallbackModel),
         summary: emptyToNull(anthropicSummaryModel),
+        summary_fallback: emptyToNull(anthropicSummaryFallbackModel),
         digest_cluster: emptyToNull(anthropicDigestClusterModel),
         digest: emptyToNull(anthropicDigestModel),
         ask: emptyToNull(anthropicAskModel),
@@ -1469,10 +1483,26 @@ export default function SettingsPage() {
                     variant="modal"
                   />
                   <ModelSelect
+                    label={t("settings.model.factsFallback")}
+                    value={anthropicFactsFallbackModel}
+                    onChange={(value) => onChangeLLMModel(setAnthropicFactsFallbackModel, value)}
+                    options={optionsForPurpose("facts", anthropicFactsFallbackModel)}
+                    labels={modelSelectLabels}
+                    variant="modal"
+                  />
+                  <ModelSelect
                     label={t("settings.model.summary")}
                     value={anthropicSummaryModel}
                     onChange={(value) => onChangeLLMModel(setAnthropicSummaryModel, value)}
                     options={optionsForPurpose("summary", anthropicSummaryModel)}
+                    labels={modelSelectLabels}
+                    variant="modal"
+                  />
+                  <ModelSelect
+                    label={t("settings.model.summaryFallback")}
+                    value={anthropicSummaryFallbackModel}
+                    onChange={(value) => onChangeLLMModel(setAnthropicSummaryFallbackModel, value)}
+                    options={optionsForPurpose("summary", anthropicSummaryFallbackModel)}
                     labels={modelSelectLabels}
                     variant="modal"
                   />

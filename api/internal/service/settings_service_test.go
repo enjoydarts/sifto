@@ -1,6 +1,10 @@
 package service
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/enjoydarts/sifto/api/internal/model"
+)
 
 func strptr(v string) *string { return &v }
 
@@ -21,5 +25,23 @@ func TestValidateCatalogModelForPurpose(t *testing.T) {
 		if (err != nil) != tt.wantErr {
 			t.Fatalf("%s: validateCatalogModelForPurpose(%v, %q) err=%v, wantErr=%v", tt.name, tt.model, tt.purpose, err, tt.wantErr)
 		}
+	}
+}
+
+func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
+	settings := &model.UserSettings{
+		FactsModel:           strptr("gpt-5.4-mini"),
+		FactsFallbackModel:   strptr("google/gemini-2.5-flash"),
+		SummaryModel:         strptr("gpt-5.4"),
+		SummaryFallbackModel: strptr("openrouter::openai/gpt-oss-120b"),
+	}
+
+	got := LLMModelSettingsPayload(settings)
+
+	if gotFactsFallback, _ := got["facts_fallback"].(*string); gotFactsFallback == nil || *gotFactsFallback != "google/gemini-2.5-flash" {
+		t.Fatalf("facts_fallback = %v, want %q", got["facts_fallback"], "google/gemini-2.5-flash")
+	}
+	if gotSummaryFallback, _ := got["summary_fallback"].(*string); gotSummaryFallback == nil || *gotSummaryFallback != "openrouter::openai/gpt-oss-120b" {
+		t.Fatalf("summary_fallback = %v, want %q", got["summary_fallback"], "openrouter::openai/gpt-oss-120b")
 	}
 }

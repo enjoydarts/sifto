@@ -62,6 +62,52 @@ type processSummaryStageResult struct {
 	RetryCount int
 }
 
+func isTransientLLMWorkerError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if msg == "" {
+		return false
+	}
+	transientHints := []string{
+		"status=429",
+		"status 429",
+		"code\":429",
+		"rate limit",
+		"status=502",
+		"status 502",
+		"code\":502",
+		"provider returned error",
+		"empty choices",
+		"context deadline exceeded",
+		"timeout",
+		"timed out",
+		"overload",
+		"temporarily unavailable",
+	}
+	for _, hint := range transientHints {
+		if strings.Contains(msg, hint) {
+			return true
+		}
+	}
+	return false
+}
+
+func canUseLLMFallback(primaryModel, fallbackModel *string, err error) bool {
+	if !isTransientLLMWorkerError(err) || fallbackModel == nil {
+		return false
+	}
+	fallback := strings.TrimSpace(*fallbackModel)
+	if fallback == "" {
+		return false
+	}
+	if primaryModel != nil && strings.EqualFold(strings.TrimSpace(*primaryModel), fallback) {
+		return false
+	}
+	return true
+}
+
 func fallbackFactsCheckWarning(err error) *service.FactsCheckResponse {
 	comment := "事実抽出チェックの判定取得に失敗したため要確認です。"
 	if err != nil {
@@ -117,13 +163,15 @@ func extractAndPersistFacts(
 		if attempt > 0 {
 			stepLabel = fmt.Sprintf("extract-facts-%d", attempt+1)
 		}
+		var primaryModelOverride *string
+		var fallbackModelOverride *string
+		if userModelSettings != nil {
+			primaryModelOverride = ptrStringOrNil(userModelSettings.FactsModel)
+			fallbackModelOverride = ptrStringOrNil(userModelSettings.FactsFallbackModel)
+		}
 		factsAttempt, err := step.Run(ctx, stepLabel, func(ctx context.Context) (*processFactsAttemptResult, error) {
 			log.Printf("process-item extract-facts start item_id=%s attempt=%d", itemID, attempt+1)
-			var modelOverride *string
-			if userModelSettings != nil {
-				modelOverride = ptrStringOrNil(userModelSettings.FactsModel)
-			}
-			runtime, err := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, modelOverride, "facts")
+			runtime, err := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, primaryModelOverride, "facts")
 			if err != nil {
 				return nil, err
 			}
@@ -158,7 +206,48 @@ func extractAndPersistFacts(
 				failedModel = factsAttempt.Runtime.Model
 			}
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "extract facts", err)
+			if canUseLLMFallback(primaryModelOverride, fallbackModelOverride, err) {
+				fallbackStepLabel := stepLabel + "-fallback"
+				fallbackAttempt, fallbackErr := step.Run(ctx, fallbackStepLabel, func(ctx context.Context) (*processFactsAttemptResult, error) {
+					log.Printf("process-item extract-facts fallback start item_id=%s attempt=%d", itemID, attempt+1)
+					runtime, runtimeErr := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, fallbackModelOverride, "facts")
+					if runtimeErr != nil {
+						return nil, runtimeErr
+					}
+					workerCtx := service.WithWorkerTraceMetadata(ctx, "facts", userIDPtr, &data.SourceID, &itemID, nil)
+					resp, workerErr := deps.worker.ExtractFactsWithModel(
+						workerCtx,
+						titleForLLM,
+						content,
+						runtime.AnthropicKey,
+						runtime.GoogleKey,
+						runtime.GroqKey,
+						runtime.DeepSeekKey,
+						runtime.AlibabaKey,
+						runtime.MistralKey,
+						runtime.XAIKey,
+						runtime.ZAIKey,
+						runtime.FireworksKey,
+						runtime.OpenAIKey,
+						runtime.Model,
+					)
+					if workerErr != nil {
+						return nil, workerErr
+					}
+					return &processFactsAttemptResult{Facts: resp, Runtime: runtime}, nil
+				})
+				if fallbackErr != nil {
+					var fallbackFailedModel *string
+					if fallbackAttempt != nil && fallbackAttempt.Runtime != nil {
+						fallbackFailedModel = fallbackAttempt.Runtime.Model
+					}
+					recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", fallbackFailedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, fallbackErr)
+					return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "extract facts", fallbackErr)
+				}
+				factsAttempt = fallbackAttempt
+			} else {
+				return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "extract facts", err)
+			}
 		}
 
 		factsResp = factsAttempt.Facts
@@ -273,13 +362,15 @@ func summarizeAndPersistItem(
 		if attempt > 0 {
 			stepLabel = fmt.Sprintf("summarize-%d", attempt+1)
 		}
+		var primaryModelOverride *string
+		var fallbackModelOverride *string
+		if userModelSettings != nil {
+			primaryModelOverride = ptrStringOrNil(userModelSettings.SummaryModel)
+			fallbackModelOverride = ptrStringOrNil(userModelSettings.SummaryFallbackModel)
+		}
 		summaryAttempt, err := step.Run(ctx, stepLabel, func(ctx context.Context) (*processSummaryAttemptResult, error) {
 			log.Printf("process-item summarize start item_id=%s attempt=%d", itemID, attempt+1)
-			var modelOverride *string
-			if userModelSettings != nil {
-				modelOverride = ptrStringOrNil(userModelSettings.SummaryModel)
-			}
-			runtime, err := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, modelOverride, "summary")
+			runtime, err := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, primaryModelOverride, "summary")
 			if err != nil {
 				return nil, err
 			}
@@ -300,7 +391,34 @@ func summarizeAndPersistItem(
 				failedModel = summaryAttempt.Runtime.Model
 			}
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "summary", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "summarize", err)
+			if canUseLLMFallback(primaryModelOverride, fallbackModelOverride, err) {
+				fallbackStepLabel := stepLabel + "-fallback"
+				fallbackAttempt, fallbackErr := step.Run(ctx, fallbackStepLabel, func(ctx context.Context) (*processSummaryAttemptResult, error) {
+					log.Printf("process-item summarize fallback start item_id=%s attempt=%d", itemID, attempt+1)
+					runtime, runtimeErr := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, fallbackModelOverride, "summary")
+					if runtimeErr != nil {
+						return nil, runtimeErr
+					}
+					sourceChars := len(sourceContent)
+					workerCtx := service.WithWorkerTraceMetadata(ctx, "summary", userIDPtr, &data.SourceID, &itemID, nil)
+					resp, workerErr := deps.worker.SummarizeWithModel(workerCtx, titleForLLM, facts, &sourceChars, runtime.AnthropicKey, runtime.GoogleKey, runtime.GroqKey, runtime.DeepSeekKey, runtime.AlibabaKey, runtime.MistralKey, runtime.XAIKey, runtime.ZAIKey, runtime.FireworksKey, runtime.OpenAIKey, runtime.Model)
+					if workerErr != nil {
+						return nil, workerErr
+					}
+					return &processSummaryAttemptResult{Summary: resp, Runtime: runtime}, nil
+				})
+				if fallbackErr != nil {
+					var fallbackFailedModel *string
+					if fallbackAttempt != nil && fallbackAttempt.Runtime != nil {
+						fallbackFailedModel = fallbackAttempt.Runtime.Model
+					}
+					recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "summary", fallbackFailedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, fallbackErr)
+					return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "summarize", fallbackErr)
+				}
+				summaryAttempt = fallbackAttempt
+			} else {
+				return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "summarize", err)
+			}
 		}
 
 		summary = summaryAttempt.Summary

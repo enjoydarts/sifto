@@ -58,7 +58,9 @@ type SettingsGetPayload struct {
 
 type UpdateLLMModelsInput struct {
 	Facts             *string
+	FactsFallback     *string
 	Summary           *string
+	SummaryFallback   *string
 	DigestCluster     *string
 	Digest            *string
 	Ask               *string
@@ -70,7 +72,9 @@ type UpdateLLMModelsInput struct {
 
 var modelSettingPurposes = map[string]string{
 	"facts":              "facts",
+	"facts_fallback":     "facts",
 	"summary":            "summary",
+	"summary_fallback":   "summary",
 	"digest_cluster":     "digest_cluster_draft",
 	"digest":             "digest",
 	"ask":                "ask",
@@ -81,7 +85,9 @@ var modelSettingPurposes = map[string]string{
 
 var modelSettingRequiredCapabilities = map[string][]string{
 	"facts":              {"structured_output"},
+	"facts_fallback":     {"structured_output"},
 	"summary":            {"structured_output"},
+	"summary_fallback":   {"structured_output"},
 	"digest_cluster":     {"structured_output"},
 	"digest":             {"structured_output"},
 	"ask":                {"structured_output"},
@@ -116,7 +122,9 @@ func obsidianExportPayload(settings *model.ObsidianExportSettings, githubApp *Gi
 func LLMModelSettingsPayload(settings *model.UserSettings) map[string]any {
 	return map[string]any{
 		"facts":              settings.FactsModel,
+		"facts_fallback":     settings.FactsFallbackModel,
 		"summary":            settings.SummaryModel,
+		"summary_fallback":   settings.SummaryFallbackModel,
 		"digest_cluster":     settings.DigestClusterModel,
 		"digest":             settings.DigestModel,
 		"ask":                settings.AskModel,
@@ -249,7 +257,9 @@ func validateCatalogModelCapabilities(model *string, settingKey string) error {
 func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in UpdateLLMModelsInput) (*model.UserSettings, error) {
 	normalized := map[string]*string{
 		"facts":              normalizeOptionalModel(in.Facts),
+		"facts_fallback":     normalizeOptionalModel(in.FactsFallback),
 		"summary":            normalizeOptionalModel(in.Summary),
+		"summary_fallback":   normalizeOptionalModel(in.SummaryFallback),
 		"digest_cluster":     normalizeOptionalModel(in.DigestCluster),
 		"digest":             normalizeOptionalModel(in.Digest),
 		"ask":                normalizeOptionalModel(in.Ask),
@@ -274,7 +284,9 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		ctx,
 		userID,
 		normalized["facts"],
+		normalized["facts_fallback"],
 		normalized["summary"],
+		normalized["summary_fallback"],
 		normalized["digest_cluster"],
 		normalized["digest"],
 		normalized["ask"],

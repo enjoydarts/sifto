@@ -68,7 +68,9 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       reading_plan_diversify_topics,
 		       reading_plan_exclude_read,
 		       facts_model,
+		       facts_fallback_model,
 		       summary_model,
+		       summary_fallback_model,
 		       digest_cluster_model,
 		       digest_model,
 		       ask_model,
@@ -116,7 +118,9 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.ReadingPlanDiversifyTopics,
 		&v.ReadingPlanExcludeRead,
 		&v.FactsModel,
+		&v.FactsFallbackModel,
 		&v.SummaryModel,
+		&v.SummaryFallbackModel,
 		&v.DigestClusterModel,
 		&v.DigestModel,
 		&v.AskModel,
@@ -244,13 +248,15 @@ func (r *UserSettingsRepo) UpsertReadingPlanConfig(ctx context.Context, userID, 
 func (r *UserSettingsRepo) UpsertLLMModelConfig(
 	ctx context.Context,
 	userID string,
-	factsModel, summaryModel, digestClusterModel, digestModel, askModel, sourceSuggestionModel, embeddingModel, factsCheckModel, faithfulnessCheckModel *string,
+	factsModel, factsFallbackModel, summaryModel, summaryFallbackModel, digestClusterModel, digestModel, askModel, sourceSuggestionModel, embeddingModel, factsCheckModel, faithfulnessCheckModel *string,
 ) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (
 			user_id,
 				facts_model,
+				facts_fallback_model,
 				summary_model,
+				summary_fallback_model,
 				digest_cluster_model,
 				digest_model,
 				ask_model,
@@ -258,10 +264,12 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 				embedding_model,
 				facts_check_model,
 				faithfulness_check_model
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 			ON CONFLICT (user_id) DO UPDATE
 			SET facts_model = EXCLUDED.facts_model,
+			    facts_fallback_model = EXCLUDED.facts_fallback_model,
 			    summary_model = EXCLUDED.summary_model,
+			    summary_fallback_model = EXCLUDED.summary_fallback_model,
 			    digest_cluster_model = EXCLUDED.digest_cluster_model,
 			    digest_model = EXCLUDED.digest_model,
 			    ask_model = EXCLUDED.ask_model,
@@ -272,7 +280,9 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 			    updated_at = NOW()`,
 		userID,
 		factsModel,
+		factsFallbackModel,
 		summaryModel,
+		summaryFallbackModel,
 		digestClusterModel,
 		digestModel,
 		askModel,

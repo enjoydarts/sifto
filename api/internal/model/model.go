@@ -54,7 +54,9 @@ type UserSettings struct {
 	ReadingPlanDiversifyTopics bool       `json:"reading_plan_diversify_topics"`
 	ReadingPlanExcludeRead     bool       `json:"reading_plan_exclude_read"`
 	FactsModel                 *string    `json:"facts_model,omitempty"`
+	FactsFallbackModel         *string    `json:"facts_fallback_model,omitempty"`
 	SummaryModel               *string    `json:"summary_model,omitempty"`
+	SummaryFallbackModel       *string    `json:"summary_fallback_model,omitempty"`
 	DigestClusterModel         *string    `json:"digest_cluster_model,omitempty"`
 	DigestModel                *string    `json:"digest_model,omitempty"`
 	AskModel                   *string    `json:"ask_model,omitempty"`

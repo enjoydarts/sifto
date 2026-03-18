@@ -761,7 +761,9 @@ export interface UserSettings {
   reading_plan: UserReadingPlanSettings;
   llm_models?: {
     facts?: string | null;
+    facts_fallback?: string | null;
     summary?: string | null;
+    summary_fallback?: string | null;
     digest_cluster?: string | null;
     digest?: string | null;
     ask?: string | null;
@@ -1377,7 +1379,9 @@ export const api = {
     }),
   updateLLMModelSettings: (body: {
     facts?: string | null;
+    facts_fallback?: string | null;
     summary?: string | null;
+    summary_fallback?: string | null;
     digest_cluster?: string | null;
     digest?: string | null;
     ask?: string | null;

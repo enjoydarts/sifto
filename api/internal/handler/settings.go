@@ -199,7 +199,9 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 	userID := middleware.GetUserID(r)
 	var body struct {
 		Facts             *string `json:"facts"`
+		FactsFallback     *string `json:"facts_fallback"`
 		Summary           *string `json:"summary"`
+		SummaryFallback   *string `json:"summary_fallback"`
 		DigestCluster     *string `json:"digest_cluster"`
 		Digest            *string `json:"digest"`
 		Ask               *string `json:"ask"`
@@ -214,7 +216,9 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 	}
 	settings, err := h.settings.UpdateLLMModels(r.Context(), userID, service.UpdateLLMModelsInput{
 		Facts:             body.Facts,
+		FactsFallback:     body.FactsFallback,
 		Summary:           body.Summary,
+		SummaryFallback:   body.SummaryFallback,
 		DigestCluster:     body.DigestCluster,
 		Digest:            body.Digest,
 		Ask:               body.Ask,

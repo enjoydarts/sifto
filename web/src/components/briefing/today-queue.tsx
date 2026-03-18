@@ -33,16 +33,14 @@ export function TodayQueue({ items, onOpen, onRead, onLater }: TodayQueueProps) 
       <div className="mt-4 space-y-3">
         {items.map((entry, index) => (
           <article key={entry.item.id} className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4">
-            <div className="grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)] gap-x-3 gap-y-3 sm:flex sm:items-start">
-              <div className="shrink-0">
-                <Thumbnail
-                  src={entry.item.thumbnail_url}
-                  title={entry.item.translated_title || entry.item.title || entry.item.url}
-                  size="md"
-                  className="h-14 w-14 rounded-xl sm:h-[72px] sm:w-[72px]"
-                />
-              </div>
-              <div className="min-w-0 flex-1">
+            <div className="min-w-0 space-y-3 sm:hidden">
+              <Thumbnail
+                src={entry.item.thumbnail_url}
+                title={entry.item.translated_title || entry.item.title || entry.item.url}
+                size="md"
+                className="h-40 w-full rounded-xl"
+              />
+              <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
                   <span className="rounded-full bg-blue-100 px-2 py-1 font-semibold text-blue-700">
                     {t("briefing.todayQueue.rank")} {index + 1}
@@ -71,30 +69,91 @@ export function TodayQueue({ items, onOpen, onRead, onLater }: TodayQueueProps) 
                   ))}
                 </div>
               </div>
-              <div className="col-span-2 grid grid-cols-3 gap-2 sm:mt-3 sm:flex sm:flex-wrap sm:justify-end">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => onOpen(entry.item.id)}
-                  className="min-w-0 rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-[13px] text-zinc-700 transition-colors hover:bg-zinc-50 sm:px-3 sm:text-sm"
+                  className="min-w-0 rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-[13px] text-zinc-700 transition-colors hover:bg-zinc-50"
                 >
-                  <span className="sm:hidden">{t("briefing.todayQueue.openShort")}</span>
-                  <span className="hidden sm:inline">{t("briefing.todayQueue.open")}</span>
+                  {t("briefing.todayQueue.openShort")}
                 </button>
                 <button
                   type="button"
                   onClick={() => onRead(entry.item.id)}
-                  className="min-w-0 rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-[13px] text-zinc-700 transition-colors hover:bg-zinc-50 sm:px-3 sm:text-sm"
+                  className="min-w-0 rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-[13px] text-zinc-700 transition-colors hover:bg-zinc-50"
                 >
-                  <span className="sm:hidden">{t("briefing.todayQueue.readShort")}</span>
-                  <span className="hidden sm:inline">{t("briefing.todayQueue.read")}</span>
+                  {t("briefing.todayQueue.readShort")}
                 </button>
                 <button
                   type="button"
                   onClick={() => onLater(entry.item.id)}
-                  className="min-w-0 rounded-lg bg-zinc-900 px-2.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-zinc-800 sm:px-3 sm:text-sm"
+                  className="min-w-0 rounded-lg bg-zinc-900 px-2.5 py-2 text-[13px] font-medium text-white transition-colors hover:bg-zinc-800"
                 >
-                  <span className="sm:hidden">{t("briefing.todayQueue.laterShort")}</span>
-                  <span className="hidden sm:inline">{t("briefing.todayQueue.later")}</span>
+                  {t("briefing.todayQueue.laterShort")}
+                </button>
+              </div>
+            </div>
+            <div className="hidden min-w-0 space-y-3 sm:block">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="shrink-0">
+                  <Thumbnail
+                    src={entry.item.thumbnail_url}
+                    title={entry.item.translated_title || entry.item.title || entry.item.url}
+                    size="md"
+                    className="h-[72px] w-[72px] rounded-xl"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                    <span className="rounded-full bg-blue-100 px-2 py-1 font-semibold text-blue-700">
+                      {t("briefing.todayQueue.rank")} {index + 1}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock3 className="size-3.5" />
+                      {entry.estimated_reading_minutes}
+                      {t("briefing.todayQueue.minutes")}
+                    </span>
+                  </div>
+                  <button type="button" onClick={() => onOpen(entry.item.id)} className="mt-2 block w-full text-left">
+                    <h3 className="line-clamp-2 break-words [overflow-wrap:anywhere] text-base font-semibold text-zinc-900 hover:underline">
+                      {entry.item.translated_title || entry.item.title || entry.item.url}
+                    </h3>
+                  </button>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {entry.reason_labels.map((reason) => (
+                      <span key={`${entry.item.id}-${reason}`} className="rounded-full border border-zinc-200 bg-white px-2 py-1 text-[11px] text-zinc-600">
+                        {labelForReason(reason)}
+                      </span>
+                    ))}
+                    {(entry.matched_goals ?? []).slice(0, 2).map((goal) => (
+                      <span key={goal.id} className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-medium text-amber-800">
+                        {goal.title}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpen(entry.item.id)}
+                  className="min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-50"
+                >
+                  {t("briefing.todayQueue.open")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onRead(entry.item.id)}
+                  className="min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-50"
+                >
+                  {t("briefing.todayQueue.read")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onLater(entry.item.id)}
+                  className="min-w-0 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+                >
+                  {t("briefing.todayQueue.later")}
                 </button>
               </div>
             </div>

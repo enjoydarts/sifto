@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="100%" style="stop-color:#1e293b"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="900" fill="url(#bg)" rx="12"/>
+
+  <!-- Title -->
+  <text x="600" y="40" text-anchor="middle" fill="#f8fafc" font-size="24" font-weight="bold" font-family="system-ui">Sifto — Architecture Overview</text>
+
+  <!-- ===== Users ===== -->
+  <rect x="40" y="70" width="200" height="80" rx="10" fill="#1e3a5f" stroke="#3b82f6" stroke-width="2" filter="url(#shadow)"/>
+  <text x="140" y="100" text-anchor="middle" fill="#93c5fd" font-size="11" font-weight="bold" font-family="system-ui">👤 Users</text>
+  <text x="140" y="120" text-anchor="middle" fill="#e2e8f0" font-size="10" font-family="system-ui">Browser / Mobile</text>
+
+  <!-- ===== Vercel ===== -->
+  <rect x="300" y="70" width="260" height="80" rx="10" fill="#1e3a5f" stroke="#3b82f6" stroke-width="2" filter="url(#shadow)"/>
+  <text x="430" y="100" text-anchor="middle" fill="#93c5fd" font-size="12" font-weight="bold" font-family="system-ui">☁️ Vercel</text>
+  <text x="430" y="116" text-anchor="middle" fill="#e2e8f0" font-size="10" font-family="system-ui">Next.js 16 / React 19 / Tailwind</text>
+  <text x="430" y="130" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="system-ui">Region: hnd1 (東京)</text>
+
+  <!-- ===== Fly.io Group ===== -->
+  <rect x="250" y="200" width="700" height="200" rx="12" fill="none" stroke="#10b981" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="270" y="225" fill="#34d399" font-size="13" font-weight="bold" font-family="system-ui">🚀 Fly.io — 東京リージョン (nrt)</text>
+
+  <!-- API -->
+  <rect x="270" y="245" width="200" height="80" rx="10" fill="#064e3b" stroke="#10b981" stroke-width="2" filter="url(#shadow)"/>
+  <text x="370" y="270" text-anchor="middle" fill="#6ee7b7" font-size="12" font-weight="bold" font-family="system-ui">⚙️ Go API</text>
+  <text x="370" y="286" text-anchor="middle" fill="#d1fae5" font-size="10" font-family="system-ui">chi router</text>
+  <text x="370" y="302" text-anchor="middle" fill="#6ee7b7" font-size="9" font-family="system-ui">256MB · auto-stop</text>
+
+  <!-- Worker -->
+  <rect x="500" y="245" width="200" height="80" rx="10" fill="#064e3b" stroke="#10b981" stroke-width="2" filter="url(#shadow)"/>
+  <text x="600" y="270" text-anchor="middle" fill="#6ee7b7" font-size="12" font-weight="bold" font-family="system-ui">🤖 Python Worker</text>
+  <text x="600" y="286" text-anchor="middle" fill="#d1fae5" font-size="10" font-family="system-ui">FastAPI</text>
+  <text x="600" y="302" text-anchor="middle" fill="#6ee7b7" font-size="9" font-family="system-ui">512MB · auto-stop</text>
+
+  <!-- Inngest -->
+  <rect x="730" y="245" width="200" height="80" rx="10" fill="#451a03" stroke="#f59e0b" stroke-width="2" filter="url(#shadow)"/>
+  <text x="830" y="270" text-anchor="middle" fill="#fcd34d" font-size="12" font-weight="bold" font-family="system-ui">⏰ Inngest</text>
+  <text x="830" y="288" text-anchor="middle" fill="#fef3c7" font-size="10" font-family="system-ui">ワークフロー管理</text>
+  <text x="830" y="302" text-anchor="middle" fill="#fcd34d" font-size="9" font-family="system-ui">収集 → 抽出 → 要約 → 配信</text>
+
+  <!-- ===== Data Layer ===== -->
+  <rect x="250" y="430" width="350" height="120" rx="12" fill="none" stroke="#3b82f6" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="270" y="455" fill="#60a5fa" font-size="13" font-weight="bold" font-family="system-ui">💾 Data Layer</text>
+
+  <!-- PostgreSQL -->
+  <rect x="270" y="470" width="160" height="65" rx="10" fill="#1e3a5f" stroke="#3b82f6" stroke-width="2" filter="url(#shadow)"/>
+  <text x="350" y="495" text-anchor="middle" fill="#93c5fd" font-size="11" font-weight="bold" font-family="system-ui">🐘 PostgreSQL</text>
+  <text x="350" y="515" text-anchor="middle" fill="#cbd5e1" font-size="9" font-family="system-ui">Neon (Serverless)</text>
+
+  <!-- Redis -->
+  <rect x="440" y="470" width="140" height="65" rx="10" fill="#450a0a" stroke="#ef4444" stroke-width="2" filter="url(#shadow)"/>
+  <text x="510" y="495" text-anchor="middle" fill="#fca5a5" font-size="11" font-weight="bold" font-family="system-ui">⚡ Redis 7</text>
+  <text x="510" y="515" text-anchor="middle" fill="#fecaca" font-size="9" font-family="system-ui">キャッシュ・キュー</text>
+
+  <!-- ===== LLM Providers ===== -->
+  <rect x="620" y="430" width="550" height="120" rx="12" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="640" y="455" fill="#a78bfa" font-size="13" font-weight="bold" font-family="system-ui">🧠 LLM Providers</text>
+
+  <rect x="640" y="470" width="100" height="55" rx="8" fill="#451a03" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="690" y="492" text-anchor="middle" fill="#fcd34d" font-size="10" font-weight="bold" font-family="system-ui">🟣 Anthropic</text>
+  <text x="690" y="508" text-anchor="middle" fill="#fef3c7" font-size="8" font-family="system-ui">Claude</text>
+
+  <rect x="750" y="470" width="100" height="55" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="800" y="492" text-anchor="middle" fill="#93c5fd" font-size="10" font-weight="bold" font-family="system-ui">🔵 Gemini</text>
+  <text x="800" y="508" text-anchor="middle" fill="#cbd5e1" font-size="8" font-family="system-ui">Google</text>
+
+  <rect x="860" y="470" width="90" height="55" rx="8" fill="#422006" stroke="#eab308" stroke-width="1.5"/>
+  <text x="905" y="492" text-anchor="middle" fill="#fde047" font-size="10" font-weight="bold" font-family="system-ui">🟡 Groq</text>
+  <text x="905" y="508" text-anchor="middle" fill="#fef9c3" font-size="8" font-family="system-ui">高速推論</text>
+
+  <rect x="960" y="470" width="90" height="55" rx="8" fill="#052e16" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="1005" y="492" text-anchor="middle" fill="#86efac" font-size="10" font-weight="bold" font-family="system-ui">🟢 DeepSeek</text>
+  <text x="1005" y="508" text-anchor="middle" fill="#bbf7d0" font-size="8" font-family="system-ui">V3.2</text>
+
+  <rect x="640" y="510" width="100" height="30" rx="8" fill="#450a0a" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="690" y="530" text-anchor="middle" fill="#fca5a5" font-size="9" font-weight="bold" font-family="system-ui">🔴 Z.ai (GLM)</text>
+
+  <rect x="750" y="510" width="110" height="30" rx="8" fill="#3b0764" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="805" y="530" text-anchor="middle" fill="#c4b5fd" font-size="9" font-weight="bold" font-family="system-ui">🔀 OpenRouter</text>
+
+  <!-- ===== External Services ===== -->
+  <rect x="40" y="200" width="190" height="210" rx="12" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="60" y="225" fill="#9ca3af" font-size="13" font-weight="bold" font-family="system-ui">🔌 External</text>
+
+  <rect x="55" y="240" width="160" height="40" rx="8" fill="#1f2937" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="135" y="265" text-anchor="middle" fill="#e5e7eb" font-size="11" font-family="system-ui">🔐 Clerk (認証)</text>
+
+  <rect x="55" y="290" width="160" height="40" rx="8" fill="#1f2937" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="135" y="315" text-anchor="middle" fill="#e5e7eb" font-size="11" font-family="system-ui">📖 Inoreader (RSS)</text>
+
+  <rect x="55" y="340" width="160" height="40" rx="8" fill="#1f2937" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="135" y="365" text-anchor="middle" fill="#e5e7eb" font-size="11" font-family="system-ui">🔔 OneSignal (Push)</text>
+
+  <rect x="55" y="390" width="160" height="40" rx="8" fill="#1f2937" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="135" y="415" text-anchor="middle" fill="#e5e7eb" font-size="11" font-family="system-ui">🐛 Sentry (監視)</text>
+
+  <!-- ===== Data Sources ===== -->
+  <rect x="40" y="450" width="190" height="120" rx="12" fill="none" stroke="#ec4899" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="60" y="475" fill="#f472b6" font-size="13" font-weight="bold" font-family="system-ui">📥 Data Sources</text>
+
+  <rect x="55" y="490" width="160" height="30" rx="6" fill="#500724" stroke="#ec4899" stroke-width="1"/>
+  <text x="135" y="510" text-anchor="middle" fill="#f9a8d4" font-size="10" font-family="system-ui">📰 RSS Feeds</text>
+
+  <rect x="55" y="525" width="160" height="30" rx="6" fill="#500724" stroke="#ec4899" stroke-width="1"/>
+  <text x="135" y="545" text-anchor="middle" fill="#f9a8d4" font-size="10" font-family="system-ui">🔗 単発URL / 📋 OPML</text>
+
+  <!-- ===== Process Flow ===== -->
+  <rect x="40" y="610" width="1120" height="120" rx="12" fill="#0f172a" stroke="#475569" stroke-width="1.5"/>
+  <text x="600" y="640" text-anchor="middle" fill="#f8fafc" font-size="14" font-weight="bold" font-family="system-ui">📊 処理フロー</text>
+
+  <!-- Flow steps -->
+  <rect x="60" y="660" width="140" height="50" rx="8" fill="#500724" stroke="#ec4899" stroke-width="1.5"/>
+  <text x="130" y="682" text-anchor="middle" fill="#f9a8d4" font-size="10" font-weight="bold" font-family="system-ui">① 収集</text>
+  <text x="130" y="698" text-anchor="middle" fill="#fbcfe8" font-size="8" font-family="system-ui">RSS / URL / OPML</text>
+
+  <text x="215" y="690" text-anchor="middle" fill="#64748b" font-size="16">→</text>
+
+  <rect x="230" y="660" width="140" height="50" rx="8" fill="#064e3b" stroke="#10b981" stroke-width="1.5"/>
+  <text x="300" y="682" text-anchor="middle" fill="#6ee7b7" font-size="10" font-weight="bold" font-family="system-ui">② 抽出</text>
+  <text x="300" y="698" text-anchor="middle" fill="#d1fae5" font-size="8" font-family="system-ui">本文 / 事実 / メタ</text>
+
+  <text x="385" y="690" text-anchor="middle" fill="#64748b" font-size="16">→</text>
+
+  <rect x="400" y="660" width="140" height="50" rx="8" fill="#451a03" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="470" y="682" text-anchor="middle" fill="#fcd34d" font-size="10" font-weight="bold" font-family="system-ui">③ 要約</text>
+  <text x="470" y="698" text-anchor="middle" fill="#fef3c7" font-size="8" font-family="system-ui">LLM → 品質チェック</text>
+
+  <text x="555" y="690" text-anchor="middle" fill="#64748b" font-size="16">→</text>
+
+  <rect x="570" y="660" width="140" height="50" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="640" y="682" text-anchor="middle" fill="#93c5fd" font-size="10" font-weight="bold" font-family="system-ui">④ 配信</text>
+  <text x="640" y="698" text-anchor="middle" fill="#dbeafe" font-size="8" font-family="system-ui">ダイジェスト / Push</text>
+
+  <text x="725" y="690" text-anchor="middle" fill="#64748b" font-size="16">→</text>
+
+  <rect x="740" y="660" width="140" height="50" rx="8" fill="#3b0764" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="810" y="682" text-anchor="middle" fill="#c4b5fd" font-size="10" font-weight="bold" font-family="system-ui">⑤ 閲覧</text>
+  <text x="810" y="698" text-anchor="middle" fill="#ddd6fe" font-size="8" font-family="system-ui">ブリーフィング / Reader</text>
+
+  <text x="895" y="690" text-anchor="middle" fill="#64748b" font-size="16">→</text>
+
+  <rect x="910" y="660" width="140" height="50" rx="8" fill="#450a0a" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="980" y="682" text-anchor="middle" fill="#fca5a5" font-size="10" font-weight="bold" font-family="system-ui">⑥ 問い合せ</text>
+  <text x="980" y="698" text-anchor="middle" fill="#fecaca" font-size="8" font-family="system-ui">AI Ask (RAG)</text>
+
+  <!-- ===== Footer ===== -->
+  <text x="600" y="770" text-anchor="middle" fill="#64748b" font-size="10" font-family="system-ui">Web: Vercel (hnd1) · API/Worker: Fly.io (nrt) · DB: Neon PostgreSQL · Auth: Clerk</text>
+  <text x="600" y="790" text-anchor="middle" fill="#475569" font-size="9" font-family="system-ui">Generated by 葵 🌻</text>
+
+  <!-- Arrows -->
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- Users → Vercel -->
+  <line x1="240" y1="110" x2="295" y2="110" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Vercel → API -->
+  <line x1="430" y1="150" x2="370" y2="240" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- API → Worker -->
+  <line x1="470" y1="285" x2="495" y2="285" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Worker → Inngest -->
+  <line x1="700" y1="285" x2="725" y2="285" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- API → PostgreSQL -->
+  <line x1="350" y1="325" x2="350" y2="465" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Worker → LLM -->
+  <line x1="600" y1="325" x2="690" y2="465" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Sources → API -->
+  <line x1="215" y1="510" x2="265" y2="290" stroke="#ec4899" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+</svg>

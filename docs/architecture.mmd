@@ -1,0 +1,88 @@
+graph TB
+    subgraph Users["👤 ユーザー層"]
+        Browser["🌐 Browser"]
+        Mobile["📱 Mobile"]
+    end
+
+    subgraph Frontend["🖥️ フロントエンド"]
+        Vercel["☁️ Vercel<br/>Next.js 16 / React 19<br/>Region: hnd1 東京"]
+    end
+
+    subgraph Fly["🚀 Fly.io 東京リージョン"]
+        API["⚙️ Go API · chi<br/>256MB"]
+        Worker["🤖 Python Worker<br/>FastAPI · 512MB"]
+        Inngest["⏰ Inngest<br/>ワークフロー管理"]
+    end
+
+    subgraph Data["💾 データ層"]
+        PG["🐘 PostgreSQL<br/>Neon (Serverless)"]
+        Redis["⚡ Redis 7<br/>キャッシュ・キュー"]
+    end
+
+    subgraph LLM["🧠 LLM Providers"]
+        Anthropic["🟣 Anthropic<br/>Claude"]
+        Gemini["🔵 Google Gemini"]
+        Groq["🟡 Groq"]
+        DeepSeek["🟢 DeepSeek V3.2"]
+        Zai["🔴 Z.ai GLM"]
+        OpenRouter["🔀 OpenRouter"]
+    end
+
+    subgraph External["🔌 外部サービス"]
+        Clerk["🔐 Clerk<br/>認証"]
+        Inoreader["📖 Inoreader<br/>RSS"]
+        OneSignal["🔔 OneSignal<br/>Push"]
+        Sentry["🐛 Sentry<br/>監視"]
+    end
+
+    subgraph Sources["📥 データソース"]
+        RSS["📰 RSS"]
+        URL["🔗 URL"]
+        OPML["📋 OPML"]
+    end
+
+    Browser --> Vercel
+    Mobile --> Vercel
+    Vercel --> API
+    Vercel -.-> Clerk
+    Vercel -.-> Sentry
+
+    API --> PG
+    API --> Redis
+    API --> Inngest
+    API --> Worker
+    API -.-> Inoreader
+    API -.-> OneSignal
+
+    Inngest --> API
+    Inngest --> Worker
+
+    Worker --> Anthropic
+    Worker --> Gemini
+    Worker --> Groq
+    Worker --> DeepSeek
+    Worker --> Zai
+    Worker --> OpenRouter
+    Worker --> PG
+    Worker --> Redis
+
+    RSS --> API
+    URL --> API
+    OPML --> API
+
+    style Vercel fill:#3b82f6,stroke:#1e40af,color:#fff
+    style API fill:#10b981,stroke:#065f46,color:#fff
+    style Worker fill:#10b981,stroke:#065f46,color:#fff
+    style Inngest fill:#f59e0b,stroke:#92400e,color:#fff
+    style PG fill:#3b82f6,stroke:#1e40af,color:#fff
+    style Redis fill:#ef4444,stroke:#991b1b,color:#fff
+    style Anthropic fill:#d97706,stroke:#92400e,color:#fff
+    style Gemini fill:#3b82f6,stroke:#1e40af,color:#fff
+    style Groq fill:#eab308,stroke:#854d0e,color:#000
+    style DeepSeek fill:#22c55e,stroke:#166534,color:#fff
+    style Zai fill:#ef4444,stroke:#991b1b,color:#fff
+    style OpenRouter fill:#8b5cf6,stroke:#5b21b6,color:#fff
+    style Clerk fill:#6b7280,stroke:#374151,color:#fff
+    style Inoreader fill:#6b7280,stroke:#374151,color:#fff
+    style OneSignal fill:#6b7280,stroke:#374151,color:#fff
+    style Sentry fill:#6b7280,stroke:#374151,color:#fff

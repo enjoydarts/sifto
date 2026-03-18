@@ -101,7 +101,7 @@ function ItemsPageContent() {
         page,
         page_size: pageSize,
         sort: pendingMode ? "newest" : sortMode,
-        unread_only: pendingMode ? false : unreadMode || unreadOnly,
+        unread_only: pendingMode ? false : unreadMode || unreadOnly || laterMode,
         read_only: pendingMode ? false : readMode,
         favorite_only: pendingMode ? false : favoriteOnly,
         later_only: pendingMode ? false : laterMode,
@@ -143,7 +143,7 @@ function ItemsPageContent() {
       const nextStatus = patch.status ?? (patch.feed ? implicitStatus : filter);
       const nextTopic = patch.topic ?? topic;
       const nextSourceID = patch.sourceId ?? sourceID;
-      const nextUnread = nextFeed === "pending" ? false : patch.unread ?? unreadOnly;
+      const nextUnread = nextFeed === "pending" ? false : nextFeed === "later" ? true : patch.unread ?? unreadOnly;
       const nextFavorite = nextFeed === "pending" ? false : patch.favorite ?? favoriteOnly;
       const nextPage = patch.page ?? page;
 
@@ -176,7 +176,7 @@ function ItemsPageContent() {
     if (topic) q.set("topic", topic);
     q.set("sort", pendingMode ? "newest" : sortMode);
     if (page > 1) q.set("page", String(page));
-    if (!pendingMode && unreadOnly) q.set("unread", "1");
+    if (!pendingMode && (unreadOnly || laterMode)) q.set("unread", "1");
     if (!pendingMode && favoriteOnly) q.set("favorite", "1");
     return q.toString();
   }, [favoriteOnly, feedMode, filter, page, pendingMode, sortMode, sourceID, topic, unreadOnly]);

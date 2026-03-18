@@ -1,5 +1,6 @@
 import httpx
 import time
+import json
 
 
 def usage_from_chat_response(data: dict) -> dict:
@@ -136,6 +137,13 @@ def run_chat_json(
     data = resp.json() if resp.content else {}
     choices = data.get("choices") or []
     if not choices:
+        snippet = ""
+        try:
+            snippet = json.dumps(data, ensure_ascii=False)[:1000]
+        except Exception:
+            snippet = (resp.text or "")[:1000]
+        if snippet:
+            raise RuntimeError(f"{provider_name} chat.completions failed: empty choices body={snippet}")
         raise RuntimeError(f"{provider_name} chat.completions failed: empty choices")
     message = choices[0].get("message") or {}
     content = message.get("content")

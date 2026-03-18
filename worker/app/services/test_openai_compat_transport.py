@@ -29,6 +29,27 @@ class _FakeClient:
         )
 
 
+class _EmptyChoicesClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def post(self, url, headers=None, json=None):
+        return httpx.Response(
+            200,
+            json={
+                "choices": [],
+                "error": {"message": "upstream overloaded"},
+                "provider": "openrouter",
+            },
+        )
+
+
 class RunChatJsonTests(unittest.TestCase):
     def setUp(self):
         _FakeClient.last_json = None
@@ -72,6 +93,27 @@ class RunChatJsonTests(unittest.TestCase):
 
         self.assertIsNotNone(_FakeClient.last_json)
         self.assertNotIn("thinking", _FakeClient.last_json)
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _EmptyChoicesClient)
+    def test_empty_choices_error_includes_response_snippet(self):
+        with self.assertRaises(RuntimeError) as ctx:
+            run_chat_json(
+                "Return JSON",
+                "openai/gpt-oss-20b",
+                "test-key",
+                url="https://example.com/chat/completions",
+                normalize_model_name=lambda model: model,
+                supports_strict_schema=lambda model: False,
+                timeout_sec=5,
+                attempts=1,
+                base_sleep_sec=0,
+                provider_name="openrouter",
+                logger=None,
+                response_schema={"type": "object"},
+            )
+
+        self.assertIn("empty choices", str(ctx.exception))
+        self.assertIn("upstream overloaded", str(ctx.exception))
 
 
 if __name__ == "__main__":

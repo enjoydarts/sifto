@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCheck, Newspaper } from "lucide-react";
+import { CheckCheck, Newspaper, Search, X } from "lucide-react";
 import { api, Item } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import Pagination from "@/components/pagination";
@@ -50,6 +50,7 @@ function ItemsPageContent() {
       qFilter && FILTERS.includes(qFilter as (typeof FILTERS)[number]) ? qFilter : "";
     const topic = (searchParams.get("topic") ?? "").trim();
     const sourceID = (searchParams.get("source_id") ?? "").trim();
+    const searchQuery = (searchParams.get("q") ?? "").trim();
 
     const pendingFeed = qFeed === "pending";
     const unreadOnly = !pendingFeed && searchParams.get("unread") === "1";
@@ -58,9 +59,9 @@ function ItemsPageContent() {
     const qPage = Number(searchParams.get("page"));
     const page = Number.isFinite(qPage) && qPage >= 1 ? Math.floor(qPage) : 1;
 
-    return { feedMode, sortMode, filter, topic, sourceID, unreadOnly, favoriteOnly, page };
+    return { feedMode, sortMode, filter, topic, sourceID, searchQuery, unreadOnly, favoriteOnly, page };
   }, [searchParams]);
-  const { feedMode, sortMode, filter, topic, sourceID, unreadOnly, favoriteOnly, page } = queryState;
+  const { feedMode, sortMode, filter, topic, sourceID, searchQuery, unreadOnly, favoriteOnly, page } = queryState;
   const unreadMode = feedMode === "unread";
   const readMode = feedMode === "read";
   const laterMode = feedMode === "later";
@@ -72,6 +73,8 @@ function ItemsPageContent() {
   const [readUpdatingIds, setReadUpdatingIds] = useState<Record<string, boolean>>({});
   const [bulkMarkingRead, setBulkMarkingRead] = useState(false);
   const [toolbarAction, setToolbarAction] = useState<"" | "triage_all" | "bulk_filtered" | "bulk_older">("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchDraft, setSearchDraft] = useState(searchQuery);
   const restoredScrollRef = useRef<string | null>(null);
   const prefetchedDetailIDsRef = useRef<Record<string, true>>({});
 
@@ -82,13 +85,14 @@ function ItemsPageContent() {
       filter,
       topic,
       sourceID,
+      searchQuery,
       page,
       sortMode,
       unreadOnly ? 1 : 0,
       favoriteOnly ? 1 : 0,
       readMode ? 1 : 0,
     ] as const,
-    [favoriteOnly, feedMode, filter, page, readMode, sortMode, sourceID, topic, unreadOnly]
+    [favoriteOnly, feedMode, filter, page, readMode, searchQuery, sortMode, sourceID, topic, unreadOnly]
   );
 
   const listQuery = useQuery<ItemsFeedQueryData>({
@@ -98,6 +102,7 @@ function ItemsPageContent() {
         status: filter || (pendingMode ? "pending" : "summarized"),
         ...(sourceID ? { source_id: sourceID } : {}),
         ...(topic ? { topic } : {}),
+        ...(searchQuery ? { q: searchQuery } : {}),
         page,
         page_size: pageSize,
         sort: pendingMode ? "newest" : sortMode,
@@ -120,6 +125,12 @@ function ItemsPageContent() {
   const queryError = listQuery.error ? String(listQuery.error) : null;
   const visibleError = error ?? queryError;
 
+  useEffect(() => {
+    if (!searchOpen) {
+      setSearchDraft(searchQuery);
+    }
+  }, [searchOpen, searchQuery]);
+
   const replaceItemsQuery = useCallback(
     (
         patch: Partial<{
@@ -128,6 +139,7 @@ function ItemsPageContent() {
           status: string;
           topic: string;
           sourceId: string;
+          q: string;
           unread: boolean;
           favorite: boolean;
           page: number;
@@ -143,6 +155,7 @@ function ItemsPageContent() {
       const nextStatus = patch.status ?? (patch.feed ? implicitStatus : filter);
       const nextTopic = patch.topic ?? topic;
       const nextSourceID = patch.sourceId ?? sourceID;
+      const nextSearch = patch.q ?? searchQuery;
       const nextUnread = nextFeed === "pending" ? false : nextFeed === "later" ? true : patch.unread ?? unreadOnly;
       const nextFavorite = nextFeed === "pending" ? false : patch.favorite ?? favoriteOnly;
       const nextPage = patch.page ?? page;
@@ -153,6 +166,8 @@ function ItemsPageContent() {
       else q.delete("source_id");
       if (nextTopic) q.set("topic", nextTopic);
       else q.delete("topic");
+      if (nextSearch) q.set("q", nextSearch);
+      else q.delete("q");
       q.set("sort", nextFeed === "pending" ? "newest" : nextSort);
       if (nextUnread) q.set("unread", "1");
       else q.delete("unread");
@@ -165,7 +180,7 @@ function ItemsPageContent() {
       const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
       router.replace(nextUrl, { scroll: false });
     },
-    [favoriteOnly, feedMode, filter, page, pathname, router, searchParams, sortMode, sourceID, topic, unreadOnly]
+    [favoriteOnly, feedMode, filter, page, pathname, router, searchParams, searchQuery, sortMode, sourceID, topic, unreadOnly]
   );
 
   const itemsQueryString = useMemo(() => {
@@ -174,12 +189,18 @@ function ItemsPageContent() {
     if (filter) q.set("status", filter);
     if (sourceID) q.set("source_id", sourceID);
     if (topic) q.set("topic", topic);
+    if (searchQuery) q.set("q", searchQuery);
     q.set("sort", pendingMode ? "newest" : sortMode);
     if (page > 1) q.set("page", String(page));
     if (!pendingMode && (unreadOnly || laterMode)) q.set("unread", "1");
     if (!pendingMode && favoriteOnly) q.set("favorite", "1");
     return q.toString();
-  }, [favoriteOnly, feedMode, filter, page, pendingMode, sortMode, sourceID, topic, unreadOnly]);
+  }, [favoriteOnly, feedMode, filter, page, pendingMode, searchQuery, sortMode, sourceID, topic, unreadOnly]);
+
+  const submitSearch = useCallback(() => {
+    replaceItemsQuery({ q: searchDraft.trim(), page: 1 });
+    setSearchOpen(false);
+  }, [replaceItemsQuery, searchDraft]);
 
   const currentItemsHref = useMemo(
     () => (itemsQueryString ? `${pathname}?${itemsQueryString}` : pathname),
@@ -451,16 +472,33 @@ function ItemsPageContent() {
               {t(pageSubtitleKey)} · {itemsTotal.toLocaleString()} {t("common.rows")}
             </p>
           </div>
-          {!pendingMode && (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => router.push("/triage?mode=all")}
-              className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-zinc-900 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring"
+              onClick={() => {
+                setSearchDraft(searchQuery);
+                setSearchOpen(true);
+              }}
+              className={`inline-flex min-h-9 items-center justify-center rounded-lg border px-3 py-2 text-sm font-medium press focus-ring ${
+                searchQuery
+                  ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                  : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100"
+              }`}
+              aria-label={t("items.search.open")}
             >
-              <CheckCheck className="size-4" aria-hidden="true" />
-              <span>{t("items.openAllTriage")}</span>
+              <Search className="size-4" aria-hidden="true" />
             </button>
-          )}
+            {!pendingMode && (
+              <button
+                type="button"
+                onClick={() => router.push("/triage?mode=all")}
+                className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-zinc-900 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring"
+              >
+                <CheckCheck className="size-4" aria-hidden="true" />
+                <span>{t("items.openAllTriage")}</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <section className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50/80 shadow-sm">
@@ -517,8 +555,10 @@ function ItemsPageContent() {
               </div>
             )}
 
-            {(sourceID || filter) && (
-              <div className="flex flex-wrap items-center gap-2 xl:order-4 xl:basis-full">
+          </div>
+          {(sourceID || filter || searchQuery || topic) && (
+            <div className="border-t border-zinc-200 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {topic && (
                   <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs text-blue-800">
                     <span className="font-medium">
@@ -538,16 +578,28 @@ function ItemsPageContent() {
                     {t("items.filter.sourceApplied")}
                   </span>
                 )}
-                {filter && (
-                  filter !== "pending" && (
+                {searchQuery && (
+                  <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-800">
+                    <span className="font-medium">
+                      {t("items.search.active")}: {searchQuery}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => replaceItemsQuery({ q: "", page: 1 })}
+                      className="rounded-full px-1.5 py-0.5 text-xs text-emerald-700 hover:bg-emerald-100 press"
+                    >
+                      {t("items.clear")}
+                    </button>
+                  </div>
+                )}
+                {filter && filter !== "pending" && (
                   <span className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700">
                     {t(`items.filter.${filter}`)}
                   </span>
-                  )
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </section>
 
         {/* State */}
@@ -652,6 +704,66 @@ function ItemsPageContent() {
               void queryClient.invalidateQueries({ queryKey: ["focus-queue"] });
             }}
           />
+        )}
+
+        {searchOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center bg-zinc-950/45 px-4 py-10 sm:items-center"
+            onClick={() => setSearchOpen(false)}
+          >
+            <div
+              className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <h2 className="text-lg font-semibold text-zinc-900">{t("items.search.title")}</h2>
+                  <p className="text-sm text-zinc-500">{t("items.search.description")}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(false)}
+                  className="inline-flex size-9 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 press focus-ring"
+                  aria-label={t("common.close")}
+                >
+                  <X className="size-4" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <input
+                  autoFocus
+                  type="search"
+                  value={searchDraft}
+                  onChange={(e) => setSearchDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      submitSearch();
+                    }
+                  }}
+                  placeholder={t("items.search.placeholder")}
+                  className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus-ring"
+                />
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSearchDraft("")}
+                    className="text-sm font-medium text-zinc-500 hover:text-zinc-700 press"
+                  >
+                    {t("common.clear")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitSearch}
+                    className="inline-flex min-h-10 items-center rounded-lg border border-zinc-900 bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring"
+                  >
+                    {t("items.search.submit")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </PageTransition>

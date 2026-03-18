@@ -74,7 +74,7 @@ func itemsListCacheTTLForSort(sort string) time.Duration {
 	}
 }
 
-func (h *ItemHandler) itemsListCacheKey(ctx context.Context, userID, status, sourceID, topic string, unreadOnly, readOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) (string, error) {
+func (h *ItemHandler) itemsListCacheKey(ctx context.Context, userID, status, sourceID, topic, searchQuery string, unreadOnly, readOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) (string, error) {
 	version := int64(0)
 	if h.cache != nil {
 		var err error
@@ -83,7 +83,7 @@ func (h *ItemHandler) itemsListCacheKey(ctx context.Context, userID, status, sou
 			return "", err
 		}
 	}
-	return cacheKeyItemsListVersioned(userID, version, status, sourceID, topic, unreadOnly, readOnly, favoriteOnly, laterOnly, sort, page, pageSize), nil
+	return cacheKeyItemsListVersioned(userID, version, status, sourceID, topic, searchQuery, unreadOnly, readOnly, favoriteOnly, laterOnly, sort, page, pageSize), nil
 }
 
 func (h *ItemHandler) bumpUserItemsVersion(ctx context.Context, userID string) error {
@@ -181,11 +181,12 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	readOnly := q.Get("read_only") == "true"
 	favoriteOnly := q.Get("favorite_only") == "true"
 	laterOnly := q.Get("later_only") == "true"
+	searchQuery := strings.TrimSpace(q.Get("q"))
 	if unreadOnly && readOnly {
 		http.Error(w, "unread_only and read_only cannot both be true", http.StatusBadRequest)
 		return
 	}
-	cacheKey, cacheKeyErr := h.itemsListCacheKey(r.Context(), userID, q.Get("status"), q.Get("source_id"), q.Get("topic"), unreadOnly, readOnly, favoriteOnly, laterOnly, sort, page, pageSize)
+	cacheKey, cacheKeyErr := h.itemsListCacheKey(r.Context(), userID, q.Get("status"), q.Get("source_id"), q.Get("topic"), searchQuery, unreadOnly, readOnly, favoriteOnly, laterOnly, sort, page, pageSize)
 	cacheBust := q.Get("cache_bust") == "1"
 	if cacheKeyErr != nil {
 		itemsListCacheCounter.errors.Add(1)
@@ -213,10 +214,15 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var queryPtr *string
+	if searchQuery != "" {
+		queryPtr = &searchQuery
+	}
 	resp, err := h.repo.ListPage(r.Context(), userID, repository.ItemListParams{
 		Status:       status,
 		SourceID:     sourceID,
 		Topic:        topic,
+		Query:        queryPtr,
 		UnreadOnly:   unreadOnly,
 		ReadOnly:     readOnly,
 		FavoriteOnly: favoriteOnly,

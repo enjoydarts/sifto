@@ -44,6 +44,7 @@ type ItemListParams struct {
 	Status       *string
 	SourceID     *string
 	Topic        *string
+	Query        *string
 	UnreadOnly   bool
 	ReadOnly     bool
 	FavoriteOnly bool
@@ -172,6 +173,19 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 			  AND COALESCE(smt.topics, '{}'::text[]) @> ARRAY[$` + itoa(len(args)) + `::text]
 		)`
 	}
+	if p.Query != nil && strings.TrimSpace(*p.Query) != "" {
+		args = append(args, "%"+strings.TrimSpace(*p.Query)+"%")
+		baseWhere += ` AND (
+			COALESCE(i.title, '') ILIKE $` + itoa(len(args)) + `
+			OR i.url ILIKE $` + itoa(len(args)) + `
+			OR EXISTS (
+				SELECT 1
+				FROM item_summaries smq
+				WHERE smq.item_id = i.id
+				  AND COALESCE(smq.translated_title, '') ILIKE $` + itoa(len(args)) + `
+			)
+		)`
+	}
 	if p.UnreadOnly {
 		baseWhere += ` AND NOT EXISTS (
 			SELECT 1 FROM item_reads ir2
@@ -250,6 +264,14 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 					SELECT 1 FROM item_summaries smt
 					WHERE smt.item_id = i.id
 					  AND COALESCE(smt.topics, '{}'::text[]) @> ARRAY[$` + itoa(nextIdx) + `::text]
+				)`
+				nextIdx++
+			}
+			if p.Query != nil && strings.TrimSpace(*p.Query) != "" {
+				q += ` AND (
+					COALESCE(i.title, '') ILIKE $` + itoa(nextIdx) + `
+					OR i.url ILIKE $` + itoa(nextIdx) + `
+					OR COALESCE(sm.translated_title, '') ILIKE $` + itoa(nextIdx) + `
 				)`
 				nextIdx++
 			}

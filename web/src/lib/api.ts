@@ -1019,11 +1019,12 @@ export const api = {
     ),
 
   // Items
-  getItems: (params?: { status?: string; source_id?: string; topic?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean; read_only?: boolean; favorite_only?: boolean; later_only?: boolean }) => {
+  getItems: (params?: { status?: string; source_id?: string; topic?: string; q?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean; read_only?: boolean; favorite_only?: boolean; later_only?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.source_id) q.set("source_id", params.source_id);
     if (params?.topic) q.set("topic", params.topic);
+    if (params?.q) q.set("q", params.q);
     if (params?.page) q.set("page", String(params.page));
     if (params?.page_size) q.set("page_size", String(params.page_size));
     if (params?.sort) q.set("sort", params.sort);

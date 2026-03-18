@@ -10,6 +10,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("gpt-5.4-pro"); got == nil {
 		t.Fatal("gpt-5.4-pro not found in catalog")
 	}
+	if got := findModelCatalog("gpt-5.4-mini"); got == nil {
+		t.Fatal("gpt-5.4-mini not found in catalog")
+	}
+	if got := findModelCatalog("gpt-5.4-nano"); got == nil {
+		t.Fatal("gpt-5.4-nano not found in catalog")
+	}
 	if got := findModelCatalog("deepseek-chat"); got == nil {
 		t.Fatal("deepseek-chat not found in catalog")
 	}
@@ -32,7 +38,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "grok-4-fast-non-reasoning", provider: "xai"},
 		{model: "glm-4.7-flash", provider: "zai"},
 		{model: "fireworks/gpt-oss-20b", provider: "fireworks"},
-		{model: "gpt-5-mini", provider: "openai"},
+		{model: "gpt-5.4-mini", provider: "openai"},
 		{model: "openrouter::openai/gpt-oss-120b", provider: "openrouter"},
 	}
 	for _, tt := range tests {
@@ -46,8 +52,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		purpose  string
 		want     string
 	}{
-		{provider: "openai", purpose: "digest", want: "gpt-5"},
-		{provider: "openai", purpose: "facts", want: "gpt-5-mini"},
+		{provider: "openai", purpose: "digest", want: "gpt-5.4"},
+		{provider: "openai", purpose: "facts", want: "gpt-5.4-mini"},
 		{provider: "deepseek", purpose: "summary", want: "deepseek-chat"},
 		{provider: "groq", purpose: "ask", want: "openai/gpt-oss-20b"},
 		{provider: "google", purpose: "facts", want: "gemini-2.5-flash-lite"},
@@ -112,8 +118,8 @@ func TestCatalogModelSupportsPurpose(t *testing.T) {
 		purpose string
 		want    bool
 	}{
-		{model: "gpt-5-mini", purpose: "summary", want: true},
-		{model: "gpt-5-mini", purpose: "source_suggestion", want: true},
+		{model: "gpt-5.4-mini", purpose: "summary", want: true},
+		{model: "gpt-5.4-mini", purpose: "source_suggestion", want: true},
 		{model: "text-embedding-3-small", purpose: "summary", want: false},
 		{model: "text-embedding-3-small", purpose: "embedding", want: true},
 		{model: "does-not-exist", purpose: "summary", want: false},
@@ -129,14 +135,14 @@ func TestCatalogIsEmbeddingModel(t *testing.T) {
 	if !CatalogIsEmbeddingModel("text-embedding-3-small") {
 		t.Fatal("text-embedding-3-small should be recognized as embedding model")
 	}
-	if CatalogIsEmbeddingModel("gpt-5-mini") {
-		t.Fatal("gpt-5-mini should not be recognized as embedding model")
+	if CatalogIsEmbeddingModel("gpt-5.4-mini") {
+		t.Fatal("gpt-5.4-mini should not be recognized as embedding model")
 	}
 }
 
 func TestCatalogModelSupportsCapability(t *testing.T) {
-	if !CatalogModelSupportsCapability("gpt-5-mini", "structured_output") {
-		t.Fatal("gpt-5-mini should support structured_output")
+	if !CatalogModelSupportsCapability("gpt-5.4-mini", "structured_output") {
+		t.Fatal("gpt-5.4-mini should support structured_output")
 	}
 	if CatalogModelSupportsCapability("text-embedding-3-small", "structured_output") {
 		t.Fatal("text-embedding-3-small should not support structured_output")

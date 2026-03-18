@@ -54,41 +54,49 @@ function buildCostPerformancePreset(catalog: LLMCatalog | null): NonNullable<Use
     facts: firstMatchingModelId(purposeModels("facts"), [
       "openai/gpt-oss-20b",
       "gemini-2.5-flash-lite",
+      "gpt-5.4-mini",
       "gpt-5-mini",
     ]),
     summary: firstMatchingModelId(purposeModels("summary"), [
       "openai/gpt-oss-120b",
       "gemini-2.5-flash",
+      "gpt-5.4",
       "gpt-5",
     ]),
     digest_cluster: firstMatchingModelId(purposeModels("digest_cluster_draft"), [
       "openai/gpt-oss-120b",
       "gemini-2.5-flash",
+      "gpt-5.4",
       "gpt-5",
     ]),
     digest: firstMatchingModelId(purposeModels("digest"), [
       "openai/gpt-oss-120b",
       "gemini-2.5-flash",
+      "gpt-5.4",
       "gpt-5",
     ]),
     ask: firstMatchingModelId(purposeModels("ask"), [
       "openai/gpt-oss-20b",
       "gemini-2.5-flash",
+      "gpt-5.4-mini",
       "gpt-5-mini",
     ]),
     source_suggestion: firstMatchingModelId(purposeModels("source_suggestion"), [
       "openai/gpt-oss-20b",
       "gemini-2.5-flash-lite",
+      "gpt-5.4-mini",
       "gpt-5-mini",
     ]),
     facts_check: firstMatchingModelId(purposeModels("facts"), [
       "openai/gpt-oss-120b",
       "gemini-2.5-flash",
+      "gpt-5.4",
       "gpt-5",
     ]),
     faithfulness_check: firstMatchingModelId(purposeModels("summary"), [
       "openai/gpt-oss-120b",
       "gemini-2.5-flash",
+      "gpt-5.4",
       "gpt-5",
     ]),
     embedding: firstMatchingModelId(embeddingModels, [

@@ -157,12 +157,12 @@
       "api_key_header": "x-openai-api-key",
       "match_prefixes": ["gpt-5"],
       "default_models": {
-        "facts": "gpt-5-mini",
-        "summary": "gpt-5-mini",
-        "digest_cluster_draft": "gpt-5",
-        "digest": "gpt-5",
-        "ask": "gpt-5-mini",
-        "source_suggestion": "gpt-5-mini"
+        "facts": "gpt-5.4-mini",
+        "summary": "gpt-5.4-mini",
+        "digest_cluster_draft": "gpt-5.4",
+        "digest": "gpt-5.4",
+        "ask": "gpt-5.4-mini",
+        "source_suggestion": "gpt-5.4-mini"
       }
     }
   ],
@@ -1688,6 +1688,52 @@
         "input_per_mtok_usd": 2.5,
         "output_per_mtok_usd": 15.0,
         "cache_read_per_mtok_usd": 0.25
+      }
+    },
+    {
+      "id": "gpt-5.4-mini",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": ["fast", "jsonStable"],
+      "comment": "gpt-5.4 系の実用主力。事実抽出、要約、質問応答まで広く回しやすく、既定候補にしやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "openai_standard_2026_03",
+        "input_per_mtok_usd": 0.75,
+        "output_per_mtok_usd": 4.5,
+        "cache_read_per_mtok_usd": 0.075
+      }
+    },
+    {
+      "id": "gpt-5.4-nano",
+      "provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "jsonStable"],
+      "comment": "gpt-5.4 系の最安枠。軽い抽出や短い判定を安く回したい時の候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "openai_standard_2026_03",
+        "input_per_mtok_usd": 0.2,
+        "output_per_mtok_usd": 1.25,
+        "cache_read_per_mtok_usd": 0.02
       }
     },
     {

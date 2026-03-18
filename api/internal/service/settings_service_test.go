@@ -12,7 +12,7 @@ func TestValidateCatalogModelForPurpose(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "nil allowed", model: nil, purpose: "summary", wantErr: false},
-		{name: "valid summary model", model: strptr("gpt-5-mini"), purpose: "summary", wantErr: false},
+		{name: "valid summary model", model: strptr("gpt-5.4-mini"), purpose: "summary", wantErr: false},
 		{name: "invalid purpose", model: strptr("text-embedding-3-small"), purpose: "summary", wantErr: true},
 		{name: "unknown model", model: strptr("unknown-model"), purpose: "summary", wantErr: true},
 	}

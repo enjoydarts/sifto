@@ -126,26 +126,29 @@ func (h *OpenRouterModelsHandler) translateDescriptions(syncRunID string, models
 	}()
 	openAI := service.NewOpenAIClient()
 	total, completed := openRouterTranslationProgress(models)
-	for i := range models {
-		descEN := strings.TrimSpace(derefOptionalString(models[i].DescriptionEN))
-		if descEN == "" {
-			continue
-		}
-		enriched := service.EnrichOpenRouterDescriptionsJA(ctx, h.repo, openAI, []repository.OpenRouterModelSnapshot{models[i]})
+	pending := openRouterPendingTranslationModels(models)
+	for _, pendingModel := range pending {
+		enriched := service.EnrichOpenRouterDescriptionsJA(ctx, h.repo, openAI, []repository.OpenRouterModelSnapshot{pendingModel})
 		if len(enriched) == 0 {
-			_ = h.repo.RecordTranslationFailure(ctx, syncRunID, models[i].ModelID, "empty translation response")
+			_ = h.repo.RecordTranslationFailure(ctx, syncRunID, pendingModel.ModelID, "empty translation response")
 			continue
 		}
 		ja := strings.TrimSpace(derefOptionalString(enriched[0].DescriptionJA))
+		descEN := strings.TrimSpace(derefOptionalString(pendingModel.DescriptionEN))
 		if ja == "" || ja == descEN {
-			_ = h.repo.RecordTranslationFailure(ctx, syncRunID, models[i].ModelID, "translation unavailable")
+			_ = h.repo.RecordTranslationFailure(ctx, syncRunID, pendingModel.ModelID, "translation unavailable")
 			completed++
 			_ = h.repo.UpdateTranslationProgress(ctx, syncRunID, total, completed)
 			continue
 		}
-		models[i].DescriptionJA = &ja
-		if err := h.repo.UpdateDescriptionsJA(ctx, syncRunID, map[string]string{models[i].ModelID: ja}); err != nil {
-			log.Printf("openrouter description translation update failed sync_run_id=%s model_id=%s err=%v", syncRunID, models[i].ModelID, err)
+		for i := range models {
+			if models[i].ModelID == pendingModel.ModelID {
+				models[i].DescriptionJA = &ja
+				break
+			}
+		}
+		if err := h.repo.UpdateDescriptionsJA(ctx, syncRunID, map[string]string{pendingModel.ModelID: ja}); err != nil {
+			log.Printf("openrouter description translation update failed sync_run_id=%s model_id=%s err=%v", syncRunID, pendingModel.ModelID, err)
 			msg := err.Error()
 			_ = h.repo.FinishSyncRun(ctx, syncRunID, len(models), len(models), &msg)
 			return
@@ -190,6 +193,22 @@ func openRouterTranslationProgress(models []repository.OpenRouterModelSnapshot) 
 		}
 	}
 	return total, completed
+}
+
+func openRouterPendingTranslationModels(models []repository.OpenRouterModelSnapshot) []repository.OpenRouterModelSnapshot {
+	pending := make([]repository.OpenRouterModelSnapshot, 0)
+	for _, model := range models {
+		descEN := strings.TrimSpace(derefOptionalString(model.DescriptionEN))
+		if descEN == "" {
+			continue
+		}
+		descJA := strings.TrimSpace(derefOptionalString(model.DescriptionJA))
+		if descJA != "" && descJA != descEN {
+			continue
+		}
+		pending = append(pending, model)
+	}
+	return pending
 }
 
 func splitOpenRouterModelEntries(current, previous []repository.OpenRouterModelSnapshot) ([]openRouterModelListEntry, []openRouterModelListEntry) {

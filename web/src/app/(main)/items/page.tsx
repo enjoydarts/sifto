@@ -473,7 +473,7 @@ function ItemsPageContent() {
               />
             </div>
 
-            <div className="min-w-0 flex-1">
+            <div className={`min-w-0 ${readMode ? "xl:w-[500px] xl:flex-none" : "flex-1"}`}>
               <FiltersBar
                 feedMode={feedMode}
                 sortMode={sortMode}
@@ -486,7 +486,7 @@ function ItemsPageContent() {
               />
             </div>
 
-            {!pendingMode && (
+            {!pendingMode && !readMode && (
               <div className="flex shrink-0 items-center gap-2 xl:w-[248px] xl:justify-end">
                 <select
                   value={toolbarAction}

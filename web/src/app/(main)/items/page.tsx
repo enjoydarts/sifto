@@ -263,12 +263,20 @@ function ItemsPageContent() {
   const toggleRead = useCallback(
     async (item: Item) => {
       setReadUpdatingIds((prev) => ({ ...prev, [item.id]: true }));
+      const willMarkRead = !item.is_read;
       try {
         queryClient.setQueryData<ItemsFeedQueryData>(listQueryKey, (prev) =>
           prev
             ? {
                 ...prev,
-                items: prev.items.map((v) => (v.id === item.id ? { ...v, is_read: !item.is_read } : v)),
+                items:
+                  laterMode && willMarkRead
+                    ? prev.items.filter((v) => v.id !== item.id)
+                    : prev.items.map((v) => (v.id === item.id ? { ...v, is_read: !item.is_read } : v)),
+                total:
+                  laterMode && willMarkRead
+                    ? Math.max(0, prev.total - (prev.items.some((v) => v.id === item.id) ? 1 : 0))
+                    : prev.total,
               }
             : prev
         );
@@ -279,6 +287,9 @@ function ItemsPageContent() {
           await api.markItemRead(item.id);
           showToast(t("itemDetail.toast.markRead"), "success");
         }
+        await queryClient.invalidateQueries({ queryKey: ["items-feed"] });
+        await queryClient.invalidateQueries({ queryKey: ["focus-queue"] });
+        await queryClient.invalidateQueries({ queryKey: ["briefing-today"] });
       } catch (e) {
         queryClient.invalidateQueries({ queryKey: listQueryKey });
         setError(String(e));
@@ -291,7 +302,7 @@ function ItemsPageContent() {
         });
       }
     },
-    [listQueryKey, queryClient, showToast, t]
+    [laterMode, listQueryKey, queryClient, showToast, t]
   );
 
   const bulkMarkRead = useCallback(

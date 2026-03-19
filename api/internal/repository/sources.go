@@ -377,6 +377,46 @@ func (r *SourceRepo) DailyStatsByUser(ctx context.Context, userID string, days i
 	return out, nil
 }
 
+func BuildSourcesDailyOverview(rows []model.SourceDailyStats) model.SourcesDailyOverview {
+	byDay := map[string]int{}
+	for _, row := range rows {
+		for _, daily := range row.DailyCounts {
+			byDay[daily.Day] += daily.Count
+		}
+	}
+
+	ordered := make([]string, 0, len(byDay))
+	for day := range byDay {
+		ordered = append(ordered, day)
+	}
+	sort.Strings(ordered)
+
+	out := model.SourcesDailyOverview{
+		DailyCounts: make([]model.SourceDailyCount, 0, len(ordered)),
+	}
+	for idx, day := range ordered {
+		count := byDay[day]
+		out.DailyCounts = append(out.DailyCounts, model.SourceDailyCount{Day: day, Count: count})
+		out.Last30DaysTotal += count
+		if idx >= len(ordered)-7 {
+			out.Last7DaysTotal += count
+		}
+		if idx == len(ordered)-1 {
+			out.TodayCount = count
+		}
+		if idx == len(ordered)-2 {
+			out.YesterdayCount = count
+		}
+		if count > 0 {
+			out.ActiveDays30d++
+		}
+	}
+	if out.ActiveDays30d > 0 {
+		out.AvgItemsPerActiveDay30 = float64(out.Last30DaysTotal) / float64(out.ActiveDays30d)
+	}
+	return out
+}
+
 func (r *SourceRepo) RefreshHealthSnapshot(ctx context.Context, sourceID string, reason *string) error {
 	var (
 		h       model.SourceHealth

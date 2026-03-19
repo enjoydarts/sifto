@@ -340,7 +340,8 @@ func (h *SourceHandler) DailyStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{
-		"items": rows,
+		"items":    rows,
+		"overview": repository.BuildSourcesDailyOverview(rows),
 	})
 }
 

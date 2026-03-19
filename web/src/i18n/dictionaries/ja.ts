@@ -347,6 +347,7 @@ export const jaDict: Dict = {
   "sources.tabs.discover": "発見",
   "sources.tabs.discoverDesc": "AI によるおすすめソース候補を見て、新しい購読先を追加します。",
   "sources.activity.note": "右端のバーは直近14日の日別取込件数です。平均は直近30日で取込があった日だけを母数にしています。",
+  "sources.activity.overviewTitle": "全ソース合算",
   "sources.activity.refresh": "推移を更新",
   "sources.activity.source": "ソース",
   "sources.activity.today": "今日",

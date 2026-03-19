@@ -3,7 +3,16 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Activity, Download, Lightbulb, Sparkles, Upload } from "lucide-react";
-import { api, Source, SourceDailyStats, SourceHealth, SourceItemStats, SourceOptimizationItem, SourceSuggestion } from "@/lib/api";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { api, Source, SourceDailyStats, SourceHealth, SourceItemStats, SourceOptimizationItem, SourceSuggestion, SourcesDailyOverview } from "@/lib/api";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -21,6 +30,7 @@ export default function SourcesPage() {
   const [sourceItemStatsByID, setSourceItemStatsByID] = useState<Record<string, SourceItemStats>>({});
   const [sourceDailyStatsByID, setSourceDailyStatsByID] = useState<Record<string, SourceDailyStats>>({});
   const [sourceOptimization, setSourceOptimization] = useState<SourceOptimizationItem[]>([]);
+  const [sourcesDailyOverview, setSourcesDailyOverview] = useState<SourcesDailyOverview | null>(null);
   const [loadingDailyStats, setLoadingDailyStats] = useState(false);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -95,6 +105,7 @@ export default function SourcesPage() {
       const next: Record<string, SourceDailyStats> = {};
       for (const row of data.items ?? []) next[row.source_id] = row;
       setSourceDailyStatsByID(next);
+      setSourcesDailyOverview(data.overview ?? null);
     } catch (e) {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
@@ -320,6 +331,15 @@ export default function SourcesPage() {
     const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
     return dt.toLocaleDateString(dateLocale, { month: "numeric", day: "numeric", timeZone: "UTC" });
   }, [dateLocale]);
+  const overviewChartRows = useMemo(
+    () =>
+      (sourcesDailyOverview?.daily_counts ?? []).map((entry) => ({
+        day: entry.day,
+        label: formatShortDate(entry.day),
+        count: entry.count,
+      })),
+    [formatShortDate, sourcesDailyOverview]
+  );
 
   return (
     <div className="space-y-4">
@@ -661,6 +681,91 @@ export default function SourcesPage() {
             </div>
 
             <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+              {sourcesDailyOverview ? (
+                <div className="border-b border-zinc-200 bg-zinc-50/70 px-4 py-4">
+                  <div className="mb-3 text-sm font-semibold text-zinc-900">{t("sources.activity.overviewTitle")}</div>
+                  <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+                    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.activity.today")}</div>
+                      <div className="mt-1 tabular-nums text-lg font-semibold text-zinc-900">{sourcesDailyOverview.today_count.toLocaleString()}</div>
+                    </div>
+                    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.activity.yesterday")}</div>
+                      <div className="mt-1 tabular-nums text-lg font-semibold text-zinc-900">{sourcesDailyOverview.yesterday_count.toLocaleString()}</div>
+                    </div>
+                    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.activity.last7d")}</div>
+                      <div className="mt-1 tabular-nums text-lg font-semibold text-zinc-900">{sourcesDailyOverview.last_7d_total.toLocaleString()}</div>
+                    </div>
+                    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.activity.last30d")}</div>
+                      <div className="mt-1 tabular-nums text-lg font-semibold text-zinc-900">{sourcesDailyOverview.last_30d_total.toLocaleString()}</div>
+                    </div>
+                    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.activity.activeDays")}</div>
+                      <div className="mt-1 tabular-nums text-lg font-semibold text-zinc-900">{sourcesDailyOverview.active_days_30d.toLocaleString()}</div>
+                    </div>
+                    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
+                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.activity.avgActiveDay")}</div>
+                      <div className="mt-1 tabular-nums text-lg font-semibold text-zinc-900">{sourcesDailyOverview.avg_items_per_active_day_30d.toFixed(1)}</div>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <div className="h-48 rounded-lg border border-zinc-200 bg-white px-2 py-3">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={overviewChartRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="sourcesOverviewFill" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#18181b" stopOpacity={0.28} />
+                              <stop offset="95%" stopColor="#18181b" stopOpacity={0.03} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid stroke="#e4e4e7" strokeDasharray="3 3" vertical={false} />
+                          <XAxis
+                            dataKey="label"
+                            tick={{ fill: "#71717a", fontSize: 11 }}
+                            tickLine={false}
+                            axisLine={false}
+                            minTickGap={24}
+                          />
+                          <YAxis
+                            allowDecimals={false}
+                            tick={{ fill: "#71717a", fontSize: 11 }}
+                            tickLine={false}
+                            axisLine={false}
+                            width={28}
+                          />
+                          <Tooltip
+                            cursor={{ stroke: "#a1a1aa", strokeDasharray: "3 3" }}
+                            contentStyle={{
+                              borderRadius: 12,
+                              borderColor: "#e4e4e7",
+                              boxShadow: "0 8px 24px rgba(24,24,27,0.08)",
+                            }}
+                            formatter={(value: number | string | undefined) => [
+                              typeof value === "number" ? value.toLocaleString() : String(value ?? 0),
+                              t("common.rows"),
+                            ]}
+                            labelFormatter={(_, payload) => {
+                              const row = payload?.[0]?.payload as { day?: string; label?: string } | undefined;
+                              return row?.day ? formatShortDate(row.day) : "";
+                            }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="count"
+                            stroke="#18181b"
+                            strokeWidth={2}
+                            fill="url(#sourcesOverviewFill)"
+                            dot={{ r: 2, strokeWidth: 0, fill: "#18181b" }}
+                            activeDot={{ r: 4, strokeWidth: 0, fill: "#18181b" }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               <div className="overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">

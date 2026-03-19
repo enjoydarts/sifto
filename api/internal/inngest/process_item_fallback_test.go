@@ -13,6 +13,7 @@ func TestIsTransientLLMWorkerError(t *testing.T) {
 		{name: "provider 502", err: assertErr("worker /extract-facts: status 500 detail=extract_facts failed: openrouter chat.completions failed: empty choices body={\"error\":{\"message\":\"Provider returned error\",\"code\":502}}"), want: true},
 		{name: "timeout", err: assertErr("worker /summarize: context deadline exceeded"), want: true},
 		{name: "temporary overload", err: assertErr("worker /summarize: upstream provider overload"), want: true},
+		{name: "deprecated model 404", err: assertErr("worker /extract-facts: status 500 detail=extract_facts failed: openrouter chat.completions failed status=404 body={\"error\":{\"message\":\"Hunter Alpha was a stealth model revealed on March 18th as an early testing version of MiMo-V2-Pro. Find it here: https://openrouter.ai/xiaomi/mimo-v2-pro\",\"code\":404}}"), want: true},
 		{name: "parse failed", err: assertErr("worker /extract-facts: status 500 detail=openrouter extract_facts parse failed"), want: false},
 		{name: "capability missing", err: assertErr("model missing required capability for facts"), want: false},
 	}

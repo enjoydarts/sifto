@@ -20,10 +20,10 @@ type ProviderModelChangeEvent struct {
 }
 
 type ProviderModelChangeSummary struct {
-	Provider   string                   `json:"provider"`
-	DetectedAt time.Time                `json:"detected_at"`
-	Trigger    string                   `json:"trigger"`
-	Added      []ProviderModelChangeEvent `json:"added"`
+	Provider    string                     `json:"provider"`
+	DetectedAt  time.Time                  `json:"detected_at"`
+	Trigger     string                     `json:"trigger"`
+	Added       []ProviderModelChangeEvent `json:"added"`
 	Constrained []ProviderModelChangeEvent `json:"constrained"`
-	Removed    []ProviderModelChangeEvent `json:"removed"`
+	Removed     []ProviderModelChangeEvent `json:"removed"`
 }

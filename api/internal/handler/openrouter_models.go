@@ -21,8 +21,8 @@ type openRouterModelListEntry struct {
 }
 
 type OpenRouterModelsHandler struct {
-	repo             *repository.OpenRouterModelRepo
-	service          *service.OpenRouterCatalogService
+	repo               *repository.OpenRouterModelRepo
+	service            *service.OpenRouterCatalogService
 	providerUpdateRepo *repository.ProviderModelUpdateRepo
 }
 
@@ -59,9 +59,9 @@ func (h *OpenRouterModelsHandler) List(w http.ResponseWriter, r *http.Request) {
 		latestChangeSummary = summary
 	}
 	writeJSON(w, map[string]any{
-		"latest_run":         latestRun,
-		"models":             available,
-		"unavailable_models": unavailable,
+		"latest_run":            latestRun,
+		"models":                available,
+		"unavailable_models":    unavailable,
 		"latest_change_summary": latestChangeSummary,
 	})
 }
@@ -142,9 +142,9 @@ func (h *OpenRouterModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		latestChangeSummary = summary
 	}
 	writeJSON(w, map[string]any{
-		"latest_run":         latestRun,
-		"models":             available,
-		"unavailable_models": unavailable,
+		"latest_run":            latestRun,
+		"models":                available,
+		"unavailable_models":    unavailable,
 		"latest_change_summary": latestChangeSummary,
 	})
 

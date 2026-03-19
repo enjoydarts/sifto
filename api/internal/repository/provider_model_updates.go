@@ -132,12 +132,12 @@ func (r *ProviderModelUpdateRepo) ListLatestProviderSummary(ctx context.Context,
 	defer rows.Close()
 
 	summary := &model.ProviderModelChangeSummary{
-		Provider:   provider,
-		DetectedAt: detectedAt,
-		Trigger:    trigger,
-		Added:      []model.ProviderModelChangeEvent{},
+		Provider:    provider,
+		DetectedAt:  detectedAt,
+		Trigger:     trigger,
+		Added:       []model.ProviderModelChangeEvent{},
 		Constrained: []model.ProviderModelChangeEvent{},
-		Removed:    []model.ProviderModelChangeEvent{},
+		Removed:     []model.ProviderModelChangeEvent{},
 	}
 	for rows.Next() {
 		var ev model.ProviderModelChangeEvent

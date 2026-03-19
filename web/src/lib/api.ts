@@ -204,6 +204,16 @@ export interface ItemSummaryLLM {
   created_at: string;
 }
 
+export interface ItemLLMExecutionAttempt {
+  provider: string;
+  model: string;
+  status: string;
+  attempt_index: number;
+  error_kind?: string | null;
+  error_message?: string | null;
+  created_at: string;
+}
+
 export interface SummaryFaithfulnessCheck {
   id: string;
   item_id: string;
@@ -256,10 +266,12 @@ export interface ItemDetail extends Item {
   processing_error?: string | null;
   facts: ItemFacts | null;
   facts_llm?: ItemSummaryLLM | null;
+  facts_executions?: ItemLLMExecutionAttempt[];
   facts_check?: FactsCheck | null;
   facts_check_llm?: ItemSummaryLLM | null;
   summary: ItemSummary | null;
   summary_llm?: ItemSummaryLLM | null;
+  summary_executions?: ItemLLMExecutionAttempt[];
   faithfulness?: SummaryFaithfulnessCheck | null;
   faithfulness_llm?: ItemSummaryLLM | null;
   feedback?: ItemFeedback | null;

@@ -226,6 +226,16 @@ type ItemSummaryLLM struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+type ItemLLMExecutionAttempt struct {
+	Provider     string    `json:"provider"`
+	Model        string    `json:"model"`
+	Status       string    `json:"status"`
+	AttemptIndex int       `json:"attempt_index"`
+	ErrorKind    *string   `json:"error_kind,omitempty"`
+	ErrorMessage *string   `json:"error_message,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
 type SummaryFaithfulnessCheck struct {
 	ID           string    `json:"id"`
 	ItemID       string    `json:"item_id"`
@@ -256,17 +266,19 @@ type ItemSummaryScoreBreakdown struct {
 
 type ItemDetail struct {
 	Item
-	Facts           *ItemFacts                `json:"facts,omitempty"`
-	FactsLLM        *ItemSummaryLLM           `json:"facts_llm,omitempty"`
-	FactsCheck      *FactsCheck               `json:"facts_check,omitempty"`
-	FactsCheckLLM   *ItemSummaryLLM           `json:"facts_check_llm,omitempty"`
-	Summary         *ItemSummary              `json:"summary,omitempty"`
-	SummaryLLM      *ItemSummaryLLM           `json:"summary_llm,omitempty"`
-	Faithfulness    *SummaryFaithfulnessCheck `json:"faithfulness,omitempty"`
-	FaithfulnessLLM *ItemSummaryLLM           `json:"faithfulness_llm,omitempty"`
-	Feedback        *ItemFeedback             `json:"feedback,omitempty"`
-	Note            *ItemNote                 `json:"note,omitempty"`
-	Highlights      []ItemHighlight           `json:"highlights,omitempty"`
+	Facts             *ItemFacts                `json:"facts,omitempty"`
+	FactsLLM          *ItemSummaryLLM           `json:"facts_llm,omitempty"`
+	FactsExecutions   []ItemLLMExecutionAttempt `json:"facts_executions,omitempty"`
+	FactsCheck        *FactsCheck               `json:"facts_check,omitempty"`
+	FactsCheckLLM     *ItemSummaryLLM           `json:"facts_check_llm,omitempty"`
+	Summary           *ItemSummary              `json:"summary,omitempty"`
+	SummaryLLM        *ItemSummaryLLM           `json:"summary_llm,omitempty"`
+	SummaryExecutions []ItemLLMExecutionAttempt `json:"summary_executions,omitempty"`
+	Faithfulness      *SummaryFaithfulnessCheck `json:"faithfulness,omitempty"`
+	FaithfulnessLLM   *ItemSummaryLLM           `json:"faithfulness_llm,omitempty"`
+	Feedback          *ItemFeedback             `json:"feedback,omitempty"`
+	Note              *ItemNote                 `json:"note,omitempty"`
+	Highlights        []ItemHighlight           `json:"highlights,omitempty"`
 }
 
 type ItemFeedback struct {

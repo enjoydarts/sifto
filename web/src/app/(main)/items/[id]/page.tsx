@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlignLeft, ArrowRight, FileText, Info, Link2, ListChecks, Sparkles, Star, ThumbsDown, ThumbsUp } from "lucide-react";
-import { api, ItemDetail, RelatedItem } from "@/lib/api";
+import { api, ItemDetail, ItemLLMExecutionAttempt, RelatedItem } from "@/lib/api";
 import { formatModelDisplayName } from "@/lib/model-display";
 import { ItemHighlightList } from "@/components/items/item-highlight-list";
 import { ItemNoteEditor } from "@/components/items/item-note-editor";
@@ -42,6 +42,52 @@ function localizeRelatedReason(reason: string, t: (key: string, fallback?: strin
   if (lower === "high semantic similarity") return t("itemDetail.relatedReason.highSemantic");
   if (lower === "semantic similarity match") return t("itemDetail.relatedReason.semanticMatch");
   return trimmed;
+}
+
+function executionStatusTone(status: string) {
+  return status === "success"
+    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+    : "bg-red-50 text-red-700 ring-red-200";
+}
+
+function ExecutionTimeline({
+  attempts,
+  title,
+  t,
+  locale,
+}: {
+  attempts?: ItemLLMExecutionAttempt[];
+  title: string;
+  t: (key: string, fallback?: string) => string;
+  locale: string;
+}) {
+  if (!attempts || attempts.length === 0) return null;
+  const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
+  return (
+    <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
+      <div className="mb-2 text-xs font-semibold text-zinc-500">{title}</div>
+      <ol className="space-y-2">
+        {attempts.map((attempt, index) => (
+          <li key={`${attempt.model}-${attempt.created_at}-${index}`} className="rounded-md border border-zinc-200 bg-white px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className={`rounded px-2 py-1 ring-1 ${executionStatusTone(attempt.status)}`}>
+                {attempt.status === "success" ? t("itemDetail.execution.success") : t("itemDetail.execution.failure")}
+              </span>
+              <span className="font-medium text-zinc-700">
+                {attempt.provider} / {formatModelDisplayName(attempt.model)}
+              </span>
+              <span className="text-zinc-500">
+                {new Date(attempt.created_at).toLocaleString(dateLocale)}
+              </span>
+            </div>
+            {attempt.error_message ? (
+              <p className="mt-2 break-words text-xs leading-5 text-zinc-600">{attempt.error_message}</p>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 }
 
 export default function ItemDetailPage() {
@@ -885,6 +931,12 @@ export default function ItemDetailPage() {
                     ))}
                   </div>
                 )}
+                <ExecutionTimeline
+                  attempts={item.summary_executions}
+                  title={t("itemDetail.execution.summary")}
+                  t={t}
+                  locale={locale}
+                />
                 {item.faithfulness && (
                   <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
                     <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-500">
@@ -968,6 +1020,12 @@ export default function ItemDetailPage() {
                     </li>
                   ))}
                 </ul>
+                <ExecutionTimeline
+                  attempts={item.facts_executions}
+                  title={t("itemDetail.execution.facts")}
+                  t={t}
+                  locale={locale}
+                />
               </>
             ) : (
               <p className="text-sm text-zinc-500">{t("itemDetail.noFacts", "-")}</p>

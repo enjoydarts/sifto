@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -101,4 +102,60 @@ func (r *ProviderModelUpdateRepo) ListRecent(ctx context.Context, since time.Tim
 		out = append(out, ev)
 	}
 	return out, rows.Err()
+}
+
+func (r *ProviderModelUpdateRepo) ListLatestProviderSummary(ctx context.Context, provider string) (*model.ProviderModelChangeSummary, error) {
+	var detectedAt time.Time
+	var trigger string
+	err := r.db.QueryRow(ctx, `
+		SELECT detected_at, COALESCE(metadata->>'trigger', '')
+		FROM provider_model_change_events
+		WHERE provider = $1
+		ORDER BY detected_at DESC
+		LIMIT 1`, provider,
+	).Scan(&detectedAt, &trigger)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT id, provider, change_type, model_id, detected_at, metadata
+		FROM provider_model_change_events
+		WHERE provider = $1 AND detected_at = $2
+		ORDER BY change_type ASC, model_id ASC`, provider, detectedAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	summary := &model.ProviderModelChangeSummary{
+		Provider:   provider,
+		DetectedAt: detectedAt,
+		Trigger:    trigger,
+		Added:      []model.ProviderModelChangeEvent{},
+		Constrained: []model.ProviderModelChangeEvent{},
+		Removed:    []model.ProviderModelChangeEvent{},
+	}
+	for rows.Next() {
+		var ev model.ProviderModelChangeEvent
+		var raw []byte
+		if err := rows.Scan(&ev.ID, &ev.Provider, &ev.ChangeType, &ev.ModelID, &ev.DetectedAt, &raw); err != nil {
+			return nil, err
+		}
+		if len(raw) > 0 {
+			_ = json.Unmarshal(raw, &ev.Metadata)
+		}
+		switch ev.ChangeType {
+		case "added":
+			summary.Added = append(summary.Added, ev)
+		case "constrained":
+			summary.Constrained = append(summary.Constrained, ev)
+		case "removed":
+			summary.Removed = append(summary.Removed, ev)
+		}
+	}
+	return summary, rows.Err()
 }

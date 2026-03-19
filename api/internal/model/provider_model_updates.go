@@ -18,3 +18,12 @@ type ProviderModelChangeEvent struct {
 	DetectedAt time.Time      `json:"detected_at"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
 }
+
+type ProviderModelChangeSummary struct {
+	Provider   string                   `json:"provider"`
+	DetectedAt time.Time                `json:"detected_at"`
+	Trigger    string                   `json:"trigger"`
+	Added      []ProviderModelChangeEvent `json:"added"`
+	Constrained []ProviderModelChangeEvent `json:"constrained"`
+	Removed    []ProviderModelChangeEvent `json:"removed"`
+}

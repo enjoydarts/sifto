@@ -23,7 +23,46 @@ func TestIsTransientLLMWorkerError(t *testing.T) {
 	}
 }
 
+func TestCanUseLLMFallbackForAttempt(t *testing.T) {
+	tests := []struct {
+		name          string
+		primaryModel  *string
+		fallbackModel *string
+		err           error
+		want          bool
+	}{
+		{
+			name:          "transient and different fallback",
+			primaryModel:  strptr("openrouter::google/gemini-2.5-flash"),
+			fallbackModel: strptr("openrouter::openai/gpt-oss-120b"),
+			err:           assertErr("worker /summarize: status 500 detail=summarize failed: openrouter chat.completions failed status=429"),
+			want:          true,
+		},
+		{
+			name:          "same resolved model does not fallback",
+			primaryModel:  strptr("openrouter::openai/gpt-oss-120b"),
+			fallbackModel: strptr("openrouter::openai/gpt-oss-120b"),
+			err:           assertErr("worker /summarize: status 500 detail=summarize failed: openrouter chat.completions failed status=429"),
+			want:          false,
+		},
+		{
+			name:          "non transient error does not fallback",
+			primaryModel:  strptr("openrouter::google/gemini-2.5-flash"),
+			fallbackModel: strptr("openrouter::openai/gpt-oss-120b"),
+			err:           assertErr("worker /summarize: status 500 detail=summarize failed: parse failed"),
+			want:          false,
+		},
+	}
+	for _, tt := range tests {
+		if got := canUseLLMFallbackForAttempt(tt.primaryModel, tt.fallbackModel, tt.err); got != tt.want {
+			t.Fatalf("%s: canUseLLMFallbackForAttempt(%v, %v, %v) = %v, want %v", tt.name, tt.primaryModel, tt.fallbackModel, tt.err, got, tt.want)
+		}
+	}
+}
+
 func assertErr(msg string) error { return transientErr(msg) }
+
+func strptr(v string) *string { return &v }
 
 type transientErr string
 

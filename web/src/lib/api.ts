@@ -107,10 +107,12 @@ export interface OpenRouterModelSnapshot {
 export interface OpenRouterModelListEntry extends OpenRouterModelSnapshot {
   availability: "available" | "constrained" | "removed";
   reason?: string | null;
+  recent_change?: "available" | "constrained" | "removed" | null;
 }
 
 export interface OpenRouterModelsResponse {
   latest_run: OpenRouterSyncRun | null;
+  latest_change_summary?: ProviderModelChangeSummary | null;
   models: OpenRouterModelListEntry[];
   unavailable_models: OpenRouterModelListEntry[];
 }
@@ -652,10 +654,19 @@ export interface LLMValueMetric {
 export interface ProviderModelChangeEvent {
   id: string;
   provider: string;
-  change_type: "added" | "removed" | string;
+  change_type: "added" | "constrained" | "removed" | string;
   model_id: string;
   detected_at: string;
   metadata?: Record<string, unknown> | null;
+}
+
+export interface ProviderModelChangeSummary {
+  provider: string;
+  detected_at: string;
+  trigger: string;
+  added: ProviderModelChangeEvent[];
+  constrained: ProviderModelChangeEvent[];
+  removed: ProviderModelChangeEvent[];
 }
 
 export interface UserSettingsCurrentMonth {

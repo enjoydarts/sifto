@@ -88,7 +88,7 @@ func main() {
 	askInsightsH := handler.NewAskInsightsHandler(askInsightRepo)
 	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo)
 	openRouterCatalogSvc := service.NewOpenRouterCatalogService()
-	openRouterModelsH := handler.NewOpenRouterModelsHandler(openRouterModelRepo, openRouterCatalogSvc)
+	openRouterModelsH := handler.NewOpenRouterModelsHandler(openRouterModelRepo, providerModelUpdateRepo, openRouterCatalogSvc)
 
 	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, sourceOptimizationRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher, cache)

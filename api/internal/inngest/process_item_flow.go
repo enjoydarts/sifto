@@ -94,7 +94,7 @@ func isTransientLLMWorkerError(err error) bool {
 	return false
 }
 
-func canUseLLMFallback(primaryModel, fallbackModel *string, err error) bool {
+func canUseLLMFallbackForAttempt(primaryResolvedModel, fallbackModel *string, err error) bool {
 	if !isTransientLLMWorkerError(err) || fallbackModel == nil {
 		return false
 	}
@@ -102,7 +102,7 @@ func canUseLLMFallback(primaryModel, fallbackModel *string, err error) bool {
 	if fallback == "" {
 		return false
 	}
-	if primaryModel != nil && strings.EqualFold(strings.TrimSpace(*primaryModel), fallback) {
+	if primaryResolvedModel != nil && strings.EqualFold(strings.TrimSpace(*primaryResolvedModel), fallback) {
 		return false
 	}
 	return true
@@ -134,6 +134,13 @@ func resolveProcessItemTitleForLLM(extractedTitle *string, fallbackTitle string)
 		}
 	}
 	return titleForLLM
+}
+
+func ptrStringValue(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return strings.TrimSpace(*v)
 }
 
 func markProcessItemFailed(ctx context.Context, itemRepo *repository.ItemInngestRepo, itemID, stage string, err error) error {
@@ -206,8 +213,9 @@ func extractAndPersistFacts(
 				failedModel = factsAttempt.Runtime.Model
 			}
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-			if canUseLLMFallback(primaryModelOverride, fallbackModelOverride, err) {
+			if canUseLLMFallbackForAttempt(failedModel, fallbackModelOverride, err) {
 				fallbackStepLabel := stepLabel + "-fallback"
+				log.Printf("process-item extract-facts fallback item_id=%s attempt=%d primary_model=%s fallback_model=%s", itemID, attempt+1, ptrStringValue(failedModel), ptrStringValue(fallbackModelOverride))
 				fallbackAttempt, fallbackErr := step.Run(ctx, fallbackStepLabel, func(ctx context.Context) (*processFactsAttemptResult, error) {
 					log.Printf("process-item extract-facts fallback start item_id=%s attempt=%d", itemID, attempt+1)
 					runtime, runtimeErr := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, fallbackModelOverride, "facts")
@@ -391,8 +399,9 @@ func summarizeAndPersistItem(
 				failedModel = summaryAttempt.Runtime.Model
 			}
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "summary", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-			if canUseLLMFallback(primaryModelOverride, fallbackModelOverride, err) {
+			if canUseLLMFallbackForAttempt(failedModel, fallbackModelOverride, err) {
 				fallbackStepLabel := stepLabel + "-fallback"
+				log.Printf("process-item summarize fallback item_id=%s attempt=%d primary_model=%s fallback_model=%s", itemID, attempt+1, ptrStringValue(failedModel), ptrStringValue(fallbackModelOverride))
 				fallbackAttempt, fallbackErr := step.Run(ctx, fallbackStepLabel, func(ctx context.Context) (*processSummaryAttemptResult, error) {
 					log.Printf("process-item summarize fallback start item_id=%s attempt=%d", itemID, attempt+1)
 					runtime, runtimeErr := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, fallbackModelOverride, "summary")

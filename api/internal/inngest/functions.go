@@ -1244,7 +1244,7 @@ func trackProviderModelUpdatesFn(client inngestgo.Client, db *pgxpool.Pool, oneS
 								ChangeType: "added",
 								ModelID:    modelID,
 								DetectedAt: now,
-								Metadata:   map[string]any{"source": "provider_api"},
+								Metadata:   map[string]any{"source": "provider_api", "trigger": "cron"},
 							})
 						}
 					}
@@ -1255,7 +1255,7 @@ func trackProviderModelUpdatesFn(client inngestgo.Client, db *pgxpool.Pool, oneS
 								ChangeType: "removed",
 								ModelID:    modelID,
 								DetectedAt: now,
-								Metadata:   map[string]any{"source": "provider_api"},
+								Metadata:   map[string]any{"source": "provider_api", "trigger": "cron"},
 							})
 						}
 					}
@@ -1343,6 +1343,7 @@ func trackProviderModelUpdatesFn(client inngestgo.Client, db *pgxpool.Pool, oneS
 func syncOpenRouterModelsFn(client inngestgo.Client, db *pgxpool.Pool, resend *service.ResendClient, oneSignal *service.OneSignalClient) (inngestgo.ServableFunction, error) {
 	userRepo := repository.NewUserRepo(db)
 	modelRepo := repository.NewOpenRouterModelRepo(db)
+	updateRepo := repository.NewProviderModelUpdateRepo(db)
 	openrouterSvc := service.NewOpenRouterCatalogService()
 	openAI := service.NewOpenAIClient()
 	return inngestgo.CreateFunction(
@@ -1391,6 +1392,39 @@ func syncOpenRouterModelsFn(client inngestgo.Client, db *pgxpool.Pool, resend *s
 			}
 
 			nowJST := timeutil.NowJST()
+			changeEvents := make([]model.ProviderModelChangeEvent, 0, len(addedModelIDs)+len(constrainedModelIDs)+len(removedModelIDs))
+			for _, modelID := range addedModelIDs {
+				changeEvents = append(changeEvents, model.ProviderModelChangeEvent{
+					Provider:   "openrouter",
+					ChangeType: "added",
+					ModelID:    modelID,
+					DetectedAt: nowJST,
+					Metadata:   map[string]any{"source": "openrouter_sync", "trigger": "cron"},
+				})
+			}
+			for _, modelID := range constrainedModelIDs {
+				changeEvents = append(changeEvents, model.ProviderModelChangeEvent{
+					Provider:   "openrouter",
+					ChangeType: "constrained",
+					ModelID:    modelID,
+					DetectedAt: nowJST,
+					Metadata:   map[string]any{"source": "openrouter_sync", "trigger": "cron"},
+				})
+			}
+			for _, modelID := range removedModelIDs {
+				changeEvents = append(changeEvents, model.ProviderModelChangeEvent{
+					Provider:   "openrouter",
+					ChangeType: "removed",
+					ModelID:    modelID,
+					DetectedAt: nowJST,
+					Metadata:   map[string]any{"source": "openrouter_sync", "trigger": "cron"},
+				})
+			}
+			if len(changeEvents) > 0 {
+				if err := updateRepo.InsertChangeEvents(ctx, changeEvents); err != nil {
+					return nil, err
+				}
+			}
 
 			users, err := userRepo.ListAll(ctx)
 			if err != nil {

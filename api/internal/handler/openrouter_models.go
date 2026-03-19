@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
 )
@@ -16,15 +17,17 @@ type openRouterModelListEntry struct {
 	repository.OpenRouterModelSnapshot
 	Availability string  `json:"availability"`
 	Reason       *string `json:"reason,omitempty"`
+	RecentChange *string `json:"recent_change,omitempty"`
 }
 
 type OpenRouterModelsHandler struct {
-	repo    *repository.OpenRouterModelRepo
-	service *service.OpenRouterCatalogService
+	repo             *repository.OpenRouterModelRepo
+	service          *service.OpenRouterCatalogService
+	providerUpdateRepo *repository.ProviderModelUpdateRepo
 }
 
-func NewOpenRouterModelsHandler(repo *repository.OpenRouterModelRepo, svc *service.OpenRouterCatalogService) *OpenRouterModelsHandler {
-	return &OpenRouterModelsHandler{repo: repo, service: svc}
+func NewOpenRouterModelsHandler(repo *repository.OpenRouterModelRepo, providerUpdateRepo *repository.ProviderModelUpdateRepo, svc *service.OpenRouterCatalogService) *OpenRouterModelsHandler {
+	return &OpenRouterModelsHandler{repo: repo, providerUpdateRepo: providerUpdateRepo, service: svc}
 }
 
 func (h *OpenRouterModelsHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -41,11 +44,25 @@ func (h *OpenRouterModelsHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	available, unavailable := splitOpenRouterModelEntries(models, prevModels)
+	recentChanges := map[string]string(nil)
+	if latestRun != nil && latestRun.TriggerType == "manual" {
+		recentChanges = buildOpenRouterRecentChanges(prevModels, models)
+	}
+	available, unavailable := splitOpenRouterModelEntries(models, prevModels, recentChanges)
+	var latestChangeSummary any
+	if h.providerUpdateRepo != nil {
+		summary, err := h.providerUpdateRepo.ListLatestProviderSummary(r.Context(), "openrouter")
+		if err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		latestChangeSummary = summary
+	}
 	writeJSON(w, map[string]any{
 		"latest_run":         latestRun,
 		"models":             available,
 		"unavailable_models": unavailable,
+		"latest_change_summary": latestChangeSummary,
 	})
 }
 
@@ -104,11 +121,31 @@ func (h *OpenRouterModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
-	available, unavailable := splitOpenRouterModelEntries(latest, prevModels)
+	if h.providerUpdateRepo != nil {
+		if err := h.insertOpenRouterChangeEvents(r.Context(), latestRun.TriggerType, prevModels, latest); err != nil {
+			writeRepoError(w, err)
+			return
+		}
+	}
+	recentChanges := map[string]string(nil)
+	if latestRun != nil && latestRun.TriggerType == "manual" {
+		recentChanges = buildOpenRouterRecentChanges(prevModels, latest)
+	}
+	available, unavailable := splitOpenRouterModelEntries(latest, prevModels, recentChanges)
+	var latestChangeSummary any
+	if h.providerUpdateRepo != nil {
+		summary, err := h.providerUpdateRepo.ListLatestProviderSummary(r.Context(), "openrouter")
+		if err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		latestChangeSummary = summary
+	}
 	writeJSON(w, map[string]any{
 		"latest_run":         latestRun,
 		"models":             available,
 		"unavailable_models": unavailable,
+		"latest_change_summary": latestChangeSummary,
 	})
 
 	go h.translateDescriptions(syncRunID, models)
@@ -211,7 +248,7 @@ func openRouterPendingTranslationModels(models []repository.OpenRouterModelSnaps
 	return pending
 }
 
-func splitOpenRouterModelEntries(current, previous []repository.OpenRouterModelSnapshot) ([]openRouterModelListEntry, []openRouterModelListEntry) {
+func splitOpenRouterModelEntries(current, previous []repository.OpenRouterModelSnapshot, recentChanges map[string]string) ([]openRouterModelListEntry, []openRouterModelListEntry) {
 	available := make([]openRouterModelListEntry, 0, len(current))
 	unavailable := make([]openRouterModelListEntry, 0)
 	currentMap := make(map[string]repository.OpenRouterModelSnapshot, len(current))
@@ -226,6 +263,10 @@ func splitOpenRouterModelEntries(current, previous []repository.OpenRouterModelS
 			r := reason
 			entry.Reason = &r
 		}
+		if recentChange, ok := recentChanges[model.ModelID]; ok {
+			rc := recentChange
+			entry.RecentChange = &rc
+		}
 		if availability == service.OpenRouterModelAvailable {
 			available = append(available, entry)
 		} else {
@@ -237,11 +278,16 @@ func splitOpenRouterModelEntries(current, previous []repository.OpenRouterModelS
 			continue
 		}
 		reason := "removed"
-		unavailable = append(unavailable, openRouterModelListEntry{
+		entry := openRouterModelListEntry{
 			OpenRouterModelSnapshot: model,
 			Availability:            string(service.OpenRouterModelRemoved),
 			Reason:                  &reason,
-		})
+		}
+		if recentChange, ok := recentChanges[model.ModelID]; ok {
+			rc := recentChange
+			entry.RecentChange = &rc
+		}
+		unavailable = append(unavailable, entry)
 	}
 	sort.Slice(available, func(i, j int) bool {
 		if available[i].ProviderSlug == available[j].ProviderSlug {
@@ -259,4 +305,90 @@ func splitOpenRouterModelEntries(current, previous []repository.OpenRouterModelS
 		return unavailable[i].Availability < unavailable[j].Availability
 	})
 	return available, unavailable
+}
+
+func buildOpenRouterRecentChanges(previous, current []repository.OpenRouterModelSnapshot) map[string]string {
+	prevMap := make(map[string]service.OpenRouterModelAvailability, len(previous))
+	for _, item := range previous {
+		state, _ := service.OpenRouterSnapshotAvailability(item)
+		prevMap[item.ModelID] = state
+	}
+	currMap := make(map[string]service.OpenRouterModelAvailability, len(current))
+	changes := make(map[string]string)
+	for _, item := range current {
+		state, _ := service.OpenRouterSnapshotAvailability(item)
+		currMap[item.ModelID] = state
+		prevState, existed := prevMap[item.ModelID]
+		if !existed {
+			changes[item.ModelID] = string(service.OpenRouterModelAvailable)
+			continue
+		}
+		if prevState == service.OpenRouterModelAvailable && state == service.OpenRouterModelConstrained {
+			changes[item.ModelID] = string(service.OpenRouterModelConstrained)
+		}
+	}
+	for _, item := range previous {
+		if _, exists := currMap[item.ModelID]; !exists {
+			changes[item.ModelID] = string(service.OpenRouterModelRemoved)
+		}
+	}
+	return changes
+}
+
+func (h *OpenRouterModelsHandler) insertOpenRouterChangeEvents(ctx context.Context, trigger string, previous, current []repository.OpenRouterModelSnapshot) error {
+	if h.providerUpdateRepo == nil {
+		return nil
+	}
+	added, constrained, removed := diffOpenRouterChangeSets(previous, current)
+	if len(added) == 0 && len(constrained) == 0 && len(removed) == 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	events := make([]model.ProviderModelChangeEvent, 0, len(added)+len(constrained)+len(removed))
+	for _, modelID := range added {
+		events = append(events, model.ProviderModelChangeEvent{
+			Provider:   "openrouter",
+			ChangeType: "added",
+			ModelID:    modelID,
+			DetectedAt: now,
+			Metadata:   map[string]any{"source": "openrouter_sync", "trigger": trigger},
+		})
+	}
+	for _, modelID := range constrained {
+		events = append(events, model.ProviderModelChangeEvent{
+			Provider:   "openrouter",
+			ChangeType: "constrained",
+			ModelID:    modelID,
+			DetectedAt: now,
+			Metadata:   map[string]any{"source": "openrouter_sync", "trigger": trigger},
+		})
+	}
+	for _, modelID := range removed {
+		events = append(events, model.ProviderModelChangeEvent{
+			Provider:   "openrouter",
+			ChangeType: "removed",
+			ModelID:    modelID,
+			DetectedAt: now,
+			Metadata:   map[string]any{"source": "openrouter_sync", "trigger": trigger},
+		})
+	}
+	return h.providerUpdateRepo.InsertChangeEvents(ctx, events)
+}
+
+func diffOpenRouterChangeSets(previous, current []repository.OpenRouterModelSnapshot) (added, constrained, removed []string) {
+	changes := buildOpenRouterRecentChanges(previous, current)
+	for modelID, change := range changes {
+		switch change {
+		case string(service.OpenRouterModelAvailable):
+			added = append(added, modelID)
+		case string(service.OpenRouterModelConstrained):
+			constrained = append(constrained, modelID)
+		case string(service.OpenRouterModelRemoved):
+			removed = append(removed, modelID)
+		}
+	}
+	sort.Strings(added)
+	sort.Strings(constrained)
+	sort.Strings(removed)
+	return added, constrained, removed
 }

@@ -82,6 +82,39 @@ function pricingScore(model: OpenRouterModelListEntry) {
   return [prompt, completion, cacheRead].reduce((sum, value) => (Number.isFinite(value) ? sum + value : sum), 0);
 }
 
+function recentChangeLabelKey(change?: OpenRouterModelListEntry["recent_change"]) {
+  switch (change) {
+    case "available":
+      return "openrouterModels.recentChange.added";
+    case "constrained":
+      return "openrouterModels.recentChange.constrained";
+    case "removed":
+      return "openrouterModels.recentChange.removed";
+    default:
+      return null;
+  }
+}
+
+function recentChangeClassName(change?: OpenRouterModelListEntry["recent_change"]) {
+  switch (change) {
+    case "available":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "constrained":
+      return "bg-amber-50 text-amber-700 border-amber-200";
+    case "removed":
+      return "bg-red-50 text-red-700 border-red-200";
+    default:
+      return "bg-zinc-50 text-zinc-700 border-zinc-200";
+  }
+}
+
+function limitSummaryModels(models: { model_id: string }[], limit = 5) {
+  return {
+    items: models.slice(0, limit).map((item) => item.model_id),
+    remaining: Math.max(models.length - limit, 0),
+  };
+}
+
 export default function OpenRouterModelsPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -212,6 +245,9 @@ export default function OpenRouterModelsPage() {
   const selectedDescriptionEn = selectedModel?.description_en ?? "";
   const selectedSupported = selectedModel ? parseStringArray(selectedModel.supported_parameters_json) : [];
   const selectedPricing = selectedModel ? pricingSummary(selectedModel) : null;
+  const latestSummary = data?.latest_change_summary ?? null;
+  const latestSummaryTriggerLabel =
+    latestSummary?.trigger === "manual" ? t("openrouterModels.summaryTrigger.manual") : t("openrouterModels.summaryTrigger.cron");
 
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
@@ -301,6 +337,49 @@ export default function OpenRouterModelsPage() {
         </div>
       </section>
 
+      {latestSummary && (latestSummary.added.length > 0 || latestSummary.constrained.length > 0 || latestSummary.removed.length > 0) ? (
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-zinc-900">{t("openrouterModels.latestSummary.title")}</h2>
+              <p className="mt-1 text-sm text-zinc-500">
+                {latestSummaryTriggerLabel} · {new Date(latestSummary.detected_at).toLocaleString()}
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {[
+              { key: "added", label: t("openrouterModels.recentChange.added"), models: latestSummary.added, className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
+              { key: "constrained", label: t("openrouterModels.recentChange.constrained"), models: latestSummary.constrained, className: "border-amber-200 bg-amber-50 text-amber-800" },
+              { key: "removed", label: t("openrouterModels.recentChange.removed"), models: latestSummary.removed, className: "border-red-200 bg-red-50 text-red-800" },
+            ].map((group) => {
+              const summary = limitSummaryModels(group.models);
+              return (
+                <div key={group.key} className={`rounded-xl border px-4 py-3 ${group.className}`}>
+                  <div className="text-sm font-semibold">
+                    {group.label} {group.models.length > 0 ? `(${group.models.length})` : ""}
+                  </div>
+                  {group.models.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+                      {summary.items.map((modelID) => (
+                        <span key={modelID} className="rounded-full border border-current/20 bg-white/70 px-2 py-1">
+                          {modelID}
+                        </span>
+                      ))}
+                      {summary.remaining > 0 ? (
+                        <span className="rounded-full border border-current/20 bg-white/70 px-2 py-1">+{summary.remaining}</span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-xs opacity-70">{t("openrouterModels.latestSummary.none")}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
       {sorted.length === 0 ? (
         <section className="rounded-2xl border border-dashed border-zinc-300 bg-white p-6 text-sm text-zinc-500">
           {t("openrouterModels.noModels")}
@@ -366,6 +445,7 @@ export default function OpenRouterModelsPage() {
                   {availableModels.map((model) => {
                     const supported = parseStringArray(model.supported_parameters_json);
                     const pricing = pricingSummary(model);
+                    const recentChangeKey = recentChangeLabelKey(model.recent_change);
                     return (
                       <tr
                         key={model.model_id}
@@ -374,7 +454,14 @@ export default function OpenRouterModelsPage() {
                       >
                         <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{model.provider_slug || "—"}</td>
                         <td className="whitespace-nowrap px-4 py-3 align-top">
-                          <div className="whitespace-nowrap font-medium text-zinc-900">{model.display_name || model.model_id}</div>
+                          <div className="flex items-center gap-2 whitespace-nowrap">
+                            <div className="whitespace-nowrap font-medium text-zinc-900">{model.display_name || model.model_id}</div>
+                            {recentChangeKey ? (
+                              <span className={`rounded-full border px-2 py-1 text-[11px] font-medium ${recentChangeClassName(model.recent_change)}`}>
+                                {t(recentChangeKey)}
+                              </span>
+                            ) : null}
+                          </div>
                           <div className="mt-1 whitespace-nowrap text-xs text-zinc-500">{model.model_id}</div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">
@@ -457,6 +544,7 @@ export default function OpenRouterModelsPage() {
                       const pricing = pricingSummary(model);
                       const stateKey = model.availability === "removed" ? "openrouterModels.state.removed" : "openrouterModels.state.constrained";
                       const reasonKey = model.reason === "removed" ? "openrouterModels.reason.removed" : "openrouterModels.reason.structuredOutput";
+                      const recentChangeKey = recentChangeLabelKey(model.recent_change);
                       return (
                         <tr key={model.model_id} className="cursor-pointer transition hover:bg-zinc-50" onClick={() => setSelectedModel(model)}>
                           <td className="whitespace-nowrap px-4 py-3 align-top">
@@ -464,7 +552,14 @@ export default function OpenRouterModelsPage() {
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{model.provider_slug || "—"}</td>
                           <td className="whitespace-nowrap px-4 py-3 align-top">
-                            <div className="whitespace-nowrap font-medium text-zinc-900">{model.display_name || model.model_id}</div>
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                              <div className="whitespace-nowrap font-medium text-zinc-900">{model.display_name || model.model_id}</div>
+                              {recentChangeKey ? (
+                                <span className={`rounded-full border px-2 py-1 text-[11px] font-medium ${recentChangeClassName(model.recent_change)}`}>
+                                  {t(recentChangeKey)}
+                                </span>
+                              ) : null}
+                            </div>
                             <div className="mt-1 whitespace-nowrap text-xs text-zinc-500">{model.model_id}</div>
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{t(reasonKey)}</td>

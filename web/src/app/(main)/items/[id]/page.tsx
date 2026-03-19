@@ -861,7 +861,7 @@ export default function ItemDetailPage() {
           </TabList>
 
           <TabPanel value="summary" className="px-6 py-10 md:px-8">
-            {(item.summary || item.faithfulness) ? (
+            {(item.summary || item.faithfulness || (item.summary_executions?.length ?? 0) > 0) ? (
               <>
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
@@ -887,7 +887,9 @@ export default function ItemDetailPage() {
                     </span>
                   )}
                 </div>
-                {item.summary && <p className="whitespace-pre-wrap text-[17px] leading-[1.9] text-zinc-900">{item.summary.summary}</p>}
+                {item.summary ? (
+                  <p className="whitespace-pre-wrap text-[17px] leading-[1.9] text-zinc-900">{item.summary.summary}</p>
+                ) : null}
                 {item.summary?.score_reason && (
                   <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
                     <div className="mb-1 text-xs font-semibold text-zinc-500">
@@ -974,7 +976,7 @@ export default function ItemDetailPage() {
           </TabPanel>
 
           <TabPanel value="facts" className="px-6 py-10 md:px-8">
-            {item.facts && item.facts.facts.length > 0 ? (
+            {(item.facts && item.facts.facts.length > 0) || item.facts_check || (item.facts_executions?.length ?? 0) > 0 ? (
               <>
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
@@ -1016,14 +1018,16 @@ export default function ItemDetailPage() {
                     )}
                   </div>
                 )}
-                <ul className="space-y-2">
-                  {item.facts.facts.map((f, i) => (
-                    <li key={i} className="flex gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-                      <span className="shrink-0 text-zinc-400">{i + 1}.</span>
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
+                {item.facts && item.facts.facts.length > 0 ? (
+                  <ul className="space-y-2">
+                    {item.facts.facts.map((f, i) => (
+                      <li key={i} className="flex gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+                        <span className="shrink-0 text-zinc-400">{i + 1}.</span>
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 <ExecutionTimeline
                   attempts={item.facts_executions}
                   title={t("itemDetail.execution.facts")}

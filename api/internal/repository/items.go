@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"log"
 	"math"
 	"sort"
 	"strconv"
@@ -1353,6 +1354,16 @@ func (r *ItemRepo) GetDetail(ctx context.Context, id, userID string) (*model.Ite
 	if note, highlights, err := r.GetByItem(ctx, userID, id); err == nil {
 		d.Note = note
 		d.Highlights = highlights
+	}
+	if d.Status == "summarized" && (len(d.FactsExecutions) == 0 || len(d.SummaryExecutions) == 0) {
+		log.Printf(
+			"item detail executions missing item_id=%s facts_exec=%d summary_exec=%d has_facts=%t has_summary=%t",
+			id,
+			len(d.FactsExecutions),
+			len(d.SummaryExecutions),
+			d.Facts != nil && len(d.Facts.Facts) > 0,
+			d.Summary != nil,
+		)
 	}
 
 	return d, nil

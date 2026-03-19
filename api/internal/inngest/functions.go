@@ -1057,7 +1057,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	}
 
 	register(fetchRSSFn(client, db))
-	register(processItemFn(client, db, worker, openAI, oneSignal, secretCipher))
+	register(processItemFn(client, db, worker, openAI, oneSignal, secretCipher, cache))
 	register(embedItemFn(client, db, openAI, secretCipher))
 	register(generateBriefingSnapshotsFn(client, db, oneSignal))
 	register(notifyReviewQueueFn(client, db, oneSignal))
@@ -1731,7 +1731,7 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 }
 
 // ② event/process-item — 本文抽出 → 事実抽出 → 要約（各stepでリトライ可能）
-func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, openAI *service.OpenAIClient, oneSignal *service.OneSignalClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
+func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, openAI *service.OpenAIClient, oneSignal *service.OneSignalClient, secretCipher *service.SecretCipher, cache service.JSONCache) (inngestgo.ServableFunction, error) {
 	deps := processItemDeps{
 		itemRepo:           repository.NewItemInngestRepo(db),
 		itemViewRepo:       repository.NewItemRepo(db),
@@ -1747,6 +1747,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 		openAI:             openAI,
 		oneSignal:          oneSignal,
 		secretCipher:       secretCipher,
+		cache:              cache,
 		pickScoreThreshold: envFloat64OrDefault("ONESIGNAL_PICK_SCORE_THRESHOLD", 0.90),
 		pickMaxPerDay:      envIntOrDefault("ONESIGNAL_PICK_MAX_PER_DAY", 2),
 	}
@@ -1794,7 +1795,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			})
 			if err != nil {
 				log.Printf("process-item extract-body failed item_id=%s err=%v", itemID, err)
-				return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "extract body", err)
+				return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract body", err)
 			}
 			log.Printf("process-item extract-body done item_id=%s content_len=%d", itemID, len(extracted.Content))
 
@@ -1802,6 +1803,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				log.Printf("process-item update-after-extract failed item_id=%s err=%v", itemID, err)
 				return nil, fmt.Errorf("update after extract: %w", err)
 			}
+			bumpProcessItemDetailCacheVersion(ctx, deps.cache, itemID)
 			log.Printf("process-item update-after-extract done item_id=%s", itemID)
 			titleForLLM := resolveProcessItemTitleForLLM(extracted.Title, data.Title)
 			factsStage, err := extractAndPersistFacts(ctx, deps, data, itemID, userIDPtr, userModelSettings, titleForLLM, extracted.Content)

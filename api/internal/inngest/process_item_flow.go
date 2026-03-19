@@ -38,6 +38,7 @@ type processItemDeps struct {
 	openAI             *service.OpenAIClient
 	oneSignal          *service.OneSignalClient
 	secretCipher       *service.SecretCipher
+	cache              service.JSONCache
 	pickScoreThreshold float64
 	pickMaxPerDay      int
 }
@@ -148,9 +149,23 @@ func ptrStringValue(v *string) string {
 	return strings.TrimSpace(*v)
 }
 
-func markProcessItemFailed(ctx context.Context, itemRepo *repository.ItemInngestRepo, itemID, stage string, err error) error {
+func itemDetailCacheVersionKey(itemID string) string {
+	return fmt.Sprintf("cache_version:item_detail:v2:%s", itemID)
+}
+
+func bumpProcessItemDetailCacheVersion(ctx context.Context, cache service.JSONCache, itemID string) {
+	if cache == nil || itemID == "" {
+		return
+	}
+	if _, err := cache.BumpVersion(ctx, itemDetailCacheVersionKey(itemID)); err != nil {
+		log.Printf("process-item cache bump failed item_id=%s err=%v", itemID, err)
+	}
+}
+
+func markProcessItemFailed(ctx context.Context, itemRepo *repository.ItemInngestRepo, cache service.JSONCache, itemID, stage string, err error) error {
 	msg := fmt.Sprintf("%s: %v", stage, err)
 	_ = itemRepo.MarkFailed(ctx, itemID, &msg)
+	bumpProcessItemDetailCacheVersion(ctx, cache, itemID)
 	return fmt.Errorf("%s: %w", stage, err)
 }
 
@@ -255,11 +270,11 @@ func extractAndPersistFacts(
 						fallbackFailedModel = fallbackAttempt.Runtime.Model
 					}
 					recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", fallbackFailedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, fallbackErr)
-					return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "extract facts", fallbackErr)
+					return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract facts", fallbackErr)
 				}
 				factsAttempt = fallbackAttempt
 			} else {
-				return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "extract facts", err)
+				return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract facts", err)
 			}
 		}
 
@@ -268,7 +283,7 @@ func extractAndPersistFacts(
 		if len(factsResp.Facts) == 0 {
 			err := fmt.Errorf("empty facts returned from worker")
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", factsAttempt.Runtime.Model, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "extract facts", err)
+			return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract facts", err)
 		}
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "facts", factsResp.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 		log.Printf("process-item extract-facts done item_id=%s facts=%d attempt=%d", itemID, len(factsResp.Facts), attempt+1)
@@ -314,7 +329,7 @@ func extractAndPersistFacts(
 			},
 		})
 		if err != nil {
-			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "facts check", err)
+			return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "facts check", err)
 		}
 
 		finalFactsCheck = factsCheck
@@ -326,10 +341,10 @@ func extractAndPersistFacts(
 	}
 
 	if factsResp == nil {
-		return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "extract facts", fmt.Errorf("facts extraction produced no result"))
+		return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract facts", fmt.Errorf("facts extraction produced no result"))
 	}
 	if finalFactsCheck == nil {
-		return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "facts check", fmt.Errorf("facts check produced no result"))
+		return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "facts check", fmt.Errorf("facts check produced no result"))
 	}
 	if err := deps.itemRepo.InsertFacts(ctx, itemID, factsResp.Facts); err != nil {
 		return nil, fmt.Errorf("insert facts: %w", err)
@@ -342,8 +357,9 @@ func extractAndPersistFacts(
 		return nil, fmt.Errorf("upsert facts check: %w", err)
 	}
 	if finalFactsCheck.Verdict == "fail" {
-		return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "facts check", fmt.Errorf("%s", finalFactsCheck.ShortComment))
+		return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "facts check", fmt.Errorf("%s", finalFactsCheck.ShortComment))
 	}
+	bumpProcessItemDetailCacheVersion(ctx, deps.cache, itemID)
 	log.Printf("process-item insert-facts done item_id=%s retries=%d facts_check=%s", itemID, factsRetryCount, finalFactsCheck.Verdict)
 
 	return &processFactsStageResult{
@@ -427,11 +443,11 @@ func summarizeAndPersistItem(
 						fallbackFailedModel = fallbackAttempt.Runtime.Model
 					}
 					recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "summary", fallbackFailedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, fallbackErr)
-					return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "summarize", fallbackErr)
+					return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "summarize", fallbackErr)
 				}
 				summaryAttempt = fallbackAttempt
 			} else {
-				return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "summarize", err)
+				return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "summarize", err)
 			}
 		}
 
@@ -441,7 +457,7 @@ func summarizeAndPersistItem(
 		if summary.Summary == "" {
 			err := fmt.Errorf("empty summary returned from worker")
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "summary", summaryAttempt.Runtime.Model, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "summarize", err)
+			return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "summarize", err)
 		}
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "summary", summary.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 
@@ -483,7 +499,7 @@ func summarizeAndPersistItem(
 			getVerdict: func(result *service.SummaryFaithfulnessResponse) string { return result.Verdict },
 		})
 		if err != nil {
-			return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "faithfulness check", err)
+			return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "faithfulness check", err)
 		}
 
 		finalFaithfulness = faithfulness
@@ -495,10 +511,10 @@ func summarizeAndPersistItem(
 	}
 
 	if summary == nil {
-		return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "summarize", fmt.Errorf("summary generation produced no result"))
+		return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "summarize", fmt.Errorf("summary generation produced no result"))
 	}
 	if finalFaithfulness == nil {
-		return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "faithfulness check", fmt.Errorf("faithfulness check produced no result"))
+		return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "faithfulness check", fmt.Errorf("faithfulness check produced no result"))
 	}
 	var faithfulnessComment *string
 	if comment := strings.TrimSpace(finalFaithfulness.ShortComment); comment != "" {
@@ -508,7 +524,7 @@ func summarizeAndPersistItem(
 		return nil, fmt.Errorf("upsert summary faithfulness check: %w", err)
 	}
 	if finalFaithfulness.Verdict == "fail" {
-		return nil, markProcessItemFailed(ctx, deps.itemRepo, itemID, "faithfulness check", fmt.Errorf("%s", finalFaithfulness.ShortComment))
+		return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "faithfulness check", fmt.Errorf("%s", finalFaithfulness.ShortComment))
 	}
 	if err := deps.itemRepo.InsertSummary(
 		ctx,
@@ -523,6 +539,7 @@ func summarizeAndPersistItem(
 	); err != nil {
 		return nil, fmt.Errorf("insert summary: %w", err)
 	}
+	bumpProcessItemDetailCacheVersion(ctx, deps.cache, itemID)
 	log.Printf("process-item summarize done item_id=%s topics=%d score=%.3f retries=%d faithfulness=%s", itemID, len(summary.Topics), summary.Score, summaryRetryCount, finalFaithfulness.Verdict)
 
 	return &processSummaryStageResult{

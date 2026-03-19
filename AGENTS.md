@@ -51,7 +51,9 @@
 
 ## ローカルエージェント参照
 
-- `UX Architect` を使いたい場合は、仕様書として `ai/agents/architect.md` を参照する。
+- `Backend Architect` を使いたい場合は、仕様書として `ai/agents/backend.md` を参照する。
+- `Frontend Developer` を使いたい場合は、仕様書として `ai/agents/frontend.md` を参照する。
+- `UX Architect` を使いたい場合は、仕様書として `ai/agents/ux-architect.md` を参照する。
 - `UI Designer` を使いたい場合は、仕様書として `ai/agents/ui-designer.md` を参照する。
 - これは Codex の組み込みエージェント切替ではなく、このリポジトリ内で参照するローカルプロファイルとして扱う。
 - 依頼時に「UX Architect として」「UI Designer として」「architect.md に沿って」のように指定された場合は、その役割に沿って出力と実装方針を組み立てる。

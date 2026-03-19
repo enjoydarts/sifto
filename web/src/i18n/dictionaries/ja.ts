@@ -915,6 +915,8 @@ export const jaDict: Dict = {
   "itemDetail.execution.facts": "事実抽出の実行履歴",
   "itemDetail.execution.success": "成功",
   "itemDetail.execution.failure": "失敗",
+  "itemDetail.execution.attempt": "試行 {{attempt}}",
+  "itemDetail.execution.help": "忠実性チェックや事実抽出チェックで再試行されると、成功が複数並ぶことがあります。",
   "itemDetail.noTitle": "タイトルなし",
   "itemDetail.noSummary": "要約はまだありません",
   "itemDetail.noFacts": "事実抽出はまだありません",

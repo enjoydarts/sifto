@@ -1262,7 +1262,7 @@ func (h *ItemHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "event publisher unavailable", http.StatusInternalServerError)
 		return
 	}
-	if err := h.publisher.SendItemCreatedE(r.Context(), item.ID, item.SourceID, item.URL); err != nil {
+	if err := h.publisher.SendItemCreatedWithReasonE(r.Context(), item.ID, item.SourceID, item.URL, nil, "retry"); err != nil {
 		http.Error(w, "failed to enqueue retry", http.StatusBadGateway)
 		return
 	}
@@ -1295,7 +1295,7 @@ func (h *ItemHandler) RetryFromFacts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "event publisher unavailable", http.StatusInternalServerError)
 		return
 	}
-	if err := h.publisher.SendItemCreatedE(r.Context(), item.ID, item.SourceID, item.URL); err != nil {
+	if err := h.publisher.SendItemCreatedWithReasonE(r.Context(), item.ID, item.SourceID, item.URL, nil, "retry_from_facts"); err != nil {
 		http.Error(w, "failed to enqueue retry", http.StatusBadGateway)
 		return
 	}
@@ -1334,7 +1334,7 @@ func (h *ItemHandler) RetryFailed(w http.ResponseWriter, r *http.Request) {
 	queued := 0
 	failed := 0
 	for _, item := range items {
-		if err := h.publisher.SendItemCreatedE(r.Context(), item.ID, item.SourceID, item.URL); err != nil {
+		if err := h.publisher.SendItemCreatedWithReasonE(r.Context(), item.ID, item.SourceID, item.URL, nil, "retry_failed"); err != nil {
 			failed++
 			continue
 		}

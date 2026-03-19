@@ -15,10 +15,12 @@ import (
 )
 
 type processItemEventData struct {
-	ItemID   string `json:"item_id"`
-	SourceID string `json:"source_id"`
-	URL      string `json:"url"`
-	Title    string `json:"title"`
+	ItemID    string `json:"item_id"`
+	SourceID  string `json:"source_id"`
+	URL       string `json:"url"`
+	Title     string `json:"title"`
+	TriggerID string `json:"trigger_id"`
+	Reason    string `json:"reason"`
 }
 
 type processItemDeps struct {

@@ -915,6 +915,8 @@ export const enDict: Dict = {
   "itemDetail.execution.facts": "Facts extraction history",
   "itemDetail.execution.success": "Success",
   "itemDetail.execution.failure": "Failure",
+  "itemDetail.execution.attempt": "Attempt {{attempt}}",
+  "itemDetail.execution.help": "You may see multiple successes when checks trigger regeneration and the model runs again.",
   "itemDetail.noTitle": "No title",
   "itemDetail.noSummary": "No summary yet",
   "itemDetail.noFacts": "No facts extracted yet",

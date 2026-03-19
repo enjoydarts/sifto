@@ -27,6 +27,31 @@ import (
 
 var llmUsageCache service.JSONCache
 
+type llmExecutionTriggerContextKey struct{}
+
+type llmExecutionTrigger struct {
+	TriggerID     string
+	TriggerReason string
+}
+
+func withLLMExecutionTrigger(ctx context.Context, triggerID, triggerReason string) context.Context {
+	if strings.TrimSpace(triggerID) == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, llmExecutionTriggerContextKey{}, llmExecutionTrigger{
+		TriggerID:     strings.TrimSpace(triggerID),
+		TriggerReason: strings.TrimSpace(triggerReason),
+	})
+}
+
+func llmExecutionTriggerFromContext(ctx context.Context) *llmExecutionTrigger {
+	v, ok := ctx.Value(llmExecutionTriggerContextKey{}).(llmExecutionTrigger)
+	if !ok || strings.TrimSpace(v.TriggerID) == "" {
+		return nil
+	}
+	return &v
+}
+
 func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpose string, usage *service.LLMUsage, userID, sourceID, itemID, digestID *string) {
 	usage = service.NormalizeCatalogPricedUsage(purpose, usage)
 	if repo == nil || usage == nil {
@@ -72,16 +97,43 @@ func recordLLMExecutionSuccess(ctx context.Context, repo *repository.LLMExecutio
 	if usage.Provider == "" || usage.Model == "" {
 		return
 	}
+	var idempotencyKey *string
+	var triggerID *string
+	var triggerReason *string
+	if trigger := llmExecutionTriggerFromContext(ctx); trigger != nil {
+		key := llmExecutionEventIdempotencyKey(repository.LLMExecutionEventInput{
+			UserID:        userID,
+			SourceID:      sourceID,
+			ItemID:        itemID,
+			DigestID:      digestID,
+			TriggerID:     &trigger.TriggerID,
+			TriggerReason: triggerReason,
+			Provider:      usage.Provider,
+			Model:         usage.Model,
+			Purpose:       purpose,
+			Status:        "success",
+			AttemptIndex:  attemptIndex,
+		})
+		idempotencyKey = &key
+		triggerID = &trigger.TriggerID
+		if strings.TrimSpace(trigger.TriggerReason) != "" {
+			v := strings.TrimSpace(trigger.TriggerReason)
+			triggerReason = &v
+		}
+	}
 	if err := repo.Insert(ctx, repository.LLMExecutionEventInput{
-		UserID:       userID,
-		SourceID:     sourceID,
-		ItemID:       itemID,
-		DigestID:     digestID,
-		Provider:     usage.Provider,
-		Model:        usage.Model,
-		Purpose:      purpose,
-		Status:       "success",
-		AttemptIndex: attemptIndex,
+		IdempotencyKey: idempotencyKey,
+		UserID:         userID,
+		SourceID:       sourceID,
+		ItemID:         itemID,
+		DigestID:       digestID,
+		TriggerID:      triggerID,
+		TriggerReason:  triggerReason,
+		Provider:       usage.Provider,
+		Model:          usage.Model,
+		Purpose:        purpose,
+		Status:         "success",
+		AttemptIndex:   attemptIndex,
 	}); err != nil {
 		log.Printf("record llm execution success purpose=%s: %v", purpose, err)
 		return
@@ -102,19 +154,49 @@ func recordLLMExecutionFailure(ctx context.Context, repo *repository.LLMExecutio
 	if len(message) > 500 {
 		message = message[:500]
 	}
+	var idempotencyKey *string
+	var triggerID *string
+	var triggerReason *string
+	if trigger := llmExecutionTriggerFromContext(ctx); trigger != nil {
+		key := llmExecutionEventIdempotencyKey(repository.LLMExecutionEventInput{
+			UserID:        userID,
+			SourceID:      sourceID,
+			ItemID:        itemID,
+			DigestID:      digestID,
+			TriggerID:     &trigger.TriggerID,
+			TriggerReason: triggerReason,
+			Provider:      provider,
+			Model:         modelVal,
+			Purpose:       purpose,
+			Status:        "failure",
+			AttemptIndex:  attemptIndex,
+			EmptyResponse: emptyResponse,
+			ErrorKind:     &errorKind,
+			ErrorMessage:  &message,
+		})
+		idempotencyKey = &key
+		triggerID = &trigger.TriggerID
+		if strings.TrimSpace(trigger.TriggerReason) != "" {
+			v := strings.TrimSpace(trigger.TriggerReason)
+			triggerReason = &v
+		}
+	}
 	if err := repo.Insert(ctx, repository.LLMExecutionEventInput{
-		UserID:        userID,
-		SourceID:      sourceID,
-		ItemID:        itemID,
-		DigestID:      digestID,
-		Provider:      provider,
-		Model:         modelVal,
-		Purpose:       purpose,
-		Status:        "failure",
-		AttemptIndex:  attemptIndex,
-		EmptyResponse: emptyResponse,
-		ErrorKind:     &errorKind,
-		ErrorMessage:  &message,
+		IdempotencyKey: idempotencyKey,
+		UserID:         userID,
+		SourceID:       sourceID,
+		ItemID:         itemID,
+		DigestID:       digestID,
+		TriggerID:      triggerID,
+		TriggerReason:  triggerReason,
+		Provider:       provider,
+		Model:          modelVal,
+		Purpose:        purpose,
+		Status:         "failure",
+		AttemptIndex:   attemptIndex,
+		EmptyResponse:  emptyResponse,
+		ErrorKind:      &errorKind,
+		ErrorMessage:   &message,
 	}); err != nil {
 		log.Printf("record llm execution failure purpose=%s: %v", purpose, err)
 		return
@@ -122,6 +204,28 @@ func recordLLMExecutionFailure(ctx context.Context, repo *repository.LLMExecutio
 	if userID != nil {
 		_ = service.BumpUserLLMUsageCacheVersion(ctx, llmUsageCache, toVal(userID))
 	}
+}
+
+func llmExecutionEventIdempotencyKey(in repository.LLMExecutionEventInput) string {
+	raw := fmt.Sprintf(
+		"trigger=%s|reason=%s|purpose=%s|provider=%s|model=%s|status=%s|attempt=%d|u=%s|s=%s|i=%s|d=%s|empty=%t|ek=%s|em=%s",
+		toVal(in.TriggerID),
+		toVal(in.TriggerReason),
+		in.Purpose,
+		in.Provider,
+		in.Model,
+		in.Status,
+		in.AttemptIndex,
+		toVal(in.UserID),
+		toVal(in.SourceID),
+		toVal(in.ItemID),
+		toVal(in.DigestID),
+		in.EmptyResponse,
+		toVal(in.ErrorKind),
+		toVal(in.ErrorMessage),
+	)
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
 }
 
 func toVal(v *string) string {
@@ -1612,18 +1716,9 @@ func fetchRSSFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFu
 						continue
 					}
 					newCount++
-					payload := map[string]any{
-						"item_id":   itemID,
-						"source_id": src.ID,
-						"url":       entry.Link,
-					}
-					if title != nil && strings.TrimSpace(*title) != "" {
-						payload["title"] = strings.TrimSpace(*title)
-					}
-					if _, err := client.Send(ctx, inngestgo.Event{
-						Name: "item/created",
-						Data: payload,
-					}); err != nil {
+					reason := "fetch_rss"
+					titleVal := title
+					if _, err := client.Send(ctx, service.NewItemCreatedEvent(itemID, src.ID, entry.Link, titleVal, reason)); err != nil {
 						log.Printf("send item/created: %v", err)
 					}
 				}
@@ -1675,6 +1770,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 		inngestgo.EventTrigger("item/created", nil),
 		func(ctx context.Context, input inngestgo.Input[processItemEventData]) (any, error) {
 			data := input.Event.Data
+			ctx = withLLMExecutionTrigger(ctx, data.TriggerID, data.Reason)
 			itemID := data.ItemID
 			url := data.URL
 			var userIDPtr *string
@@ -1689,7 +1785,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			if userIDPtr != nil && *userIDPtr != "" {
 				userModelSettings, _ = deps.userSettingsRepo.GetByUserID(ctx, *userIDPtr)
 			}
-			log.Printf("process-item start item_id=%s url=%s", itemID, url)
+			log.Printf("process-item start item_id=%s url=%s trigger_id=%s reason=%s", itemID, url, strings.TrimSpace(data.TriggerID), strings.TrimSpace(data.Reason))
 
 			// Step 1: 本文抽出
 			extracted, err := step.Run(ctx, "extract-body", func(ctx context.Context) (*service.ExtractBodyResponse, error) {

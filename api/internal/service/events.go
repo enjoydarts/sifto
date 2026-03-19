@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/google/uuid"
 	"github.com/inngest/inngestgo"
 )
 
@@ -20,21 +21,35 @@ func NewEventPublisher() (*EventPublisher, error) {
 }
 
 func (p *EventPublisher) SendItemCreated(ctx context.Context, itemID, sourceID, url string) {
-	_ = p.SendItemCreatedE(ctx, itemID, sourceID, url)
+	_ = p.SendItemCreatedWithReasonE(ctx, itemID, sourceID, url, nil, "unknown")
 }
 
 func (p *EventPublisher) SendItemCreatedE(ctx context.Context, itemID, sourceID, url string) error {
+	return p.SendItemCreatedWithReasonE(ctx, itemID, sourceID, url, nil, "unknown")
+}
+
+func NewItemCreatedEvent(itemID, sourceID, url string, title *string, reason string) inngestgo.Event {
+	data := map[string]any{
+		"item_id":    itemID,
+		"source_id":  sourceID,
+		"url":        url,
+		"trigger_id": uuid.NewString(),
+		"reason":     reason,
+	}
+	if title != nil {
+		data["title"] = *title
+	}
+	return inngestgo.Event{
+		Name: "item/created",
+		Data: data,
+	}
+}
+
+func (p *EventPublisher) SendItemCreatedWithReasonE(ctx context.Context, itemID, sourceID, url string, title *string, reason string) error {
 	if p == nil {
 		return nil
 	}
-	if _, err := p.client.Send(ctx, inngestgo.Event{
-		Name: "item/created",
-		Data: map[string]any{
-			"item_id":   itemID,
-			"source_id": sourceID,
-			"url":       url,
-		},
-	}); err != nil {
+	if _, err := p.client.Send(ctx, NewItemCreatedEvent(itemID, sourceID, url, title, reason)); err != nil {
 		log.Printf("send item/created: %v", err)
 		return err
 	}

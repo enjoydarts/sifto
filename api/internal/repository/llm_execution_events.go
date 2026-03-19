@@ -13,18 +13,21 @@ func NewLLMExecutionEventRepo(db *pgxpool.Pool) *LLMExecutionEventRepo {
 }
 
 type LLMExecutionEventInput struct {
-	UserID        *string
-	SourceID      *string
-	ItemID        *string
-	DigestID      *string
-	Provider      string
-	Model         string
-	Purpose       string
-	Status        string
-	AttemptIndex  int
-	EmptyResponse bool
-	ErrorKind     *string
-	ErrorMessage  *string
+	IdempotencyKey *string
+	UserID         *string
+	SourceID       *string
+	ItemID         *string
+	DigestID       *string
+	TriggerID      *string
+	TriggerReason  *string
+	Provider       string
+	Model          string
+	Purpose        string
+	Status         string
+	AttemptIndex   int
+	EmptyResponse  bool
+	ErrorKind      *string
+	ErrorMessage   *string
 }
 
 type LLMExecutionCurrentMonthSummary struct {
@@ -46,12 +49,17 @@ type LLMExecutionCurrentMonthSummary struct {
 func (r *LLMExecutionEventRepo) Insert(ctx context.Context, in LLMExecutionEventInput) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO llm_execution_events (
+			idempotency_key,
 			user_id, source_id, item_id, digest_id,
+			trigger_id, trigger_reason,
 			provider, model, purpose, status, attempt_index,
 			empty_response, error_kind, error_message
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+		ON CONFLICT (idempotency_key) DO NOTHING
 	`,
+		in.IdempotencyKey,
 		in.UserID, in.SourceID, in.ItemID, in.DigestID,
+		in.TriggerID, in.TriggerReason,
 		in.Provider, in.Model, in.Purpose, in.Status, in.AttemptIndex,
 		in.EmptyResponse, in.ErrorKind, in.ErrorMessage,
 	)

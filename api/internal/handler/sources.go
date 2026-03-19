@@ -553,7 +553,7 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if created {
-			h.publisher.SendItemCreated(r.Context(), itemID, s.ID, body.URL)
+			h.publisher.SendItemCreatedWithReasonE(r.Context(), itemID, s.ID, body.URL, body.Title, "manual_source")
 		}
 	}
 

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"log"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 )
@@ -68,6 +69,8 @@ func (r *ItemRepo) loadFactsDetail(ctx context.Context, itemID string, detail *m
 	}
 	if attempts, attemptsErr := loadLatestItemLLMExecutionAttempts(ctx, r, itemID, "facts", itemDetailExecutionLimit); attemptsErr == nil {
 		detail.FactsExecutions = attempts
+	} else {
+		log.Printf("item detail facts executions load failed item_id=%s err=%v", itemID, attemptsErr)
 	}
 	if check, checkErr := loadFactsCheck(ctx, r.db, itemID); checkErr == nil {
 		detail.FactsCheck = check
@@ -89,6 +92,8 @@ func (r *ItemRepo) loadSummaryDetail(ctx context.Context, itemID string, detail 
 	}
 	if attempts, attemptsErr := loadLatestItemLLMExecutionAttempts(ctx, r, itemID, "summary", itemDetailExecutionLimit); attemptsErr == nil {
 		detail.SummaryExecutions = attempts
+	} else {
+		log.Printf("item detail summary executions load failed item_id=%s err=%v", itemID, attemptsErr)
 	}
 	if check, checkErr := loadFaithfulnessCheck(ctx, r.db, itemID); checkErr == nil {
 		detail.Faithfulness = check

@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
@@ -41,6 +42,154 @@ func loadItemEmbeddingsByID(ctx context.Context, db *pgxpool.Pool, itemIDs []str
 		out[itemID] = emb
 	}
 	return out, rows.Err()
+}
+
+func loadItemFactsByID(ctx context.Context, db *pgxpool.Pool, itemIDs []string) (map[string][]string, error) {
+	if len(itemIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := db.Query(ctx, `
+		SELECT item_id, facts
+		FROM item_facts
+		WHERE item_id = ANY($1::uuid[])`, itemIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string][]string, len(itemIDs))
+	for rows.Next() {
+		var itemID string
+		var facts []string
+		if err := rows.Scan(&itemID, &facts); err != nil {
+			return nil, err
+		}
+		out[itemID] = facts
+	}
+	return out, rows.Err()
+}
+
+func (r *ItemRepo) TriageClustersByEmbeddings(ctx context.Context, items []model.Item, selectedItemIDs []string) ([]model.ReadingPlanCluster, error) {
+	if len(items) < 2 {
+		return nil, nil
+	}
+	itemIDs := make([]string, 0, len(items))
+	for _, it := range items {
+		itemIDs = append(itemIDs, it.ID)
+	}
+	embByID, err := loadItemEmbeddingsByID(ctx, r.db, itemIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(embByID) < 2 {
+		return nil, nil
+	}
+	factsByID, err := loadItemFactsByID(ctx, r.db, itemIDs)
+	if err != nil {
+		return nil, err
+	}
+	selectedSet := make(map[string]struct{}, len(selectedItemIDs))
+	for _, id := range selectedItemIDs {
+		selectedSet[id] = struct{}{}
+	}
+	return buildTriageClusters(items, embByID, factsByID, selectedSet), nil
+}
+
+func buildTriageClusters(
+	items []model.Item,
+	embByID map[string][]float64,
+	factsByID map[string][]string,
+	selectedSet map[string]struct{},
+) []model.ReadingPlanCluster {
+	if len(items) < 2 || len(embByID) < 2 {
+		return nil
+	}
+	used := make([]bool, len(items))
+	clusters := make([]model.ReadingPlanCluster, 0, len(items)/2)
+	for i := range items {
+		if used[i] {
+			continue
+		}
+		seed := items[i]
+		seedEmb, ok := embByID[seed.ID]
+		if !ok || len(seedEmb) == 0 {
+			continue
+		}
+		used[i] = true
+		members := []model.Item{seed}
+		maxSim := 0.0
+		for j := i + 1; j < len(items); j++ {
+			if used[j] {
+				continue
+			}
+			cand := items[j]
+			cEmb, ok := embByID[cand.ID]
+			if !ok || len(cEmb) == 0 {
+				continue
+			}
+			match := false
+			bestSim := 0.0
+			for _, member := range members {
+				mEmb, ok := embByID[member.ID]
+				if !ok || len(mEmb) == 0 {
+					continue
+				}
+				sim := cosineSimilarity(mEmb, cEmb)
+				if sim > bestSim {
+					bestSim = sim
+				}
+				if shouldClusterTriage(member, cand, sim, factsByID[member.ID], factsByID[cand.ID]) {
+					match = true
+					break
+				}
+			}
+			if match {
+				used[j] = true
+				members = append(members, cand)
+				if bestSim > maxSim {
+					maxSim = bestSim
+				}
+			}
+		}
+		if len(members) < 2 {
+			continue
+		}
+		selectedMembers := make([]model.Item, 0, len(members))
+		if len(selectedSet) > 0 {
+			for _, m := range members {
+				if _, ok := selectedSet[m.ID]; ok {
+					selectedMembers = append(selectedMembers, m)
+				}
+			}
+			if len(selectedMembers) == 0 {
+				continue
+			}
+		}
+		sortClusterMembers(members)
+		representative := members[0]
+		if len(selectedMembers) > 0 {
+			sortClusterMembers(selectedMembers)
+			representative = selectedMembers[0]
+		}
+		clusters = append(clusters, model.ReadingPlanCluster{
+			ID:             representative.ID,
+			Label:          readingPlanClusterLabel(representative),
+			Size:           len(members),
+			MaxSimilarity:  maxSim,
+			Representative: representative,
+			Items:          members,
+		})
+	}
+	sort.SliceStable(clusters, func(i, j int) bool {
+		if clusters[i].Size != clusters[j].Size {
+			return clusters[i].Size > clusters[j].Size
+		}
+		if clusters[i].MaxSimilarity != clusters[j].MaxSimilarity {
+			return clusters[i].MaxSimilarity > clusters[j].MaxSimilarity
+		}
+		return clusters[i].Representative.CreatedAt.After(clusters[j].Representative.CreatedAt)
+	})
+	return reorderReadingPlanClustersMMR(clusters, embByID)
 }
 
 func (r *ItemRepo) readingPlanClustersByEmbeddings(ctx context.Context, items []model.Item, selectedItemIDs []string) ([]model.ReadingPlanCluster, error) {
@@ -290,9 +439,29 @@ func shouldClusterBriefing(seed, cand model.Item, similarity float64) bool {
 	return hasTopicOverlap(seed.SummaryTopics, cand.SummaryTopics)
 }
 
-func hasTopicOverlap(a, b []string) bool {
-	if len(a) == 0 || len(b) == 0 {
+func shouldClusterTriage(seed, cand model.Item, similarity float64, seedFacts, candFacts []string) bool {
+	if similarity >= 0.72 {
+		return true
+	}
+	if similarity < 0.58 {
 		return false
+	}
+	if !publishedCloseEnough(seed, cand, 6*time.Hour) {
+		return false
+	}
+	if sharedFactCount(seedFacts, candFacts) > 0 {
+		return true
+	}
+	return countTopicOverlap(seed.SummaryTopics, cand.SummaryTopics) >= 2
+}
+
+func hasTopicOverlap(a, b []string) bool {
+	return countTopicOverlap(a, b) > 0
+}
+
+func countTopicOverlap(a, b []string) int {
+	if len(a) == 0 || len(b) == 0 {
+		return 0
 	}
 	set := make(map[string]struct{}, len(a))
 	for _, v := range a {
@@ -301,12 +470,61 @@ func hasTopicOverlap(a, b []string) bool {
 		}
 		set[v] = struct{}{}
 	}
+	count := 0
 	for _, v := range b {
 		if _, ok := set[v]; ok {
-			return true
+			count++
 		}
 	}
-	return false
+	return count
+}
+
+func sharedFactCount(a, b []string) int {
+	if len(a) == 0 || len(b) == 0 {
+		return 0
+	}
+	set := make(map[string]struct{}, len(a))
+	for _, fact := range a {
+		key := normalizeFact(fact)
+		if key == "" {
+			continue
+		}
+		set[key] = struct{}{}
+	}
+	count := 0
+	for _, fact := range b {
+		key := normalizeFact(fact)
+		if key == "" {
+			continue
+		}
+		if _, ok := set[key]; ok {
+			count++
+		}
+	}
+	return count
+}
+
+func normalizeFact(v string) string {
+	v = strings.ToLower(strings.TrimSpace(v))
+	replacer := strings.NewReplacer(",", " ", ".", " ", ":", " ", ";", " ", "-", " ", "_", " ", "/", " ")
+	v = replacer.Replace(v)
+	return strings.Join(strings.Fields(v), " ")
+}
+
+func publishedCloseEnough(a, b model.Item, d time.Duration) bool {
+	at := a.CreatedAt
+	if a.PublishedAt != nil {
+		at = *a.PublishedAt
+	}
+	bt := b.CreatedAt
+	if b.PublishedAt != nil {
+		bt = *b.PublishedAt
+	}
+	diff := at.Sub(bt)
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff <= d
 }
 
 func sortClusterMembers(items []model.Item) {

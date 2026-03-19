@@ -75,6 +75,10 @@ func cacheKeyFocusQueue(userID, window string, size int, diversifyTopics, exclud
 	return fmt.Sprintf("%s:items:focus-queue:%s:window=%s:size=%d:div=%t:exclude_later=%t", cacheKeyVersion, userID, window, size, diversifyTopics, excludeLater)
 }
 
+func cacheKeyTriageQueue(userID, window string, size int, diversifyTopics, excludeLater bool) string {
+	return fmt.Sprintf("%s:items:triage-queue:%s:window=%s:size=%d:div=%t:exclude_later=%t", cacheKeyVersion, userID, window, size, diversifyTopics, excludeLater)
+}
+
 func cacheKeyTriageAll(userID string) string {
 	return fmt.Sprintf("%s:items:triage-all:%s", cacheKeyVersion, userID)
 }
@@ -175,6 +179,7 @@ func cacheUserInvalidatePrefixes(userID string) []string {
 		fmt.Sprintf("%s:items:list:%s:", cacheKeyVersion, userID),
 		fmt.Sprintf("%s:items:reading-plan:%s:", cacheKeyVersion, userID),
 		fmt.Sprintf("%s:items:focus-queue:%s:", cacheKeyVersion, userID),
+		fmt.Sprintf("%s:items:triage-queue:%s:", cacheKeyVersion, userID),
 		fmt.Sprintf("%s:items:triage-all:%s", cacheKeyVersion, userID),
 		fmt.Sprintf("%s:briefing:today:%s:", cacheKeyVersion, userID),
 		fmt.Sprintf("%s:dashboard:snapshot:%s:", cacheKeyVersion, userID),

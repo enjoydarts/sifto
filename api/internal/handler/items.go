@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -37,6 +38,118 @@ const focusQueueCacheTTL = 60 * time.Second
 const triageAllCacheTTL = 90 * time.Second
 const relatedItemsCacheTTL = 5 * time.Minute
 const itemDetailCacheTTL = 5 * time.Minute
+
+func buildTriageQueueEntries(resp *model.ReadingPlanResponse) []model.TriageQueueEntry {
+	if resp == nil {
+		return nil
+	}
+	consumed := make(map[string]struct{}, len(resp.Items))
+	entries := make([]model.TriageQueueEntry, 0, len(resp.Items))
+	for _, cluster := range resp.Clusters {
+		bundle := model.TriageBundle{
+			ID:             cluster.ID,
+			Label:          cluster.Label,
+			Size:           cluster.Size,
+			MaxSimilarity:  cluster.MaxSimilarity,
+			Representative: cluster.Representative,
+			Items:          cluster.Items,
+			Summary:        cluster.Representative.Summary,
+			SharedTopics:   triageSharedTopics(cluster.Items),
+		}
+		for _, item := range cluster.Items {
+			consumed[item.ID] = struct{}{}
+		}
+		entries = append(entries, model.TriageQueueEntry{
+			EntryType: "bundle",
+			Bundle:    &bundle,
+		})
+	}
+	for _, item := range resp.Items {
+		if _, ok := consumed[item.ID]; ok {
+			continue
+		}
+		itemCopy := item
+		entries = append(entries, model.TriageQueueEntry{
+			EntryType: "item",
+			Item:      &itemCopy,
+		})
+	}
+	return entries
+}
+
+func triageSharedTopics(items []model.Item) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	counts := map[string]int{}
+	for _, item := range items {
+		seen := map[string]struct{}{}
+		for _, topic := range item.SummaryTopics {
+			topic = strings.TrimSpace(topic)
+			if topic == "" {
+				continue
+			}
+			if _, ok := seen[topic]; ok {
+				continue
+			}
+			seen[topic] = struct{}{}
+			counts[topic]++
+		}
+	}
+	shared := make([]string, 0, len(counts))
+	for topic, count := range counts {
+		if count >= 2 {
+			shared = append(shared, topic)
+		}
+	}
+	sort.Strings(shared)
+	return shared
+}
+
+func triageCompletedCount(entries []model.TriageQueueEntry) int {
+	completed := 0
+	for _, entry := range entries {
+		if entry.EntryType == "bundle" && entry.Bundle != nil {
+			allRead := len(entry.Bundle.Items) > 0
+			for _, item := range entry.Bundle.Items {
+				if !item.IsRead {
+					allRead = false
+					break
+				}
+			}
+			if allRead {
+				completed++
+			}
+			continue
+		}
+		if entry.Item != nil && entry.Item.IsRead {
+			completed++
+		}
+	}
+	return completed
+}
+
+func buildTriageQueueParams(q url.Values) (repository.ReadingPlanParams, error) {
+	mode := strings.TrimSpace(q.Get("mode"))
+	window := q.Get("window")
+	if mode == "all" {
+		window = "all"
+	}
+	if window == "" {
+		window = "24h"
+	}
+	size := parseIntOrDefault(q.Get("size"), 20)
+	if size < 1 || size > 100 {
+		return repository.ReadingPlanParams{}, errors.New("invalid size")
+	}
+	return repository.ReadingPlanParams{
+		Window:          window,
+		Size:            size,
+		DiversifyTopics: q.Get("diversify_topics") != "false",
+		ExcludeRead:     true,
+		ExcludeLater:    q.Get("exclude_later") != "false",
+	}, nil
+}
 
 func NewItemHandler(
 	repo *repository.ItemRepo,
@@ -682,6 +795,125 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, out, focusQueueCacheTTL); err != nil {
 			incrCacheMetric(r.Context(), h.cache, userID, "focus_queue.error")
 			log.Printf("focus-queue cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
+	}
+	writeJSON(w, out)
+}
+
+func (h *ItemHandler) TriageQueue(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	params, err := buildTriageQueueParams(r.URL.Query())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	cacheKey := cacheKeyTriageQueue(userID, params.Window, params.Size, params.DiversifyTopics, params.ExcludeLater)
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
+	if h.cache != nil && !cacheBust {
+		var cached model.TriageQueueResponse
+		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
+			incrCacheMetric(r.Context(), h.cache, userID, "triage_queue.hit")
+			writeJSON(w, cached)
+			return
+		} else if err != nil {
+			incrCacheMetric(r.Context(), h.cache, userID, "triage_queue.error")
+			log.Printf("triage-queue cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
+		incrCacheMetric(r.Context(), h.cache, userID, "triage_queue.miss")
+	} else if cacheBust && h.cache != nil {
+		incrCacheMetric(r.Context(), h.cache, userID, "triage_queue.bypass")
+	}
+
+	out := model.TriageQueueResponse{
+		Entries:         nil,
+		Window:          params.Window,
+		Size:            params.Size,
+		Completed:       0,
+		Remaining:       0,
+		Total:           0,
+		UnderlyingItems: 0,
+		BundleCount:     0,
+		SourcePool:      0,
+		DiversifyTopics: params.DiversifyTopics,
+	}
+	if params.Window == "all" {
+		items := make([]model.Item, 0, 200)
+		page := 1
+		for page <= 100 {
+			resp, err := h.repo.ListPage(r.Context(), userID, repository.ItemListParams{
+				Page:         page,
+				PageSize:     200,
+				Sort:         "newest",
+				UnreadOnly:   true,
+				FavoriteOnly: false,
+				LaterOnly:    false,
+			})
+			if err != nil {
+				writeRepoError(w, err)
+				return
+			}
+			if resp == nil || len(resp.Items) == 0 {
+				break
+			}
+			items = append(items, resp.Items...)
+			if !resp.HasNext {
+				break
+			}
+			page++
+		}
+		triageClusters, err := h.repo.TriageClustersByEmbeddings(r.Context(), items, nil)
+		if err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		allResp := &model.ReadingPlanResponse{
+			Items:           items,
+			Window:          "all",
+			Size:            len(items),
+			DiversifyTopics: false,
+			ExcludeRead:     true,
+			SourcePoolCount: len(items),
+			Clusters:        triageClusters,
+		}
+		out.Entries = buildTriageQueueEntries(allResp)
+		out.Window = allResp.Window
+		out.Size = allResp.Size
+		out.Total = len(out.Entries)
+		out.Completed = triageCompletedCount(out.Entries)
+		out.Remaining = len(out.Entries) - out.Completed
+		out.UnderlyingItems = len(allResp.Items)
+		out.BundleCount = len(allResp.Clusters)
+		out.SourcePool = allResp.SourcePoolCount
+		out.DiversifyTopics = allResp.DiversifyTopics
+	} else {
+		resp, err := h.repo.ReadingPlan(r.Context(), userID, params)
+		if err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		if resp != nil {
+			triageClusters, err := h.repo.TriageClustersByEmbeddings(r.Context(), resp.Items, nil)
+			if err != nil {
+				writeRepoError(w, err)
+				return
+			}
+			resp.Clusters = triageClusters
+			out.Entries = buildTriageQueueEntries(resp)
+			out.Window = resp.Window
+			out.Size = resp.Size
+			out.Total = len(out.Entries)
+			out.Completed = triageCompletedCount(out.Entries)
+			out.Remaining = len(out.Entries) - out.Completed
+			out.UnderlyingItems = len(resp.Items)
+			out.BundleCount = len(resp.Clusters)
+			out.SourcePool = resp.SourcePoolCount
+			out.DiversifyTopics = resp.DiversifyTopics
+		}
+	}
+	if h.cache != nil {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, out, focusQueueCacheTTL); err != nil {
+			incrCacheMetric(r.Context(), h.cache, userID, "triage_queue.error")
+			log.Printf("triage-queue cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 	}
 	writeJSON(w, out)

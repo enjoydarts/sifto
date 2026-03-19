@@ -166,6 +166,7 @@ func main() {
 			r.Post("/retry-failed", itemH.RetryFailed)
 			r.Get("/reading-plan", itemH.ReadingPlan)
 			r.Get("/focus-queue", itemH.FocusQueue)
+			r.Get("/triage-queue", itemH.TriageQueue)
 			r.Get("/today-queue", itemH.TodayQueue)
 			r.Get("/triage-all", itemH.TriageAll)
 			r.Get("/{id}/related", itemH.Related)

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowUp, ArrowRight, ExternalLink, Hand } from "lucide-react";
-import { api, Item, FocusQueueResponse } from "@/lib/api";
+import { api, Item, TriageBundle, TriageQueueEntry, TriageQueueResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { InlineReader } from "@/components/inline-reader";
@@ -28,6 +28,32 @@ function rateTone(rate: number) {
   return "text-rose-700";
 }
 
+function entryKey(entry: TriageQueueEntry) {
+  if (entry.entry_type === "bundle") return `bundle:${entry.bundle?.id ?? "unknown"}`;
+  return `item:${entry.item?.id ?? "unknown"}`;
+}
+
+function entryItemIds(entry: TriageQueueEntry) {
+  if (entry.entry_type === "bundle") {
+    return (entry.bundle?.items ?? []).map((item) => item.id);
+  }
+  return entry.item?.id ? [entry.item.id] : [];
+}
+
+function isEntryDone(entry: TriageQueueEntry, actioned: Record<string, true>) {
+  const itemIds = entryItemIds(entry);
+  if (itemIds.length === 0) return true;
+  return itemIds.every((id) => actioned[id]);
+}
+
+function leadItem(entry: TriageQueueEntry) {
+  return entry.entry_type === "bundle" ? (entry.bundle?.representative ?? null) : (entry.item ?? null);
+}
+
+function sourceCount(bundle: TriageBundle) {
+  return new Set((bundle.items ?? []).map((item) => item.source_id).filter(Boolean)).size;
+}
+
 export default function TriagePage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
@@ -42,6 +68,7 @@ export default function TriagePage() {
   const [dragging, setDragging] = useState(false);
   const [swipeExit, setSwipeExit] = useState<ActionType | null>(null);
   const [mobileMetricsOpen, setMobileMetricsOpen] = useState(false);
+  const [bundleExpanded, setBundleExpanded] = useState(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const currentShownAtRef = useRef<{ id: string; shownAtMs: number } | null>(null);
 
@@ -82,52 +109,55 @@ export default function TriagePage() {
   const focusSize = readingPlanPrefs?.size ?? 15;
   const diversifyTopics = Boolean(readingPlanPrefs?.diversify_topics ?? true);
 
-  const queueQuery = useQuery<FocusQueueResponse>({
+  const queueQuery = useQuery<TriageQueueResponse>({
     queryKey: ["triage-queue", triageMode, focusWindow, focusSize, diversifyTopics ? 1 : 0] as const,
     queryFn: () =>
-      triageMode === "all"
-        ? api.getTriageAll()
-        : api.getFocusQueue({
-            window: focusWindow === "today_jst" || focusWindow === "7d" ? focusWindow : "24h",
-            size: focusSize,
-            diversify_topics: diversifyTopics,
-            exclude_later: true,
-          }),
+      api.getTriageQueue({
+        mode: triageMode,
+        window: triageMode === "all" ? undefined : focusWindow === "today_jst" || focusWindow === "7d" ? focusWindow : "24h",
+        size: triageMode === "all" ? undefined : focusSize,
+        diversify_topics: triageMode === "all" ? undefined : diversifyTopics,
+        exclude_later: true,
+      }),
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
 
-  const queue = useMemo(() => queueQuery.data?.items ?? [], [queueQuery.data?.items]);
+  const queue = useMemo(() => queueQuery.data?.entries ?? [], [queueQuery.data?.entries]);
   const pendingItems = useMemo(
-    () => queue.filter((it) => !it.is_read && !actioned[it.id]),
+    () => queue.filter((entry) => !isEntryDone(entry, actioned)),
     [actioned, queue]
   );
   const current = pendingItems[0] ?? null;
   const done = queue.length - pendingItems.length;
   const progress = queue.length > 0 ? Math.round((done / queue.length) * 100) : 0;
+  const currentLead = current ? leadItem(current) : null;
+  const currentBundle = current?.entry_type === "bundle" ? current.bundle ?? null : null;
 
   const currentDetailQuery = useQuery({
-    queryKey: ["item-detail", current?.id ?? ""],
-    queryFn: () => api.getItem(current?.id ?? ""),
-    enabled: !!current?.id,
+    queryKey: ["item-detail", currentLead?.id ?? ""],
+    queryFn: () => api.getItem(currentLead?.id ?? ""),
+    enabled: !!currentLead?.id,
     staleTime: 60_000,
   });
 
   useEffect(() => {
-    if (!current?.id) return;
-    currentShownAtRef.current = { id: current.id, shownAtMs: Date.now() };
+    const id = current ? entryKey(current) : "";
+    if (!id) return;
+    currentShownAtRef.current = { id, shownAtMs: Date.now() };
     setDragOffset({ x: 0, y: 0 });
     setDragging(false);
     setSwipeExit(null);
-  }, [current?.id]);
+    setBundleExpanded(false);
+  }, [current]);
 
-  const recordMetric = useCallback((itemID: string, action: ActionType) => {
+  const recordMetric = useCallback((entryID: string, action: ActionType) => {
     const shown = currentShownAtRef.current;
-    if (!shown || shown.id !== itemID) return;
+    if (!shown || shown.id !== entryID) return;
     const elapsed = Math.max(0, Date.now() - shown.shownAtMs);
     const event: TriageMetricEvent = {
       ts: Date.now(),
-      item_id: itemID,
+      item_id: entryID,
       action,
       elapsed_ms: elapsed,
     };
@@ -158,25 +188,12 @@ export default function TriagePage() {
           await api.markItemLater(item.id);
           showToast(t("triage.toast.later"), "success");
         }
-        queryClient.setQueriesData(
-          { queryKey: ["triage-queue"] },
-          (prev: unknown) => {
-            if (!prev || typeof prev !== "object") return prev;
-            const data = prev as { items?: Array<Record<string, unknown>> };
-            if (!Array.isArray(data.items)) return prev;
-            return {
-              ...data,
-              items: data.items.map((v) =>
-                v.id === item.id ? { ...v, is_read: action === "read" || action === "favorite" } : v
-              ),
-            };
-          }
-        );
         await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["triage-queue"] }),
           queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
           queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
         ]);
-        recordMetric(item.id, action);
+        recordMetric(`item:${item.id}`, action);
         setActioned((prev) => ({ ...prev, [item.id]: true }));
       } catch (e) {
         showToast(`${t("common.error")}: ${String(e)}`, "error");
@@ -185,6 +202,40 @@ export default function TriagePage() {
       }
     },
     [queryClient, recordMetric, showToast, t, updating]
+  );
+
+  const applyBundleAction = useCallback(
+    async (bundle: TriageBundle, action: "read" | "later") => {
+      if (updating) return;
+      const itemIds = Array.from(new Set((bundle.items ?? []).map((item) => item.id).filter(Boolean)));
+      if (itemIds.length === 0) return;
+      setUpdating(true);
+      try {
+        if (action === "read") {
+          const res = await api.markItemsReadByIDs(itemIds);
+          showToast(`${res.updated_count}${locale === "ja" ? "" : " "}${t("briefing.clusterReadDone")}`, "success");
+        } else {
+          const res = await api.markItemsLaterBulk({ item_ids: itemIds });
+          showToast(`${res.updated_count}${locale === "ja" ? "" : " "}${t("briefing.clusterLaterDone")}`, "success");
+        }
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["triage-queue"] }),
+          queryClient.invalidateQueries({ queryKey: ["briefing-today"] }),
+          queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
+        ]);
+        recordMetric(`bundle:${bundle.id}`, action);
+        setActioned((prev) => {
+          const next = { ...prev };
+          for (const id of itemIds) next[id] = true;
+          return next;
+        });
+      } catch (e) {
+        showToast(`${t("common.error")}: ${String(e)}`, "error");
+      } finally {
+        setUpdating(false);
+      }
+    },
+    [locale, queryClient, recordMetric, showToast, t, updating]
   );
 
   const metricSummary = useMemo(() => {
@@ -225,18 +276,30 @@ export default function TriagePage() {
       if (!current || updating) return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
-        void applyAction(current, "read");
+        if (current.entry_type === "bundle" && current.bundle) {
+          void applyBundleAction(current.bundle, "read");
+        } else if (current.item) {
+          void applyAction(current.item, "read");
+        }
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
-        void applyAction(current, "favorite");
+        if (current.entry_type === "bundle") {
+          setBundleExpanded((v) => !v);
+        } else if (current.item) {
+          void applyAction(current.item, "favorite");
+        }
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        void applyAction(current, "later");
+        if (current.entry_type === "bundle" && current.bundle) {
+          void applyBundleAction(current.bundle, "later");
+        } else if (current.item) {
+          void applyAction(current.item, "later");
+        }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [applyAction, current, updating]);
+  }, [applyAction, applyBundleAction, current, updating]);
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (updating) return;
@@ -271,7 +334,15 @@ export default function TriagePage() {
       setDragging(false);
       setSwipeExit(action);
       window.setTimeout(() => {
-        void applyAction(current, action);
+        if (current.entry_type === "bundle" && current.bundle) {
+          if (action === "read" || action === "later") {
+            void applyBundleAction(current.bundle, action);
+          } else {
+            setBundleExpanded(true);
+          }
+        } else if (current.item) {
+          void applyAction(current.item, action);
+        }
         setDragOffset({ x: 0, y: 0 });
         setSwipeExit(null);
       }, 160);
@@ -440,7 +511,7 @@ export default function TriagePage() {
         </section>
       )}
 
-      {current && (
+      {current && currentLead && (
         <section
           className="relative touch-none select-none rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6"
           onPointerDown={onPointerDown}
@@ -460,7 +531,7 @@ export default function TriagePage() {
               className="absolute left-3 top-3 rounded-full border border-green-300 bg-green-50 px-2 py-1 text-[10px] font-semibold text-green-700"
               style={{ opacity: swipeBadgeOpacity.favorite }}
             >
-              {t("triage.action.favorite")}
+              {currentBundle ? t("triage.action.inspectBundle") : t("triage.action.favorite")}
             </div>
             <div
               className="absolute right-3 top-3 rounded-full border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-700"
@@ -475,18 +546,35 @@ export default function TriagePage() {
               {t("triage.action.later")}
             </div>
           </div>
-          <div className="mb-2 text-xs text-zinc-500">{new Date(current.published_at ?? current.created_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}</div>
+          <div className="mb-2 text-xs text-zinc-500">
+            {new Date(currentLead.published_at ?? currentLead.created_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}
+          </div>
+          {currentBundle ? (
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1">
+                {currentBundle.items.length} {t("triage.bundleCount")}
+              </span>
+              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1">
+                {sourceCount(currentBundle)} {t("triage.bundleSources")}
+              </span>
+              {(currentBundle.shared_topics ?? []).slice(0, 3).map((topic) => (
+                <span key={topic} className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1">
+                  {topic}
+                </span>
+              ))}
+            </div>
+          ) : null}
           <h2 className="text-xl font-semibold leading-snug text-zinc-900">
-            {current.translated_title || current.title || current.url}
+            {currentLead.translated_title || currentLead.title || currentLead.url}
           </h2>
           <a
-            href={current.url}
+            href={currentLead.url}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-2 inline-flex items-center gap-1 break-all text-sm text-blue-600 hover:underline"
           >
             <ExternalLink className="size-3.5" aria-hidden="true" />
-            <span>{current.url}</span>
+            <span>{currentLead.url}</span>
           </a>
 
           <div className="mt-4 rounded-lg border border-zinc-100 bg-zinc-50 p-3">
@@ -502,18 +590,62 @@ export default function TriagePage() {
               >
                 {currentDetailQuery.data.summary.summary}
               </p>
+            ) : currentBundle?.summary ? (
+              <p className="text-sm leading-7 text-zinc-700">{currentBundle.summary}</p>
             ) : (
               <p className="text-sm text-zinc-500">{t("triage.noSummary")}</p>
             )}
           </div>
 
+          {currentBundle ? (
+            <div className="mt-3 rounded-lg border border-zinc-100 bg-white p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-semibold text-zinc-600">{t("triage.bundleMembers")}</div>
+                <button
+                  type="button"
+                  onClick={() => setBundleExpanded((v) => !v)}
+                  className="rounded border border-zinc-300 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                >
+                  {bundleExpanded ? t("triage.bundleCollapse") : t("triage.bundleExpand")}
+                </button>
+              </div>
+              {bundleExpanded ? (
+                <div className="mt-3 space-y-2">
+                  {currentBundle.items.map((item) => (
+                    <div key={item.id} className="rounded-lg border border-zinc-100 bg-zinc-50 p-3">
+                      <div className="text-sm font-medium text-zinc-900">{item.translated_title || item.title || item.url}</div>
+                      <div className="mt-1 text-xs text-zinc-500">{item.source_title || item.url}</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setInlineItemId(item.id)}
+                          className="rounded border border-zinc-300 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                        >
+                          {t("triage.bundleOpenItem")}
+                        </button>
+                        <Link
+                          href={`/items/${item.id}?from=${encodeURIComponent("/triage")}`}
+                          className="rounded border border-zinc-300 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+                        >
+                          {t("triage.bundleOpenDetail")}
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-zinc-500">{t("triage.bundleCollapsedHint")}</p>
+              )}
+            </div>
+          ) : null}
+
           <div className="mt-3">
             <button
               type="button"
-              onClick={() => setInlineItemId(current.id)}
+              onClick={() => (currentBundle ? setBundleExpanded((v) => !v) : setInlineItemId(currentLead.id))}
               className="rounded border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
             >
-              {t("triage.openInline")}
+              {currentBundle ? t("triage.action.inspectBundle") : t("triage.openInline")}
             </button>
           </div>
 
@@ -521,7 +653,9 @@ export default function TriagePage() {
             <button
               type="button"
               disabled={updating}
-              onClick={() => void applyAction(current, "read")}
+              onClick={() =>
+                currentBundle ? void applyBundleAction(currentBundle, "read") : current.item ? void applyAction(current.item, "read") : undefined
+              }
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
             >
               <ArrowLeft className="size-4" aria-hidden="true" />
@@ -530,7 +664,9 @@ export default function TriagePage() {
             <button
               type="button"
               disabled={updating}
-              onClick={() => void applyAction(current, "later")}
+              onClick={() =>
+                currentBundle ? void applyBundleAction(currentBundle, "later") : current.item ? void applyAction(current.item, "later") : undefined
+              }
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
             >
               <ArrowUp className="size-4" aria-hidden="true" />
@@ -539,15 +675,21 @@ export default function TriagePage() {
             <button
               type="button"
               disabled={updating}
-              onClick={() => void applyAction(current, "favorite")}
+              onClick={() =>
+                currentBundle
+                  ? setBundleExpanded((v) => !v)
+                  : current.item
+                    ? void applyAction(current.item, "favorite")
+                    : undefined
+              }
               className="inline-flex items-center justify-center gap-2 rounded-lg border border-zinc-900 bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
             >
               <ArrowRight className="size-4" aria-hidden="true" />
-              <span>{t("triage.action.favorite")}</span>
+              <span>{currentBundle ? t("triage.action.inspectBundle") : t("triage.action.favorite")}</span>
             </button>
           </div>
 
-          <p className="mt-3 text-xs text-zinc-500">{t("triage.hint")}</p>
+          <p className="mt-3 text-xs text-zinc-500">{currentBundle ? t("triage.hintBundle") : t("triage.hint")}</p>
         </section>
       )}
 

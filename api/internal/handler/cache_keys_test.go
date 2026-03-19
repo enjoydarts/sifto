@@ -90,3 +90,11 @@ func TestCacheKeyLLMUsageVersioned(t *testing.T) {
 		t.Fatalf("cacheKeyLLMUsageListVersioned = %q, want %q", got, want)
 	}
 }
+
+func TestCacheKeyTriageQueue(t *testing.T) {
+	got := cacheKeyTriageQueue("u1", "24h", 15, true, true)
+	want := "v1:items:triage-queue:u1:window=24h:size=15:div=true:exclude_later=true"
+	if got != want {
+		t.Fatalf("cacheKeyTriageQueue = %q, want %q", got, want)
+	}
+}

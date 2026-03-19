@@ -420,6 +420,36 @@ type ReadingPlanCluster struct {
 	Items          []Item  `json:"items"`
 }
 
+type TriageBundle struct {
+	ID             string   `json:"id"`
+	Label          string   `json:"label"`
+	Size           int      `json:"size"`
+	MaxSimilarity  float64  `json:"max_similarity"`
+	Representative Item     `json:"representative"`
+	Items          []Item   `json:"items"`
+	Summary        *string  `json:"summary,omitempty"`
+	SharedTopics   []string `json:"shared_topics,omitempty"`
+}
+
+type TriageQueueEntry struct {
+	EntryType string        `json:"entry_type"`
+	Item      *Item         `json:"item,omitempty"`
+	Bundle    *TriageBundle `json:"bundle,omitempty"`
+}
+
+type TriageQueueResponse struct {
+	Entries         []TriageQueueEntry `json:"entries"`
+	Window          string             `json:"window"`
+	Size            int                `json:"size"`
+	Completed       int                `json:"completed"`
+	Remaining       int                `json:"remaining"`
+	Total           int                `json:"total"`
+	UnderlyingItems int                `json:"underlying_items"`
+	BundleCount     int                `json:"bundle_count"`
+	SourcePool      int                `json:"source_pool"`
+	DiversifyTopics bool               `json:"diversify_topics"`
+}
+
 type TodayQueueCandidate struct {
 	Item          Item       `json:"item"`
 	LastSkippedAt *time.Time `json:"last_skipped_at,omitempty"`

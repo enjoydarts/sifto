@@ -390,6 +390,36 @@ export interface FocusQueueResponse {
   diversify_topics: boolean;
 }
 
+export interface TriageBundle {
+  id: string;
+  label: string;
+  size: number;
+  max_similarity: number;
+  representative: Item;
+  items: Item[];
+  summary?: string | null;
+  shared_topics?: string[];
+}
+
+export interface TriageQueueEntry {
+  entry_type: "item" | "bundle";
+  item?: Item | null;
+  bundle?: TriageBundle | null;
+}
+
+export interface TriageQueueResponse {
+  entries: TriageQueueEntry[];
+  window: "24h" | "today_jst" | "7d" | string;
+  size: number;
+  completed: number;
+  remaining: number;
+  total: number;
+  underlying_items: number;
+  bundle_count: number;
+  source_pool: number;
+  diversify_topics: boolean;
+}
+
 export interface TodayQueueItem {
   item: Item;
   estimated_reading_minutes: number;
@@ -1115,6 +1145,22 @@ export const api = {
     if (params?.exclude_later != null) q.set("exclude_later", String(params.exclude_later));
     const qs = q.toString();
     return apiFetch<FocusQueueResponse>(`/items/focus-queue${qs ? `?${qs}` : ""}`);
+  },
+  getTriageQueue: (params?: {
+    mode?: "quick" | "all";
+    window?: "24h" | "today_jst" | "7d";
+    size?: number;
+    diversify_topics?: boolean;
+    exclude_later?: boolean;
+  }) => {
+    const q = new URLSearchParams();
+    if (params?.mode) q.set("mode", params.mode);
+    if (params?.window) q.set("window", params.window);
+    if (params?.size) q.set("size", String(params.size));
+    if (params?.diversify_topics != null) q.set("diversify_topics", String(params.diversify_topics));
+    if (params?.exclude_later != null) q.set("exclude_later", String(params.exclude_later));
+    const qs = q.toString();
+    return apiFetch<TriageQueueResponse>(`/items/triage-queue${qs ? `?${qs}` : ""}`);
   },
   getTodayQueue: (params?: { size?: number }) => {
     const q = new URLSearchParams();

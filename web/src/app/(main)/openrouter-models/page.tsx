@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link2, RefreshCw, Search, X } from "lucide-react";
+import { Copy, Link2, RefreshCw, Search, X } from "lucide-react";
 import { api, OpenRouterModelListEntry, OpenRouterModelsResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -168,6 +168,16 @@ export default function OpenRouterModelsPage() {
       setSyncing(false);
     }
   }, [showToast, t]);
+
+  const handleCopyModelId = useCallback(async () => {
+    if (!selectedModel) return;
+    try {
+      await navigator.clipboard.writeText(selectedModel.model_id);
+      showToast(t("openrouterModels.toast.modelIdCopied"), "success");
+    } catch {
+      showToast(t("openrouterModels.toast.modelIdCopyFailed"), "error");
+    }
+  }, [selectedModel, showToast, t]);
 
   const providerOptions = useMemo(() => {
     const values = new Set<string>();
@@ -610,7 +620,18 @@ export default function OpenRouterModelsPage() {
                 <h2 className="mt-1 break-words text-base font-semibold text-zinc-900">
                   {selectedModel.display_name || selectedModel.model_id}
                 </h2>
-                <p className="mt-1 break-all text-xs text-zinc-500">{selectedModel.model_id}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="min-w-0 break-all text-xs text-zinc-500">{selectedModel.model_id}</p>
+                  <button
+                    type="button"
+                    onClick={handleCopyModelId}
+                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:text-zinc-800"
+                    aria-label={t("openrouterModels.modal.copyModelId")}
+                    title={t("openrouterModels.modal.copyModelId")}
+                  >
+                    <Copy className="size-3.5" aria-hidden="true" />
+                  </button>
+                </div>
               </div>
               <button
                 type="button"

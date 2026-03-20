@@ -532,7 +532,7 @@ function ItemsPageContent() {
     <PageTransition>
       <div className="space-y-3 pb-8">
         <div className="grid gap-3 xl:grid-cols-[248px_minmax(0,1fr)] xl:items-start">
-          <aside className="hidden xl:sticky xl:top-[8.5rem] xl:flex xl:self-start xl:flex-col xl:gap-4">
+          <aside className="hidden xl:sticky xl:top-[6.25rem] xl:flex xl:self-start xl:flex-col xl:gap-4">
             <SectionCard compact className="overflow-hidden">
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
                 {t("items.rail.metrics")}

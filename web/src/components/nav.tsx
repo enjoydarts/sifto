@@ -159,12 +159,12 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/95 shadow-[0_1px_3px_rgba(0,0,0,0.04)] backdrop-blur">
-        <div className="mx-auto max-w-[1360px] px-4 py-3 md:px-6">
-          <div className="flex min-h-12 items-center gap-3">
-            <Link href="/" className="flex items-center gap-2 press focus-ring rounded">
+      <header className="sticky top-0 z-20 border-b border-[color:rgba(190,179,160,0.55)] bg-[color:rgba(252,251,248,0.84)] shadow-[0_8px_28px_rgba(35,24,12,0.06)] backdrop-blur">
+        <div className="mx-auto max-w-[1360px] px-4 py-3 md:px-6 md:py-[18px]">
+          <div className="flex min-h-11 items-center gap-3 lg:hidden">
+            <Link href="/" className="flex items-center gap-2 rounded-full press focus-ring">
               <Image src="/logo.png" alt="Sifto" width={32} height={32} priority />
-              <span className="text-[19px] font-bold tracking-tight text-zinc-900">Sifto</span>
+              <span className="font-serif text-[20px] tracking-[-0.03em] text-[var(--color-editorial-ink)]">Sifto</span>
             </Link>
 
             <div className="ml-auto flex items-center gap-2">
@@ -172,7 +172,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
               <button
                 type="button"
                 onClick={handleForceRefresh}
-                className="inline-flex h-9 w-9 items-center justify-center rounded border border-zinc-200 text-zinc-700 hover:bg-zinc-50 press focus-ring"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] press focus-ring"
                 aria-label={t("nav.refreshLatest")}
                 title={t("nav.refreshLatest")}
               >
@@ -182,7 +182,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
               <select
                 value={locale}
                 onChange={(e) => setLocale(e.target.value as "ja" | "en")}
-                className="h-9 rounded border border-zinc-200 bg-white px-3 text-xs text-zinc-600 focus-ring"
+                className="h-9 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 text-xs text-[var(--color-editorial-ink-soft)] focus-ring"
                 aria-label={t("nav.language")}
               >
                 <option value="ja">{t("nav.locale.ja")}</option>
@@ -191,7 +191,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded border border-zinc-200 text-zinc-700 hover:bg-zinc-50 md:hidden press focus-ring"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] lg:hidden press focus-ring"
                 aria-expanded={menuOpen}
                 aria-label={menuOpen ? t("nav.menu.close") : t("nav.menu.open")}
               >
@@ -204,8 +204,18 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
             </div>
           </div>
 
-          <div className="mt-2 hidden items-center gap-2 md:flex">
-            <nav className="flex min-w-0 flex-1 flex-wrap gap-1">
+          <div className="hidden items-center gap-5 lg:flex">
+            <Link href="/" className="flex min-w-[220px] items-center gap-3 rounded-full press focus-ring">
+              <Image src="/logo.png" alt="Sifto" width={38} height={38} priority />
+              <div className="flex flex-col gap-0.5">
+                <span className="font-serif text-[22px] leading-none tracking-[0.03em] text-[var(--color-editorial-ink)]">Sifto</span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                  Intelligence Desk
+                </span>
+              </div>
+            </Link>
+
+            <nav className="flex min-w-0 flex-1 flex-wrap gap-2">
               {primaryLinks.map(({ href, activeHref, labelKey, icon: Icon }) => {
                 const active = isLinkActive(href, activeHref);
                 return (
@@ -213,13 +223,12 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                     key={href}
                     href={href}
                     onClick={() => setMoreOpen(false)}
-                    className={`group inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[14px] font-medium transition-colors duration-150 press focus-ring ${
+                    className={`group inline-flex items-center rounded-full border px-[14px] py-[10px] text-[13px] leading-none transition-colors duration-150 press focus-ring ${
                       active
-                        ? "bg-zinc-900 text-white font-semibold shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
-                        : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+                        ? "border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink)]"
+                        : "border-transparent text-[var(--color-editorial-ink-soft)] hover:border-[var(--color-editorial-line)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
                     }`}
                   >
-                    <NavIcon icon={Icon} active={active} />
                     <span>{t(labelKey)}</span>
                   </Link>
                 );
@@ -228,22 +237,21 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                 <button
                   type="button"
                   onClick={() => setMoreOpen((v) => !v)}
-                  className={`group inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-[14px] font-medium transition-colors duration-150 press focus-ring ${
+                  className={`group inline-flex items-center rounded-full border px-[14px] py-[10px] text-[13px] leading-none transition-colors duration-150 press focus-ring ${
                     secondaryLinks.some((v) => isActive(v.href))
-                      ? "bg-zinc-900 text-white font-semibold shadow-[0_2px_4px_rgba(0,0,0,0.1)]"
-                      : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900"
+                      ? "border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink)]"
+                      : "border-transparent text-[var(--color-editorial-ink-soft)] hover:border-[var(--color-editorial-line)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
                   }`}
                   aria-expanded={moreOpen}
                 >
-                  <NavIcon icon={SettingsIcon} active={isMoreActive} />
                   <span>{t("nav.more")}</span>
                 </button>
                 {moreOpen && (
-                  <div className="absolute left-0 top-10 z-30 w-52 rounded-[20px] border border-zinc-200 bg-white p-3 shadow-[0_8px_24px_rgba(0,0,0,0.12)] motion-safe:animate-scale-in">
+                  <div className="absolute left-0 top-11 z-30 w-56 rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3 shadow-[var(--shadow-dropdown)] motion-safe:animate-scale-in">
                     {secondaryLinkGroups.map((group, groupIdx) => (
                       <div key={group.labelKey}>
-                        {groupIdx > 0 && <div className="my-2 h-px bg-zinc-100" />}
-                        <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                        {groupIdx > 0 && <div className="my-2 h-px bg-[var(--color-editorial-line)]" />}
+                        <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
                           {t(group.labelKey)}
                         </div>
                         {group.items.map(({ href, labelKey, icon: Icon }) => {
@@ -254,7 +262,9 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                               href={href}
                               onClick={() => setMoreOpen(false)}
                               className={`flex items-center gap-2 rounded-[14px] px-4 py-3 text-[14px] transition-colors duration-150 press focus-ring ${
-                                active ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-50"
+                                active
+                                  ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                                  : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
                               }`}
                             >
                               <NavIcon icon={Icon} active={active} />
@@ -264,27 +274,49 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                         })}
                       </div>
                     ))}
+                    {hasSignedInUser && (
+                      <div className="mt-2 border-t border-[var(--color-editorial-line)] px-2 pt-2">
+                        <div className="truncate text-xs text-[var(--color-editorial-ink-faint)]">
+                          {displayName}
+                        </div>
+                        <button
+                          onClick={onSignOut}
+                          className="mt-2 w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-left text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] press focus-ring"
+                        >
+                          {t("nav.signOut")}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </nav>
-            {hasSignedInUser && (
-              <>
-                <span className="max-w-44 truncate text-sm text-zinc-500">
-                  {displayName}
-                </span>
-                <button
-                  onClick={onSignOut}
-                  className="rounded-lg border border-zinc-200 px-3 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 press focus-ring"
-                >
-                  {t("nav.signOut")}
-                </button>
-              </>
-            )}
+            <div className="ml-auto flex items-center gap-2">
+              <PWAInstallButton />
+              <button
+                type="button"
+                onClick={handleForceRefresh}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] press focus-ring"
+                aria-label={t("nav.refreshLatest")}
+                title={t("nav.refreshLatest")}
+              >
+                <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+              </button>
+              <label className="sr-only">{t("nav.language")}</label>
+              <select
+                value={locale}
+                onChange={(e) => setLocale(e.target.value as "ja" | "en")}
+                className="h-9 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 text-xs text-[var(--color-editorial-ink-soft)] focus-ring"
+                aria-label={t("nav.language")}
+              >
+                <option value="ja">{t("nav.locale.ja")}</option>
+                <option value="en">{t("nav.locale.en")}</option>
+              </select>
+            </div>
           </div>
 
           {menuOpen && (
-            <div className="mt-2 rounded-[20px] border border-zinc-200 bg-white p-3 shadow-sm md:hidden motion-safe:animate-scale-in">
+            <div className="mt-2 rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3 shadow-[var(--shadow-dropdown)] lg:hidden motion-safe:animate-scale-in">
               <nav className="grid gap-1">
                 {primaryLinks.map(({ href, activeHref, labelKey, icon: Icon }) => {
                   const active = isLinkActive(href, activeHref);
@@ -295,8 +327,8 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                       onClick={() => setMenuOpen(false)}
                       className={`inline-flex items-center gap-2 rounded-[14px] px-4 py-3 text-sm font-medium transition-colors duration-150 press focus-ring ${
                         active
-                          ? "bg-zinc-900 text-white"
-                          : "text-zinc-700 hover:bg-zinc-50"
+                          ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                          : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
                       }`}
                     >
                       <NavIcon icon={Icon} active={active} />
@@ -304,11 +336,11 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                     </Link>
                   );
                 })}
-                <div className="my-1 h-px bg-zinc-100" />
+                <div className="my-1 h-px bg-[var(--color-editorial-line)]" />
                 {secondaryLinkGroups.map((group, groupIdx) => (
                   <div key={group.labelKey}>
-                    {groupIdx > 0 && <div className="my-1 h-px bg-zinc-100" />}
-                    <div className="px-4 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                    {groupIdx > 0 && <div className="my-1 h-px bg-[var(--color-editorial-line)]" />}
+                    <div className="px-4 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
                       {t(group.labelKey)}
                     </div>
                     {group.items.map(({ href, labelKey, icon: Icon }) => {
@@ -320,8 +352,8 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                           onClick={() => setMenuOpen(false)}
                           className={`inline-flex items-center gap-2 rounded-[14px] px-4 py-3 text-sm font-medium transition-colors duration-150 press focus-ring ${
                             active
-                              ? "bg-zinc-900 text-white"
-                              : "text-zinc-700 hover:bg-zinc-50"
+                              ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                              : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
                           }`}
                         >
                           <NavIcon icon={Icon} active={active} />
@@ -333,13 +365,13 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                 ))}
               </nav>
               {hasSignedInUser && (
-                <div className="mt-2 border-t border-zinc-100 px-2 pt-2">
-                  <div className="truncate text-xs text-zinc-500">
+                <div className="mt-2 border-t border-[var(--color-editorial-line)] px-2 pt-2">
+                  <div className="truncate text-xs text-[var(--color-editorial-ink-faint)]">
                     {displayName}
                   </div>
                   <button
                     onClick={onSignOut}
-                    className="mt-2 w-full rounded-lg border border-zinc-200 px-3 py-2 text-left text-xs font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring"
+                    className="mt-2 w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-left text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] press focus-ring"
                   >
                     {t("nav.signOut")}
                   </button>
@@ -349,8 +381,8 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
           )}
         </div>
         {openRouterSyncRun ? (
-          <div className="border-t border-amber-200 bg-amber-50/95">
-            <div className="mx-auto flex max-w-[1360px] items-center justify-between gap-3 px-4 py-2 text-xs text-amber-900 md:px-6">
+          <div className="border-t border-[#e1cb9e] bg-[var(--warning-soft)]/95">
+            <div className="mx-auto flex max-w-[1360px] items-center justify-between gap-3 px-4 py-2 text-xs text-[var(--warning)] md:px-6">
               <Link href="/openrouter-models" className="inline-flex min-w-0 items-center gap-2 rounded hover:underline">
                 <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
                 <span className="truncate">
@@ -366,7 +398,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
         ) : null}
       </header>
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 px-2 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-2 backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-editorial-line)] bg-[color-mix(in_srgb,var(--color-editorial-panel-strong)_92%,transparent)] px-2 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-2 backdrop-blur lg:hidden"
       >
         <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
           {primaryLinks.map(({ href, activeHref, labelKey, icon: Icon }) => {
@@ -377,13 +409,15 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                 href={href}
                 aria-label={t(labelKey)}
                 className={`relative flex min-h-12 flex-col items-center justify-center rounded-xl px-1 py-1 text-[11px] font-medium transition-colors duration-150 press focus-ring ${
-                  active ? "bg-zinc-900/5 text-zinc-900" : "text-zinc-500 hover:bg-zinc-50"
+                  active
+                    ? "bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink)]"
+                    : "text-[var(--color-editorial-ink-faint)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
                 }`}
               >
                 <NavIcon icon={Icon} active={active} mobile />
                 <span className="sr-only">{t(labelKey)}</span>
                 {active && (
-                  <span className="absolute bottom-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-zinc-900" />
+                  <span className="absolute bottom-1.5 left-1/2 h-1 w-6 -translate-x-1/2 rounded-full bg-[var(--color-editorial-accent)]" />
                 )}
               </Link>
             );
@@ -392,13 +426,15 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
             href="/settings"
             aria-label={t("nav.more")}
             className={`relative flex min-h-12 flex-col items-center justify-center rounded-xl px-1 py-1 text-[11px] font-medium transition-colors duration-150 press focus-ring ${
-              isMoreActive ? "bg-zinc-900/5 text-zinc-900" : "text-zinc-500 hover:bg-zinc-50"
+              isMoreActive
+                ? "bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink)]"
+                : "text-[var(--color-editorial-ink-faint)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
             }`}
           >
             <NavIcon icon={SettingsIcon} active={isMoreActive} mobile />
             <span className="sr-only">{t("nav.more")}</span>
             {isMoreActive && (
-              <span className="absolute bottom-1.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-zinc-900" />
+              <span className="absolute bottom-1.5 left-1/2 h-1 w-6 -translate-x-1/2 rounded-full bg-[var(--color-editorial-accent)]" />
             )}
           </Link>
         </div>
@@ -410,7 +446,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
 function NavIcon({ icon: Icon, active, mobile = false }: { icon: LucideIcon; active?: boolean; mobile?: boolean }) {
   return (
     <Icon
-      className={`${mobile ? "size-[18px]" : "size-4"} shrink-0 transition-transform duration-150 group-hover:scale-110 ${active ? "scale-110" : ""}`}
+      className={`${mobile ? "size-[18px]" : "size-4"} shrink-0 transition-transform duration-150 group-hover:scale-110 ${active ? "scale-105" : ""}`}
       strokeWidth={2}
       aria-hidden="true"
     />

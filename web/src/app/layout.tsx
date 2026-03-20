@@ -41,7 +41,7 @@ export default function RootLayout({
 
   return (
     <html lang="ja" className={`${sawarabiGothic.variable} ${sawarabiMincho.variable}`}>
-      <body className="min-h-screen bg-zinc-50 font-sans text-zinc-900 antialiased">
+      <body className="min-h-screen bg-[var(--background)] font-sans text-[var(--foreground)] antialiased">
         <Script
           id="onesignal-sdk"
           src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"

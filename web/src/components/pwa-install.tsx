@@ -76,7 +76,7 @@ export default function PWAInstallButton() {
           setInstalling(false);
         }
       }}
-      className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-white px-2 py-1 text-xs font-medium text-zinc-700 hover:bg-zinc-50"
+      className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-1.5 text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] press focus-ring"
     >
       <Download className="size-3.5" aria-hidden="true" />
       <span>{t("pwa.install")}</span>

@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import httpx
 
 from app.services.llm_catalog import model_pricing, model_supports, resolve_model_id
 from app.services.llm_text_utils import (
@@ -182,6 +183,52 @@ def _repair_structured_json_text(text: str, model: str, response_schema: dict | 
     return cleaned
 
 
+def _openrouter_generation_url() -> str:
+    base = os.getenv("OPENROUTER_GENERATION_API_URL", "").strip()
+    if base:
+        return base
+    api_base = os.getenv("OPENROUTER_API_BASE_URL", "https://openrouter.ai/api/v1/chat/completions").strip()
+    if api_base.endswith("/chat/completions"):
+        return api_base[: -len("/chat/completions")] + "/generation"
+    return "https://openrouter.ai/api/v1/generation"
+
+
+def _fetch_generation_cost_details(api_key: str, generation_id: str, timeout_sec: float) -> dict:
+    generation_id = str(generation_id or "").strip()
+    if not api_key or not generation_id:
+        return {}
+    try:
+        with httpx.Client(timeout=timeout_sec) as client:
+            resp = client.get(
+                _openrouter_generation_url(),
+                headers={"Authorization": f"Bearer {api_key}"},
+                params={"id": generation_id},
+            )
+    except Exception as err:
+        _log.warning("openrouter generation lookup failed id=%s err=%s", generation_id, err)
+        return {}
+    if resp.status_code >= 400:
+        _log.warning("openrouter generation lookup failed id=%s status=%s body=%s", generation_id, resp.status_code, resp.text[:400])
+        return {}
+    try:
+        data = resp.json() if resp.content else {}
+    except Exception:
+        return {}
+    result: dict = {}
+    total_cost = data.get("data", {}).get("total_cost")
+    if total_cost is None:
+        total_cost = data.get("total_cost")
+    if total_cost is not None:
+        try:
+            result["billed_cost_usd"] = float(total_cost)
+        except Exception:
+            pass
+    resolved_model = str(data.get("data", {}).get("model") or data.get("model") or "").strip()
+    if resolved_model:
+        result["resolved_model"] = resolved_model
+    return result
+
+
 def _chat_json(
     prompt: str,
     model: str,
@@ -217,6 +264,12 @@ def _chat_json(
         schema_name=schema_name,
         include_temperature=True,
     )
+    if usage.get("billed_cost_usd") is None and usage.get("generation_id"):
+        generation_meta = _fetch_generation_cost_details(api_key, str(usage.get("generation_id") or ""), req_timeout)
+        if generation_meta.get("billed_cost_usd") is not None:
+            usage["billed_cost_usd"] = generation_meta["billed_cost_usd"]
+        if generation_meta.get("resolved_model") and not usage.get("resolved_model"):
+            usage["resolved_model"] = generation_meta["resolved_model"]
     return _repair_structured_json_text(text, model, response_schema), usage
 
 

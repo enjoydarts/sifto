@@ -19,6 +19,8 @@ type LLMUsageLogInput struct {
 	DigestID                 *string
 	Provider                 string
 	Model                    string
+	RequestedModel           string
+	ResolvedModel            string
 	PricingModelFamily       string
 	PricingSource            string
 	Purpose                  string
@@ -37,6 +39,8 @@ type LLMUsageLog struct {
 	DigestID                 *string   `json:"digest_id,omitempty"`
 	Provider                 string    `json:"provider"`
 	Model                    string    `json:"model"`
+	RequestedModel           *string   `json:"requested_model,omitempty"`
+	ResolvedModel            *string   `json:"resolved_model,omitempty"`
 	PricingModelFamily       *string   `json:"pricing_model_family,omitempty"`
 	PricingSource            string    `json:"pricing_source"`
 	Purpose                  string    `json:"purpose"`
@@ -108,19 +112,26 @@ type LLMUsageAnalysisSummary struct {
 	EstimatedCostUSD         float64 `json:"estimated_cost_usd"`
 }
 
+func nullIfEmpty(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
 func (r *LLMUsageLogRepo) Insert(ctx context.Context, in LLMUsageLogInput) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO llm_usage_logs (
 			idempotency_key, user_id, source_id, item_id, digest_id,
-			provider, model, pricing_model_family, pricing_source, purpose,
+			provider, model, requested_model, resolved_model, pricing_model_family, pricing_source, purpose,
 			input_tokens, output_tokens,
 			cache_creation_input_tokens, cache_read_input_tokens,
 			estimated_cost_usd
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 		ON CONFLICT (idempotency_key) DO NOTHING
 	`,
 		in.IdempotencyKey, in.UserID, in.SourceID, in.ItemID, in.DigestID,
-		in.Provider, in.Model, in.PricingModelFamily, in.PricingSource, in.Purpose,
+		in.Provider, in.Model, nullIfEmpty(in.RequestedModel), nullIfEmpty(in.ResolvedModel), in.PricingModelFamily, in.PricingSource, in.Purpose,
 		in.InputTokens, in.OutputTokens,
 		in.CacheCreationInputTokens, in.CacheReadInputTokens,
 		in.EstimatedCostUSD,
@@ -134,7 +145,7 @@ func (r *LLMUsageLogRepo) ListByUser(ctx context.Context, userID string, limit i
 	}
 	rows, err := r.db.Query(ctx, `
 		SELECT id, user_id, source_id, item_id, digest_id,
-		       provider, model, pricing_model_family, pricing_source, purpose,
+		       provider, model, requested_model, resolved_model, pricing_model_family, pricing_source, purpose,
 		       input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens,
 		       estimated_cost_usd, created_at
 		FROM llm_usage_logs
@@ -151,7 +162,7 @@ func (r *LLMUsageLogRepo) ListByUser(ctx context.Context, userID string, limit i
 		var v LLMUsageLog
 		if err := rows.Scan(
 			&v.ID, &v.UserID, &v.SourceID, &v.ItemID, &v.DigestID,
-			&v.Provider, &v.Model, &v.PricingModelFamily, &v.PricingSource, &v.Purpose,
+			&v.Provider, &v.Model, &v.RequestedModel, &v.ResolvedModel, &v.PricingModelFamily, &v.PricingSource, &v.Purpose,
 			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens, &v.CacheReadInputTokens,
 			&v.EstimatedCostUSD, &v.CreatedAt,
 		); err != nil {

@@ -50,6 +50,27 @@ class _EmptyChoicesClient:
         )
 
 
+class _ResolvedModelClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def post(self, url, headers=None, json=None):
+        return httpx.Response(
+            200,
+            json={
+                "model": "openai/gpt-oss-120b",
+                "choices": [{"message": {"content": '{"answer":"ok"}'}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+
 class _EmptyContentClient:
     def __init__(self, *args, **kwargs):
         pass
@@ -117,7 +138,7 @@ class RunChatJsonTests(unittest.TestCase):
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
     def test_non_zai_requests_do_not_set_thinking(self):
-        run_chat_json(
+        _text, usage = run_chat_json(
             "Return JSON",
             "gpt-5-mini",
             "test-key",
@@ -134,6 +155,7 @@ class RunChatJsonTests(unittest.TestCase):
 
         self.assertIsNotNone(_FakeClient.last_json)
         self.assertNotIn("thinking", _FakeClient.last_json)
+        self.assertEqual(usage.get("requested_model"), "gpt-5-mini")
 
     @patch("app.services.openai_compat_transport.httpx.Client", _EmptyChoicesClient)
     def test_empty_choices_error_includes_response_snippet(self):
@@ -155,6 +177,26 @@ class RunChatJsonTests(unittest.TestCase):
 
         self.assertIn("empty choices", str(ctx.exception))
         self.assertIn("upstream overloaded", str(ctx.exception))
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _ResolvedModelClient)
+    def test_usage_includes_requested_and_resolved_model(self):
+        _text, usage = run_chat_json(
+            "Return JSON",
+            "openrouter::auto",
+            "test-key",
+            url="https://example.com/chat/completions",
+            normalize_model_name=lambda model: model,
+            supports_strict_schema=lambda model: False,
+            timeout_sec=5,
+            attempts=1,
+            base_sleep_sec=0,
+            provider_name="openrouter",
+            logger=None,
+            response_schema={"type": "object"},
+        )
+
+        self.assertEqual(usage.get("requested_model"), "openrouter::auto")
+        self.assertEqual(usage.get("resolved_model"), "openai/gpt-oss-120b")
 
     @patch("app.services.openai_compat_transport.httpx.Client", _EmptyContentClient)
     def test_empty_content_logs_message_shape(self):

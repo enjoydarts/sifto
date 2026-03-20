@@ -230,10 +230,12 @@ type ItemSummary struct {
 }
 
 type ItemSummaryLLM struct {
-	Provider      string    `json:"provider"`
-	Model         string    `json:"model"`
-	PricingSource string    `json:"pricing_source"`
-	CreatedAt     time.Time `json:"created_at"`
+	Provider       string    `json:"provider"`
+	Model          string    `json:"model"`
+	RequestedModel *string   `json:"requested_model,omitempty"`
+	ResolvedModel  *string   `json:"resolved_model,omitempty"`
+	PricingSource  string    `json:"pricing_source"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type ItemLLMExecutionAttempt struct {

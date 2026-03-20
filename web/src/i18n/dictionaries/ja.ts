@@ -941,6 +941,8 @@ export const jaDict: Dict = {
   "itemDetail.execution.attempt": "試行 {{attempt}}",
   "itemDetail.execution.purpose.factsLocalization": "日本語化",
   "itemDetail.execution.help": "忠実性チェックや事実抽出チェックで再試行されると、成功が複数並ぶことがあります。",
+  "itemDetail.model.requested": "指定",
+  "itemDetail.model.resolved": "実使用",
   "itemDetail.noTitle": "タイトルなし",
   "itemDetail.noSummary": "要約はまだありません",
   "itemDetail.noFacts": "事実抽出はまだありません",

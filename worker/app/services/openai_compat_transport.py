@@ -57,6 +57,7 @@ def usage_from_chat_response(data: dict) -> dict:
         "output_tokens": int(usage.get("completion_tokens", 0) or 0),
         "cache_creation_input_tokens": 0,
         "cache_read_input_tokens": int(cached_tokens or 0),
+        "resolved_model": str(data.get("model") or "").strip() or None,
     }
 
 
@@ -193,4 +194,6 @@ def run_chat_json(
     text = text.strip()
     if text == "":
         _log_empty_message_content(logger, provider_name, normalize_model_name(model), body, data, choices[0], message)
-    return text, usage_from_chat_response(data)
+    usage = usage_from_chat_response(data)
+    usage["requested_model"] = str(model or "").strip() or None
+    return text, usage

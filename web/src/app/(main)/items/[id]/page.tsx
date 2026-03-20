@@ -56,6 +56,31 @@ function executionPurposeLabel(attempt: ItemLLMExecutionAttempt, t: (key: string
   return null;
 }
 
+function hasRequestedResolvedPair(requested?: string | null, resolved?: string | null) {
+  const req = (requested ?? "").trim();
+  const res = (resolved ?? "").trim();
+  return req !== "" && res !== "" && req !== res;
+}
+
+function renderLLMModelDisplay(
+  provider: string,
+  model: string,
+  requested: string | null | undefined,
+  resolved: string | null | undefined,
+  t: (key: string, fallback?: string) => string
+) {
+  if (!hasRequestedResolvedPair(requested, resolved)) {
+    return <>{provider} / {formatModelDisplayName(model)}</>;
+  }
+  return (
+    <span className="inline-flex flex-col gap-0.5 align-top">
+      <span>{provider}</span>
+      <span>{t("itemDetail.model.requested")}: {formatModelDisplayName(requested ?? "")}</span>
+      <span>{t("itemDetail.model.resolved")}: {formatModelDisplayName(resolved ?? "")}</span>
+    </span>
+  );
+}
+
 function extractHttpStatus(error: unknown): number | null {
   const message = error instanceof Error ? error.message : String(error);
   const match = message.match(/^(\d{3}):/);
@@ -996,7 +1021,13 @@ export default function ItemDetailPage() {
                       className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
                       title={t("itemDetail.summaryModelTitle")}
                     >
-                      {item.summary_llm.provider} / {formatModelDisplayName(item.summary_llm.model)}
+                      {renderLLMModelDisplay(
+                        item.summary_llm.provider,
+                        item.summary_llm.model,
+                        item.summary_llm.requested_model,
+                        item.summary_llm.resolved_model,
+                        t
+                      )}
                     </span>
                   )}
                 </div>
@@ -1065,7 +1096,13 @@ export default function ItemDetailPage() {
                           className="rounded bg-white px-2 py-1 text-zinc-600 ring-1 ring-zinc-200"
                           title={t("itemDetail.faithfulnessModelTitle")}
                         >
-                          {item.faithfulness_llm.provider} / {formatModelDisplayName(item.faithfulness_llm.model)}
+                          {renderLLMModelDisplay(
+                            item.faithfulness_llm.provider,
+                            item.faithfulness_llm.model,
+                            item.faithfulness_llm.requested_model,
+                            item.faithfulness_llm.resolved_model,
+                            t
+                          )}
                         </span>
                       )}
                     </div>
@@ -1101,7 +1138,13 @@ export default function ItemDetailPage() {
                       className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
                       title={t("itemDetail.factsModelTitle")}
                     >
-                      {item.facts_llm.provider} / {formatModelDisplayName(item.facts_llm.model)}
+                      {renderLLMModelDisplay(
+                        item.facts_llm.provider,
+                        item.facts_llm.model,
+                        item.facts_llm.requested_model,
+                        item.facts_llm.resolved_model,
+                        t
+                      )}
                     </span>
                   )}
                 </div>
@@ -1114,7 +1157,13 @@ export default function ItemDetailPage() {
                           className="rounded bg-white px-2 py-1 text-zinc-600 ring-1 ring-zinc-200"
                           title={t("itemDetail.factsCheckModelTitle")}
                         >
-                          {item.facts_check_llm.provider} / {formatModelDisplayName(item.facts_check_llm.model)}
+                          {renderLLMModelDisplay(
+                            item.facts_check_llm.provider,
+                            item.facts_check_llm.model,
+                            item.facts_check_llm.requested_model,
+                            item.facts_check_llm.resolved_model,
+                            t
+                          )}
                         </span>
                       )}
                     </div>

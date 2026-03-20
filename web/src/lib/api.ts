@@ -212,6 +212,8 @@ export interface ItemSummary {
 export interface ItemSummaryLLM {
   provider: string;
   model: string;
+  requested_model?: string | null;
+  resolved_model?: string | null;
   pricing_source: string;
   created_at: string;
 }

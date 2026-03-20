@@ -57,7 +57,8 @@ func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpo
 	if repo == nil || usage == nil {
 		return
 	}
-	if usage.Provider == "" || usage.Model == "" {
+	storedModel := llmUsageStoredModel(usage)
+	if usage.Provider == "" || storedModel == "" {
 		return
 	}
 	idempotencyKey := llmUsageIdempotencyKey(purpose, usage, userID, sourceID, itemID, digestID)
@@ -72,7 +73,9 @@ func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpo
 		ItemID:                   itemID,
 		DigestID:                 digestID,
 		Provider:                 usage.Provider,
-		Model:                    usage.Model,
+		Model:                    storedModel,
+		RequestedModel:           strings.TrimSpace(usage.RequestedModel),
+		ResolvedModel:            strings.TrimSpace(usage.ResolvedModel),
 		PricingModelFamily:       usage.PricingModelFamily,
 		PricingSource:            pricingSource,
 		Purpose:                  purpose,
@@ -88,6 +91,16 @@ func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpo
 	if userID != nil {
 		_ = service.BumpUserLLMUsageCacheVersion(ctx, llmUsageCache, *userID)
 	}
+}
+
+func llmUsageStoredModel(usage *service.LLMUsage) string {
+	if usage == nil {
+		return ""
+	}
+	if strings.TrimSpace(usage.Provider) == "openrouter" && strings.TrimSpace(usage.ResolvedModel) != "" {
+		return strings.TrimSpace(usage.ResolvedModel)
+	}
+	return strings.TrimSpace(usage.Model)
 }
 
 func recordLLMExecutionSuccess(ctx context.Context, repo *repository.LLMExecutionEventRepo, purpose string, usage *service.LLMUsage, attemptIndex int, userID, sourceID, itemID, digestID *string) {
@@ -278,11 +291,12 @@ func classifyLLMExecutionError(err error) (string, bool) {
 }
 
 func llmUsageIdempotencyKey(purpose string, usage *service.LLMUsage, userID, sourceID, itemID, digestID *string) string {
+	model := llmUsageStoredModel(usage)
 	raw := fmt.Sprintf(
 		"purpose=%s|provider=%s|model=%s|u=%s|s=%s|i=%s|d=%s|in=%d|out=%d|cw=%d|cr=%d",
 		purpose,
 		usage.Provider,
-		usage.Model,
+		model,
 		toVal(userID),
 		toVal(sourceID),
 		toVal(itemID),

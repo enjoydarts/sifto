@@ -214,6 +214,8 @@ type SuggestFeedSeedSitesResponse struct {
 type LLMUsage struct {
 	Provider                 string                `json:"provider"`
 	Model                    string                `json:"model"`
+	RequestedModel           string                `json:"requested_model,omitempty"`
+	ResolvedModel            string                `json:"resolved_model,omitempty"`
 	PricingModelFamily       string                `json:"pricing_model_family,omitempty"`
 	PricingSource            string                `json:"pricing_source,omitempty"`
 	InputTokens              int                   `json:"input_tokens"`

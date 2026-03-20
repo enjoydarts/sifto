@@ -941,6 +941,8 @@ export const enDict: Dict = {
   "itemDetail.execution.attempt": "Attempt {{attempt}}",
   "itemDetail.execution.purpose.factsLocalization": "Localization",
   "itemDetail.execution.help": "You may see multiple successes when checks trigger regeneration and the model runs again.",
+  "itemDetail.model.requested": "Requested",
+  "itemDetail.model.resolved": "Resolved",
   "itemDetail.noTitle": "No title",
   "itemDetail.noSummary": "No summary yet",
   "itemDetail.noFacts": "No facts extracted yet",

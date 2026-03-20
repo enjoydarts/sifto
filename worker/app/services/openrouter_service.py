@@ -116,12 +116,17 @@ def _estimate_cost_usd(model: str, purpose: str, usage: dict) -> float:
 
 
 def _llm_meta(model: str, purpose: str, usage: dict) -> dict:
-    pricing = _pricing_for_model(model, purpose)
-    actual_model = _normalize_model_name(model)
+    requested_model = str(usage.get("requested_model") or model or "").strip()
+    resolved_model = str(usage.get("resolved_model") or "").strip()
+    pricing_target = resolved_model or requested_model or model
+    pricing = _pricing_for_model(pricing_target, purpose)
+    actual_model = _normalize_model_name(pricing_target)
     return with_execution_failures({
         "provider": "openrouter",
-        "model": model,
-        "pricing_model_family": model,
+        "model": requested_model or model,
+        "requested_model": requested_model or model,
+        "resolved_model": resolved_model,
+        "pricing_model_family": pricing.get("pricing_model_family", actual_model),
         "pricing_source": pricing.get("pricing_source", _OPENROUTER_PRICING_SOURCE_VERSION),
         "input_tokens": int(usage.get("input_tokens", 0) or 0),
         "output_tokens": int(usage.get("output_tokens", 0) or 0),

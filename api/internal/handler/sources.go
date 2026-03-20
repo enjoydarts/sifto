@@ -1000,6 +1000,8 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 			return map[string]any{
 				"provider":             resp.LLM.Provider,
 				"model":                resp.LLM.Model,
+				"requested_model":      resp.LLM.RequestedModel,
+				"resolved_model":       resp.LLM.ResolvedModel,
 				"estimated_cost_usd":   resp.LLM.EstimatedCostUSD,
 				"input_tokens":         resp.LLM.InputTokens,
 				"output_tokens":        resp.LLM.OutputTokens,
@@ -1071,6 +1073,8 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	return map[string]any{
 		"provider":             resp.LLM.Provider,
 		"model":                resp.LLM.Model,
+		"requested_model":      resp.LLM.RequestedModel,
+		"resolved_model":       resp.LLM.ResolvedModel,
 		"estimated_cost_usd":   resp.LLM.EstimatedCostUSD,
 		"input_tokens":         resp.LLM.InputTokens,
 		"output_tokens":        resp.LLM.OutputTokens,
@@ -1639,6 +1643,8 @@ func (h *SourceHandler) recordSourceSuggestionLLMUsage(ctx context.Context, user
 		UserID:                   &uid,
 		Provider:                 llm.Provider,
 		Model:                    llm.Model,
+		RequestedModel:           llm.RequestedModel,
+		ResolvedModel:            llm.ResolvedModel,
 		PricingModelFamily:       llm.PricingModelFamily,
 		PricingSource:            llm.PricingSource,
 		Purpose:                  "source_suggestion",

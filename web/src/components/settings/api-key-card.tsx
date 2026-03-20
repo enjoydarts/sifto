@@ -43,41 +43,41 @@ export default function ApiKeyCard({
   labels: ApiKeyCardLabels;
 }) {
   return (
-    <form onSubmit={onSubmit} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+    <form onSubmit={onSubmit} className="surface-editorial rounded-[var(--radius-panel)] p-5">
       <div className="mb-4">
-        <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-          <Icon className="size-4 text-zinc-500" aria-hidden="true" />
+        <h2 className="inline-flex items-center gap-2 text-base font-semibold text-[var(--color-editorial-ink)]">
+          <Icon className="size-4 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
           {title}
         </h2>
-        <p className="mt-1 text-sm text-zinc-500">{description}</p>
+        <p className="mt-1 text-sm text-[var(--color-editorial-ink-soft)]">{description}</p>
       </div>
 
-      <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+      <div className="rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink-soft)]">
         {configured ? (
           <>
             {labels.configured}{" "}
-            <span className="font-mono text-xs text-zinc-500">••••{last4 ?? "****"}</span>
+            <span className="font-mono text-xs text-[var(--color-editorial-ink-faint)]">••••{last4 ?? "****"}</span>
           </>
         ) : (
-          <span className="text-zinc-500">{labels.notSet}</span>
+          <span className="text-[var(--color-editorial-ink-faint)]">{labels.notSet}</span>
         )}
       </div>
 
-      <label className="mt-4 block text-sm font-medium text-zinc-700">{labels.newApiKey}</label>
+      <label className="mt-4 block text-sm font-medium text-[var(--color-editorial-ink)]">{labels.newApiKey}</label>
       <input
         type="password"
         autoComplete="off"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-0 placeholder:text-zinc-400 focus:border-zinc-400"
+        className="mt-1 w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink)] outline-none ring-0 placeholder:text-[var(--color-editorial-ink-faint)]"
       />
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
         >
           {saving ? labels.saving : labels.saveOrUpdate}
         </button>
@@ -85,7 +85,7 @@ export default function ApiKeyCard({
           type="button"
           disabled={deleting || !configured}
           onClick={onDelete}
-          className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
+          className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] disabled:opacity-50"
         >
           {deleting ? labels.deleting : labels.deleteKey}
         </button>

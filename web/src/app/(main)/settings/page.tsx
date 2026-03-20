@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BellRing, Brain, ChevronDown, Coins, KeyRound, Link2, Mail, Settings as SettingsIcon } from "lucide-react";
+import { Brain, ChevronDown, KeyRound, Settings as SettingsIcon } from "lucide-react";
 import { api, LLMCatalog, LLMCatalogModel, NotificationPriorityRule, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -11,7 +11,8 @@ import ApiKeyCard from "@/components/settings/api-key-card";
 import ModelGuideModal from "@/components/settings/model-guide-modal";
 import ModelSelect, { type ModelOption } from "@/components/settings/model-select";
 import ProviderModelUpdatesPanel from "@/components/settings/provider-model-updates-panel";
-import SettingsMetricCard from "@/components/settings/settings-metric-card";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionCard } from "@/components/ui/section-card";
 import { formatModelDisplayName } from "@/lib/model-display";
 
 const MODEL_UPDATES_DISMISSED_AT_KEY = "provider-model-updates:dismissed-at";
@@ -155,6 +156,19 @@ function isUnavailableOpenRouterModel(item: LLMCatalogModel): boolean {
   return item.provider === "openrouter" && item.capabilities?.supports_structured_output === false;
 }
 
+type SettingsSectionID =
+  | "reading-plan"
+  | "digest"
+  | "notifications"
+  | "integrations"
+  | "models"
+  | "budget"
+  | "system";
+
+function joinClassNames(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
+
 
 export default function SettingsPage() {
   const { t } = useI18n();
@@ -214,10 +228,7 @@ export default function SettingsPage() {
   const [fireworksApiKeyInput, setFireworksApiKeyInput] = useState("");
   const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
-  const [llmSectionOpen, setLLMSectionOpen] = useState(true);
-  const [operationsSectionOpen, setOperationsSectionOpen] = useState(true);
-  const [notificationsSectionOpen, setNotificationsSectionOpen] = useState(true);
-  const [integrationsSectionOpen, setIntegrationsSectionOpen] = useState(true);
+  const [activeSection, setActiveSection] = useState<SettingsSectionID>("models");
   const [llmExtrasOpen, setLLMExtrasOpen] = useState(false);
   const [modelGuideOpen, setModelGuideOpen] = useState(false);
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
@@ -1314,387 +1325,244 @@ export default function SettingsPage() {
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!settings) return null;
 
+  const sectionNavItems: Array<{
+    id: SettingsSectionID;
+    title: string;
+    summary: string;
+  }> = [
+    {
+      id: "models",
+      title: t("settings.section.llm"),
+      summary: `${configuredProviderCount}/${accessCards.length} ${t("settings.access.configuredProviders")}`,
+    },
+    {
+      id: "reading-plan",
+      title: t("settings.recommendedTitle"),
+      summary: `${t(`settings.window.${readingPlanWindow}`)} / ${readingPlanSize} / ${readingPlanDiversifyTopics ? t("settings.on") : t("settings.off")}`,
+    },
+    {
+      id: "digest",
+      title: t("settings.digestTitle"),
+      summary: digestEmailEnabled ? t("settings.controlRoom.digestEnabled") : t("settings.controlRoom.digestDisabled"),
+    },
+    {
+      id: "notifications",
+      title: t("settings.section.notifications"),
+      summary: `${notificationPriority.briefing_enabled ? t("settings.pushTypeBriefing") : t("settings.controlRoom.briefingOff")} / cap ${notificationPriority.daily_cap}`,
+    },
+    {
+      id: "integrations",
+      title: t("settings.section.integrations"),
+      summary: `${settings.has_inoreader_oauth ? t("settings.inoreaderConnected") : t("settings.inoreaderNotConnected")} / ${settings.obsidian_export?.github_installation_id ? t("settings.obsidianGithubConnected") : t("settings.obsidianGithubNotConnected")}`,
+    },
+    {
+      id: "budget",
+      title: t("settings.budgetTitle"),
+      summary: settings.monthly_budget_usd == null
+        ? t("settings.controlRoom.budgetUnset")
+        : `$${settings.monthly_budget_usd.toFixed(2)} / ${settings.current_month.remaining_budget_pct == null ? "—" : `${settings.current_month.remaining_budget_pct.toFixed(1)}%`}`,
+    },
+    {
+      id: "system",
+      title: t("settings.section.system"),
+      summary: `${configuredProviderCount}/${accessCards.length} ${t("settings.configured")}`,
+    },
+  ];
+
+  const railNotes = [
+    {
+      title: t("settings.controlRoom.providerUpdatesTitle"),
+      body: visibleProviderModelUpdates.length > 0
+        ? t("settings.controlRoom.providerUpdatesBody").replace("{{count}}", String(visibleProviderModelUpdates.length))
+        : t("settings.controlRoom.providerUpdatesEmpty"),
+    },
+    {
+      title: t("settings.controlRoom.notificationHealthTitle"),
+      body: `${notificationPriority.briefing_enabled ? t("settings.pushTypeBriefing") : t("settings.controlRoom.briefingOff")} / ${notificationPriority.immediate_enabled ? t("settings.pushTypeImmediate") : t("settings.controlRoom.immediateOff")} / cap ${notificationPriority.daily_cap}`,
+    },
+    {
+      title: t("settings.controlRoom.budgetStatusTitle"),
+      body:
+        settings.current_month.remaining_budget_pct == null
+          ? t("settings.controlRoom.budgetUnset")
+          : t("settings.controlRoom.budgetStatusBody")
+              .replace("{{month}}", settings.current_month.month_jst)
+              .replace("{{remaining}}", `${settings.current_month.remaining_budget_pct.toFixed(1)}%`),
+    },
+  ];
+
+  const selectedSectionMeta = {
+    "reading-plan": {
+      kicker: t("settings.recommendedTitle"),
+      title: t("settings.controlRoom.readingPlanTitle"),
+      description: t("settings.controlRoom.readingPlanDescription"),
+    },
+    digest: {
+      kicker: t("settings.digestTitle"),
+      title: t("settings.controlRoom.digestTitle"),
+      description: t("settings.controlRoom.digestDescription"),
+    },
+    notifications: {
+      kicker: t("settings.section.notifications"),
+      title: t("settings.controlRoom.notificationsTitle"),
+      description: t("settings.controlRoom.notificationsDescription"),
+    },
+    integrations: {
+      kicker: t("settings.section.integrations"),
+      title: t("settings.controlRoom.integrationsTitle"),
+      description: t("settings.controlRoom.integrationsDescription"),
+    },
+    models: {
+      kicker: t("settings.section.llm"),
+      title: t("settings.controlRoom.modelsTitle"),
+      description: t("settings.controlRoom.modelsDescription"),
+    },
+    budget: {
+      kicker: t("settings.budgetTitle"),
+      title: t("settings.controlRoom.budgetTitle"),
+      description: t("settings.controlRoom.budgetDescription"),
+    },
+    system: {
+      kicker: t("settings.section.system"),
+      title: t("settings.controlRoom.systemTitle"),
+      description: t("settings.controlRoom.systemDescription"),
+    },
+  }[activeSection];
+
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-          <SettingsIcon className="size-6 text-zinc-500" aria-hidden="true" />
-          <span>{t("settings.title")}</span>
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500">{t("settings.subtitle")}</p>
-      </div>
+    <div className="mx-auto max-w-[1360px] space-y-6">
+      <PageHeader
+        eyebrow={t("settings.controlRoomEyebrow")}
+        title={
+          <span className="font-serif">
+            {t("settings.controlRoomTitle")}
+          </span>
+        }
+        description={t("settings.controlRoomSubtitle")}
+      />
 
-      <section className="grid gap-3 md:grid-cols-3">
-        <SettingsMetricCard
-          label={t("settings.metric.mtdCost")}
-          value={`$${settings.current_month.estimated_cost_usd.toFixed(6)}`}
-        />
-        <SettingsMetricCard
-          label={t("settings.metric.monthlyBudget")}
-          value={settings.monthly_budget_usd == null ? "—" : `$${settings.monthly_budget_usd.toFixed(2)}`}
-        />
-        <SettingsMetricCard
-          label={t("settings.metric.budgetRemaining")}
-          value={
-            settings.current_month.remaining_budget_pct == null
-              ? "—"
-              : `${settings.current_month.remaining_budget_pct.toFixed(1)}%`
-          }
-          valueClassName={budgetRemainingTone}
-        />
-      </section>
-
-      <section className="space-y-6">
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setLLMSectionOpen((prev) => !prev)}
-            className="flex w-full items-start justify-between gap-4 text-left"
-          >
-            <div>
-              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-                <Brain className="size-4 text-zinc-500" aria-hidden="true" />
-                {t("settings.section.llm")}
-              </h2>
-              <p className="mt-1 text-sm text-zinc-500">{t("settings.section.llmDescription")}</p>
+      <div className="grid gap-6 lg:grid-cols-[248px_minmax(0,1fr)] xl:grid-cols-[268px_minmax(0,1fr)]">
+        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+          <SectionCard className="p-0">
+            <div className="px-5 pt-5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+              {t("settings.controlRoomSections")}
             </div>
-            <ChevronDown className={`mt-0.5 size-4 shrink-0 text-zinc-500 transition-transform ${llmSectionOpen ? "rotate-180" : ""}`} />
-          </button>
-
-          {llmSectionOpen ? (
-            <>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={applyCostPerformancePreset}
-                  className="inline-flex items-center rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-800"
-                >
-                  {t("settings.modelPreset.costPerformance")}
-                </button>
-                <button
-                  type="button"
-                  onClick={toggleLLMExtras}
-                  className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
-                >
-                  {t("settings.section.llmExtras")}
-                  <ChevronDown className={`size-3 transition-transform ${llmExtrasOpen ? "rotate-180" : ""}`} />
-                </button>
-              </div>
-
-              <div className="mt-5 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <div className="text-sm font-medium text-zinc-900">{t("settings.access.selectProvider")}</div>
-                <div className="text-xs text-zinc-500">
-                  {`${t("settings.access.configuredProviders")}: ${configuredProviderCount}/${accessCards.length}`}
-                </div>
-              </div>
-            </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              {accessCards.map((card) => {
-                const selected = card.id === activeAccessCard?.id;
+            <div className="mt-3">
+              {sectionNavItems.map((item, index) => {
+                const active = item.id === activeSection;
                 return (
                   <button
-                    key={card.id}
+                    key={item.id}
                     type="button"
-                    onClick={() => setActiveAccessProvider(card.id)}
-                    className={`rounded-xl border px-4 py-3 text-left transition ${
-                      selected
-                        ? "border-zinc-900 bg-white shadow-sm"
-                        : "border-zinc-200 bg-white/70 hover:border-zinc-300 hover:bg-white"
-                    }`}
+                    onClick={() => setActiveSection(item.id)}
+                    className={joinClassNames(
+                      "relative block w-full border-t border-[var(--color-editorial-line)] px-4 py-3 text-left transition-colors first:border-t-0",
+                      active
+                        ? "bg-[linear-gradient(90deg,rgba(243,236,227,0.92),rgba(243,236,227,0.28)_78%,transparent)]"
+                        : "hover:bg-[var(--color-editorial-panel-strong)]"
+                    )}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-medium text-zinc-900">{card.title.replace(/（.*?）|\(.*?\)/g, "").trim()}</div>
+                    {active ? (
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                          card.configured
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-zinc-200 text-zinc-600"
-                        }`}
-                      >
-                        {card.configured ? t("settings.configured") : t("settings.access.notConfiguredShort")}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-xs text-zinc-500">
-                      {card.configured ? `••••${card.last4 ?? "****"}` : card.notSet}
-                    </div>
+                        aria-hidden="true"
+                        className={joinClassNames(
+                          "absolute left-0 w-[3px] rounded-full bg-[var(--color-editorial-ink)]",
+                          index === 0 ? "top-0 bottom-3" : "bottom-3 top-3"
+                        )}
+                      />
+                    ) : null}
+                    <div className="text-[13px] font-semibold text-[var(--color-editorial-ink)]">{item.title}</div>
+                    <div className="mt-1 text-[12px] leading-5 text-[var(--color-editorial-ink-soft)]">{item.summary}</div>
                   </button>
                 );
               })}
             </div>
-              </div>
+          </SectionCard>
 
-              {activeAccessCard ? (
-                <div className="mt-4">
-                  <ApiKeyCard
-                    icon={KeyRound}
-                    title={activeAccessCard.title}
-                    description={activeAccessCard.description}
-                    configured={activeAccessCard.configured}
-                    last4={activeAccessCard.last4}
-                    value={activeAccessCard.value}
-                    onChange={activeAccessCard.onChange}
-                    onSubmit={activeAccessCard.onSubmit}
-                    onDelete={activeAccessCard.onDelete}
-                    placeholder={activeAccessCard.placeholder}
-                    saving={activeAccessCard.saving}
-                    deleting={activeAccessCard.deleting}
-                    labels={{ ...apiKeyCardLabels, notSet: activeAccessCard.notSet }}
-                  />
-                </div>
-              ) : null}
-
-              <form onSubmit={submitLLMModels} className="mt-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-            <div className="mb-4">
-              <h3 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-                <Brain className="size-4 text-zinc-500" aria-hidden="true" />
-                {t("settings.modelsTitle")}
-              </h3>
-              <p className="mt-1 text-sm text-zinc-500">{t("settings.modelsDescription")}</p>
-              <p className="mt-1 text-xs text-zinc-400">{t("settings.pricingDescription")}</p>
+          <SectionCard className="p-0">
+            <div className="px-5 pt-5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+              {t("settings.controlRoomStatusNotes")}
             </div>
-
-            {unavailableSelectedModelWarnings.length > 0 ? (
-              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                <div className="font-medium">{t("settings.modelUnavailable.title")}</div>
-                <div className="mt-2 space-y-1 text-amber-800">
-                  {unavailableSelectedModelWarnings.map((entry) => (
-                    <p key={entry.key}>
-                      {t("settings.modelUnavailable.message")
-                        .replace("{{field}}", entry.label)
-                        .replace("{{model}}", entry.modelLabel)}
-                    </p>
-                  ))}
+            <div className="mt-3">
+              {railNotes.map((note, index) => (
+                <div
+                  key={note.title}
+                  className={joinClassNames(
+                    "border-t border-[var(--color-editorial-line)] px-4 py-3 first:border-t-0",
+                    index === 0 ? "" : ""
+                  )}
+                >
+                  <div className="text-[13px] font-semibold text-[var(--color-editorial-ink)]">{note.title}</div>
+                  <div className="mt-1 text-[12px] leading-5 text-[var(--color-editorial-ink-soft)]">{note.body}</div>
                 </div>
-              </div>
-            ) : null}
-
-            <div className="space-y-4">
-              <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                <h4 className="text-sm font-semibold text-zinc-900">{t("settings.group.summary")}</h4>
-                <div className="mt-3 grid gap-4 md:grid-cols-2">
-                  <ModelSelect
-                    label={t("settings.model.facts")}
-                    value={anthropicFactsModel}
-                    onChange={(value) => onChangeLLMModel(setAnthropicFactsModel, value)}
-                    options={optionsForPurpose("facts", anthropicFactsModel)}
-                    labels={modelSelectLabels}
-                    variant="modal"
-                  />
-                  <ModelSelect
-                    label={t("settings.model.factsFallback")}
-                    value={anthropicFactsFallbackModel}
-                    onChange={(value) => onChangeLLMModel(setAnthropicFactsFallbackModel, value)}
-                    options={optionsForPurpose("facts", anthropicFactsFallbackModel)}
-                    labels={modelSelectLabels}
-                    variant="modal"
-                  />
-                  <ModelSelect
-                    label={t("settings.model.summary")}
-                    value={anthropicSummaryModel}
-                    onChange={(value) => onChangeLLMModel(setAnthropicSummaryModel, value)}
-                    options={optionsForPurpose("summary", anthropicSummaryModel)}
-                    labels={modelSelectLabels}
-                    variant="modal"
-                  />
-                  <ModelSelect
-                    label={t("settings.model.summaryFallback")}
-                    value={anthropicSummaryFallbackModel}
-                    onChange={(value) => onChangeLLMModel(setAnthropicSummaryFallbackModel, value)}
-                    options={optionsForPurpose("summary", anthropicSummaryFallbackModel)}
-                    labels={modelSelectLabels}
-                    variant="modal"
-                  />
-                </div>
-              </section>
-
-              <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                <h4 className="text-sm font-semibold text-zinc-900">{t("settings.group.digest")}</h4>
-                <div className="mt-3 grid gap-4 md:grid-cols-2">
-                  <ModelSelect
-                    label={t("settings.model.digestCluster")}
-                    value={anthropicDigestClusterModel}
-                    onChange={(value) => onChangeLLMModel(setAnthropicDigestClusterModel, value)}
-                    options={optionsForPurpose("digest_cluster_draft", anthropicDigestClusterModel)}
-                    labels={modelSelectLabels}
-                    variant="modal"
-                  />
-                  <ModelSelect
-                    label={t("settings.model.digest")}
-                    value={anthropicDigestModel}
-                    onChange={(value) => onChangeLLMModel(setAnthropicDigestModel, value)}
-                    options={optionsForPurpose("digest", anthropicDigestModel)}
-                    labels={modelSelectLabels}
-                    variant="modal"
-                  />
-                </div>
-              </section>
-
-              <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                <h4 className="text-sm font-semibold text-zinc-900">{t("settings.group.validation")}</h4>
-                <div className="mt-3 grid gap-4 md:grid-cols-2">
-                  <ModelSelect
-                    label={t("settings.model.factsCheck")}
-                    value={factsCheckModel}
-                    onChange={(value) => onChangeLLMModel(setFactsCheckModel, value)}
-                    options={optionsForPurpose("facts", factsCheckModel)}
-                    labels={modelSelectLabels}
-                    variant="modal"
-                  />
-                  <ModelSelect
-                    label={t("settings.model.faithfulnessCheck")}
-                    value={faithfulnessCheckModel}
-                    onChange={(value) => onChangeLLMModel(setFaithfulnessCheckModel, value)}
-                    options={optionsForPurpose("summary", faithfulnessCheckModel)}
-                    labels={modelSelectLabels}
-                    variant="modal"
-                  />
-                </div>
-              </section>
-
-              <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                <h4 className="text-sm font-semibold text-zinc-900">{t("settings.group.other")}</h4>
-                <div className="mt-3 grid gap-4 md:grid-cols-2">
-                  <ModelSelect
-                    label={t("settings.model.sourceSuggestion")}
-                    value={anthropicSourceSuggestionModel}
-                    onChange={(value) => onChangeLLMModel(setAnthropicSourceSuggestionModel, value)}
-                    options={sourceSuggestionModelOptions}
-                    labels={modelSelectLabels}
-                    variant="modal"
-                  />
-                  <ModelSelect
-                    label={t("settings.model.ask")}
-                    value={anthropicAskModel}
-                    onChange={(value) => onChangeLLMModel(setAnthropicAskModel, value)}
-                    options={optionsForPurpose("ask", anthropicAskModel)}
-                    labels={modelSelectLabels}
-                    variant="modal"
-                  />
-                  <ModelSelect
-                    label={t("settings.model.embeddings")}
-                    value={openAIEmbeddingModel}
-                    onChange={(value) => onChangeLLMModel(setOpenAIEmbeddingModel, value)}
-                    options={openAIEmbeddingModelOptions}
-                    labels={modelSelectLabels}
-                    variant="modal"
-                  />
-                </div>
-              </section>
+              ))}
             </div>
+          </SectionCard>
+        </aside>
 
-            <div className="mt-4">
-              <button
-                type="submit"
-                disabled={savingLLMModels}
-                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-              >
-                {savingLLMModels ? t("common.saving") : t("settings.saveModels")}
-              </button>
-            </div>
-              </form>
-
-              {llmExtrasOpen ? (
-                <div ref={llmExtrasRef} className="mt-4">
-                  <div className="space-y-4">
-                    <ProviderModelUpdatesPanel
-                      allEvents={providerModelUpdates}
-                      visibleEvents={visibleProviderModelUpdates}
-                      onDismiss={dismissProviderModelUpdates}
-                      onRestore={restoreProviderModelUpdates}
-                      labels={{
-                        title: t("settings.providerModelUpdates"),
-                        description: t("settings.providerModelUpdatesDescription"),
-                        dismiss: t("settings.providerModelUpdate.dismiss"),
-                        empty: t("settings.providerModelUpdate.empty"),
-                        dismissed: t("settings.providerModelUpdate.dismissed"),
-                        restore: t("settings.providerModelUpdate.restore"),
-                        added: t("settings.providerModelUpdate.added", "added"),
-                        removed: t("settings.providerModelUpdate.removed", "removed"),
-                      }}
-                    />
-                    <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <div>
-                        <h3 className="text-sm font-semibold text-zinc-900">{t("settings.modelGuide.title")}</h3>
-                        <p className="mt-1 text-xs text-zinc-500">{t("settings.modelGuide.description")}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setModelGuideOpen(true)}
-                          className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
-                        >
-                          {t("settings.modelGuide.open")}
-                        </button>
-                      </div>
-                    </section>
-                  </div>
+        <div className="space-y-5">
+          <SectionCard>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                  {selectedSectionMeta.kicker}
                 </div>
-              ) : null}
-            </>
-          ) : null}
-        </section>
-
-        <ModelGuideModal
-          open={modelGuideOpen}
-          onClose={() => setModelGuideOpen(false)}
-          entries={modelComparisonEntries}
-          t={t}
-        />
-
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setOperationsSectionOpen((prev) => !prev)}
-            className="flex w-full items-start justify-between gap-4 text-left"
-          >
-            <div>
-              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-                <BellRing className="size-4 text-zinc-500" aria-hidden="true" />
-                {t("settings.section.operations")}
-              </h2>
-              <p className="mt-1 text-sm text-zinc-500">{t("settings.section.operationsDescription")}</p>
-            </div>
-            <ChevronDown className={`mt-0.5 size-4 shrink-0 text-zinc-500 transition-transform ${operationsSectionOpen ? "rotate-180" : ""}`} />
-          </button>
-
-          {operationsSectionOpen ? (
-            <div className="mt-4 grid gap-6 lg:grid-cols-3">
-            <form onSubmit={submitReadingPlan} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-              <div className="mb-4">
-                <h3 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-                  <Brain className="size-4 text-zinc-500" aria-hidden="true" />
-                  {t("settings.recommendedTitle")}
-                </h3>
-                <p className="mt-1 text-sm text-zinc-500">
-                  {t("settings.recommendedDescription")}
+                <h2 className="mt-2 font-serif text-[1.85rem] leading-[1.1] tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                  {selectedSectionMeta.title}
+                </h2>
+                <p className="mt-2 max-w-3xl text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                  {selectedSectionMeta.description}
                 </p>
               </div>
+              {activeSection === "models" ? (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={applyCostPerformancePreset}
+                    className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 press focus-ring"
+                  >
+                    {t("settings.modelPreset.costPerformance")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleLLMExtras}
+                    className="inline-flex min-h-10 items-center gap-1 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] press focus-ring"
+                  >
+                    {t("settings.section.llmExtras")}
+                    <ChevronDown className={`size-3 transition-transform ${llmExtrasOpen ? "rotate-180" : ""}`} />
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </SectionCard>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700">
-                    {t("settings.window")}
-                  </label>
+          {activeSection === "reading-plan" ? (
+            <SectionCard>
+              <form onSubmit={submitReadingPlan} className="space-y-5">
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)] lg:gap-6">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.window")}</div>
+                    <p className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.controlRoom.windowHelp")}</p>
+                  </div>
                   <select
                     value={readingPlanWindow}
                     onChange={(e) => setReadingPlanWindow(e.target.value as "24h" | "today_jst" | "7d")}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                    className="w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink)]"
                   >
                     <option value="24h">{t("settings.window.24h")}</option>
                     <option value="today_jst">{t("settings.window.today")}</option>
                     <option value="7d">{t("settings.window.7d")}</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700">
-                    {t("settings.size")}
-                  </label>
+                <div className="grid gap-4 border-t border-[var(--color-editorial-line)] pt-5 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)] lg:gap-6">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.size")}</div>
+                    <p className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.controlRoom.sizeHelp")}</p>
+                  </div>
                   <select
                     value={readingPlanSize}
                     onChange={(e) => setReadingPlanSize(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+                    className="w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink)]"
                   >
                     {[7, 15, 25].map((n) => (
                       <option key={n} value={String(n)}>
@@ -1703,170 +1571,63 @@ export default function SettingsPage() {
                     ))}
                   </select>
                 </div>
-                <label className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-                  <span>{t("settings.diversifyTopics")}</span>
-                  <input
-                    type="checkbox"
-                    checked={readingPlanDiversifyTopics}
-                    onChange={(e) => setReadingPlanDiversifyTopics(e.target.checked)}
-                    className="size-4 rounded border-zinc-300"
-                  />
-                </label>
-              </div>
-
-              <div className="mt-4">
+                <div className="grid gap-4 border-t border-[var(--color-editorial-line)] pt-5 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)] lg:gap-6">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.diversifyTopics")}</div>
+                    <p className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.controlRoom.diversifyHelp")}</p>
+                  </div>
+                  <label className="flex items-center justify-between gap-3 rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink-soft)]">
+                    <span>{readingPlanDiversifyTopics ? t("settings.controlRoom.topicBalanceOn") : t("settings.controlRoom.topicBalanceOff")}</span>
+                    <input
+                      type="checkbox"
+                      checked={readingPlanDiversifyTopics}
+                      onChange={(e) => setReadingPlanDiversifyTopics(e.target.checked)}
+                      className="size-4 rounded border-[var(--color-editorial-line-strong)]"
+                    />
+                  </label>
+                </div>
                 <button
                   type="submit"
                   disabled={savingReadingPlan}
-                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                  className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
                 >
                   {savingReadingPlan ? t("common.saving") : t("settings.saveRecommended")}
                 </button>
-              </div>
-            </form>
+              </form>
+            </SectionCard>
+          ) : null}
 
-            <form onSubmit={submitDigestDelivery} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-              <div className="mb-4">
-                <h3 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-                  <Mail className="size-4 text-zinc-500" aria-hidden="true" />
-                  {t("settings.digestTitle")}
-                </h3>
-                <p className="mt-1 text-sm text-zinc-500">
-                  {t("settings.digestDescription")}
-                </p>
-              </div>
-
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-zinc-800">
-                    {t("settings.digestEmailSending")}
+          {activeSection === "digest" ? (
+            <SectionCard>
+              <form onSubmit={submitDigestDelivery} className="space-y-5">
+                <div className="flex items-center justify-between gap-3 rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.digestEmailSending")}</div>
+                    <div className="mt-1 text-[12px] leading-5 text-[var(--color-editorial-ink-soft)]">{t("settings.digestDisabledHint")}</div>
                   </div>
-                  <div className="text-xs text-zinc-500">
-                    {t("settings.digestDisabledHint")}
-                  </div>
+                  <label className="inline-flex shrink-0 items-center gap-2 text-sm text-[var(--color-editorial-ink-soft)]">
+                    <input
+                      type="checkbox"
+                      checked={digestEmailEnabled}
+                      onChange={(e) => setDigestEmailEnabled(e.target.checked)}
+                      className="size-4 rounded border-[var(--color-editorial-line-strong)]"
+                    />
+                    {digestEmailEnabled ? t("settings.on") : t("settings.off")}
+                  </label>
                 </div>
-                <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap text-sm text-zinc-700">
-                  <input
-                    type="checkbox"
-                    checked={digestEmailEnabled}
-                    onChange={(e) => setDigestEmailEnabled(e.target.checked)}
-                    className="size-4 rounded border-zinc-300"
-                  />
-                  {digestEmailEnabled ? t("settings.on") : t("settings.off")}
-                </label>
-              </div>
-
-              <div className="mt-4">
                 <button
                   type="submit"
                   disabled={savingDigestDelivery}
-                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                  className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
                 >
                   {savingDigestDelivery ? t("common.saving") : t("settings.saveDelivery")}
                 </button>
-              </div>
-            </form>
-
-            <form onSubmit={submitBudget} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-              <div className="mb-4">
-                <h3 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-                  <Coins className="size-4 text-zinc-500" aria-hidden="true" />
-                  {t("settings.budgetTitle")}
-                </h3>
-                <p className="mt-1 text-sm text-zinc-500">
-                  {t("settings.budgetDescription")}
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700">
-                    {t("settings.monthlyBudgetUsd")}
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={budgetUSD}
-                    onChange={(e) => setBudgetUSD(e.target.value)}
-                    placeholder={t("settings.budgetPlaceholder")}
-                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-400"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-zinc-800">
-                      {t("settings.budgetAlertEmail")}
-                    </div>
-                    <div className="text-xs text-zinc-500">
-                      {t("settings.budgetAlertHint")}
-                    </div>
-                  </div>
-                  <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap text-sm text-zinc-700">
-                    <input
-                      type="checkbox"
-                      checked={alertEnabled}
-                      onChange={(e) => setAlertEnabled(e.target.checked)}
-                      className="size-4 rounded border-zinc-300"
-                    />
-                    {alertEnabled ? t("settings.on") : t("settings.off")}
-                  </label>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700">
-                    {t("settings.alertThreshold")}
-                  </label>
-                  <div className="mt-1 flex items-center gap-3">
-                    <input
-                      type="range"
-                      min={1}
-                      max={99}
-                      value={thresholdPct}
-                      onChange={(e) => setThresholdPct(Number(e.target.value))}
-                      className="w-full accent-zinc-900"
-                    />
-                    <span className="w-12 text-right text-sm font-medium text-zinc-800">{thresholdPct}%</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-center gap-2">
-                <button
-                  type="submit"
-                  disabled={savingBudget}
-                  className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-                >
-                  {savingBudget ? t("common.saving") : t("settings.saveBudget")}
-                </button>
-                <span className="text-xs text-zinc-500">
-                  {`${t("settings.currentMonth")}: ${settings.current_month.month_jst}`}
-                </span>
-              </div>
-            </form>
-            </div>
+              </form>
+            </SectionCard>
           ) : null}
-        </section>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setNotificationsSectionOpen((prev) => !prev)}
-            className="flex w-full items-start justify-between gap-4 text-left"
-          >
-            <div>
-              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-                <BellRing className="size-4 text-zinc-500" aria-hidden="true" />
-                {t("settings.section.notifications")}
-              </h2>
-              <p className="mt-1 text-sm text-zinc-500">{t("settings.section.notificationsDescription")}</p>
-            </div>
-            <ChevronDown className={`mt-0.5 size-4 shrink-0 text-zinc-500 transition-transform ${notificationsSectionOpen ? "rotate-180" : ""}`} />
-          </button>
-
-          {notificationsSectionOpen ? (
-            <div className="mt-4">
+          {activeSection === "notifications" ? (
+            <SectionCard>
               <OneSignalSettings
                 rule={notificationPriority}
                 onSaveRule={async (rule) => {
@@ -1875,180 +1636,408 @@ export default function SettingsPage() {
                   setSettings((prev) => (prev ? { ...prev, notification_priority: res.notification_priority } : prev));
                 }}
               />
+            </SectionCard>
+          ) : null}
+
+          {activeSection === "integrations" ? (
+            <div className="space-y-5">
+              <SectionCard>
+                <div className="mb-4">
+                  <h3 className="inline-flex items-center gap-2 text-base font-semibold text-[var(--color-editorial-ink)]">
+                    <KeyRound className="size-4 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
+                    {t("settings.inoreaderTitle")}
+                  </h3>
+                  <p className="mt-1 text-sm text-[var(--color-editorial-ink-soft)]">{t("settings.inoreaderDescription")}</p>
+                </div>
+                <div className="rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink-soft)]">
+                  {settings.has_inoreader_oauth ? t("settings.inoreaderConnected") : t("settings.inoreaderNotConnected")}
+                </div>
+                {settings.inoreader_token_expires_at ? (
+                  <p className="mt-2 break-words text-xs text-[var(--color-editorial-ink-faint)]">
+                    {t("settings.inoreaderTokenExpiresAt")}: {new Date(settings.inoreader_token_expires_at).toLocaleString()}
+                  </p>
+                ) : null}
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <a
+                    href="/api/settings/inoreader/connect"
+                    className="inline-flex min-h-10 w-full items-center justify-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] sm:w-auto"
+                  >
+                    {t("settings.inoreaderConnect")}
+                  </a>
+                  <button
+                    type="button"
+                    disabled={deletingInoreaderOAuth || !settings.has_inoreader_oauth}
+                    onClick={handleDeleteInoreaderOAuth}
+                    className="min-h-10 w-full rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] disabled:opacity-50 sm:w-auto"
+                  >
+                    {deletingInoreaderOAuth ? t("settings.deleting") : t("settings.inoreaderDisconnect")}
+                  </button>
+                </div>
+              </SectionCard>
+
+              <SectionCard>
+                <form onSubmit={submitObsidianExport} className="space-y-4">
+                  <div className="mb-4">
+                    <h3 className="inline-flex items-center gap-2 text-base font-semibold text-[var(--color-editorial-ink)]">
+                      <SettingsIcon className="size-4 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
+                      {t("settings.obsidianTitle")}
+                    </h3>
+                    <p className="mt-1 text-sm text-[var(--color-editorial-ink-soft)]">{t("settings.obsidianDescription")}</p>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.obsidianEnabled")}</div>
+                      <div className="mt-1 text-[12px] leading-5 text-[var(--color-editorial-ink-soft)]">{t("settings.obsidianEnabledHint")}</div>
+                    </div>
+                    <label className="inline-flex shrink-0 items-center gap-2 text-sm text-[var(--color-editorial-ink-soft)]">
+                      <input
+                        type="checkbox"
+                        checked={obsidianEnabled}
+                        onChange={(e) => setObsidianEnabled(e.target.checked)}
+                        className="size-4 rounded border-[var(--color-editorial-line-strong)]"
+                      />
+                      {obsidianEnabled ? t("settings.on") : t("settings.off")}
+                    </label>
+                  </div>
+
+                  <div className="rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink-soft)]">
+                    {settings.obsidian_export?.github_installation_id
+                      ? t("settings.obsidianGithubConnected")
+                      : t("settings.obsidianGithubNotConnected")}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      href="/api/settings/obsidian-github/connect"
+                      className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)]"
+                    >
+                      {t("settings.obsidianGithubConnect")}
+                    </a>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-editorial-ink)]">{t("settings.obsidianRepoOwner")}</label>
+                      <input
+                        type="text"
+                        value={obsidianRepoOwner}
+                        onChange={(e) => setObsidianRepoOwner(e.target.value)}
+                        className="mt-1 w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink)]"
+                        placeholder="your-org"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-editorial-ink)]">{t("settings.obsidianRepoName")}</label>
+                      <input
+                        type="text"
+                        value={obsidianRepoName}
+                        onChange={(e) => setObsidianRepoName(e.target.value)}
+                        className="mt-1 w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink)]"
+                        placeholder="obsidian-vault"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-editorial-ink)]">{t("settings.obsidianBranch")}</label>
+                      <input
+                        type="text"
+                        value={obsidianRepoBranch}
+                        onChange={(e) => setObsidianRepoBranch(e.target.value)}
+                        className="mt-1 w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink)]"
+                        placeholder="main"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-editorial-ink)]">{t("settings.obsidianRootPath")}</label>
+                      <input
+                        type="text"
+                        value={obsidianRootPath}
+                        onChange={(e) => setObsidianRootPath(e.target.value)}
+                        className="mt-1 w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink)]"
+                        placeholder="Sifto/Favorites"
+                      />
+                      <p className="mt-1 text-xs text-[var(--color-editorial-ink-faint)]">{t("settings.obsidianRootPathHint")}</p>
+                    </div>
+                  </div>
+
+                  {settings.obsidian_export?.last_success_at ? (
+                    <p className="text-xs text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.obsidianLastSuccess")}: {new Date(settings.obsidian_export.last_success_at).toLocaleString()}
+                    </p>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="submit"
+                      disabled={savingObsidianExport}
+                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                    >
+                      {savingObsidianExport ? t("common.saving") : t("settings.obsidianSave")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void runObsidianExportNow();
+                      }}
+                      disabled={runningObsidianExport}
+                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] disabled:opacity-60"
+                    >
+                      {runningObsidianExport ? t("settings.obsidianRunNowRunning") : t("settings.obsidianRunNow")}
+                    </button>
+                  </div>
+                </form>
+              </SectionCard>
             </div>
           ) : null}
-        </section>
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setIntegrationsSectionOpen((prev) => !prev)}
-            className="flex w-full items-start justify-between gap-4 text-left"
-          >
-            <div>
-              <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-                <Link2 className="size-4 text-zinc-500" aria-hidden="true" />
-                {t("settings.section.integrations")}
-              </h2>
-              <p className="mt-1 text-sm text-zinc-500">{t("settings.section.integrationsDescription")}</p>
+          {activeSection === "models" ? (
+            <div className="space-y-5">
+              <SectionCard>
+                <form onSubmit={submitLLMModels} className="space-y-4">
+                  <div>
+                    <h3 className="inline-flex items-center gap-2 text-base font-semibold text-[var(--color-editorial-ink)]">
+                      <Brain className="size-4 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
+                      {t("settings.modelsTitle")}
+                    </h3>
+                    <p className="mt-1 text-sm text-[var(--color-editorial-ink-soft)]">{t("settings.modelsDescription")}</p>
+                    <p className="mt-1 text-xs text-[var(--color-editorial-ink-faint)]">{t("settings.pricingDescription")}</p>
+                  </div>
+
+                  {unavailableSelectedModelWarnings.length > 0 ? (
+                    <div className="rounded-[16px] border border-[#e1cb9e] bg-[var(--color-warning-soft)] px-4 py-3 text-sm text-[var(--color-warning)]">
+                      <div className="font-medium">{t("settings.modelUnavailable.title")}</div>
+                      <div className="mt-2 space-y-1">
+                        {unavailableSelectedModelWarnings.map((entry) => (
+                          <p key={entry.key}>
+                            {t("settings.modelUnavailable.message")
+                              .replace("{{field}}", entry.label)
+                              .replace("{{model}}", entry.modelLabel)}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="space-y-4">
+                    <section className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.group.summary")}</h4>
+                      <div className="mt-3 grid gap-4 md:grid-cols-2">
+                        <ModelSelect label={t("settings.model.facts")} value={anthropicFactsModel} onChange={(value) => onChangeLLMModel(setAnthropicFactsModel, value)} options={optionsForPurpose("facts", anthropicFactsModel)} labels={modelSelectLabels} variant="modal" />
+                        <ModelSelect label={t("settings.model.factsFallback")} value={anthropicFactsFallbackModel} onChange={(value) => onChangeLLMModel(setAnthropicFactsFallbackModel, value)} options={optionsForPurpose("facts", anthropicFactsFallbackModel)} labels={modelSelectLabels} variant="modal" />
+                        <ModelSelect label={t("settings.model.summary")} value={anthropicSummaryModel} onChange={(value) => onChangeLLMModel(setAnthropicSummaryModel, value)} options={optionsForPurpose("summary", anthropicSummaryModel)} labels={modelSelectLabels} variant="modal" />
+                        <ModelSelect label={t("settings.model.summaryFallback")} value={anthropicSummaryFallbackModel} onChange={(value) => onChangeLLMModel(setAnthropicSummaryFallbackModel, value)} options={optionsForPurpose("summary", anthropicSummaryFallbackModel)} labels={modelSelectLabels} variant="modal" />
+                      </div>
+                    </section>
+                    <section className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.group.digest")}</h4>
+                      <div className="mt-3 grid gap-4 md:grid-cols-2">
+                        <ModelSelect label={t("settings.model.digestCluster")} value={anthropicDigestClusterModel} onChange={(value) => onChangeLLMModel(setAnthropicDigestClusterModel, value)} options={optionsForPurpose("digest_cluster_draft", anthropicDigestClusterModel)} labels={modelSelectLabels} variant="modal" />
+                        <ModelSelect label={t("settings.model.digest")} value={anthropicDigestModel} onChange={(value) => onChangeLLMModel(setAnthropicDigestModel, value)} options={optionsForPurpose("digest", anthropicDigestModel)} labels={modelSelectLabels} variant="modal" />
+                      </div>
+                    </section>
+                    <section className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.group.validation")}</h4>
+                      <div className="mt-3 grid gap-4 md:grid-cols-2">
+                        <ModelSelect label={t("settings.model.factsCheck")} value={factsCheckModel} onChange={(value) => onChangeLLMModel(setFactsCheckModel, value)} options={optionsForPurpose("facts", factsCheckModel)} labels={modelSelectLabels} variant="modal" />
+                        <ModelSelect label={t("settings.model.faithfulnessCheck")} value={faithfulnessCheckModel} onChange={(value) => onChangeLLMModel(setFaithfulnessCheckModel, value)} options={optionsForPurpose("summary", faithfulnessCheckModel)} labels={modelSelectLabels} variant="modal" />
+                      </div>
+                    </section>
+                    <section className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.group.other")}</h4>
+                      <div className="mt-3 grid gap-4 md:grid-cols-2">
+                        <ModelSelect label={t("settings.model.sourceSuggestion")} value={anthropicSourceSuggestionModel} onChange={(value) => onChangeLLMModel(setAnthropicSourceSuggestionModel, value)} options={sourceSuggestionModelOptions} labels={modelSelectLabels} variant="modal" />
+                        <ModelSelect label={t("settings.model.ask")} value={anthropicAskModel} onChange={(value) => onChangeLLMModel(setAnthropicAskModel, value)} options={optionsForPurpose("ask", anthropicAskModel)} labels={modelSelectLabels} variant="modal" />
+                        <ModelSelect label={t("settings.model.embeddings")} value={openAIEmbeddingModel} onChange={(value) => onChangeLLMModel(setOpenAIEmbeddingModel, value)} options={openAIEmbeddingModelOptions} labels={modelSelectLabels} variant="modal" />
+                      </div>
+                    </section>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={savingLLMModels}
+                    className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                  >
+                    {savingLLMModels ? t("common.saving") : t("settings.saveModels")}
+                  </button>
+                </form>
+              </SectionCard>
+
+              {llmExtrasOpen ? (
+                <div ref={llmExtrasRef} className="space-y-5">
+                  <ProviderModelUpdatesPanel
+                    allEvents={providerModelUpdates}
+                    visibleEvents={visibleProviderModelUpdates}
+                    onDismiss={dismissProviderModelUpdates}
+                    onRestore={restoreProviderModelUpdates}
+                    labels={{
+                      title: t("settings.providerModelUpdates"),
+                      description: t("settings.providerModelUpdatesDescription"),
+                      dismiss: t("settings.providerModelUpdate.dismiss"),
+                      empty: t("settings.providerModelUpdate.empty"),
+                      dismissed: t("settings.providerModelUpdate.dismissed"),
+                      restore: t("settings.providerModelUpdate.restore"),
+                      added: t("settings.providerModelUpdate.added", "added"),
+                      removed: t("settings.providerModelUpdate.removed", "removed"),
+                    }}
+                  />
+                  <SectionCard>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.modelGuide.title")}</h3>
+                        <p className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">{t("settings.modelGuide.description")}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setModelGuideOpen(true)}
+                        className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                      >
+                        {t("settings.modelGuide.open")}
+                      </button>
+                    </div>
+                  </SectionCard>
+                </div>
+              ) : null}
             </div>
-            <ChevronDown className={`mt-0.5 size-4 shrink-0 text-zinc-500 transition-transform ${integrationsSectionOpen ? "rotate-180" : ""}`} />
-          </button>
+          ) : null}
 
-          {integrationsSectionOpen ? (
-            <div className="mt-4 space-y-4">
-            <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-              <div className="mb-4">
-                <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-                  <KeyRound className="size-4 text-zinc-500" aria-hidden="true" />
-                  {t("settings.inoreaderTitle")}
-                </h2>
-                <p className="mt-1 text-sm text-zinc-500">{t("settings.inoreaderDescription")}</p>
-              </div>
+          {activeSection === "budget" ? (
+            <SectionCard>
+              <form onSubmit={submitBudget} className="space-y-5">
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)] lg:gap-6">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.monthlyBudgetUsd")}</div>
+                    <p className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.controlRoom.monthlyBudgetHelp")}</p>
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={budgetUSD}
+                    onChange={(e) => setBudgetUSD(e.target.value)}
+                    placeholder={t("settings.budgetPlaceholder")}
+                    className="w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink)] outline-none placeholder:text-[var(--color-editorial-ink-faint)]"
+                  />
+                </div>
+                <div className="grid gap-4 border-t border-[var(--color-editorial-line)] pt-5 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)] lg:gap-6">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.budgetAlertEmail")}</div>
+                    <p className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.budgetAlertHint")}</p>
+                  </div>
+                  <label className="flex items-center justify-between gap-3 rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink-soft)]">
+                    <span>{alertEnabled ? t("settings.on") : t("settings.off")}</span>
+                    <input
+                      type="checkbox"
+                      checked={alertEnabled}
+                      onChange={(e) => setAlertEnabled(e.target.checked)}
+                      className="size-4 rounded border-[var(--color-editorial-line-strong)]"
+                    />
+                  </label>
+                </div>
+                <div className="grid gap-4 border-t border-[var(--color-editorial-line)] pt-5 lg:grid-cols-[minmax(0,240px)_minmax(0,1fr)] lg:gap-6">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.alertThreshold")}</div>
+                    <p className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.controlRoom.thresholdHelp")}</p>
+                  </div>
+                  <div className="rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={1}
+                        max={99}
+                        value={thresholdPct}
+                        onChange={(e) => setThresholdPct(Number(e.target.value))}
+                        className="w-full accent-[var(--color-editorial-ink)]"
+                      />
+                      <span className={`w-12 text-right text-sm font-medium ${budgetRemainingTone}`}>{thresholdPct}%</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="submit"
+                    disabled={savingBudget}
+                    className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                  >
+                    {savingBudget ? t("common.saving") : t("settings.saveBudget")}
+                  </button>
+                  <span className="text-xs text-[var(--color-editorial-ink-faint)]">
+                    {`${t("settings.currentMonth")}: ${settings.current_month.month_jst}`}
+                  </span>
+                </div>
+              </form>
+            </SectionCard>
+          ) : null}
 
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-                {settings.has_inoreader_oauth ? t("settings.inoreaderConnected") : t("settings.inoreaderNotConnected")}
-              </div>
-              {settings.inoreader_token_expires_at && (
-                <p className="mt-2 break-words text-xs text-zinc-500">
-                  {t("settings.inoreaderTokenExpiresAt")}: {new Date(settings.inoreader_token_expires_at).toLocaleString()}
-                </p>
-              )}
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                <a
-                  href="/api/settings/inoreader/connect"
-                  className="inline-flex w-full items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white sm:w-auto"
-                >
-                  {t("settings.inoreaderConnect")}
-                </a>
-                <button
-                  type="button"
-                  disabled={deletingInoreaderOAuth || !settings.has_inoreader_oauth}
-                  onClick={handleDeleteInoreaderOAuth}
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50 sm:w-auto"
-                >
-                  {deletingInoreaderOAuth ? t("settings.deleting") : t("settings.inoreaderDisconnect")}
-                </button>
-              </div>
-            </section>
-
-            <form onSubmit={submitObsidianExport} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <div className="mb-4">
-            <h2 className="inline-flex items-center gap-2 text-base font-semibold text-zinc-900">
-              <SettingsIcon className="size-4 text-zinc-500" aria-hidden="true" />
-              {t("settings.obsidianTitle")}
-            </h2>
-            <p className="mt-1 text-sm text-zinc-500">{t("settings.obsidianDescription")}</p>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-              <div className="min-w-0">
-                <div className="text-sm font-medium text-zinc-800">{t("settings.obsidianEnabled")}</div>
-                <div className="text-xs text-zinc-500">{t("settings.obsidianEnabledHint")}</div>
-              </div>
-              <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap text-sm text-zinc-700">
-                <input
-                  type="checkbox"
-                  checked={obsidianEnabled}
-                  onChange={(e) => setObsidianEnabled(e.target.checked)}
-                  className="size-4 rounded border-zinc-300"
+          {activeSection === "system" ? (
+            <div className="space-y-5">
+              <SectionCard>
+                <div>
+                  <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.access.selectProvider")}</div>
+                  <div className="mt-1 text-xs text-[var(--color-editorial-ink-faint)]">
+                    {`${t("settings.access.configuredProviders")}: ${configuredProviderCount}/${accessCards.length}`}
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {accessCards.map((card) => {
+                    const selected = card.id === activeAccessCard?.id;
+                    return (
+                      <button
+                        key={card.id}
+                        type="button"
+                        onClick={() => setActiveAccessProvider(card.id)}
+                        className={joinClassNames(
+                          "rounded-[18px] border px-4 py-3 text-left transition",
+                          selected
+                            ? "border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel-strong)] shadow-[var(--shadow-card)]"
+                            : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] hover:bg-[var(--color-editorial-panel-strong)]"
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-medium text-[var(--color-editorial-ink)]">{card.title.replace(/（.*?）|\(.*?\)/g, "").trim()}</div>
+                          <span className={joinClassNames(
+                            "rounded-full px-2 py-0.5 text-[11px] font-medium",
+                            card.configured
+                              ? "border border-[var(--color-editorial-success-line)] bg-[var(--color-editorial-success-soft)] text-[var(--color-editorial-success)]"
+                              : "border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-faint)]"
+                          )}>
+                            {card.configured ? t("settings.configured") : t("settings.access.notConfiguredShort")}
+                          </span>
+                        </div>
+                        <div className="mt-2 text-xs text-[var(--color-editorial-ink-soft)]">
+                          {card.configured ? `••••${card.last4 ?? "****"}` : card.notSet}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </SectionCard>
+              {activeAccessCard ? (
+                <ApiKeyCard
+                  icon={KeyRound}
+                  title={activeAccessCard.title}
+                  description={activeAccessCard.description}
+                  configured={activeAccessCard.configured}
+                  last4={activeAccessCard.last4}
+                  value={activeAccessCard.value}
+                  onChange={activeAccessCard.onChange}
+                  onSubmit={activeAccessCard.onSubmit}
+                  onDelete={activeAccessCard.onDelete}
+                  placeholder={activeAccessCard.placeholder}
+                  saving={activeAccessCard.saving}
+                  deleting={activeAccessCard.deleting}
+                  labels={{ ...apiKeyCardLabels, notSet: activeAccessCard.notSet }}
                 />
-                {obsidianEnabled ? t("settings.on") : t("settings.off")}
-              </label>
-            </div>
-
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-              {settings.obsidian_export?.github_installation_id
-                ? t("settings.obsidianGithubConnected")
-                : t("settings.obsidianGithubNotConnected")}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <a
-                href="/api/settings/obsidian-github/connect"
-                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white"
-              >
-                {t("settings.obsidianGithubConnect")}
-              </a>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">{t("settings.obsidianRepoOwner")}</label>
-              <input
-                type="text"
-                value={obsidianRepoOwner}
-                onChange={(e) => setObsidianRepoOwner(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-                placeholder="your-org"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">{t("settings.obsidianRepoName")}</label>
-              <input
-                type="text"
-                value={obsidianRepoName}
-                onChange={(e) => setObsidianRepoName(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-                placeholder="obsidian-vault"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">{t("settings.obsidianBranch")}</label>
-              <input
-                type="text"
-                value={obsidianRepoBranch}
-                onChange={(e) => setObsidianRepoBranch(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-                placeholder="main"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-700">{t("settings.obsidianRootPath")}</label>
-              <input
-                type="text"
-                value={obsidianRootPath}
-                onChange={(e) => setObsidianRootPath(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
-                placeholder="Sifto/Favorites"
-              />
-              <p className="mt-1 text-xs text-zinc-500">{t("settings.obsidianRootPathHint")}</p>
-            </div>
-
-            {settings.obsidian_export?.last_success_at && (
-              <p className="text-xs text-zinc-500">
-                {t("settings.obsidianLastSuccess")}: {new Date(settings.obsidian_export.last_success_at).toLocaleString()}
-              </p>
-            )}
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="submit"
-              disabled={savingObsidianExport}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              {savingObsidianExport ? t("common.saving") : t("settings.obsidianSave")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void runObsidianExportNow();
-              }}
-              disabled={runningObsidianExport}
-              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-60"
-            >
-              {runningObsidianExport ? t("settings.obsidianRunNowRunning") : t("settings.obsidianRunNow")}
-            </button>
-          </div>
-            </form>
-
+              ) : null}
             </div>
           ) : null}
-        </section>
-      </section>
+        </div>
+      </div>
+
+      <ModelGuideModal
+        open={modelGuideOpen}
+        onClose={() => setModelGuideOpen(false)}
+        entries={modelComparisonEntries}
+        t={t}
+      />
     </div>
   );
 }

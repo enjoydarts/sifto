@@ -49,7 +49,7 @@ export function TabList({
   return (
     <div
       role="tablist"
-      className={`flex gap-1 overflow-x-auto border-b border-zinc-200 bg-zinc-50 px-5 pt-2 md:px-6 md:pt-3 ${className ?? ""}`}
+      className={`flex gap-1 overflow-x-auto border-b border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-5 pt-2 md:px-6 md:pt-3 ${className ?? ""}`}
     >
       {children}
     </div>
@@ -73,8 +73,8 @@ export function Tab({
       onClick={() => setActiveTab(value)}
       className={`whitespace-nowrap rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors focus-ring ${
         active
-          ? "border-b-[3px] border-zinc-900 bg-white text-zinc-900 font-semibold"
-          : "border-b-[3px] border-transparent text-zinc-500 hover:text-zinc-700"
+          ? "border-b-[3px] border-[var(--color-editorial-ink)] bg-[var(--color-editorial-panel-strong)] font-semibold text-[var(--color-editorial-ink)]"
+          : "border-b-[3px] border-transparent text-[var(--color-editorial-ink-faint)] hover:text-[var(--color-editorial-ink-soft)]"
       }`}
     >
       {children}

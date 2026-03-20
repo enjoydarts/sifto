@@ -9,7 +9,7 @@ export default function MainLayout({
   return (
     <>
       <Nav />
-      <main className="mx-auto max-w-6xl px-4 py-6 pb-[calc(env(safe-area-inset-bottom)+7.5rem)] md:pb-6">{children}</main>
+      <main className="mx-auto max-w-[1360px] px-4 py-6 pb-[calc(env(safe-area-inset-bottom)+7.5rem)] md:px-6 md:pb-6">{children}</main>
       <ScrollToTop />
     </>
   );

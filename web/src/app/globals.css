@@ -1,10 +1,48 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f5f6f8;
-  --foreground: #171717;
-  --panel: #ffffff;
+  --background: #f4f1ea;
+  --foreground: #171412;
+  --panel: #fcfbf8;
+  --panel-muted: #f0ece3;
+  --panel-strong: #ffffff;
+  --foreground-muted: #665d53;
+  --border-subtle: #d9d1c4;
+  --border-strong: #beb3a0;
+  --accent: #8f3d25;
+  --accent-soft: #f4ded8;
+  --success: #245f4a;
+  --success-soft: #e0efe7;
+  --warning: #8a5a14;
+  --warning-soft: #f5ead2;
+  --error: #8f2f2b;
+  --error-soft: #f5dfde;
+  --info: #275d8a;
+  --info-soft: #e2eef8;
   --safe-top: env(safe-area-inset-top, 0px);
+  --shadow-card: 0 10px 24px rgba(35, 24, 12, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.48);
+  --shadow-dropdown: 0 16px 40px rgba(35, 24, 12, 0.12);
+  --radius-card: 1rem;
+  --radius-panel: 1.25rem;
+  --radius-chip: 999px;
+  --color-editorial-bg: var(--background);
+  --color-editorial-panel: var(--panel);
+  --color-editorial-panel-muted: var(--panel-muted);
+  --color-editorial-panel-strong: var(--panel-strong);
+  --color-editorial-line: var(--border-subtle);
+  --color-editorial-line-strong: var(--border-strong);
+  --color-editorial-ink: var(--foreground);
+  --color-editorial-ink-soft: var(--foreground-muted);
+  --color-editorial-ink-faint: #8f877f;
+  --color-editorial-accent: var(--accent);
+  --color-editorial-accent-soft: var(--accent-soft);
+  --color-editorial-accent-line: #d7b4a9;
+  --color-editorial-success: var(--success);
+  --color-editorial-success-soft: var(--success-soft);
+  --color-editorial-success-line: #b9d4c9;
+  --color-editorial-error: var(--error);
+  --color-editorial-error-soft: var(--error-soft);
+  --color-editorial-error-line: #dbb3b1;
 }
 
 @supports (padding-top: constant(safe-area-inset-top)) {
@@ -17,23 +55,74 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-panel: var(--panel);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-panel-muted: var(--panel-muted);
+  --color-panel-strong: var(--panel-strong);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-error: var(--error);
+  --color-error-soft: var(--error-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --font-sans: var(--font-sans-jp);
+  --font-serif: var(--font-serif-jp);
 
   /* UX improvement tokens */
-  --radius-card: 1rem;       /* 16px */
-  --radius-image: 0.75rem;   /* 12px */
-  --radius-button: 0.625rem; /* 10px */
-  --radius-modal: 1.25rem;   /* 20px */
-  --radius-hero: 1.25rem;    /* 20px */
-  --shadow-card: 0 4px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(0,0,0,0.02);
-  --shadow-dropdown: 0 8px 24px rgba(0,0,0,0.12);
+  --radius-card: var(--radius-card);
+  --radius-image: 0.75rem;
+  --radius-button: 0.625rem;
+  --radius-modal: var(--radius-panel);
+  --radius-hero: var(--radius-panel);
+  --shadow-card: var(--shadow-card);
+  --shadow-dropdown: var(--shadow-dropdown);
 }
 
 body {
-  background: var(--background);
+  background:
+    radial-gradient(circle at top left, rgba(143, 61, 37, 0.08), transparent 30%),
+    radial-gradient(circle at top right, rgba(39, 93, 138, 0.06), transparent 28%),
+    var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans-jp), "Noto Sans JP", ui-sans-serif, system-ui, sans-serif;
+}
+
+.surface-editorial {
+  background: var(--panel);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-card);
+}
+
+.surface-editorial-muted {
+  background: var(--panel-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+.surface-editorial-strong {
+  background: var(--panel-strong);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-card);
+}
+
+.text-editorial-muted {
+  color: var(--foreground-muted);
+}
+
+.text-editorial-strong {
+  color: var(--foreground);
+}
+
+.text-editorial-accent {
+  color: var(--accent);
+}
+
+.border-editorial {
+  border-color: var(--border-subtle);
 }
 
 /* ── Page / card transitions ── */
@@ -71,11 +160,23 @@ body {
 
 /* ── Interaction utilities ── */
 .press {
-  transition: transform 100ms;
+  transition: transform 100ms, box-shadow 100ms, background-color 100ms, border-color 100ms;
   &:active { transform: scale(0.97); }
 }
 .focus-ring {
-  &:focus-visible { outline: 2px solid #a1a1aa; outline-offset: 2px; }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-fade-in-up,
+  .animate-scale-in,
+  .animate-slide-in-right,
+  .animate-slide-out-right,
+  .press {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 @keyframes toast-float-fade {

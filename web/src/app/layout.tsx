@@ -1,10 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
+import { Sawarabi_Gothic, Sawarabi_Mincho } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
+const sawarabiGothic = Sawarabi_Gothic({
+  subsets: ["latin"],
+  variable: "--font-sans-jp",
+  weight: ["400"],
+});
+
+const sawarabiMincho = Sawarabi_Mincho({
+  subsets: ["latin"],
+  variable: "--font-serif-jp",
+  weight: ["400"],
+});
 
 export const metadata: Metadata = {
   title: "Sifto",
@@ -30,7 +40,7 @@ export default function RootLayout({
   const clerkEnabled = Boolean(clerkPublishableKey && process.env.CLERK_SECRET_KEY);
 
   return (
-    <html lang="ja" className={geist.variable}>
+    <html lang="ja" className={`${sawarabiGothic.variable} ${sawarabiMincho.variable}`}>
       <body className="min-h-screen bg-zinc-50 font-sans text-zinc-900 antialiased">
         <Script
           id="onesignal-sdk"

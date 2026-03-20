@@ -9,8 +9,8 @@ type Props = {
 
 function badgeTone(result: string) {
   return result === "fail"
-    ? "border-rose-200 bg-rose-50 text-rose-700"
-    : "border-amber-200 bg-amber-50 text-amber-700";
+    ? "border-[#dbb3b1] bg-[var(--color-editorial-error-soft)] text-[var(--color-editorial-error)]"
+    : "border-[#e1cb9e] bg-[var(--warning-soft)] text-[var(--warning)]";
 }
 
 function labelFor(prefix: "facts" | "faithfulness", result: string, t: Props["t"]) {
@@ -36,7 +36,7 @@ export function CheckStatusBadges({ factsCheckResult, faithfulnessResult, t, com
       {entries.map((entry) => (
         <span
           key={`${entry.key}-${entry.result}`}
-          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${badgeTone(entry.result)}`}
+          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${badgeTone(entry.result)}`}
         >
           {labelFor(entry.key, entry.result, t)}
         </span>

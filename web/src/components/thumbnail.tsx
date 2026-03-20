@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 type ThumbnailSize = "sm" | "md" | "lg";
+type ThumbnailTone = "default" | "editorial";
 
 const SIZE_MAP: Record<ThumbnailSize, { container: string; text: string }> = {
   sm: { container: "h-12 w-12",   text: "text-base" },
@@ -41,11 +42,13 @@ export function Thumbnail({
   src,
   title,
   size = "md",
+  tone = "default",
   className = "",
 }: {
   src?: string | null;
   title: string;
   size?: ThumbnailSize;
+  tone?: ThumbnailTone;
   className?: string;
 }) {
   const [imgError, setImgError] = useState(false);
@@ -55,12 +58,16 @@ export function Thumbnail({
   const initial = getInitial(title);
 
   return (
-    <div className={`shrink-0 overflow-hidden rounded-lg ${container} ${className}`}>
+    <div className={`relative shrink-0 overflow-hidden rounded-lg ${container} ${className}`}>
       {showFallback ? (
         <div
-          className={`flex h-full w-full items-center justify-center bg-gradient-to-br ${gradient}`}
+          className={
+            tone === "editorial"
+              ? "flex h-full w-full items-center justify-center bg-[linear-gradient(135deg,rgba(157,60,36,0.18),transparent),linear-gradient(135deg,#d6d0c5,#f7f4ee)]"
+              : `flex h-full w-full items-center justify-center bg-gradient-to-br ${gradient}`
+          }
         >
-          <span className={`font-bold text-white/90 ${text}`}>{initial}</span>
+          <span className={`${tone === "editorial" ? "text-[rgba(23,20,18,0.76)]" : "text-white/90"} font-bold ${text}`}>{initial}</span>
         </div>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
@@ -71,6 +78,12 @@ export function Thumbnail({
           referrerPolicy="no-referrer"
           className="h-full w-full object-cover"
           onError={() => setImgError(true)}
+        />
+      )}
+      {tone === "editorial" && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent,rgba(23,20,18,0.08)),repeating-linear-gradient(90deg,transparent,transparent_24px,rgba(255,255,255,0.16)_24px,rgba(255,255,255,0.16)_25px)]"
         />
       )}
     </div>

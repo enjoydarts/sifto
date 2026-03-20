@@ -1,77 +1,109 @@
-import { Star } from "lucide-react";
+import { ArrowDownAZ, Sparkles, Star, TrendingUp } from "lucide-react";
 import { type SortMode } from "./feed-tabs";
 
 export function FiltersBar({
   feedMode,
   sortMode,
-  topic,
   favoriteOnly,
+  toolbarAction,
+  bulkMarkingRead,
   onSortChange,
-  onTopicClear,
   onFavoriteChange,
+  onToolbarActionChange,
+  onToolbarRun,
   t,
 }: {
   feedMode: string;
   sortMode: SortMode;
-  topic: string;
   favoriteOnly: boolean;
+  toolbarAction: "" | "triage_all" | "bulk_filtered" | "bulk_older";
+  bulkMarkingRead: boolean;
   onSortChange: (sort: SortMode) => void;
-  onTopicClear: () => void;
   onFavoriteChange: (v: boolean) => void;
+  onToolbarActionChange: (v: "" | "triage_all" | "bulk_filtered" | "bulk_older") => void;
+  onToolbarRun: () => void;
   t: (key: string) => string;
 }) {
   const focusMode = feedMode === "recommended";
   const pendingMode = feedMode === "pending";
   const showPrimaryRow = !focusMode && !pendingMode;
+  const sortIcons: Record<SortMode, typeof ArrowDownAZ> = {
+    newest: ArrowDownAZ,
+    score: TrendingUp,
+    personal_score: Sparkles,
+  };
 
   return (
     <div className="flex flex-col gap-2">
       {showPrimaryRow && (
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-1 rounded-lg border border-zinc-200 bg-white p-0.5">
-          {(["newest", "score", "personal_score"] as SortMode[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => onSortChange(s)}
-              className={`min-w-0 flex-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors press focus-ring sm:px-2.5 sm:text-xs ${
-                sortMode === s
-                  ? "bg-zinc-900 text-white"
-                  : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
-              }`}
-            >
-              {t(`items.sort.${s}`)}
-            </button>
-          ))}
+        <div className="flex min-w-0 max-w-full flex-wrap gap-2 sm:pb-0">
+          <div className="flex min-w-0 items-center gap-1 rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-1">
+            {(["newest", "score", "personal_score"] as SortMode[]).map((s) => (
+              (() => {
+                const Icon = sortIcons[s];
+                const active = sortMode === s;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => onSortChange(s)}
+                    title={t(`items.sort.${s}`)}
+                    aria-label={t(`items.sort.${s}`)}
+                    aria-pressed={active}
+                    className={`inline-flex h-9 w-9 items-center justify-center rounded-[12px] transition-colors press focus-ring ${
+                      active
+                        ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                        : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
+                    }`}
+                  >
+                    <Icon className="size-4" aria-hidden="true" />
+                  </button>
+                );
+              })()
+            ))}
           </div>
 
-          <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50 transition-colors">
+          <label
+            title={t("items.filter.favoriteOnly")}
+            className={`inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border transition-colors ${
+              favoriteOnly
+                ? "border-[#d7b4a9] bg-[var(--color-editorial-accent-soft)] text-[var(--color-editorial-accent)]"
+                : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+            }`}
+          >
             <input
               type="checkbox"
               checked={favoriteOnly}
               onChange={(e) => onFavoriteChange(e.target.checked)}
-              className="size-4 rounded border-zinc-300"
+              aria-label={t("items.filter.favoriteOnly")}
+              className="sr-only"
             />
-            <span className="inline-flex items-center gap-1">
-              <Star className="size-3.5 text-amber-500" aria-hidden="true" />
-              <span className="hidden whitespace-nowrap sm:inline">{t("items.filter.favoriteOnly")}</span>
-            </span>
+            <Star className={`size-4 ${favoriteOnly ? "fill-current" : "text-amber-600"}`} aria-hidden="true" />
           </label>
+
+          <div className="flex min-w-0 flex-1 items-center gap-2 xl:hidden">
+            <select
+              value={toolbarAction}
+              onChange={(e) => onToolbarActionChange(e.target.value as typeof toolbarAction)}
+              className="min-h-11 min-w-0 flex-1 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink-soft)] focus-ring"
+              aria-label={t("items.toolbar.actions")}
+            >
+              <option value="">{t("items.actions.placeholder")}</option>
+              <option value="bulk_filtered">{t("items.bulkRead.filtered")}</option>
+              <option value="bulk_older">{t("items.bulkRead.olderThan7d")}</option>
+            </select>
+            <button
+              type="button"
+              disabled={!toolbarAction || bulkMarkingRead}
+              onClick={onToolbarRun}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {bulkMarkingRead ? t("common.saving") : t("items.actions.run")}
+            </button>
+          </div>
         </div>
       )}
 
-      {!focusMode && topic && (
-        <div className="inline-flex max-w-full items-center gap-2 self-start rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs text-blue-800">
-          <span className="truncate font-medium">{t("items.topic")}: {topic}</span>
-          <button
-            type="button"
-            onClick={onTopicClear}
-            className="rounded px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-100 press"
-          >
-            {t("items.clear")}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

@@ -33,16 +33,16 @@ export default function Pagination({
   if (total <= pageSize) return null;
 
   return (
-    <div className={`flex flex-wrap items-center justify-between gap-2 ${className ?? ""}`}>
-      <div className="text-xs text-zinc-500">
+    <div className={`max-w-full overflow-x-hidden flex flex-wrap items-center justify-between gap-2 ${className ?? ""}`}>
+      <div className="text-xs uppercase tracking-[0.12em] text-[var(--color-editorial-ink-faint)]">
         {total.toLocaleString()} {t("common.rows")}
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex max-w-full flex-wrap items-center gap-1 sm:flex-nowrap">
         <button
           type="button"
           onClick={() => onPageChange(current - 1)}
           disabled={current <= 1}
-          className="rounded border border-zinc-300 bg-white px-2.5 py-1 text-xs text-zinc-700 disabled:opacity-40"
+          className="rounded-full border border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-3 py-1.5 text-xs text-[var(--color-editorial-ink-soft)] disabled:opacity-40"
         >
           {t("common.prev")}
         </button>
@@ -51,10 +51,10 @@ export default function Pagination({
             key={p}
             type="button"
             onClick={() => onPageChange(p)}
-            className={`rounded px-2.5 py-1 text-xs ${
+            className={`rounded-full px-3 py-1.5 text-xs ${
               p === current
-                ? "bg-zinc-900 text-white"
-                : "border border-zinc-300 bg-white text-zinc-700"
+                ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                : "border border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)]"
             }`}
           >
             {p}
@@ -64,11 +64,11 @@ export default function Pagination({
           type="button"
           onClick={() => onPageChange(current + 1)}
           disabled={current >= totalPages}
-          className="rounded border border-zinc-300 bg-white px-2.5 py-1 text-xs text-zinc-700 disabled:opacity-40"
+          className="rounded-full border border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-3 py-1.5 text-xs text-[var(--color-editorial-ink-soft)] disabled:opacity-40"
         >
           {t("common.next")}
         </button>
-        <span className="ml-2 text-xs text-zinc-500">
+        <span className="ml-0 w-full pt-1 text-xs uppercase tracking-[0.12em] text-[var(--color-editorial-ink-faint)] sm:ml-2 sm:w-auto sm:pt-0">
           {t("common.page")} {current}/{totalPages}
         </span>
       </div>

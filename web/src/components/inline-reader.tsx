@@ -1,6 +1,7 @@
 "use client";
 
 import { type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { api, ItemDetail } from "@/lib/api";
@@ -42,6 +43,7 @@ export function InlineReader({
   const [feedbackUpdating, setFeedbackUpdating] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [dragY, setDragY] = useState(0);
+  const [mounted, setMounted] = useState(false);
   const startYRef = useRef<number | null>(null);
   const startAtRef = useRef<number>(0);
   const lastMoveAtRef = useRef<number>(0);
@@ -74,6 +76,11 @@ export function InlineReader({
   const error =
     (detailQuery.error ? String(detailQuery.error) : null) ??
     (relatedQuery.error ? String(relatedQuery.error) : null);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   async function toggleRead(current: ItemDetail) {
     if (!canMarkRead) return;
@@ -269,15 +276,15 @@ export function InlineReader({
     resetDrag();
   };
 
-  if (!open || !itemId) return null;
+  if (!open || !itemId || !mounted) return null;
 
   const feedbackRating = (item?.feedback?.rating ?? item?.feedback_rating ?? 0) as -1 | 0 | 1;
   const isFavorite = Boolean(item?.feedback?.is_favorite ?? item?.is_favorite ?? false);
 
-  return (
-    <div className="fixed inset-0 z-40 bg-black/35" onClick={onClose}>
+  return createPortal(
+    <div className="fixed inset-0 z-40 bg-[rgba(18,14,11,0.52)] backdrop-blur-[3px]" onClick={onClose}>
       <div
-        className={`absolute inset-x-0 inset-y-0 w-full overflow-x-hidden overflow-y-auto overscroll-y-contain bg-white shadow-2xl will-change-transform md:left-auto md:right-0 md:max-w-3xl md:border-l md:border-zinc-200 ${
+        className={`absolute inset-x-0 inset-y-0 z-[61] w-full overflow-x-hidden overflow-y-auto overscroll-y-contain border-l border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] opacity-100 shadow-[0_24px_60px_rgba(28,20,14,0.24)] will-change-transform md:left-auto md:right-0 md:max-w-[72rem] ${
           dragging ? "transition-none" : "transition-transform duration-200 ease-out"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -295,23 +302,23 @@ export function InlineReader({
           <span
             className={`rounded-full transition-all duration-150 ${
               dragging
-                ? "h-1.5 w-16 bg-zinc-500 shadow-[0_0_0_4px_rgba(113,113,122,0.12)]"
-                : "h-1.5 w-12 bg-zinc-300"
+                ? "h-1.5 w-16 bg-[var(--color-editorial-line-strong)] shadow-[0_0_0_4px_rgba(128,108,88,0.14)]"
+                : "h-1.5 w-12 bg-[var(--color-editorial-line)]"
             }`}
           />
         </div>
 
-        {loading && <p className="p-5 text-sm text-zinc-500 sm:p-6">{t("common.loading")}</p>}
-        {error && <p className="p-5 text-sm text-red-500 sm:p-6">{error}</p>}
-        {!loading && !item && <p className="p-5 text-sm text-zinc-500 sm:p-6">{t("common.noData")}</p>}
+        {loading && <p className="p-5 text-sm text-[var(--color-editorial-ink-soft)] sm:p-6">{t("common.loading")}</p>}
+        {error && <p className="p-5 text-sm text-[var(--color-editorial-error)] sm:p-6">{error}</p>}
+        {!loading && !item && <p className="p-5 text-sm text-[var(--color-editorial-ink-soft)] sm:p-6">{t("common.noData")}</p>}
 
         {item && (
           <>
             {/* Header: title + URL + close */}
-            <div className="border-b border-zinc-200 px-5 pb-5 pt-3 sm:p-6">
+            <div className="border-b border-[var(--color-editorial-line)] px-5 pb-5 pt-3 sm:p-6">
               <div className="mb-2 flex items-center justify-between gap-3">
                 {item.source_title ? (
-                  <div className="min-w-0 text-xs font-medium tracking-[0.08em] text-zinc-500">
+                  <div className="min-w-0 text-xs font-medium uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
                     {item.source_title}
                   </div>
                 ) : (
@@ -320,35 +327,35 @@ export function InlineReader({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="shrink-0 rounded border border-zinc-300 bg-white p-1 text-zinc-700 hover:bg-zinc-50 press focus-ring"
+                  className="shrink-0 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-2 text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] press focus-ring"
                   aria-label={t("common.close")}
                 >
                   <X className="size-4" aria-hidden="true" />
                 </button>
               </div>
-              <h3 className="text-2xl font-bold leading-snug text-zinc-900">
+              <h3 className="text-2xl font-bold leading-snug text-[var(--color-editorial-ink)] sm:text-[30px]">
                 {item.translated_title || item.title || item.url}
               </h3>
               <a
                 href={item.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-2 block break-all text-[13px] text-blue-600 hover:underline"
+                className="mt-2 block break-all text-[13px] text-[var(--color-editorial-accent)] hover:underline"
               >
                 {item.url}
               </a>
-              <div className="mt-1 text-xs text-zinc-500">
+              <div className="mt-1 text-xs text-[var(--color-editorial-ink-faint)]">
                 {new Date(item.published_at ?? item.created_at).toLocaleString(locale === "ja" ? "ja-JP" : "en-US")}
               </div>
             </div>
 
             {/* Primary actions + feedback (outside tabs) */}
-            <div className="space-y-3 border-b border-zinc-200 p-5 sm:p-6">
+            <div className="space-y-3 border-b border-[var(--color-editorial-line)] p-5 sm:p-6">
               {nextQueueItemId && (
                 <button
                   type="button"
                   onClick={() => (onOpenItem ? onOpenItem(nextQueueItemId) : onOpenDetail(nextQueueItemId))}
-                  className="flex w-full items-center justify-center gap-2 rounded-[14px] bg-zinc-900 px-4 py-[14px] text-[15px] font-semibold text-white hover:bg-zinc-800 press focus-ring"
+                  className="flex w-full items-center justify-center gap-2 rounded-[16px] bg-[var(--color-editorial-ink)] px-4 py-[14px] text-[15px] font-semibold text-[var(--color-editorial-panel-strong)] hover:opacity-90 press focus-ring"
                 >
                   <span>{t("itemDetail.next")}</span>
                   <span className="text-lg">→</span>
@@ -359,7 +366,11 @@ export function InlineReader({
                   <button
                     type="button"
                     onClick={() => void toggleRead(item)}
-                    className="min-h-10 rounded-[14px] border border-zinc-300 bg-white px-3 py-[10px] text-[14px] font-medium text-zinc-700 hover:bg-zinc-50"
+                    className={`min-h-10 rounded-full px-3 py-[10px] text-[14px] font-medium ${
+                      item.is_read
+                        ? "border border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+                        : "border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)] hover:opacity-90"
+                    }`}
                   >
                     {item.is_read ? t("items.action.markUnread") : t("items.action.markRead")}
                   </button>
@@ -367,7 +378,7 @@ export function InlineReader({
                 <button
                   type="button"
                   onClick={() => onOpenDetail(item.id)}
-                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-[14px] border border-zinc-300 bg-white px-3 py-[10px] text-[14px] font-medium text-zinc-700 hover:bg-zinc-50 ${
+                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-full border border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-3 py-[10px] text-[14px] font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] ${
                     canMarkRead ? "" : "col-span-2"
                   }`}
                 >
@@ -384,10 +395,10 @@ export function InlineReader({
                       rating: feedbackRating === 1 ? 0 : 1,
                     })
                   }
-                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-[12px] border p-3 text-sm font-medium transition-colors ${
+                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-full border p-3 text-sm font-medium transition-colors ${
                     feedbackRating === 1
-                      ? "border-green-200 bg-green-50 text-green-700"
-                      : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                      ? "border-[var(--color-editorial-success-line)] bg-[var(--color-editorial-success-soft)] text-[var(--color-editorial-success)]"
+                      : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
                   }`}
                 >
                   <ThumbsUp className="size-[18px]" aria-hidden="true" />
@@ -401,10 +412,10 @@ export function InlineReader({
                       rating: feedbackRating === -1 ? 0 : -1,
                     })
                   }
-                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-[12px] border p-3 text-sm font-medium transition-colors ${
+                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-full border p-3 text-sm font-medium transition-colors ${
                     feedbackRating === -1
-                      ? "border-rose-200 bg-rose-50 text-rose-700"
-                      : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                      ? "border-[var(--color-editorial-error-line)] bg-[var(--color-editorial-error-soft)] text-[var(--color-editorial-error)]"
+                      : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
                   }`}
                 >
                   <ThumbsDown className="size-[18px]" aria-hidden="true" />
@@ -418,10 +429,10 @@ export function InlineReader({
                       is_favorite: !isFavorite,
                     })
                   }
-                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-[12px] border p-3 text-sm font-medium transition-colors ${
+                  className={`inline-flex min-h-10 items-center justify-center gap-1 rounded-full border p-3 text-sm font-medium transition-colors ${
                     isFavorite
-                      ? "border-amber-200 bg-amber-50 text-amber-700"
-                      : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                      ? "border-[var(--color-editorial-accent-line)] bg-[var(--color-editorial-accent-soft)] text-[var(--color-editorial-accent)]"
+                      : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
                   }`}
                 >
                   <Star className={`size-[18px] ${isFavorite ? "fill-current" : ""}`} aria-hidden="true" />
@@ -448,40 +459,40 @@ export function InlineReader({
                       faithfulnessResult={item.faithfulness?.final_result}
                       t={t}
                     />
-                    <p className="mt-3 whitespace-pre-wrap text-base leading-[1.8] text-zinc-800">
+                    <p className="mt-3 whitespace-pre-wrap text-base leading-[1.8] text-[var(--color-editorial-ink)]">
                       {item.summary.summary}
                     </p>
                   </div>
                 ) : (
-                  <p className="text-base text-zinc-500">{t("common.noData")}</p>
+                  <p className="text-base text-[var(--color-editorial-ink-faint)]">{t("common.noData")}</p>
                 )}
               </TabPanel>
 
               <TabPanel value="facts" className="px-5 py-7 sm:px-6">
                 {item.facts && item.facts.facts.length > 0 ? (
-                  <ul className="list-disc space-y-2 pl-5 text-base leading-[1.8] text-zinc-800">
+                  <ul className="list-disc space-y-2 pl-5 text-base leading-[1.8] text-[var(--color-editorial-ink)]">
                     {item.facts.facts.map((f, idx) => (
                       <li key={`${item.id}-fact-${idx}`}>{f}</li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-base text-zinc-500">{t("common.noData")}</p>
+                  <p className="text-base text-[var(--color-editorial-ink-faint)]">{t("common.noData")}</p>
                 )}
               </TabPanel>
 
               <TabPanel value="body" className="px-5 py-7 sm:px-6">
                 {item.content_text ? (
-                  <div className="whitespace-pre-wrap text-base leading-[1.8] max-w-prose text-zinc-800">
+                  <div className="max-w-prose whitespace-pre-wrap text-base leading-[1.8] text-[var(--color-editorial-ink)]">
                     {item.content_text}
                   </div>
                 ) : (
-                  <p className="text-base text-zinc-500">{t("tabs.bodyUnavailable")}</p>
+                  <p className="text-base text-[var(--color-editorial-ink-faint)]">{t("tabs.bodyUnavailable")}</p>
                 )}
               </TabPanel>
 
               <TabPanel value="related" className="px-5 py-7 sm:px-6">
                 {related.length === 0 ? (
-                  <p className="text-base text-zinc-500">{t("itemDetail.relatedEmpty")}</p>
+                  <p className="text-base text-[var(--color-editorial-ink-faint)]">{t("itemDetail.relatedEmpty")}</p>
                 ) : (
                   <ul className="space-y-2">
                     {related.map((r) => (
@@ -489,7 +500,7 @@ export function InlineReader({
                         <button
                           type="button"
                           onClick={() => (onOpenItem ? onOpenItem(r.id) : onOpenDetail(r.id))}
-                          className="w-full truncate rounded-[14px] border border-zinc-200 px-4 py-3 text-left text-base text-zinc-700 hover:bg-zinc-50"
+                          className="w-full truncate rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3 text-left text-base text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
                           title={r.title || r.url}
                         >
                           {r.title || r.url}
@@ -503,8 +514,8 @@ export function InlineReader({
               <TabPanel value="notes" className="px-5 py-7 sm:px-6">
                 <div className="space-y-3">
                   <div>
-                    <h4 className="text-base font-semibold text-zinc-800">{t("itemDetail.savedNotes")}</h4>
-                    <p className="mt-1 text-sm text-zinc-500">{t("itemDetail.savedNotesDesc")}</p>
+                    <h4 className="text-base font-semibold text-[var(--color-editorial-ink)]">{t("itemDetail.savedNotes")}</h4>
+                    <p className="mt-1 text-sm text-[var(--color-editorial-ink-faint)]">{t("itemDetail.savedNotesDesc")}</p>
                   </div>
                   <div className="grid items-stretch gap-4 lg:grid-cols-2">
                     <ItemNoteEditor key={item.id} note={item.note ?? null} onSave={(content) => saveNote(item, content)} />
@@ -520,6 +531,7 @@ export function InlineReader({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

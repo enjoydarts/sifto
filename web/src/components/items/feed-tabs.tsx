@@ -19,17 +19,17 @@ export function FeedTabs({
   ];
 
   return (
-    <div className="grid w-full grid-cols-[0.95fr_1.2fr_0.9fr_1fr_0.95fr] gap-1 rounded-lg border border-zinc-200 bg-white p-0.5">
+    <div className="flex w-full gap-1 overflow-x-auto rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-1 sm:grid sm:grid-cols-[0.95fr_1.2fr_0.9fr_1fr_0.95fr] sm:overflow-visible">
       {tabs.map(({ value, labelKey }) => (
         <button
           key={value}
           type="button"
           onClick={() => onSelect(value)}
           aria-pressed={feedMode === value}
-          className={`inline-flex min-h-8 items-center justify-center whitespace-nowrap rounded-md px-1 py-1.5 text-[12px] font-medium transition-all duration-150 press focus-ring sm:px-2 sm:text-sm ${
+          className={`inline-flex min-h-9 shrink-0 items-center justify-center whitespace-nowrap rounded-[12px] px-3 py-1.5 text-[12px] font-medium transition-all duration-150 press focus-ring sm:min-w-0 sm:px-2 sm:text-sm ${
             feedMode === value
-              ? "bg-zinc-900 text-white shadow-sm"
-              : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"
+              ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)] shadow-sm"
+              : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
           }`}
         >
           {t(labelKey)}

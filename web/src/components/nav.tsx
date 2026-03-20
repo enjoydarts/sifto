@@ -160,7 +160,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   return (
     <>
       <header className="sticky top-0 z-20 border-b border-zinc-200/80 bg-white/95 shadow-[0_1px_3px_rgba(0,0,0,0.04)] backdrop-blur">
-        <div className="mx-auto max-w-6xl px-4 py-3">
+        <div className="mx-auto max-w-[1360px] px-4 py-3 md:px-6">
           <div className="flex min-h-12 items-center gap-3">
             <Link href="/" className="flex items-center gap-2 press focus-ring rounded">
               <Image src="/logo.png" alt="Sifto" width={32} height={32} priority />
@@ -350,7 +350,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
         </div>
         {openRouterSyncRun ? (
           <div className="border-t border-amber-200 bg-amber-50/95">
-            <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 text-xs text-amber-900">
+            <div className="mx-auto flex max-w-[1360px] items-center justify-between gap-3 px-4 py-2 text-xs text-amber-900 md:px-6">
               <Link href="/openrouter-models" className="inline-flex min-w-0 items-center gap-2 rounded hover:underline">
                 <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
                 <span className="truncate">

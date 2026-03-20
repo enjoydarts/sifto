@@ -6,16 +6,21 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCheck, Newspaper, Search, X } from "lucide-react";
 import { api, Item } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
-import Pagination from "@/components/pagination";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import { InlineReader } from "@/components/inline-reader";
 import { PageTransition } from "@/components/page-transition";
-import { EmptyState } from "@/components/empty-state";
-import { SkeletonItemRow } from "@/components/skeleton";
 import { FiltersBar } from "@/components/items/filters-bar";
 import { ItemCard } from "@/components/items/item-card";
 import { FeedTabs, type FeedMode, type SortMode } from "@/components/items/feed-tabs";
+import { ItemsSummaryStrip } from "@/components/items/items-summary-strip";
+import { ItemsListState } from "@/components/items/items-list-state";
+import { DenseArticleList } from "@/components/items/dense-article-list";
+import { PageHeader } from "@/components/ui/page-header";
+import { FilterBar } from "@/components/ui/filter-bar";
+import { SectionCard } from "@/components/ui/section-card";
+import { Tag } from "@/components/ui/tag";
+import { SkeletonList } from "@/components/ui/skeleton-list";
 
 const FILTERS = ["", "summarized", "pending", "new", "fetched", "facts_extracted", "failed", "deleted"] as const;
 type ItemsFeedQueryData = {
@@ -210,7 +215,7 @@ function ItemsPageContent() {
     if (!pendingMode && !deletedMode && (unreadOnly || laterMode)) q.set("unread", "1");
     if (!pendingMode && !deletedMode && favoriteOnly) q.set("favorite", "1");
     return q.toString();
-  }, [deletedMode, favoriteOnly, feedMode, filter, page, pendingMode, searchQuery, sortMode, sourceID, topic, unreadOnly]);
+  }, [deletedMode, favoriteOnly, feedMode, filter, laterMode, page, pendingMode, searchQuery, sortMode, sourceID, topic, unreadOnly]);
 
   const submitSearch = useCallback(() => {
     replaceItemsQuery({ q: searchDraft.trim(), page: 1 });
@@ -406,6 +411,39 @@ function ItemsPageContent() {
     () => sortedItems.find((item) => item.id === inlineItemId)?.status ?? null,
     [inlineItemId, sortedItems]
   );
+  const visibleUnreadCount = useMemo(() => sortedItems.filter((item) => !item.is_read).length, [sortedItems]);
+  const visibleReadCount = useMemo(() => sortedItems.filter((item) => item.is_read).length, [sortedItems]);
+  const visibleRetryCount = useMemo(() => sortedItems.filter((item) => item.status === "failed").length, [sortedItems]);
+  const summaryMetrics = useMemo(
+    () => [
+      {
+        key: "results",
+        label: t("items.kpi.results"),
+        value: itemsTotal.toLocaleString(),
+        hint: t("items.state.summaryResultsHint"),
+      },
+      {
+        key: "unread",
+        label: t("items.kpi.unreadVisible"),
+        value: visibleUnreadCount.toLocaleString(),
+        hint: t("items.state.summaryUnreadHint"),
+        tone: "accent" as const,
+      },
+      {
+        key: "read",
+        label: t("items.kpi.readVisible"),
+        value: visibleReadCount.toLocaleString(),
+        hint: t("items.state.summaryReadHint"),
+      },
+      {
+        key: "retry",
+        label: t("items.state.retryLabel"),
+        value: visibleRetryCount.toLocaleString(),
+        hint: t("items.state.summaryRetryHint"),
+      },
+    ],
+    [itemsTotal, t, visibleReadCount, visibleRetryCount, visibleUnreadCount]
+  );
 
   const pageSubtitleKey =
     feedMode === "later"
@@ -475,87 +513,158 @@ function ItemsPageContent() {
     );
   }, [detailHref, locale, prefetchItemDetail, readUpdatingIds, rememberScroll, retryItem, retryingIds, router, saveReadQueue, sortedItems, t, toggleRead]);
 
+  const railFilterTags = [
+    topic ? (
+      <Tag key="topic" tone="accent" removable onRemove={() => replaceItemsQuery({ topic: "", page: 1 })}>
+        {t("items.topic")}: {topic}
+      </Tag>
+    ) : null,
+    sourceID ? <Tag key="source">{t("items.filter.sourceApplied")}</Tag> : null,
+    searchQuery ? (
+      <Tag key="search" tone="success" removable onRemove={() => replaceItemsQuery({ q: "", page: 1 })}>
+        {t("items.search.active")}: {searchQuery}
+      </Tag>
+    ) : null,
+    filter && filter !== "pending" && filter !== "deleted" ? <Tag key="status">{t(`items.filter.${filter}`)}</Tag> : null,
+  ].filter(Boolean);
+
   return (
     <PageTransition>
-      <div className="space-y-4 pb-8">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold">
-              <Newspaper className="size-6 text-zinc-500" aria-hidden="true" />
-              <span>{t("items.title")}</span>
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              {t(pageSubtitleKey)} · {itemsTotal.toLocaleString()} {t("common.rows")}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setSearchDraft(searchQuery);
-                setSearchOpen(true);
-              }}
-              className={`inline-flex min-h-9 items-center justify-center rounded-lg border px-3 py-2 text-sm font-medium press focus-ring ${
-                searchQuery
-                  ? "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                  : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100"
-              }`}
-              aria-label={t("items.search.open")}
-            >
-              <Search className="size-4" aria-hidden="true" />
-            </button>
-            {!pendingMode && (
-              <button
-                type="button"
-                onClick={() => router.push("/triage?mode=all")}
-                className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-zinc-900 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring"
-              >
-                <CheckCheck className="size-4" aria-hidden="true" />
-                <span>{t("items.openAllTriage")}</span>
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="space-y-3 pb-8">
+        <div className="grid gap-3 xl:grid-cols-[248px_minmax(0,1fr)] xl:items-start">
+          <aside className="hidden xl:sticky xl:top-[8.5rem] xl:flex xl:self-start xl:flex-col xl:gap-4">
+            <SectionCard compact className="overflow-hidden">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
+                {t("items.rail.metrics")}
+              </div>
+              <div className="mt-3 divide-y divide-[var(--color-editorial-line)]">
+                {summaryMetrics.map((metric) => (
+                  <div key={metric.key} className="grid gap-1 py-3 first:pt-0 last:pb-0">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {metric.label}
+                    </div>
+                    <div className="text-[2rem] leading-none tracking-[-0.04em] text-[var(--color-editorial-ink)]">
+                      {metric.value}
+                    </div>
+                    <div className="text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
+                      {metric.hint}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
 
-        <section className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50/80 shadow-sm">
-          <div className="flex flex-col gap-2 px-3 py-2 xl:flex-row xl:items-center">
-            <div className="shrink-0 xl:w-[400px]">
-              <FeedTabs
-                feedMode={feedMode}
-                onSelect={(feed) => replaceItemsQuery({ feed, page: 1, unread: false })}
-                t={t}
-              />
-            </div>
-
-            <div className={`min-w-0 ${readMode ? "xl:w-[500px] xl:flex-none" : "flex-1"}`}>
-              <FiltersBar
-                feedMode={feedMode}
-                sortMode={sortMode}
-                topic={topic}
-                favoriteOnly={favoriteOnly}
-                onSortChange={(sort) => replaceItemsQuery({ sort, page: 1 })}
-                onTopicClear={() => replaceItemsQuery({ topic: "", page: 1 })}
-                onFavoriteChange={(v) => replaceItemsQuery({ favorite: v, page: 1 })}
-                t={t}
-              />
-            </div>
-
-            {!pendingMode && !readMode && (
-              <div className="flex shrink-0 items-center gap-2 xl:w-[248px] xl:justify-end">
-                <select
-                  value={toolbarAction}
-                  onChange={(e) => setToolbarAction(e.target.value as typeof toolbarAction)}
-                  className="min-h-9 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 focus-ring xl:w-[168px] xl:flex-none"
-                  aria-label={t("items.toolbar.actions")}
-                >
-                  <option value="">{t("items.actions.placeholder")}</option>
-                  <option value="bulk_filtered">{t("items.bulkRead.filtered")}</option>
-                  <option value="bulk_older">{t("items.bulkRead.olderThan7d")}</option>
-                </select>
+            <SectionCard compact>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
+                {t("items.rail.actions")}
+              </div>
+              <div className="mt-3 grid gap-2">
                 <button
                   type="button"
-                  disabled={!toolbarAction || bulkMarkingRead}
                   onClick={() => {
+                    setSearchDraft(searchQuery);
+                    setSearchOpen(true);
+                  }}
+                  className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full border px-3 py-2 text-sm font-medium press focus-ring ${
+                    searchQuery
+                      ? "border-[var(--color-editorial-accent-line)] bg-[var(--color-editorial-accent-soft)] text-[var(--color-editorial-accent)]"
+                      : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+                  }`}
+                >
+                  <Search className="size-4" aria-hidden="true" />
+                  <span>{t("items.search.open")}</span>
+                </button>
+                {!pendingMode && (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/triage?mode=all")}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 press focus-ring"
+                  >
+                    <CheckCheck className="size-4" aria-hidden="true" />
+                    <span>{t("items.openAllTriage")}</span>
+                  </button>
+                )}
+              </div>
+            </SectionCard>
+
+            {showFilterBadges && (
+              <SectionCard compact>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
+                  {t("items.rail.filters")}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">{railFilterTags}</div>
+              </SectionCard>
+            )}
+          </aside>
+
+          <div className="min-w-0 space-y-3">
+            <PageHeader
+              compact
+              className="overflow-hidden"
+              eyebrow={t("items.state.eyebrow")}
+              title={t("items.title")}
+              description={`${t(pageSubtitleKey)} · ${itemsTotal.toLocaleString()} ${t("common.rows")}`}
+              meta={(
+                <div className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
+                  <Newspaper className="size-3.5" aria-hidden="true" />
+                  <span>{t("items.state.meta")}</span>
+                </div>
+              )}
+              actions={(
+                <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:hidden">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchDraft(searchQuery);
+                      setSearchOpen(true);
+                    }}
+                    className={`inline-flex min-h-9 items-center justify-center rounded-full border px-3 py-1.5 text-sm font-medium press focus-ring ${
+                      searchQuery
+                        ? "border-[var(--color-editorial-accent-line)] bg-[var(--color-editorial-accent-soft)] text-[var(--color-editorial-accent)]"
+                        : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                    }`}
+                    aria-label={t("items.search.open")}
+                  >
+                    <Search className="size-4" aria-hidden="true" />
+                  </button>
+                  {!pendingMode && (
+                    <button
+                      type="button"
+                      onClick={() => router.push("/triage?mode=all")}
+                      className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 press focus-ring"
+                    >
+                      <CheckCheck className="size-4" aria-hidden="true" />
+                      <span>{t("items.openAllTriage")}</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            />
+
+            <div className="hidden xl:hidden">
+              <ItemsSummaryStrip metrics={summaryMetrics} />
+            </div>
+
+            <FilterBar
+              compact
+              leading={(
+                <FeedTabs
+                  feedMode={feedMode}
+                  onSelect={(feed) => replaceItemsQuery({ feed, page: 1, unread: false })}
+                  t={t}
+                />
+              )}
+              filters={(
+                <FiltersBar
+                  feedMode={feedMode}
+                  sortMode={sortMode}
+                  favoriteOnly={favoriteOnly}
+                  toolbarAction={toolbarAction}
+                  bulkMarkingRead={bulkMarkingRead}
+                  onSortChange={(sort) => replaceItemsQuery({ sort, page: 1 })}
+                  onFavoriteChange={(v) => replaceItemsQuery({ favorite: v, page: 1 })}
+                  onToolbarActionChange={setToolbarAction}
+                  onToolbarRun={() => {
                     if (toolbarAction === "bulk_filtered") {
                       void bulkMarkRead("filtered");
                       return;
@@ -564,107 +673,73 @@ function ItemsPageContent() {
                       void bulkMarkRead("older_than_7d");
                     }
                   }}
-                  className="inline-flex min-h-9 items-center justify-center rounded-lg border border-zinc-900 bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-800 press focus-ring disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {bulkMarkingRead ? t("common.saving") : t("items.actions.run")}
-                </button>
-              </div>
+                  t={t}
+                />
+              )}
+              actions={
+                !pendingMode && !readMode ? (
+                  <div className="hidden w-full flex-wrap items-center justify-end gap-2 xl:flex xl:w-auto xl:flex-nowrap">
+                    <select
+                      value={toolbarAction}
+                      onChange={(e) => setToolbarAction(e.target.value as typeof toolbarAction)}
+                      className="min-h-10 min-w-0 flex-1 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3.5 py-2 text-sm text-[var(--color-editorial-ink-soft)] focus-ring xl:w-[188px] xl:flex-none"
+                      aria-label={t("items.toolbar.actions")}
+                    >
+                      <option value="">{t("items.actions.placeholder")}</option>
+                      <option value="bulk_filtered">{t("items.bulkRead.filtered")}</option>
+                      <option value="bulk_older">{t("items.bulkRead.olderThan7d")}</option>
+                    </select>
+                    <button
+                      type="button"
+                      disabled={!toolbarAction || bulkMarkingRead}
+                      onClick={() => {
+                        if (toolbarAction === "bulk_filtered") {
+                          void bulkMarkRead("filtered");
+                          return;
+                        }
+                        if (toolbarAction === "bulk_older") {
+                          void bulkMarkRead("older_than_7d");
+                        }
+                      }}
+                      className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {bulkMarkingRead ? t("common.saving") : t("items.actions.run")}
+                    </button>
+                  </div>
+                ) : null
+              }
+            >
+              {showFilterBadges ? <div className="flex flex-wrap items-center gap-2">{railFilterTags}</div> : null}
+            </FilterBar>
+
+            {loading || items.length === 0 || !!visibleError ? (
+              <ItemsListState
+                loading={loading}
+                error={visibleError}
+                isSearchActive={Boolean(searchQuery)}
+                hasFilters={Boolean(topic || sourceID || (filter && filter !== "pending"))}
+                isPendingMode={pendingMode}
+                onRetry={() => {
+                  setError(null);
+                  void queryClient.invalidateQueries({ queryKey: listQueryKey });
+                }}
+                onResetFilters={() => replaceItemsQuery({ q: "", topic: "", sourceId: "", status: "", page: 1, favorite: false })}
+                t={t}
+              />
+            ) : (
+              <DenseArticleList
+                sections={dateSections.map((section) => ({
+                  date: section.date,
+                  items: section.items.map((item, idx) => renderItem(item, { animIdx: idx })),
+                }))}
+                total={itemsTotal}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={(nextPage) => replaceItemsQuery({ page: nextPage })}
+              />
             )}
-
           </div>
-          {showFilterBadges && (
-            <div className="border-t border-zinc-200 px-3 py-2">
-              <div className="flex flex-wrap items-center gap-2">
-                {topic && (
-                  <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs text-blue-800">
-                    <span className="font-medium">
-                      {t("items.topic")}: {topic}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => replaceItemsQuery({ topic: "", page: 1 })}
-                      className="rounded-full px-1.5 py-0.5 text-xs text-blue-700 hover:bg-blue-100 press"
-                    >
-                      {t("items.clear")}
-                    </button>
-                  </div>
-                )}
-                {sourceID && (
-                  <span className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700">
-                    {t("items.filter.sourceApplied")}
-                  </span>
-                )}
-                {searchQuery && (
-                  <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs text-emerald-800">
-                    <span className="font-medium">
-                      {t("items.search.active")}: {searchQuery}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => replaceItemsQuery({ q: "", page: 1 })}
-                      className="rounded-full px-1.5 py-0.5 text-xs text-emerald-700 hover:bg-emerald-100 press"
-                    >
-                      {t("items.clear")}
-                    </button>
-                  </div>
-                )}
-                {filter && filter !== "pending" && filter !== "deleted" && (
-                  <span className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700">
-                    {t(`items.filter.${filter}`)}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* State */}
-        {visibleError && <p className="text-sm text-red-500">{visibleError}</p>}
-
-        {loading && (
-          <ul className="list-none space-y-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <li key={i} className="list-none">
-                <SkeletonItemRow />
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {!loading && items.length === 0 && (
-          <EmptyState
-            icon={Newspaper}
-            title={t(pendingMode ? "emptyState.itemsPending.title" : "emptyState.items.title")}
-            description={t(pendingMode ? "emptyState.itemsPending.desc" : "emptyState.items.desc")}
-            action={{ label: t("emptyState.items.action"), href: "/sources" }}
-          />
-        )}
-
-        {!loading && (
-          <div className="space-y-5">
-            {dateSections.map((section) => (
-              <section key={section.date} className="space-y-2">
-                <h2 className="px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                  {section.date}
-                </h2>
-                <ul className="list-none space-y-2">
-                  {section.items.map((item, idx) => (
-                    <li key={item.id} className="min-w-0 list-none">
-                      {renderItem(item, { animIdx: idx })}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
-        )}
-
-        <Pagination
-          total={itemsTotal}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={(nextPage) => replaceItemsQuery({ page: nextPage })}
-        />
+        </div>
 
         {inlineItemId && (
           <InlineReader
@@ -790,11 +865,7 @@ export default function ItemsPage() {
   return (
     <Suspense
       fallback={
-        <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <SkeletonItemRow key={i} />
-          ))}
-        </div>
+        <SkeletonList rows={8} />
       }
     >
       <ItemsPageContent />

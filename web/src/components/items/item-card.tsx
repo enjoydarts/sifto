@@ -236,7 +236,7 @@ export function ItemCard({
             </div>
 
             <div className="hidden sm:block">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--color-editorial-ink-faint)]">
+              <div className="text-center text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--color-editorial-ink-faint)]">
                 {t("items.state.meta")}
               </div>
               <div
@@ -246,7 +246,7 @@ export function ItemCard({
               >
                 {item.personal_score != null && (
                   <div className="min-w-0 text-center">
-                    <div className="text-[10px] leading-tight text-[var(--color-editorial-ink-faint)]">
+                    <div className="text-center text-[10px] leading-tight text-[var(--color-editorial-ink-faint)]">
                       {t("items.sort.personal_score")}
                     </div>
                     <div className="mt-1 text-[20px] font-semibold leading-none tabular-nums tracking-[-0.03em] text-[var(--color-editorial-ink)]">
@@ -255,7 +255,7 @@ export function ItemCard({
                   </div>
                 )}
                 <div className="min-w-0 text-center">
-                  <div className="text-[10px] leading-tight text-[var(--color-editorial-ink-faint)]">
+                  <div className="text-center text-[10px] leading-tight text-[var(--color-editorial-ink-faint)]">
                     {t("items.sort.score")}
                   </div>
                   <div className="mt-1 text-[20px] font-semibold leading-none tabular-nums tracking-[-0.03em] text-[var(--color-editorial-ink)]">

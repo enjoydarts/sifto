@@ -7,7 +7,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Bell, BookOpen, Flame, Sparkles, X } from "lucide-react";
 import { api, BriefingCluster, Item, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
 import { ReadingGoalsPanel } from "@/components/briefing/reading-goals-panel";
-import { TodayQueue } from "@/components/briefing/today-queue";
 import { DueReviewPanel } from "@/components/reviews/due-review-panel";
 import { WeeklyReviewPanel } from "@/components/reviews/weekly-review-panel";
 import { InlineReader } from "@/components/inline-reader";
@@ -16,6 +15,8 @@ import { PageTransition } from "@/components/page-transition";
 import { EmptyState } from "@/components/empty-state";
 import { SkeletonCard } from "@/components/skeleton";
 import { useToast } from "@/components/toast-provider";
+import { SectionCard } from "@/components/ui/section-card";
+import { Tag } from "@/components/ui/tag";
 
 const EMPTY_ITEMS: Item[] = [];
 const EMPTY_CLUSTERS: BriefingCluster[] = [];
@@ -31,7 +32,6 @@ export default function BriefingPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
-  const [savingClusterId, setSavingClusterId] = useState<string | null>(null);
   const [dismissedModelUpdatesAt, setDismissedModelUpdatesAt] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const briefingQuery = useQuery({
@@ -51,12 +51,6 @@ export default function BriefingPage() {
   const readingGoalsQuery = useQuery({
     queryKey: ["reading-goals"] as const,
     queryFn: () => api.getReadingGoals(),
-    staleTime: 60_000,
-    placeholderData: (prev) => prev,
-  });
-  const settingsQuery = useQuery({
-    queryKey: ["settings"] as const,
-    queryFn: api.getSettings,
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
@@ -91,36 +85,12 @@ export default function BriefingPage() {
   }, [dismissedModelUpdatesAt, modelUpdates]);
   const highlights = data?.highlight_items ?? EMPTY_ITEMS;
   const activeGoals = readingGoalsQuery.data?.active ?? EMPTY_GOALS;
-  const readingPlanPrefs = settingsQuery.data?.reading_plan;
-  const focusWindow = readingPlanPrefs?.window ?? "24h";
-  const focusSize = readingPlanPrefs?.size ?? 15;
-  const diversifyTopics = Boolean(readingPlanPrefs?.diversify_topics ?? true);
-  const quickTriageQuery = useQuery({
-    queryKey: ["triage-queue", "quick", focusWindow, focusSize, diversifyTopics ? 1 : 0] as const,
-    queryFn: () =>
-      api.getFocusQueue({
-        window: focusWindow === "today_jst" || focusWindow === "7d" ? focusWindow : "24h",
-        size: focusSize,
-        diversify_topics: diversifyTopics,
-        exclude_later: true,
-      }),
-    staleTime: 30_000,
-    placeholderData: (prev) => prev,
-  });
   const todayQueue = todayQueueQuery.data?.items ?? EMPTY_TODAY_QUEUE;
   const reviewQueue = reviewQueueQuery.data?.items ?? EMPTY_REVIEW_QUEUE;
   const weeklyReview = (weeklyReviewQuery.data ?? null) as WeeklyReviewSnapshot | null;
-  const quickTriageCount = useMemo(
-    () => (quickTriageQuery.data?.items ?? EMPTY_ITEMS).filter((item) => !item.is_read).length,
-    [quickTriageQuery.data?.items]
-  );
   const clusters = data?.clusters ?? EMPTY_CLUSTERS;
   const unreadHighlights = useMemo(() => highlights.filter((item) => !item.is_read), [highlights]);
   const nowReading = unreadHighlights[0] ?? highlights[0] ?? null;
-  const topHighlightCards = useMemo(() => {
-    if (!nowReading) return highlights.slice(0, 4);
-    return highlights.filter((item) => item.id !== nowReading.id).slice(0, 4);
-  }, [highlights, nowReading]);
   const nextReads = useMemo(() => {
     const src = unreadHighlights.length > 0 ? unreadHighlights : highlights;
     return src.slice(1, 7);
@@ -248,72 +218,8 @@ export default function BriefingPage() {
     queryClient.setQueryData(["briefing-today", 18], next);
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["today-queue"] }),
-      queryClient.invalidateQueries({ queryKey: ["triage-queue"] }),
       queryClient.invalidateQueries({ queryKey: ["items-feed"] }),
     ]);
-  };
-
-  const saveClusterForLater = async (cluster: BriefingCluster) => {
-    const itemIds = Array.from(new Set((cluster.items ?? EMPTY_ITEMS).map((item) => item.id).filter(Boolean)));
-    if (itemIds.length === 0) {
-      showToast(t("briefing.clusterLaterEmpty"), "info");
-      return;
-    }
-    setSavingClusterId(cluster.id);
-    try {
-      const res = await api.markItemsLaterBulk({ item_ids: itemIds });
-      if (res.updated_count <= 0) {
-        showToast(t("briefing.clusterLaterEmpty"), "info");
-        return;
-      }
-      showToast(`${res.updated_count}${locale === "ja" ? "" : " "}${t("briefing.clusterLaterDone")}`, "success");
-      await refreshBriefingData();
-    } catch (e) {
-      showToast(`${t("common.error")}: ${String(e)}`, "error");
-    } finally {
-      setSavingClusterId(null);
-    }
-  };
-  const markClusterRead = async (cluster: BriefingCluster) => {
-    const itemIds = Array.from(
-      new Set((cluster.items ?? EMPTY_ITEMS).filter((item) => !item.is_read).map((item) => item.id).filter(Boolean))
-    );
-    if (itemIds.length === 0) {
-      showToast(t("briefing.clusterReadEmpty"), "info");
-      return;
-    }
-    setSavingClusterId(`read:${cluster.id}`);
-    try {
-      const res = await api.markItemsReadByIDs(itemIds);
-      if (res.updated_count <= 0) {
-        showToast(t("briefing.clusterReadEmpty"), "info");
-        return;
-      }
-      showToast(`${res.updated_count}${locale === "ja" ? "" : " "}${t("briefing.clusterReadDone")}`, "success");
-      await refreshBriefingData();
-    } catch (e) {
-      showToast(`${t("common.error")}: ${String(e)}`, "error");
-    } finally {
-      setSavingClusterId(null);
-    }
-  };
-
-  const markTodayQueueRead = async (itemId: string) => {
-    try {
-      await api.markItemRead(itemId);
-      await refreshBriefingData();
-    } catch (e) {
-      showToast(`${t("common.error")}: ${String(e)}`, "error");
-    }
-  };
-
-  const saveTodayQueueForLater = async (itemId: string) => {
-    try {
-      await api.markItemLater(itemId);
-      await refreshBriefingData();
-    } catch (e) {
-      showToast(`${t("common.error")}: ${String(e)}`, "error");
-    }
   };
 
   const markReviewDone = async (id: string) => {
@@ -338,13 +244,13 @@ export default function BriefingPage() {
     <PageTransition>
       <div className="space-y-6">
         {visibleModelUpdates.length > 0 && (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm">
+        <section className="rounded-[var(--radius-panel)] border border-[#e1cb9e] bg-[var(--warning-soft)]/70 p-4 shadow-[var(--shadow-card)]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
-              <Bell className="size-4 shrink-0 text-amber-700" aria-hidden="true" />
+              <Bell className="size-4 shrink-0 text-[var(--warning)]" aria-hidden="true" />
               <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-amber-900">{t("briefing.providerModelUpdates")}</h2>
-                <p className="text-sm text-amber-800">
+                <h2 className="font-sans text-sm font-semibold text-[var(--warning)]">{t("briefing.providerModelUpdates")}</h2>
+                <p className="font-sans text-sm text-[var(--warning)]/90">
                   {visibleModelUpdates.slice(0, 3).map((event) => `${event.provider} ${event.change_type === "added" ? "+" : "-"} ${event.model_id}`).join(" / ")}
                 </p>
               </div>
@@ -353,14 +259,14 @@ export default function BriefingPage() {
               <button
                 type="button"
                 onClick={dismissModelUpdates}
-                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 press focus-ring"
+                className="inline-flex items-center rounded-full border border-[#e1cb9e] bg-[var(--panel)] px-3 py-2 text-sm font-medium text-[var(--warning)] hover:bg-[var(--panel-strong)] press focus-ring"
               >
                 <X className="mr-1 size-4" aria-hidden="true" />
                 {t("briefing.providerModelUpdatesDismiss")}
               </button>
               <Link
                 href="/settings"
-                className="inline-flex items-center rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 press focus-ring"
+                className="inline-flex items-center rounded-full border border-[#e1cb9e] bg-[var(--panel)] px-3 py-2 text-sm font-medium text-[var(--warning)] hover:bg-[var(--panel-strong)] press focus-ring"
               >
                 {t("briefing.providerModelUpdatesOpen")}
               </Link>
@@ -369,261 +275,319 @@ export default function BriefingPage() {
         </section>
         )}
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="inline-flex items-center gap-2 text-2xl font-bold tracking-tight text-zinc-900">
-                <Sparkles className="size-6 text-blue-600" aria-hidden="true" />
-                <span>{t("briefing.title")}</span>
+        <SectionCard className="p-5 sm:p-6">
+          <div className="min-w-0">
+              <div className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-accent)]">
+                Morning Briefing
+              </div>
+              <h1 className="mt-2.5 font-serif text-[2.25rem] leading-[1.05] tracking-[-0.03em] text-[var(--color-editorial-ink)] sm:text-[2.75rem]">
+                {greetingLabel}
               </h1>
-              {briefingDateLabel ? (
-                <p className="mt-1 text-sm text-zinc-600">{briefingDateLabel}</p>
-              ) : null}
-              <p className="mt-1 text-sm text-zinc-600">
-                {`${greetingLabel}、${greetingSummary}。`}
+              <p className="mt-2.5 max-w-3xl font-sans text-[15px] leading-7 text-[var(--color-editorial-ink-soft)]">
+                {`${greetingSummary}。 ${greetingTail}`}
               </p>
-              <p className="mt-1 text-sm text-zinc-500">
-                {greetingTail}
-              </p>
-              {generatedAtLabel ? (
-                <p className="mt-1 text-xs text-zinc-500">
-                  {t("briefing.generatedAt")} {generatedAtLabel}
-                  {data?.status === "stale" ? ` · ${t("briefing.statusStale")}` : ""}
+              <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-2 font-sans text-[12px] font-medium text-[var(--color-editorial-ink-faint)]">
+                {briefingDateLabel ? <span>{briefingDateLabel}</span> : null}
+                {generatedAtLabel ? (
+                  <span>
+                    {t("briefing.generatedAt")} {generatedAtLabel}
+                    {data?.status === "stale" ? ` · ${t("briefing.statusStale")}` : ""}
+                  </span>
+                ) : null}
+              </div>
+              <div className="mt-4 grid gap-2 md:flex md:flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (nowReading) {
+                      setInlineItemId(nowReading.id);
+                      return;
+                    }
+                    router.push("/items?feed=unread&sort=newest");
+                  }}
+                  className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 press focus-ring md:w-auto"
+                >
+                  <BookOpen className="size-4" aria-hidden="true" />
+                  {t("briefing.readNow", "今すぐ読む")}
+                </button>
+                <Link
+                  href="/items?feed=unread&sort=newest"
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] press focus-ring md:w-auto"
+                >
+                  {t("briefing.hub.openInbox")}
+                </Link>
+                <Link
+                  href="/triage"
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] press focus-ring md:w-auto"
+                >
+                  {t("briefing.hub.start")}
+                </Link>
+              </div>
+              {error && <p className="mt-4 text-sm text-[var(--color-editorial-error)]">{error}</p>}
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3.5">
+                <div className="font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                  {t("briefing.hub.unread")}
+                </div>
+                <div className="mt-2.5 text-[2.1rem] leading-none tracking-[-0.04em] text-[var(--color-editorial-ink)]">
+                  {String(data?.stats.total_unread ?? 0)}
+                </div>
+                <p className="mt-1.5 font-sans text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                  {t("briefing.hub.openInbox")}
                 </p>
-              ) : null}
-            </div>
-            <div className="flex flex-col items-start gap-2 sm:items-end">
+              </div>
+              <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3.5">
+                <div className="font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                  {t("briefing.hub.queue")}
+                </div>
+                <div className="mt-2.5 text-[2.1rem] leading-none tracking-[-0.04em] text-[var(--color-editorial-ink)]">
+                  {String(nextReads.length)}
+                </div>
+                <p className="mt-1.5 font-sans text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                  {t("briefing.hub.openQueue")}
+                </p>
+              </div>
               {data?.stats.streak_days ? (
-                <div className="text-right">
-                  <div className="inline-flex items-center gap-1 text-sm font-medium text-zinc-700">
-                    <Flame className="size-4 text-amber-500" aria-hidden="true" />
-                    <span>{data.stats.streak_days}{t("briefing.kpi.streakUnit")}</span>
+                <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3.5">
+                  <div className="inline-flex items-center gap-1 font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                    <Flame className="size-3.5 text-[var(--warning)]" aria-hidden="true" />
+                    <span>Reading Streak</span>
+                  </div>
+                  <div className="mt-2.5 text-[2.1rem] leading-none tracking-[-0.04em] text-[var(--color-editorial-ink)]">
+                    {data.stats.streak_days}{t("briefing.kpi.streakUnit")}
                   </div>
                   {data.stats.streak_at_risk ? (
-                    <p className="mt-1 text-xs text-rose-700">
+                    <p className="mt-1.5 font-sans text-[13px] leading-6 text-[var(--color-editorial-error)]">
                       {t("briefing.streakRisk.prefix")}
                       {data?.stats.streak_remaining ?? 0}
                       {t("briefing.streakRisk.unit")}
                       {t("briefing.streakRisk.suffix")}
                     </p>
-                  ) : null}
+                  ) : (
+                    <p className="mt-1.5 font-sans text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                      {t("briefing.hub.start")}
+                    </p>
+                  )}
                 </div>
               ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  void api
-                    .getBriefingToday({ size: 18, cache_bust: true })
-                    .then((next) => {
-                      queryClient.setQueryData(["briefing-today", 18], next);
-                    })
-                    .catch(() => {
-                      // keep current snapshot on refresh failure
-                    });
-                }}
-                disabled={isRefreshing}
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 press focus-ring"
-              >
-                {isRefreshing ? t("briefing.refreshing") : t("common.refresh")}
-              </button>
-            </div>
           </div>
+        </SectionCard>
 
-          {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
-
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <Link
-              href="/items?feed=unread&sort=newest"
-              className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition-colors hover:border-zinc-300 hover:bg-white"
-            >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                {t("briefing.hub.unread")}
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-zinc-900">
-                {String(data?.stats.total_unread ?? 0)}
-              </p>
-              <p className="mt-1 text-sm text-zinc-500">{t("briefing.hub.openInbox")}</p>
-            </Link>
-            <Link
-              href="/items?feed=later&sort=newest"
-              className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition-colors hover:border-zinc-300 hover:bg-white"
-            >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                {t("briefing.hub.queue")}
-              </p>
-              <p className="mt-2 text-2xl font-semibold text-zinc-900">
-                {String(nextReads.length)}
-              </p>
-              <p className="mt-1 text-sm text-zinc-500">{t("briefing.hub.openQueue")}</p>
-            </Link>
-            <Link
-              href="/triage"
-              className="rounded-2xl border border-zinc-900 bg-zinc-900 p-4 text-white transition-colors hover:bg-zinc-800"
-            >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-300">
-                {t("briefing.hub.triage")}
-              </p>
-              <p className="mt-2 text-2xl font-semibold">
-                {String(quickTriageCount)}
-              </p>
-              <p className="mt-1 text-sm text-zinc-300">{t("briefing.hub.start")}</p>
-            </Link>
-          </div>
-
-          <div className="mt-5">
-            <p className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">
-              {t("briefing.nowReadingLabel", "NOW READING")}
-            </p>
-          </div>
-          {!loading && topHighlightCards.length > 0 ? (
-            <div className="mt-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.highlights")}</h2>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {topHighlightCards.map((item, idx) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setInlineItemId(item.id)}
-                    className="overflow-hidden rounded-[16px] border border-zinc-200 bg-white text-left shadow-[0_4px_12px_rgba(0,0,0,0.06)] hover:border-zinc-300 hover:bg-zinc-50"
-                  >
-                    <ThumbnailArtwork item={item} className="h-40 w-full" />
-                    <div className="p-5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
-                          {t("briefing.highlightBadge")} {idx + 1}
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_340px]">
+          <div className="grid gap-6">
+            {loading ? (
+              <SectionCard>
+                <SkeletonCard />
+              </SectionCard>
+            ) : !nowReading ? (
+              <SectionCard className="flex min-h-[420px] items-center justify-center">
+                <EmptyState
+                  icon={Sparkles}
+                  title={t("emptyState.briefing.title")}
+                  description={t("emptyState.briefing.desc")}
+                />
+              </SectionCard>
+            ) : (
+              <SectionCard className="overflow-hidden p-0">
+                <div className="grid gap-0 bg-[radial-gradient(circle_at_top_left,_rgba(143,61,37,0.08),_transparent_36%),linear-gradient(135deg,_#ffffff_0%,_#f7f3ec_52%,_#ffffff_100%)] lg:grid-cols-[minmax(0,1fr)_320px]">
+                  <div className="flex flex-col justify-between gap-6 p-6 sm:p-7">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Tag tone="accent">{t("briefing.highlightBadge")} 1</Tag>
+                        <Tag>{nowReading.is_read ? t("items.read.read") : t("items.read.unread")}</Tag>
+                        <span className="font-sans text-[12px] font-medium text-[var(--color-editorial-ink-faint)]">
+                          {fmtDate(nowReading.published_at || nowReading.created_at, locale)}
                         </span>
-                        <span className="text-xs text-zinc-500">{fmtDate(item.published_at || item.created_at, locale)}</span>
                       </div>
-                      <div className="mt-3 line-clamp-3 break-words [overflow-wrap:anywhere] text-[15px] font-semibold text-zinc-900">
-                        {item.translated_title || item.title || item.url}
+                      <button
+                        type="button"
+                        onClick={() => setInlineItemId(nowReading.id)}
+                        className="mt-5 block w-full text-left"
+                      >
+                        <h2 className="line-clamp-4 break-words font-serif text-[2rem] leading-[1.18] tracking-[-0.03em] text-[var(--color-editorial-ink)] hover:underline">
+                          {nowReading.translated_title || nowReading.title || nowReading.url}
+                        </h2>
+                      </button>
+                      <p className="mt-4 line-clamp-4 font-sans text-[14px] leading-7 text-[var(--color-editorial-ink-soft)]">
+                        {nowReading.content_text?.trim() || nowReading.recommendation_reason || nowReading.url}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap gap-x-4 gap-y-2 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">
+                        <span>{nowReading.source_title || "Source"}</span>
+                        <span>{fmtDate(nowReading.published_at || nowReading.created_at, locale)}</span>
+                      </div>
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setInlineItemId(nowReading.id)}
+                          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 press focus-ring"
+                        >
+                          <BookOpen className="size-4" aria-hidden="true" />
+                          {t("briefing.readNow", "今すぐ読む")}
+                        </button>
+                        <Link
+                          href={`/items/${nowReading.id}?from=${encodeURIComponent("/items?feed=unread&sort=newest")}`}
+                          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] press focus-ring"
+                        >
+                          {t("items.action.openDetail")}
+                          <ArrowRight className="size-4" aria-hidden="true" />
+                        </Link>
                       </div>
                     </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {loading ? (
-            <div className="mt-3">
-              <SkeletonCard />
-            </div>
-          ) : !nowReading ? (
-            <EmptyState
-              icon={Sparkles}
-              title={t("emptyState.briefing.title")}
-              description={t("emptyState.briefing.desc")}
-            />
-          ) : (
-            <article className="mt-3 overflow-hidden rounded-[20px] border border-zinc-200 bg-white shadow-[0_4px_16px_rgba(0,0,0,0.04),0_0_0_1px_rgba(0,0,0,0.02)]">
-              <div className="grid gap-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_34%),linear-gradient(135deg,_#ffffff_0%,_#f8fafc_52%,_#ffffff_100%)] md:grid-cols-[1fr_1.2fr]">
-                <div className="flex flex-col justify-between p-[28px]">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                      <span className="rounded-full bg-blue-100 px-2.5 py-1 font-semibold text-blue-700">
-                        {t("briefing.highlightBadge")} 1
-                      </span>
-                      <span className="rounded-full border border-zinc-300 bg-white px-2 py-0.5">
-                        {nowReading.is_read ? t("items.read.read") : t("items.read.unread")}
-                      </span>
-                      <span>{fmtDate(nowReading.published_at || nowReading.created_at, locale)}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setInlineItemId(nowReading.id)}
-                      className="mt-4 block w-full text-left"
-                    >
-                      <h2 className="line-clamp-4 break-words [overflow-wrap:anywhere] text-[28px] font-bold leading-[1.25] text-zinc-950 hover:underline md:text-[2rem]">
-                        {nowReading.translated_title || nowReading.title || nowReading.url}
-                      </h2>
-                    </button>
-                    <p className="mt-3 line-clamp-2 break-all text-sm text-zinc-500" title={nowReading.url}>
-                      {nowReading.url}
-                    </p>
                   </div>
-                  <div className="mt-5 flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setInlineItemId(nowReading.id)}
-                      className="inline-flex items-center gap-1 rounded-[12px] bg-zinc-950 px-[24px] py-[12px] text-[15px] font-semibold text-white hover:bg-zinc-800 press focus-ring"
-                    >
-                      <BookOpen className="size-4" aria-hidden="true" />
-                      {t("briefing.readNow", "今すぐ読む")}
-                    </button>
-                    <Link
-                      href={`/items/${nowReading.id}?from=${encodeURIComponent("/items?feed=unread&sort=newest")}`}
-                      className="inline-flex items-center gap-1 rounded-[12px] border border-zinc-300 bg-white px-[24px] py-[12px] text-[15px] font-semibold text-zinc-700 hover:bg-zinc-50 press focus-ring"
-                    >
-                      {t("items.action.openDetail")}
-                      <ArrowRight className="size-4" aria-hidden="true" />
-                    </Link>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setInlineItemId(nowReading.id)}
-                  className="group relative min-h-[240px] overflow-hidden border-t border-zinc-200 md:min-h-full md:border-l md:border-t-0"
-                >
-                  <ThumbnailArtwork item={nowReading} className="h-full min-h-[240px] w-full md:min-h-[280px]" />
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/5 to-transparent opacity-80 transition-opacity group-hover:opacity-100" />
-                </button>
-              </div>
-            </article>
-          )}
-
-          <div className="mt-5 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.nextReads", "Next Up")}</h2>
-            <Link href="/items?feed=unread&sort=newest" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
-              {t("briefing.openRecommended")}
-            </Link>
-          </div>
-          {loading ? (
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </div>
-          ) : nextReads.length === 0 ? (
-            <p className="mt-2 text-sm text-zinc-500">{t("briefing.emptyHighlights", "次に読む記事はありません。")}</p>
-          ) : (
-            <ul className="mt-3 space-y-3">
-              {nextReads.map((item) => (
-                <li key={item.id}>
                   <button
                     type="button"
-                    onClick={() => setInlineItemId(item.id)}
-                    className="grid w-full grid-cols-[120px_1fr] gap-3 rounded-[16px] border border-zinc-200 bg-white p-4 text-left shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:border-zinc-300 hover:bg-zinc-50"
+                    onClick={() => setInlineItemId(nowReading.id)}
+                    className="group relative min-h-[260px] overflow-hidden border-t border-[var(--color-editorial-line)] lg:border-l lg:border-t-0"
                   >
-                    <ThumbnailArtwork item={item} className="h-20 w-full rounded-xl" />
-                    <div className="min-w-0">
-                      <div className="line-clamp-2 break-words [overflow-wrap:anywhere] text-[15px] font-semibold text-zinc-900">
-                        {item.translated_title || item.title || item.url}
-                      </div>
-                      <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
-                        <span>{item.is_read ? t("items.read.read") : t("items.read.unread")}</span>
-                        <span>{fmtDate(item.published_at || item.created_at, locale)}</span>
-                      </div>
-                    </div>
+                    <ThumbnailArtwork item={nowReading} className="h-full min-h-[260px] w-full" />
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent opacity-75 transition-opacity group-hover:opacity-100" />
                   </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+                </div>
+              </SectionCard>
+            )}
+
+            <SectionCard>
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <div className="font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                    {t("briefing.nowReadingLabel", "NOW READING")}
+                  </div>
+                  <h2 className="mt-2 font-serif text-[1.6rem] leading-[1.15] tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                    {t("briefing.nextReads", "Next Up")}
+                  </h2>
+                </div>
+                <Link href="/items?feed=unread&sort=newest" className="text-[12px] font-semibold text-[var(--color-editorial-ink-faint)] hover:text-[var(--color-editorial-ink)]">
+                  {t("briefing.openRecommended")}
+                </Link>
+              </div>
+              {loading ? (
+                <div className="mt-4 grid gap-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <SkeletonCard key={i} />
+                  ))}
+                </div>
+              ) : nextReads.length === 0 ? (
+                <p className="mt-4 text-sm text-[var(--color-editorial-ink-soft)]">{t("briefing.emptyHighlights", "次に読む記事はありません。")}</p>
+              ) : (
+                <ul className="mt-5 grid gap-4">
+                  {nextReads.slice(0, 4).map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        onClick={() => setInlineItemId(item.id)}
+                        className="grid w-full gap-4 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4 text-left hover:bg-[var(--color-editorial-panel)] md:grid-cols-[122px_minmax(0,1fr)]"
+                      >
+                        <ThumbnailArtwork item={item} className="h-[180px] w-full rounded-[14px] md:h-[92px]" />
+                        <div className="min-w-0">
+                          <h3 className="line-clamp-2 break-words font-serif text-[1.05rem] font-semibold leading-[1.35] text-[var(--color-editorial-ink)]">
+                            {item.translated_title || item.title || item.url}
+                          </h3>
+                          <p className="mt-2 line-clamp-2 font-sans text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                            {item.content_text?.trim() || item.recommendation_reason || item.url}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">
+                            <span>{item.source_title || "Source"}</span>
+                            <span>{fmtDate(item.published_at || item.created_at, locale)}</span>
+                          </div>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </SectionCard>
+          </div>
+
+          <aside className="grid gap-6 self-start">
+            <SectionCard>
+              <div className="font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                Today Queue
+              </div>
+              <h2 className="mt-2 font-serif text-[1.45rem] leading-[1.15] tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                {t("briefing.todayQueue.title")}
+              </h2>
+              <p className="mt-2 font-sans text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                {t("briefing.todayQueue.subtitle")}
+              </p>
+              {todayQueue.length === 0 ? (
+                <p className="mt-4 text-sm text-[var(--color-editorial-ink-soft)]">{t("briefing.emptyHighlights", "次に読む記事はありません。")}</p>
+              ) : (
+                <div className="mt-4 grid gap-3">
+                  {todayQueue.slice(0, 3).map((entry, index) => (
+                    <article key={entry.item.id} className="overflow-hidden rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]">
+                      <button type="button" onClick={() => setInlineItemId(entry.item.id)} className="block w-full text-left">
+                        <ThumbnailArtwork item={entry.item} className="h-[168px] w-full" />
+                        <div className="p-4">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                            <span>{t("briefing.todayQueue.rank")} {index + 1}</span>
+                            <span>{entry.estimated_reading_minutes}{t("briefing.todayQueue.minutes")}</span>
+                          </div>
+                          <h3 className="mt-2 line-clamp-2 break-words font-serif text-[1rem] font-semibold leading-[1.35] text-[var(--color-editorial-ink)] hover:underline">
+                            {entry.item.translated_title || entry.item.title || entry.item.url}
+                          </h3>
+                          <p className="mt-2 line-clamp-3 font-sans text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                            {entry.reason_labels.map((reason) => {
+                              if (reason === "priority goal") return t("briefing.todayQueue.reason.goal");
+                              if (reason === "fresh") return t("briefing.todayQueue.reason.fresh");
+                              if (reason === "attention") return t("briefing.todayQueue.reason.attention");
+                              return reason;
+                            }).join(" / ")}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                        {(entry.matched_goals ?? []).slice(0, 2).map((goal) => (
+                          <Tag key={goal.id} tone="warning">{goal.title}</Tag>
+                        ))}
+                        <Tag>{entry.estimated_reading_minutes}{t("briefing.todayQueue.minutes")}</Tag>
+                          </div>
+                        </div>
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </SectionCard>
+
+            <SectionCard>
+              <div className="font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                Cluster Watch
+              </div>
+              <h2 className="mt-2 font-serif text-[1.45rem] leading-[1.15] tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                あとで見るテーマ
+              </h2>
+              {clusterRows.length === 0 ? (
+                <p className="mt-4 text-sm text-[var(--color-editorial-ink-soft)]">{t("briefing.emptyClusters")}</p>
+              ) : (
+                <div className="mt-4 grid gap-3">
+                  {clusterRows.slice(0, 2).map((cluster) => (
+                    <article key={cluster.id} className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <h3 className="font-serif text-[1rem] font-semibold leading-[1.35] text-[var(--color-editorial-ink)]">
+                        {cluster.label || t("briefing.clusterFallback")}
+                      </h3>
+                      {cluster.summary ? (
+                        <p className="mt-2 font-sans text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">{cluster.summary}</p>
+                      ) : null}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Tag>{cluster.items.length} items</Tag>
+                        {cluster.topItems[0]?.source_title ? <Tag>{cluster.topItems[0].source_title}</Tag> : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+              <div className="mt-4 flex justify-end">
+                <Link href="/clusters" className="text-[12px] font-semibold text-[var(--color-editorial-ink-faint)] hover:text-[var(--color-editorial-ink)]">
+                  {t("briefing.openClusters")}
+                </Link>
+              </div>
+            </SectionCard>
+          </aside>
+        </div>
 
         <ReadingGoalsPanel goals={activeGoals} />
-
-        <TodayQueue
-          items={todayQueue}
-          onOpen={setInlineItemId}
-          onRead={(itemId) => {
-            void markTodayQueueRead(itemId);
-          }}
-          onLater={(itemId) => {
-            void saveTodayQueueForLater(itemId);
-          }}
-        />
 
         <DueReviewPanel
           items={reviewQueue}
@@ -637,88 +601,6 @@ export default function BriefingPage() {
         />
 
         <WeeklyReviewPanel review={weeklyReview} />
-
-        <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-zinc-900">{t("briefing.clusters")}</h2>
-            <div className="flex items-center gap-3">
-              <Link href="/clusters" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
-                {t("briefing.openClusters")}
-              </Link>
-              <Link href="/items?feed=unread&sort=newest" className="text-xs text-zinc-500 hover:text-zinc-900 transition-colors">
-                {t("briefing.openRecommended")}
-              </Link>
-            </div>
-          </div>
-          {loading ? (
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </div>
-          ) : clusterRows.length === 0 ? (
-            <p className="mt-2 text-sm text-zinc-500">{t("briefing.emptyClusters")}</p>
-          ) : (
-            <div className="mt-3 grid gap-4 xl:grid-cols-2">
-              {clusterRows.slice(0, 6).map((cluster) => (
-                <section key={cluster.id} className="rounded-2xl border border-zinc-200 bg-zinc-50/50 p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="truncate text-base font-semibold text-zinc-900">
-                        {cluster.label || t("briefing.clusterFallback")}
-                      </h3>
-                      {cluster.summary ? (
-                        <p className="mt-1 line-clamp-2 text-sm text-zinc-600">{cluster.summary}</p>
-                      ) : null}
-                    </div>
-                    <span className="rounded-full border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-600">
-                      {cluster.items.length}
-                    </span>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void saveClusterForLater(cluster)}
-                      disabled={savingClusterId === cluster.id || savingClusterId === `read:${cluster.id}`}
-                      className="inline-flex items-center rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 press focus-ring disabled:cursor-wait disabled:opacity-60"
-                    >
-                      {savingClusterId === cluster.id ? t("briefing.clusterLaterSaving") : t("briefing.clusterLater")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void markClusterRead(cluster)}
-                      disabled={savingClusterId === cluster.id || savingClusterId === `read:${cluster.id}`}
-                      className="inline-flex items-center rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 press focus-ring disabled:cursor-wait disabled:opacity-60"
-                    >
-                      {savingClusterId === `read:${cluster.id}` ? t("briefing.clusterReadSaving") : t("briefing.clusterRead")}
-                    </button>
-                  </div>
-                  <ul className="mt-3 space-y-2">
-                    {cluster.topItems.map((item) => (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          onClick={() => setInlineItemId(item.id)}
-                          className="grid w-full grid-cols-[100px_1fr] gap-3 rounded-xl border border-zinc-200 bg-white p-3 text-left hover:border-zinc-300 hover:bg-zinc-50"
-                        >
-                          <ThumbnailArtwork item={item} className="h-20 w-full" />
-                          <div className="min-w-0">
-                            <div className="line-clamp-2 break-words [overflow-wrap:anywhere] text-sm font-medium text-zinc-900">
-                              {item.translated_title || item.title || item.url}
-                            </div>
-                            <div className="mt-1 text-xs text-zinc-500">
-                              {fmtDate(item.published_at || item.created_at, locale)}
-                            </div>
-                          </div>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
-          )}
-        </section>
 
         {inlineItemId && (
           <InlineReader

@@ -163,7 +163,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
         <div className="mx-auto max-w-[1360px] px-4 py-3 md:px-6 md:py-[18px]">
           <div className="flex min-h-11 items-center gap-3 lg:hidden">
             <Link href="/" className="flex items-center gap-2 rounded-full press focus-ring">
-              <Image src="/logo.png" alt="Sifto" width={32} height={32} priority />
+              <Image src="/logo-transparent.png" alt="Sifto" width={32} height={32} priority />
               <span className="font-serif text-[20px] tracking-[-0.03em] text-[var(--color-editorial-ink)]">Sifto</span>
             </Link>
 
@@ -206,7 +206,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
 
           <div className="hidden items-center gap-5 lg:flex">
             <Link href="/" className="flex min-w-[220px] items-center gap-3 rounded-full press focus-ring">
-              <Image src="/logo.png" alt="Sifto" width={38} height={38} priority />
+              <Image src="/logo-transparent.png" alt="Sifto" width={38} height={38} priority />
               <div className="flex flex-col gap-0.5">
                 <span className="font-serif text-[22px] leading-none tracking-[0.03em] text-[var(--color-editorial-ink)]">Sifto</span>
                 <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">

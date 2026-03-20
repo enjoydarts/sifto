@@ -18,7 +18,7 @@ export default function LoginForm({ showClerk }: Props) {
     <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_#ffffff,_#f4f4f5_55%,_#e4e4e7)] px-4 py-10">
       <div className="w-full max-w-lg">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <Image src="/logo.png" alt="Sifto" width={56} height={56} priority />
+          <Image src="/logo-transparent.png" alt="Sifto" width={56} height={56} priority />
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Sifto</h1>
           <p className="text-sm text-zinc-500">{t("login.subtitle")}</p>
         </div>

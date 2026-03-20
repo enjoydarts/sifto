@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sifto Briefing Front Page Mockup</title>
+    <style>
+      :root {
+        --bg: #f4f1ea;
+        --paper: #fcfbf8;
+        --paper-strong: #ffffff;
+        --paper-muted: #f0ece3;
+        --line: #d9d1c4;
+        --line-strong: #beb3a0;
+        --ink: #171412;
+        --ink-soft: #5f5750;
+        --ink-faint: #8f877f;
+        --accent: #9d3c24;
+        --accent-soft: #f3ded7;
+        --success: #245f4a;
+        --success-soft: #dfefe7;
+        --warn: #8a5a14;
+        --warn-soft: #f5ead2;
+        --shadow: 0 10px 24px rgba(35, 24, 12, 0.06);
+        --radius-xl: 22px;
+        --radius-lg: 16px;
+        --radius-md: 12px;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, rgba(157, 60, 36, 0.05), transparent 30%),
+          linear-gradient(180deg, #f8f5ee 0%, var(--bg) 100%);
+        color: var(--ink);
+        font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", Georgia, serif;
+      }
+
+      .shell {
+        max-width: 1360px;
+        margin: 0 auto;
+        padding: 28px;
+        display: grid;
+        gap: 24px;
+      }
+
+      .panel {
+        background: rgba(252, 251, 248, 0.88);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 28px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) 320px;
+        gap: 22px;
+      }
+
+      .eyebrow,
+      .section-kicker,
+      .metric-label,
+      .mini-label {
+        color: var(--ink-faint);
+        font: 700 10px/1.4 "Helvetica Neue", Arial, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+      }
+
+      .eyebrow { color: var(--accent); }
+
+      h1 {
+        margin: 12px 0 0;
+        font-size: 44px;
+        line-height: 1.06;
+        letter-spacing: -0.03em;
+      }
+
+      .lede,
+      .summary-copy,
+      .support-copy,
+      .card-copy,
+      .queue-copy,
+      .cluster-copy {
+        font-family: "Helvetica Neue", Arial, sans-serif;
+      }
+
+      .lede {
+        margin: 14px 0 0;
+        max-width: 720px;
+        color: var(--ink-soft);
+        font-size: 15px;
+        line-height: 1.8;
+      }
+
+      .hero-meta {
+        margin-top: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+        color: var(--ink-faint);
+        font: 600 12px/1.4 "Helvetica Neue", Arial, sans-serif;
+      }
+
+      .hero-actions {
+        margin-top: 20px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .btn,
+      .btn-dark {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 11px 16px;
+        background: var(--paper-strong);
+        color: var(--ink);
+        font: 600 12px/1 "Helvetica Neue", Arial, sans-serif;
+      }
+
+      .btn-dark {
+        background: var(--ink);
+        border-color: var(--ink);
+        color: var(--paper);
+      }
+
+      .hero-rail {
+        display: grid;
+        gap: 12px;
+      }
+
+      .metric-card {
+        padding: 16px 18px;
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--line);
+        background: var(--paper-strong);
+      }
+
+      .metric-card strong {
+        display: block;
+        margin-top: 10px;
+        font-size: 34px;
+        line-height: 1;
+      }
+
+      .metric-card p {
+        margin: 10px 0 0;
+        color: var(--ink-soft);
+        font: 500 13px/1.6 "Helvetica Neue", Arial, sans-serif;
+      }
+
+      .grid-main {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) 340px;
+        gap: 24px;
+        align-items: start;
+      }
+
+      .lead-column,
+      .support-column {
+        display: grid;
+        gap: 22px;
+      }
+
+      .lead-panel {
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+      }
+
+      .lead-copy {
+        padding: 28px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 18px;
+      }
+
+      .lead-status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--paper-strong);
+        color: var(--ink-soft);
+        font: 600 12px/1 "Helvetica Neue", Arial, sans-serif;
+      }
+
+      .pill.accent {
+        border-color: #d7b4a9;
+        background: var(--accent-soft);
+        color: #7f301e;
+      }
+
+      .lead-title {
+        margin: 0;
+        font-size: 34px;
+        line-height: 1.18;
+        letter-spacing: -0.03em;
+      }
+
+      .summary-copy {
+        color: var(--ink-soft);
+        font-size: 14px;
+        line-height: 1.75;
+      }
+
+      .lead-image {
+        min-height: 100%;
+        background:
+          linear-gradient(180deg, rgba(23, 20, 18, 0.02), rgba(23, 20, 18, 0.24)),
+          url("https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=1200&q=80") center/cover;
+      }
+
+      .section {
+        padding: 22px;
+      }
+
+      .section-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .section-header h2 {
+        margin: 8px 0 0;
+        font-size: 24px;
+        line-height: 1.15;
+        letter-spacing: -0.03em;
+      }
+
+      .section-link {
+        color: var(--ink-faint);
+        font: 600 12px/1.2 "Helvetica Neue", Arial, sans-serif;
+        text-decoration: none;
+      }
+
+      .next-grid {
+        margin-top: 18px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .next-card {
+        display: grid;
+        grid-template-columns: 122px minmax(0, 1fr);
+        gap: 14px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--paper-strong);
+      }
+
+      .thumb {
+        border-radius: 14px;
+        min-height: 92px;
+        background:
+          linear-gradient(180deg, rgba(23, 20, 18, 0.02), rgba(23, 20, 18, 0.16)),
+          url("https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=80") center/cover;
+      }
+
+      .next-card h3,
+      .queue-item h3,
+      .cluster-card h3 {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.35;
+        letter-spacing: -0.02em;
+      }
+
+      .meta-row {
+        margin-top: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        color: var(--ink-faint);
+        font: 600 11px/1.3 "Helvetica Neue", Arial, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .queue-list,
+      .cluster-list {
+        margin-top: 16px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .queue-item,
+      .cluster-card {
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: var(--paper-strong);
+      }
+
+      .queue-copy,
+      .cluster-copy {
+        margin: 10px 0 0;
+        color: var(--ink-soft);
+        font-size: 13px;
+        line-height: 1.65;
+      }
+
+      .queue-tags,
+      .cluster-tags {
+        margin-top: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 7px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        color: var(--ink-soft);
+        font: 600 11px/1 "Helvetica Neue", Arial, sans-serif;
+      }
+
+      .cluster-grid {
+        margin-top: 16px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .section-footer {
+        margin-top: 16px;
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      @media (max-width: 1080px) {
+        .hero,
+        .grid-main,
+        .lead-panel {
+          grid-template-columns: 1fr;
+        }
+
+        .lead-image {
+          min-height: 260px;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .shell {
+          padding: 18px;
+          gap: 18px;
+        }
+
+        .hero,
+        .section,
+        .lead-copy {
+          padding: 20px;
+        }
+
+        h1 {
+          font-size: 34px;
+        }
+
+        .lead-title {
+          font-size: 28px;
+        }
+
+        .next-card {
+          grid-template-columns: 1fr;
+        }
+
+        .thumb {
+          min-height: 180px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel hero">
+        <div>
+          <div class="eyebrow">Morning Briefing</div>
+          <h1>今日の流れを一度で掴む、<br />静かな一面トップ。</h1>
+          <p class="lede">
+            未読 34 件のうち、まず読むべき 1 本を先頭に置き、その次に進む数本を editorial front page のリズムで並べます。
+            記事一覧よりも判断の文脈を強くし、今日の読む順番を迷わせないブリーフィング面です。
+          </p>
+          <div class="hero-meta">
+            <span>2026年3月20日 金曜日</span>
+            <span>Generated 07:42</span>
+            <span>Morning window / JST</span>
+          </div>
+          <div class="hero-actions">
+            <button class="btn-dark">今すぐ読む</button>
+            <button class="btn">未読一覧を開く</button>
+            <button class="btn">トリアージを始める</button>
+          </div>
+        </div>
+        <div class="hero-rail">
+          <div class="metric-card">
+            <div class="metric-label">Unread</div>
+            <strong>34</strong>
+            <p>まず確認したい未読。今日の読む順番は下の lead と next up で案内します。</p>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Reading Streak</div>
+            <strong>12日</strong>
+            <p>継続は維持中。今日は AI agent と semiconductor 周辺の動きが強めです。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid-main">
+        <div class="lead-column">
+          <article class="panel lead-panel">
+            <div class="lead-copy">
+              <div>
+                <div class="lead-status">
+                  <span class="pill accent">Lead Story</span>
+                  <span class="pill">Unread</span>
+                  <span class="pill">Priority signal</span>
+                </div>
+                <h2 class="lead-title">OpenAI と Apple の新たな提携観測が、AIアシスタント配信面の主導権を再び押し上げる。</h2>
+                <p class="summary-copy">
+                  今日の主役記事。プロダクト統合という話に見えますが、本質は distribution と default surface の再編です。
+                  Sifto の視点では「どの AI が最終的にユーザー接点を握るか」を読むための 1 本として扱います。
+                </p>
+              </div>
+              <div>
+                <div class="meta-row">
+                  <span>The Information</span>
+                  <span>07:10 JST</span>
+                  <span>5 min read</span>
+                </div>
+                <div class="hero-actions" style="margin-top: 16px;">
+                  <button class="btn-dark">Read Now</button>
+                  <button class="btn">詳細を見る</button>
+                </div>
+              </div>
+            </div>
+            <div class="lead-image"></div>
+          </article>
+
+          <section class="panel section">
+            <div class="section-header">
+              <div>
+                <div class="section-kicker">Next Up</div>
+                <h2>次に読む 4 本</h2>
+              </div>
+              <a class="section-link" href="#">未読一覧へ</a>
+            </div>
+            <div class="next-grid">
+              <article class="next-card">
+                <div class="thumb"></div>
+                <div>
+                  <h3>NVIDIA の新 GPU ロードマップ更新が、エージェント実行コストの均衡を変える。</h3>
+                  <p class="queue-copy">コスト構造と inference cadence を見るための補助記事。lead とセットで読む価値が高い。</p>
+                  <div class="meta-row">
+                    <span>Semafor</span>
+                    <span>Fresh</span>
+                    <span>Score 0.82</span>
+                  </div>
+                </div>
+              </article>
+              <article class="next-card">
+                <div class="thumb" style="background-image: linear-gradient(180deg, rgba(23, 20, 18, 0.02), rgba(23, 20, 18, 0.16)), url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=900&q=80');"></div>
+                <div>
+                  <h3>Anthropic の enterprise 配布戦略が、B2B AI 導入の評価基準を押し替え始めている。</h3>
+                  <p class="queue-copy">プロダクト比較というより導入面の競争構造を見るための 1 本。</p>
+                  <div class="meta-row">
+                    <span>FT</span>
+                    <span>Attention</span>
+                    <span>Score 0.77</span>
+                  </div>
+                </div>
+              </article>
+              <article class="next-card">
+                <div class="thumb" style="background-image: linear-gradient(180deg, rgba(23, 20, 18, 0.02), rgba(23, 20, 18, 0.16)), url('https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80');"></div>
+                <div>
+                  <h3>Google 検索の AI answer 強化が publisher 面の traffic 依存を一段押し下げる。</h3>
+                  <p class="queue-copy">distribution side を俯瞰するための文脈記事。今日のテーマと接続しやすい。</p>
+                  <div class="meta-row">
+                    <span>The Verge</span>
+                    <span>Fresh</span>
+                    <span>Score 0.74</span>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+        </div>
+
+        <aside class="support-column">
+          <section class="panel section">
+            <div class="section-header">
+              <div>
+                <div class="section-kicker">Today Queue</div>
+                <h2>今日読む候補</h2>
+              </div>
+            </div>
+            <div class="queue-list">
+              <article class="queue-item">
+                <div class="mini-label">Rank 1</div>
+                <h3>Agent economics の再編</h3>
+                <p class="queue-copy">読む理由: priority goal / attention</p>
+                <div class="queue-tags">
+                  <span class="tag">AI infra</span>
+                  <span class="tag">5 min</span>
+                </div>
+              </article>
+              <article class="queue-item">
+                <div class="mini-label">Rank 2</div>
+                <h3>Apple distribution surface</h3>
+                <p class="queue-copy">読む理由: fresh / strategic default</p>
+                <div class="queue-tags">
+                  <span class="tag">Platform</span>
+                  <span class="tag">4 min</span>
+                </div>
+              </article>
+              <article class="queue-item">
+                <div class="mini-label">Rank 3</div>
+                <h3>Enterprise AI packaging</h3>
+                <p class="queue-copy">読む理由: matched goal / workflow impact</p>
+                <div class="queue-tags">
+                  <span class="tag">B2B</span>
+                  <span class="tag">6 min</span>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel section">
+            <div class="section-header">
+              <div>
+                <div class="section-kicker">Cluster Watch</div>
+                <h2>あとで見るテーマ</h2>
+              </div>
+            </div>
+            <div class="cluster-grid">
+              <article class="cluster-card">
+                <h3>AI assistants as default interface</h3>
+                <p class="cluster-copy">今日の lead と next up を束ねる主題。配信面・OS統合・検索面がひとつに繋がっています。</p>
+                <div class="cluster-tags">
+                  <span class="tag">7 items</span>
+                  <span class="tag">Distribution</span>
+                </div>
+              </article>
+              <article class="cluster-card">
+                <h3>Inference cost normalization</h3>
+                <p class="cluster-copy">GPU と provider 戦略の連鎖を見る補助テーマ。今日の後半に読む用です。</p>
+                <div class="cluster-tags">
+                  <span class="tag">4 items</span>
+                  <span class="tag">Infra</span>
+                </div>
+              </article>
+            </div>
+            <div class="section-footer">
+              <a class="section-link" href="#">全クラスタを見る</a>
+            </div>
+          </section>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>

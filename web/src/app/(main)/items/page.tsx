@@ -40,14 +40,17 @@ function ItemsPageContent() {
           ? "read"
           : qFeed === "pending"
             ? "pending"
+            : qFeed === "deleted"
+              ? "deleted"
           : "unread";
 
     const qSort = searchParams.get("sort");
     const sortMode: SortMode = qSort === "score" ? "score" : qSort === "personal_score" ? "personal_score" : "newest";
 
     const qFilter = searchParams.get("status");
+    const deletedViaLegacyStatus = qFilter === "deleted";
     const filter =
-      qFilter && FILTERS.includes(qFilter as (typeof FILTERS)[number]) ? qFilter : "";
+      qFilter && FILTERS.includes(qFilter as (typeof FILTERS)[number]) && qFilter !== "deleted" ? qFilter : "";
     const topic = (searchParams.get("topic") ?? "").trim();
     const sourceID = (searchParams.get("source_id") ?? "").trim();
     const searchQuery = (searchParams.get("q") ?? "").trim();
@@ -59,13 +62,24 @@ function ItemsPageContent() {
     const qPage = Number(searchParams.get("page"));
     const page = Number.isFinite(qPage) && qPage >= 1 ? Math.floor(qPage) : 1;
 
-    return { feedMode, sortMode, filter, topic, sourceID, searchQuery, unreadOnly, favoriteOnly, page };
+    return {
+      feedMode: deletedViaLegacyStatus ? "deleted" : feedMode,
+      sortMode,
+      filter,
+      topic,
+      sourceID,
+      searchQuery,
+      unreadOnly,
+      favoriteOnly,
+      page,
+    };
   }, [searchParams]);
   const { feedMode, sortMode, filter, topic, sourceID, searchQuery, unreadOnly, favoriteOnly, page } = queryState;
   const unreadMode = feedMode === "unread";
   const readMode = feedMode === "read";
   const laterMode = feedMode === "later";
   const pendingMode = feedMode === "pending";
+  const deletedMode = feedMode === "deleted";
   const pageSize = 20;
   const [error, setError] = useState<string | null>(null);
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
@@ -99,17 +113,17 @@ function ItemsPageContent() {
     queryKey: listQueryKey,
     queryFn: async () => {
       const data = await api.getItems({
-        status: filter || (pendingMode ? "pending" : "summarized"),
+        status: deletedMode ? "deleted" : filter || (pendingMode ? "pending" : "summarized"),
         ...(sourceID ? { source_id: sourceID } : {}),
         ...(topic ? { topic } : {}),
         ...(searchQuery ? { q: searchQuery } : {}),
         page,
         page_size: pageSize,
         sort: pendingMode ? "newest" : sortMode,
-        unread_only: pendingMode || filter === "deleted" ? false : unreadMode || unreadOnly || laterMode,
-        read_only: pendingMode || filter === "deleted" ? false : readMode,
-        favorite_only: pendingMode || filter === "deleted" ? false : favoriteOnly,
-        later_only: pendingMode || filter === "deleted" ? false : laterMode,
+        unread_only: pendingMode || deletedMode ? false : unreadMode || unreadOnly || laterMode,
+        read_only: pendingMode || deletedMode ? false : readMode,
+        favorite_only: pendingMode || deletedMode ? false : favoriteOnly,
+        later_only: pendingMode || deletedMode ? false : laterMode,
       });
       return {
         items: data?.items ?? [],
@@ -156,9 +170,9 @@ function ItemsPageContent() {
       const nextTopic = patch.topic ?? topic;
       const nextSourceID = patch.sourceId ?? sourceID;
       const nextSearch = patch.q ?? searchQuery;
-      const isDeletedFilter = nextStatus === "deleted";
-      const nextUnread = nextFeed === "pending" || isDeletedFilter ? false : nextFeed === "later" ? true : patch.unread ?? unreadOnly;
-      const nextFavorite = nextFeed === "pending" || isDeletedFilter ? false : patch.favorite ?? favoriteOnly;
+      const isDeletedFeed = nextFeed === "deleted";
+      const nextUnread = nextFeed === "pending" || isDeletedFeed ? false : nextFeed === "later" ? true : patch.unread ?? unreadOnly;
+      const nextFavorite = nextFeed === "pending" || isDeletedFeed ? false : patch.favorite ?? favoriteOnly;
       const nextPage = patch.page ?? page;
 
       if (nextStatus) q.set("status", nextStatus);
@@ -193,10 +207,10 @@ function ItemsPageContent() {
     if (searchQuery) q.set("q", searchQuery);
     q.set("sort", pendingMode ? "newest" : sortMode);
     if (page > 1) q.set("page", String(page));
-    if (!pendingMode && filter !== "deleted" && (unreadOnly || laterMode)) q.set("unread", "1");
-    if (!pendingMode && filter !== "deleted" && favoriteOnly) q.set("favorite", "1");
+    if (!pendingMode && !deletedMode && (unreadOnly || laterMode)) q.set("unread", "1");
+    if (!pendingMode && !deletedMode && favoriteOnly) q.set("favorite", "1");
     return q.toString();
-  }, [favoriteOnly, feedMode, filter, page, pendingMode, searchQuery, sortMode, sourceID, topic, unreadOnly]);
+  }, [deletedMode, favoriteOnly, feedMode, filter, page, pendingMode, searchQuery, sortMode, sourceID, topic, unreadOnly]);
 
   const submitSearch = useCallback(() => {
     replaceItemsQuery({ q: searchDraft.trim(), page: 1 });
@@ -207,6 +221,7 @@ function ItemsPageContent() {
     () => (itemsQueryString ? `${pathname}?${itemsQueryString}` : pathname),
     [itemsQueryString, pathname]
   );
+  const showFilterBadges = !!(sourceID || searchQuery || topic || (filter && filter !== "pending"));
 
   const scrollStorageKey = useMemo(() => `items-scroll:${currentItemsHref}`, [currentItemsHref]);
   const lastItemStorageKey = useMemo(() => `items-last-item:${currentItemsHref}`, [currentItemsHref]);
@@ -504,7 +519,7 @@ function ItemsPageContent() {
 
         <section className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50/80 shadow-sm">
           <div className="flex flex-col gap-2 px-3 py-2 xl:flex-row xl:items-center">
-            <div className="shrink-0 xl:w-[320px]">
+            <div className="shrink-0 xl:w-[400px]">
               <FeedTabs
                 feedMode={feedMode}
                 onSelect={(feed) => replaceItemsQuery({ feed, page: 1, unread: false })}
@@ -557,7 +572,7 @@ function ItemsPageContent() {
             )}
 
           </div>
-          {(sourceID || filter || searchQuery || topic) && (
+          {showFilterBadges && (
             <div className="border-t border-zinc-200 px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
                 {topic && (
@@ -593,7 +608,7 @@ function ItemsPageContent() {
                     </button>
                   </div>
                 )}
-                {filter && filter !== "pending" && (
+                {filter && filter !== "pending" && filter !== "deleted" && (
                   <span className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-700">
                     {t(`items.filter.${filter}`)}
                   </span>

@@ -39,7 +39,7 @@ from app.services.summary_faithfulness_common import (
 from app.services.summary_faithfulness_runner import run_summary_faithfulness_check
 from app.services.summary_parse_common import finalize_summary_result
 from app.services.summary_task_common import build_summary_task
-from app.services.task_transport_common import wrap_json_transport
+from app.services.task_transport_common import with_execution_failures, wrap_json_transport
 from app.services.title_translation_common import TITLE_TRANSLATION_SCHEMA, run_title_translation
 
 _log = logging.getLogger(__name__)
@@ -131,7 +131,7 @@ def _estimate_cost_usd(model: str, purpose: str, usage: dict) -> float:
 def _llm_meta(model: str, purpose: str, usage: dict) -> dict:
     pricing = _pricing_for_model(model, purpose)
     actual_model = _normalize_model_name(model)
-    return {
+    return with_execution_failures({
         "provider": "fireworks",
         "model": actual_model,
         "pricing_model_family": pricing.get("pricing_model_family", ""),
@@ -141,7 +141,7 @@ def _llm_meta(model: str, purpose: str, usage: dict) -> dict:
         "cache_creation_input_tokens": int(usage.get("cache_creation_input_tokens", 0) or 0),
         "cache_read_input_tokens": int(usage.get("cache_read_input_tokens", 0) or 0),
         "estimated_cost_usd": _estimate_cost_usd(actual_model, purpose, usage),
-    }
+    }, usage.get("execution_failures"))
 
 
 def _supports_strict_schema(model: str) -> bool:

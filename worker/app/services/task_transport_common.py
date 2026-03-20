@@ -3,6 +3,23 @@ def wrap_usage_transport(call, llm_meta_builder):
     return text, llm_meta_builder(usage)
 
 
+def with_execution_failures(llm: dict, execution_failures) -> dict:
+    if not execution_failures:
+        return llm
+    failures = []
+    for failure in execution_failures:
+        if not isinstance(failure, dict):
+            continue
+        model = str(failure.get("model") or "").strip()
+        reason = str(failure.get("reason") or "").strip()
+        if not model:
+            continue
+        failures.append({"model": model, "reason": reason})
+    if failures:
+        llm["execution_failures"] = failures
+    return llm
+
+
 def empty_llm_meta(provider: str, model: str, pricing_source: str = "default") -> dict:
     return {
         "provider": provider,

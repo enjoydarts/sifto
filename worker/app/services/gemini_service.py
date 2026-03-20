@@ -55,7 +55,7 @@ from app.services.feed_task_common import (
     parse_seed_sites_result,
 )
 from app.services.facts_task_common import build_facts_localization_task, build_facts_task, parse_facts_result
-from app.services.task_transport_common import wrap_usage_transport
+from app.services.task_transport_common import with_execution_failures, wrap_usage_transport
 
 _log = logging.getLogger(__name__)
 _GEMINI_PRICING_SOURCE_VERSION = "google_aistudio_static_2026_02"
@@ -256,7 +256,7 @@ def _estimate_cost_usd(model: str, purpose: str, usage: dict) -> float:
 def _llm_meta(model: str, purpose: str, usage: dict) -> dict:
     pricing = _pricing_for_model(model, purpose)
     actual_model = _normalize_model_name(model)
-    return {
+    return with_execution_failures({
         "provider": "google",
         "model": actual_model,
         "pricing_model_family": pricing.get("pricing_model_family", ""),
@@ -266,7 +266,7 @@ def _llm_meta(model: str, purpose: str, usage: dict) -> dict:
         "cache_creation_input_tokens": usage.get("cache_creation_input_tokens", 0),
         "cache_read_input_tokens": usage.get("cache_read_input_tokens", 0),
         "estimated_cost_usd": _estimate_cost_usd(actual_model, purpose, usage),
-    }
+    }, usage.get("execution_failures"))
 
 
 def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:

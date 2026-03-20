@@ -34,3 +34,30 @@ func TestLLMExecutionIdempotencyKeyUsesTriggerID(t *testing.T) {
 		t.Fatalf("different trigger IDs produced same key: %q", keyA1)
 	}
 }
+
+func TestLLMExecutionIdempotencyKeyDiffersByModelAndStatus(t *testing.T) {
+	triggerID := "trigger-a"
+	itemID := "item-1"
+
+	base := repository.LLMExecutionEventInput{
+		ItemID:       &itemID,
+		Provider:     "openrouter",
+		Model:        "openrouter::google/gemini-2.5-flash",
+		Purpose:      "summary",
+		Status:       "failure",
+		AttemptIndex: 0,
+		TriggerID:    &triggerID,
+	}
+
+	fallback := base
+	fallback.Model = "openrouter::openai/gpt-oss-120b"
+	if got, want := llmExecutionEventIdempotencyKey(base) == llmExecutionEventIdempotencyKey(fallback), false; got != want {
+		t.Fatalf("different models should produce different idempotency keys")
+	}
+
+	success := base
+	success.Status = "success"
+	if got, want := llmExecutionEventIdempotencyKey(base) == llmExecutionEventIdempotencyKey(success), false; got != want {
+		t.Fatalf("different statuses should produce different idempotency keys")
+	}
+}

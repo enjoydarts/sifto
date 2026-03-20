@@ -52,7 +52,7 @@ from app.services.feed_task_common import (
 from app.services.facts_task_common import build_facts_localization_task, build_facts_task, parse_facts_result
 from app.services.openai_compat_transport import run_chat_json
 from app.services.openai_responses_transport import run_responses_json
-from app.services.task_transport_common import wrap_usage_transport
+from app.services.task_transport_common import with_execution_failures, wrap_usage_transport
 
 _log = logging.getLogger(__name__)
 _OPENAI_PRICING_SOURCE_VERSION = "openai_standard_2026_03"
@@ -127,7 +127,7 @@ def _estimate_cost_usd(model: str, purpose: str, usage: dict) -> float:
 def _llm_meta(model: str, purpose: str, usage: dict) -> dict:
     pricing = _pricing_for_model(model, purpose)
     actual_model = _normalize_model_name(model)
-    return {
+    return with_execution_failures({
         "provider": "openai",
         "model": actual_model,
         "pricing_model_family": pricing.get("pricing_model_family", ""),
@@ -137,7 +137,7 @@ def _llm_meta(model: str, purpose: str, usage: dict) -> dict:
         "cache_creation_input_tokens": int(usage.get("cache_creation_input_tokens", 0) or 0),
         "cache_read_input_tokens": int(usage.get("cache_read_input_tokens", 0) or 0),
         "estimated_cost_usd": _estimate_cost_usd(actual_model, purpose, usage),
-    }
+    }, usage.get("execution_failures"))
 
 
 def _supports_strict_schema(model: str) -> bool:

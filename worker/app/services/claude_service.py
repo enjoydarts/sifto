@@ -55,7 +55,7 @@ from app.services.feed_task_common import (
     parse_seed_sites_result,
 )
 from app.services.facts_task_common import build_facts_localization_task, build_facts_task, parse_facts_result
-from app.services.task_transport_common import empty_llm_meta, wrap_message_fallback_transport, wrap_message_transport
+from app.services.task_transport_common import empty_llm_meta, with_execution_failures, wrap_message_fallback_transport, wrap_message_transport
 
 _client = None
 _facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
@@ -97,20 +97,7 @@ def _call_with_model_fallback(*args, **kwargs):
 
 
 def _with_execution_failures(llm: dict, execution_failures: list[dict] | None) -> dict:
-    if not execution_failures:
-        return llm
-    failures = []
-    for failure in execution_failures:
-        if not isinstance(failure, dict):
-            continue
-        model = str(failure.get("model") or "").strip()
-        reason = str(failure.get("reason") or "").strip()
-        if not model:
-            continue
-        failures.append({"model": model, "reason": reason})
-    if failures:
-        llm["execution_failures"] = failures
-    return llm
+    return with_execution_failures(llm, execution_failures)
 
 
 def _split_text_chunks(text: str, chunk_chars: int = 8000, overlap_chars: int = 400) -> list[str]:

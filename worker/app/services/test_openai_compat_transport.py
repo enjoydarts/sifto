@@ -50,6 +50,47 @@ class _EmptyChoicesClient:
         )
 
 
+class _EmptyContentClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def post(self, url, headers=None, json=None):
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "content": "",
+                            "tool_calls": [{"type": "function", "function": {"name": "emit_json"}}],
+                            "refusal": "",
+                            "reasoning": {"tokens": 12},
+                        },
+                    }
+                ],
+                "provider": "openrouter",
+                "usage": {"prompt_tokens": 1, "completion_tokens": 0},
+            },
+        )
+
+
+class _ListLogger:
+    def __init__(self):
+        self.messages = []
+
+    def warning(self, msg, *args):
+        if args:
+            msg = msg % args
+        self.messages.append(msg)
+
+
 class RunChatJsonTests(unittest.TestCase):
     def setUp(self):
         _FakeClient.last_json = None
@@ -114,6 +155,32 @@ class RunChatJsonTests(unittest.TestCase):
 
         self.assertIn("empty choices", str(ctx.exception))
         self.assertIn("upstream overloaded", str(ctx.exception))
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _EmptyContentClient)
+    def test_empty_content_logs_message_shape(self):
+        logger = _ListLogger()
+
+        text, usage = run_chat_json(
+            "Return JSON",
+            "openai/gpt-oss-20b",
+            "test-key",
+            url="https://example.com/chat/completions",
+            normalize_model_name=lambda model: model,
+            supports_strict_schema=lambda model: False,
+            timeout_sec=5,
+            attempts=1,
+            base_sleep_sec=0,
+            provider_name="openrouter",
+            logger=logger,
+            response_schema={"type": "object"},
+        )
+
+        self.assertEqual(text, "")
+        self.assertEqual(usage["input_tokens"], 1)
+        self.assertTrue(logger.messages)
+        self.assertIn("empty message content", logger.messages[0])
+        self.assertIn("tool_calls_count=1", logger.messages[0])
+        self.assertIn("message_keys=['content', 'reasoning', 'refusal', 'tool_calls']", logger.messages[0])
 
 
 if __name__ == "__main__":

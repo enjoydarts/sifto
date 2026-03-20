@@ -3,6 +3,45 @@ import time
 import json
 
 
+def _safe_sorted_keys(value) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    return sorted(str(k) for k in value.keys())
+
+
+def _content_shape(content) -> tuple[str, int]:
+    if isinstance(content, list):
+        text_parts = [str(part.get("text") or "") for part in content if isinstance(part, dict)]
+        return "list", len("\n".join(text_parts).strip())
+    if content is None:
+        return "none", 0
+    text = str(content)
+    return type(content).__name__, len(text.strip())
+
+
+def _log_empty_message_content(logger, provider_name: str, model: str, body: dict, data: dict, choice: dict, message: dict) -> None:
+    if logger is None or not hasattr(logger, "warning"):
+        return
+    content_type, content_length = _content_shape(message.get("content"))
+    tool_calls = message.get("tool_calls")
+    refusal = str(message.get("refusal") or "").strip()
+    logger.warning(
+        "%s chat.completions returned empty message content model=%s response_format=%s content_type=%s content_length=%d finish_reason=%s tool_calls_count=%d refusal_present=%s provider_field=%s top_level_keys=%s choice_keys=%s message_keys=%s",
+        provider_name,
+        model,
+        str((body.get("response_format") or {}).get("type") or ""),
+        content_type,
+        content_length,
+        str(choice.get("finish_reason") or ""),
+        len(tool_calls) if isinstance(tool_calls, list) else 0,
+        "true" if refusal else "false",
+        str(data.get("provider") or ""),
+        _safe_sorted_keys(data),
+        _safe_sorted_keys(choice),
+        _safe_sorted_keys(message),
+    )
+
+
 def usage_from_chat_response(data: dict) -> dict:
     usage = data.get("usage") or {}
     prompt_details = usage.get("prompt_tokens_details") or {}
@@ -151,4 +190,7 @@ def run_chat_json(
         text = "\n".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
     else:
         text = str(content or "")
-    return text.strip(), usage_from_chat_response(data)
+    text = text.strip()
+    if text == "":
+        _log_empty_message_content(logger, provider_name, normalize_model_name(model), body, data, choices[0], message)
+    return text, usage_from_chat_response(data)

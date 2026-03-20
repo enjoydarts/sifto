@@ -14,6 +14,7 @@ func TestIsTransientLLMWorkerError(t *testing.T) {
 		{name: "timeout", err: assertErr("worker /summarize: context deadline exceeded"), want: true},
 		{name: "temporary overload", err: assertErr("worker /summarize: upstream provider overload"), want: true},
 		{name: "deprecated model 404", err: assertErr("worker /extract-facts: status 500 detail=extract_facts failed: openrouter chat.completions failed status=404 body={\"error\":{\"message\":\"Hunter Alpha was a stealth model revealed on March 18th as an early testing version of MiMo-V2-Pro. Find it here: https://openrouter.ai/xiaomi/mimo-v2-pro\",\"code\":404}}"), want: true},
+		{name: "structured parse failed with snippet", err: assertErr("worker /summarize: status 500 detail=summarize failed: openrouter summarize parse failed: response_snippet="), want: true},
 		{name: "parse failed", err: assertErr("worker /extract-facts: status 500 detail=openrouter extract_facts parse failed"), want: false},
 		{name: "capability missing", err: assertErr("model missing required capability for facts"), want: false},
 	}
@@ -52,6 +53,13 @@ func TestCanUseLLMFallbackForAttempt(t *testing.T) {
 			fallbackModel: strptr("openrouter::openai/gpt-oss-120b"),
 			err:           assertErr("worker /summarize: status 500 detail=summarize failed: parse failed"),
 			want:          false,
+		},
+		{
+			name:          "structured parse failure with snippet falls back",
+			primaryModel:  strptr("openrouter::google/gemini-2.5-flash"),
+			fallbackModel: strptr("openrouter::openai/gpt-oss-120b"),
+			err:           assertErr("worker /summarize: status 500 detail=summarize failed: openrouter summarize parse failed: response_snippet="),
+			want:          true,
 		},
 	}
 	for _, tt := range tests {

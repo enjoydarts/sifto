@@ -94,6 +94,9 @@ func isTransientLLMWorkerError(err error) bool {
 	if msg == "" {
 		return false
 	}
+	if strings.Contains(msg, "parse failed: response_snippet=") {
+		return true
+	}
 	transientHints := []string{
 		"status=429",
 		"status 429",

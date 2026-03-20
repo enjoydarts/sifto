@@ -135,6 +135,36 @@ def _supports_strict_schema(model: str) -> bool:
     return model_supports(_normalize_model_family(model), "supports_strict_json_schema") or model_supports(model, "supports_strict_json_schema")
 
 
+def _load_repair_json():
+    try:
+        from json_repair import repair_json
+    except Exception:
+        return None
+    return repair_json
+
+
+def _should_repair_structured_json(model: str, response_schema: dict | None) -> bool:
+    return response_schema is not None
+
+
+def _repair_structured_json_text(text: str, model: str, response_schema: dict | None) -> str:
+    cleaned = str(text or "").strip()
+    if not cleaned or not _should_repair_structured_json(model, response_schema):
+        return cleaned
+    if _extract_first_json_object(cleaned) is not None:
+        return cleaned
+    repair_json = _load_repair_json()
+    if repair_json is None:
+        return cleaned
+    try:
+        repaired = str(repair_json(cleaned, skip_json_loads=True, ensure_ascii=False) or "").strip()
+    except Exception:
+        return cleaned
+    if repaired and _extract_first_json_object(repaired) is not None:
+        return repaired
+    return cleaned
+
+
 def _chat_json(
     prompt: str,
     model: str,
@@ -152,7 +182,7 @@ def _chat_json(
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("OPENROUTER_TIMEOUT_SEC", 90.0)
     attempts = max(1, int(os.getenv("OPENROUTER_RETRY_ATTEMPTS", "3") or "3"))
     base_sleep_sec = _env_timeout_seconds("OPENROUTER_RETRY_BASE_SEC", 0.5)
-    return run_chat_json(
+    text, usage = run_chat_json(
         prompt,
         model,
         api_key,
@@ -170,6 +200,7 @@ def _chat_json(
         schema_name=schema_name,
         include_temperature=True,
     )
+    return _repair_structured_json_text(text, model, response_schema), usage
 
 
 def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:

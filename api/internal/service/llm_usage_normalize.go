@@ -7,8 +7,12 @@ func NormalizeCatalogPricedUsage(purpose string, usage *LLMUsage) *LLMUsage {
 		return nil
 	}
 	modelID := strings.TrimSpace(usage.Model)
-	if strings.TrimSpace(usage.Provider) == "openrouter" && strings.TrimSpace(usage.ResolvedModel) != "" {
-		modelID = OpenRouterAliasModelID(strings.TrimSpace(usage.ResolvedModel))
+	if strings.TrimSpace(usage.Provider) == "openrouter" {
+		if resolvedModelID := OpenRouterAliasModelID(strings.TrimSpace(usage.ResolvedModel)); resolvedModelID != "" {
+			if entry := CatalogModelByID(resolvedModelID); entry != nil && entry.Pricing != nil {
+				modelID = resolvedModelID
+			}
+		}
 	}
 	if modelID == "" {
 		return usage

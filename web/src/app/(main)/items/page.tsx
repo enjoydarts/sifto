@@ -17,7 +17,7 @@ import { FiltersBar } from "@/components/items/filters-bar";
 import { ItemCard } from "@/components/items/item-card";
 import { FeedTabs, type FeedMode, type SortMode } from "@/components/items/feed-tabs";
 
-const FILTERS = ["", "summarized", "pending", "new", "fetched", "facts_extracted", "failed"] as const;
+const FILTERS = ["", "summarized", "pending", "new", "fetched", "facts_extracted", "failed", "deleted"] as const;
 type ItemsFeedQueryData = {
   items: Item[];
   total: number;
@@ -106,10 +106,10 @@ function ItemsPageContent() {
         page,
         page_size: pageSize,
         sort: pendingMode ? "newest" : sortMode,
-        unread_only: pendingMode ? false : unreadMode || unreadOnly || laterMode,
-        read_only: pendingMode ? false : readMode,
-        favorite_only: pendingMode ? false : favoriteOnly,
-        later_only: pendingMode ? false : laterMode,
+        unread_only: pendingMode || filter === "deleted" ? false : unreadMode || unreadOnly || laterMode,
+        read_only: pendingMode || filter === "deleted" ? false : readMode,
+        favorite_only: pendingMode || filter === "deleted" ? false : favoriteOnly,
+        later_only: pendingMode || filter === "deleted" ? false : laterMode,
       });
       return {
         items: data?.items ?? [],
@@ -156,8 +156,9 @@ function ItemsPageContent() {
       const nextTopic = patch.topic ?? topic;
       const nextSourceID = patch.sourceId ?? sourceID;
       const nextSearch = patch.q ?? searchQuery;
-      const nextUnread = nextFeed === "pending" ? false : nextFeed === "later" ? true : patch.unread ?? unreadOnly;
-      const nextFavorite = nextFeed === "pending" ? false : patch.favorite ?? favoriteOnly;
+      const isDeletedFilter = nextStatus === "deleted";
+      const nextUnread = nextFeed === "pending" || isDeletedFilter ? false : nextFeed === "later" ? true : patch.unread ?? unreadOnly;
+      const nextFavorite = nextFeed === "pending" || isDeletedFilter ? false : patch.favorite ?? favoriteOnly;
       const nextPage = patch.page ?? page;
 
       if (nextStatus) q.set("status", nextStatus);
@@ -192,8 +193,8 @@ function ItemsPageContent() {
     if (searchQuery) q.set("q", searchQuery);
     q.set("sort", pendingMode ? "newest" : sortMode);
     if (page > 1) q.set("page", String(page));
-    if (!pendingMode && (unreadOnly || laterMode)) q.set("unread", "1");
-    if (!pendingMode && favoriteOnly) q.set("favorite", "1");
+    if (!pendingMode && filter !== "deleted" && (unreadOnly || laterMode)) q.set("unread", "1");
+    if (!pendingMode && filter !== "deleted" && favoriteOnly) q.set("favorite", "1");
     return q.toString();
   }, [favoriteOnly, feedMode, filter, page, pendingMode, searchQuery, sortMode, sourceID, topic, unreadOnly]);
 

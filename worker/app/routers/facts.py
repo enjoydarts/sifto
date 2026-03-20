@@ -26,6 +26,7 @@ class FactsRequest(BaseModel):
 class FactsResponse(BaseModel):
     facts: list[str]
     llm: dict | None = None
+    facts_localization_llm: dict | None = None
 
 
 @router.post("/extract-facts", response_model=FactsResponse)

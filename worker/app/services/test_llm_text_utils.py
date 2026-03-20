@@ -1,0 +1,25 @@
+import unittest
+
+from app.services.llm_text_utils import facts_need_japanese_localization
+
+
+class FactsLocalizationDetectionTests(unittest.TestCase):
+    def test_chinese_facts_still_need_japanese_localization(self):
+        facts = [
+            "苹果公司发布新模型，并计划扩大企业销售。",
+            "该公司表示将在亚洲市场继续投资。",
+        ]
+
+        self.assertTrue(facts_need_japanese_localization(facts))
+
+    def test_japanese_facts_with_kana_do_not_need_localization(self):
+        facts = [
+            "アップルは新モデルを発表し、企業向け販売を拡大すると述べた。",
+            "同社はアジア市場への投資を続ける方針を示した。",
+        ]
+
+        self.assertFalse(facts_need_japanese_localization(facts))
+
+
+if __name__ == "__main__":
+    unittest.main()

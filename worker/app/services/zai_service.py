@@ -228,6 +228,7 @@ def extract_facts(title: str | None, content: str, model: str, api_key: str) -> 
         schema_name="facts",
     )
     facts = parse_facts_result(text)
+    localization_llm = None
     if not facts:
         raise RuntimeError(f"zai extract_facts parse failed: response_snippet={text[:500]}")
     if _facts_need_japanese_localization(facts):
@@ -244,9 +245,8 @@ def extract_facts(title: str | None, content: str, model: str, api_key: str) -> 
         localized_facts = parse_facts_result(localized_text)
         if localized_facts:
             facts = localized_facts
-            usage["input_tokens"] = int(usage.get("input_tokens", 0)) + int(localized_usage.get("input_tokens", 0))
-            usage["output_tokens"] = int(usage.get("output_tokens", 0)) + int(localized_usage.get("output_tokens", 0))
-    return {"facts": facts, "llm": _llm_meta(model, "facts", usage)}
+            localization_llm = _llm_meta(model, "facts_localization", localized_usage)
+    return {"facts": facts, "llm": _llm_meta(model, "facts", usage), "facts_localization_llm": localization_llm}
 
 
 def summarize(title: str | None, facts: list[str], source_text_chars: int | None = None, model: str = "glm-4.7", api_key: str = "") -> dict:

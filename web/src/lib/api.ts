@@ -219,6 +219,7 @@ export interface ItemSummaryLLM {
 export interface ItemLLMExecutionAttempt {
   provider: string;
   model: string;
+  purpose: string;
   status: string;
   attempt_index: number;
   error_kind?: string | null;

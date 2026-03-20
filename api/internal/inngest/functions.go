@@ -1806,13 +1806,24 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			log.Printf("process-item start item_id=%s url=%s trigger_id=%s reason=%s", itemID, url, strings.TrimSpace(data.TriggerID), strings.TrimSpace(data.Reason))
 
 			// Step 1: 本文抽出
-			extracted, err := step.Run(ctx, "extract-body", func(ctx context.Context) (*service.ExtractBodyResponse, error) {
-				log.Printf("process-item extract-body start item_id=%s", itemID)
-				return deps.worker.ExtractBody(ctx, url)
-			})
-			if err != nil {
-				log.Printf("process-item extract-body failed item_id=%s err=%v", itemID, err)
-				return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract body", err)
+			var extracted *service.ExtractBodyResponse
+			var err error
+			for attempt := 0; attempt < 3; attempt++ {
+				stepLabel := "extract-body"
+				if attempt > 0 {
+					stepLabel = fmt.Sprintf("extract-body-%d", attempt+1)
+				}
+				extracted, err = step.Run(ctx, stepLabel, func(ctx context.Context) (*service.ExtractBodyResponse, error) {
+					log.Printf("process-item extract-body start item_id=%s attempt=%d", itemID, attempt+1)
+					return deps.worker.ExtractBody(ctx, url)
+				})
+				if err == nil {
+					break
+				}
+				log.Printf("process-item extract-body failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
+				if !shouldRetryExtractBody(attempt, err) {
+					return nil, markProcessItemDeleted(ctx, deps.itemRepo, deps.cache, itemID, "extract body retried and deleted", err)
+				}
 			}
 			log.Printf("process-item extract-body done item_id=%s content_len=%d", itemID, len(extracted.Content))
 

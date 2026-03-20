@@ -239,6 +239,7 @@ type ItemSummaryLLM struct {
 type ItemLLMExecutionAttempt struct {
 	Provider     string    `json:"provider"`
 	Model        string    `json:"model"`
+	Purpose      string    `json:"purpose"`
 	Status       string    `json:"status"`
 	AttemptIndex int       `json:"attempt_index"`
 	ErrorKind    *string   `json:"error_kind,omitempty"`

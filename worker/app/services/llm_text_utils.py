@@ -178,11 +178,18 @@ def contains_japanese(text: str) -> bool:
     return re.search(r"[\u3040-\u30ff\u3400-\u9fff]", s) is not None
 
 
+def contains_japanese_kana(text: str) -> bool:
+    s = (text or "").strip()
+    if not s:
+        return False
+    return re.search(r"[\u3040-\u30ffー]", s) is not None
+
+
 def facts_need_japanese_localization(facts: list[str]) -> bool:
     cleaned = [str(v).strip() for v in (facts or []) if str(v).strip()]
     if not cleaned:
         return False
-    japanese_count = sum(1 for fact in cleaned if contains_japanese(fact))
+    japanese_count = sum(1 for fact in cleaned if contains_japanese_kana(fact))
     return japanese_count * 2 < len(cleaned)
 
 

@@ -50,6 +50,11 @@ function executionStatusTone(status: string) {
     : "bg-red-50 text-red-700 ring-red-200";
 }
 
+function executionPurposeLabel(attempt: ItemLLMExecutionAttempt, t: (key: string, fallback?: string) => string) {
+  if (attempt.purpose === "facts_localization") return t("itemDetail.execution.purpose.factsLocalization");
+  return null;
+}
+
 function ExecutionTimeline({
   attempts,
   title,
@@ -77,6 +82,11 @@ function ExecutionTimeline({
               <span className="rounded bg-zinc-100 px-2 py-1 text-zinc-600 ring-1 ring-zinc-200">
                 {t("itemDetail.execution.attempt").replace("{{attempt}}", String(attempt.attempt_index + 1))}
               </span>
+              {executionPurposeLabel(attempt, t) ? (
+                <span className="rounded bg-amber-50 px-2 py-1 text-amber-700 ring-1 ring-amber-200">
+                  {executionPurposeLabel(attempt, t)}
+                </span>
+              ) : null}
               <span className="font-medium text-zinc-700">
                 {attempt.provider} / {formatModelDisplayName(attempt.model)}
               </span>

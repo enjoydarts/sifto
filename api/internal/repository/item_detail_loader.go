@@ -22,11 +22,14 @@ func normalizeExecutionAttemptsForDetail(attempts []model.ItemLLMExecutionAttemp
 	return out
 }
 
-func loadLatestItemLLMExecutionAttempts(ctx context.Context, r *ItemRepo, itemID, purpose string, limit int) ([]model.ItemLLMExecutionAttempt, error) {
+func loadLatestItemLLMExecutionAttempts(ctx context.Context, r *ItemRepo, itemID string, purposes []string, limit int) ([]model.ItemLLMExecutionAttempt, error) {
+	if len(purposes) == 0 {
+		return nil, nil
+	}
 	query := `
-		SELECT provider, model, status, attempt_index, error_kind, error_message, created_at
+		SELECT provider, model, purpose, status, attempt_index, error_kind, error_message, created_at
 		FROM llm_execution_events
-		WHERE item_id = $1 AND purpose = $2
+		WHERE item_id = $1 AND purpose = ANY($2)
 		ORDER BY created_at DESC`
 	var (
 		rows pgx.Rows
@@ -34,9 +37,9 @@ func loadLatestItemLLMExecutionAttempts(ctx context.Context, r *ItemRepo, itemID
 	)
 	if limit > 0 {
 		query += "\n\t\tLIMIT $3"
-		rows, err = r.db.Query(ctx, query, itemID, purpose, limit)
+		rows, err = r.db.Query(ctx, query, itemID, purposes, limit)
 	} else {
-		rows, err = r.db.Query(ctx, query, itemID, purpose)
+		rows, err = r.db.Query(ctx, query, itemID, purposes)
 	}
 	if err != nil {
 		return nil, err
@@ -49,6 +52,7 @@ func loadLatestItemLLMExecutionAttempts(ctx context.Context, r *ItemRepo, itemID
 		if err := rows.Scan(
 			&attempt.Provider,
 			&attempt.Model,
+			&attempt.Purpose,
 			&attempt.Status,
 			&attempt.AttemptIndex,
 			&attempt.ErrorKind,
@@ -74,7 +78,7 @@ func (r *ItemRepo) loadFactsDetail(ctx context.Context, itemID string, detail *m
 	if llm, llmErr := loadLatestItemLLMUsage(ctx, r.db, itemID, "facts"); llmErr == nil {
 		detail.FactsLLM = llm
 	}
-	if attempts, attemptsErr := loadLatestItemLLMExecutionAttempts(ctx, r, itemID, "facts", 0); attemptsErr == nil {
+	if attempts, attemptsErr := loadLatestItemLLMExecutionAttempts(ctx, r, itemID, []string{"facts", "facts_localization"}, 0); attemptsErr == nil {
 		detail.FactsExecutions = attempts
 	} else {
 		log.Printf("item detail facts executions load failed item_id=%s err=%v", itemID, attemptsErr)
@@ -97,7 +101,7 @@ func (r *ItemRepo) loadSummaryDetail(ctx context.Context, itemID string, detail 
 	if llm, llmErr := loadLatestItemLLMUsage(ctx, r.db, itemID, "summary"); llmErr == nil {
 		detail.SummaryLLM = llm
 	}
-	if attempts, attemptsErr := loadLatestItemLLMExecutionAttempts(ctx, r, itemID, "summary", 0); attemptsErr == nil {
+	if attempts, attemptsErr := loadLatestItemLLMExecutionAttempts(ctx, r, itemID, []string{"summary"}, 0); attemptsErr == nil {
 		detail.SummaryExecutions = attempts
 	} else {
 		log.Printf("item detail summary executions load failed item_id=%s err=%v", itemID, attemptsErr)

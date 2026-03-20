@@ -167,6 +167,24 @@ func (r *ItemInngestRepo) MarkFailed(ctx context.Context, id string, processingE
 	return err
 }
 
+func (r *ItemInngestRepo) MarkDeleted(ctx context.Context, id string, processingError *string) error {
+	var msg *string
+	if processingError != nil {
+		s := *processingError
+		if len(s) > 4000 {
+			s = s[:4000]
+		}
+		msg = &s
+	}
+	_, err := r.db.Exec(ctx, `
+		UPDATE items
+		SET deleted_at = NOW(),
+		    processing_error = $2,
+		    updated_at = NOW()
+		WHERE id = $1`, id, msg)
+	return err
+}
+
 func (r *ItemInngestRepo) UpsertEmbedding(ctx context.Context, itemID, model string, embedding []float64) error {
 	if len(embedding) == 0 {
 		return nil

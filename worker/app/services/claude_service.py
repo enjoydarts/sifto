@@ -389,6 +389,7 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
         }
 
     merged_facts = _merge_fact_lists(all_fact_lists, max_items=24)
+    localization_llm = None
     if merged_facts and _facts_need_japanese_localization(merged_facts):
         localize_task = build_facts_localization_task(title, merged_facts)
         message, used_model, execution_failures = _call_with_model_fallback(
@@ -405,13 +406,14 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
             localized_facts = parse_facts_result(message.content[0].text.strip())
             if localized_facts:
                 merged_facts = localized_facts
-                llm_metas.append(_with_execution_failures(_llm_meta(message, "facts", used_model or _facts_model), execution_failures))
+                localization_llm = _with_execution_failures(_llm_meta(message, "facts_localization", used_model or _facts_model), execution_failures)
     llm = _merge_llm_metas(llm_metas, "facts")
     llm["chunk_count"] = len(chunks)
     llm["chunk_success_count"] = len(llm_metas)
     return {
         "facts": merged_facts,
         "llm": llm,
+        "facts_localization_llm": localization_llm,
     }
 
 

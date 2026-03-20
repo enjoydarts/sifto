@@ -65,6 +65,13 @@ type processSummaryStageResult struct {
 	RetryCount int
 }
 
+func shouldRetryExtractBody(attempt int, err error) bool {
+	if err == nil {
+		return false
+	}
+	return attempt < 2
+}
+
 func executionFailedModel(runtime *llmRuntime, resolvedModel *string) *string {
 	if runtime != nil && runtime.Model != nil && strings.TrimSpace(*runtime.Model) != "" {
 		return runtime.Model
@@ -183,6 +190,13 @@ func markProcessItemFailed(ctx context.Context, itemRepo *repository.ItemInngest
 	return fmt.Errorf("%s: %w", stage, err)
 }
 
+func markProcessItemDeleted(ctx context.Context, itemRepo *repository.ItemInngestRepo, cache service.JSONCache, itemID, reason string, err error) error {
+	msg := fmt.Sprintf("%s: %v", reason, err)
+	_ = itemRepo.MarkDeleted(ctx, itemID, &msg)
+	bumpProcessItemDetailCacheVersion(ctx, cache, itemID)
+	return fmt.Errorf("%s: %w", reason, err)
+}
+
 func extractAndPersistFacts(
 	ctx context.Context,
 	deps processItemDeps,
@@ -299,12 +313,15 @@ func extractAndPersistFacts(
 		factsResp = factsAttempt.Facts
 		recordLLMExecutionFailuresFromUsage(ctx, deps.llmExecutionRepo, "facts", factsResp.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 		recordLLMUsage(ctx, deps.llmUsageRepo, "facts", factsResp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
+		recordLLMExecutionFailuresFromUsage(ctx, deps.llmExecutionRepo, "facts_localization", factsResp.FactsLocalizationLLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
+		recordLLMUsage(ctx, deps.llmUsageRepo, "facts_localization", factsResp.FactsLocalizationLLM, userIDPtr, &data.SourceID, &itemID, nil)
 		if len(factsResp.Facts) == 0 {
 			err := fmt.Errorf("empty facts returned from worker")
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", factsAttempt.Runtime.Model, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract facts", err)
 		}
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "facts", factsResp.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
+		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "facts_localization", factsResp.FactsLocalizationLLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 		log.Printf("process-item extract-facts done item_id=%s facts=%d attempt=%d", itemID, len(factsResp.Facts), attempt+1)
 
 		var factsCheckModel *string

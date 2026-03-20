@@ -93,8 +93,9 @@ type ExtractBodyResponse struct {
 }
 
 type ExtractFactsResponse struct {
-	Facts []string  `json:"facts"`
-	LLM   *LLMUsage `json:"llm,omitempty"`
+	Facts                []string  `json:"facts"`
+	LLM                  *LLMUsage `json:"llm,omitempty"`
+	FactsLocalizationLLM *LLMUsage `json:"facts_localization_llm,omitempty"`
 }
 
 type SummarizeResponse struct {

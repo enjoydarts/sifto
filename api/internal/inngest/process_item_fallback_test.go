@@ -104,6 +104,21 @@ func TestExecutionFailedModel(t *testing.T) {
 	}
 }
 
+func TestShouldRetryExtractBody(t *testing.T) {
+	if !shouldRetryExtractBody(0, assertErr("worker /extract-body: status 422 detail=Failed to extract body")) {
+		t.Fatal("first extract-body failure should retry")
+	}
+	if !shouldRetryExtractBody(1, assertErr("worker /extract-body: status 422 detail=Failed to extract body")) {
+		t.Fatal("second extract-body failure should retry")
+	}
+	if shouldRetryExtractBody(2, assertErr("worker /extract-body: status 422 detail=Failed to extract body")) {
+		t.Fatal("third extract-body failure should stop retrying")
+	}
+	if shouldRetryExtractBody(0, nil) {
+		t.Fatal("nil error should not retry")
+	}
+}
+
 func assertErr(msg string) error { return transientErr(msg) }
 
 func strptr(v string) *string { return &v }

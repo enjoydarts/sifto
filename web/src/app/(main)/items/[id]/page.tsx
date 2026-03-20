@@ -59,7 +59,8 @@ function executionPurposeLabel(attempt: ItemLLMExecutionAttempt, t: (key: string
 function hasRequestedResolvedPair(requested?: string | null, resolved?: string | null) {
   const req = (requested ?? "").trim();
   const res = (resolved ?? "").trim();
-  return req !== "" && res !== "" && req !== res;
+  if (req === "" || res === "") return false;
+  return formatModelDisplayName(req) !== formatModelDisplayName(res);
 }
 
 function renderLLMModelDisplay(
@@ -73,11 +74,10 @@ function renderLLMModelDisplay(
     return <>{provider} / {formatModelDisplayName(model)}</>;
   }
   return (
-    <span className="inline-flex flex-col gap-0.5 align-top">
-      <span>{provider}</span>
-      <span>{t("itemDetail.model.requested")}: {formatModelDisplayName(requested ?? "")}</span>
-      <span>{t("itemDetail.model.resolved")}: {formatModelDisplayName(resolved ?? "")}</span>
-    </span>
+    <>
+      {provider} / {t("itemDetail.model.requested")}: {formatModelDisplayName(requested ?? "")} /{" "}
+      {t("itemDetail.model.resolved")}: {formatModelDisplayName(resolved ?? "")}
+    </>
   );
 }
 

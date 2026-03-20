@@ -29,3 +29,24 @@ func TestNormalizeExecutionAttemptsForDetail(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeExecutionAttemptsForDetailWithoutLimit(t *testing.T) {
+	base := time.Date(2026, 3, 19, 10, 0, 0, 0, time.UTC)
+	in := []model.ItemLLMExecutionAttempt{
+		{Model: "m3", CreatedAt: base.Add(3 * time.Minute)},
+		{Model: "m2", CreatedAt: base.Add(2 * time.Minute)},
+		{Model: "m1", CreatedAt: base.Add(1 * time.Minute)},
+	}
+
+	got := normalizeExecutionAttemptsForDetail(in, 0)
+	if len(got) != 3 {
+		t.Fatalf("len = %d, want 3", len(got))
+	}
+
+	want := []string{"m1", "m2", "m3"}
+	for i, modelID := range want {
+		if got[i].Model != modelID {
+			t.Fatalf("got[%d].Model = %q, want %q", i, got[i].Model, modelID)
+		}
+	}
+}

@@ -5,9 +5,8 @@ import (
 	"log"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/jackc/pgx/v5"
 )
-
-const itemDetailExecutionLimit = 4
 
 func normalizeExecutionAttemptsForDetail(attempts []model.ItemLLMExecutionAttempt, limit int) []model.ItemLLMExecutionAttempt {
 	if len(attempts) == 0 {
@@ -24,19 +23,27 @@ func normalizeExecutionAttemptsForDetail(attempts []model.ItemLLMExecutionAttemp
 }
 
 func loadLatestItemLLMExecutionAttempts(ctx context.Context, r *ItemRepo, itemID, purpose string, limit int) ([]model.ItemLLMExecutionAttempt, error) {
-	rows, err := r.db.Query(ctx, `
+	query := `
 		SELECT provider, model, status, attempt_index, error_kind, error_message, created_at
 		FROM llm_execution_events
 		WHERE item_id = $1 AND purpose = $2
-		ORDER BY created_at DESC
-		LIMIT $3
-	`, itemID, purpose, limit)
+		ORDER BY created_at DESC`
+	var (
+		rows pgx.Rows
+		err  error
+	)
+	if limit > 0 {
+		query += "\n\t\tLIMIT $3"
+		rows, err = r.db.Query(ctx, query, itemID, purpose, limit)
+	} else {
+		rows, err = r.db.Query(ctx, query, itemID, purpose)
+	}
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	out := make([]model.ItemLLMExecutionAttempt, 0, limit)
+	out := make([]model.ItemLLMExecutionAttempt, 0)
 	for rows.Next() {
 		var attempt model.ItemLLMExecutionAttempt
 		if err := rows.Scan(
@@ -67,7 +74,7 @@ func (r *ItemRepo) loadFactsDetail(ctx context.Context, itemID string, detail *m
 	if llm, llmErr := loadLatestItemLLMUsage(ctx, r.db, itemID, "facts"); llmErr == nil {
 		detail.FactsLLM = llm
 	}
-	if attempts, attemptsErr := loadLatestItemLLMExecutionAttempts(ctx, r, itemID, "facts", itemDetailExecutionLimit); attemptsErr == nil {
+	if attempts, attemptsErr := loadLatestItemLLMExecutionAttempts(ctx, r, itemID, "facts", 0); attemptsErr == nil {
 		detail.FactsExecutions = attempts
 	} else {
 		log.Printf("item detail facts executions load failed item_id=%s err=%v", itemID, attemptsErr)
@@ -90,7 +97,7 @@ func (r *ItemRepo) loadSummaryDetail(ctx context.Context, itemID string, detail 
 	if llm, llmErr := loadLatestItemLLMUsage(ctx, r.db, itemID, "summary"); llmErr == nil {
 		detail.SummaryLLM = llm
 	}
-	if attempts, attemptsErr := loadLatestItemLLMExecutionAttempts(ctx, r, itemID, "summary", itemDetailExecutionLimit); attemptsErr == nil {
+	if attempts, attemptsErr := loadLatestItemLLMExecutionAttempts(ctx, r, itemID, "summary", 0); attemptsErr == nil {
 		detail.SummaryExecutions = attempts
 	} else {
 		log.Printf("item detail summary executions load failed item_id=%s err=%v", itemID, attemptsErr)

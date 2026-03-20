@@ -61,6 +61,49 @@ func TestCanUseLLMFallbackForAttempt(t *testing.T) {
 	}
 }
 
+func TestExecutionFailedModel(t *testing.T) {
+	resolved := "openrouter::google/gemini-2.5-flash"
+	runtimeModel := "openrouter::openai/gpt-oss-120b"
+
+	tests := []struct {
+		name     string
+		runtime  *llmRuntime
+		resolved *string
+		want     *string
+	}{
+		{
+			name:     "prefers runtime model",
+			runtime:  &llmRuntime{Model: &runtimeModel},
+			resolved: &resolved,
+			want:     &runtimeModel,
+		},
+		{
+			name:     "falls back to resolved model",
+			runtime:  nil,
+			resolved: &resolved,
+			want:     &resolved,
+		},
+		{
+			name:     "empty model returns nil",
+			runtime:  &llmRuntime{Model: strptr(" ")},
+			resolved: nil,
+			want:     nil,
+		},
+	}
+
+	for _, tt := range tests {
+		got := executionFailedModel(tt.runtime, tt.resolved)
+		switch {
+		case tt.want == nil && got != nil:
+			t.Fatalf("%s: got %v, want nil", tt.name, *got)
+		case tt.want != nil && got == nil:
+			t.Fatalf("%s: got nil, want %v", tt.name, *tt.want)
+		case tt.want != nil && got != nil && *got != *tt.want:
+			t.Fatalf("%s: got %v, want %v", tt.name, *got, *tt.want)
+		}
+	}
+}
+
 func assertErr(msg string) error { return transientErr(msg) }
 
 func strptr(v string) *string { return &v }

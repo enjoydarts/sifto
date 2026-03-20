@@ -543,8 +543,8 @@ export default function ItemDetailPage() {
     try {
       await api.deleteItem(item.id);
       removeItemFromFeedCaches(item.id);
+      queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) => (prev ? { ...prev, status: "deleted" } : prev));
       setItem((prev) => (prev ? { ...prev, status: "deleted" } : prev));
-      await queryClient.invalidateQueries({ queryKey: ["item-detail", item.id] });
       showToast(t("itemDetail.toast.deleted"), "success");
     } catch (e) {
       setError(String(e));

@@ -1000,6 +1000,9 @@ func (h *ItemHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
+		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
+	}
 	h.invalidateUserCaches(r.Context(), userID)
 	w.WriteHeader(http.StatusNoContent)
 }

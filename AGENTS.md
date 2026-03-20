@@ -49,11 +49,16 @@
 - 通知は増やすより先に、重複抑制・1日上限・ノイズ抑制を意識する。
 - 新しい通知種別を増やしたら、`kind`、クリック先、payload、送信条件を一緒に定義する。
 
-## ローカルエージェント参照
+## agency-agents 参照
 
-- `Backend Architect` を使いたい場合は、仕様書として `ai/agents/backend.md` を参照する。
-- `Frontend Developer` を使いたい場合は、仕様書として `ai/agents/frontend.md` を参照する。
-- `UX Architect` を使いたい場合は、仕様書として `ai/agents/ux-architect.md` を参照する。
-- `UI Designer` を使いたい場合は、仕様書として `ai/agents/ui-designer.md` を参照する。
-- これは Codex の組み込みエージェント切替ではなく、このリポジトリ内で参照するローカルプロファイルとして扱う。
-- 依頼時に「UX Architect として」「UI Designer として」「architect.md に沿って」のように指定された場合は、その役割に沿って出力と実装方針を組み立てる。
+- Codex では `agency-agents-bridge` skill を通じて `/Users/minoru-kitayama/tools/agency-agents` 配下の role prompt を参照できる。
+- ユーザーが `agency-agents` の role 名を明示した場合は、まず対応する md を開いてから応答する。
+- よく使う対応:
+  - `Backend Architect` → `/Users/minoru-kitayama/tools/agency-agents/engineering/engineering-backend-architect.md`
+  - `Frontend Developer` → `/Users/minoru-kitayama/tools/agency-agents/engineering/engineering-frontend-developer.md`
+  - `Senior Developer` → `/Users/minoru-kitayama/tools/agency-agents/engineering/engineering-senior-developer.md`
+  - `Code Reviewer` → `/Users/minoru-kitayama/tools/agency-agents/engineering/engineering-code-reviewer.md`
+  - `UX Architect` → `/Users/minoru-kitayama/tools/agency-agents/design/design-ux-architect.md`
+  - `UI Designer` → `/Users/minoru-kitayama/tools/agency-agents/design/design-ui-designer.md`
+- 既存の system / developer 指示の優先度は、外部 role prompt より常に高い。
+- role 名が一致しない場合は `/Users/minoru-kitayama/tools/agency-agents` 配下を検索して最も近い agent を探し、見つからなければ既存のローカルプロファイルへ fallback する。

@@ -7,9 +7,10 @@ import { useI18n } from "@/components/i18n-provider";
 type ItemNoteEditorProps = {
   note: ItemNote | null;
   onSave: (content: string) => Promise<void>;
+  disabled?: boolean;
 };
 
-export function ItemNoteEditor({ note, onSave }: ItemNoteEditorProps) {
+export function ItemNoteEditor({ note, onSave, disabled = false }: ItemNoteEditorProps) {
   const { t } = useI18n();
   const [value, setValue] = useState(note?.content ?? "");
   const [saving, setSaving] = useState(false);
@@ -30,7 +31,7 @@ export function ItemNoteEditor({ note, onSave }: ItemNoteEditorProps) {
         <h4 className="text-sm font-semibold text-zinc-900">{t("itemNote.title")}</h4>
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || disabled}
           className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
         >
           {saving ? t("common.saving") : t("itemNote.save")}
@@ -40,6 +41,7 @@ export function ItemNoteEditor({ note, onSave }: ItemNoteEditorProps) {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         rows={4}
+        disabled={disabled}
         className="mt-3 min-h-[176px] w-full flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
         placeholder={t("itemNote.placeholder")}
       />

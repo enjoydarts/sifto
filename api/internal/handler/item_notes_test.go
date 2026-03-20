@@ -11,18 +11,26 @@ import (
 
 	"github.com/enjoydarts/sifto/api/internal/middleware"
 	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/enjoydarts/sifto/api/internal/repository"
 )
 
 type fakeItemNoteStore struct {
 	note       *model.ItemNote
 	highlights []model.ItemHighlight
+	err        error
 }
 
 func (f *fakeItemNoteStore) GetByItem(_ context.Context, userID, itemID string) (*model.ItemNote, []model.ItemHighlight, error) {
+	if f.err != nil {
+		return nil, nil, f.err
+	}
 	return f.note, f.highlights, nil
 }
 
 func (f *fakeItemNoteStore) UpsertNote(_ context.Context, note model.ItemNote) (model.ItemNote, error) {
+	if f.err != nil {
+		return model.ItemNote{}, f.err
+	}
 	if note.ID == "" {
 		note.ID = "note-1"
 	}
@@ -34,6 +42,9 @@ func (f *fakeItemNoteStore) UpsertNote(_ context.Context, note model.ItemNote) (
 }
 
 func (f *fakeItemNoteStore) CreateHighlight(_ context.Context, highlight model.ItemHighlight) (model.ItemHighlight, error) {
+	if f.err != nil {
+		return model.ItemHighlight{}, f.err
+	}
 	if highlight.ID == "" {
 		highlight.ID = "highlight-1"
 	}
@@ -43,6 +54,9 @@ func (f *fakeItemNoteStore) CreateHighlight(_ context.Context, highlight model.I
 }
 
 func (f *fakeItemNoteStore) DeleteHighlight(_ context.Context, userID, itemID, highlightID string) error {
+	if f.err != nil {
+		return f.err
+	}
 	next := f.highlights[:0]
 	for _, h := range f.highlights {
 		if !(h.UserID == userID && h.ItemID == itemID && h.ID == highlightID) {
@@ -111,5 +125,20 @@ func TestItemNotesHandlerListHighlights(t *testing.T) {
 	}
 	if len(resp.Highlights) != 1 {
 		t.Fatalf("len(highlights) = %d, want 1", len(resp.Highlights))
+	}
+}
+
+func TestItemNotesHandlerSaveNoteConflict(t *testing.T) {
+	store := &fakeItemNoteStore{err: repository.ErrConflict}
+	h := NewItemNotesHandler(store, nil)
+	body := bytes.NewBufferString(`{"content":"watch this trend"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/items/item-1/note", body)
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, "u1"))
+	rr := httptest.NewRecorder()
+
+	h.UpsertNote(rr, req, "item-1")
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", rr.Code)
 	}
 }

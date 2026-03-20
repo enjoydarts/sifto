@@ -20,6 +20,19 @@ type ItemRepo struct{ db *pgxpool.Pool }
 
 func NewItemRepo(db *pgxpool.Pool) *ItemRepo { return &ItemRepo{db} }
 
+type ownedItemState string
+
+const (
+	ownedItemMissing ownedItemState = "missing"
+	ownedItemDeleted ownedItemState = "deleted"
+	ownedItemActive  ownedItemState = "active"
+)
+
+type retryCandidate struct {
+	item      model.Item
+	isDeleted bool
+}
+
 func appendItemStatusFilter(query string, args []any, status *string) (string, []any) {
 	if status == nil || *status == "" {
 		return query, args
@@ -1747,23 +1760,11 @@ func maxAskTopicOverlap(item model.AskCandidate, selected []model.AskCandidate) 
 }
 
 func (r *ItemRepo) GetForRetry(ctx context.Context, id, userID string) (*model.Item, error) {
-	var it model.Item
-	err := r.db.QueryRow(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, sm.summary, i.status,
-		       FALSE AS is_read,
-		       FALSE AS is_favorite,
-		       0 AS feedback_rating,
-		       i.published_at, i.fetched_at, i.created_at, i.updated_at
-		FROM items i
-		LEFT JOIN item_summaries sm ON sm.item_id = i.id
-		JOIN sources s ON s.id = i.source_id
-		WHERE i.id = $1 AND s.user_id = $2 AND i.deleted_at IS NULL`, id, userID,
-	).Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText, &it.Summary,
-		&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt)
+	candidate, err := r.loadRetryCandidate(ctx, r.db, id, userID, false)
 	if err != nil {
-		return nil, mapDBError(err)
+		return nil, err
 	}
-	return &it, nil
+	return &candidate.item, nil
 }
 
 func (r *ItemRepo) ResetForFactsRetry(ctx context.Context, id, userID string) (*model.Item, error) {
@@ -1773,22 +1774,11 @@ func (r *ItemRepo) ResetForFactsRetry(ctx context.Context, id, userID string) (*
 	}
 	defer tx.Rollback(ctx)
 
-	var it model.Item
-	err = tx.QueryRow(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, sm.summary, i.status,
-		       FALSE AS is_read,
-		       FALSE AS is_favorite,
-		       0 AS feedback_rating,
-		       i.published_at, i.fetched_at, i.created_at, i.updated_at
-		FROM items i
-		LEFT JOIN item_summaries sm ON sm.item_id = i.id
-		JOIN sources s ON s.id = i.source_id
-		WHERE i.id = $1 AND s.user_id = $2 AND i.deleted_at IS NULL`, id, userID,
-	).Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText, &it.Summary,
-		&it.Status, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt)
+	candidate, err := r.loadRetryCandidate(ctx, tx, id, userID, true)
 	if err != nil {
-		return nil, mapDBError(err)
+		return nil, err
 	}
+	it := candidate.item
 	if it.ContentText == nil || strings.TrimSpace(*it.ContentText) == "" {
 		return nil, ErrConflict
 	}
@@ -1823,6 +1813,53 @@ func (r *ItemRepo) ResetForFactsRetry(ctx context.Context, id, userID string) (*
 		return nil, err
 	}
 	return &it, nil
+}
+
+type retryCandidateQuerier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func (r *ItemRepo) loadRetryCandidate(ctx context.Context, q retryCandidateQuerier, id, userID string, forUpdate bool) (*retryCandidate, error) {
+	query := `
+		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, sm.summary, i.status,
+		       i.deleted_at IS NOT NULL AS is_deleted,
+		       FALSE AS is_read,
+		       FALSE AS is_favorite,
+		       0 AS feedback_rating,
+		       i.published_at, i.fetched_at, i.created_at, i.updated_at
+		FROM items i
+		LEFT JOIN item_summaries sm ON sm.item_id = i.id
+		JOIN sources s ON s.id = i.source_id
+		WHERE i.id = $1 AND s.user_id = $2`
+	if forUpdate {
+		query += ` FOR UPDATE`
+	}
+	var candidate retryCandidate
+	err := q.QueryRow(ctx, query, id, userID).Scan(
+		&candidate.item.ID,
+		&candidate.item.SourceID,
+		&candidate.item.URL,
+		&candidate.item.Title,
+		&candidate.item.ThumbnailURL,
+		&candidate.item.ContentText,
+		&candidate.item.Summary,
+		&candidate.item.Status,
+		&candidate.isDeleted,
+		&candidate.item.IsRead,
+		&candidate.item.IsFavorite,
+		&candidate.item.FeedbackRating,
+		&candidate.item.PublishedAt,
+		&candidate.item.FetchedAt,
+		&candidate.item.CreatedAt,
+		&candidate.item.UpdatedAt,
+	)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	if candidate.isDeleted {
+		return nil, ErrConflict
+	}
+	return &candidate, nil
 }
 
 func (r *ItemRepo) ListFailedForRetry(ctx context.Context, userID string, sourceID *string) ([]model.Item, error) {
@@ -1977,23 +2014,43 @@ func (r *ItemRepo) UnmarkLater(ctx context.Context, userID, itemID string) error
 }
 
 func (r *ItemRepo) ensureOwned(ctx context.Context, userID, itemID string) error {
-	var exists bool
-	err := r.db.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1
-			FROM items i
-			JOIN sources s ON s.id = i.source_id
-			WHERE i.id = $1 AND s.user_id = $2 AND i.deleted_at IS NULL
-		)`,
-		itemID, userID,
-	).Scan(&exists)
+	state, err := r.ownedItemState(ctx, userID, itemID)
 	if err != nil {
 		return err
 	}
-	if !exists {
+	return errForOwnedItemState(state)
+}
+
+func (r *ItemRepo) ownedItemState(ctx context.Context, userID, itemID string) (ownedItemState, error) {
+	var deleted bool
+	err := r.db.QueryRow(ctx, `
+		SELECT i.deleted_at IS NOT NULL
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		WHERE i.id = $1 AND s.user_id = $2`,
+		itemID, userID,
+	).Scan(&deleted)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ownedItemMissing, nil
+		}
+		return ownedItemMissing, err
+	}
+	if deleted {
+		return ownedItemDeleted, nil
+	}
+	return ownedItemActive, nil
+}
+
+func errForOwnedItemState(state ownedItemState) error {
+	switch state {
+	case ownedItemActive:
+		return nil
+	case ownedItemDeleted:
+		return ErrConflict
+	default:
 		return ErrNotFound
 	}
-	return nil
 }
 
 func (r *ItemRepo) Delete(ctx context.Context, itemID, userID string) error {

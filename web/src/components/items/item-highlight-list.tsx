@@ -9,9 +9,10 @@ type ItemHighlightListProps = {
   highlights: ItemHighlight[];
   onCreate: (input: { quote_text: string; anchor_text?: string; section?: string }) => Promise<void>;
   onDelete: (highlightId: string) => Promise<void>;
+  disabled?: boolean;
 };
 
-export function ItemHighlightList({ highlights, onCreate, onDelete }: ItemHighlightListProps) {
+export function ItemHighlightList({ highlights, onCreate, onDelete, disabled = false }: ItemHighlightListProps) {
   const { t } = useI18n();
   const [quoteText, setQuoteText] = useState("");
   const [anchorText, setAnchorText] = useState("");
@@ -43,7 +44,7 @@ export function ItemHighlightList({ highlights, onCreate, onDelete }: ItemHighli
         <button
           type="submit"
           form="inline-reader-highlight-form"
-          disabled={saving}
+          disabled={saving || disabled}
           className="shrink-0 rounded-lg bg-zinc-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
         >
           {saving ? t("common.saving") : t("itemHighlight.add")}
@@ -61,6 +62,7 @@ export function ItemHighlightList({ highlights, onCreate, onDelete }: ItemHighli
           <input
             value={section}
             onChange={(e) => setSection(e.target.value)}
+            disabled={disabled}
             className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
             placeholder={t("itemHighlight.sectionPlaceholder")}
           />
@@ -76,6 +78,7 @@ export function ItemHighlightList({ highlights, onCreate, onDelete }: ItemHighli
           value={quoteText}
           onChange={(e) => setQuoteText(e.target.value)}
           rows={3}
+          disabled={disabled}
           className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
           placeholder={t("itemHighlight.quotePlaceholder")}
         />
@@ -91,6 +94,7 @@ export function ItemHighlightList({ highlights, onCreate, onDelete }: ItemHighli
             <input
               value={anchorText}
               onChange={(e) => setAnchorText(e.target.value)}
+              disabled={disabled}
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
               placeholder={t("itemHighlight.anchorPlaceholder")}
             />
@@ -118,8 +122,9 @@ export function ItemHighlightList({ highlights, onCreate, onDelete }: ItemHighli
               </div>
               <button
                 type="button"
+                disabled={disabled}
                 onClick={() => void onDelete(highlight.id)}
-                className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
               >
                 {t("itemHighlight.delete")}
               </button>

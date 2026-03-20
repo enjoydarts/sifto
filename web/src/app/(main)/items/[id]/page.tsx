@@ -56,6 +56,45 @@ function executionPurposeLabel(attempt: ItemLLMExecutionAttempt, t: (key: string
   return null;
 }
 
+function extractHttpStatus(error: unknown): number | null {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = message.match(/^(\d{3}):/);
+  return match ? Number(match[1]) : null;
+}
+
+function localizeActionError(
+  error: unknown,
+  action:
+    | "markRead"
+    | "feedback"
+    | "delete"
+    | "retry"
+    | "retryFromFacts"
+    | "saveNote"
+    | "createHighlight"
+    | "deleteHighlight",
+  t: (key: string, fallback?: string) => string
+): string {
+  const status = extractHttpStatus(error);
+  if (status === 404) return t("itemDetail.actionError.notFound");
+  if (status === 409) {
+    switch (action) {
+      case "retry":
+        return t("itemDetail.actionError.retryUnavailable");
+      case "retryFromFacts":
+        return t("itemDetail.actionError.retryFromFactsUnavailable");
+      case "delete":
+      case "markRead":
+      case "feedback":
+      case "saveNote":
+      case "createHighlight":
+      case "deleteHighlight":
+        return t("itemDetail.actionError.deletedReadonly");
+    }
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 function ExecutionTimeline({
   attempts,
   title,
@@ -115,7 +154,8 @@ export default function ItemDetailPage() {
   const searchParams = useSearchParams();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [readUpdating, setReadUpdating] = useState(false);
   const [deleteUpdating, setDeleteUpdating] = useState(false);
   const [feedbackUpdating, setFeedbackUpdating] = useState(false);
@@ -325,7 +365,8 @@ export default function ItemDetailPage() {
     ]);
     if (cachedItem) {
       setItem(applyReadOverride(cachedItem));
-      setError(null);
+      setLoadError(null);
+      setActionError(null);
       setLoading(false);
     } else {
       setLoading(true);
@@ -347,7 +388,8 @@ export default function ItemDetailPage() {
           const nextItem = applyReadOverride(detailRes.value);
           queryClient.setQueryData(["item-detail", id], nextItem);
           setItem(nextItem);
-          setError(null);
+          setLoadError(null);
+          setActionError(null);
         }
 
         if (relatedRes.status === "fulfilled") {
@@ -364,7 +406,7 @@ export default function ItemDetailPage() {
         }
       })
       .catch((e) => {
-        if (!cancelled) setError(String(e));
+        if (!cancelled) setLoadError(String(e));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -398,6 +440,8 @@ export default function ItemDetailPage() {
 
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
   const canMarkRead = item?.status === "summarized";
+  const isDeleted = item?.status === "deleted";
+  const disableMutations = Boolean(isDeleted);
   const backHref = useMemo(() => {
     const from = searchParams.get("from");
     return from && from.startsWith("/items") ? from : "/items";
@@ -491,20 +535,22 @@ export default function ItemDetailPage() {
       );
       setItem({ ...item, is_read: next.is_read });
       await refreshReadDependentQueries();
+      setActionError(null);
       showToast(
         next.is_read ? t("itemDetail.toast.markRead") : t("itemDetail.toast.markUnread"),
         "success"
       );
     } catch (e) {
-      setError(String(e));
-      showToast(`${t("common.error")}: ${String(e)}`, "error");
+      const message = localizeActionError(e, "markRead", t);
+      setActionError(message);
+      showToast(`${t("common.error")}: ${message}`, "error");
     } finally {
       setReadUpdating(false);
     }
   };
 
   const updateFeedback = async (patch: { rating?: -1 | 0 | 1; is_favorite?: boolean }) => {
-    if (!item) return;
+    if (!item || item.status === "deleted") return;
     setFeedbackUpdating(true);
     const nextRating =
       patch.rating != null ? patch.rating : ((item.feedback?.rating ?? 0) as -1 | 0 | 1);
@@ -520,17 +566,22 @@ export default function ItemDetailPage() {
         feedback_rating: next.rating,
       });
       setItem((prev) => (prev ? { ...prev, feedback: next } : prev));
+      queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) =>
+        prev ? { ...prev, feedback: next } : prev
+      );
+      setActionError(null);
       showToast(t("itemDetail.toast.feedbackSaved"), "success");
     } catch (e) {
-      setError(String(e));
-      showToast(`${t("common.error")}: ${String(e)}`, "error");
+      const message = localizeActionError(e, "feedback", t);
+      setActionError(message);
+      showToast(`${t("common.error")}: ${message}`, "error");
     } finally {
       setFeedbackUpdating(false);
     }
   };
 
   const deleteItem = async () => {
-    if (!item || deleteUpdating) return;
+    if (!item || deleteUpdating || item.status === "deleted") return;
     const ok = await confirm({
       title: t("itemDetail.delete.title"),
       message: t("itemDetail.delete.message"),
@@ -545,31 +596,35 @@ export default function ItemDetailPage() {
       removeItemFromFeedCaches(item.id);
       queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) => (prev ? { ...prev, status: "deleted" } : prev));
       setItem((prev) => (prev ? { ...prev, status: "deleted" } : prev));
+      setActionError(null);
       showToast(t("itemDetail.toast.deleted"), "success");
     } catch (e) {
-      setError(String(e));
-      showToast(`${t("common.error")}: ${String(e)}`, "error");
+      const message = localizeActionError(e, "delete", t);
+      setActionError(message);
+      showToast(`${t("common.error")}: ${message}`, "error");
     } finally {
       setDeleteUpdating(false);
     }
   };
 
   const retryItem = async () => {
-    if (!item || retryUpdating) return;
+    if (!item || retryUpdating || item.status === "deleted") return;
     setRetryUpdating(true);
     try {
       await api.retryItem(item.id);
+      setActionError(null);
       showToast(t("itemDetail.toast.retryQueued"), "success");
     } catch (e) {
-      setError(String(e));
-      showToast(`${t("common.error")}: ${String(e)}`, "error");
+      const message = localizeActionError(e, "retry", t);
+      setActionError(message);
+      showToast(`${t("common.error")}: ${message}`, "error");
     } finally {
       setRetryUpdating(false);
     }
   };
 
   const retryFromFacts = async () => {
-    if (!item || retryFromFactsUpdating) return;
+    if (!item || retryFromFactsUpdating || item.status === "deleted") return;
     const ok = await confirm({
       title: t("itemDetail.retryFromFacts.title"),
       message: t("itemDetail.retryFromFacts.message"),
@@ -581,65 +636,69 @@ export default function ItemDetailPage() {
     setRetryFromFactsUpdating(true);
     try {
       await api.retryItemFromFacts(item.id);
-      setItem((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: "fetched",
-              processing_error: null,
-              facts: null,
-              facts_llm: null,
-              facts_check: null,
-              facts_check_llm: null,
-              summary: null,
-              summary_llm: null,
-              faithfulness: null,
-              faithfulness_llm: null,
-            }
-          : prev
-      );
+      const nextItem = (prev: ItemDetail): ItemDetail => ({
+        ...prev,
+        status: "fetched" as const,
+        processing_error: null,
+        facts: null,
+        facts_llm: null,
+        facts_check: null,
+        facts_check_llm: null,
+        summary: null,
+        summary_llm: null,
+        faithfulness: null,
+        faithfulness_llm: null,
+      });
+      setItem((prev) => (prev ? nextItem(prev) : prev));
+      queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) => (prev ? nextItem(prev) : prev));
       await refreshItemQueries(item.id);
+      setActionError(null);
       showToast(t("itemDetail.toast.retryFromFactsQueued"), "success");
     } catch (e) {
-      setError(String(e));
-      showToast(`${t("common.error")}: ${String(e)}`, "error");
+      const message = localizeActionError(e, "retryFromFacts", t);
+      setActionError(message);
+      showToast(`${t("common.error")}: ${message}`, "error");
     } finally {
       setRetryFromFactsUpdating(false);
     }
   };
 
   const saveNote = async (content: string) => {
-    if (!item) return;
+    if (!item || item.status === "deleted") return;
     try {
       const next = await api.saveItemNote(item.id, { content });
       setItem((prev) => (prev ? { ...prev, note: next } : prev));
       queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) =>
         prev ? { ...prev, note: next } : prev
       );
+      setActionError(null);
       showToast(t("itemNote.saved"), "success");
     } catch (e) {
-      setError(String(e));
-      showToast(`${t("common.error")}: ${String(e)}`, "error");
+      const message = localizeActionError(e, "saveNote", t);
+      setActionError(message);
+      showToast(`${t("common.error")}: ${message}`, "error");
     }
   };
 
   const createHighlight = async (input: { quote_text: string; anchor_text?: string; section?: string }) => {
-    if (!item) return;
+    if (!item || item.status === "deleted") return;
     try {
       const next = await api.createItemHighlight(item.id, input);
       setItem((prev) => (prev ? { ...prev, highlights: [next, ...(prev.highlights ?? [])] } : prev));
       queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) =>
         prev ? { ...prev, highlights: [next, ...(prev.highlights ?? [])] } : prev
       );
+      setActionError(null);
       showToast(t("itemHighlight.saved"), "success");
     } catch (e) {
-      setError(String(e));
-      showToast(`${t("common.error")}: ${String(e)}`, "error");
+      const message = localizeActionError(e, "createHighlight", t);
+      setActionError(message);
+      showToast(`${t("common.error")}: ${message}`, "error");
     }
   };
 
   const deleteHighlight = async (highlightId: string) => {
-    if (!item) return;
+    if (!item || item.status === "deleted") return;
     try {
       await api.deleteItemHighlight(item.id, highlightId);
       setItem((prev) =>
@@ -648,15 +707,17 @@ export default function ItemDetailPage() {
       queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) =>
         prev ? { ...prev, highlights: (prev.highlights ?? []).filter((highlight) => highlight.id !== highlightId) } : prev
       );
+      setActionError(null);
       showToast(t("itemHighlight.deleted"), "success");
     } catch (e) {
-      setError(String(e));
-      showToast(`${t("common.error")}: ${String(e)}`, "error");
+      const message = localizeActionError(e, "deleteHighlight", t);
+      setActionError(message);
+      showToast(`${t("common.error")}: ${message}`, "error");
     }
   };
 
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
-  if (error) return <p className="text-sm text-red-500">{error}</p>;
+  if (loadError) return <p className="text-sm text-red-500">{loadError}</p>;
   if (!item) return null;
 
   const translatedTitle = item.translated_title?.trim() || item.summary?.translated_title?.trim() || "";
@@ -693,7 +754,7 @@ export default function ItemDetailPage() {
               <button
                 type="button"
                 onClick={toggleRead}
-                disabled={readUpdating}
+                disabled={readUpdating || disableMutations}
                 className="rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {readUpdating
@@ -706,7 +767,7 @@ export default function ItemDetailPage() {
             <button
               type="button"
               onClick={retryItem}
-              disabled={retryUpdating}
+              disabled={retryUpdating || disableMutations}
               className={`rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
                 item.status === "new" ? "hidden" : ""
               }`}
@@ -716,7 +777,7 @@ export default function ItemDetailPage() {
             <button
               type="button"
               onClick={retryFromFacts}
-              disabled={retryFromFactsUpdating}
+              disabled={retryFromFactsUpdating || disableMutations}
               className={`rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
                 item.status === "new" ? "hidden" : ""
               }`}
@@ -726,7 +787,7 @@ export default function ItemDetailPage() {
             <button
               type="button"
               onClick={deleteItem}
-              disabled={deleteUpdating}
+              disabled={deleteUpdating || disableMutations}
               className="rounded-[10px] border border-red-300 bg-white px-3 py-2 text-[13px] font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {deleteUpdating
@@ -760,10 +821,20 @@ export default function ItemDetailPage() {
         >
           {item.url}
         </a>
+        {actionError ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {actionError}
+          </div>
+        ) : null}
+        {isDeleted ? (
+          <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+            {t("itemDetail.deletedReadonly")}
+          </div>
+        ) : null}
         <div className="mt-3 grid grid-cols-3 gap-2">
           <button
             type="button"
-            disabled={feedbackUpdating}
+            disabled={feedbackUpdating || disableMutations}
             onClick={() =>
               updateFeedback({ rating: (item.feedback?.rating ?? 0) === 1 ? 0 : 1 })
             }
@@ -778,7 +849,7 @@ export default function ItemDetailPage() {
           </button>
           <button
             type="button"
-            disabled={feedbackUpdating}
+            disabled={feedbackUpdating || disableMutations}
             onClick={() =>
               updateFeedback({ rating: (item.feedback?.rating ?? 0) === -1 ? 0 : -1 })
             }
@@ -793,7 +864,7 @@ export default function ItemDetailPage() {
           </button>
           <button
             type="button"
-            disabled={feedbackUpdating}
+            disabled={feedbackUpdating || disableMutations}
             onClick={() => updateFeedback({ is_favorite: !Boolean(item.feedback?.is_favorite) })}
             className={`inline-flex items-center justify-center gap-1 rounded-[12px] border p-3 text-[14px] font-medium transition-colors ${
               item.feedback?.is_favorite
@@ -1251,11 +1322,12 @@ export default function ItemDetailPage() {
               <p className="mt-1 text-sm text-zinc-500">{t("itemDetail.savedNotesDesc")}</p>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
-              <ItemNoteEditor note={item.note ?? null} onSave={saveNote} />
+              <ItemNoteEditor note={item.note ?? null} onSave={saveNote} disabled={disableMutations} />
               <ItemHighlightList
                 highlights={item.highlights ?? []}
                 onCreate={createHighlight}
                 onDelete={deleteHighlight}
+                disabled={disableMutations}
               />
             </div>
           </TabPanel>

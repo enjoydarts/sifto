@@ -62,13 +62,23 @@ def usage_from_chat_response(data: dict) -> dict:
         or usage.get("cached_tokens")
         or 0
     )
-    return {
+    billed_cost = usage.get("cost")
+    usage_payload = {
         "input_tokens": int(usage.get("prompt_tokens", 0) or 0),
         "output_tokens": int(usage.get("completion_tokens", 0) or 0),
         "cache_creation_input_tokens": 0,
         "cache_read_input_tokens": int(cached_tokens or 0),
         "resolved_model": str(data.get("model") or "").strip() or None,
     }
+    if billed_cost is not None:
+        try:
+            usage_payload["billed_cost_usd"] = float(billed_cost)
+        except Exception:
+            pass
+    generation_id = str(data.get("id") or "").strip()
+    if generation_id:
+        usage_payload["generation_id"] = generation_id
+    return usage_payload
 
 
 def run_chat_json(

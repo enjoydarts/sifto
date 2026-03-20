@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -65,6 +66,8 @@ var (
 
 const openRouterAliasPrefix = "openrouter::"
 
+var anthropicOpenRouterResolvedPattern = regexp.MustCompile(`^anthropic/claude-(\d+(?:\.\d+)*)-(opus|sonnet|haiku)-\d{8}$`)
+
 func OpenRouterAliasModelID(model string) string {
 	m := strings.TrimSpace(model)
 	if m == "" {
@@ -79,6 +82,17 @@ func OpenRouterAliasModelID(model string) string {
 func ResolveOpenRouterModelID(model string) string {
 	m := strings.TrimSpace(model)
 	return strings.TrimPrefix(m, openRouterAliasPrefix)
+}
+
+func CanonicalizeOpenRouterModelID(model string) string {
+	resolved := ResolveOpenRouterModelID(model)
+	if resolved == "" {
+		return ""
+	}
+	if match := anthropicOpenRouterResolvedPattern.FindStringSubmatch(resolved); len(match) == 3 {
+		return "anthropic/claude-" + match[2] + "-" + match[1]
+	}
+	return resolved
 }
 
 func IsOpenRouterAliasedModel(model string) bool {

@@ -78,6 +78,8 @@ func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpo
 		ResolvedModel:            strings.TrimSpace(usage.ResolvedModel),
 		PricingModelFamily:       usage.PricingModelFamily,
 		PricingSource:            pricingSource,
+		OpenRouterCostUSD:        usage.OpenRouterCostUSD,
+		OpenRouterGenerationID:   strings.TrimSpace(usage.OpenRouterGenerationID),
 		Purpose:                  purpose,
 		InputTokens:              usage.InputTokens,
 		OutputTokens:             usage.OutputTokens,

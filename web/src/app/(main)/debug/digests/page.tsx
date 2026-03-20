@@ -51,6 +51,21 @@ type TitleBackfillResponse = {
   targets?: unknown[];
 };
 
+type OpenRouterCostBackfillResponse = {
+  status: string;
+  dry_run: boolean;
+  user_filter?: string | null;
+  limit: number;
+  from?: string | null;
+  to?: string | null;
+  matched: number;
+  repaired: number;
+  zeroed: number;
+  failed: number;
+  error_samples?: unknown[];
+  targets?: unknown[];
+};
+
 type DebugSystemStatusResponse = {
   proxy_status: number;
   proxy_latency_ms: number;
@@ -191,6 +206,13 @@ export default function DebugDigestsPage() {
   const [titleBackfillDryRun, setTitleBackfillDryRun] = useState(true);
   const [busyTitleBackfill, setBusyTitleBackfill] = useState(false);
   const [titleBackfillResult, setTitleBackfillResult] = useState<TitleBackfillResponse | null>(null);
+  const [openRouterCostUserId, setOpenRouterCostUserId] = useState("");
+  const [openRouterCostLimit, setOpenRouterCostLimit] = useState("200");
+  const [openRouterCostFrom, setOpenRouterCostFrom] = useState("");
+  const [openRouterCostTo, setOpenRouterCostTo] = useState("");
+  const [openRouterCostDryRun, setOpenRouterCostDryRun] = useState(true);
+  const [busyOpenRouterCostBackfill, setBusyOpenRouterCostBackfill] = useState(false);
+  const [openRouterCostBackfillResult, setOpenRouterCostBackfillResult] = useState<OpenRouterCostBackfillResponse | null>(null);
   const [retrySourceId, setRetrySourceId] = useState("");
   const [busyRetryFailed, setBusyRetryFailed] = useState(false);
   const [retryFailedResult, setRetryFailedResult] = useState<BulkRetryFailedResult | null>(null);
@@ -488,6 +510,38 @@ export default function DebugDigestsPage() {
       showToast(String(e), "error");
     } finally {
       setBusyTitleBackfill(false);
+    }
+  };
+
+  const onBackfillOpenRouterCosts = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusyOpenRouterCostBackfill(true);
+    setError(null);
+    setOpenRouterCostBackfillResult(null);
+    try {
+      const parsedLimit = Number(openRouterCostLimit);
+      if (!Number.isFinite(parsedLimit) || parsedLimit <= 0 || parsedLimit > 5000) {
+        throw new Error(t("debug.openrouterCost.limitError"));
+      }
+      const payload: Record<string, unknown> = {
+        limit: parsedLimit,
+        dry_run: openRouterCostDryRun,
+      };
+      if (openRouterCostUserId.trim()) payload.user_id = openRouterCostUserId.trim();
+      if (openRouterCostFrom.trim()) payload.from = openRouterCostFrom.trim();
+      if (openRouterCostTo.trim()) payload.to = openRouterCostTo.trim();
+      const res = await postJSON<OpenRouterCostBackfillResponse>("/api/debug/llm-usage/backfill-openrouter-costs", payload);
+      setOpenRouterCostBackfillResult(res);
+      showToast(
+        openRouterCostDryRun ? t("debug.openrouterCost.previewDone") : t("debug.openrouterCost.runDone"),
+        "success"
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setBusyOpenRouterCostBackfill(false);
     }
   };
 
@@ -956,6 +1010,81 @@ export default function DebugDigestsPage() {
         {backfillResult && (
           <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
             {JSON.stringify(backfillResult, null, 2)}
+          </pre>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+        <h2 className="mb-3 text-sm font-semibold text-zinc-800">{t("debug.openrouterCost.title")}</h2>
+        <form onSubmit={onBackfillOpenRouterCosts} className="space-y-3">
+          <p className="text-xs text-zinc-500">{t("debug.openrouterCost.description")}</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="text-sm sm:col-span-2">
+              <div className="mb-1 text-xs font-medium text-zinc-600">{t("debug.openrouterCost.userId")}</div>
+              <input
+                value={openRouterCostUserId}
+                onChange={(e) => setOpenRouterCostUserId(e.target.value)}
+                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                placeholder={t("debug.openrouterCost.userPlaceholder")}
+              />
+            </label>
+            <label className="text-sm">
+              <div className="mb-1 text-xs font-medium text-zinc-600">{t("debug.openrouterCost.limit")}</div>
+              <input
+                type="number"
+                min={1}
+                max={5000}
+                value={openRouterCostLimit}
+                onChange={(e) => setOpenRouterCostLimit(e.target.value)}
+                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              />
+            </label>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm">
+              <div className="mb-1 text-xs font-medium text-zinc-600">{t("debug.openrouterCost.from")}</div>
+              <input
+                value={openRouterCostFrom}
+                onChange={(e) => setOpenRouterCostFrom(e.target.value)}
+                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                placeholder={t("debug.openrouterCost.datePlaceholder")}
+              />
+            </label>
+            <label className="text-sm">
+              <div className="mb-1 text-xs font-medium text-zinc-600">{t("debug.openrouterCost.to")}</div>
+              <input
+                value={openRouterCostTo}
+                onChange={(e) => setOpenRouterCostTo(e.target.value)}
+                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                placeholder={t("debug.openrouterCost.datePlaceholder")}
+              />
+            </label>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-zinc-700">
+            <input
+              type="checkbox"
+              checked={openRouterCostDryRun}
+              onChange={(e) => setOpenRouterCostDryRun(e.target.checked)}
+              className="accent-zinc-900"
+            />
+            {t("debug.digest.dryRun")}
+          </label>
+          <button
+            type="submit"
+            disabled={busyOpenRouterCostBackfill}
+            className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+          >
+            {busyOpenRouterCostBackfill
+              ? t("debug.running")
+              : openRouterCostDryRun
+                ? t("debug.openrouterCost.preview")
+                : t("debug.openrouterCost.run")}
+          </button>
+        </form>
+
+        {openRouterCostBackfillResult && (
+          <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+            {JSON.stringify(openRouterCostBackfillResult, null, 2)}
           </pre>
         )}
       </section>

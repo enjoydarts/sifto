@@ -82,8 +82,20 @@ def _normalize_model_name(model: str) -> str:
     return resolve_model_id(model)
 
 
+def _canonicalize_openrouter_resolved_model(model: str) -> str:
+    normalized = _normalize_model_name(model)
+    if model_pricing(normalized) is not None:
+        return normalized
+    anthropic_match = re.fullmatch(r"anthropic/claude-(?P<version>\d+(?:\.\d+)*)-(?P<tier>opus|sonnet|haiku)-\d{8}", normalized)
+    if anthropic_match:
+        version = anthropic_match.group("version")
+        tier = anthropic_match.group("tier")
+        return f"anthropic/claude-{tier}-{version}"
+    return normalized
+
+
 def _normalize_model_family(model: str) -> str:
-    return _normalize_model_name(model)
+    return _canonicalize_openrouter_resolved_model(model)
 
 
 def _pricing_for_model(model: str, purpose: str) -> dict:
@@ -132,7 +144,7 @@ def _llm_meta(model: str, purpose: str, usage: dict) -> dict:
         "output_tokens": int(usage.get("output_tokens", 0) or 0),
         "cache_creation_input_tokens": int(usage.get("cache_creation_input_tokens", 0) or 0),
         "cache_read_input_tokens": int(usage.get("cache_read_input_tokens", 0) or 0),
-        "estimated_cost_usd": _estimate_cost_usd(actual_model, purpose, usage),
+        "estimated_cost_usd": float(usage.get("billed_cost_usd")) if usage.get("billed_cost_usd") is not None else _estimate_cost_usd(actual_model, purpose, usage),
     }, usage.get("execution_failures"))
 
 

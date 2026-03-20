@@ -218,6 +218,8 @@ type LLMUsage struct {
 	ResolvedModel            string                `json:"resolved_model,omitempty"`
 	PricingModelFamily       string                `json:"pricing_model_family,omitempty"`
 	PricingSource            string                `json:"pricing_source,omitempty"`
+	OpenRouterCostUSD        *float64              `json:"openrouter_cost_usd,omitempty"`
+	OpenRouterGenerationID   string                `json:"openrouter_generation_id,omitempty"`
 	InputTokens              int                   `json:"input_tokens"`
 	OutputTokens             int                   `json:"output_tokens"`
 	CacheCreationInputTokens int                   `json:"cache_creation_input_tokens"`

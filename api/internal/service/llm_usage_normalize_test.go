@@ -2,6 +2,8 @@ package service
 
 import "testing"
 
+func float64Ptr(v float64) *float64 { return &v }
+
 func TestNormalizeCatalogPricedUsagePrefersOpenRouterAliasedPricing(t *testing.T) {
 	original := dynamicChatModels
 	SetDynamicChatModels([]LLMModelCatalog{
@@ -135,5 +137,68 @@ func TestNormalizeCatalogPricedUsageFallsBackToRequestedModelWhenResolvedModelMi
 	want := 3.0
 	if got.EstimatedCostUSD != want {
 		t.Fatalf("estimated_cost_usd = %.4f, want %.4f", got.EstimatedCostUSD, want)
+	}
+}
+
+func TestNormalizeCatalogPricedUsageKeepsOpenRouterBilledCostWhenPresent(t *testing.T) {
+	usage := &LLMUsage{
+		Provider:             "openrouter",
+		Model:                OpenRouterAliasModelID("auto"),
+		RequestedModel:       OpenRouterAliasModelID("auto"),
+		ResolvedModel:        "anthropic/claude-4.6-opus-20260205",
+		PricingSource:        "worker_estimate",
+		EstimatedCostUSD:     0.1234,
+		OpenRouterCostUSD:    float64Ptr(0.1234),
+		InputTokens:          1_000_000,
+		OutputTokens:         500_000,
+		CacheReadInputTokens: 100_000,
+	}
+
+	got := NormalizeCatalogPricedUsage("summary", usage)
+	if got == nil {
+		t.Fatal("NormalizeCatalogPricedUsage returned nil")
+	}
+	if got.EstimatedCostUSD != 0.1234 {
+		t.Fatalf("estimated_cost_usd = %.4f, want 0.1234", got.EstimatedCostUSD)
+	}
+	if got.PricingSource != "openrouter_billed" {
+		t.Fatalf("pricing_source = %q, want openrouter_billed", got.PricingSource)
+	}
+}
+
+func TestNormalizeCatalogPricedUsageNormalizesDatedAnthropicResolvedModel(t *testing.T) {
+	original := dynamicChatModels
+	SetDynamicChatModels([]LLMModelCatalog{
+		{
+			ID:       OpenRouterAliasModelID("anthropic/claude-opus-4.6"),
+			Provider: "openrouter",
+			Pricing: &LLMModelPricing{
+				PricingSource:    "openrouter_snapshot",
+				InputPerMTokUSD:  5.0,
+				OutputPerMTokUSD: 25.0,
+			},
+		},
+	})
+	defer SetDynamicChatModels(original)
+
+	usage := &LLMUsage{
+		Provider:       "openrouter",
+		Model:          OpenRouterAliasModelID("auto"),
+		RequestedModel: OpenRouterAliasModelID("auto"),
+		ResolvedModel:  "anthropic/claude-4.6-opus-20260205",
+		PricingSource:  "worker_estimate",
+		InputTokens:    1_000_000,
+		OutputTokens:   500_000,
+	}
+
+	got := NormalizeCatalogPricedUsage("summary", usage)
+	if got == nil {
+		t.Fatal("NormalizeCatalogPricedUsage returned nil")
+	}
+	if got.PricingModelFamily != OpenRouterAliasModelID("anthropic/claude-opus-4.6") {
+		t.Fatalf("pricing_model_family = %q", got.PricingModelFamily)
+	}
+	if got.EstimatedCostUSD != 17.5 {
+		t.Fatalf("estimated_cost_usd = %.4f, want 17.5", got.EstimatedCostUSD)
 	}
 }

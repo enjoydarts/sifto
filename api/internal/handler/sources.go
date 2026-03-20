@@ -1647,6 +1647,8 @@ func (h *SourceHandler) recordSourceSuggestionLLMUsage(ctx context.Context, user
 		ResolvedModel:            llm.ResolvedModel,
 		PricingModelFamily:       llm.PricingModelFamily,
 		PricingSource:            llm.PricingSource,
+		OpenRouterCostUSD:        llm.OpenRouterCostUSD,
+		OpenRouterGenerationID:   strings.TrimSpace(llm.OpenRouterGenerationID),
 		Purpose:                  "source_suggestion",
 		InputTokens:              llm.InputTokens,
 		OutputTokens:             llm.OutputTokens,

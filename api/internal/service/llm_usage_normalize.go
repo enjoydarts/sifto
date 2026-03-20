@@ -6,9 +6,20 @@ func NormalizeCatalogPricedUsage(purpose string, usage *LLMUsage) *LLMUsage {
 	if usage == nil {
 		return nil
 	}
+	if strings.TrimSpace(usage.Provider) == "openrouter" && usage.OpenRouterCostUSD != nil {
+		normalized := *usage
+		if resolvedModelID := OpenRouterAliasModelID(CanonicalizeOpenRouterModelID(strings.TrimSpace(usage.ResolvedModel))); resolvedModelID != "" {
+			if entry := CatalogModelByID(resolvedModelID); entry != nil {
+				normalized.PricingModelFamily = resolvedModelID
+			}
+		}
+		normalized.PricingSource = "openrouter_billed"
+		normalized.EstimatedCostUSD = *usage.OpenRouterCostUSD
+		return &normalized
+	}
 	modelID := strings.TrimSpace(usage.Model)
 	if strings.TrimSpace(usage.Provider) == "openrouter" {
-		if resolvedModelID := OpenRouterAliasModelID(strings.TrimSpace(usage.ResolvedModel)); resolvedModelID != "" {
+		if resolvedModelID := OpenRouterAliasModelID(CanonicalizeOpenRouterModelID(strings.TrimSpace(usage.ResolvedModel))); resolvedModelID != "" {
 			if entry := CatalogModelByID(resolvedModelID); entry != nil && entry.Pricing != nil {
 				modelID = resolvedModelID
 			}

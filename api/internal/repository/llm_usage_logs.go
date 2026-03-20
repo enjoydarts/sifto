@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,6 +24,8 @@ type LLMUsageLogInput struct {
 	ResolvedModel            string
 	PricingModelFamily       string
 	PricingSource            string
+	OpenRouterCostUSD        *float64
+	OpenRouterGenerationID   string
 	Purpose                  string
 	InputTokens              int
 	OutputTokens             int
@@ -43,6 +46,8 @@ type LLMUsageLog struct {
 	ResolvedModel            *string   `json:"resolved_model,omitempty"`
 	PricingModelFamily       *string   `json:"pricing_model_family,omitempty"`
 	PricingSource            string    `json:"pricing_source"`
+	OpenRouterCostUSD        *float64  `json:"openrouter_cost_usd,omitempty"`
+	OpenRouterGenerationID   *string   `json:"openrouter_generation_id,omitempty"`
 	Purpose                  string    `json:"purpose"`
 	InputTokens              int       `json:"input_tokens"`
 	OutputTokens             int       `json:"output_tokens"`
@@ -119,19 +124,40 @@ func nullIfEmpty(v string) *string {
 	return &v
 }
 
+func shouldBackfillOpenRouterUsageLog(v LLMUsageLog) bool {
+	if strings.TrimSpace(v.Provider) != "openrouter" {
+		return false
+	}
+	if v.OpenRouterCostUSD != nil {
+		return false
+	}
+	if v.EstimatedCostUSD < 0 {
+		return true
+	}
+	requestedModel := ""
+	if v.RequestedModel != nil {
+		requestedModel = strings.TrimSpace(*v.RequestedModel)
+	}
+	resolvedModel := ""
+	if v.ResolvedModel != nil {
+		resolvedModel = strings.TrimSpace(*v.ResolvedModel)
+	}
+	return requestedModel == "openrouter::auto" && resolvedModel != ""
+}
+
 func (r *LLMUsageLogRepo) Insert(ctx context.Context, in LLMUsageLogInput) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO llm_usage_logs (
 			idempotency_key, user_id, source_id, item_id, digest_id,
-			provider, model, requested_model, resolved_model, pricing_model_family, pricing_source, purpose,
+			provider, model, requested_model, resolved_model, pricing_model_family, pricing_source, openrouter_cost_usd, openrouter_generation_id, purpose,
 			input_tokens, output_tokens,
 			cache_creation_input_tokens, cache_read_input_tokens,
 			estimated_cost_usd
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 		ON CONFLICT (idempotency_key) DO NOTHING
 	`,
 		in.IdempotencyKey, in.UserID, in.SourceID, in.ItemID, in.DigestID,
-		in.Provider, in.Model, nullIfEmpty(in.RequestedModel), nullIfEmpty(in.ResolvedModel), in.PricingModelFamily, in.PricingSource, in.Purpose,
+		in.Provider, in.Model, nullIfEmpty(in.RequestedModel), nullIfEmpty(in.ResolvedModel), in.PricingModelFamily, in.PricingSource, in.OpenRouterCostUSD, nullIfEmpty(in.OpenRouterGenerationID), in.Purpose,
 		in.InputTokens, in.OutputTokens,
 		in.CacheCreationInputTokens, in.CacheReadInputTokens,
 		in.EstimatedCostUSD,
@@ -145,7 +171,7 @@ func (r *LLMUsageLogRepo) ListByUser(ctx context.Context, userID string, limit i
 	}
 	rows, err := r.db.Query(ctx, `
 		SELECT id, user_id, source_id, item_id, digest_id,
-		       provider, model, requested_model, resolved_model, pricing_model_family, pricing_source, purpose,
+		       provider, model, requested_model, resolved_model, pricing_model_family, pricing_source, openrouter_cost_usd, openrouter_generation_id, purpose,
 		       input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens,
 		       estimated_cost_usd, created_at
 		FROM llm_usage_logs
@@ -162,7 +188,7 @@ func (r *LLMUsageLogRepo) ListByUser(ctx context.Context, userID string, limit i
 		var v LLMUsageLog
 		if err := rows.Scan(
 			&v.ID, &v.UserID, &v.SourceID, &v.ItemID, &v.DigestID,
-			&v.Provider, &v.Model, &v.RequestedModel, &v.ResolvedModel, &v.PricingModelFamily, &v.PricingSource, &v.Purpose,
+			&v.Provider, &v.Model, &v.RequestedModel, &v.ResolvedModel, &v.PricingModelFamily, &v.PricingSource, &v.OpenRouterCostUSD, &v.OpenRouterGenerationID, &v.Purpose,
 			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens, &v.CacheReadInputTokens,
 			&v.EstimatedCostUSD, &v.CreatedAt,
 		); err != nil {
@@ -171,6 +197,59 @@ func (r *LLMUsageLogRepo) ListByUser(ctx context.Context, userID string, limit i
 		out = append(out, v)
 	}
 	return out, rows.Err()
+}
+
+func (r *LLMUsageLogRepo) ListOpenRouterBackfillCandidates(ctx context.Context, userID *string, limit int, from, to *time.Time) ([]LLMUsageLog, error) {
+	if limit <= 0 || limit > 5000 {
+		limit = 500
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT id, user_id, source_id, item_id, digest_id,
+		       provider, model, requested_model, resolved_model, pricing_model_family, pricing_source, openrouter_cost_usd, openrouter_generation_id, purpose,
+		       input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens,
+		       estimated_cost_usd, created_at
+		FROM llm_usage_logs
+		WHERE provider = 'openrouter'
+		  AND ($1::uuid IS NULL OR user_id = $1)
+		  AND ($2::timestamptz IS NULL OR created_at >= $2)
+		  AND ($3::timestamptz IS NULL OR created_at < $3)
+		  AND (
+			estimated_cost_usd < 0
+			OR (requested_model = 'openrouter::auto' AND resolved_model IS NOT NULL AND openrouter_cost_usd IS NULL)
+		  )
+		ORDER BY created_at DESC
+		LIMIT $4`, userID, from, to, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]LLMUsageLog, 0)
+	for rows.Next() {
+		var v LLMUsageLog
+		if err := rows.Scan(
+			&v.ID, &v.UserID, &v.SourceID, &v.ItemID, &v.DigestID,
+			&v.Provider, &v.Model, &v.RequestedModel, &v.ResolvedModel, &v.PricingModelFamily, &v.PricingSource, &v.OpenRouterCostUSD, &v.OpenRouterGenerationID, &v.Purpose,
+			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens, &v.CacheReadInputTokens,
+			&v.EstimatedCostUSD, &v.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if shouldBackfillOpenRouterUsageLog(v) {
+			out = append(out, v)
+		}
+	}
+	return out, rows.Err()
+}
+
+func (r *LLMUsageLogRepo) UpdateOpenRouterBackfill(ctx context.Context, id string, pricingModelFamily *string, pricingSource string, estimatedCostUSD float64) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE llm_usage_logs
+		SET pricing_model_family = $2,
+		    pricing_source = $3,
+		    estimated_cost_usd = $4
+		WHERE id = $1`, id, pricingModelFamily, pricingSource, estimatedCostUSD)
+	return err
 }
 
 func (r *LLMUsageLogRepo) DailySummaryByUser(ctx context.Context, userID string, days int) ([]LLMUsageDailySummary, error) {

@@ -71,6 +71,32 @@ class _ResolvedModelClient:
         )
 
 
+class _ResolvedModelWithCostClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def post(self, url, headers=None, json=None):
+        return httpx.Response(
+            200,
+            json={
+                "id": "gen-123",
+                "model": "anthropic/claude-4.6-opus-20260205",
+                "choices": [{"message": {"content": '{"answer":"ok"}'}}],
+                "usage": {
+                    "prompt_tokens": 12,
+                    "completion_tokens": 34,
+                    "cost": 0.1234,
+                },
+            },
+        )
+
+
 class _EmptyContentClient:
     def __init__(self, *args, **kwargs):
         pass
@@ -229,6 +255,27 @@ class RunChatJsonTests(unittest.TestCase):
 
         self.assertEqual(usage.get("requested_model"), "openrouter::auto")
         self.assertEqual(usage.get("resolved_model"), "openai/gpt-oss-120b")
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _ResolvedModelWithCostClient)
+    def test_usage_includes_openrouter_billed_cost_and_generation_id(self):
+        _text, usage = run_chat_json(
+            "Return JSON",
+            "openrouter::auto",
+            "test-key",
+            url="https://example.com/chat/completions",
+            normalize_model_name=lambda model: model,
+            supports_strict_schema=lambda model: False,
+            timeout_sec=5,
+            attempts=1,
+            base_sleep_sec=0,
+            provider_name="openrouter",
+            logger=None,
+            response_schema={"type": "object"},
+        )
+
+        self.assertEqual(usage.get("resolved_model"), "anthropic/claude-4.6-opus-20260205")
+        self.assertEqual(usage.get("billed_cost_usd"), 0.1234)
+        self.assertEqual(usage.get("generation_id"), "gen-123")
 
     @patch("app.services.openai_compat_transport.httpx.Client", _EmptyContentClient)
     def test_empty_content_logs_message_shape(self):

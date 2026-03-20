@@ -1,0 +1,3 @@
+display_name: Agency Agents Bridge
+description: Use local agency-agents role files when the user asks for named specialist personas.
+default_prompt: Use the mapped agency-agents role file before responding.

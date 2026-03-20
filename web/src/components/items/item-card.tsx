@@ -4,7 +4,6 @@ import { ExternalLink, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { type Item } from "@/lib/api";
 import { Thumbnail } from "@/components/thumbnail";
 import { CheckStatusBadges } from "@/components/items/check-status-badges";
-import { ActionRow } from "@/components/ui/action-row";
 import { ListRowCard } from "@/components/ui/list-row-card";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Tag } from "@/components/ui/tag";
@@ -92,7 +91,7 @@ export function ItemCard({
         onMouseEnter={onPrefetch}
         onFocus={onPrefetch}
         onTouchStart={onPrefetch}
-        className={`group grid min-w-0 gap-4 ${featured ? "md:grid-cols-[144px_minmax(0,1fr)_170px] md:items-start" : "sm:grid-cols-[132px_minmax(0,1fr)_170px] sm:items-start"}`}
+        className={`group grid min-w-0 gap-4 ${featured ? "md:grid-cols-[144px_minmax(0,1fr)_188px] md:items-start" : "sm:grid-cols-[132px_minmax(0,1fr)_188px] sm:items-start"}`}
       >
         <div
           className={`shrink-0 ${
@@ -196,43 +195,85 @@ export function ItemCard({
           </div>
         </div>
 
-        <ActionRow
-          className={`gap-3 ${
+        <div
+          className={`flex gap-3 ${
             featured
-              ? "self-start md:flex-col md:items-end"
-              : "w-full flex-col items-stretch justify-start border-t border-[var(--color-editorial-line)] pt-4 sm:w-auto sm:max-w-[170px] sm:items-end sm:border-t-0 sm:pt-0"
+              ? "self-start md:w-[188px] md:flex-col md:items-stretch"
+              : "w-full flex-col items-stretch justify-start border-t border-[var(--color-editorial-line)] pt-4 sm:w-[188px] sm:border-t-0 sm:pt-0"
           }`}
         >
-          <div className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2.5 sm:max-w-[170px] sm:p-3">
-            <div className="flex items-center justify-between gap-3">
+          <div className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2.5 sm:px-3 sm:py-3">
+            <div className="sm:hidden">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--color-editorial-ink-faint)]">
+                  {t("items.state.meta")}
+                </div>
+                <div
+                  className={`grid min-w-0 flex-1 gap-2 ${
+                    item.personal_score != null ? "grid-cols-2" : "grid-cols-1"
+                  }`}
+                >
+                  {item.personal_score != null && (
+                    <div className="min-w-0 text-right text-[var(--color-editorial-ink)]">
+                      <div className="truncate text-[10px] leading-none text-[var(--color-editorial-ink-faint)]">
+                        {t("items.sort.personal_score")}
+                      </div>
+                      <div className="mt-1 text-[17px] leading-none tracking-[-0.03em]">
+                        {item.personal_score.toFixed(2)}
+                      </div>
+                    </div>
+                  )}
+                  <div className="min-w-0 text-right text-[var(--color-editorial-ink)]">
+                    <div className="truncate text-[10px] leading-none text-[var(--color-editorial-ink-faint)]">
+                      {t("items.sort.score")}
+                    </div>
+                    <div className="mt-1 text-[17px] leading-none tracking-[-0.03em]">
+                      {item.summary_score != null ? item.summary_score.toFixed(2) : "—"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="hidden sm:block">
               <div className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[var(--color-editorial-ink-faint)]">
                 {t("items.state.meta")}
               </div>
-              <div className="flex items-baseline gap-3">
+              <div
+                className={`mt-3 grid gap-3 ${
+                  item.personal_score != null ? "grid-cols-2" : "grid-cols-1"
+                }`}
+              >
                 {item.personal_score != null && (
-                  <div className="flex items-baseline gap-1 text-[var(--color-editorial-ink)]">
-                    <span className="text-[12px] text-[var(--color-editorial-ink-faint)]">{t("items.sort.personal_score")}</span>
-                    <span className="text-[18px] leading-none tracking-[-0.03em]">{item.personal_score.toFixed(2)}</span>
+                  <div className="min-w-0 text-center">
+                    <div className="text-[10px] leading-tight text-[var(--color-editorial-ink-faint)]">
+                      {t("items.sort.personal_score")}
+                    </div>
+                    <div className="mt-1 text-[20px] font-semibold leading-none tabular-nums tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                      {item.personal_score.toFixed(2)}
+                    </div>
                   </div>
                 )}
-                <div className="flex items-baseline gap-1 text-[var(--color-editorial-ink)]">
-                  <span className="text-[12px] text-[var(--color-editorial-ink-faint)]">{t("items.sort.score")}</span>
-                  <span className="text-[18px] leading-none tracking-[-0.03em]">
+                <div className="min-w-0 text-center">
+                  <div className="text-[10px] leading-tight text-[var(--color-editorial-ink-faint)]">
+                    {t("items.sort.score")}
+                  </div>
+                  <div className="mt-1 text-[20px] font-semibold leading-none tabular-nums tracking-[-0.03em] text-[var(--color-editorial-ink)]">
                     {item.summary_score != null ? item.summary_score.toFixed(2) : "—"}
-                  </span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="grid w-full gap-2 sm:max-w-[170px]">
+          <div className="grid w-full gap-2">
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenDetail();
               }}
-              className="inline-flex min-h-11 w-full items-center justify-center gap-1 rounded-full border border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] transition-colors hover:bg-[var(--color-editorial-panel-strong)] press focus-ring sm:h-9 sm:min-h-0 sm:text-xs"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-1 rounded-full border border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] transition-colors hover:bg-[var(--color-editorial-panel-strong)] press focus-ring sm:h-9 sm:min-h-0 sm:text-sm"
             >
               <ExternalLink className="size-3.5" aria-hidden="true" />
               <span className="sm:hidden">{t("items.action.openShort")}</span>
@@ -247,7 +288,7 @@ export function ItemCard({
                   e.stopPropagation();
                   onToggleRead();
                 }}
-                className={`min-h-11 w-full rounded-full px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 press focus-ring sm:h-9 sm:min-h-0 sm:text-xs ${
+                className={`min-h-11 w-full rounded-full px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 press focus-ring sm:h-9 sm:min-h-0 sm:text-sm ${
                   isRead
                     ? "border border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
                     : "border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)] hover:opacity-90"
@@ -279,7 +320,7 @@ export function ItemCard({
                   e.stopPropagation();
                   onRetry();
                 }}
-                className="min-h-11 w-full rounded-full border border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] transition-colors hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50 press focus-ring sm:h-9 sm:min-h-0 sm:text-xs"
+                className="min-h-11 w-full rounded-full border border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] transition-colors hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50 press focus-ring sm:h-9 sm:min-h-0 sm:text-sm"
               >
                 {retrying ? t("items.retrying") : (
                   <>
@@ -290,7 +331,7 @@ export function ItemCard({
               </button>
             )}
           </div>
-        </ActionRow>
+        </div>
       </div>
     </ListRowCard>
   );

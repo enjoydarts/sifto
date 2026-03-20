@@ -24,7 +24,13 @@ def wrap_message_transport(message, llm_meta_builder, empty_llm: dict) -> tuple[
 
 
 def wrap_message_fallback_transport(result, llm_meta_builder, provider: str, fallback_model: str, pricing_source: str) -> tuple[str, dict]:
-    message, resolved_model = result
+    message = None
+    resolved_model = None
+    if isinstance(result, tuple):
+        if len(result) >= 1:
+            message = result[0]
+        if len(result) >= 2:
+            resolved_model = result[1]
     return wrap_message_transport(
         message,
         lambda msg: llm_meta_builder(msg, resolved_model or fallback_model),

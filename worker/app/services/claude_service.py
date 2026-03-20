@@ -96,6 +96,23 @@ def _call_with_model_fallback(*args, **kwargs):
     return _anthropic_call_with_model_fallback(*args, logger=_log, **kwargs)
 
 
+def _with_execution_failures(llm: dict, execution_failures: list[dict] | None) -> dict:
+    if not execution_failures:
+        return llm
+    failures = []
+    for failure in execution_failures:
+        if not isinstance(failure, dict):
+            continue
+        model = str(failure.get("model") or "").strip()
+        reason = str(failure.get("reason") or "").strip()
+        if not model:
+            continue
+        failures.append({"model": model, "reason": reason})
+    if failures:
+        llm["execution_failures"] = failures
+    return llm
+
+
 def _split_text_chunks(text: str, chunk_chars: int = 8000, overlap_chars: int = 400) -> list[str]:
     text = (text or "").strip()
     if not text:
@@ -202,7 +219,13 @@ def _merge_llm_metas(metas: list[dict], purpose: str) -> dict:
     families = {str(m.get("pricing_model_family", "")) for m in valid if m.get("pricing_model_family") is not None}
     sources = {str(m.get("pricing_source", "default")) for m in valid}
 
-    return {
+    execution_failures = []
+    for meta in valid:
+        failures = meta.get("execution_failures")
+        if isinstance(failures, list):
+            execution_failures.extend(f for f in failures if isinstance(f, dict))
+
+    merged = {
         "provider": next(iter(providers)) if len(providers) == 1 else "mixed",
         "model": models[0] if len(set(models)) == 1 and models else "multiple",
         "pricing_model_family": next(iter(families)) if len(families) == 1 else "mixed",
@@ -215,6 +238,9 @@ def _merge_llm_metas(metas: list[dict], purpose: str) -> dict:
         "calls": len(valid),
         "purpose": purpose,
     }
+    if execution_failures:
+        merged["execution_failures"] = execution_failures
+    return merged
 
 
 def _env_optional_float(name: str) -> float | None:
@@ -319,6 +345,7 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
 
     all_fact_lists: list[list[str]] = []
     llm_metas: list[dict] = []
+    execution_failures_all: list[dict] = []
     any_llm_success = False
     per_chunk_fact_target = 4 if len(chunks) <= 3 else 3 if len(chunks) <= 8 else 2
 
@@ -329,7 +356,7 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
             output_mode="array",
             fact_range=f"{per_chunk_fact_target}〜{per_chunk_fact_target + 2}個",
         )
-        message, used_model = _call_with_model_fallback(
+        message, used_model, execution_failures = _call_with_model_fallback(
             f"{task['system_instruction']}\n\n{task['prompt']}",
             str(model or _facts_model),
             _facts_model_fallback,
@@ -338,18 +365,19 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
             system_prompt=task["system_instruction"],
             user_prompt=task["prompt"],
         )
+        execution_failures_all.extend(execution_failures or [])
         if message is None:
             continue
         any_llm_success = True
         text = message.content[0].text.strip()
         all_fact_lists.append(parse_facts_result(text))
-        llm_metas.append(_llm_meta(message, "facts", used_model or _facts_model))
+        llm_metas.append(_with_execution_failures(_llm_meta(message, "facts", used_model or _facts_model), execution_failures))
 
     if not any_llm_success:
         lines = [line.strip() for line in content.splitlines() if line.strip()]
         return {
             "facts": lines[:5],
-            "llm": {
+            "llm": _with_execution_failures({
                 "provider": "local-fallback",
                 "model": _facts_model,
                 "input_tokens": 0,
@@ -357,13 +385,13 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
                 "cache_creation_input_tokens": 0,
                 "cache_read_input_tokens": 0,
                 "estimated_cost_usd": 0.0,
-            },
+            }, execution_failures_all),
         }
 
     merged_facts = _merge_fact_lists(all_fact_lists, max_items=24)
     if merged_facts and _facts_need_japanese_localization(merged_facts):
         localize_task = build_facts_localization_task(title, merged_facts)
-        message, used_model = _call_with_model_fallback(
+        message, used_model, execution_failures = _call_with_model_fallback(
             f"{localize_task['system_instruction']}\n\n{localize_task['prompt']}",
             str(model or _facts_model),
             _facts_model_fallback,
@@ -372,11 +400,12 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
             system_prompt=localize_task["system_instruction"],
             user_prompt=localize_task["prompt"],
         )
+        execution_failures_all.extend(execution_failures or [])
         if message is not None:
             localized_facts = parse_facts_result(message.content[0].text.strip())
             if localized_facts:
                 merged_facts = localized_facts
-                llm_metas.append(_llm_meta(message, "facts", used_model or _facts_model))
+                llm_metas.append(_with_execution_failures(_llm_meta(message, "facts", used_model or _facts_model), execution_failures))
     llm = _merge_llm_metas(llm_metas, "facts")
     llm["chunk_count"] = len(chunks)
     llm["chunk_success_count"] = len(llm_metas)
@@ -426,7 +455,7 @@ def summarize(
 
     prompt = f"{task['system_instruction']}\n\n{task['prompt']}"
     enable_summary_prompt_cache = os.getenv("ANTHROPIC_SUMMARY_PROMPT_CACHE", "1").strip() not in ("0", "false", "False")
-    message, used_model = _call_with_model_fallback(
+    message, used_model, execution_failures = _call_with_model_fallback(
         prompt,
         str(model or _summary_model),
         _summary_model_fallback,
@@ -453,7 +482,7 @@ def summarize(
             "score_breakdown": score_breakdown,
             "score_reason": "Anthropic応答を取得できなかったため簡易スコアです。",
             "score_policy_version": "v2",
-            "llm": {
+            "llm": _with_execution_failures({
                 "provider": "local-fallback",
                 "model": used_model or _summary_model,
                 "input_tokens": 0,
@@ -461,7 +490,7 @@ def summarize(
                 "cache_creation_input_tokens": 0,
                 "cache_read_input_tokens": 0,
                 "estimated_cost_usd": 0.0,
-            },
+            }, execution_failures),
         }
     text = message.content[0].text.strip()
     start = text.find("{")
@@ -481,7 +510,7 @@ def summarize(
         score_reason=str(data.get("score_reason") or "").strip(),
         translated_title=str(data.get("translated_title") or "").strip(),
         translate_func=lambda raw_title: _translate_title_to_ja(raw_title, used_model or _summary_model, api_key=api_key),
-        llm=_llm_meta(message, "summary", used_model or _summary_model),
+        llm=_with_execution_failures(_llm_meta(message, "summary", used_model or _summary_model), execution_failures),
         error_prefix="anthropic summarize parse failed",
         response_text=text,
     )
@@ -489,7 +518,7 @@ def summarize(
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, api_key: str | None = None, model: str | None = None) -> dict:
     prompt = summary_faithfulness_prompt(title, facts, summary)
-    message, used_model = _call_with_model_fallback(
+    message, used_model, _execution_failures = _call_with_model_fallback(
         prompt,
         str(model or _summary_model),
         _summary_model_fallback,
@@ -529,7 +558,7 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
 
 def check_facts(title: str | None, content: str, facts: list[str], api_key: str | None = None, model: str | None = None) -> dict:
     prompt = facts_check_prompt(title, content, facts)
-    message, used_model = _call_with_model_fallback(
+    message, used_model, _execution_failures = _call_with_model_fallback(
         prompt,
         str(model or _summary_model),
         _summary_model_fallback,
@@ -582,7 +611,7 @@ JSONで返してください:
 
 タイトル: {src}
 """
-    message, used_model = _call_with_model_fallback(
+    message, used_model, _execution_failures = _call_with_model_fallback(
         prompt,
         str(model or _summary_model),
         _summary_model_fallback,
@@ -712,7 +741,7 @@ def compose_digest(digest_date: str, items: list[dict], api_key: str | None = No
 
     task = build_digest_task(digest_date, len(items), digest_input, input_mode=input_mode)
 
-    message, used_model = _call_with_model_fallback(
+    message, used_model, _execution_failures = _call_with_model_fallback(
         f"{task['system_instruction']}\n\n{task['prompt']}",
         str(model or _digest_model),
         _digest_model_fallback,
@@ -785,7 +814,7 @@ def ask_question(query: str, candidates: list[dict], api_key: str | None = None,
             },
         }
     task = build_ask_task(query, candidates)
-    message, used_model = _call_with_model_fallback(
+    message, used_model, _execution_failures = _call_with_model_fallback(
         f"{task['system_instruction']}\n\n{task['prompt']}",
         str(model or _digest_model),
         _digest_model_fallback,
@@ -856,7 +885,7 @@ def compose_digest_cluster_draft(
 
     task = build_cluster_draft_task(cluster_label, item_count, topics, source_lines)
 
-    message, used_model = _call_with_model_fallback(
+    message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
         str(model or _digest_model),
         _digest_model_fallback,
@@ -938,7 +967,7 @@ def rank_feed_suggestions(
             },
         }
 
-    message, used_model = _call_with_model_fallback(
+    message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
         str(model or _feed_suggest_model),
         _feed_suggest_model_fallback,
@@ -990,7 +1019,7 @@ def suggest_feed_seed_sites(
                 "estimated_cost_usd": 0.0,
             },
         }
-    message, used_model = _call_with_model_fallback(
+    message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
         str(model or _feed_suggest_model),
         _feed_suggest_model_fallback,
@@ -1024,7 +1053,7 @@ def suggest_feed_seed_sites(
 興味トピック:
 {json.dumps(task["preferred_topics"], ensure_ascii=False)}
 """
-        rescue_message, _ = _call_with_model_fallback(
+        rescue_message, _, _execution_failures = _call_with_model_fallback(
             rescue_prompt,
             str(model or _feed_suggest_model),
             _feed_suggest_model_fallback,

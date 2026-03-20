@@ -131,7 +131,8 @@ def call_with_model_fallback(
     logger=None,
 ):
     if client_for_api_key(api_key) is None:
-        return None, None
+        return None, None, []
+    failures = []
     try:
         return (
             call_with_retries(
@@ -146,8 +147,10 @@ def call_with_model_fallback(
                 logger=logger,
             ),
             primary_model,
+            failures,
         )
     except Exception as e:
+        failures.append({"model": primary_model, "reason": str(e)})
         if logger is not None:
             logger.warning("anthropic call failed model=%s err=%s", primary_model, e)
         if fallback_model and fallback_model != primary_model:
@@ -165,8 +168,10 @@ def call_with_model_fallback(
                         logger=logger,
                     ),
                     fallback_model,
+                    failures,
                 )
             except Exception as e2:
+                failures.append({"model": fallback_model, "reason": str(e2)})
                 if logger is not None:
                     logger.warning("anthropic fallback failed model=%s err=%s", fallback_model, e2)
-        return None, None
+        return None, None, failures

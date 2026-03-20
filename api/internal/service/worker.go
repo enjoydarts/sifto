@@ -211,15 +211,21 @@ type SuggestFeedSeedSitesResponse struct {
 }
 
 type LLMUsage struct {
-	Provider                 string  `json:"provider"`
-	Model                    string  `json:"model"`
-	PricingModelFamily       string  `json:"pricing_model_family,omitempty"`
-	PricingSource            string  `json:"pricing_source,omitempty"`
-	InputTokens              int     `json:"input_tokens"`
-	OutputTokens             int     `json:"output_tokens"`
-	CacheCreationInputTokens int     `json:"cache_creation_input_tokens"`
-	CacheReadInputTokens     int     `json:"cache_read_input_tokens"`
-	EstimatedCostUSD         float64 `json:"estimated_cost_usd"`
+	Provider                 string                `json:"provider"`
+	Model                    string                `json:"model"`
+	PricingModelFamily       string                `json:"pricing_model_family,omitempty"`
+	PricingSource            string                `json:"pricing_source,omitempty"`
+	InputTokens              int                   `json:"input_tokens"`
+	OutputTokens             int                   `json:"output_tokens"`
+	CacheCreationInputTokens int                   `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int                   `json:"cache_read_input_tokens"`
+	EstimatedCostUSD         float64               `json:"estimated_cost_usd"`
+	ExecutionFailures        []LLMExecutionFailure `json:"execution_failures,omitempty"`
+}
+
+type LLMExecutionFailure struct {
+	Model  string `json:"model"`
+	Reason string `json:"reason"`
 }
 
 func (w *WorkerClient) ExtractBody(ctx context.Context, url string) (*ExtractBodyResponse, error) {

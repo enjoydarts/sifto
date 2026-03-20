@@ -297,6 +297,7 @@ func extractAndPersistFacts(
 		}
 
 		factsResp = factsAttempt.Facts
+		recordLLMExecutionFailuresFromUsage(ctx, deps.llmExecutionRepo, "facts", factsResp.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 		recordLLMUsage(ctx, deps.llmUsageRepo, "facts", factsResp.LLM, userIDPtr, &data.SourceID, &itemID, nil)
 		if len(factsResp.Facts) == 0 {
 			err := fmt.Errorf("empty facts returned from worker")
@@ -475,6 +476,7 @@ func summarizeAndPersistItem(
 
 		summary = summaryAttempt.Summary
 		summary.Summary = strings.TrimSpace(summary.Summary)
+		recordLLMExecutionFailuresFromUsage(ctx, deps.llmExecutionRepo, "summary", summary.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
 		recordLLMUsage(ctx, deps.llmUsageRepo, "summary", summary.LLM, userIDPtr, &data.SourceID, &itemID, nil)
 		if summary.Summary == "" {
 			err := fmt.Errorf("empty summary returned from worker")

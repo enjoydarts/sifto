@@ -206,6 +206,23 @@ func recordLLMExecutionFailure(ctx context.Context, repo *repository.LLMExecutio
 	}
 }
 
+func recordLLMExecutionFailuresFromUsage(ctx context.Context, repo *repository.LLMExecutionEventRepo, purpose string, usage *service.LLMUsage, attemptIndex int, userID, sourceID, itemID, digestID *string) {
+	if repo == nil || usage == nil || len(usage.ExecutionFailures) == 0 {
+		return
+	}
+	for _, failure := range usage.ExecutionFailures {
+		model := strings.TrimSpace(failure.Model)
+		if model == "" {
+			continue
+		}
+		reason := strings.TrimSpace(failure.Reason)
+		if reason == "" {
+			reason = "worker internal fallback"
+		}
+		recordLLMExecutionFailure(ctx, repo, purpose, &model, attemptIndex, userID, sourceID, itemID, digestID, fmt.Errorf("%s", reason))
+	}
+}
+
 func llmExecutionEventIdempotencyKey(in repository.LLMExecutionEventInput) string {
 	raw := fmt.Sprintf(
 		"trigger=%s|reason=%s|purpose=%s|provider=%s|model=%s|status=%s|attempt=%d|u=%s|s=%s|i=%s|d=%s|empty=%t|ek=%s|em=%s",

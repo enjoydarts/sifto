@@ -1819,7 +1819,7 @@ type retryCandidateQuerier interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-func (r *ItemRepo) loadRetryCandidate(ctx context.Context, q retryCandidateQuerier, id, userID string, forUpdate bool) (*retryCandidate, error) {
+func loadRetryCandidateQuery(forUpdate bool) string {
 	query := `
 		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, i.content_text, sm.summary, i.status,
 		       i.deleted_at IS NOT NULL AS is_deleted,
@@ -1832,8 +1832,13 @@ func (r *ItemRepo) loadRetryCandidate(ctx context.Context, q retryCandidateQueri
 		JOIN sources s ON s.id = i.source_id
 		WHERE i.id = $1 AND s.user_id = $2`
 	if forUpdate {
-		query += ` FOR UPDATE`
+		query += ` FOR UPDATE OF i`
 	}
+	return query
+}
+
+func (r *ItemRepo) loadRetryCandidate(ctx context.Context, q retryCandidateQuerier, id, userID string, forUpdate bool) (*retryCandidate, error) {
+	query := loadRetryCandidateQuery(forUpdate)
 	var candidate retryCandidate
 	err := q.QueryRow(ctx, query, id, userID).Scan(
 		&candidate.item.ID,

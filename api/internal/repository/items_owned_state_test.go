@@ -1,6 +1,9 @@
 package repository
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestErrForOwnedItemState(t *testing.T) {
 	tests := []struct {
@@ -87,6 +90,24 @@ func TestNormalizeItemDetailStatus(t *testing.T) {
 	}
 	if got := normalizeItemDetailStatus("summarized", false); got != "summarized" {
 		t.Fatalf("normalizeItemDetailStatus(active) = %q, want %q", got, "summarized")
+	}
+}
+
+func TestLoadRetryCandidateQueryUsesForUpdateOfItems(t *testing.T) {
+	query := loadRetryCandidateQuery(true)
+	const want = "FOR UPDATE OF i"
+	if !strings.Contains(query, want) {
+		t.Fatalf("loadRetryCandidateQuery(true) = %q, want substring %q", query, want)
+	}
+	if strings.Contains(query, "FOR UPDATE\n") || strings.Contains(query, "FOR UPDATE\r\n") || (strings.Contains(query, "FOR UPDATE ") && !strings.Contains(query, want)) {
+		t.Fatalf("loadRetryCandidateQuery(true) should not lock outer-joined tables: %q", query)
+	}
+}
+
+func TestLoadRetryCandidateQueryWithoutLock(t *testing.T) {
+	query := loadRetryCandidateQuery(false)
+	if strings.Contains(query, "FOR UPDATE") {
+		t.Fatalf("loadRetryCandidateQuery(false) = %q, want no FOR UPDATE", query)
 	}
 }
 

@@ -542,8 +542,8 @@ export default function ItemDetailPage() {
     try {
       await api.deleteItem(item.id);
       removeItemFromFeedCaches(item.id);
+      await queryClient.invalidateQueries({ queryKey: ["item-detail", item.id] });
       showToast(t("itemDetail.toast.deleted"), "success");
-      router.push(backHref);
     } catch (e) {
       setError(String(e));
       showToast(`${t("common.error")}: ${String(e)}`, "error");

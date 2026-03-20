@@ -165,7 +165,7 @@ export interface Item {
   translated_title?: string | null;
   thumbnail_url?: string | null;
   content_text: string | null;
-  status: "new" | "fetched" | "facts_extracted" | "summarized" | "failed";
+  status: "new" | "fetched" | "facts_extracted" | "summarized" | "failed" | "deleted";
   processing_error?: string | null;
   facts_check_result?: "pass" | "warn" | "fail" | string | null;
   faithfulness_result?: "pass" | "warn" | "fail" | string | null;

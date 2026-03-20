@@ -20,6 +20,7 @@ const STATUS_COLOR: Record<string, string> = {
   facts_extracted: "bg-purple-50 text-purple-600",
   summarized: "bg-green-50 text-green-700",
   failed: "bg-red-50 text-red-600",
+  deleted: "bg-zinc-200 text-zinc-700",
 };
 
 type RelatedCluster = {
@@ -542,6 +543,7 @@ export default function ItemDetailPage() {
     try {
       await api.deleteItem(item.id);
       removeItemFromFeedCaches(item.id);
+      setItem((prev) => (prev ? { ...prev, status: "deleted" } : prev));
       await queryClient.invalidateQueries({ queryKey: ["item-detail", item.id] });
       showToast(t("itemDetail.toast.deleted"), "success");
     } catch (e) {

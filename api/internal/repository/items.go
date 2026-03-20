@@ -41,10 +41,10 @@ func appendItemStatusFilter(query string, args []any, status *string) (string, [
 		return query + ` AND i.deleted_at IS NOT NULL`, args
 	}
 	if *status == "pending" {
-		return query + ` AND i.status IN ('new', 'fetched', 'facts_extracted', 'failed')`, args
+		return query + ` AND i.deleted_at IS NULL AND i.status IN ('new', 'fetched', 'facts_extracted', 'failed')`, args
 	}
 	args = append(args, *status)
-	return query + ` AND i.status = $` + itoa(len(args)), args
+	return query + ` AND i.deleted_at IS NULL AND i.status = $` + itoa(len(args)), args
 }
 
 type topicPulseRow struct {
@@ -269,9 +269,9 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 				if *p.Status == "deleted" {
 					q += ` AND i.deleted_at IS NOT NULL`
 				} else if *p.Status == "pending" {
-					q += ` AND i.status IN ('new', 'fetched', 'facts_extracted', 'failed')`
+					q += ` AND i.deleted_at IS NULL AND i.status IN ('new', 'fetched', 'facts_extracted', 'failed')`
 				} else {
-					q += ` AND i.status = $` + itoa(nextIdx)
+					q += ` AND i.deleted_at IS NULL AND i.status = $` + itoa(nextIdx)
 					nextIdx++
 				}
 			} else {

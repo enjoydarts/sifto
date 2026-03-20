@@ -36,3 +36,40 @@ func TestRetryCandidateConflictForDeleted(t *testing.T) {
 		t.Fatalf("deleted retry candidate should map to conflict, got %v", got)
 	}
 }
+
+func TestAppendItemStatusFilterExcludesDeletedForPending(t *testing.T) {
+	query, args := appendItemStatusFilter("SELECT * FROM items i WHERE 1=1", nil, stringPtr("pending"))
+
+	const want = "SELECT * FROM items i WHERE 1=1 AND i.deleted_at IS NULL AND i.status IN ('new', 'fetched', 'facts_extracted', 'failed')"
+	if query != want {
+		t.Fatalf("appendItemStatusFilter() query = %q, want %q", query, want)
+	}
+	if len(args) != 0 {
+		t.Fatalf("appendItemStatusFilter() args len = %d, want 0", len(args))
+	}
+}
+
+func TestAppendItemStatusFilterExcludesDeletedForExplicitStatus(t *testing.T) {
+	query, args := appendItemStatusFilter("SELECT * FROM items i WHERE 1=1", nil, stringPtr("summarized"))
+
+	const want = "SELECT * FROM items i WHERE 1=1 AND i.deleted_at IS NULL AND i.status = $1"
+	if query != want {
+		t.Fatalf("appendItemStatusFilter() query = %q, want %q", query, want)
+	}
+	if len(args) != 1 || args[0] != "summarized" {
+		t.Fatalf("appendItemStatusFilter() args = %#v, want [summarized]", args)
+	}
+}
+
+func TestNormalizeItemDetailStatus(t *testing.T) {
+	if got := normalizeItemDetailStatus("failed", true); got != "deleted" {
+		t.Fatalf("normalizeItemDetailStatus(deleted) = %q, want %q", got, "deleted")
+	}
+	if got := normalizeItemDetailStatus("summarized", false); got != "summarized" {
+		t.Fatalf("normalizeItemDetailStatus(active) = %q, want %q", got, "summarized")
+	}
+}
+
+func stringPtr(v string) *string {
+	return &v
+}

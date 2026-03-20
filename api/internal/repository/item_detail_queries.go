@@ -8,8 +8,10 @@ import (
 
 func (r *ItemRepo) loadItemDetailBase(ctx context.Context, id, userID string) (*model.ItemDetail, error) {
 	var d model.ItemDetail
+	var deleted bool
 	err := r.db.QueryRow(ctx, `
 		SELECT i.id, i.source_id, s.title, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
+		       i.deleted_at IS NOT NULL AS is_deleted,
 		       sm.translated_title,
 		       EXISTS (
 		           SELECT 1 FROM item_reads ir
@@ -21,11 +23,19 @@ func (r *ItemRepo) loadItemDetailBase(ctx context.Context, id, userID string) (*
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
 	).Scan(&d.ID, &d.SourceID, &d.SourceTitle, &d.URL, &d.Title, &d.ThumbnailURL, &d.ContentText,
-		&d.Status, &d.TranslatedTitle, &d.IsRead, &d.ProcessingError, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
+		&d.Status, &deleted, &d.TranslatedTitle, &d.IsRead, &d.ProcessingError, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {
 		return nil, mapDBError(err)
 	}
+	d.Status = normalizeItemDetailStatus(d.Status, deleted)
 	return &d, nil
+}
+
+func normalizeItemDetailStatus(status string, deleted bool) string {
+	if deleted {
+		return "deleted"
+	}
+	return status
 }
 
 func (r *ItemRepo) queryFactsDetail(ctx context.Context, itemID string) (*model.ItemFacts, error) {

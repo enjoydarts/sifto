@@ -22,6 +22,26 @@ func TestErrForOwnedItemState(t *testing.T) {
 	}
 }
 
+func TestErrForRestoreOwnedItemState(t *testing.T) {
+	tests := []struct {
+		name  string
+		state ownedItemState
+		want  error
+	}{
+		{name: "active", state: ownedItemActive, want: ErrConflict},
+		{name: "deleted", state: ownedItemDeleted, want: nil},
+		{name: "missing", state: ownedItemMissing, want: ErrNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := errForRestoreOwnedItemState(tt.state); got != tt.want {
+				t.Fatalf("errForRestoreOwnedItemState(%q) = %v, want %v", tt.state, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRetryCandidateConflictForDeleted(t *testing.T) {
 	candidate := retryCandidate{isDeleted: true}
 	if !candidate.isDeleted {

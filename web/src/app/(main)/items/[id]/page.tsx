@@ -158,6 +158,7 @@ export default function ItemDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [readUpdating, setReadUpdating] = useState(false);
   const [deleteUpdating, setDeleteUpdating] = useState(false);
+  const [restoreUpdating, setRestoreUpdating] = useState(false);
   const [feedbackUpdating, setFeedbackUpdating] = useState(false);
   const [retryUpdating, setRetryUpdating] = useState(false);
   const [retryFromFactsUpdating, setRetryFromFactsUpdating] = useState(false);
@@ -607,6 +608,26 @@ export default function ItemDetailPage() {
     }
   };
 
+  const restoreItem = async () => {
+    if (!item || restoreUpdating || item.status !== "deleted") return;
+    setRestoreUpdating(true);
+    try {
+      const next = await api.restoreItem(item.id);
+      queryClient.setQueryData<ItemDetail>(["item-detail", item.id], next);
+      setItem(next);
+      removeItemFromFeedCaches(item.id);
+      await refreshItemQueries(item.id);
+      setActionError(null);
+      showToast(t("itemDetail.toast.restored"), "success");
+    } catch (e) {
+      const message = localizeActionError(e, "delete", t);
+      setActionError(message);
+      showToast(`${t("common.error")}: ${message}`, "error");
+    } finally {
+      setRestoreUpdating(false);
+    }
+  };
+
   const retryItem = async () => {
     if (!item || retryUpdating || item.status === "deleted") return;
     setRetryUpdating(true);
@@ -784,16 +805,25 @@ export default function ItemDetailPage() {
             >
               {retryFromFactsUpdating ? t("common.saving") : t("itemDetail.retryFromFacts")}
             </button>
-            <button
-              type="button"
-              onClick={deleteItem}
-              disabled={deleteUpdating || disableMutations}
-              className="rounded-[10px] border border-red-300 bg-white px-3 py-2 text-[13px] font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {deleteUpdating
-                ? t("itemDetail.delete.deleting")
-                : t("itemDetail.delete.button")}
-            </button>
+            {isDeleted ? (
+              <button
+                type="button"
+                onClick={restoreItem}
+                disabled={restoreUpdating}
+                className="rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {restoreUpdating ? t("itemDetail.restore.restoring") : t("itemDetail.restore.button")}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={deleteItem}
+                disabled={deleteUpdating || disableMutations}
+                className="rounded-[10px] border border-red-300 bg-white px-3 py-2 text-[13px] font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {deleteUpdating ? t("itemDetail.delete.deleting") : t("itemDetail.delete.button")}
+              </button>
+            )}
           </div>
         </div>
 

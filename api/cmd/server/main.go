@@ -184,6 +184,7 @@ func main() {
 				itemNotesH.DeleteHighlight(w, r, chi.URLParam(r, "id"), chi.URLParam(r, "highlightId"))
 			})
 			r.Delete("/{id}", itemH.Delete)
+			r.Post("/{id}/restore", itemH.Restore)
 			r.Get("/{id}", itemH.GetDetail)
 			r.Patch("/{id}/feedback", itemH.SetFeedback)
 			r.Post("/{id}/read", itemH.MarkRead)

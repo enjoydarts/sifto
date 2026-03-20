@@ -2053,6 +2053,17 @@ func errForOwnedItemState(state ownedItemState) error {
 	}
 }
 
+func errForRestoreOwnedItemState(state ownedItemState) error {
+	switch state {
+	case ownedItemDeleted:
+		return nil
+	case ownedItemActive:
+		return ErrConflict
+	default:
+		return ErrNotFound
+	}
+}
+
 func (r *ItemRepo) Delete(ctx context.Context, itemID, userID string) error {
 	if err := r.ensureOwned(ctx, userID, itemID); err != nil {
 		return err
@@ -2060,6 +2071,22 @@ func (r *ItemRepo) Delete(ctx context.Context, itemID, userID string) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE items
 		SET deleted_at = NOW(),
+		    updated_at = NOW()
+		WHERE id = $1`, itemID)
+	return err
+}
+
+func (r *ItemRepo) Restore(ctx context.Context, itemID, userID string) error {
+	state, err := r.ownedItemState(ctx, userID, itemID)
+	if err != nil {
+		return err
+	}
+	if err := errForRestoreOwnedItemState(state); err != nil {
+		return err
+	}
+	_, err = r.db.Exec(ctx, `
+		UPDATE items
+		SET deleted_at = NULL,
 		    updated_at = NOW()
 		WHERE id = $1`, itemID)
 	return err

@@ -1007,6 +1007,25 @@ func (h *ItemHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *ItemHandler) Restore(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	id := chi.URLParam(r, "id")
+	if err := h.repo.Restore(r.Context(), id, userID); err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
+		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
+	}
+	h.invalidateUserCaches(r.Context(), userID)
+	item, err := h.getItemDetail(r.Context(), userID, id, true)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, item)
+}
+
 func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	id := chi.URLParam(r, "id")

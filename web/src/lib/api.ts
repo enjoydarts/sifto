@@ -1320,6 +1320,8 @@ export const api = {
     apiFetch<ItemLaterResult>(`/items/${id}/later`, { method: "DELETE" }),
   deleteItem: (id: string) =>
     apiFetch<void>(`/items/${id}`, { method: "DELETE" }),
+  restoreItem: (id: string) =>
+    apiFetch<ItemDetail>(`/items/${id}/restore`, { method: "POST" }),
   setItemFeedback: (id: string, body: { rating: number; is_favorite: boolean }) =>
     apiFetch<ItemFeedbackResult>(`/items/${id}/feedback`, {
       method: "PATCH",

@@ -375,7 +375,7 @@ export default function BriefingPage() {
           </div>
         </SectionCard>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_340px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_340px] xl:items-start">
           <div className="grid gap-6">
             {loading ? (
               <SectionCard>

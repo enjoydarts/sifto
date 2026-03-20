@@ -102,6 +102,37 @@ class _EmptyContentClient:
         )
 
 
+class _RetryThenSuccessClient:
+    call_count = 0
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def post(self, url, headers=None, json=None):
+        _RetryThenSuccessClient.call_count += 1
+        if _RetryThenSuccessClient.call_count == 1:
+            return httpx.Response(
+                429,
+                json={
+                    "error": {"message": "Rate limit reached"},
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "model": "openai/gpt-oss-120b",
+                "choices": [{"message": {"content": '{"answer":"ok"}'}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+
 class _ListLogger:
     def __init__(self):
         self.messages = []
@@ -115,6 +146,7 @@ class _ListLogger:
 class RunChatJsonTests(unittest.TestCase):
     def setUp(self):
         _FakeClient.last_json = None
+        _RetryThenSuccessClient.call_count = 0
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
     def test_zai_requests_disable_thinking(self):
@@ -223,6 +255,28 @@ class RunChatJsonTests(unittest.TestCase):
         self.assertIn("empty message content", logger.messages[0])
         self.assertIn("tool_calls_count=1", logger.messages[0])
         self.assertIn("message_keys=['content', 'reasoning', 'refusal', 'tool_calls']", logger.messages[0])
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _RetryThenSuccessClient)
+    def test_retryable_status_is_recorded_as_execution_failure_when_later_success(self):
+        _text, usage = run_chat_json(
+            "Return JSON",
+            "openrouter::auto",
+            "test-key",
+            url="https://example.com/chat/completions",
+            normalize_model_name=lambda model: model,
+            supports_strict_schema=lambda model: False,
+            timeout_sec=5,
+            attempts=2,
+            base_sleep_sec=0,
+            provider_name="openrouter",
+            logger=_ListLogger(),
+            response_schema={"type": "object"},
+        )
+
+        self.assertEqual(
+            usage.get("execution_failures"),
+            [{"model": "openrouter::auto", "reason": "status=429 body={\"error\":{\"message\":\"Rate limit reached\"}}"}],
+        )
 
 
 if __name__ == "__main__":

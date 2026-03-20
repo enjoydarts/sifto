@@ -3,6 +3,16 @@ import time
 import json
 
 
+def _append_execution_failure(usage: dict, model: str, reason: str) -> None:
+    model_name = str(model or "").strip()
+    failure_reason = str(reason or "").strip()
+    if not model_name or not failure_reason:
+        return
+    failures = usage.setdefault("execution_failures", [])
+    if isinstance(failures, list):
+        failures.append({"model": model_name, "reason": failure_reason})
+
+
 def _safe_sorted_keys(value) -> list[str]:
     if not isinstance(value, dict):
         return []
@@ -116,6 +126,8 @@ def run_chat_json(
     retryable_status = {408, 409, 429, 500, 502, 503, 504}
     resp: httpx.Response | None = None
     last_error: Exception | None = None
+    retry_usage: dict = {}
+    requested_model = str(model or "").strip() or None
 
     def is_json_validation_error(response: httpx.Response) -> bool:
         return response.status_code == 400 and "json_validate_failed" in (response.text or "")
@@ -136,6 +148,7 @@ def run_chat_json(
         except Exception as e:
             last_error = e
             if i < attempts - 1:
+                _append_execution_failure(retry_usage, requested_model, f"request failed: {e}")
                 sleep_sec = base_sleep_sec * (2**i)
                 logger.warning(
                     "%s chat.completions request failed model=%s retry_in=%.1fs attempt=%d/%d err=%s",
@@ -153,6 +166,7 @@ def run_chat_json(
         if resp.status_code < 400:
             break
         if resp.status_code in retryable_status and i < attempts - 1:
+            _append_execution_failure(retry_usage, requested_model, f"status={resp.status_code} body={resp.text[:1000]}")
             sleep_sec = base_sleep_sec * (2**i)
             logger.warning(
                 "%s chat.completions retrying model=%s status=%d retry_in=%.1fs attempt=%d/%d",
@@ -195,5 +209,7 @@ def run_chat_json(
     if text == "":
         _log_empty_message_content(logger, provider_name, normalize_model_name(model), body, data, choices[0], message)
     usage = usage_from_chat_response(data)
-    usage["requested_model"] = str(model or "").strip() or None
+    usage["requested_model"] = requested_model
+    if retry_usage.get("execution_failures"):
+        usage["execution_failures"] = list(retry_usage["execution_failures"])
     return text, usage

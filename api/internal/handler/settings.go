@@ -26,9 +26,9 @@ type SettingsHandler struct {
 
 const settingsCacheTTL = 2 * time.Minute
 
-func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {
+func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {
 	return &SettingsHandler{
-		settings:         service.NewSettingsService(repo, obsidianRepo, llmUsageRepo, cipher, github),
+		settings:         service.NewSettingsService(repo, obsidianRepo, llmUsageRepo, openRouterOverrideRepo, cipher, github),
 		obsidianRepo:     obsidianRepo,
 		notificationRepo: notificationRepo,
 		oauth:            service.NewInoreaderOAuthService(repo, cipher),
@@ -92,7 +92,12 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SettingsHandler) GetLLMCatalog(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, service.LLMCatalogData())
+	catalog, err := h.settings.LLMCatalog(r.Context(), middleware.GetUserID(r))
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, catalog)
 }
 
 func (h *SettingsHandler) InoreaderConnect(w http.ResponseWriter, r *http.Request) {

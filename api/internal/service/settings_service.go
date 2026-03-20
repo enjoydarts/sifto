@@ -12,11 +12,12 @@ import (
 )
 
 type SettingsService struct {
-	repo         *repository.UserSettingsRepo
-	obsidianRepo *repository.ObsidianExportRepo
-	llmUsageRepo *repository.LLMUsageLogRepo
-	cipher       *SecretCipher
-	githubApp    *GitHubAppClient
+	repo                   *repository.UserSettingsRepo
+	obsidianRepo           *repository.ObsidianExportRepo
+	llmUsageRepo           *repository.LLMUsageLogRepo
+	openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo
+	cipher                 *SecretCipher
+	githubApp              *GitHubAppClient
 }
 
 type SettingsGetPayload struct {
@@ -96,8 +97,15 @@ var modelSettingRequiredCapabilities = map[string][]string{
 	"faithfulness_check": {"structured_output"},
 }
 
-func NewSettingsService(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, cipher *SecretCipher, githubApp *GitHubAppClient) *SettingsService {
-	return &SettingsService{repo: repo, obsidianRepo: obsidianRepo, llmUsageRepo: llmUsageRepo, cipher: cipher, githubApp: githubApp}
+func NewSettingsService(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *SecretCipher, githubApp *GitHubAppClient) *SettingsService {
+	return &SettingsService{
+		repo:                   repo,
+		obsidianRepo:           obsidianRepo,
+		llmUsageRepo:           llmUsageRepo,
+		openRouterOverrideRepo: openRouterOverrideRepo,
+		cipher:                 cipher,
+		githubApp:              githubApp,
+	}
 }
 
 func obsidianExportPayload(settings *model.ObsidianExportSettings, githubApp *GitHubAppClient) map[string]any {
@@ -232,29 +240,45 @@ func normalizeOptionalModel(v *string) *string {
 	return &s
 }
 
-func validateCatalogModelForPurpose(model *string, purpose string) error {
+func validateCatalogModelForPurpose(catalog *LLMCatalog, model *string, purpose string) error {
 	if model == nil {
 		return nil
 	}
-	if !CatalogModelSupportsPurpose(*model, purpose) {
+	if !CatalogModelSupportsPurposeInCatalog(catalog, *model, purpose) {
 		return fmt.Errorf("invalid model for %s", purpose)
 	}
 	return nil
 }
 
-func validateCatalogModelCapabilities(model *string, settingKey string) error {
+func validateCatalogModelCapabilities(catalog *LLMCatalog, model *string, settingKey string) error {
 	if model == nil {
 		return nil
 	}
 	for _, capability := range modelSettingRequiredCapabilities[settingKey] {
-		if !CatalogModelSupportsCapability(*model, capability) {
+		if !CatalogModelSupportsCapabilityInCatalog(catalog, *model, capability) {
 			return fmt.Errorf("model missing required capability for %s", settingKey)
 		}
 	}
 	return nil
 }
 
+func (s *SettingsService) LLMCatalog(ctx context.Context, userID string) (*LLMCatalog, error) {
+	catalog := LLMCatalogData()
+	if s.openRouterOverrideRepo == nil || strings.TrimSpace(userID) == "" {
+		return catalog, nil
+	}
+	overrides, err := s.openRouterOverrideRepo.ListByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return ApplyUserOpenRouterOverridesToCatalog(catalog, overrides), nil
+}
+
 func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in UpdateLLMModelsInput) (*model.UserSettings, error) {
+	catalog, err := s.LLMCatalog(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	normalized := map[string]*string{
 		"facts":              normalizeOptionalModel(in.Facts),
 		"facts_fallback":     normalizeOptionalModel(in.FactsFallback),
@@ -269,15 +293,15 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		"faithfulness_check": normalizeOptionalModel(in.FaithfulnessCheck),
 	}
 	for settingKey, purpose := range modelSettingPurposes {
-		if err := validateCatalogModelForPurpose(normalized[settingKey], purpose); err != nil {
+		if err := validateCatalogModelForPurpose(catalog, normalized[settingKey], purpose); err != nil {
 			return nil, err
 		}
-		if err := validateCatalogModelCapabilities(normalized[settingKey], settingKey); err != nil {
+		if err := validateCatalogModelCapabilities(catalog, normalized[settingKey], settingKey); err != nil {
 			return nil, err
 		}
 	}
 	embeddingModel := normalized["embedding"]
-	if embeddingModel != nil && !CatalogIsEmbeddingModel(*embeddingModel) {
+	if embeddingModel != nil && !CatalogIsEmbeddingModelInCatalog(catalog, *embeddingModel) {
 		return nil, fmt.Errorf("invalid embedding model")
 	}
 	return s.repo.UpsertLLMModelConfig(

@@ -192,12 +192,11 @@ func catalogPath() string {
 	return candidates[0]
 }
 
-func findModelCatalog(model string) *LLMModelCatalog {
+func findModelCatalogInCatalog(catalog *LLMCatalog, model string) *LLMModelCatalog {
 	m := strings.TrimSpace(model)
-	if m == "" {
+	if m == "" || catalog == nil {
 		return nil
 	}
-	catalog := LLMCatalogData()
 	for i := range catalog.ChatModels {
 		if catalog.ChatModels[i].ID == m {
 			return &catalog.ChatModels[i]
@@ -211,8 +210,16 @@ func findModelCatalog(model string) *LLMModelCatalog {
 	return nil
 }
 
+func findModelCatalog(model string) *LLMModelCatalog {
+	return findModelCatalogInCatalog(LLMCatalogData(), model)
+}
+
 func CatalogModelByID(model string) *LLMModelCatalog {
 	return findModelCatalog(model)
+}
+
+func CatalogModelByIDInCatalog(catalog *LLMCatalog, model string) *LLMModelCatalog {
+	return findModelCatalogInCatalog(catalog, model)
 }
 
 func providerCatalogByID(provider string) *LLMProviderCatalog {
@@ -283,8 +290,20 @@ func CatalogModelCapabilities(model string) *LLMModelCapabilities {
 	return entry.Capabilities
 }
 
+func CatalogModelCapabilitiesInCatalog(catalog *LLMCatalog, model string) *LLMModelCapabilities {
+	entry := findModelCatalogInCatalog(catalog, model)
+	if entry == nil {
+		return nil
+	}
+	return entry.Capabilities
+}
+
 func CatalogModelSupportsCapability(model, capability string) bool {
-	caps := CatalogModelCapabilities(model)
+	return CatalogModelSupportsCapabilityInCatalog(LLMCatalogData(), model, capability)
+}
+
+func CatalogModelSupportsCapabilityInCatalog(catalog *LLMCatalog, model, capability string) bool {
+	caps := CatalogModelCapabilitiesInCatalog(catalog, model)
 	if caps == nil {
 		return false
 	}
@@ -307,7 +326,11 @@ func CatalogModelSupportsCapability(model, capability string) bool {
 }
 
 func CatalogModelSupportsPurpose(model, purpose string) bool {
-	entry := findModelCatalog(model)
+	return CatalogModelSupportsPurposeInCatalog(LLMCatalogData(), model, purpose)
+}
+
+func CatalogModelSupportsPurposeInCatalog(catalog *LLMCatalog, model, purpose string) bool {
+	entry := findModelCatalogInCatalog(catalog, model)
 	if entry == nil {
 		return false
 	}
@@ -324,11 +347,15 @@ func CatalogModelSupportsPurpose(model, purpose string) bool {
 }
 
 func CatalogIsEmbeddingModel(model string) bool {
-	entry := findModelCatalog(model)
+	return CatalogIsEmbeddingModelInCatalog(LLMCatalogData(), model)
+}
+
+func CatalogIsEmbeddingModelInCatalog(catalog *LLMCatalog, model string) bool {
+	entry := findModelCatalogInCatalog(catalog, model)
 	if entry == nil {
 		return false
 	}
-	for _, candidate := range LLMCatalogData().EmbeddingModels {
+	for _, candidate := range catalog.EmbeddingModels {
 		if candidate.ID == entry.ID {
 			return true
 		}

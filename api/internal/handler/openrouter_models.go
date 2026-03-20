@@ -2,12 +2,14 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/enjoydarts/sifto/api/internal/middleware"
 	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
@@ -15,22 +17,27 @@ import (
 
 type openRouterModelListEntry struct {
 	repository.OpenRouterModelSnapshot
-	Availability string  `json:"availability"`
-	Reason       *string `json:"reason,omitempty"`
-	RecentChange *string `json:"recent_change,omitempty"`
+	Availability    string  `json:"availability"`
+	RawAvailability string  `json:"raw_availability"`
+	Reason          *string `json:"reason,omitempty"`
+	RecentChange    *string `json:"recent_change,omitempty"`
+	OverrideEnabled bool    `json:"override_enabled"`
 }
 
 type OpenRouterModelsHandler struct {
 	repo               *repository.OpenRouterModelRepo
+	overrideRepo       *repository.OpenRouterModelOverrideRepo
 	service            *service.OpenRouterCatalogService
 	providerUpdateRepo *repository.ProviderModelUpdateRepo
+	cache              service.JSONCache
 }
 
-func NewOpenRouterModelsHandler(repo *repository.OpenRouterModelRepo, providerUpdateRepo *repository.ProviderModelUpdateRepo, svc *service.OpenRouterCatalogService) *OpenRouterModelsHandler {
-	return &OpenRouterModelsHandler{repo: repo, providerUpdateRepo: providerUpdateRepo, service: svc}
+func NewOpenRouterModelsHandler(repo *repository.OpenRouterModelRepo, overrideRepo *repository.OpenRouterModelOverrideRepo, providerUpdateRepo *repository.ProviderModelUpdateRepo, svc *service.OpenRouterCatalogService, cache service.JSONCache) *OpenRouterModelsHandler {
+	return &OpenRouterModelsHandler{repo: repo, overrideRepo: overrideRepo, providerUpdateRepo: providerUpdateRepo, service: svc, cache: cache}
 }
 
 func (h *OpenRouterModelsHandler) List(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
 	models, latestRun, err := h.repo.ListLatestSnapshots(r.Context())
 	if err != nil {
 		writeRepoError(w, err)
@@ -48,7 +55,12 @@ func (h *OpenRouterModelsHandler) List(w http.ResponseWriter, r *http.Request) {
 	if latestRun != nil && latestRun.TriggerType == "manual" {
 		recentChanges = buildOpenRouterRecentChanges(prevModels, models)
 	}
-	available, unavailable := splitOpenRouterModelEntries(models, prevModels, recentChanges)
+	overrides, err := h.listOverrides(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	available, unavailable := splitOpenRouterModelEntries(models, prevModels, recentChanges, overrides)
 	var latestChangeSummary any
 	if h.providerUpdateRepo != nil {
 		summary, err := h.providerUpdateRepo.ListLatestProviderSummary(r.Context(), "openrouter")
@@ -83,6 +95,7 @@ func (h *OpenRouterModelsHandler) Status(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *OpenRouterModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
 	syncRunID, err := h.repo.StartSyncRun(r.Context(), "manual")
 	if err != nil {
 		writeRepoError(w, err)
@@ -131,7 +144,12 @@ func (h *OpenRouterModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	if latestRun != nil && latestRun.TriggerType == "manual" {
 		recentChanges = buildOpenRouterRecentChanges(prevModels, latest)
 	}
-	available, unavailable := splitOpenRouterModelEntries(latest, prevModels, recentChanges)
+	overrides, err := h.listOverrides(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	available, unavailable := splitOpenRouterModelEntries(latest, prevModels, recentChanges, overrides)
 	var latestChangeSummary any
 	if h.providerUpdateRepo != nil {
 		summary, err := h.providerUpdateRepo.ListLatestProviderSummary(r.Context(), "openrouter")
@@ -149,6 +167,72 @@ func (h *OpenRouterModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	})
 
 	go h.translateDescriptions(syncRunID, models)
+}
+
+func (h *OpenRouterModelsHandler) UpdateStructuredOutputOverride(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		ModelID               string `json:"model_id"`
+		AllowStructuredOutput bool   `json:"allow_structured_output"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	modelID := strings.TrimSpace(body.ModelID)
+	if modelID == "" {
+		http.Error(w, "model_id is required", http.StatusBadRequest)
+		return
+	}
+	if h.overrideRepo == nil {
+		http.Error(w, "override repository is not configured", http.StatusInternalServerError)
+		return
+	}
+	if !body.AllowStructuredOutput {
+		if err := h.overrideRepo.Delete(r.Context(), userID, modelID); err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		h.bumpUserSettingsVersion(r.Context(), userID)
+		writeJSON(w, map[string]any{
+			"model_id":                modelID,
+			"override_enabled":        false,
+			"allow_structured_output": false,
+		})
+		return
+	}
+	latest, _, err := h.repo.ListLatestSnapshots(r.Context())
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	var snapshot *repository.OpenRouterModelSnapshot
+	for i := range latest {
+		if latest[i].ModelID == modelID {
+			snapshot = &latest[i]
+			break
+		}
+	}
+	if snapshot == nil {
+		http.Error(w, "removed models cannot be overridden", http.StatusBadRequest)
+		return
+	}
+	rawAvailability, _ := service.OpenRouterSnapshotAvailability(*snapshot)
+	if rawAvailability != service.OpenRouterModelConstrained {
+		http.Error(w, "only constrained models can be overridden", http.StatusBadRequest)
+		return
+	}
+	record, err := h.overrideRepo.Upsert(r.Context(), userID, modelID, true)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	h.bumpUserSettingsVersion(r.Context(), userID)
+	writeJSON(w, map[string]any{
+		"model_id":                record.ModelID,
+		"override_enabled":        true,
+		"allow_structured_output": true,
+	})
 }
 
 func (h *OpenRouterModelsHandler) translateDescriptions(syncRunID string, models []repository.OpenRouterModelSnapshot) {
@@ -248,16 +332,39 @@ func openRouterPendingTranslationModels(models []repository.OpenRouterModelSnaps
 	return pending
 }
 
-func splitOpenRouterModelEntries(current, previous []repository.OpenRouterModelSnapshot, recentChanges map[string]string) ([]openRouterModelListEntry, []openRouterModelListEntry) {
+func (h *OpenRouterModelsHandler) bumpUserSettingsVersion(ctx context.Context, userID string) {
+	if h.cache == nil || strings.TrimSpace(userID) == "" {
+		return
+	}
+	if _, err := h.cache.BumpVersion(ctx, cacheVersionKeyUserSettings(userID)); err != nil {
+		log.Printf("openrouter override settings cache bump failed user_id=%s err=%v", userID, err)
+	}
+}
+
+func (h *OpenRouterModelsHandler) listOverrides(ctx context.Context, userID string) (map[string]repository.OpenRouterModelOverride, error) {
+	if h.overrideRepo == nil || strings.TrimSpace(userID) == "" {
+		return map[string]repository.OpenRouterModelOverride{}, nil
+	}
+	return h.overrideRepo.ListByUser(ctx, userID)
+}
+
+func splitOpenRouterModelEntries(current, previous []repository.OpenRouterModelSnapshot, recentChanges map[string]string, overrides map[string]repository.OpenRouterModelOverride) ([]openRouterModelListEntry, []openRouterModelListEntry) {
 	available := make([]openRouterModelListEntry, 0, len(current))
 	unavailable := make([]openRouterModelListEntry, 0)
 	currentMap := make(map[string]repository.OpenRouterModelSnapshot, len(current))
 	for _, model := range current {
 		currentMap[model.ModelID] = model
-		availability, reason := service.OpenRouterSnapshotAvailability(model)
+		rawAvailability, _ := service.OpenRouterSnapshotAvailability(model)
+		overrideEnabled := false
+		if override, ok := overrides[model.ModelID]; ok && override.AllowStructuredOutput {
+			overrideEnabled = true
+		}
+		availability, reason := service.OpenRouterEffectiveAvailability(model, overrideEnabled, false)
 		entry := openRouterModelListEntry{
 			OpenRouterModelSnapshot: model,
 			Availability:            string(availability),
+			RawAvailability:         string(rawAvailability),
+			OverrideEnabled:         overrideEnabled && rawAvailability == service.OpenRouterModelConstrained,
 		}
 		if reason != "" {
 			r := reason
@@ -281,6 +388,7 @@ func splitOpenRouterModelEntries(current, previous []repository.OpenRouterModelS
 		entry := openRouterModelListEntry{
 			OpenRouterModelSnapshot: model,
 			Availability:            string(service.OpenRouterModelRemoved),
+			RawAvailability:         string(service.OpenRouterModelRemoved),
 			Reason:                  &reason,
 		}
 		if recentChange, ok := recentChanges[model.ModelID]; ok {

@@ -21,7 +21,7 @@ func TestValidateCatalogModelForPurpose(t *testing.T) {
 		{name: "unknown model", model: strptr("unknown-model"), purpose: "summary", wantErr: true},
 	}
 	for _, tt := range tests {
-		err := validateCatalogModelForPurpose(tt.model, tt.purpose)
+		err := validateCatalogModelForPurpose(LLMCatalogData(), tt.model, tt.purpose)
 		if (err != nil) != tt.wantErr {
 			t.Fatalf("%s: validateCatalogModelForPurpose(%v, %q) err=%v, wantErr=%v", tt.name, tt.model, tt.purpose, err, tt.wantErr)
 		}

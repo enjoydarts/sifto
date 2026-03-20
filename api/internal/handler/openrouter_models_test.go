@@ -74,3 +74,43 @@ func TestBuildOpenRouterRecentChanges(t *testing.T) {
 		t.Fatalf("kept-available should not be marked as recent change")
 	}
 }
+
+func TestSplitOpenRouterModelEntriesAppliesUserOverrideOnlyToConstrainedModels(t *testing.T) {
+	current := []repository.OpenRouterModelSnapshot{
+		{ModelID: "stepfun/step-3.5-flash", SupportedParametersJSON: []byte(`["tools"]`)},
+		{ModelID: "openai/gpt-oss-120b", SupportedParametersJSON: []byte(`["response_format"]`)},
+	}
+	previous := []repository.OpenRouterModelSnapshot{
+		{ModelID: "stepfun/removed-model", SupportedParametersJSON: []byte(`["response_format"]`)},
+	}
+	overrides := map[string]repository.OpenRouterModelOverride{
+		"stepfun/step-3.5-flash": {
+			ModelID:               "stepfun/step-3.5-flash",
+			AllowStructuredOutput: true,
+		},
+		"stepfun/removed-model": {
+			ModelID:               "stepfun/removed-model",
+			AllowStructuredOutput: true,
+		},
+	}
+
+	available, unavailable := splitOpenRouterModelEntries(current, previous, nil, overrides)
+	if len(available) != 2 {
+		t.Fatalf("len(available) = %d, want 2", len(available))
+	}
+	foundOverride := false
+	for _, item := range available {
+		if item.ModelID == "stepfun/step-3.5-flash" {
+			foundOverride = true
+			if !item.OverrideEnabled {
+				t.Fatalf("override-enabled model should expose override flag")
+			}
+		}
+	}
+	if !foundOverride {
+		t.Fatalf("overridden constrained model should move to available list")
+	}
+	if len(unavailable) != 1 || unavailable[0].ModelID != "stepfun/removed-model" {
+		t.Fatalf("removed model should stay unavailable, got %#v", unavailable)
+	}
+}

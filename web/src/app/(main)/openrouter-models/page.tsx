@@ -128,6 +128,7 @@ export default function OpenRouterModelsPage() {
   const [activeTab, setActiveTab] = useState<"available" | "unavailable">("available");
   const [sortKey, setSortKey] = useState<SortKey>("provider");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [savingOverrideModelId, setSavingOverrideModelId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -178,6 +179,30 @@ export default function OpenRouterModelsPage() {
       showToast(t("openrouterModels.toast.modelIdCopyFailed"), "error");
     }
   }, [selectedModel, showToast, t]);
+
+  const handleStructuredOutputOverride = useCallback(
+    async (model: OpenRouterModelListEntry, enabled: boolean) => {
+      setSavingOverrideModelId(model.model_id);
+      try {
+        await api.setOpenRouterStructuredOutputOverride(model.model_id, enabled);
+        await load();
+        if (selectedModel?.model_id === model.model_id) {
+          setSelectedModel((current) =>
+            current ? { ...current, override_enabled: enabled, availability: enabled ? "available" : current.raw_availability } : current,
+          );
+        }
+        showToast(
+          enabled ? t("openrouterModels.toast.overrideEnabled") : t("openrouterModels.toast.overrideDisabled"),
+          "success",
+        );
+      } catch (e) {
+        showToast(String(e), "error");
+      } finally {
+        setSavingOverrideModelId(null);
+      }
+    },
+    [load, selectedModel?.model_id, showToast, t],
+  );
 
   const providerOptions = useMemo(() => {
     const values = new Set<string>();
@@ -258,6 +283,11 @@ export default function OpenRouterModelsPage() {
   const latestSummary = data?.latest_change_summary ?? null;
   const latestSummaryTriggerLabel =
     latestSummary?.trigger === "manual" ? t("openrouterModels.summaryTrigger.manual") : t("openrouterModels.summaryTrigger.cron");
+
+  const isOverrideEligible = useCallback(
+    (model: OpenRouterModelListEntry) => model.raw_availability === "constrained" || model.override_enabled,
+    [],
+  );
 
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
@@ -473,6 +503,28 @@ export default function OpenRouterModelsPage() {
                             ) : null}
                           </div>
                           <div className="mt-1 whitespace-nowrap text-xs text-zinc-500">{model.model_id}</div>
+                          {isOverrideEligible(model) ? (
+                            <div className="mt-2 flex items-center gap-2">
+                              {model.override_enabled ? (
+                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">
+                                  {t("openrouterModels.override.enabledBadge")}
+                                </span>
+                              ) : null}
+                              <button
+                                type="button"
+                                disabled={savingOverrideModelId === model.model_id}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleStructuredOutputOverride(model, !model.override_enabled);
+                                }}
+                                className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] font-medium text-zinc-700 hover:border-zinc-300 hover:bg-white disabled:opacity-60"
+                              >
+                                {model.override_enabled
+                                  ? t("openrouterModels.override.disable")
+                                  : t("openrouterModels.override.enable")}
+                              </button>
+                            </div>
+                          ) : null}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">
                           {model.context_length ? model.context_length.toLocaleString() : "—"}
@@ -516,7 +568,7 @@ export default function OpenRouterModelsPage() {
                 ) : (
                   <div className="overflow-hidden rounded-xl border border-zinc-200">
                     <div className="overflow-x-auto">
-                      <table className="min-w-[1240px] divide-y divide-zinc-200 text-sm">
+                      <table className="min-w-[1340px] divide-y divide-zinc-200 text-sm">
                   <thead className="bg-zinc-50">
                     <tr className="text-left text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
                       <th className="px-4 py-3">{t("openrouterModels.table.state")}</th>
@@ -531,6 +583,7 @@ export default function OpenRouterModelsPage() {
                         </button>
                       </th>
                       <th className="px-4 py-3">{t("openrouterModels.table.reason")}</th>
+                      <th className="px-4 py-3">{t("openrouterModels.table.override")}</th>
                       <th className="px-4 py-3">
                         <button type="button" className="hover:text-zinc-700" onClick={() => setSort("context")}>
                           {t("openrouterModels.table.context")}{sortMarker("context")}
@@ -573,6 +626,25 @@ export default function OpenRouterModelsPage() {
                             <div className="mt-1 whitespace-nowrap text-xs text-zinc-500">{model.model_id}</div>
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{t(reasonKey)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">
+                            {model.raw_availability === "constrained" ? (
+                              <button
+                                type="button"
+                                disabled={savingOverrideModelId === model.model_id}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleStructuredOutputOverride(model, !model.override_enabled);
+                                }}
+                                className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] font-medium text-zinc-700 hover:border-zinc-300 hover:bg-white disabled:opacity-60"
+                              >
+                                {model.override_enabled
+                                  ? t("openrouterModels.override.disable")
+                                  : t("openrouterModels.override.enable")}
+                              </button>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
                           <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{model.context_length ? model.context_length.toLocaleString() : "—"}</td>
                           <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{pricing ?? "—"}</td>
                           <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">
@@ -682,6 +754,24 @@ export default function OpenRouterModelsPage() {
                   <p className="mt-2 text-sm text-zinc-500">—</p>
                 )}
               </section>
+              {isOverrideEligible(selectedModel) ? (
+                <section className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                  <h3 className="text-sm font-semibold text-zinc-900">{t("openrouterModels.override.title")}</h3>
+                  <p className="mt-2 text-sm leading-6 text-zinc-600">{t("openrouterModels.override.help")}</p>
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      disabled={savingOverrideModelId === selectedModel.model_id}
+                      onClick={() => void handleStructuredOutputOverride(selectedModel, !selectedModel.override_enabled)}
+                      className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+                    >
+                      {selectedModel.override_enabled
+                        ? t("openrouterModels.override.disable")
+                        : t("openrouterModels.override.enable")}
+                    </button>
+                  </div>
+                </section>
+              ) : null}
             </div>
           </div>
         </div>

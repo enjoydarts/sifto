@@ -136,6 +136,45 @@ func OpenRouterSnapshotAvailability(item repository.OpenRouterModelSnapshot) (Op
 	return OpenRouterModelAvailable, ""
 }
 
+func OpenRouterEffectiveAvailability(item repository.OpenRouterModelSnapshot, allowStructuredOutputOverride bool, removed bool) (OpenRouterModelAvailability, string) {
+	if removed {
+		return OpenRouterModelRemoved, "removed"
+	}
+	availability, reason := OpenRouterSnapshotAvailability(item)
+	if availability == OpenRouterModelConstrained && allowStructuredOutputOverride {
+		return OpenRouterModelAvailable, ""
+	}
+	return availability, reason
+}
+
+func ApplyUserOpenRouterOverridesToCatalog(catalog *LLMCatalog, overrides map[string]repository.OpenRouterModelOverride) *LLMCatalog {
+	if catalog == nil {
+		return &LLMCatalog{}
+	}
+	out := *catalog
+	if len(catalog.ChatModels) == 0 {
+		return &out
+	}
+	out.ChatModels = make([]LLMModelCatalog, len(catalog.ChatModels))
+	for i, item := range catalog.ChatModels {
+		next := item
+		if item.Provider == "openrouter" {
+			modelID := ResolveOpenRouterModelID(item.ID)
+			if override, ok := overrides[modelID]; ok && override.AllowStructuredOutput {
+				if next.Capabilities == nil {
+					next.Capabilities = &LLMModelCapabilities{}
+				} else {
+					copied := *next.Capabilities
+					next.Capabilities = &copied
+				}
+				next.Capabilities.SupportsStructuredOutput = true
+			}
+		}
+		out.ChatModels[i] = next
+	}
+	return &out
+}
+
 func EnrichOpenRouterDescriptionsJA(ctx context.Context, repo *repository.OpenRouterModelRepo, openAI *OpenAIClient, models []repository.OpenRouterModelSnapshot) []repository.OpenRouterModelSnapshot {
 	if len(models) == 0 {
 		return models

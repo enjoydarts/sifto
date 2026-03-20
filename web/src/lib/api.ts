@@ -116,8 +116,10 @@ export interface OpenRouterModelSnapshot {
 
 export interface OpenRouterModelListEntry extends OpenRouterModelSnapshot {
   availability: "available" | "constrained" | "removed";
+  raw_availability: "available" | "constrained" | "removed";
   reason?: string | null;
   recent_change?: "available" | "constrained" | "removed" | null;
+  override_enabled: boolean;
 }
 
 export interface OpenRouterModelsResponse {
@@ -1589,6 +1591,11 @@ export const api = {
     apiFetch<OpenRouterSyncStatusResponse>("/openrouter-models/status"),
   syncOpenRouterModels: () =>
     apiFetch<OpenRouterModelsResponse>("/openrouter-models/sync", { method: "POST" }),
+  setOpenRouterStructuredOutputOverride: (modelId: string, allowStructuredOutput: boolean) =>
+    apiFetch<{ model_id: string; override_enabled: boolean; allow_structured_output: boolean }>(
+      "/openrouter-models/overrides/structured-output",
+      { method: "PUT", body: JSON.stringify({ model_id: modelId, allow_structured_output: allowStructuredOutput }) }
+    ),
   deleteInoreaderOAuth: () =>
     apiFetch<{ user_id: string; has_inoreader_oauth: boolean; inoreader_token_expires: string | null }>(
       "/settings/inoreader-oauth",

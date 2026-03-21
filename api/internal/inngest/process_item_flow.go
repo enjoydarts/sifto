@@ -261,7 +261,7 @@ func extractAndPersistFacts(
 			}, nil
 		})
 		if err != nil {
-			failedModel := executionFailedModel(primaryRuntime, nil)
+			failedModel := executionFailedModel(primaryRuntime, primaryModelOverride)
 			if factsAttempt != nil {
 				failedModel = executionFailedModel(factsAttempt.Runtime, failedModel)
 			}
@@ -300,7 +300,7 @@ func extractAndPersistFacts(
 					return &processFactsAttemptResult{Facts: resp, Runtime: runtime}, nil
 				})
 				if fallbackErr != nil {
-					fallbackFailedModel := executionFailedModel(fallbackRuntime, nil)
+					fallbackFailedModel := executionFailedModel(fallbackRuntime, fallbackModelOverride)
 					if fallbackAttempt != nil {
 						fallbackFailedModel = executionFailedModel(fallbackAttempt.Runtime, fallbackFailedModel)
 					}
@@ -456,7 +456,7 @@ func summarizeAndPersistItem(
 			}, nil
 		})
 		if err != nil {
-			failedModel := executionFailedModel(primaryRuntime, nil)
+			failedModel := executionFailedModel(primaryRuntime, primaryModelOverride)
 			if summaryAttempt != nil {
 				failedModel = executionFailedModel(summaryAttempt.Runtime, failedModel)
 			}
@@ -481,7 +481,7 @@ func summarizeAndPersistItem(
 					return &processSummaryAttemptResult{Summary: resp, Runtime: runtime}, nil
 				})
 				if fallbackErr != nil {
-					fallbackFailedModel := executionFailedModel(fallbackRuntime, nil)
+					fallbackFailedModel := executionFailedModel(fallbackRuntime, fallbackModelOverride)
 					if fallbackAttempt != nil {
 						fallbackFailedModel = executionFailedModel(fallbackAttempt.Runtime, fallbackFailedModel)
 					}

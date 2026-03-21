@@ -14,7 +14,7 @@ export function SectionCard({ children, className = "", compact = false }: Secti
   return (
     <section
       className={joinClassNames(
-        "surface-editorial rounded-[var(--radius-panel)]",
+        "surface-editorial min-w-0 rounded-[var(--radius-panel)]",
         compact ? "p-3 sm:p-4" : "p-4 sm:p-5",
         className
       )}

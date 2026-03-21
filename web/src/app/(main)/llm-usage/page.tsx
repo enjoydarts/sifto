@@ -8,7 +8,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -27,6 +26,8 @@ import {
   RecentLogsTable,
   ReliabilityTable,
 } from "@/components/llm-usage/tables";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionCard } from "@/components/ui/section-card";
 
 function fmtUSD(v: number) {
   return `$${v.toFixed(6)}`;
@@ -71,8 +72,23 @@ function providerLabel(provider: string) {
   return PROVIDER_COLORS[provider]?.label ?? provider;
 }
 
+function joinClassNames(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
+
+type LLMUsageSectionID =
+  | "overview"
+  | "forecast"
+  | "daily"
+  | "providers"
+  | "purposes"
+  | "reliability"
+  | "models"
+  | "logs";
+
 export default function LLMUsagePage() {
   const { t, locale } = useI18n();
+  const [activeSection, setActiveSection] = useState<LLMUsageSectionID>("overview");
   const [providerSortKey, setProviderSortKey] = useState<string>("estimated_cost_usd");
   const [providerSortDir, setProviderSortDir] = useState<"asc" | "desc">("desc");
   const [purposeSortKey, setPurposeSortKey] = useState<string>("estimated_cost_usd");
@@ -582,346 +598,496 @@ export default function LLMUsagePage() {
     };
   }, [forecastMode, forecastMonth, settings, summaryRows]);
 
+  const railSections = useMemo(
+    () => [
+      {
+        id: "overview" as const,
+        label: t("llmUsage.section.overview"),
+        meta: t("llmUsage.section.overviewMeta"),
+      },
+      {
+        id: "forecast" as const,
+        label: t("llmUsage.section.forecast"),
+        meta: t("llmUsage.section.forecastMeta"),
+      },
+      {
+        id: "daily" as const,
+        label: t("llmUsage.section.daily"),
+        meta: t("llmUsage.section.dailyMeta"),
+      },
+      {
+        id: "providers" as const,
+        label: t("llmUsage.section.providers"),
+        meta: t("llmUsage.section.providersMeta"),
+      },
+      {
+        id: "purposes" as const,
+        label: t("llmUsage.section.purposes"),
+        meta: t("llmUsage.section.purposesMeta"),
+      },
+      {
+        id: "reliability" as const,
+        label: t("llmUsage.section.reliability"),
+        meta: t("llmUsage.section.reliabilityMeta"),
+      },
+      {
+        id: "models" as const,
+        label: t("llmUsage.section.models"),
+        meta: t("llmUsage.section.modelsMeta"),
+      },
+      {
+        id: "logs" as const,
+        label: t("llmUsage.section.logs"),
+        meta: t("llmUsage.section.logsMeta"),
+      },
+    ],
+    [t]
+  );
+
+  const activeSectionTitle = useMemo(() => {
+    switch (activeSection) {
+      case "overview":
+        return t("llmUsage.active.overviewTitle");
+      case "forecast":
+        return t("llmUsage.active.forecastTitle");
+      case "daily":
+        return t("llmUsage.active.dailyTitle");
+      case "providers":
+        return t("llmUsage.active.providersTitle");
+      case "purposes":
+        return t("llmUsage.active.purposesTitle");
+      case "reliability":
+        return t("llmUsage.active.reliabilityTitle");
+      case "models":
+        return t("llmUsage.active.modelsTitle");
+      case "logs":
+        return t("llmUsage.active.logsTitle");
+    }
+  }, [activeSection, t]);
+
+  const activeSectionDescription = useMemo(() => {
+    switch (activeSection) {
+      case "overview":
+        return t("llmUsage.active.overviewDescription");
+      case "forecast":
+        return t("llmUsage.active.forecastDescription");
+      case "daily":
+        return t("llmUsage.active.dailyDescription");
+      case "providers":
+        return t("llmUsage.active.providersDescription");
+      case "purposes":
+        return t("llmUsage.active.purposesDescription");
+      case "reliability":
+        return t("llmUsage.active.reliabilityDescription");
+      case "models":
+        return t("llmUsage.active.modelsDescription");
+      case "logs":
+        return t("llmUsage.active.logsDescription");
+    }
+  }, [activeSection, t]);
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <Brain className="size-6 text-zinc-500" aria-hidden="true" />
-            <span>{t("llm.title")}</span>
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            {t("llm.subtitle")}
-          </p>
-        </div>
+    <div className="space-y-6 overflow-x-hidden">
+      <PageHeader
+        eyebrow={t("llm.title")}
+        title={<span className="font-serif">{t("llm.title")}</span>}
+        description={t("llm.subtitle")}
+        compact
+        meta={
+          <>
+            <span>{`${t("llm.currentMonth")}: ${settings?.current_month?.month_jst ?? "—"}`}</span>
+            <span>{`${t("llm.totalCost")}: ${fmtUSD(totals.cost)}`}</span>
+            <span>{`${t("llm.totalCalls")}: ${fmtNum(totals.calls)}`}</span>
+          </>
+        }
+        actions={
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
+            <label className="text-sm">
+              <span className="mb-1 block text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("llm.days")}</span>
+              <select
+                value={daysFilter}
+                onChange={(e) => setDaysFilter(e.target.value as "7" | "14" | "30" | "90" | "mtd")}
+                className="min-h-10 w-full rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm text-[var(--color-editorial-ink)]"
+              >
+                {(["7", "14", "30", "90"] as const).map((d) => (
+                  <option key={d} value={d}>
+                    {`${d}${t("llm.daysSuffix")}`}
+                  </option>
+                ))}
+                <option value="mtd">{t("llm.currentMonth")}</option>
+              </select>
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("llm.limit")}</span>
+              <select
+                value={limit}
+                onChange={(e) => setLimit(Number(e.target.value))}
+                className="min-h-10 w-full rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm text-[var(--color-editorial-ink)]"
+              >
+                {[50, 100, 200, 500].map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        }
+      />
 
-        <div className="flex flex-wrap gap-2">
-          <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium text-zinc-600">{t("llm.days")}</span>
-            <select
-              value={daysFilter}
-              onChange={(e) => setDaysFilter(e.target.value as "7" | "14" | "30" | "90" | "mtd")}
-              className="rounded border border-zinc-300 bg-white px-3 py-2 text-sm"
-            >
-              {(["7", "14", "30", "90"] as const).map((d) => (
-                <option key={d} value={d}>
-                  {`${d}${t("llm.daysSuffix")}`}
-                </option>
-              ))}
-              <option value="mtd">{t("llm.currentMonth")}</option>
-            </select>
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-xs font-medium text-zinc-600">{t("llm.limit")}</span>
-            <select
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
-              className="rounded border border-zinc-300 bg-white px-3 py-2 text-sm"
-            >
-              {[50, 100, 200, 500].map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </div>
-
-      {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
+      {loading && <p className="text-sm text-[var(--color-editorial-ink-soft)]">{t("common.loading")}</p>}
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-[16px] border border-[var(--color-editorial-error-line)] bg-[var(--color-editorial-error-soft)] px-4 py-3 text-sm text-[var(--color-editorial-error)]">
           {error}
         </div>
       )}
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label={totalCostLabel} value={fmtUSD(totals.cost)} />
-        <MetricCard label={t("llm.totalCalls")} value={fmtNum(totals.calls)} />
-        <MetricCard label={t("llm.input")} value={fmtNum(totals.input)} />
-        <MetricCard label={t("llm.output")} value={fmtNum(totals.output)} />
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)]">
-        <div className="rounded-lg border border-zinc-200 bg-white p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-800">{t("llm.providerCost")}</h2>
-            <span className="text-xs text-zinc-400">
-              {providerCardRows.length} {t("llm.providers")}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-            {providerCardRows.map((row) => (
-              <MetricCard
-                key={row.provider}
-                className="w-full"
-                label={`${providerLabel(row.provider)}${row.selectedCost <= 0 && row.monthCost > 0 ? " (MTD)" : ""}`}
-                value={fmtUSD(row.selectedCost > 0 ? row.selectedCost : row.monthCost)}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-zinc-200 bg-white p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-zinc-800">{t("llm.cacheTitle")}</h2>
-            <span className="text-xs text-zinc-400">{totals.input > 0 ? ((totals.cacheRead / totals.input) * 100).toFixed(1) : "0.0"}%</span>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-            <MetricCard className="w-full" label={t("llm.cacheWriteTokens")} value={fmtNum(totals.cacheWrite)} />
-            <MetricCard className="w-full" label={t("llm.cacheReadTokens")} value={fmtNum(totals.cacheRead)} />
-            <MetricCard
-              className="w-full"
-              label={t("llm.cacheReadRatio")}
-              value={`${totals.input > 0 ? ((totals.cacheRead / totals.input) * 100).toFixed(1) : "0.0"}%`}
-            />
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
-            <CalendarDays className="size-4 text-zinc-500" aria-hidden="true" />
-            <span>{t("llm.dailyCostTrend")}</span>
-          </h2>
-          <span className="text-xs text-zinc-400">{dailyChartRows.length} days</span>
-        </div>
-        {dailyChartRows.length === 0 ? (
-          <p className="text-sm text-zinc-400">{t("llm.noSummary")}</p>
-        ) : (
-          <div className="h-72 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={dailyChartRows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
-                <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#71717a" }} tickLine={false} axisLine={false} />
-                <YAxis
-                  tick={{ fontSize: 12, fill: "#71717a" }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => fmtUSDShort(Number(v))}
-                />
-                <Tooltip
-                  formatter={(value: number | string | undefined, name?: string) => [
-                    fmtUSD(Number(value ?? 0)),
-                    providerLabel(name ?? ""),
-                  ]}
-                  labelFormatter={(label) => `${label}`}
-                  contentStyle={{ borderRadius: 10, borderColor: "#e4e4e7" }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                {chartProviders.map((provider) => {
-                  const colors = providerColorMap.get(provider);
-                  if (!colors) return null;
-                  return (
-                    <Area
-                      key={provider}
-                      type="monotone"
-                      dataKey={provider}
-                      name={providerLabel(provider)}
-                      stackId="cost"
-                      stroke={colors.stroke}
-                      fill={colors.fill}
-                      fillOpacity={colors.fillOpacity}
-                    />
-                  );
-                })}
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </section>
-
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
-            <CalendarDays className="size-4 text-zinc-500" aria-hidden="true" />
-            <span>{t("llm.monthEndForecast")}</span>
-          </h2>
-          <div className="flex items-center gap-2">
-            <select
-              value={forecastMonth ?? ""}
-              onChange={(e) => setForecastMonth(e.target.value)}
-              className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs"
-            >
-              {availableForecastMonths.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
+      <div className="grid gap-6 xl:grid-cols-[248px_minmax(0,1fr)]">
+        <aside className="space-y-4">
+          <SectionCard>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+              Usage Sections
+            </div>
+            <div className="mt-4 grid gap-0">
+              {railSections.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => setActiveSection(section.id)}
+                  className={joinClassNames(
+                    "relative border-t border-[var(--color-editorial-line)] px-4 py-3 text-left first:border-t-0 first:pt-0",
+                    activeSection === section.id
+                      ? "bg-[linear-gradient(90deg,rgba(243,236,227,0.92),rgba(243,236,227,0.28)_78%,transparent)]"
+                      : ""
+                  )}
+                >
+                  {activeSection === section.id ? (
+                    <span className="absolute bottom-3 left-0 top-3 w-[3px] rounded-full bg-[var(--color-editorial-ink)] first:top-0" />
+                  ) : null}
+                  <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{section.label}</div>
+                  <div className="mt-1 text-[11px] leading-5 text-[var(--color-editorial-ink-soft)] sm:text-xs">{section.meta}</div>
+                </button>
               ))}
-            </select>
-            <div className="inline-flex rounded-md border border-zinc-200 bg-zinc-50 p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setForecastMode("month_avg")}
-                className={`rounded px-2 py-1 ${forecastMode === "month_avg" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}
-              >
-                {t("llm.forecast.refMonthAvg")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setForecastMode("recent_7d")}
-                className={`rounded px-2 py-1 ${forecastMode === "recent_7d" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}
-              >
-                {t("llm.forecast.refRecent7d")}
-              </button>
             </div>
-            <span className="text-xs text-zinc-400">{monthlyForecast?.monthLabel ?? "—"}</span>
-          </div>
-        </div>
-        {!monthlyForecast ? (
-          <p className="text-sm text-zinc-400">{t("common.loading")}</p>
-        ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 lg:grid-cols-4">
-              <MetricCard className="w-full sm:w-full lg:w-full" label={t("llm.monthToDate")} value={fmtUSD(monthlyForecast.actualTotal)} />
-              <MetricCard
-                className="w-full sm:w-full lg:w-full"
-                label={
-                  monthlyForecast.isCurrentMonth
-                    ? t("llm.forecastEom")
-                    : t("llm.monthTotal")
-                }
-                value={fmtUSD(monthlyForecast.forecastTotal)}
-              />
-              <MetricCard className="w-full sm:w-full lg:w-full" label={t("llm.currentPacePerDay")} value={fmtUSD(monthlyForecast.dailyPace)} />
-              <MetricCard
-                className="w-full sm:w-full lg:w-full"
-                label={t("llm.budgetDelta")}
-                value={
-                  monthlyForecast.budget == null
-                    ? "—"
-                    : `${monthlyForecast.forecastTotal - monthlyForecast.budget >= 0 ? "+" : ""}${fmtUSD(
-                        monthlyForecast.forecastTotal - monthlyForecast.budget
-                      )}`
-                }
-              />
+          </SectionCard>
+
+          <SectionCard>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+              Status
             </div>
-            <p className="text-xs text-zinc-500">
-              {monthlyForecast.isCurrentMonth
-                ? `${t("llm.forecast.modeLabel")} ${forecastMode === "month_avg" ? t("llm.forecast.monthAvg") : t("llm.forecast.recent7d")}${t("llm.forecast.refOpen")}${t("llm.forecast.refMonthAvg")} ${fmtUSD(monthlyForecast.monthAvgDailyPace)} / ${t("llm.forecast.refRecent7d")} ${fmtUSD(monthlyForecast.recent7dDailyPace)}${t("llm.forecast.refClose")}`
-                : t("llm.forecast.pastMonthsOnly")}
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3">
+                <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("llmUsage.status.currentMonth")}</div>
+                <div className="mt-1 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
+                  {settings?.current_month?.month_jst ?? "—"} / {fmtUSD(settings?.current_month?.estimated_cost_usd ?? 0)}
+                </div>
+              </div>
+              <div className="rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3">
+                <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("llmUsage.status.budget")}</div>
+                <div className="mt-1 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
+                  {monthlyForecast?.budget == null ? "—" : `${fmtUSD(monthlyForecast.budget)} / ${fmtUSD(monthlyForecast.forecastTotal)}`}
+                </div>
+              </div>
+              <div className="rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3">
+                <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("llmUsage.status.reliability")}</div>
+                <div className="mt-1 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
+                  {currentMonthExecutionTableRows.length} rows / {fmtNum(logs.length)} logs
+                </div>
+              </div>
+            </div>
+          </SectionCard>
+        </aside>
+
+        <div className="min-w-0 space-y-6">
+          <SectionCard>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+              {railSections.find((section) => section.id === activeSection)?.label}
+            </div>
+            <h2 className="mt-2 font-serif text-[1.8rem] leading-[1.1] tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+              {activeSectionTitle}
+            </h2>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+              {activeSectionDescription}
             </p>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthlyForecast.rows} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e4e4e7" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#71717a" }} tickLine={false} axisLine={false} />
-                  <YAxis
-                    tick={{ fontSize: 12, fill: "#71717a" }}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v) => fmtUSDShort(Number(v))}
-                  />
-                  <Tooltip
-                    formatter={(value: number | string | undefined, name?: string) => [
-                      fmtUSD(Number(value ?? 0)),
-                      name === "actual"
-                        ? t("llm.actualCumulative")
-                        : t("llm.forecastLabel"),
-                    ]}
-                    labelFormatter={(label) => `${monthlyForecast.monthLabel}-${String(label).padStart(2, "0")}`}
-                    contentStyle={{ borderRadius: 10, borderColor: "#e4e4e7" }}
-                  />
-                  <Legend
-                    wrapperStyle={{ fontSize: 12 }}
-                    formatter={(value) =>
-                      value === "actual"
-                        ? t("llm.actualCumulative")
-                        : value === "forecast"
-                          ? t("llm.forecastLabel")
-                          : value
-                    }
-                  />
-                  {monthlyForecast.budget != null && (
-                    <ReferenceLine
-                      y={monthlyForecast.budget}
-                      stroke="#ef4444"
-                      strokeDasharray="5 5"
-                      label={{
-                        value: `${t("llm.budget")} ${fmtUSDShort(monthlyForecast.budget)}`,
-                        fill: "#ef4444",
-                        fontSize: 11,
-                        position: "insideTopRight",
-                      }}
+          </SectionCard>
+
+          {activeSection === "overview" ? (
+            <>
+              <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <MetricCard label={totalCostLabel} value={fmtUSD(totals.cost)} />
+                <MetricCard label={t("llm.totalCalls")} value={fmtNum(totals.calls)} />
+                <MetricCard label={t("llm.input")} value={fmtNum(totals.input)} />
+                <MetricCard label={t("llm.output")} value={fmtNum(totals.output)} />
+              </section>
+
+              <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)]">
+                <SectionCard>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="font-serif text-[1.25rem] leading-[1.15] tracking-[-0.03em] text-[var(--color-editorial-ink)]">{t("llm.providerCost")}</h2>
+                    <span className="text-xs text-[var(--color-editorial-ink-faint)]">
+                      {providerCardRows.length} {t("llm.providers")}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                    {providerCardRows.map((row) => (
+                      <MetricCard
+                        key={row.provider}
+                        className="w-full"
+                        label={`${providerLabel(row.provider)}${row.selectedCost <= 0 && row.monthCost > 0 ? " (MTD)" : ""}`}
+                        value={fmtUSD(row.selectedCost > 0 ? row.selectedCost : row.monthCost)}
+                      />
+                    ))}
+                  </div>
+                </SectionCard>
+
+                <SectionCard>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="font-serif text-[1.25rem] leading-[1.15] tracking-[-0.03em] text-[var(--color-editorial-ink)]">{t("llm.cacheTitle")}</h2>
+                    <span className="text-xs text-[var(--color-editorial-ink-faint)]">{totals.input > 0 ? ((totals.cacheRead / totals.input) * 100).toFixed(1) : "0.0"}%</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                    <MetricCard className="w-full" label={t("llm.cacheWriteTokens")} value={fmtNum(totals.cacheWrite)} />
+                    <MetricCard className="w-full" label={t("llm.cacheReadTokens")} value={fmtNum(totals.cacheRead)} />
+                    <MetricCard
+                      className="w-full"
+                      label={t("llm.cacheReadRatio")}
+                      value={`${totals.input > 0 ? ((totals.cacheRead / totals.input) * 100).toFixed(1) : "0.0"}%`}
                     />
-                  )}
-                  <Line
-                    type="monotone"
-                    dataKey="actual"
-                    name="actual"
-                    stroke="#18181b"
-                    strokeWidth={2.5}
-                    dot={false}
-                    connectNulls={false}
-                  />
-                  {monthlyForecast.isCurrentMonth && (
-                    <Line
-                      type="monotone"
-                      dataKey="forecast"
-                      name="forecast"
-                      stroke="#2563eb"
-                      strokeWidth={2}
-                      strokeDasharray="6 4"
-                      dot={false}
-                      connectNulls={false}
+                  </div>
+                </SectionCard>
+              </section>
+
+              <SectionCard>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="inline-flex items-center gap-2 font-serif text-[1.25rem] leading-[1.15] tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                    <CalendarDays className="size-4 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
+                    <span>{t("llm.dailyCostTrend")}</span>
+                  </h2>
+                  <span className="text-xs text-[var(--color-editorial-ink-faint)]">{dailyChartRows.length} days</span>
+                </div>
+                {dailyChartRows.length === 0 ? (
+                  <p className="text-sm text-[var(--color-editorial-ink-faint)]">{t("llm.noSummary")}</p>
+                ) : (
+                  <div className="h-72 w-full overflow-hidden rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={dailyChartRows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#d9d1c4" vertical={false} />
+                        <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#8f877f" }} tickLine={false} axisLine={false} />
+                        <YAxis
+                          tick={{ fontSize: 12, fill: "#8f877f" }}
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(v) => fmtUSDShort(Number(v))}
+                        />
+                        <Tooltip
+                          formatter={(value: number | string | undefined, name?: string) => [
+                            fmtUSD(Number(value ?? 0)),
+                            providerLabel(name ?? ""),
+                          ]}
+                          labelFormatter={(label) => `${label}`}
+                          contentStyle={{ borderRadius: 16, borderColor: "#d9d1c4", background: "#fff" }}
+                        />
+                        {chartProviders.map((provider) => {
+                          const colors = providerColorMap.get(provider);
+                          if (!colors) return null;
+                          return (
+                            <Area
+                              key={provider}
+                              type="monotone"
+                              dataKey={provider}
+                              name={providerLabel(provider)}
+                              stackId="cost"
+                              stroke={colors.stroke}
+                              fill={colors.fill}
+                              fillOpacity={colors.fillOpacity}
+                            />
+                          );
+                        })}
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </SectionCard>
+            </>
+          ) : null}
+
+          {activeSection === "forecast" ? (
+            <SectionCard>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="inline-flex items-center gap-2 font-serif text-[1.25rem] leading-[1.15] tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                  <CalendarDays className="size-4 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
+                  <span>{t("llm.monthEndForecast")}</span>
+                </h2>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={forecastMonth ?? ""}
+                    onChange={(e) => setForecastMonth(e.target.value)}
+                    className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-1.5 text-xs text-[var(--color-editorial-ink)]"
+                  >
+                    {availableForecastMonths.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="grid min-w-0 grid-cols-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-0.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setForecastMode("month_avg")}
+                      className={joinClassNames(
+                        "min-w-0 rounded-full px-2 py-1 text-center sm:px-3",
+                        forecastMode === "month_avg" ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]" : "text-[var(--color-editorial-ink-soft)]"
+                      )}
+                    >
+                      {t("llm.forecast.refMonthAvg")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForecastMode("recent_7d")}
+                      className={joinClassNames(
+                        "min-w-0 rounded-full px-2 py-1 text-center sm:px-3",
+                        forecastMode === "recent_7d" ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]" : "text-[var(--color-editorial-ink-soft)]"
+                      )}
+                    >
+                      {t("llm.forecast.refRecent7d")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {!monthlyForecast ? (
+                <p className="text-sm text-[var(--color-editorial-ink-faint)]">{t("common.loading")}</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 lg:grid-cols-4">
+                    <MetricCard className="w-full" label={t("llm.monthToDate")} value={fmtUSD(monthlyForecast.actualTotal)} />
+                    <MetricCard className="w-full" label={monthlyForecast.isCurrentMonth ? t("llm.forecastEom") : t("llm.monthTotal")} value={fmtUSD(monthlyForecast.forecastTotal)} />
+                    <MetricCard className="w-full" label={t("llm.currentPacePerDay")} value={fmtUSD(monthlyForecast.dailyPace)} />
+                    <MetricCard
+                      className="w-full"
+                      label={t("llm.budgetDelta")}
+                      value={
+                        monthlyForecast.budget == null
+                          ? "—"
+                          : `${monthlyForecast.forecastTotal - monthlyForecast.budget >= 0 ? "+" : ""}${fmtUSD(monthlyForecast.forecastTotal - monthlyForecast.budget)}`
+                      }
                     />
-                  )}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
-      </section>
+                  </div>
+                  <p className="text-xs text-[var(--color-editorial-ink-soft)]">
+                    {monthlyForecast.isCurrentMonth
+                      ? `${t("llm.forecast.modeLabel")} ${forecastMode === "month_avg" ? t("llm.forecast.monthAvg") : t("llm.forecast.recent7d")}${t("llm.forecast.refOpen")}${t("llm.forecast.refMonthAvg")} ${fmtUSD(monthlyForecast.monthAvgDailyPace)} / ${t("llm.forecast.refRecent7d")} ${fmtUSD(monthlyForecast.recent7dDailyPace)}${t("llm.forecast.refClose")}`
+                      : t("llm.forecast.pastMonthsOnly")}
+                  </p>
+                  <div className="h-80 w-full overflow-hidden rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={monthlyForecast.rows} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#d9d1c4" vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#8f877f" }} tickLine={false} axisLine={false} />
+                        <YAxis
+                          tick={{ fontSize: 12, fill: "#8f877f" }}
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(v) => fmtUSDShort(Number(v))}
+                        />
+                        <Tooltip
+                          formatter={(value: number | string | undefined, name?: string) => [
+                            fmtUSD(Number(value ?? 0)),
+                            name === "actual" ? t("llm.actualCumulative") : t("llm.forecastLabel"),
+                          ]}
+                          labelFormatter={(label) => `${monthlyForecast.monthLabel}-${String(label).padStart(2, "0")}`}
+                          contentStyle={{ borderRadius: 16, borderColor: "#d9d1c4", background: "#fff" }}
+                        />
+                        {monthlyForecast.budget != null && (
+                          <ReferenceLine
+                            y={monthlyForecast.budget}
+                            stroke="#c05032"
+                            strokeDasharray="5 5"
+                            label={{
+                              value: `${t("llm.budget")} ${fmtUSDShort(monthlyForecast.budget)}`,
+                              fill: "#c05032",
+                              fontSize: 11,
+                              position: "insideTopRight",
+                            }}
+                          />
+                        )}
+                        <Line type="monotone" dataKey="actual" name="actual" stroke="#171412" strokeWidth={2.5} dot={false} connectNulls={false} />
+                        {monthlyForecast.isCurrentMonth ? (
+                          <Line type="monotone" dataKey="forecast" name="forecast" stroke="#275d8a" strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={false} />
+                        ) : null}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </SectionCard>
+          ) : null}
 
-      <CurrentMonthByProviderTable
-        title={t("llm.currentMonthByProvider")}
-        rows={currentMonthProviderTableRows}
-        monthLabel={settings?.current_month?.month_jst ?? currentMonthProviderRows[0]?.month_jst ?? "—"}
-        totalCostLabel={fmtUSD(settings?.current_month?.estimated_cost_usd ?? 0)}
-        noSummaryLabel={t("llm.noSummary")}
-        fmtNum={fmtNum}
-        fmtUSD={fmtUSD}
-        sortKey={providerSortKey}
-        sortDir={providerSortDir}
-        onSort={(key) => toggleSort(key, providerSortKey, setProviderSortKey, setProviderSortDir)}
-      />
+          {activeSection === "daily" ? (
+            <SectionCard>
+              <DailySummaryGroups
+                title={t("llm.dailySummary")}
+                groupedByDate={groupedByDate}
+                noSummaryLabel={t("llm.noSummary")}
+                fmtNum={fmtNum}
+                fmtUSD={fmtUSD}
+              />
+            </SectionCard>
+          ) : null}
 
-      <CurrentMonthByPurposeTable
-        title={t("llm.currentMonthByPurpose")}
-        rows={currentMonthPurposeTableRows}
-        monthLabel={settings?.current_month?.month_jst ?? currentMonthPurposeRows[0]?.month_jst ?? "—"}
-        noSummaryLabel={t("llm.noSummary")}
-        fmtNum={fmtNum}
-        fmtUSD={fmtUSD}
-        sortKey={purposeSortKey}
-        sortDir={purposeSortDir}
-        onSort={(key) => toggleSort(key, purposeSortKey, setPurposeSortKey, setPurposeSortDir)}
-      />
+          {activeSection === "providers" ? (
+            <CurrentMonthByProviderTable
+              title={t("llm.currentMonthByProvider")}
+              rows={currentMonthProviderTableRows}
+              monthLabel={settings?.current_month?.month_jst ?? currentMonthProviderRows[0]?.month_jst ?? "—"}
+              totalCostLabel={fmtUSD(settings?.current_month?.estimated_cost_usd ?? 0)}
+              noSummaryLabel={t("llm.noSummary")}
+              fmtNum={fmtNum}
+              fmtUSD={fmtUSD}
+              sortKey={providerSortKey}
+              sortDir={providerSortDir}
+              onSort={(key) => toggleSort(key, providerSortKey, setProviderSortKey, setProviderSortDir)}
+            />
+          ) : null}
 
-      <ReliabilityTable
-        rows={currentMonthExecutionTableRows}
-        monthLabel={settings?.current_month?.month_jst ?? currentMonthExecutionRows[0]?.month_jst ?? "—"}
-        noSummaryLabel={t("llm.noSummary")}
-        fmtNum={fmtNum}
-        fmtUSD={fmtUSD}
-        sortKey={reliabilitySortKey}
-        sortDir={reliabilitySortDir}
-        onSort={handleReliabilitySort}
-        labels={{
-        title: t("llm.currentMonthReliability"),
-        attempts: t("llm.attempts"),
-        cost: t("llm.totalCost"),
-        failures: t("llm.failures"),
-        failureRate: t("llm.failureRate"),
-        retries: t("llm.retries"),
-          retryRate: t("llm.retryRate"),
-          emptyResponses: t("llm.emptyResponses"),
-          emptyRate: t("llm.emptyRate"),
-        }}
-      />
+          {activeSection === "purposes" ? (
+            <CurrentMonthByPurposeTable
+              title={t("llm.currentMonthByPurpose")}
+              rows={currentMonthPurposeTableRows}
+              monthLabel={settings?.current_month?.month_jst ?? currentMonthPurposeRows[0]?.month_jst ?? "—"}
+              noSummaryLabel={t("llm.noSummary")}
+              fmtNum={fmtNum}
+              fmtUSD={fmtUSD}
+              sortKey={purposeSortKey}
+              sortDir={purposeSortDir}
+              onSort={(key) => toggleSort(key, purposeSortKey, setPurposeSortKey, setPurposeSortDir)}
+            />
+          ) : null}
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
+          {activeSection === "reliability" ? (
+            <ReliabilityTable
+              rows={currentMonthExecutionTableRows}
+              monthLabel={settings?.current_month?.month_jst ?? currentMonthExecutionRows[0]?.month_jst ?? "—"}
+              noSummaryLabel={t("llm.noSummary")}
+              fmtNum={fmtNum}
+              fmtUSD={fmtUSD}
+              sortKey={reliabilitySortKey}
+              sortDir={reliabilitySortDir}
+              onSort={handleReliabilitySort}
+              labels={{
+                title: t("llm.currentMonthReliability"),
+                attempts: t("llm.attempts"),
+                cost: t("llm.totalCost"),
+                failures: t("llm.failures"),
+                failureRate: t("llm.failureRate"),
+                retries: t("llm.retries"),
+                retryRate: t("llm.retryRate"),
+                emptyResponses: t("llm.emptyResponses"),
+                emptyRate: t("llm.emptyRate"),
+              }}
+            />
+          ) : null}
+
+          {activeSection === "models" ? (
+            <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
             <Brain className="size-4 text-zinc-500" aria-hidden="true" />
@@ -933,7 +1099,7 @@ export default function LLMUsagePage() {
           <p className="text-sm text-zinc-400">{t("llm.noSummary")}</p>
         ) : (
           <div className="space-y-4">
-            <div className="h-80 w-full rounded border border-zinc-100 p-2">
+            <div className="h-80 w-full overflow-hidden rounded border border-zinc-100 p-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={modelChartRows}
@@ -968,7 +1134,6 @@ export default function LLMUsagePage() {
                     }}
                     contentStyle={{ borderRadius: 10, borderColor: "#e4e4e7" }}
                   />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="cost" name="Cost (USD)" fill="#18181b" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -1036,31 +1201,28 @@ export default function LLMUsagePage() {
             </div>
           </div>
         )}
-      </section>
+            </section>
+          ) : null}
 
-      <DailySummaryGroups
-        title={t("llm.dailySummary")}
-        groupedByDate={groupedByDate}
-        noSummaryLabel={t("llm.noSummary")}
-        fmtNum={fmtNum}
-        fmtUSD={fmtUSD}
-      />
-
-      <RecentLogsTable
-        logs={sortedLogs}
-        pagedLogs={pagedLogs}
-        logPage={logPage}
-        setLogPage={setLogPage}
-        logsPageSize={logsPageSize}
-        locale={locale}
-        noLogsLabel={t("llm.noLogs")}
-        labels={{ title: t("llm.recentLogs"), time: t("llm.time") }}
-        fmtNum={fmtNum}
-        fmtUSD={fmtUSD}
-        sortKey={logSortKey}
-        sortDir={logSortDir}
-        onSort={(key) => toggleSort(key, logSortKey, setLogSortKey, setLogSortDir)}
-      />
+          {activeSection === "logs" ? (
+            <RecentLogsTable
+              logs={sortedLogs}
+              pagedLogs={pagedLogs}
+              logPage={logPage}
+              setLogPage={setLogPage}
+              logsPageSize={logsPageSize}
+              locale={locale}
+              noLogsLabel={t("llm.noLogs")}
+              labels={{ title: t("llm.recentLogs"), time: t("llm.time") }}
+              fmtNum={fmtNum}
+              fmtUSD={fmtUSD}
+              sortKey={logSortKey}
+              sortDir={logSortDir}
+              onSort={(key) => toggleSort(key, logSortKey, setLogSortKey, setLogSortDir)}
+            />
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

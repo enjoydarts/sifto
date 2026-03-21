@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sifto LLM Usage Control Room Mockup</title>
+    <style>
+      :root {
+        --bg: #f4f1ea;
+        --paper: #fcfbf8;
+        --paper-strong: #ffffff;
+        --paper-muted: #f0ece3;
+        --line: #d9d1c4;
+        --line-strong: #beb3a0;
+        --ink: #171412;
+        --ink-soft: #5f5750;
+        --ink-faint: #8f877f;
+        --accent: #9d3c24;
+        --success: #245f4a;
+        --warn: #8a5a14;
+        --shadow: 0 10px 24px rgba(35, 24, 12, 0.06);
+        --radius-xl: 22px;
+        --radius-lg: 16px;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, rgba(157, 60, 36, 0.05), transparent 30%),
+          linear-gradient(180deg, #f8f5ee 0%, var(--bg) 100%);
+        color: var(--ink);
+        font-family: "Helvetica Neue", Arial, sans-serif;
+      }
+
+      h1, h2, h3, h4 {
+        margin: 0;
+        font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", Georgia, serif;
+        letter-spacing: -0.03em;
+      }
+
+      .shell {
+        max-width: 1360px;
+        margin: 0 auto;
+        padding: 28px;
+        display: grid;
+        gap: 24px;
+      }
+
+      .panel {
+        background: rgba(252, 251, 248, 0.9);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow);
+      }
+
+      .page-header {
+        padding: 24px 28px;
+      }
+
+      .eyebrow,
+      .rail-kicker,
+      .section-kicker,
+      .metric-kicker,
+      .chart-kicker,
+      .table-kicker {
+        color: var(--ink-faint);
+        font: 700 10px/1.4 "Helvetica Neue", Arial, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+      }
+
+      .eyebrow { color: var(--accent); }
+
+      h1 {
+        margin-top: 12px;
+        font-size: 42px;
+        line-height: 1.05;
+      }
+
+      .header-copy {
+        margin-top: 14px;
+        max-width: 820px;
+        color: var(--ink-soft);
+        font-size: 15px;
+        line-height: 1.8;
+      }
+
+      .header-tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .tool-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 40px;
+        padding: 0 14px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--paper);
+        color: var(--ink-soft);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 248px minmax(0, 1fr);
+        gap: 24px;
+        align-items: start;
+      }
+
+      .sidebar,
+      .content {
+        display: grid;
+        gap: 20px;
+      }
+
+      .sidebar .panel,
+      .content .panel {
+        padding: 18px;
+      }
+
+      .rail-list {
+        margin-top: 14px;
+        display: grid;
+        gap: 0;
+      }
+
+      .rail-item {
+        position: relative;
+        border-top: 1px solid var(--line);
+        padding: 13px 14px 13px 16px;
+      }
+
+      .rail-item:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+
+      .rail-item.active {
+        background: linear-gradient(90deg, rgba(243, 236, 227, 0.92), rgba(243, 236, 227, 0.28) 78%, transparent);
+      }
+
+      .rail-item.active::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 12px;
+        bottom: 12px;
+        width: 3px;
+        border-radius: 999px;
+        background: var(--ink);
+      }
+
+      .rail-item:first-child.active::before {
+        top: 0;
+      }
+
+      .rail-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      .rail-meta {
+        margin-top: 5px;
+        color: var(--ink-soft);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .status-stack {
+        margin-top: 14px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .status-card {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--paper-strong);
+        padding: 14px;
+      }
+
+      .status-title {
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .status-copy {
+        margin-top: 6px;
+        color: var(--ink-soft);
+        font-size: 12px;
+        line-height: 1.6;
+      }
+
+      .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        gap: 16px;
+      }
+
+      .section-header h2 {
+        margin-top: 8px;
+        font-size: 30px;
+        line-height: 1.1;
+      }
+
+      .section-copy {
+        margin-top: 10px;
+        color: var(--ink-soft);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      .metrics-grid {
+        margin-top: 18px;
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .metric-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--paper-strong);
+        padding: 16px 18px;
+      }
+
+      .metric-card strong {
+        display: block;
+        margin-top: 8px;
+        font-size: 28px;
+        line-height: 1.1;
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      .metric-note {
+        margin-top: 10px;
+        color: var(--ink-soft);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .split {
+        margin-top: 18px;
+        display: grid;
+        gap: 18px;
+        grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+      }
+
+      .subpanel {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--paper-strong);
+        padding: 18px;
+      }
+
+      .subpanel h3 {
+        margin-top: 8px;
+        font-size: 24px;
+        line-height: 1.15;
+      }
+
+      .subcopy {
+        margin-top: 8px;
+        color: var(--ink-soft);
+        font-size: 12px;
+        line-height: 1.7;
+      }
+
+      .mini-metrics {
+        margin-top: 14px;
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .mini-metric {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--paper);
+        padding: 12px 14px;
+      }
+
+      .mini-metric strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 18px;
+        line-height: 1.1;
+      }
+
+      .provider-list {
+        margin-top: 14px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .provider-item {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .provider-item:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .provider-name {
+        color: var(--ink);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .provider-meta {
+        margin-top: 4px;
+        color: var(--ink-soft);
+        font-size: 12px;
+      }
+
+      .provider-value {
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .chart-surface {
+        margin-top: 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--paper-strong);
+        padding: 18px;
+      }
+
+      .chart-frame {
+        position: relative;
+        height: 330px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.85), rgba(252,251,248,0.92)),
+          repeating-linear-gradient(
+            to bottom,
+            transparent 0,
+            transparent 54px,
+            rgba(217, 209, 196, 0.55) 54px,
+            rgba(217, 209, 196, 0.55) 55px
+          );
+        overflow: hidden;
+      }
+
+      .axis-x, .axis-y {
+        position: absolute;
+        background: var(--line-strong);
+      }
+
+      .axis-x {
+        left: 54px;
+        right: 18px;
+        bottom: 42px;
+        height: 1px;
+      }
+
+      .axis-y {
+        top: 18px;
+        left: 54px;
+        bottom: 42px;
+        width: 1px;
+      }
+
+      .axis-label {
+        position: absolute;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--ink-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .axis-label.x { right: 18px; bottom: 12px; }
+      .axis-label.y { left: 8px; top: 26px; writing-mode: vertical-rl; }
+
+      .area {
+        position: absolute;
+        inset: 0;
+      }
+
+      .legend {
+        margin-top: 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        color: var(--ink-soft);
+        font-size: 12px;
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .legend i {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+      }
+
+      .provider-bar {
+        margin-top: 16px;
+        height: 18px;
+        border-radius: 999px;
+        overflow: hidden;
+        display: flex;
+        background: var(--paper-muted);
+        border: 1px solid var(--line);
+      }
+
+      .provider-bar div:nth-child(1) { background: #245f4a; width: 36%; }
+      .provider-bar div:nth-child(2) { background: #275d8a; width: 24%; }
+      .provider-bar div:nth-child(3) { background: #8a5a14; width: 18%; }
+      .provider-bar div:nth-child(4) { background: #9d3c24; width: 14%; }
+      .provider-bar div:nth-child(5) { background: #6f3229; width: 8%; }
+
+      .table-surface {
+        margin-top: 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        overflow: hidden;
+        background: var(--paper-strong);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+
+      thead {
+        background: var(--paper);
+      }
+
+      th {
+        padding: 12px 16px;
+        color: var(--ink-faint);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        text-align: left;
+        border-bottom: 1px solid var(--line-strong);
+      }
+
+      td {
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--line);
+        color: var(--ink-soft);
+      }
+
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+
+      td.num,
+      th.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+
+      td.strong {
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      .footer-note {
+        color: var(--ink-faint);
+        font-size: 12px;
+      }
+
+      @media (max-width: 1100px) {
+        .layout { grid-template-columns: 1fr; }
+        .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .split { grid-template-columns: 1fr; }
+      }
+
+      @media (max-width: 720px) {
+        .shell { padding: 18px; }
+        h1 { font-size: 34px; }
+        .metrics-grid,
+        .mini-metrics { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel page-header">
+        <div class="eyebrow">LLM Usage</div>
+        <h1>流れを追いながら、どこで重くなったかを見る</h1>
+        <p class="header-copy">
+          画面全体を縦に積まず、見る目的ごとに切り替える control room へ整理した
+          mock です。初期表示は Overview で、日次推移と provider の重心を先に掴み、
+          Forecast や Reliability、Logs は左レールから開きます。
+        </p>
+        <div class="header-tools">
+          <div class="tool-chip">対象期間: 当月</div>
+          <div class="tool-chip">履歴件数: 100</div>
+          <div class="tool-chip">予測方式: 月初平均</div>
+        </div>
+      </section>
+
+      <section class="layout">
+        <aside class="sidebar">
+          <section class="panel">
+            <div class="rail-kicker">Sections</div>
+            <div class="rail-list">
+              <div class="rail-item active">
+                <div class="rail-title">Overview</div>
+                <div class="rail-meta">今日までの費用、provider の重心、日次の波形</div>
+              </div>
+              <div class="rail-item">
+                <div class="rail-title">Forecast</div>
+                <div class="rail-meta">月末着地、予算差分、日次ペースの比較</div>
+              </div>
+              <div class="rail-item">
+                <div class="rail-title">Daily Trend</div>
+                <div class="rail-meta">JST 日次の provider 別推移を大きく読む</div>
+              </div>
+              <div class="rail-item">
+                <div class="rail-title">Providers</div>
+                <div class="rail-meta">当月の provider 別コストと call 構成</div>
+              </div>
+              <div class="rail-item">
+                <div class="rail-title">Purposes</div>
+                <div class="rail-meta">種別ごとの費用差と負荷の分布</div>
+              </div>
+              <div class="rail-item">
+                <div class="rail-title">Reliability</div>
+                <div class="rail-meta">失敗、再試行、空応答の偏り</div>
+              </div>
+              <div class="rail-item">
+                <div class="rail-title">Models</div>
+                <div class="rail-meta">モデル別コスト、token、cache の明細</div>
+              </div>
+              <div class="rail-item">
+                <div class="rail-title">Logs</div>
+                <div class="rail-meta">直近の実行ログと pricing source</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="rail-kicker">Status</div>
+            <div class="status-stack">
+              <div class="status-card">
+                <div class="status-title">Current focus</div>
+                <div class="status-copy">Overview を起点に、異常な増加や provider 偏重がないかを見る。</div>
+              </div>
+              <div class="status-card">
+                <div class="status-title">Budget</div>
+                <div class="status-copy">$42.00 予算に対して、現時点の着地予測は +$3.60。</div>
+              </div>
+              <div class="status-card">
+                <div class="status-title">Reliability watch</div>
+                <div class="status-copy">Facts Check と Ask で retry がやや増加。次に Reliability を見る。</div>
+              </div>
+            </div>
+          </section>
+        </aside>
+
+        <section class="content">
+          <section class="panel">
+            <div class="section-header">
+              <div>
+                <div class="section-kicker">Overview</div>
+                <h2>当月の重心を一画面で掴む</h2>
+                <div class="section-copy">
+                  Usage 画面の最初の面です。合計、provider の重さ、cache、
+                  そして日次推移だけを先に見せて、Forecast や Logs は別章に逃がします。
+                </div>
+              </div>
+              <div class="footer-note">Section 1 / 8</div>
+            </div>
+
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <div class="metric-kicker">Month to date</div>
+                <strong>$31.48</strong>
+                <div class="metric-note">前週比 +14%</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-kicker">Calls</div>
+                <strong>18,420</strong>
+                <div class="metric-note">summary と facts が中心</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-kicker">Input tokens</div>
+                <strong>12.8M</strong>
+                <div class="metric-note">cache read 比率 18.4%</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-kicker">Output tokens</div>
+                <strong>4.9M</strong>
+                <div class="metric-note">digest 生成が増加</div>
+              </div>
+            </div>
+
+            <div class="split">
+              <section class="subpanel">
+                <div class="chart-kicker">Daily Trend</div>
+                <h3>JST 日次コスト推移</h3>
+                <div class="subcopy">
+                  provider 別の積み上がりをそのまま残し、Usage の主役として先頭に置く。
+                </div>
+                <div class="chart-surface">
+                  <div class="chart-frame">
+                    <div class="axis-y"></div>
+                    <div class="axis-x"></div>
+                    <div class="axis-label y">Cost (USD)</div>
+                    <div class="axis-label x">JST Day</div>
+                    <svg class="area" viewBox="0 0 760 330" preserveAspectRatio="none" aria-hidden="true">
+                      <path d="M54 270 C120 250, 162 230, 220 226 C274 222, 312 210, 366 188 C420 166, 472 176, 526 150 C584 122, 640 118, 742 100 L742 288 L54 288 Z" fill="rgba(36,95,74,0.42)"></path>
+                      <path d="M54 282 C110 278, 172 266, 224 252 C282 238, 336 232, 396 216 C448 204, 500 206, 560 186 C614 168, 670 160, 742 146 L742 288 L54 288 Z" fill="rgba(39,93,138,0.28)"></path>
+                      <path d="M54 286 C120 284, 176 282, 232 274 C286 268, 340 262, 394 248 C450 236, 506 232, 560 220 C624 206, 688 196, 742 186 L742 288 L54 288 Z" fill="rgba(138,90,20,0.22)"></path>
+                      <polyline points="54,270 120,250 162,230 220,226 274,222 312,210 366,188 420,166 472,176 526,150 584,122 640,118 742,100" fill="none" stroke="#245f4a" stroke-width="3"></polyline>
+                    </svg>
+                  </div>
+                  <div class="legend">
+                    <span><i style="background:#245f4a"></i>OpenAI</span>
+                    <span><i style="background:#275d8a"></i>Anthropic</span>
+                    <span><i style="background:#8a5a14"></i>Google</span>
+                    <span><i style="background:#9d3c24"></i>OpenRouter</span>
+                    <span><i style="background:#6f3229"></i>DeepSeek</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="subpanel">
+                <div class="chart-kicker">Provider Weight</div>
+                <h3>今月の provider 重心</h3>
+                <div class="subcopy">
+                  provider card と cache を別セクションにせず、Overview 内の右脇で軽く把握する。
+                </div>
+                <div class="mini-metrics">
+                  <div class="mini-metric">
+                    <div class="metric-kicker">Cache write</div>
+                    <strong>1.8M</strong>
+                  </div>
+                  <div class="mini-metric">
+                    <div class="metric-kicker">Cache read</div>
+                    <strong>2.4M</strong>
+                  </div>
+                  <div class="mini-metric">
+                    <div class="metric-kicker">Read ratio</div>
+                    <strong>18.4%</strong>
+                  </div>
+                </div>
+                <div class="provider-bar">
+                  <div></div><div></div><div></div><div></div><div></div>
+                </div>
+                <div class="provider-list">
+                  <div class="provider-item">
+                    <div>
+                      <div class="provider-name">OpenAI</div>
+                      <div class="provider-meta">summary / ask が中心</div>
+                    </div>
+                    <div class="provider-value">$11.28</div>
+                  </div>
+                  <div class="provider-item">
+                    <div>
+                      <div class="provider-name">Anthropic</div>
+                      <div class="provider-meta">digest で利用増</div>
+                    </div>
+                    <div class="provider-value">$7.42</div>
+                  </div>
+                  <div class="provider-item">
+                    <div>
+                      <div class="provider-name">Google</div>
+                      <div class="provider-meta">facts と fallback</div>
+                    </div>
+                    <div class="provider-value">$5.67</div>
+                  </div>
+                  <div class="provider-item">
+                    <div>
+                      <div class="provider-name">OpenRouter</div>
+                      <div class="provider-meta">cost-efficient route</div>
+                    </div>
+                    <div class="provider-value">$4.56</div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="section-header">
+              <div>
+                <div class="section-kicker">Forecast Preview</div>
+                <h2>別章に逃がすものも、Overview 下で少しだけ予告する</h2>
+                <div class="section-copy">
+                  完全な月末着地予測は Forecast セクションに分けるが、
+                  「このあと何を見るのか」はここで軽く見せる。
+                </div>
+              </div>
+              <div class="footer-note">Forecast is a separate section</div>
+            </div>
+
+            <div class="table-surface">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Section</th>
+                    <th>What it shows</th>
+                    <th class="num">Current cue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="strong">Forecast</td>
+                    <td>月末着地、予算差分、月初平均 / 直近7日平均の比較</td>
+                    <td class="num strong">+$3.60</td>
+                  </tr>
+                  <tr>
+                    <td class="strong">Reliability</td>
+                    <td>失敗率、retry、empty response の崩れ</td>
+                    <td class="num">Ask +1.8pt</td>
+                  </tr>
+                  <tr>
+                    <td class="strong">Models</td>
+                    <td>モデル別コスト、token、cache と pricing source</td>
+                    <td class="num">$0.0049/call</td>
+                  </tr>
+                  <tr>
+                    <td class="strong">Logs</td>
+                    <td>直近の生ログと pricing source の確認</td>
+                    <td class="num">100 rows</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

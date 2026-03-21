@@ -53,6 +53,7 @@ type WorkerClient struct {
 	baseURL              string
 	http                 *http.Client
 	composeDigestTimeout time.Duration
+	askTimeout           time.Duration
 	internalSecret       string
 }
 
@@ -62,16 +63,21 @@ func NewWorkerClient() *WorkerClient {
 		url = "http://localhost:8000"
 	}
 	composeTimeout := workerComposeDigestTimeout()
+	askTimeout := workerAskTimeout()
 	httpTimeout := 60 * time.Second
 	// Keep client timeout longer than compose timeout; otherwise http.Client.Timeout
 	// can fire before context.WithTimeout in compose calls.
 	if composeTimeout > 0 && composeTimeout+15*time.Second > httpTimeout {
 		httpTimeout = composeTimeout + 15*time.Second
 	}
+	if askTimeout > 0 && askTimeout+15*time.Second > httpTimeout {
+		httpTimeout = askTimeout + 15*time.Second
+	}
 	return &WorkerClient{
 		baseURL:              url,
 		http:                 &http.Client{Timeout: httpTimeout},
 		composeDigestTimeout: composeTimeout,
+		askTimeout:           askTimeout,
 		internalSecret:       strings.TrimSpace(os.Getenv("INTERNAL_WORKER_SECRET")),
 	}
 }
@@ -83,6 +89,15 @@ func workerComposeDigestTimeout() time.Duration {
 		}
 	}
 	return 420 * time.Second
+}
+
+func workerAskTimeout() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("PYTHON_WORKER_ASK_TIMEOUT_SEC")); v != "" {
+		if sec, err := strconv.Atoi(v); err == nil && sec > 0 {
+			return time.Duration(sec) * time.Second
+		}
+	}
+	return 120 * time.Second
 }
 
 type ExtractBodyResponse struct {
@@ -388,6 +403,11 @@ func (w *WorkerClient) AskWithModel(
 	openAIAPIKey *string,
 	model *string,
 ) (*AskResponse, error) {
+	if _, ok := ctx.Deadline(); !ok && w.askTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.askTimeout)
+		defer cancel()
+	}
 	return postWithHeaders[AskResponse](ctx, w, "/ask", map[string]any{
 		"query":      query,
 		"candidates": candidates,

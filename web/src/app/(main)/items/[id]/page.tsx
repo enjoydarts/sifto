@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Info, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, ItemDetail, ItemLLMExecutionAttempt, RelatedItem } from "@/lib/api";
 import { formatModelDisplayName } from "@/lib/model-display";
+import { InlineReader } from "@/components/inline-reader";
 import { ItemHighlightList } from "@/components/items/item-highlight-list";
 import { ItemNoteEditor } from "@/components/items/item-note-editor";
 import { useI18n } from "@/components/i18n-provider";
@@ -119,7 +120,7 @@ function localizeActionError(
   return error instanceof Error ? error.message : String(error);
 }
 
-function formatHeroDate(value: string, locale: string): string {
+function formatHeroDate(value: string): string {
   const date = new Date(value);
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -223,6 +224,7 @@ export default function ItemDetailPage() {
   const [detailTab, setDetailTab] = useState<"summary" | "facts" | "body" | "related" | "notes">("summary");
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const [nextItemHref, setNextItemHref] = useState<string | null>(null);
+  const [inlineItemId, setInlineItemId] = useState<string | null>(null);
   const autoMarkedRef = useRef<Record<string, true>>({});
   const readStateOverrideRef = useRef<Record<string, boolean>>({});
 
@@ -502,6 +504,10 @@ export default function ItemDetailPage() {
     const from = searchParams.get("from");
     return from && from.startsWith("/items") ? from : "/items";
   }, [searchParams]);
+  const currentDetailHref = useMemo(() => {
+    const nextQuery = searchParams.toString();
+    return nextQuery ? `/items/${id}?${nextQuery}` : `/items/${id}`;
+  }, [id, searchParams]);
   const queueStorageKey = useMemo(() => `items-queue:${backHref}`, [backHref]);
   useEffect(() => {
     try {
@@ -577,6 +583,15 @@ export default function ItemDetailPage() {
           })
         : related,
     [related, relatedClusters, relatedSortMode]
+  );
+  const openInlineRelatedItem = useCallback((relatedItemId: string) => {
+    setInlineItemId(relatedItemId);
+  }, []);
+  const openItemDetailFromInlineReader = useCallback(
+    (nextId: string) => {
+      router.push(`/items/${nextId}?from=${encodeURIComponent(currentDetailHref)}`);
+    },
+    [currentDetailHref, router]
   );
 
   const toggleRead = async () => {
@@ -819,7 +834,7 @@ export default function ItemDetailPage() {
               </span>
               {item.published_at && (
                 <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-xs text-[var(--color-editorial-ink-faint)]">
-                  {formatHeroDate(item.published_at, locale)}
+                  {formatHeroDate(item.published_at)}
                 </span>
               )}
               <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-xs text-[var(--color-editorial-ink-faint)]">
@@ -996,7 +1011,7 @@ export default function ItemDetailPage() {
                     >
                       <span>{label}</span>
                       <strong className="font-semibold text-[var(--color-editorial-ink)]">
-                        {formatHeroDate(value, locale)}
+                        {formatHeroDate(value)}
                       </strong>
                     </div>
                   ))}
@@ -1325,9 +1340,13 @@ export default function ItemDetailPage() {
                               )}
                               <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
                             </div>
-                            <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-[var(--color-editorial-ink)] hover:underline">
+                            <button
+                              type="button"
+                              onClick={() => openInlineRelatedItem(r.id)}
+                              className="block text-left text-sm font-semibold text-[var(--color-editorial-ink)] hover:underline"
+                            >
                               {r.title ?? t("itemDetail.noTitle")}
-                            </Link>
+                            </button>
                             <a
                               href={r.url}
                               target="_blank"
@@ -1377,9 +1396,13 @@ export default function ItemDetailPage() {
                       )}
                       <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
                     </div>
-                    <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-[var(--color-editorial-ink)] hover:underline">
+                    <button
+                      type="button"
+                      onClick={() => openInlineRelatedItem(r.id)}
+                      className="block text-left text-sm font-semibold text-[var(--color-editorial-ink)] hover:underline"
+                    >
                       {r.title ?? t("itemDetail.noTitle")}
-                    </Link>
+                    </button>
                     <a
                       href={r.url}
                       target="_blank"
@@ -1433,6 +1456,15 @@ export default function ItemDetailPage() {
           </div>
         ) : null}
       </section>
+      <InlineReader
+        itemId={inlineItemId}
+        open={!!inlineItemId}
+        locale={locale}
+        onClose={() => setInlineItemId(null)}
+        onOpenDetail={openItemDetailFromInlineReader}
+        onOpenItem={openInlineRelatedItem}
+        autoMarkRead={false}
+      />
     </div>
   );
 }

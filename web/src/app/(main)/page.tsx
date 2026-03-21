@@ -323,7 +323,7 @@ export default function BriefingPage() {
                   {t("briefing.hub.start")}
                 </Link>
               </div>
-              {error && <p className="mt-4 text-sm text-[var(--color-editorial-error)]">{error}</p>}
+              {error && <p className="mt-4 text-sm text-[var(--color-editorial-error)]">{String(error)}</p>}
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-3">

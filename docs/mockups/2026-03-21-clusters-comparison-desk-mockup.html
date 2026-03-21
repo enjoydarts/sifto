@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sifto Clusters Comparison Desk Mockup</title>
+    <style>
+      :root {
+        --bg: #f4efe7;
+        --paper: #fbf8f2;
+        --paper-strong: #fffdf9;
+        --line: #d9d1c4;
+        --line-strong: #beb3a0;
+        --ink: #1f1a16;
+        --ink-soft: #5f5750;
+        --ink-faint: #8f877f;
+        --shadow: 0 18px 40px rgba(57, 43, 27, 0.08);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Helvetica Neue", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(255,255,255,0.8), transparent 32%),
+          linear-gradient(180deg, #f6f1e9 0%, #f1ebe2 100%);
+        color: var(--ink);
+      }
+
+      .page {
+        max-width: 1360px;
+        margin: 0 auto;
+        padding: 28px 24px 72px;
+      }
+
+      .header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      .eyebrow {
+        color: var(--ink-faint);
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 10px 0 0;
+        font-family: "Times New Roman", "Hiragino Mincho ProN", "Yu Mincho", serif;
+        font-size: 44px;
+        line-height: 1.08;
+        letter-spacing: -0.04em;
+      }
+
+      .sub {
+        margin-top: 14px;
+        max-width: 70ch;
+        color: var(--ink-soft);
+        font-size: 15px;
+        line-height: 1.8;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--paper-strong);
+        padding: 6px 10px;
+        color: var(--ink-soft);
+        font-size: 12px;
+        line-height: 1;
+      }
+
+      .summary {
+        margin-top: 22px;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: rgba(255,255,255,0.72);
+        box-shadow: var(--shadow);
+        padding: 18px 18px 16px;
+      }
+
+      .metric .label {
+        color: var(--ink-faint);
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .metric .value {
+        margin-top: 10px;
+        font-family: "Times New Roman", "Hiragino Mincho ProN", "Yu Mincho", serif;
+        font-size: 30px;
+      }
+
+      .metric .note {
+        margin-top: 8px;
+        color: var(--ink-soft);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .cards {
+        margin-top: 22px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: rgba(255,255,255,0.78);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .card-top {
+        padding: 22px 22px 18px;
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      .theme {
+        font-family: "Times New Roman", "Hiragino Mincho ProN", "Yu Mincho", serif;
+        font-size: 30px;
+        line-height: 1.14;
+        letter-spacing: -0.04em;
+      }
+
+      .deck {
+        margin-top: 12px;
+        color: var(--ink-soft);
+        font-size: 14px;
+        line-height: 1.8;
+      }
+
+      .rep {
+        margin-top: 18px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: linear-gradient(180deg, #faf6ef, #fffdfa);
+        overflow: hidden;
+      }
+
+      .rep-image {
+        height: 180px;
+        background-size: cover;
+        background-position: center;
+      }
+
+      .rep-body {
+        padding: 14px 16px;
+      }
+
+      .rep .kicker {
+        color: var(--ink-faint);
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .rep h3 {
+        margin: 8px 0 0;
+        font-size: 16px;
+        line-height: 1.6;
+      }
+
+      .rep p {
+        margin: 10px 0 0;
+        color: var(--ink-soft);
+        font-size: 14px;
+        line-height: 1.75;
+      }
+
+      .strip {
+        margin-top: 16px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255,255,255,0.58);
+        padding: 12px 14px;
+      }
+
+      .strip-title {
+        color: var(--ink-faint);
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .strip-list {
+        margin-top: 10px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .strip-item {
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+      }
+
+      .strip-item:first-child {
+        padding-top: 0;
+        border-top: 0;
+      }
+
+      .strip-item strong {
+        display: block;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .strip-item span {
+        display: block;
+        margin-top: 4px;
+        color: var(--ink-soft);
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      .topics {
+        margin-top: 16px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 0 22px 22px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 16px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--paper-strong);
+        color: var(--ink-soft);
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .button.primary {
+        border-color: var(--ink);
+        background: var(--ink);
+        color: #fffdf9;
+      }
+
+      @media (max-width: 980px) {
+        .summary,
+        .cards {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .page { padding: 20px 14px 56px; }
+        h1 { font-size: 36px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="header">
+        <div>
+          <div class="eyebrow">Clusters</div>
+          <h1>いま比較して選ぶべき話題の塊</h1>
+          <div class="sub">
+            クラスタ全体を比較して、どのテーマから読むかを決めるための面。テーマ、未読数、鮮度、代表記事の強さを同じ視線で見られる構成にする。
+          </div>
+        </div>
+        <div class="pill">8 clusters / 43 unread</div>
+      </div>
+
+      <section class="summary">
+        <div class="metric">
+          <div class="label">Active Themes</div>
+          <div class="value">8</div>
+          <div class="note">今日の流入で比較対象になっているクラスタ数</div>
+        </div>
+        <div class="metric">
+          <div class="label">Unread Across Clusters</div>
+          <div class="value">43</div>
+          <div class="note">未読が厚いクラスタを先に見るべきかの判断軸</div>
+        </div>
+        <div class="metric">
+          <div class="label">Top Representative Score</div>
+          <div class="value">0.91</div>
+          <div class="note">代表記事の強さが高いクラスタは先に読む価値が高い</div>
+        </div>
+        <div class="metric">
+          <div class="label">Newest Cluster Update</div>
+          <div class="value">08:42</div>
+          <div class="note">鮮度の高い塊を優先するための時間軸</div>
+        </div>
+      </section>
+
+      <section class="cards">
+        <article class="card">
+          <div class="card-top">
+            <div class="meta">
+              <span class="pill">6 unread</span>
+              <span class="pill">avg score 0.84</span>
+              <span class="pill">updated 08:42</span>
+            </div>
+            <div class="theme">Agent Governance</div>
+            <div class="deck">企業向け AI エージェントの監査性、承認フロー、権限境界に関する動きがまとまったクラスタ。</div>
+
+            <div class="rep">
+              <div class="rep-image" style="background-image:linear-gradient(180deg, rgba(31,26,22,0.05), rgba(31,26,22,0.32)), url('https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1400&q=80');"></div>
+              <div class="rep-body">
+                <div class="kicker">Representative Article</div>
+                <h3>OpenAI、企業向け自動化エージェントの新しい運用フレームを提示</h3>
+                <p>execution logs と approval trails を切り分ける考え方が中心。Sifto の summary / facts / faithfulness 設計にも近い。</p>
+              </div>
+            </div>
+
+            <div class="topics">
+              <span class="pill">auditability</span>
+              <span class="pill">approval trail</span>
+              <span class="pill">workflow verification</span>
+            </div>
+
+            <div class="strip">
+              <div class="strip-title">More in this cluster</div>
+              <div class="strip-list">
+                <div class="strip-item">
+                  <strong>Anthropic、企業導入向けに agent audit trail のベストプラクティスを公開</strong>
+                  <span>監査ログの保持期間と human review の導線設計が主論点。</span>
+                </div>
+                <div class="strip-item">
+                  <strong>Microsoft、Copilot agent の権限委譲境界を整理した技術文書を公開</strong>
+                  <span>planner / executor / approver を分ける設計整理が近い。</span>
+                </div>
+                <div class="strip-item">
+                  <strong>+3 more</strong>
+                  <span>クラスタ詳細で残り記事を一覧表示。</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="button primary">この話題を後で読む</button>
+            <button class="button">この話題を既読にする</button>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-top">
+            <div class="meta">
+              <span class="pill">4 unread</span>
+              <span class="pill">avg score 0.78</span>
+              <span class="pill">updated 08:10</span>
+            </div>
+            <div class="theme">Search Interface Shift</div>
+            <div class="deck">検索体験の UI 再編と、回答面の要約・引用・出典設計に関する記事が集まっているクラスタ。</div>
+
+            <div class="rep">
+              <div class="rep-image" style="background-image:linear-gradient(180deg, rgba(31,26,22,0.05), rgba(31,26,22,0.32)), url('https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=1400&q=80');"></div>
+              <div class="rep-body">
+                <div class="kicker">Representative Article</div>
+                <h3>Perplexity、企業向け検索面に監査ログ付きの回答ワークフローを追加</h3>
+                <p>citation と evidence panel を同じ面でどう扱うかが論点。Sifto の item detail の見せ方にも接続しやすい。</p>
+              </div>
+            </div>
+
+            <div class="topics">
+              <span class="pill">answer UI</span>
+              <span class="pill">citations</span>
+              <span class="pill">evidence panel</span>
+            </div>
+
+            <div class="strip">
+              <div class="strip-title">More in this cluster</div>
+              <div class="strip-list">
+                <div class="strip-item">
+                  <strong>Google、AI Overview に citation stack を追加</strong>
+                  <span>回答面で evidence をどう畳むかが主論点。</span>
+                </div>
+                <div class="strip-item">
+                  <strong>You.com、企業向け回答UIでソース信頼度表示を強化</strong>
+                  <span>要約と引用の階層化が比較ポイント。</span>
+                </div>
+                <div class="strip-item">
+                  <strong>+2 more</strong>
+                  <span>クラスタ詳細で残り記事を一覧表示。</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="button primary">この話題を後で読む</button>
+            <button class="button">この話題を既読にする</button>
+          </div>
+        </article>
+      </section>
+    </div>
+  </body>
+</html>

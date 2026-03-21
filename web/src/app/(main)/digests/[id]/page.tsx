@@ -48,13 +48,6 @@ function formatDateTime(value: string | null | undefined, locale: string) {
   }).format(d);
 }
 
-function buildHeroNote(digest: DigestDetail, t: (key: string, fallback?: string) => string) {
-  const source = (digest.email_body ?? digest.send_error ?? "").replace(/\s+/g, " ").trim();
-  if (!source) return t("digestDetail.heroFallback");
-  if (source.length <= 180) return source;
-  return `${source.slice(0, 180).trim()}...`;
-}
-
 export default function DigestDetailPage() {
   const { t, locale } = useI18n();
   const { id } = useParams<{ id: string }>();
@@ -83,7 +76,12 @@ export default function DigestDetailPage() {
           ← {t("nav.digests")}
         </Link>
 
-        <section className="rounded-[30px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(255,253,249,0.96)),var(--color-editorial-panel)] px-5 py-5 shadow-[var(--shadow-card)] sm:px-6">
+        <section
+          className="rounded-[30px] border border-[var(--color-editorial-line)] px-5 py-5 shadow-[var(--shadow-card)] sm:px-6"
+          style={{
+            background: "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,253,249,0.96)), #fbf8f2",
+          }}
+        >
           <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
             {digest.digest_date}
           </div>
@@ -100,9 +98,6 @@ export default function DigestDetailPage() {
             <MetaPill>{t("digestDetail.digestRetryCount")} {digest.digest_retry_count}</MetaPill>
             <MetaPill>{t("digestDetail.clusterDraftRetryCount")} {digest.cluster_draft_retry_count}</MetaPill>
           </div>
-          <p className="mt-4 max-w-4xl text-sm leading-8 text-[var(--color-editorial-ink-soft)]">
-            {buildHeroNote(digest, t)}
-          </p>
           {!!digest.send_error && !digest.sent_at ? (
             <div className="mt-5 border-t border-[var(--color-editorial-line)] pt-4 text-sm leading-7 text-[#7a4337]">
               {digest.send_error}

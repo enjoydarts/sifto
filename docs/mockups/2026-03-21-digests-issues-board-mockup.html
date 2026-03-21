@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sifto Digests Issues Board Mockup</title>
+    <style>
+      :root {
+        --bg: #f3efe6;
+        --paper: #fbf8f2;
+        --panel: rgba(255, 255, 255, 0.78);
+        --panel-strong: rgba(255, 253, 249, 0.96);
+        --line: #d9d1c4;
+        --line-strong: #beb3a0;
+        --ink: #241f18;
+        --ink-soft: #5f5548;
+        --ink-faint: #8a7d6c;
+        --sent: #e7f1e8;
+        --sent-ink: #335a39;
+        --pending: #f2eee7;
+        --pending-ink: #6f6353;
+        --processing: #eaf0f6;
+        --processing-ink: #38506c;
+        --failed: #f6e8e4;
+        --failed-ink: #7a4337;
+        --shadow: 0 18px 50px rgba(36, 31, 24, 0.08);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Sawarabi Gothic", "Hiragino Sans", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(255,255,255,0.72), transparent 34%),
+          linear-gradient(180deg, #f7f4ed 0%, var(--bg) 100%);
+      }
+
+      .frame {
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 44px 24px 72px;
+      }
+
+      .hero {
+        border: 1px solid var(--line);
+        border-radius: 30px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,253,249,0.96)), var(--paper);
+        box-shadow: var(--shadow);
+        padding: 30px 32px;
+      }
+
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 10px 0 0;
+        font-family: "Sawarabi Mincho", serif;
+        font-size: clamp(38px, 5vw, 58px);
+        line-height: 1.05;
+        letter-spacing: -0.04em;
+        font-weight: 400;
+      }
+
+      .hero p {
+        max-width: 760px;
+        margin: 14px 0 0;
+        color: var(--ink-soft);
+        font-size: 15px;
+        line-height: 1.9;
+      }
+
+      .hero-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .meta-pill {
+        border: 1px solid var(--line);
+        background: var(--panel-strong);
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+
+      .board {
+        margin-top: 22px;
+        display: grid;
+        gap: 18px;
+      }
+
+      .issue {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        padding: 24px;
+        display: grid;
+        gap: 18px;
+      }
+
+      .issue-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: flex-start;
+      }
+
+      .issue-kicker {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+
+      .issue-title {
+        margin-top: 10px;
+        font-family: "Sawarabi Mincho", serif;
+        font-size: clamp(26px, 3vw, 36px);
+        line-height: 1.2;
+        letter-spacing: -0.03em;
+      }
+
+      .issue-meta {
+        margin-top: 14px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+
+      .status {
+        border-radius: 999px;
+        padding: 9px 14px;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      .sent { background: var(--sent); color: var(--sent-ink); }
+      .pending { background: var(--pending); color: var(--pending-ink); }
+      .processing { background: var(--processing); color: var(--processing-ink); }
+      .failed { background: var(--failed); color: var(--failed-ink); }
+
+      .issue-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 260px;
+        gap: 18px;
+      }
+
+      .summary-box,
+      .trail-box {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: rgba(255,255,255,0.6);
+        padding: 16px 18px;
+      }
+
+      .summary-box h2,
+      .trail-box h2 {
+        margin: 0;
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+      }
+
+      .summary-box p,
+      .trail-box p {
+        margin: 12px 0 0;
+        font-size: 14px;
+        line-height: 1.85;
+        color: var(--ink-soft);
+      }
+
+      .trail-box strong {
+        display: block;
+        margin-top: 12px;
+        font-size: 14px;
+        color: var(--ink);
+      }
+
+      .error {
+        border-top: 1px solid var(--line);
+        padding-top: 16px;
+        font-size: 13px;
+        color: var(--failed-ink);
+      }
+
+      .pagination {
+        margin-top: 20px;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+      }
+
+      .page-chip {
+        min-width: 42px;
+        height: 42px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--panel-strong);
+        display: grid;
+        place-items: center;
+        color: var(--ink-soft);
+        font-size: 13px;
+      }
+
+      .page-chip.active {
+        background: var(--ink);
+        color: var(--panel-strong);
+        border-color: var(--ink);
+      }
+
+      @media (max-width: 900px) {
+        .issue-body { grid-template-columns: 1fr; }
+      }
+
+      @media (max-width: 640px) {
+        .frame { padding: 26px 14px 52px; }
+        .hero, .issue { padding: 18px; }
+        .issue-head { flex-direction: column; align-items: stretch; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="frame">
+      <section class="hero">
+        <div class="eyebrow">Digest Archive</div>
+        <h1>過去の配信号を、読み返せる形で並べる。</h1>
+        <p>
+          ダイジェストは配信ログではなく、過去に配られた号のアーカイブとして見せる。件名を主役にし、配信日と状態は補助情報として同じ視線の中で読めるようにする。
+        </p>
+        <div class="hero-meta">
+          <div class="meta-pill">35 issues archived</div>
+          <div class="meta-pill">Newest issue sent 2026-03-21 07:00</div>
+          <div class="meta-pill">2 drafts still processing</div>
+        </div>
+      </section>
+
+      <section class="board">
+        <article class="issue">
+          <div class="issue-head">
+            <div>
+              <div class="issue-kicker">2026-03-21 Morning Brief</div>
+              <div class="issue-title">AIエージェント運用が「信頼の設計」へ移った日</div>
+              <div class="issue-meta">
+                <span>Created 2026-03-21 06:42</span>
+                <span>11 items included</span>
+                <span>Open rate 48%</span>
+              </div>
+            </div>
+            <div class="status sent">送信済み</div>
+          </div>
+          <div class="issue-body">
+            <div class="summary-box">
+              <h2>Issue note</h2>
+              <p>
+                マルチエージェントの品質保証、推論コスト、そして監査可能性が同時に議論され始めた一日。配信は「速度」より「信頼の担保」へ論点が移ったことを中核に編成されている。
+              </p>
+            </div>
+            <div class="trail-box">
+              <h2>Archive trail</h2>
+              <strong>Top thread</strong>
+              <p>LLM orchestration, verification loops, cost control, and structured output governance.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="issue">
+          <div class="issue-head">
+            <div>
+              <div class="issue-kicker">2026-03-20 Evening Edition</div>
+              <div class="issue-title">生成系の価格競争が、用途別最適化の段階に入った</div>
+              <div class="issue-meta">
+                <span>Created 2026-03-20 18:26</span>
+                <span>9 items included</span>
+                <span>Draft regenerated once</span>
+              </div>
+            </div>
+            <div class="status processing">処理中</div>
+          </div>
+          <div class="issue-body">
+            <div class="summary-box">
+              <h2>Issue note</h2>
+              <p>
+                単純な単価比較ではなく、summary・facts・faithfulness_check ごとのモデル選定へ関心が移行。用途別の使い分けが本格化し、運用設計そのものが競争力になり始めたという整理で束ねている。
+              </p>
+            </div>
+            <div class="trail-box">
+              <h2>Archive trail</h2>
+              <strong>Top thread</strong>
+              <p>Provider diversification, per-purpose tuning, and cost-per-reliable-output comparisons.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="issue">
+          <div class="issue-head">
+            <div>
+              <div class="issue-kicker">2026-03-19 Morning Brief</div>
+              <div class="issue-title">OpenRouter自動コスト補修の配信が、途中で失敗したまま残っている</div>
+              <div class="issue-meta">
+                <span>Created 2026-03-19 06:58</span>
+                <span>7 items included</span>
+                <span>Email subject generated</span>
+              </div>
+            </div>
+            <div class="status failed">失敗</div>
+          </div>
+          <div class="issue-body">
+            <div class="summary-box">
+              <h2>Issue note</h2>
+              <p>
+                コスト集計補修の内部実装はまとまっていたが、送信キュー処理で失敗。アーカイブとしては残しつつ、配信完了には至っていない号として静かに扱う。
+              </p>
+            </div>
+            <div class="trail-box">
+              <h2>Archive trail</h2>
+              <strong>Top thread</strong>
+              <p>OpenRouter cost repair, delayed queue execution, and email delivery failure recovery.</p>
+            </div>
+          </div>
+          <div class="error">send_email_failed: SES delivery quota exhausted during final send phase.</div>
+        </article>
+      </section>
+
+      <div class="pagination">
+        <div class="page-chip">‹</div>
+        <div class="page-chip active">1</div>
+        <div class="page-chip">2</div>
+        <div class="page-chip">3</div>
+        <div class="page-chip">›</div>
+      </div>
+    </main>
+  </body>
+  </html>

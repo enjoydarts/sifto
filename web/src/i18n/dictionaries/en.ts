@@ -164,8 +164,7 @@ export const enDict: Dict = {
   "briefing.todayQueue.reason.fresh": "Fresh",
   "briefing.todayQueue.reason.attention": "Attention",
   "clusters.title": "Topic Bundles Worth Comparing Right Now",
-  "clusters.subtitle":
-    "A desk for comparing whole clusters before deciding which theme deserves attention first. Theme, unread weight, freshness, and representative strength sit on the same visual plane.",
+  "clusters.subtitle": "Compare topic bundles and decide whether to save them for later or mark them as read.",
   "clusters.swipeHint": "Swipe left to mark read, swipe right to save for later.",
   "clusters.backBriefing": "Back to briefing",
   "clusters.empty": "No clusters available yet.",

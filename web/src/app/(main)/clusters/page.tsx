@@ -226,7 +226,10 @@ export default function ClustersPage() {
                               {representative.translated_title || representative.title || representative.url}
                             </h3>
                             <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
-                              {cluster.summary || representative.summary || representative.content_text || t("clusters.card.noRepresentativeSummary")}
+                              {cluster.summary ||
+                                representative.recommendation_reason ||
+                                representative.content_text ||
+                                t("clusters.card.noRepresentativeSummary")}
                             </p>
                           </div>
                         </Link>

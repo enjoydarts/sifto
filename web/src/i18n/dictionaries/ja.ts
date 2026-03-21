@@ -164,8 +164,7 @@ export const jaDict: Dict = {
   "briefing.todayQueue.reason.fresh": "新着",
   "briefing.todayQueue.reason.attention": "注目候補",
   "clusters.title": "いま比較して選ぶべき話題の塊",
-  "clusters.subtitle":
-    "クラスタ全体を比較して、どのテーマから読むかを決めるための面。テーマ、未読数、鮮度、代表記事の強さを同じ視線で見られる構成にする。",
+  "clusters.subtitle": "話題のまとまりを見比べながら、あとで読むか既読にするかを決めます。",
   "clusters.swipeHint": "左へスワイプで既読、右へスワイプであとで読むに振り分けます。",
   "clusters.backBriefing": "ブリーフィングへ戻る",
   "clusters.empty": "まだ扱えるクラスタはありません。",

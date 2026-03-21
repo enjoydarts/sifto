@@ -56,6 +56,7 @@ export default function SourcesPage() {
     items_count?: number;
   } | null>(null);
   const [addingSuggestedURL, setAddingSuggestedURL] = useState<string | null>(null);
+  const [hasLoadedSuggestions, setHasLoadedSuggestions] = useState(false);
   const [candidates, setCandidates] = useState<
     { url: string; title: string | null }[]
   >([]);
@@ -69,6 +70,47 @@ export default function SourcesPage() {
   const normalizeSuggestionReason = useCallback((value: string | null | undefined) => {
     return (value ?? "").trim().replace(/\s+/g, " ");
   }, []);
+  const normalizeSuggestionText = useCallback((value: unknown): string | null => {
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      return normalized === "" ? null : normalized;
+    }
+    if (value === null || value === undefined) return null;
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    return null;
+  }, []);
+  const normalizeSuggestionStringList = useCallback((value: unknown): string[] => {
+    if (!Array.isArray(value)) return [];
+    const out: string[] = [];
+    for (const raw of value) {
+      const normalized = normalizeSuggestionText(raw);
+      if (normalized !== null) {
+        out.push(normalized);
+      }
+    }
+    return out;
+  }, [normalizeSuggestionText]);
+  const normalizeSuggestion = useCallback(
+    (raw: unknown): SourceSuggestion | null => {
+      if (!raw || typeof raw !== "object") return null;
+      const source = raw as Record<string, unknown>;
+      const url = normalizeSuggestionText(source.url);
+      if (!url) return null;
+      const title = normalizeSuggestionText(source.title);
+      return {
+        url,
+        title,
+        reasons: normalizeSuggestionStringList(source.reasons),
+        matched_topics: normalizeSuggestionStringList(source.matched_topics),
+        ai_reason: normalizeSuggestionText(source.ai_reason) ?? null,
+        ai_confidence: typeof source.ai_confidence === "number" ? source.ai_confidence : null,
+        seed_source_ids: normalizeSuggestionStringList(source.seed_source_ids),
+      };
+    },
+    [normalizeSuggestionStringList, normalizeSuggestionText]
+  );
 
   const load = useCallback(async () => {
     try {
@@ -165,25 +207,22 @@ export default function SourcesPage() {
   };
 
   const loadSuggestions = useCallback(async () => {
+    setHasLoadedSuggestions(false);
     setLoadingSuggestions(true);
     setSuggestionsError(null);
     try {
       const res = await api.getRecommendedSources({ limit: 24 });
-      setRecommendations(res.items ?? []);
+      const next = Array.isArray(res.items) ? res.items.map(normalizeSuggestion).filter((v): v is SourceSuggestion => v !== null) : [];
+      setRecommendations(next);
       setSuggestionsLLM(res.llm ?? null);
     } catch (e) {
       setSuggestionsError(String(e));
       setSuggestionsLLM(null);
     } finally {
       setLoadingSuggestions(false);
+      setHasLoadedSuggestions(true);
     }
-  }, []);
-
-  useEffect(() => {
-    if (activeSection === "add" && !loadingSuggestions && recommendations.length === 0 && !suggestionsError) {
-      void loadSuggestions();
-    }
-  }, [activeSection, loadSuggestions, loadingSuggestions, recommendations.length, suggestionsError]);
+  }, [normalizeSuggestion]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -389,7 +428,15 @@ export default function SourcesPage() {
                 <button
                   key={section.key}
                   type="button"
-                  onClick={() => setActiveSection(section.key)}
+                  onClick={() => {
+                    if (section.key === "add") {
+                      setRecommendations([]);
+                      setSuggestionsError(null);
+                      setSuggestionsLLM(null);
+                      setHasLoadedSuggestions(false);
+                    }
+                    setActiveSection(section.key);
+                  }}
                   className={`rounded-[16px] border-l-2 px-3 py-3 text-left transition-colors ${
                     activeSection === section.key
                       ? "border-[var(--color-editorial-ink)] bg-[rgba(255,253,249,0.94)]"
@@ -708,7 +755,7 @@ export default function SourcesPage() {
                     </p>
                   ) : null}
                   {suggestionsError ? <p className="mt-3 text-sm text-red-600">{suggestionsError}</p> : null}
-                  {!suggestionsError && !loadingSuggestions && recommendations.length === 0 ? (
+                  {!suggestionsError && !loadingSuggestions && hasLoadedSuggestions && recommendations.length === 0 ? (
                     <p className="mt-3 text-sm text-[var(--color-editorial-ink-faint)]">{t("sources.suggest.empty")}</p>
                   ) : null}
                   <div className="mt-4 grid gap-3">

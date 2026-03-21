@@ -391,8 +391,8 @@ export default function BriefingPage() {
               </SectionCard>
             ) : (
               <SectionCard className="overflow-hidden p-0">
-                <div className="grid gap-0 bg-[radial-gradient(circle_at_top_left,_rgba(143,61,37,0.08),_transparent_36%),linear-gradient(135deg,_#ffffff_0%,_#f7f3ec_52%,_#ffffff_100%)] lg:grid-cols-[minmax(0,1fr)_320px]">
-                  <div className="flex flex-col justify-between gap-6 p-6 sm:p-7">
+                <div className="grid min-w-0 max-w-full gap-0 bg-[radial-gradient(circle_at_top_left,_rgba(143,61,37,0.08),_transparent_36%),linear-gradient(135deg,_#ffffff_0%,_#f7f3ec_52%,_#ffffff_100%)] lg:grid-cols-[minmax(0,1fr)_320px]">
+                  <div className="flex min-w-0 max-w-full flex-col justify-between gap-6 p-6 sm:p-7">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <Tag tone="accent">{t("briefing.highlightBadge")} 1</Tag>
@@ -406,18 +406,18 @@ export default function BriefingPage() {
                         onClick={() => setInlineItemId(nowReading.id)}
                         className="mt-5 block w-full text-left"
                       >
-                        <h2 className="line-clamp-4 break-words font-serif text-[2rem] leading-[1.18] tracking-[-0.03em] text-[var(--color-editorial-ink)] hover:underline">
+                        <h2 className="line-clamp-4 min-w-0 max-w-full break-all break-words font-serif text-[2rem] leading-[1.18] tracking-[-0.03em] text-[var(--color-editorial-ink)] hover:underline">
                           {nowReading.translated_title || nowReading.title || nowReading.url}
                         </h2>
                       </button>
-                      <p className="mt-4 line-clamp-4 font-sans text-[14px] leading-7 text-[var(--color-editorial-ink-soft)]">
+                      <p className="mt-4 line-clamp-4 min-w-0 max-w-full break-all break-words font-sans text-[14px] leading-7 text-[var(--color-editorial-ink-soft)]">
                         {nowReading.content_text?.trim() || nowReading.recommendation_reason || nowReading.url}
                       </p>
                     </div>
                     <div>
                       <div className="flex flex-wrap gap-x-4 gap-y-2 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">
-                        <span>{nowReading.source_title || "Source"}</span>
-                        <span>{fmtDate(nowReading.published_at || nowReading.created_at, locale)}</span>
+                        <span className="min-w-0 max-w-full break-all break-words">{nowReading.source_title || "Source"}</span>
+                        <span className="min-w-0 max-w-full break-all break-words">{fmtDate(nowReading.published_at || nowReading.created_at, locale)}</span>
                       </div>
                       <div className="mt-4 flex flex-wrap items-center gap-2">
                         <button
@@ -441,7 +441,7 @@ export default function BriefingPage() {
                   <button
                     type="button"
                     onClick={() => setInlineItemId(nowReading.id)}
-                    className="group relative min-h-[260px] overflow-hidden border-t border-[var(--color-editorial-line)] lg:border-l lg:border-t-0"
+                    className="group relative min-h-[260px] min-w-0 max-w-full overflow-hidden border-t border-[var(--color-editorial-line)] lg:border-l lg:border-t-0"
                   >
                     <ThumbnailArtwork item={nowReading} className="h-full min-h-[260px] w-full" />
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/10 to-transparent opacity-75 transition-opacity group-hover:opacity-100" />
@@ -482,16 +482,16 @@ export default function BriefingPage() {
                         className="grid w-full gap-4 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4 text-left hover:bg-[var(--color-editorial-panel)] md:grid-cols-[122px_minmax(0,1fr)]"
                       >
                         <ThumbnailArtwork item={item} className="h-[180px] w-full rounded-[14px] md:h-[92px]" />
-                        <div className="min-w-0">
-                          <h3 className="line-clamp-2 break-words font-serif text-[1.05rem] font-semibold leading-[1.35] text-[var(--color-editorial-ink)]">
+                        <div className="min-w-0 max-w-full">
+                          <h3 className="line-clamp-2 min-w-0 max-w-full break-all break-words font-serif text-[1.05rem] font-semibold leading-[1.35] text-[var(--color-editorial-ink)]">
                             {item.translated_title || item.title || item.url}
                           </h3>
-                          <p className="mt-2 line-clamp-2 font-sans text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                          <p className="mt-2 line-clamp-2 min-w-0 max-w-full break-all break-words font-sans text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">
                             {item.content_text?.trim() || item.recommendation_reason || item.url}
                           </p>
                           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">
-                            <span>{item.source_title || "Source"}</span>
-                            <span>{fmtDate(item.published_at || item.created_at, locale)}</span>
+                            <span className="min-w-0 max-w-full break-all break-words">{item.source_title || "Source"}</span>
+                            <span className="min-w-0 max-w-full break-all break-words">{fmtDate(item.published_at || item.created_at, locale)}</span>
                           </div>
                         </div>
                       </button>
@@ -640,8 +640,8 @@ function ThumbnailArtwork({ item, className }: { item: Item; className?: string 
   return (
     <div className={`relative overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.2),_transparent_35%),linear-gradient(135deg,_#18181b_0%,_#3f3f46_45%,_#d4d4d8_100%)] ${className ?? ""}`}>
       <div className="absolute inset-0 bg-[linear-gradient(135deg,transparent_0%,rgba(255,255,255,0.12)_45%,transparent_100%)]" />
-      <div className="absolute bottom-3 left-3 right-3 line-clamp-3 text-left text-xs font-medium text-white/90">
-        {item.translated_title || item.title || item.url}
+      <div className="absolute inset-x-3 bottom-3 min-w-0 max-w-full break-all break-words text-left text-xs font-medium text-white/90">
+        <div className="line-clamp-3">{item.translated_title || item.title || item.url}</div>
       </div>
     </div>
   );

@@ -659,8 +659,14 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 
 	registered := map[string]bool{}
 	startAt := time.Now()
-	const suggestionMaxLatency = 12 * time.Second
+	const suggestionMaxLatency = 24 * time.Second
 	isOverBudget := func() bool { return time.Since(startAt) >= suggestionMaxLatency }
+	remainingSuggestionBudget := func() time.Duration {
+		if d := suggestionMaxLatency - time.Since(startAt); d > 0 {
+			return d
+		}
+		return 0
+	}
 	type probeSeed struct {
 		SourceID string
 		ProbeURL string
@@ -688,8 +694,9 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 
 	cands := map[string]*sourceSuggestionAgg{}
 	aiReady := (anthropicAPIKey != nil || googleAPIKey != nil || groqAPIKey != nil || fireworksAPIKey != nil || deepseekAPIKey != nil || alibabaAPIKey != nil || mistralAPIKey != nil || xaiAPIKey != nil || zaiAPIKey != nil || openAIAPIKey != nil) && h.worker != nil
+	timedOutInAiStep := false
 	if aiReady {
-		h.expandSourceSuggestionsWithLLMSeeds(
+		timedOutInAiStep = h.expandSourceSuggestionsWithLLMSeeds(
 			ctx,
 			userID,
 			sources,
@@ -709,6 +716,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 			zaiAPIKey,
 			openAIAPIKey,
 			anthropicSourceSuggestionModel,
+			remainingSuggestionBudget,
 		)
 	}
 	if !aiReady {
@@ -716,7 +724,11 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 			if isOverBudget() {
 				break
 			}
-			probeCtx, cancel := context.WithTimeout(ctx, 1200*time.Millisecond)
+			probeTimeout := capDuration(1200*time.Millisecond, remainingSuggestionBudget())
+			if probeTimeout <= 0 {
+				break
+			}
+			probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 			feeds, err := discoverRSSFeeds(probeCtx, p.ProbeURL)
 			cancel()
 			if err != nil {
@@ -832,7 +844,14 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 		zaiAPIKey,
 		openAIAPIKey,
 		anthropicSourceSuggestionModel,
+		remainingSuggestionBudget,
 	)
+	if isOverBudget() {
+		llmMeta = mergeLLMWarning(llmMeta, "source suggestion timed out; partial results returned", "timeout")
+	}
+	if timedOutInAiStep {
+		llmMeta = mergeLLMWarning(llmMeta, "source suggestion timed out during AI seed generation", "seed_generation")
+	}
 	if len(out) > limit {
 		out = out[:limit]
 	}
@@ -924,9 +943,19 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	zaiAPIKey *string,
 	openAIAPIKey *string,
 	model *string,
+	remainingSuggestionBudget func() time.Duration,
 ) map[string]any {
 	if h.worker == nil || len(suggestions) == 0 {
 		return nil
+	}
+	if remainingSuggestionBudget == nil {
+		remainingSuggestionBudget = func() time.Duration { return 0 }
+	}
+	if remainingSuggestionBudget() <= 0 {
+		return map[string]any{
+			"warning": "source suggestion rank skipped due timeout budget",
+			"stage":   "rank",
+		}
 	}
 	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
 	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
@@ -962,8 +991,16 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 		})
 		byID[id] = &suggestions[i]
 	}
+	rankBudget := capDuration(6*time.Second, remainingSuggestionBudget())
+	if rankBudget <= 0 {
+		return map[string]any{
+			"warning": "source suggestion rank skipped due timeout budget",
+			"stage":   "rank",
+		}
+	}
+	rankCtx, cancel := context.WithTimeout(ctx, rankBudget)
 	resp, err := h.worker.RankFeedSuggestionsWithModel(
-		ctx,
+		rankCtx,
 		existing,
 		preferredTopics,
 		cands,
@@ -981,7 +1018,14 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 		openAIAPIKey,
 		model,
 	)
+	cancel()
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return map[string]any{
+				"warning": "source suggestion ranking timed out",
+				"stage":   "rank",
+			}
+		}
 		return map[string]any{
 			"error": err.Error(),
 			"stage": "rank",
@@ -1456,13 +1500,26 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	zaiAPIKey *string,
 	openAIAPIKey *string,
 	model *string,
-) {
+	remainingSuggestionBudget func() time.Duration,
+) bool {
+	if remainingSuggestionBudget == nil {
+		remainingSuggestionBudget = func() time.Duration { return 0 }
+	}
+	if remainingSuggestionBudget() <= 0 {
+		return true
+	}
 	existing := make([]service.RankFeedSuggestionsExistingSource, 0, len(sources))
 	for _, s := range sources {
 		existing = append(existing, service.RankFeedSuggestionsExistingSource{URL: s.URL, Title: s.Title})
 	}
+	seedBudget := capDuration(8*time.Second, remainingSuggestionBudget())
+	if seedBudget <= 0 {
+		return true
+	}
+	ctxSeed, cancelSeed := context.WithTimeout(ctx, seedBudget)
+	defer cancelSeed()
 	resp, err := h.worker.SuggestFeedSeedSitesWithModel(
-		ctx,
+		ctxSeed,
 		existing,
 		preferredTopics,
 		positiveExamples,
@@ -1480,7 +1537,13 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 		model,
 	)
 	if err != nil || resp == nil {
-		return
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return true
+		}
+		return false
+	}
+	if remainingSuggestionBudget() <= 0 {
+		return true
 	}
 	resp.LLM = service.NormalizeCatalogPricedUsage("source_suggestion", resp.LLM)
 	h.recordSourceSuggestionLLMUsage(ctx, userID, resp.LLM)
@@ -1502,7 +1565,14 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 			probeURLs = probeURLs[:4]
 		}
 		for _, probe := range probeURLs {
-			ctxOne, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+			if remainingSuggestionBudget() <= 0 {
+				return true
+			}
+			probeTimeout := capDuration(1500*time.Millisecond, remainingSuggestionBudget())
+			if probeTimeout <= 0 {
+				return true
+			}
+			ctxOne, cancel := context.WithTimeout(ctx, probeTimeout)
 			feeds, err := discoverRSSFeeds(ctxOne, probe)
 			cancel()
 			if err != nil {
@@ -1572,6 +1642,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 			}
 		}
 	}
+	return false
 }
 
 func aiSeedFeedProbeURLs(raw string) []string {
@@ -1621,6 +1692,31 @@ func coerceHTTPURL(raw string) string {
 		return "https://" + v
 	}
 	return ""
+}
+
+func capDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func mergeLLMWarning(llmMeta map[string]any, warning string, stage string) map[string]any {
+	if llmMeta == nil {
+		llmMeta = map[string]any{}
+	}
+	existing, ok := llmMeta["warning"].(string)
+	if ok && existing != "" {
+		if !strings.Contains(existing, warning) {
+			llmMeta["warning"] = fmt.Sprintf("%s; %s", existing, warning)
+		}
+	} else {
+		llmMeta["warning"] = warning
+	}
+	if stage != "" {
+		llmMeta["stage"] = stage
+	}
+	return llmMeta
 }
 
 func minInt(a, b int) int {

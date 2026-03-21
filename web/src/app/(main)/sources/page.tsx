@@ -17,14 +17,15 @@ import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
-import { SourceOptimizationPanel } from "@/components/sources/source-optimization-panel";
-import { Tabs, TabList, Tab, TabPanel } from "@/components/tabs";
+import { PageTransition } from "@/components/page-transition";
+import { PageHeader } from "@/components/ui/page-header";
+import { Tag } from "@/components/ui/tag";
 
 export default function SourcesPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
-  const [activeTab, setActiveTab] = useState<"manage" | "activity" | "improve" | "discover">("manage");
+  const [activeSection, setActiveSection] = useState<"overview" | "sources" | "optimization" | "add">("overview");
   const [sources, setSources] = useState<Source[]>([]);
   const [sourceHealthByID, setSourceHealthByID] = useState<Record<string, SourceHealth>>({});
   const [sourceItemStatsByID, setSourceItemStatsByID] = useState<Record<string, SourceItemStats>>({});
@@ -114,10 +115,10 @@ export default function SourcesPage() {
   }, [showToast, t]);
 
   useEffect(() => {
-    if (activeTab === "activity" && !loadingDailyStats && Object.keys(sourceDailyStatsByID).length === 0) {
+    if (activeSection === "overview" && !loadingDailyStats && Object.keys(sourceDailyStatsByID).length === 0) {
       void loadDailyStats();
     }
-  }, [activeTab, loadDailyStats, loadingDailyStats, sourceDailyStatsByID]);
+  }, [activeSection, loadDailyStats, loadingDailyStats, sourceDailyStatsByID]);
 
   const registerSource = async (feedUrl: string) => {
     await api.createSource({
@@ -163,7 +164,7 @@ export default function SourcesPage() {
     }
   };
 
-  const loadSuggestions = async () => {
+  const loadSuggestions = useCallback(async () => {
     setLoadingSuggestions(true);
     setSuggestionsError(null);
     try {
@@ -176,7 +177,13 @@ export default function SourcesPage() {
     } finally {
       setLoadingSuggestions(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (activeSection === "add" && !loadingSuggestions && recommendations.length === 0 && !suggestionsError) {
+      void loadSuggestions();
+    }
+  }, [activeSection, loadSuggestions, loadingSuggestions, recommendations.length, suggestionsError]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -260,20 +267,6 @@ export default function SourcesPage() {
   };
 
   const pagedSources = sources.slice((page - 1) * pageSize, page * pageSize);
-  const tabs: Array<{ key: "manage" | "activity" | "improve" | "discover"; label: string; count?: number }> = [
-    { key: "manage", label: t("sources.tabs.manage"), count: sources.length },
-    { key: "activity", label: t("sources.tabs.activity"), count: Object.keys(sourceDailyStatsByID).length || undefined },
-    { key: "improve", label: t("sources.tabs.improve"), count: sourceOptimization.length },
-    { key: "discover", label: t("sources.tabs.discover"), count: recommendations.length || undefined },
-  ];
-  const activityRows = useMemo(() => {
-    return sources
-      .map((src) => ({
-        source: src,
-        daily: sourceDailyStatsByID[src.id],
-      }))
-      .sort((a, b) => (b.daily?.last_30d_total ?? 0) - (a.daily?.last_30d_total ?? 0));
-  }, [sourceDailyStatsByID, sources]);
   const handleExportOPML = async () => {
     setExportingOPML(true);
     try {
@@ -340,623 +333,429 @@ export default function SourcesPage() {
       })),
     [formatShortDate, sourcesDailyOverview]
   );
+  const healthSummary = useMemo(() => {
+    const values = Object.values(sourceHealthByID);
+    return {
+      ok: values.filter((item) => item.status === "ok").length,
+      stale: values.filter((item) => item.status === "stale").length,
+      error: values.filter((item) => item.status === "error").length,
+    };
+  }, [sourceHealthByID]);
+  const sectionItems = useMemo(
+    () =>
+      [
+        {
+          key: "overview" as const,
+          title: "Overview",
+          meta: t("sources.tabs.activityDesc"),
+        },
+        {
+          key: "sources" as const,
+          title: "Sources",
+          meta: t("sources.tabs.manageDesc"),
+        },
+        {
+          key: "optimization" as const,
+          title: "Optimization",
+          meta: t("sources.tabs.improveDesc"),
+        },
+        {
+          key: "add" as const,
+          title: "Add Source",
+          meta: t("sources.tabs.discoverDesc"),
+        },
+      ] satisfies Array<{ key: "overview" | "sources" | "optimization" | "add"; title: string; meta: string }>,
+    [t]
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-bold">{t("sources.title")}</h1>
-          <p className="mt-1 text-sm text-zinc-500">
-            {sources.length.toLocaleString()} {t("common.rows")}
-          </p>
-        </div>
-      </div>
+    <PageTransition>
+      <div className="space-y-5 overflow-x-hidden">
+        <PageHeader
+          eyebrow="Sources"
+          title={<span className="font-serif">{t("sources.title")}</span>}
+          description={t("sources.controlRoomSubtitle")}
+          meta={
+            <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-xs">
+              {sources.length.toLocaleString()} {t("common.rows")}
+            </span>
+          }
+        />
 
-      <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-        <Tabs defaultValue="manage" value={activeTab} onChange={(value) => setActiveTab(value as "manage" | "activity" | "improve" | "discover")}>
-          <TabList className="px-3 pt-3 md:px-4 md:pt-4">
-            {tabs.map((tab) => (
-              <Tab key={tab.key} value={tab.key}>
-                <span className="inline-flex items-center gap-2">
-                  <span>{tab.label}</span>
-                  {typeof tab.count === "number" ? (
-                    <span className="rounded-full bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-500">
-                      {tab.count}
-                    </span>
-                  ) : null}
-                </span>
-              </Tab>
-            ))}
-          </TabList>
-
-          <TabPanel value="manage" className="space-y-4 px-4 py-4 md:px-5">
-            <p className="text-sm text-zinc-500">{t("sources.tabs.manageDesc")}</p>
-          <form
-            onSubmit={handleAdd}
-            className="rounded-lg border border-zinc-200 bg-white p-4"
-          >
-            <h2 className="mb-3 text-sm font-semibold text-zinc-700">
-              {t("sources.addSource")}
-            </h2>
-            <div className="mb-2 flex gap-3 text-sm">
-              {(["rss", "manual"] as const).map((kind) => (
-                <label key={kind} className="flex cursor-pointer items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name="type"
-                    value={kind}
-                    checked={type === kind}
-                    onChange={() => setType(kind)}
-                    className="accent-zinc-900"
-                  />
-                  {kind === "rss" ? t("sources.rss") : t("sources.manual")}
-                </label>
+        <section className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="surface-editorial rounded-[26px] px-4 py-4 xl:sticky xl:top-[6.25rem] xl:self-start">
+            <div className="grid gap-2">
+              {sectionItems.map((section) => (
+                <button
+                  key={section.key}
+                  type="button"
+                  onClick={() => setActiveSection(section.key)}
+                  className={`rounded-[16px] border-l-2 px-3 py-3 text-left transition-colors ${
+                    activeSection === section.key
+                      ? "border-[var(--color-editorial-ink)] bg-[rgba(255,253,249,0.94)]"
+                      : "border-transparent hover:bg-[rgba(255,255,255,0.58)]"
+                  }`}
+                >
+                  <div className="text-[13px] font-semibold text-[var(--color-editorial-ink)]">{section.title}</div>
+                  <div className="mt-1 text-xs leading-6 text-[var(--color-editorial-ink-soft)]">{section.meta}</div>
+                </button>
               ))}
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                type="url"
-                placeholder={
-                  type === "rss"
-                    ? t("sources.placeholder.rss")
-                    : t("sources.placeholder.manual")
-                }
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                required
-                className="flex-1 rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-              />
-              <input
-                type="text"
-                placeholder={t("sources.placeholder.nameOptional")}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 sm:w-44"
-              />
-              <button
-                type="submit"
-                disabled={adding}
-                className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
-              >
-                {adding ? t("sources.adding") : t("sources.add")}
-              </button>
+
+            <div className="mt-4 rounded-[20px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,253,249,0.98))] px-4 py-4">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                {t("sources.currentState")}
+              </div>
+              <div className="mt-2 font-serif text-[30px] leading-none text-[var(--color-editorial-ink)]">{sources.length}</div>
+              <div className="mt-2 text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                {`${t("sources.currentStateMeta")} ${healthSummary.ok} / stale ${healthSummary.stale} / error ${healthSummary.error}`}
+              </div>
             </div>
-            {addError && (
-              <p className="mt-2 text-sm text-red-500">{addError}</p>
-            )}
-            {candidates.length > 1 && (
-              <div className="mt-3">
-                <p className="mb-2 text-xs font-medium text-zinc-600">
-                  {t("sources.discover.multiple")}
-                </p>
-                <ul className="space-y-1">
-                  {candidates.map((c) => (
-                    <li
-                      key={c.url}
-                      className="flex items-center justify-between gap-3 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm"
-                    >
-                      <div className="min-w-0">
-                        {c.title && (
-                          <div className="truncate font-medium text-zinc-800">
-                            {c.title}
-                          </div>
-                        )}
-                        <div className="truncate text-xs text-zinc-500">{c.url}</div>
+          </aside>
+
+          <div className="min-w-0 space-y-4">
+            {activeSection === "overview" && (
+              <>
+                <section className="surface-editorial rounded-[28px] px-5 py-5">
+                  <h2 className="font-serif text-[30px] leading-[1.16] tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                    {t("sources.section.overviewTitle")}
+                  </h2>
+                  <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                    {t("sources.section.overviewDescription")}
+                  </p>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <MetricCard label={t("sources.activeSources")} value={String(sources.filter((source) => source.enabled).length)} />
+                    <MetricCard
+                      label={t("sources.unreadAcrossSources")}
+                      value={String(
+                        Object.values(sourceItemStatsByID).reduce((sum, stat) => sum + (stat.unread_items ?? 0), 0)
+                      )}
+                    />
+                    <MetricCard label={t("sources.ingestion30d")} value={String(sourcesDailyOverview?.last_30d_total ?? 0)} />
+                  </div>
+
+                  <div className="mt-4 rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.66)] px-3 py-3">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("sources.activity.overviewTitle")}</div>
+                        <div className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">{t("sources.activity.note")}</div>
                       </div>
                       <button
                         type="button"
-                        onClick={async () => {
-                          setAdding(true);
-                          setAddError(null);
-                          try {
-                            await registerSource(c.url);
-                          } catch (e) {
-                            const msg = e instanceof Error ? e.message.replace(/^\d+:\s*/, "") : String(e);
-                            setAddError(msg);
-                          } finally {
-                            setAdding(false);
-                          }
-                        }}
-                        disabled={adding}
-                        className="shrink-0 rounded bg-zinc-900 px-3 py-1 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+                        onClick={() => void loadDailyStats()}
+                        disabled={loadingDailyStats}
+                        className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm text-[var(--color-editorial-ink-soft)] disabled:opacity-50"
                       >
-                        {t("sources.discover.register")}
+                        <Activity className="size-4" aria-hidden="true" />
+                        {loadingDailyStats ? t("common.loading") : t("sources.activity.refresh")}
                       </button>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  onClick={() => setCandidates([])}
-                  className="mt-2 text-xs text-zinc-400 hover:text-zinc-700"
-                >
-                  {t("common.cancel")}
-                </button>
-              </div>
-            )}
-          </form>
-
-          <section className="rounded-lg border border-zinc-200 bg-white p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="mb-2 text-sm font-semibold text-zinc-700">{t("sources.inoreader.title")}</h2>
-                <p className="text-xs text-zinc-500">{t("sources.inoreader.desc")}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  ref={opmlInputRef}
-                  type="file"
-                  accept=".opml,.xml,text/xml,application/xml"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void handleImportOPMLFile(f);
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => opmlInputRef.current?.click()}
-                  disabled={importingOPML}
-                  className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-                >
-                  <Upload className="size-3.5" aria-hidden="true" />
-                  {importingOPML ? t("sources.opml.importing") : t("sources.opml.import")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleExportOPML()}
-                  disabled={exportingOPML}
-                  className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-                >
-                  <Download className="size-3.5" aria-hidden="true" />
-                  {exportingOPML ? t("sources.opml.exporting") : t("sources.opml.export")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleImportInoreader()}
-                  disabled={importingInoreader}
-                  className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
-                >
-                  {importingInoreader ? t("sources.inoreader.importing") : t("sources.inoreader.import")}
-                </button>
-              </div>
-            </div>
-          </section>
-
-          {loading && <p className="text-sm text-zinc-500">{t("common.loading")}</p>}
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          {!loading && sources.length === 0 && (
-            <p className="text-sm text-zinc-400">
-              {t("sources.empty")}
-            </p>
-          )}
-
-          <ul className="space-y-2">
-            {pagedSources.map((src) => (
-              <li
-                key={src.id}
-                className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm md:flex-row md:items-start"
-              >
-                <button
-                  onClick={() => handleToggle(src.id, src.enabled)}
-                  aria-label={src.enabled ? t("sources.toggle.disable") : t("sources.toggle.enable")}
-                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors md:mt-1 ${
-                    src.enabled ? "bg-blue-500" : "bg-zinc-300"
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                      src.enabled ? "translate-x-4" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-
-                <div className="min-w-0 flex-1">
-                  <Link
-                    href={`/items?feed=unread&sort=newest&source_id=${src.id}`}
-                    className="block truncate text-sm font-medium text-zinc-900 hover:text-zinc-950 hover:underline"
-                  >
-                    {src.title ?? src.url}
-                  </Link>
-                  {sourceHealthByID[src.id] && (
-                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
-                      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${
-                        sourceHealthByID[src.id].status === "ok"
-                          ? "border-green-200 bg-green-50 text-green-700"
-                          : sourceHealthByID[src.id].status === "error"
-                            ? "border-red-200 bg-red-50 text-red-700"
-                            : sourceHealthByID[src.id].status === "stale"
-                              ? "border-amber-200 bg-amber-50 text-amber-700"
-                              : "border-zinc-200 bg-zinc-50 text-zinc-600"
-                      }`}>
-                        <Activity className="size-3" aria-hidden="true" />
-                        {sourceHealthByID[src.id].status}
-                      </span>
-                      <span className="text-zinc-400">
-                        {sourceHealthByID[src.id].failed_items}/{sourceHealthByID[src.id].total_items} {t("sources.health.failed")}
-                      </span>
                     </div>
-                  )}
-                  {src.title && (
-                    <div className="truncate text-xs text-zinc-400">{src.url}</div>
-                  )}
-                  {src.last_fetched_at && (
-                    <div className="text-xs text-zinc-400">
-                      {t("sources.lastFetched")}:{" "}
-                      {new Date(src.last_fetched_at).toLocaleString(dateLocale)}
-                    </div>
-                  )}
-                  <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-zinc-500 md:hidden">
-                    <div>
-                      <dt>{t("sources.stats.unread")}</dt>
-                      <dd className="mt-0.5 tabular-nums text-sm font-semibold text-zinc-900">
-                        {(sourceItemStatsByID[src.id]?.unread_items ?? 0).toLocaleString()}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t("sources.stats.read")}</dt>
-                      <dd className="mt-0.5 tabular-nums text-sm font-semibold text-zinc-900">
-                        {(sourceItemStatsByID[src.id]?.read_items ?? 0).toLocaleString()}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t("sources.stats.total")}</dt>
-                      <dd className="mt-0.5 tabular-nums text-sm font-semibold text-zinc-900">
-                        {(sourceItemStatsByID[src.id]?.total_items ?? 0).toLocaleString()}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t("sources.stats.avgPerDay30d")}</dt>
-                      <dd className="mt-0.5 tabular-nums text-sm font-semibold text-zinc-900">
-                        {(sourceItemStatsByID[src.id]?.avg_items_per_day_30d ?? 0).toFixed(1)}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-
-                <dl className="hidden shrink-0 grid-cols-4 gap-6 self-center md:grid">
-                  <div className="min-w-[72px] text-right">
-                    <dt className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.stats.unread")}</dt>
-                    <dd className="mt-1 tabular-nums text-sm font-semibold text-zinc-900">
-                      {(sourceItemStatsByID[src.id]?.unread_items ?? 0).toLocaleString()}
-                    </dd>
-                  </div>
-                  <div className="min-w-[72px] text-right">
-                    <dt className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.stats.read")}</dt>
-                    <dd className="mt-1 tabular-nums text-sm font-semibold text-zinc-900">
-                      {(sourceItemStatsByID[src.id]?.read_items ?? 0).toLocaleString()}
-                    </dd>
-                  </div>
-                  <div className="min-w-[72px] text-right">
-                    <dt className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.stats.total")}</dt>
-                    <dd className="mt-1 tabular-nums text-sm font-semibold text-zinc-900">
-                      {(sourceItemStatsByID[src.id]?.total_items ?? 0).toLocaleString()}
-                    </dd>
-                  </div>
-                  <div className="min-w-[96px] text-right">
-                    <dt className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.stats.avgPerDay30d")}</dt>
-                    <dd className="mt-1 tabular-nums text-sm font-semibold text-zinc-900">
-                      {(sourceItemStatsByID[src.id]?.avg_items_per_day_30d ?? 0).toFixed(1)}
-                    </dd>
-                  </div>
-                </dl>
-
-                <div className="flex shrink-0 items-center gap-3 md:self-center">
-                  <button
-                    type="button"
-                    onClick={() => openEditDialog(src)}
-                    className="text-xs text-zinc-500 hover:text-zinc-900"
-                  >
-                    {t("sources.edit")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(src.id)}
-                    className="text-xs text-zinc-400 hover:text-red-500"
-                  >
-                    {t("sources.delete")}
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <Pagination total={sources.length} page={page} pageSize={pageSize} onPageChange={setPage} />
-          </TabPanel>
-
-          <TabPanel value="activity" className="space-y-4 px-4 py-4 md:px-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm text-zinc-500">{t("sources.tabs.activityDesc")}</p>
-                <p className="mt-1 text-xs text-zinc-400">{t("sources.activity.note")}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void loadDailyStats()}
-                disabled={loadingDailyStats}
-                className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-              >
-                <Activity className="size-4" aria-hidden="true" />
-                {loadingDailyStats ? t("common.loading") : t("sources.activity.refresh")}
-              </button>
-            </div>
-
-            <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-              {sourcesDailyOverview ? (
-                <div className="border-b border-zinc-200 bg-zinc-50/70 px-4 py-4">
-                  <div className="mb-3 text-sm font-semibold text-zinc-900">{t("sources.activity.overviewTitle")}</div>
-                  <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
-                    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.activity.today")}</div>
-                      <div className="mt-1 tabular-nums text-lg font-semibold text-zinc-900">{sourcesDailyOverview.today_count.toLocaleString()}</div>
-                    </div>
-                    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.activity.yesterday")}</div>
-                      <div className="mt-1 tabular-nums text-lg font-semibold text-zinc-900">{sourcesDailyOverview.yesterday_count.toLocaleString()}</div>
-                    </div>
-                    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.activity.last7d")}</div>
-                      <div className="mt-1 tabular-nums text-lg font-semibold text-zinc-900">{sourcesDailyOverview.last_7d_total.toLocaleString()}</div>
-                    </div>
-                    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.activity.last30d")}</div>
-                      <div className="mt-1 tabular-nums text-lg font-semibold text-zinc-900">{sourcesDailyOverview.last_30d_total.toLocaleString()}</div>
-                    </div>
-                    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.activity.activeDays")}</div>
-                      <div className="mt-1 tabular-nums text-lg font-semibold text-zinc-900">{sourcesDailyOverview.active_days_30d.toLocaleString()}</div>
-                    </div>
-                    <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{t("sources.activity.avgActiveDay")}</div>
-                      <div className="mt-1 tabular-nums text-lg font-semibold text-zinc-900">{sourcesDailyOverview.avg_items_per_active_day_30d.toFixed(1)}</div>
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <div className="h-48 rounded-lg border border-zinc-200 bg-white px-2 py-3">
+                    <div className="h-56 overflow-hidden rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2 py-3">
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={overviewChartRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                           <defs>
                             <linearGradient id="sourcesOverviewFill" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#18181b" stopOpacity={0.28} />
-                              <stop offset="95%" stopColor="#18181b" stopOpacity={0.03} />
+                              <stop offset="5%" stopColor="#5a4735" stopOpacity={0.24} />
+                              <stop offset="95%" stopColor="#5a4735" stopOpacity={0.03} />
                             </linearGradient>
                           </defs>
-                          <CartesianGrid stroke="#e4e4e7" strokeDasharray="3 3" vertical={false} />
-                          <XAxis
-                            dataKey="label"
-                            tick={{ fill: "#71717a", fontSize: 11 }}
-                            tickLine={false}
-                            axisLine={false}
-                            minTickGap={24}
-                          />
-                          <YAxis
-                            allowDecimals={false}
-                            tick={{ fill: "#71717a", fontSize: 11 }}
-                            tickLine={false}
-                            axisLine={false}
-                            width={28}
-                          />
+                          <CartesianGrid stroke="#d9d1c4" strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="label" tick={{ fill: "#8f877f", fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={24} />
+                          <YAxis allowDecimals={false} tick={{ fill: "#8f877f", fontSize: 11 }} tickLine={false} axisLine={false} width={28} />
                           <Tooltip
-                            cursor={{ stroke: "#a1a1aa", strokeDasharray: "3 3" }}
-                            contentStyle={{
-                              borderRadius: 12,
-                              borderColor: "#e4e4e7",
-                              boxShadow: "0 8px 24px rgba(24,24,27,0.08)",
-                            }}
+                            cursor={{ stroke: "#beb3a0", strokeDasharray: "3 3" }}
+                            contentStyle={{ borderRadius: 16, borderColor: "#d9d1c4", boxShadow: "0 8px 24px rgba(24,24,27,0.08)" }}
                             formatter={(value: number | string | undefined) => [
                               typeof value === "number" ? value.toLocaleString() : String(value ?? 0),
                               t("common.rows"),
                             ]}
                             labelFormatter={(_, payload) => {
-                              const row = payload?.[0]?.payload as { day?: string; label?: string } | undefined;
+                              const row = payload?.[0]?.payload as { day?: string } | undefined;
                               return row?.day ? formatShortDate(row.day) : "";
                             }}
                           />
-                          <Area
-                            type="monotone"
-                            dataKey="count"
-                            stroke="#18181b"
-                            strokeWidth={2}
-                            fill="url(#sourcesOverviewFill)"
-                            dot={{ r: 2, strokeWidth: 0, fill: "#18181b" }}
-                            activeDot={{ r: 4, strokeWidth: 0, fill: "#18181b" }}
-                          />
+                          <Area type="monotone" dataKey="count" stroke="#5a4735" strokeWidth={2} fill="url(#sourcesOverviewFill)" dot={{ r: 2, strokeWidth: 0, fill: "#5a4735" }} activeDot={{ r: 4, strokeWidth: 0, fill: "#5a4735" }} />
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
+                </section>
+
+                <section className="surface-editorial rounded-[28px] px-5 py-5">
+                  <h2 className="font-serif text-[24px] leading-[1.2] text-[var(--color-editorial-ink)]">{t("sources.section.sourcesTitle")}</h2>
+                  <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{t("sources.section.sourcesDescription")}</p>
+                  <div className="mt-4 space-y-3">
+                    {pagedSources.slice(0, 3).map((src) => (
+                      <SourceCard
+                        key={src.id}
+                        src={src}
+                        health={sourceHealthByID[src.id]}
+                        stats={sourceItemStatsByID[src.id]}
+                        dateLocale={dateLocale}
+                        t={t}
+                        onToggle={handleToggle}
+                        onEdit={openEditDialog}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </div>
+                </section>
+              </>
+            )}
+
+            {activeSection === "sources" && (
+              <section className="surface-editorial rounded-[28px] px-5 py-5">
+                <h2 className="font-serif text-[30px] leading-[1.16] tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                  {t("sources.section.sourcesTitle")}
+                </h2>
+                <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{t("sources.section.sourcesDescription")}</p>
+                {loading && <p className="mt-4 text-sm text-[var(--color-editorial-ink-soft)]">{t("common.loading")}</p>}
+                {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+                {!loading && !error && sources.length === 0 && <p className="mt-4 text-sm text-[var(--color-editorial-ink-faint)]">{t("sources.empty")}</p>}
+                <div className="mt-4 space-y-3">
+                  {pagedSources.map((src) => (
+                    <SourceCard
+                      key={src.id}
+                      src={src}
+                      health={sourceHealthByID[src.id]}
+                      stats={sourceItemStatsByID[src.id]}
+                      dateLocale={dateLocale}
+                      t={t}
+                      onToggle={handleToggle}
+                      onEdit={openEditDialog}
+                      onDelete={handleDelete}
+                    />
+                  ))}
                 </div>
-              ) : null}
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
-                    <tr className="border-b border-zinc-200">
-                      <th className="px-4 py-3 font-medium">{t("sources.activity.source")}</th>
-                      <th className="px-3 py-3 text-right font-medium">{t("sources.activity.today")}</th>
-                      <th className="px-3 py-3 text-right font-medium">{t("sources.activity.yesterday")}</th>
-                      <th className="px-3 py-3 text-right font-medium">{t("sources.activity.last7d")}</th>
-                      <th className="px-3 py-3 text-right font-medium">{t("sources.activity.last30d")}</th>
-                      <th className="px-3 py-3 text-right font-medium">{t("sources.activity.activeDays")}</th>
-                      <th className="px-3 py-3 text-right font-medium">{t("sources.activity.avgActiveDay")}</th>
-                      <th className="px-4 py-3 font-medium">{t("sources.activity.dailyBars")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activityRows.map(({ source, daily }) => {
-                      const dailyCounts = daily?.daily_counts ?? [];
-                      const recentBars = dailyCounts.slice(-14);
-                      const maxCount = Math.max(1, ...recentBars.map((v) => v.count));
+                <div className="mt-4">
+                  <Pagination total={sources.length} page={page} pageSize={pageSize} onPageChange={setPage} />
+                </div>
+              </section>
+            )}
+
+            {activeSection === "optimization" && (
+              <section className="surface-editorial rounded-[28px] px-5 py-5">
+                <h2 className="font-serif text-[30px] leading-[1.16] tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                  {t("sources.optimization.title")}
+                </h2>
+                <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{t("sources.optimization.subtitle")}</p>
+                <div className="mt-4 grid gap-3">
+                  {sourceOptimization.length === 0 ? (
+                    <p className="text-sm text-[var(--color-editorial-ink-faint)]">{t("sources.optimization.empty")}</p>
+                  ) : (
+                    sourceOptimization.map((item) => {
+                      const source = sources.find((candidate) => candidate.id === item.source_id);
                       return (
-                        <tr key={`activity-${source.id}`} className="border-b border-zinc-100 last:border-b-0">
-                          <td className="px-4 py-3 align-top">
-                            <div className="min-w-[220px]">
-                              <Link
-                                href={`/items?feed=unread&sort=newest&source_id=${source.id}`}
-                                className="block truncate font-medium text-zinc-900 hover:text-zinc-950 hover:underline"
+                        <article key={item.source_id} className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.64)] p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold leading-7 text-[var(--color-editorial-ink)]">
+                                {source?.title || source?.url || item.source_id}
+                              </div>
+                              <p className="mt-1 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.reason}</p>
+                            </div>
+                            <Tag tone="subtle">{item.recommendation}</Tag>
+                          </div>
+                          <div className="mt-3 grid gap-2 text-xs text-[var(--color-editorial-ink-soft)] md:grid-cols-4">
+                            <div>{t("sources.optimization.backlog")}: {item.metrics.unread_backlog}</div>
+                            <div>{t("sources.optimization.readRate")}: {Math.round(item.metrics.read_rate * 100)}%</div>
+                            <div>{t("sources.optimization.favoriteRate")}: {Math.round(item.metrics.favorite_rate * 100)}%</div>
+                            <div>{t("sources.optimization.avgScore")}: {item.metrics.average_summary_score.toFixed(2)}</div>
+                          </div>
+                        </article>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
+            )}
+
+            {activeSection === "add" && (
+              <>
+                <section className="rounded-[24px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,253,249,0.98))] px-5 py-5 shadow-[var(--shadow-card)]">
+                  <h2 className="font-serif text-[24px] leading-[1.2] text-[var(--color-editorial-ink)]">{t("sources.addSource")}</h2>
+                  <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{t("sources.section.addDescription")}</p>
+                  <form onSubmit={handleAdd} className="mt-4 space-y-3">
+                    <div className="flex gap-3 text-sm">
+                      {(["rss", "manual"] as const).map((kind) => (
+                        <label key={kind} className="flex cursor-pointer items-center gap-1.5">
+                          <input type="radio" name="type" value={kind} checked={type === kind} onChange={() => setType(kind)} className="accent-zinc-900" />
+                          {kind === "rss" ? t("sources.rss") : t("sources.manual")}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_180px_140px]">
+                      <input
+                        type="url"
+                        placeholder={type === "rss" ? t("sources.placeholder.rss") : t("sources.placeholder.manual")}
+                        value={url}
+                        onChange={(e) => setUrl(e.target.value)}
+                        required
+                        className="rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-3 text-sm outline-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder={t("sources.placeholder.nameOptional")}
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        className="rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-3 text-sm outline-none"
+                      />
+                      <button
+                        type="submit"
+                        disabled={adding}
+                        className="inline-flex min-h-[46px] items-center justify-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 text-sm font-semibold text-[var(--color-editorial-panel-strong)] disabled:opacity-50"
+                      >
+                        {adding ? t("sources.adding") : t("sources.add")}
+                      </button>
+                    </div>
+                    {addError ? <p className="text-sm text-red-600">{addError}</p> : null}
+                    {candidates.length > 1 ? (
+                      <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.64)] p-4">
+                        <p className="mb-2 text-xs text-[var(--color-editorial-ink-soft)]">{t("sources.discover.multiple")}</p>
+                        <ul className="space-y-2">
+                          {candidates.map((candidate) => (
+                            <li key={candidate.url} className="flex items-center justify-between gap-3 rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2">
+                              <div className="min-w-0">
+                                {candidate.title ? <div className="truncate text-sm font-medium text-[var(--color-editorial-ink)]">{candidate.title}</div> : null}
+                                <div className="truncate text-xs text-[var(--color-editorial-ink-soft)]">{candidate.url}</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  setAdding(true);
+                                  setAddError(null);
+                                  try {
+                                    await registerSource(candidate.url);
+                                  } catch (e) {
+                                    const msg = e instanceof Error ? e.message.replace(/^\d+:\s*/, "") : String(e);
+                                    setAddError(msg);
+                                  } finally {
+                                    setAdding(false);
+                                  }
+                                }}
+                                disabled={adding}
+                                className="shrink-0 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3 py-2 text-xs font-semibold text-[var(--color-editorial-panel-strong)] disabled:opacity-50"
                               >
-                                {source.title ?? source.url}
-                              </Link>
-                              {source.title ? <div className="truncate text-xs text-zinc-400">{source.url}</div> : null}
+                                {t("sources.discover.register")}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </form>
+                </section>
+
+                <section className="rounded-[24px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,253,249,0.98))] px-5 py-5 shadow-[var(--shadow-card)]">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="font-serif text-[24px] leading-[1.2] text-[var(--color-editorial-ink)]">{t("sources.opml.title")}</h2>
+                      <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{t("sources.opml.desc")}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        ref={opmlInputRef}
+                        type="file"
+                        accept=".opml,.xml,text/xml,application/xml"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void handleImportOPMLFile(f);
+                        }}
+                      />
+                      <button type="button" onClick={() => opmlInputRef.current?.click()} disabled={importingOPML} className="inline-flex min-h-[42px] items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm text-[var(--color-editorial-ink-soft)] disabled:opacity-50">
+                        <Upload className="size-4" aria-hidden="true" />
+                        {importingOPML ? t("sources.opml.importing") : t("sources.opml.import")}
+                      </button>
+                      <button type="button" onClick={() => void handleExportOPML()} disabled={exportingOPML} className="inline-flex min-h-[42px] items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm text-[var(--color-editorial-ink-soft)] disabled:opacity-50">
+                        <Download className="size-4" aria-hidden="true" />
+                        {exportingOPML ? t("sources.opml.exporting") : t("sources.opml.export")}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-[24px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,253,249,0.98))] px-5 py-5 shadow-[var(--shadow-card)]">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="font-serif text-[24px] leading-[1.2] text-[var(--color-editorial-ink)]">{t("sources.inoreader.title")}</h2>
+                      <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{t("sources.inoreader.desc")}</p>
+                    </div>
+                    <button type="button" onClick={() => void handleImportInoreader()} disabled={importingInoreader} className="inline-flex min-h-[42px] items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 text-sm font-semibold text-[var(--color-editorial-panel-strong)] disabled:opacity-50">
+                      {importingInoreader ? t("sources.inoreader.importing") : t("sources.inoreader.import")}
+                    </button>
+                  </div>
+                </section>
+
+                <section className="surface-editorial rounded-[28px] px-5 py-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="inline-flex items-center gap-2 font-serif text-[24px] leading-[1.2] text-[var(--color-editorial-ink)]">
+                        <Sparkles className="size-5 text-[var(--color-editorial-ink-soft)]" aria-hidden="true" />
+                        {t("sources.suggest.title")}
+                      </h2>
+                      <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{t("sources.suggest.desc")}</p>
+                    </div>
+                    <button type="button" onClick={() => void loadSuggestions()} disabled={loadingSuggestions} className="inline-flex min-h-[42px] items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm text-[var(--color-editorial-ink-soft)] disabled:opacity-50">
+                      <Lightbulb className="size-4" aria-hidden="true" />
+                      {loadingSuggestions ? t("sources.suggest.finding") : t("sources.suggest.button")}
+                    </button>
+                  </div>
+                  {suggestionsLLM ? (
+                    <p className="mt-3 text-xs text-[var(--color-editorial-ink-soft)]">
+                      {t("sources.suggest.aiRanked")}: {suggestionsLLM.provider ?? t("common.unknown")} / {suggestionsLLM.model ?? t("common.unknown")}
+                    </p>
+                  ) : null}
+                  {suggestionsError ? <p className="mt-3 text-sm text-red-600">{suggestionsError}</p> : null}
+                  {!suggestionsError && !loadingSuggestions && recommendations.length === 0 ? (
+                    <p className="mt-3 text-sm text-[var(--color-editorial-ink-faint)]">{t("sources.suggest.empty")}</p>
+                  ) : null}
+                  <div className="mt-4 grid gap-3">
+                    {recommendations.map((suggestion) => {
+                      const normalizedAIReason = normalizeSuggestionReason(suggestion.ai_reason);
+                      const hasDistinctAIReason =
+                        normalizedAIReason !== "" &&
+                        !suggestion.reasons.some((reason) => normalizeSuggestionReason(reason) === normalizedAIReason);
+                      return (
+                        <article key={suggestion.url} className="rounded-[20px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.64)] p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold leading-7 text-[var(--color-editorial-ink)]">{suggestion.title ?? suggestion.url}</div>
+                              {suggestion.title ? <div className="truncate text-xs text-[var(--color-editorial-ink-soft)]">{suggestion.url}</div> : null}
+                              {suggestion.reasons.length > 0 ? (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {suggestion.reasons.slice(0, 2).map((reason) => (
+                                    <Tag key={`${suggestion.url}-${reason}`} tone="subtle">{reason}</Tag>
+                                  ))}
+                                </div>
+                              ) : null}
+                              {suggestion.matched_topics?.length ? (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {suggestion.matched_topics.slice(0, 3).map((topic) => (
+                                    <Tag key={`${suggestion.url}-topic-${topic}`} tone="info">{`${t("sources.suggest.topicPrefix")} ${topic}`}</Tag>
+                                  ))}
+                                </div>
+                              ) : null}
+                              {hasDistinctAIReason && suggestion.ai_reason ? (
+                                <p className="mt-2 text-xs leading-6 text-[var(--color-editorial-ink-soft)]">
+                                  <span className="font-medium text-[var(--color-editorial-ink)]">{t("sources.suggest.aiReason")}:</span> {suggestion.ai_reason}
+                                </p>
+                              ) : null}
                             </div>
-                          </td>
-                          <td className="px-3 py-3 text-right tabular-nums text-zinc-900">{(daily?.today_count ?? 0).toLocaleString()}</td>
-                          <td className="px-3 py-3 text-right tabular-nums text-zinc-700">{(daily?.yesterday_count ?? 0).toLocaleString()}</td>
-                          <td className="px-3 py-3 text-right tabular-nums text-zinc-700">{(daily?.last_7d_total ?? 0).toLocaleString()}</td>
-                          <td className="px-3 py-3 text-right tabular-nums font-medium text-zinc-900">{(daily?.last_30d_total ?? 0).toLocaleString()}</td>
-                          <td className="px-3 py-3 text-right tabular-nums text-zinc-700">{(daily?.active_days_30d ?? 0).toLocaleString()}</td>
-                          <td className="px-3 py-3 text-right tabular-nums text-zinc-700">{(daily?.avg_items_per_active_day_30d ?? 0).toFixed(1)}</td>
-                          <td className="px-4 py-3">
-                            <div className="min-w-[180px]">
-                              <div className="flex h-12 items-end gap-1">
-                                {recentBars.map((entry) => (
-                                  <div
-                                    key={`${source.id}-${entry.day}`}
-                                    title={`${formatShortDate(entry.day)}: ${entry.count.toLocaleString()}`}
-                                    className="flex-1 rounded-t bg-zinc-900/80"
-                                    style={{ height: `${Math.max(8, Math.round((entry.count / maxCount) * 100))}%` }}
-                                  />
-                                ))}
-                              </div>
-                              <div className="mt-1 flex items-center justify-between text-[11px] text-zinc-400">
-                                <span>{recentBars[0] ? formatShortDate(recentBars[0].day) : "-"}</span>
-                                <span>{recentBars[recentBars.length - 1] ? formatShortDate(recentBars[recentBars.length - 1].day) : "-"}</span>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
+                            <button type="button" onClick={() => void registerSuggestedSource(suggestion)} disabled={addingSuggestedURL === suggestion.url} className="shrink-0 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-xs font-semibold text-[var(--color-editorial-panel-strong)] disabled:opacity-50">
+                              {addingSuggestedURL === suggestion.url ? t("sources.adding") : t("sources.add")}
+                            </button>
+                          </div>
+                        </article>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </TabPanel>
-
-          <TabPanel value="improve" className="space-y-4 px-4 py-4 md:px-5">
-            <p className="text-sm text-zinc-500">{t("sources.tabs.improveDesc")}</p>
-            <SourceOptimizationPanel items={sourceOptimization} sources={sources} />
-          </TabPanel>
-
-          <TabPanel value="discover" className="space-y-4 px-4 py-4 md:px-5">
-            <p className="text-sm text-zinc-500">{t("sources.tabs.discoverDesc")}</p>
-            <section className="rounded-xl border border-zinc-200 bg-white p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
-                <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
-                {t("sources.suggest.title")}
-              </h2>
-              <p className="mt-1 text-xs text-zinc-500">
-                {t("sources.suggest.desc")}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={loadSuggestions}
-              disabled={loadingSuggestions}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-            >
-              <Lightbulb className="size-3.5" aria-hidden="true" />
-              {loadingSuggestions
-                ? t("sources.suggest.finding")
-                : t("sources.suggest.button")}
-            </button>
-          </div>
-          {suggestionsLLM && (
-            <p className="mt-2 text-xs text-zinc-500">
-              {t("sources.suggest.aiRanked")}: {suggestionsLLM.provider ?? t("common.unknown")} /{" "}
-              {suggestionsLLM.model ?? t("common.unknown")}
-              {typeof suggestionsLLM.estimated_cost_usd === "number" && (
-                <span className="ml-2 text-zinc-400">{`$${suggestionsLLM.estimated_cost_usd.toFixed(6)}`}</span>
-              )}
-              {typeof suggestionsLLM.items_count === "number" && (
-                <span className="ml-2 text-zinc-400">{`items=${suggestionsLLM.items_count}`}</span>
-              )}
-              {suggestionsLLM.stage && (
-                <span className="ml-2 text-zinc-400">{`stage=${suggestionsLLM.stage}`}</span>
-              )}
-              {suggestionsLLM.warning && (
-                <span className="ml-2 text-amber-600">{suggestionsLLM.warning}</span>
-              )}
-              {suggestionsLLM.error && (
-                <span className="ml-2 text-red-600">{suggestionsLLM.error}</span>
-              )}
-            </p>
-          )}
-          {suggestionsError && (
-            <p className="mt-3 text-sm text-red-500">{suggestionsError}</p>
-          )}
-          {!suggestionsError && !loadingSuggestions && recommendations.length === 0 && (
-            <p className="mt-3 text-sm text-zinc-500">
-              {t("sources.suggest.empty")}
-            </p>
-          )}
-          {recommendations.length > 0 && (
-            <ul className="mt-3 space-y-2">
-              {recommendations.map((s) => {
-                const normalizedAIReason = normalizeSuggestionReason(s.ai_reason);
-                const hasDistinctAIReason =
-                  normalizedAIReason !== "" &&
-                  !s.reasons.some((reason) => normalizeSuggestionReason(reason) === normalizedAIReason);
-                return (
-                <li
-                  key={s.url}
-                  className="flex items-start justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-zinc-900">{s.title ?? s.url}</div>
-                    {s.title && <div className="truncate text-xs text-zinc-500">{s.url}</div>}
-                    {s.reasons.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {s.reasons.slice(0, 2).map((reason) => (
-                          <span
-                            key={`${s.url}-${reason}`}
-                            className="rounded-full bg-white px-2 py-0.5 text-[11px] text-zinc-600 ring-1 ring-zinc-200"
-                          >
-                            {reason}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {!!s.matched_topics?.length && (
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        {s.matched_topics.slice(0, 3).map((topic) => (
-                          <span
-                            key={`${s.url}-topic-${topic}`}
-                            className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700 ring-1 ring-blue-200"
-                          >
-                            {`${t("sources.suggest.topicPrefix")} ${topic}`}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {hasDistinctAIReason && s.ai_reason && (
-                      <p className="mt-1 text-xs leading-5 text-zinc-600">
-                        <span className="font-medium text-zinc-700">
-                          {t("sources.suggest.aiReason")}:
-                        </span>{" "}
-                        {s.ai_reason}
-                      </p>
-                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => registerSuggestedSource(s)}
-                    disabled={addingSuggestedURL === s.url}
-                    className="shrink-0 rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
-                  >
-                    {addingSuggestedURL === s.url
-                      ? t("sources.adding")
-                      : t("sources.add")}
-                  </button>
-                </li>
-                );
-              })}
-            </ul>
-          )}
-            </section>
-          </TabPanel>
-        </Tabs>
-      </section>
+                </section>
+              </>
+            )}
+          </div>
+        </section>
 
       {editingSource && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 px-4">
@@ -1004,6 +803,105 @@ export default function SourcesPage() {
           </div>
         </div>
       )}
+      </div>
+    </PageTransition>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.72)] px-4 py-4 shadow-[var(--shadow-card)]">
+      <div className="text-[11px] uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">{label}</div>
+      <div className="mt-2 font-serif text-[28px] text-[var(--color-editorial-ink)]">{value}</div>
+    </div>
+  );
+}
+
+function SourceCard({
+  src,
+  health,
+  stats,
+  dateLocale,
+  t,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  src: Source;
+  health?: SourceHealth;
+  stats?: SourceItemStats;
+  dateLocale: string;
+  t: (key: string) => string;
+  onToggle: (id: string, enabled: boolean) => void;
+  onEdit: (src: Source) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <article className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.72)] p-4 shadow-[var(--shadow-card)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_240px]">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onToggle(src.id, src.enabled)}
+              aria-label={src.enabled ? t("sources.toggle.disable") : t("sources.toggle.enable")}
+              className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors ${
+                src.enabled ? "bg-[#5a4735]" : "bg-zinc-300"
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${src.enabled ? "translate-x-4" : "translate-x-0"}`} />
+            </button>
+            {health ? <Tag tone="subtle">{health.status}</Tag> : null}
+            {src.last_fetched_at ? (
+              <Tag tone="subtle">
+                {t("sources.lastFetched")}: {new Date(src.last_fetched_at).toLocaleString(dateLocale)}
+              </Tag>
+            ) : null}
+          </div>
+          <Link
+            href={`/items?feed=unread&sort=newest&source_id=${src.id}`}
+            className="mt-3 block text-[17px] font-semibold leading-7 text-[var(--color-editorial-ink)] hover:underline"
+          >
+            {src.title ?? src.url}
+          </Link>
+          {src.title ? <div className="mt-1 truncate text-xs text-[var(--color-editorial-ink-soft)]">{src.url}</div> : null}
+          {health ? (
+            <div className="mt-2 text-xs text-[var(--color-editorial-ink-soft)]">
+              {health.failed_items}/{health.total_items} {t("sources.health.failed")}
+            </div>
+          ) : null}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              href={`/items?feed=unread&sort=newest&source_id=${src.id}`}
+              className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 text-sm font-semibold text-[var(--color-editorial-panel-strong)]"
+            >
+              {t("sources.openItems")}
+            </Link>
+            <button type="button" onClick={() => onEdit(src)} className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm text-[var(--color-editorial-ink-soft)]">
+              {t("sources.edit")}
+            </button>
+            <button type="button" onClick={() => void onDelete(src.id)} className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm text-[var(--color-editorial-ink-soft)]">
+              {t("sources.delete")}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <SourceStat label={t("sources.stats.unread")} value={(stats?.unread_items ?? 0).toLocaleString()} />
+          <SourceStat label={t("sources.stats.read")} value={(stats?.read_items ?? 0).toLocaleString()} />
+          <SourceStat label={t("sources.stats.total")} value={(stats?.total_items ?? 0).toLocaleString()} />
+          <SourceStat label={t("sources.stats.avgPerDay30d")} value={(stats?.avg_items_per_day_30d ?? 0).toFixed(1)} />
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function SourceStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-l border-[var(--color-editorial-line)] pl-3 first:border-l-0 first:pl-0 xl:first:border-l xl:first:pl-3 xl:[&:first-child]:border-l-0 xl:[&:first-child]:pl-0">
+      <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--color-editorial-ink-faint)]">{label}</div>
+      <div className="mt-2 text-[17px] font-semibold text-[var(--color-editorial-ink)]">{value}</div>
     </div>
   );
 }

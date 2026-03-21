@@ -59,9 +59,11 @@ export function TabList({
 export function Tab({
   value,
   children,
+  className,
 }: {
   value: string;
   children: ReactNode;
+  className?: string;
 }) {
   const { activeTab, setActiveTab } = useTabs();
   const active = activeTab === value;
@@ -70,12 +72,13 @@ export function Tab({
       type="button"
       role="tab"
       aria-selected={active}
+      data-state={active ? "active" : "inactive"}
       onClick={() => setActiveTab(value)}
       className={`whitespace-nowrap rounded-t-lg px-4 py-2.5 text-sm font-medium transition-colors focus-ring ${
         active
           ? "border-b-[3px] border-[var(--color-editorial-ink)] bg-[var(--color-editorial-panel-strong)] font-semibold text-[var(--color-editorial-ink)]"
           : "border-b-[3px] border-transparent text-[var(--color-editorial-ink-faint)] hover:text-[var(--color-editorial-ink-soft)]"
-      }`}
+      } ${className ?? ""}`}
     >
       {children}
     </button>

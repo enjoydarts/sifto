@@ -26,13 +26,16 @@ export function ItemNoteEditor({ note, onSave, disabled = false }: ItemNoteEdito
   }
 
   return (
-    <form onSubmit={submit} className="flex h-full min-h-0 flex-col rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+    <form
+      onSubmit={submit}
+      className="flex h-full min-h-0 flex-col rounded-[20px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(245,240,233,0.78),rgba(255,255,255,0.92))] p-4"
+    >
       <div className="flex items-center justify-between gap-3">
-        <h4 className="text-sm font-semibold text-zinc-900">{t("itemNote.title")}</h4>
+        <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("itemNote.title")}</h4>
         <button
           type="submit"
           disabled={saving || disabled}
-          className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-medium text-white disabled:opacity-60"
+          className="rounded-full bg-[var(--color-editorial-ink)] px-3 py-2 text-xs font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
         >
           {saving ? t("common.saving") : t("itemNote.save")}
         </button>
@@ -42,7 +45,7 @@ export function ItemNoteEditor({ note, onSave, disabled = false }: ItemNoteEdito
         onChange={(e) => setValue(e.target.value)}
         rows={4}
         disabled={disabled}
-        className="mt-3 min-h-[176px] w-full flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900"
+        className="mt-3 min-h-[176px] w-full flex-1 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink)]"
         placeholder={t("itemNote.placeholder")}
       />
     </form>

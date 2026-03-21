@@ -1,26 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlignLeft, ArrowRight, FileText, Info, Link2, ListChecks, Sparkles, Star, ThumbsDown, ThumbsUp } from "lucide-react";
+import { ArrowRight, Info, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, ItemDetail, ItemLLMExecutionAttempt, RelatedItem } from "@/lib/api";
 import { formatModelDisplayName } from "@/lib/model-display";
 import { ItemHighlightList } from "@/components/items/item-highlight-list";
 import { ItemNoteEditor } from "@/components/items/item-note-editor";
-import { Tabs, TabList, Tab, TabPanel } from "@/components/tabs";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 
 const STATUS_COLOR: Record<string, string> = {
-  new: "bg-zinc-100 text-zinc-600",
-  fetched: "bg-blue-50 text-blue-600",
-  facts_extracted: "bg-purple-50 text-purple-600",
-  summarized: "bg-green-50 text-green-700",
-  failed: "bg-red-50 text-red-600",
-  deleted: "bg-zinc-200 text-zinc-700",
+  new: "border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)]",
+  fetched: "border border-sky-200 bg-sky-50 text-sky-700",
+  facts_extracted: "border border-amber-200 bg-amber-50 text-amber-700",
+  summarized: "border border-emerald-200 bg-emerald-50 text-emerald-700",
+  failed: "border border-[var(--color-editorial-error-line)] bg-[var(--color-editorial-error-soft)] text-[var(--color-editorial-error)]",
+  deleted: "border border-[var(--color-editorial-line-strong)] bg-[#ece5db] text-[var(--color-editorial-ink-soft)]",
 };
 
 type RelatedCluster = {
@@ -120,6 +119,16 @@ function localizeActionError(
   return error instanceof Error ? error.message : String(error);
 }
 
+function formatHeroDate(value: string, locale: string): string {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
 function ExecutionTimeline({
   attempts,
   title,
@@ -134,37 +143,57 @@ function ExecutionTimeline({
   if (!attempts || attempts.length === 0) return null;
   const dateLocale = locale === "ja" ? "ja-JP" : "en-US";
   return (
-    <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-      <div className="mb-1 text-xs font-semibold text-zinc-500">{title}</div>
-      <p className="mb-3 text-xs leading-5 text-zinc-500">{t("itemDetail.execution.help")}</p>
+    <div className="mt-6 rounded-[18px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(245,240,233,0.78),rgba(255,255,255,0.92))] px-4 py-3">
+      <div className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">{title}</div>
+      <p className="mb-3 text-xs leading-5 text-[var(--color-editorial-ink-faint)]">{t("itemDetail.execution.help")}</p>
       <ol className="space-y-2">
         {attempts.map((attempt, index) => (
-          <li key={`${attempt.model}-${attempt.created_at}-${index}`} className="rounded-md border border-zinc-200 bg-white px-3 py-2">
+          <li
+            key={`${attempt.model}-${attempt.created_at}-${index}`}
+            className="rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5"
+          >
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className={`rounded px-2 py-1 ring-1 ${executionStatusTone(attempt.status)}`}>
                 {attempt.status === "success" ? t("itemDetail.execution.success") : t("itemDetail.execution.failure")}
               </span>
-              <span className="rounded bg-zinc-100 px-2 py-1 text-zinc-600 ring-1 ring-zinc-200">
+              <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-1 text-[var(--color-editorial-ink-soft)]">
                 {t("itemDetail.execution.attempt").replace("{{attempt}}", String(attempt.attempt_index + 1))}
               </span>
               {executionPurposeLabel(attempt, t) ? (
-                <span className="rounded bg-amber-50 px-2 py-1 text-amber-700 ring-1 ring-amber-200">
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">
                   {executionPurposeLabel(attempt, t)}
                 </span>
               ) : null}
-              <span className="font-medium text-zinc-700">
+              <span className="font-medium text-[var(--color-editorial-ink-soft)]">
                 {attempt.provider} / {formatModelDisplayName(attempt.model)}
               </span>
-              <span className="text-zinc-500">
+              <span className="text-[var(--color-editorial-ink-faint)]">
                 {new Date(attempt.created_at).toLocaleString(dateLocale)}
               </span>
             </div>
             {attempt.error_message ? (
-              <p className="mt-2 break-words text-xs leading-5 text-zinc-600">{attempt.error_message}</p>
+              <p className="mt-2 break-words text-xs leading-5 text-[var(--color-editorial-ink-soft)]">{attempt.error_message}</p>
             ) : null}
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+function DetailInfoBox({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-5 rounded-[18px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(245,240,233,0.78),rgba(255,255,255,0.9))] px-4 py-4">
+      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+        {title}
+      </h3>
+      {children}
     </div>
   );
 }
@@ -191,6 +220,7 @@ export default function ItemDetailPage() {
   const [relatedClusters, setRelatedClusters] = useState<RelatedCluster[]>([]);
   const [expandedRelatedClusterIds, setExpandedRelatedClusterIds] = useState<Record<string, boolean>>({});
   const [relatedSortMode, setRelatedSortMode] = useState<"similarity" | "recent">("similarity");
+  const [detailTab, setDetailTab] = useState<"summary" | "facts" | "body" | "related" | "notes">("summary");
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const [nextItemHref, setNextItemHref] = useState<string | null>(null);
   const autoMarkedRef = useRef<Record<string, true>>({});
@@ -770,211 +800,209 @@ export default function ItemDetailPage() {
   const originalTitle = item.title?.trim() ?? "";
   const displayTitle = translatedTitle || originalTitle || t("itemDetail.noTitle");
   const showOriginalTitle = Boolean(translatedTitle && originalTitle && translatedTitle !== originalTitle);
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       <Link href={backHref} className="inline-block text-sm text-zinc-500 hover:text-zinc-900">
         ← {t("nav.items")}
       </Link>
 
-      <section className="rounded-[20px] border border-zinc-200 bg-white p-6 shadow-sm md:p-8">
-        <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`rounded px-2 py-0.5 text-xs font-medium ${
-                STATUS_COLOR[item.status] ?? "bg-zinc-100 text-zinc-600"
-              }`}
-            >
-              {t(`status.${item.status}`, item.status)}
-            </span>
-            {item.published_at && (
-              <span className="text-sm text-zinc-500">
-                {new Date(item.published_at).toLocaleString(dateLocale)}
+      <section className="overflow-hidden rounded-[28px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(255,255,255,0.94)),#fbf8f2] shadow-[var(--shadow-card)]">
+        <div className={`grid gap-0 ${item.thumbnail_url ? "lg:grid-cols-[minmax(0,1.22fr)_minmax(320px,0.9fr)]" : ""}`}>
+          <div className={`min-w-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(255,255,255,0.94))] px-5 py-7 sm:px-[30px] md:px-[34px] md:pb-[28px] md:pt-[30px] ${item.thumbnail_url ? "lg:border-r lg:border-[var(--color-editorial-line)]" : ""}`}>
+            <div className="mb-4 flex flex-wrap items-center gap-[10px] text-xs tracking-[0.04em]">
+              <span
+                className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                  STATUS_COLOR[item.status] ?? "bg-zinc-100 text-zinc-600"
+                }`}
+              >
+                {t(`status.${item.status}`, item.status)}
               </span>
-            )}
-            <span className="text-xs text-zinc-400">id: {item.id}</span>
-          </div>
+              {item.published_at && (
+                <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-xs text-[var(--color-editorial-ink-faint)]">
+                  {formatHeroDate(item.published_at, locale)}
+                </span>
+              )}
+              <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-xs text-[var(--color-editorial-ink-faint)]">
+                id: {item.id}
+              </span>
+            </div>
 
-          <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:justify-end">
-            {canMarkRead ? (
-              <button
-                type="button"
-                onClick={toggleRead}
-                disabled={readUpdating || disableMutations}
-                className="rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {readUpdating
-                  ? t("items.action.updating")
-                  : item.is_read
-                    ? t("items.action.markUnread")
-                    : t("items.action.markRead")}
-              </button>
+            {item.source_title ? (
+              <div className="mb-2 text-xs font-medium tracking-[0.12em] text-[var(--color-editorial-ink-faint)]">
+                {item.source_title}
+              </div>
             ) : null}
-            <button
-              type="button"
-              onClick={retryItem}
-              disabled={retryUpdating || disableMutations}
-              className={`rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
-                item.status === "new" ? "hidden" : ""
-              }`}
-            >
-              {retryUpdating ? t("common.saving") : t("itemDetail.retrySummary")}
-            </button>
-            <button
-              type="button"
-              onClick={retryFromFacts}
-              disabled={retryFromFactsUpdating || disableMutations}
-              className={`rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 ${
-                item.status === "new" ? "hidden" : ""
-              }`}
-            >
-              {retryFromFactsUpdating ? t("common.saving") : t("itemDetail.retryFromFacts")}
-            </button>
-            {isDeleted ? (
-              <button
-                type="button"
-                onClick={restoreItem}
-                disabled={restoreUpdating}
-                className="rounded-[10px] border border-zinc-300 bg-white px-3 py-2 text-[13px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {restoreUpdating ? t("itemDetail.restore.restoring") : t("itemDetail.restore.button")}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={deleteItem}
-                disabled={deleteUpdating || disableMutations}
-                className="rounded-[10px] border border-red-300 bg-white px-3 py-2 text-[13px] font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {deleteUpdating ? t("itemDetail.delete.deleting") : t("itemDetail.delete.button")}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {item.source_title ? (
-          <div className="mb-2 text-xs font-medium tracking-[0.08em] text-zinc-500">
-            {item.source_title}
-          </div>
-        ) : null}
-        <div className="mb-2 flex items-start gap-2">
-          <FileText className="mt-1 size-5 shrink-0 text-zinc-500" aria-hidden="true" />
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold leading-[1.25] text-zinc-900 md:text-[32px]">{displayTitle}</h1>
+            <h1 className="font-serif text-2xl leading-[1.15] tracking-[-0.04em] text-[var(--color-editorial-ink)] md:text-[42px] lg:text-[42px]">
+              {displayTitle}
+            </h1>
             {showOriginalTitle && (
-              <p className="mt-1 truncate text-sm text-zinc-500" title={originalTitle}>
+              <p className="mt-3 truncate text-sm text-[var(--color-editorial-ink-faint)]" title={originalTitle}>
                 {t("itemDetail.originalTitle")}: {originalTitle}
               </p>
             )}
-          </div>
-        </div>
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block break-all text-sm text-blue-600 hover:underline"
-        >
-          {item.url}
-        </a>
-        {actionError ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            {actionError}
-          </div>
-        ) : null}
-        {isDeleted ? (
-          <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-            {t("itemDetail.deletedReadonly")}
-          </div>
-        ) : null}
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            disabled={feedbackUpdating || disableMutations}
-            onClick={() =>
-              updateFeedback({ rating: (item.feedback?.rating ?? 0) === 1 ? 0 : 1 })
-            }
-            className={`inline-flex items-center justify-center gap-1 rounded-[12px] border p-3 text-[14px] font-medium transition-colors ${
-              (item.feedback?.rating ?? 0) === 1
-                ? "border-green-200 bg-green-50 text-green-700"
-                : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
-            }`}
-          >
-            <ThumbsUp className="size-[18px]" aria-hidden="true" />
-            <span className="hidden sm:inline">{t("items.feedback.like")}</span>
-          </button>
-          <button
-            type="button"
-            disabled={feedbackUpdating || disableMutations}
-            onClick={() =>
-              updateFeedback({ rating: (item.feedback?.rating ?? 0) === -1 ? 0 : -1 })
-            }
-            className={`inline-flex items-center justify-center gap-1 rounded-[12px] border p-3 text-[14px] font-medium transition-colors ${
-              (item.feedback?.rating ?? 0) === -1
-                ? "border-rose-200 bg-rose-50 text-rose-700"
-                : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
-            }`}
-          >
-            <ThumbsDown className="size-[18px]" aria-hidden="true" />
-            <span className="hidden sm:inline">{t("items.feedback.dislike")}</span>
-          </button>
-          <button
-            type="button"
-            disabled={feedbackUpdating || disableMutations}
-            onClick={() => updateFeedback({ is_favorite: !Boolean(item.feedback?.is_favorite) })}
-            className={`inline-flex items-center justify-center gap-1 rounded-[12px] border p-3 text-[14px] font-medium transition-colors ${
-              item.feedback?.is_favorite
-                ? "border-amber-200 bg-amber-50 text-amber-700"
-                : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
-            }`}
-          >
-            <Star className={`size-[18px] ${item.feedback?.is_favorite ? "fill-current" : ""}`} aria-hidden="true" />
-            <span className="hidden sm:inline">{t("items.feedback.favorite")}</span>
-          </button>
-        </div>
-
-        {item.status === "failed" && item.processing_error && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-red-700">
-              {t("itemDetail.failureReason")}
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 block break-all text-sm text-sky-700 hover:underline"
+            >
+              {item.url}
+            </a>
+            <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+              {canMarkRead ? (
+                <button
+                  type="button"
+                  onClick={toggleRead}
+                  disabled={readUpdating || disableMutations}
+                  className="w-full rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2.5 text-[13px] font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                >
+                  {readUpdating
+                    ? t("items.action.updating")
+                    : item.is_read
+                      ? t("items.action.markUnread")
+                      : t("items.action.markRead")}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={retryItem}
+                disabled={retryUpdating || disableMutations}
+                  className={`w-full rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-2.5 text-[13px] font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${
+                    item.status === "new" ? "hidden" : ""
+                  }`}
+              >
+                {retryUpdating ? t("common.saving") : t("itemDetail.retrySummary")}
+              </button>
+              <button
+                type="button"
+                onClick={retryFromFacts}
+                disabled={retryFromFactsUpdating || disableMutations}
+                  className={`w-full rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-2.5 text-[13px] font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${
+                    item.status === "new" ? "hidden" : ""
+                  }`}
+              >
+                {retryFromFactsUpdating ? t("common.saving") : t("itemDetail.retryFromFacts")}
+              </button>
+              {isDeleted ? (
+                <button
+                  type="button"
+                  onClick={restoreItem}
+                  disabled={restoreUpdating}
+                  className="w-full rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-2.5 text-[13px] font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                >
+                  {restoreUpdating ? t("itemDetail.restore.restoring") : t("itemDetail.restore.button")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={deleteItem}
+                  disabled={deleteUpdating || disableMutations}
+                  className="w-full rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-2.5 text-[13px] font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                >
+                  {deleteUpdating ? t("itemDetail.delete.deleting") : t("itemDetail.delete.button")}
+                </button>
+              )}
             </div>
-            <p className="whitespace-pre-wrap break-words text-sm text-red-900">{item.processing_error}</p>
-          </div>
-        )}
-
-        {item.thumbnail_url && (
-          <div className="mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={item.thumbnail_url}
-              alt=""
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              className="h-64 w-full object-cover sm:h-80"
-            />
-          </div>
-        )}
-
-        <div className="mt-4 grid gap-2 text-xs text-zinc-500 sm:grid-cols-2">
-          <div>
-            <span className="font-medium text-zinc-600">created_at:</span>{" "}
-            {new Date(item.created_at).toLocaleString(dateLocale)}
-          </div>
-          <div>
-            <span className="font-medium text-zinc-600">updated_at:</span>{" "}
-            {new Date(item.updated_at).toLocaleString(dateLocale)}
-          </div>
-          {item.fetched_at && (
-            <div>
-              <span className="font-medium text-zinc-600">fetched_at:</span>{" "}
-              {new Date(item.fetched_at).toLocaleString(dateLocale)}
+            {actionError ? (
+              <div className="mt-4 rounded-[18px] border border-[var(--color-editorial-error-line)] bg-[var(--color-editorial-error-soft)] px-4 py-3 text-sm text-[var(--color-editorial-error)]">
+                {actionError}
+              </div>
+            ) : null}
+            {isDeleted ? (
+              <div className="mt-4 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink-soft)]">
+                {t("itemDetail.deletedReadonly")}
+              </div>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={feedbackUpdating || disableMutations}
+                onClick={() =>
+                  updateFeedback({ rating: (item.feedback?.rating ?? 0) === 1 ? 0 : 1 })
+                }
+                className={`inline-flex h-11 w-11 items-center justify-center rounded-full border transition-colors ${
+                  (item.feedback?.rating ?? 0) === 1
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+                }`}
+                aria-label={t("items.feedback.like")}
+              >
+                <ThumbsUp className="size-[18px]" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                disabled={feedbackUpdating || disableMutations}
+                onClick={() =>
+                  updateFeedback({ rating: (item.feedback?.rating ?? 0) === -1 ? 0 : -1 })
+                }
+                className={`inline-flex h-11 w-11 items-center justify-center rounded-full border transition-colors ${
+                  (item.feedback?.rating ?? 0) === -1
+                    ? "border-rose-200 bg-rose-50 text-rose-700"
+                    : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+                }`}
+                aria-label={t("items.feedback.dislike")}
+              >
+                <ThumbsDown className="size-[18px]" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                disabled={feedbackUpdating || disableMutations}
+                onClick={() => updateFeedback({ is_favorite: !Boolean(item.feedback?.is_favorite) })}
+                className={`inline-flex h-11 w-11 items-center justify-center rounded-full border transition-colors ${
+                  item.feedback?.is_favorite
+                    ? "border-amber-200 bg-amber-50 text-amber-700"
+                    : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+                }`}
+                aria-label={t("items.feedback.favorite")}
+              >
+                <Star className={`size-[18px] ${item.feedback?.is_favorite ? "fill-current" : ""}`} aria-hidden="true" />
+              </button>
             </div>
-          )}
-          {item.summary?.summarized_at && (
-            <div>
-              <span className="font-medium text-zinc-600">summarized_at:</span>{" "}
-              {new Date(item.summary.summarized_at).toLocaleString(dateLocale)}
+
+            {item.status === "failed" && item.processing_error && (
+              <div className="mt-4 rounded-[18px] border border-[var(--color-editorial-error-line)] bg-[var(--color-editorial-error-soft)] px-4 py-3">
+                <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-editorial-error)]">
+                  {t("itemDetail.failureReason")}
+                </div>
+                <p className="whitespace-pre-wrap break-words text-sm text-[var(--color-editorial-error)]">{item.processing_error}</p>
+              </div>
+            )}
+          </div>
+
+          {item.thumbnail_url ? (
+            <div className="min-w-0 grid grid-rows-[minmax(200px,1fr)_auto] border-t border-[var(--color-editorial-line)] bg-[#fbf8f2] lg:grid-rows-[minmax(240px,1fr)_auto] lg:border-t-0">
+              <div className="overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={item.thumbnail_url}
+                  alt=""
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                  className="h-56 w-full object-cover sm:h-72 lg:h-full"
+                />
+              </div>
+              <div className="grid gap-px border-t border-[var(--color-editorial-line)] bg-[var(--color-editorial-line)]">
+                {[
+                  ["created_at", item.created_at],
+                  ["fetched_at", item.fetched_at],
+                  ["summarized_at", item.summary?.summarized_at],
+                  ["updated_at", item.updated_at],
+                ]
+                  .filter((entry): entry is [string, string] => Boolean(entry[1]))
+                  .map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="flex min-w-0 items-center justify-between gap-3 bg-[rgba(255,255,255,0.72)] px-4 py-2.5 text-xs text-[var(--color-editorial-ink-soft)]"
+                    >
+                      <span>{label}</span>
+                      <strong className="font-semibold text-[var(--color-editorial-ink)]">
+                        {formatHeroDate(value, locale)}
+                      </strong>
+                    </div>
+                  ))}
+              </div>
             </div>
-          )}
+          ) : null}
         </div>
       </section>
 
@@ -988,37 +1016,51 @@ export default function ItemDetailPage() {
         </Link>
       )}
 
-      <section className="overflow-hidden rounded-[20px] border border-zinc-200 bg-white shadow-sm">
-        <Tabs defaultValue="summary">
-          <TabList>
-            <Tab value="summary">{t("tabs.summary")}</Tab>
-            <Tab value="facts">{t("tabs.facts")}</Tab>
-            <Tab value="body">{t("tabs.body")}</Tab>
-            <Tab value="related">{t("tabs.related")}</Tab>
-            <Tab value="notes">{t("tabs.notes")}</Tab>
-          </TabList>
+      <section className="overflow-hidden rounded-[24px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.72)] shadow-[var(--shadow-card)]">
+        <div className="flex flex-wrap gap-2 border-b border-[var(--color-editorial-line)] bg-[rgba(250,247,241,0.95)] px-4 py-3 md:px-5 md:py-4">
+          {(["summary", "facts", "body", "related", "notes"] as const).map((tab) => {
+            const label =
+              tab === "summary" ? t("tabs.summary")
+              : tab === "facts" ? t("tabs.facts")
+              : tab === "body" ? t("tabs.body")
+              : tab === "related" ? t("tabs.related")
+              : t("tabs.notes");
+            const active = detailTab === tab;
+            return (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setDetailTab(tab)}
+                className={`rounded-full border px-4 py-1.5 text-[13px] font-medium transition-colors ${
+                  active
+                    ? "border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                    : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
 
-          <TabPanel value="summary" className="px-6 py-10 md:px-8">
+        {detailTab === "summary" ? (
+          <div className="min-w-0 px-5 py-6 md:px-7 md:py-7">
             {(item.summary || item.faithfulness || (item.summary_executions?.length ?? 0) > 0) ? (
-              <>
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-800">
-                    <Sparkles className="size-4 text-zinc-500" aria-hidden="true" />
-                    {t("itemDetail.summary")}
-                  </h2>
+              <section className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-5 py-4 md:px-6 md:py-5">
+                <div className="flex flex-wrap items-center gap-2">
                   {item.summary?.score != null && (
-                    <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-700">
+                    <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2.5 py-1 text-xs text-[var(--color-editorial-ink-soft)]">
                       score {item.summary.score.toFixed(2)}
                     </span>
                   )}
                   {item.summary?.score_policy_version && (
-                    <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500">
+                    <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2.5 py-1 text-xs text-[var(--color-editorial-ink-faint)]">
                       {item.summary.score_policy_version}
                     </span>
                   )}
                   {item.summary_llm && (
                     <span
-                      className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
+                      className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2.5 py-1 text-xs text-[var(--color-editorial-ink-soft)]"
                       title={t("itemDetail.summaryModelTitle")}
                     >
                       {renderLLMModelDisplay(
@@ -1032,18 +1074,17 @@ export default function ItemDetailPage() {
                   )}
                 </div>
                 {item.summary ? (
-                  <p className="whitespace-pre-wrap text-[17px] leading-[1.9] text-zinc-900">{item.summary.summary}</p>
+                  <div className="mt-3 whitespace-pre-wrap font-serif text-[18px] leading-[1.95] text-[var(--color-editorial-ink)]">
+                    {item.summary.summary}
+                  </div>
                 ) : null}
                 {item.summary?.score_reason && (
-                  <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-                    <div className="mb-1 text-xs font-semibold text-zinc-500">
-                      {t("itemDetail.scoreReason")}
-                    </div>
-                    <p className="text-sm leading-6 text-zinc-700">{item.summary.score_reason}</p>
-                  </div>
+                  <DetailInfoBox title={t("itemDetail.scoreReason")}>
+                    <p className="text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.summary.score_reason}</p>
+                  </DetailInfoBox>
                 )}
                 {item.summary?.score_breakdown && (
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                     {[
                       ["importance", t("itemDetail.score.importance")],
                       ["novelty", t("itemDetail.score.novelty")],
@@ -1054,13 +1095,13 @@ export default function ItemDetailPage() {
                       const v = item.summary?.score_breakdown?.[key as keyof NonNullable<typeof item.summary.score_breakdown>];
                       if (v == null) return null;
                       return (
-                        <div key={key} className="rounded-lg border border-zinc-200 px-3 py-2">
-                          <div className="text-xs font-medium text-zinc-500">{label}</div>
+                        <div key={key} className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-3">
+                          <div className="text-xs font-medium text-[var(--color-editorial-ink-faint)]">{label}</div>
                           <div className="mt-1 flex items-center justify-between gap-2">
-                            <div className="h-2 flex-1 rounded-full bg-zinc-100">
-                              <div className="h-2 rounded-full bg-zinc-800" style={{ width: `${Math.max(4, v * 100)}%` }} />
+                            <div className="h-2 flex-1 rounded-full bg-[#e9e1d3]">
+                              <div className="h-2 rounded-full bg-[var(--color-editorial-ink)]" style={{ width: `${Math.max(4, v * 100)}%` }} />
                             </div>
-                            <span className="w-10 text-right text-xs font-medium text-zinc-700">
+                            <span className="w-10 text-right text-xs font-medium text-[var(--color-editorial-ink-soft)]">
                               {v.toFixed(2)}
                             </span>
                           </div>
@@ -1069,31 +1110,12 @@ export default function ItemDetailPage() {
                     })}
                   </div>
                 )}
-                {item.summary && item.summary.topics.length > 0 && (
-                  <div className="mt-4 flex flex-wrap gap-1.5">
-                    {item.summary.topics.map((topic) => (
-                      <span
-                        key={topic}
-                        className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700 ring-1 ring-zinc-200"
-                      >
-                        {topic}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <ExecutionTimeline
-                  attempts={item.summary_executions}
-                  title={t("itemDetail.execution.summary")}
-                  t={t}
-                  locale={locale}
-                />
                 {item.faithfulness && (
-                  <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-500">
-                      <span>{t("itemDetail.faithfulness")}</span>
+                  <DetailInfoBox title={t("itemDetail.faithfulness")}>
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--color-editorial-ink-faint)]">
                       {item.faithfulness_llm && (
                         <span
-                          className="rounded bg-white px-2 py-1 text-zinc-600 ring-1 ring-zinc-200"
+                          className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[var(--color-editorial-ink-soft)]"
                           title={t("itemDetail.faithfulnessModelTitle")}
                         >
                           {renderLLMModelDisplay(
@@ -1107,35 +1129,39 @@ export default function ItemDetailPage() {
                       )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="rounded bg-white px-2 py-1 text-zinc-700 ring-1 ring-zinc-200">
+                      <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[var(--color-editorial-ink-soft)]">
                         {t(`itemDetail.faithfulness.${item.faithfulness.final_result}`, item.faithfulness.final_result)}
                       </span>
-                      <span className="text-zinc-500">
+                      <span className="text-[var(--color-editorial-ink-faint)]">
                         {t("itemDetail.faithfulness.retryCount")}: {item.faithfulness.retry_count}
                       </span>
                     </div>
                     {item.faithfulness.short_comment && (
-                      <p className="mt-2 text-sm leading-6 text-zinc-700">{item.faithfulness.short_comment}</p>
+                      <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.faithfulness.short_comment}</p>
                     )}
-                  </div>
+                  </DetailInfoBox>
                 )}
-              </>
+                <ExecutionTimeline
+                  attempts={item.summary_executions}
+                  title={t("itemDetail.execution.summary")}
+                  t={t}
+                  locale={locale}
+                />
+              </section>
             ) : (
-              <p className="text-sm text-zinc-500">{t("itemDetail.noSummary", "-")}</p>
+              <p className="text-sm text-[var(--color-editorial-ink-soft)]">{t("itemDetail.noSummary", "-")}</p>
             )}
-          </TabPanel>
+          </div>
+        ) : null}
 
-          <TabPanel value="facts" className="px-6 py-10 md:px-8">
+        {detailTab === "facts" ? (
+          <div className="min-w-0 px-5 py-6 md:px-7 md:py-7">
             {(item.facts && item.facts.facts.length > 0) || item.facts_check || (item.facts_executions?.length ?? 0) > 0 ? (
-              <>
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
-                    <ListChecks className="size-4 text-zinc-500" aria-hidden="true" />
-                    {t("itemDetail.facts")}
-                  </h2>
+              <section className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-5 py-4 md:px-6 md:py-5">
+                <div className="flex flex-wrap items-center gap-2">
                   {item.facts_llm && (
                     <span
-                      className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600"
+                      className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2.5 py-1 text-xs text-[var(--color-editorial-ink-soft)]"
                       title={t("itemDetail.factsModelTitle")}
                     >
                       {renderLLMModelDisplay(
@@ -1149,12 +1175,11 @@ export default function ItemDetailPage() {
                   )}
                 </div>
                 {item.facts_check && (
-                  <div className="mb-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-zinc-500">
-                      <span>{t("itemDetail.factsCheck")}</span>
+                  <DetailInfoBox title={t("itemDetail.factsCheck")}>
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-[var(--color-editorial-ink-faint)]">
                       {item.facts_check_llm && (
                         <span
-                          className="rounded bg-white px-2 py-1 text-zinc-600 ring-1 ring-zinc-200"
+                          className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[var(--color-editorial-ink-soft)]"
                           title={t("itemDetail.factsCheckModelTitle")}
                         >
                           {renderLLMModelDisplay(
@@ -1168,23 +1193,23 @@ export default function ItemDetailPage() {
                       )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="rounded bg-white px-2 py-1 text-zinc-700 ring-1 ring-zinc-200">
+                      <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[var(--color-editorial-ink-soft)]">
                         {t(`itemDetail.factsCheck.${item.facts_check.final_result}`, item.facts_check.final_result)}
                       </span>
-                      <span className="text-zinc-500">
+                      <span className="text-[var(--color-editorial-ink-faint)]">
                         {t("itemDetail.factsCheck.retryCount")}: {item.facts_check.retry_count}
                       </span>
                     </div>
                     {item.facts_check.short_comment && (
-                      <p className="mt-2 text-sm leading-6 text-zinc-700">{item.facts_check.short_comment}</p>
+                      <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.facts_check.short_comment}</p>
                     )}
-                  </div>
+                  </DetailInfoBox>
                 )}
                 {item.facts && item.facts.facts.length > 0 ? (
-                  <ul className="space-y-2">
+                  <ul className="mt-4 space-y-2.5">
                     {item.facts.facts.map((f, i) => (
-                      <li key={i} className="flex gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-                        <span className="shrink-0 text-zinc-400">{i + 1}.</span>
+                      <li key={i} className="flex gap-2 rounded-[18px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,#faf6ef,#fffdfa)] px-4 py-3 text-sm text-[var(--color-editorial-ink-soft)]">
+                        <span className="shrink-0 text-[var(--color-editorial-ink-faint)]">{i + 1}.</span>
                         <span>{f}</span>
                       </li>
                     ))}
@@ -1196,49 +1221,44 @@ export default function ItemDetailPage() {
                   t={t}
                   locale={locale}
                 />
-              </>
+              </section>
             ) : (
-              <p className="text-sm text-zinc-500">{t("itemDetail.noFacts", "-")}</p>
+              <p className="text-sm text-[var(--color-editorial-ink-soft)]">{t("itemDetail.noFacts", "-")}</p>
             )}
-          </TabPanel>
+          </div>
+        ) : null}
 
-          <TabPanel value="body" className="px-6 py-10 md:px-8">
+        {detailTab === "body" ? (
+          <div className="min-w-0 px-5 py-6 md:px-7 md:py-7">
             {item.content_text ? (
-              <>
-                <h2 className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
-                  <AlignLeft className="size-4 text-zinc-500" aria-hidden="true" />
-                  {t("itemDetail.content")}
-                </h2>
-                <div className="max-w-prose whitespace-pre-wrap text-[18px] leading-[2] text-zinc-900">
+              <section className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-5 py-4 md:px-6 md:py-5">
+                <div className="mt-3 max-w-prose whitespace-pre-wrap font-serif text-[18px] leading-[2] text-[var(--color-editorial-ink)]">
                   {item.content_text}
                 </div>
-              </>
+              </section>
             ) : (
-              <p className="text-sm text-zinc-500">{t("itemDetail.noContent", "-")}</p>
+              <p className="text-sm text-[var(--color-editorial-ink-soft)]">{t("itemDetail.noContent", "-")}</p>
             )}
-          </TabPanel>
+          </div>
+        ) : null}
 
-          <TabPanel value="related" className="px-6 py-10 md:px-8">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-3">
-                <h2 className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-700">
-                  <Link2 className="size-4 text-zinc-500" aria-hidden="true" />
-                  {t("itemDetail.related")}
-                </h2>
-                <span className="text-xs text-zinc-400">
+        {detailTab === "related" ? (
+          <div className="min-w-0 px-5 py-6 md:px-7 md:py-7">
+            <section className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-5 py-4 md:px-6 md:py-5">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="text-xs text-[var(--color-editorial-ink-faint)]">
                   {clusteredRelated.length > 0
                     ? `${clusteredRelated.length} ${t("itemDetail.clusters")} / ${related.length}`
                     : related.length}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-white p-1">
+                </div>
+                <div className="flex items-center gap-1 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-1">
                 <button
                   type="button"
                   onClick={() => setRelatedSortMode("similarity")}
                   className={`rounded px-2 py-1 text-xs font-medium ${
                     relatedSortMode === "similarity"
-                      ? "bg-zinc-900 text-white"
-                      : "text-zinc-600 hover:bg-zinc-50"
+                      ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                      : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
                   }`}
                 >
                   {t("itemDetail.sort.similarity")}
@@ -1248,35 +1268,35 @@ export default function ItemDetailPage() {
                   onClick={() => setRelatedSortMode("recent")}
                   className={`rounded px-2 py-1 text-xs font-medium ${
                     relatedSortMode === "recent"
-                      ? "bg-zinc-900 text-white"
-                      : "text-zinc-600 hover:bg-zinc-50"
+                      ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                      : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
                   }`}
                 >
                   {t("itemDetail.sort.recent")}
                 </button>
+                </div>
               </div>
-            </div>
-            {related.length === 0 ? (
-              <p className="text-sm text-zinc-500">
-                {relatedError
-                  ? t("itemDetail.relatedError")
-                  : t("itemDetail.relatedEmpty")}
-              </p>
-            ) : (
-              <div className="space-y-3">
+              {related.length === 0 ? (
+                <p className="text-sm text-[var(--color-editorial-ink-soft)]">
+                  {relatedError
+                    ? t("itemDetail.relatedError")
+                    : t("itemDetail.relatedEmpty")}
+                </p>
+              ) : (
+                <div className="space-y-3">
                 {clusteredRelated.map((c) => {
                   const expanded = !!expandedRelatedClusterIds[c.id];
                   const restItems = c.items.slice(1);
                   return (
-                    <div key={c.id} className="rounded-lg border border-zinc-200 p-3">
+                    <div key={c.id} className="rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3">
                       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-                        <span className="rounded-full bg-zinc-100 px-2 py-0.5 font-medium text-zinc-700">
+                        <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-0.5 font-medium text-[var(--color-editorial-ink-soft)]">
                           {c.label}
                         </span>
-                        <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                        <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-0.5 text-[var(--color-editorial-ink-soft)]">
                           {c.size} {t("common.rows")}
                         </span>
-                        <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                        <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-0.5 text-[var(--color-editorial-ink-soft)]">
                           sim {c.max_similarity.toFixed(3)}
                         </span>
                         <button
@@ -1284,7 +1304,7 @@ export default function ItemDetailPage() {
                           onClick={() =>
                             setExpandedRelatedClusterIds((prev) => ({ ...prev, [c.id]: !prev[c.id] }))
                           }
-                          className="ml-auto rounded border border-zinc-200 bg-white px-2 py-0.5 text-zinc-600 hover:bg-zinc-50"
+                          className="ml-auto rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
                         >
                           {expanded
                             ? t("itemDetail.relatedCollapse")
@@ -1293,36 +1313,36 @@ export default function ItemDetailPage() {
                       </div>
                       <div className="space-y-3">
                         {[c.items[0], ...(expanded ? restItems : [])].map((r, idx) => (
-                          <div key={r.id} className={`rounded-lg p-3 ${idx === 0 ? "bg-zinc-50" : "border border-zinc-200 bg-white"}`}>
-                            <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                              <span className="rounded bg-white px-2 py-0.5 text-zinc-700 ring-1 ring-zinc-200">
+                          <div key={r.id} className={`rounded-[18px] p-3 ${idx === 0 ? "border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,#faf6ef,#fffdfa)]" : "border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]"}`}>
+                            <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-[var(--color-editorial-ink-faint)]">
+                              <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2 py-0.5 text-[var(--color-editorial-ink-soft)]">
                                 sim {r.similarity.toFixed(3)}
                               </span>
                               {r.summary_score != null && (
-                                <span className="rounded bg-white px-2 py-0.5 text-zinc-700 ring-1 ring-zinc-200">
+                                <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2 py-0.5 text-[var(--color-editorial-ink-soft)]">
                                   score {r.summary_score.toFixed(2)}
                                 </span>
                               )}
                               <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
                             </div>
-                            <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-zinc-900 hover:underline">
+                            <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-[var(--color-editorial-ink)] hover:underline">
                               {r.title ?? t("itemDetail.noTitle")}
                             </Link>
                             <a
                               href={r.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="mt-1 block break-all text-xs text-blue-600 hover:underline"
+                              className="mt-1 block break-all text-xs text-sky-700 hover:underline"
                             >
                               {r.url}
                             </a>
                             {r.summary && (
-                              <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
+                              <p className="mt-2 line-clamp-3 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">{r.summary}</p>
                             )}
                             {r.reason && (
-                              <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs leading-5 text-zinc-600">
+                              <div className="mt-2 rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2.5 py-1.5 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
                                 <span className="inline-flex items-center gap-1 align-middle font-medium">
-                                  <Info className="size-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
+                                  <Info className="size-3.5 shrink-0 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
                                   <span>{t("itemDetail.relatedReasonPrefix")}</span>
                                 </span>
                                 <span className="ml-1 align-middle">{localizeRelatedReason(r.reason, t)}</span>
@@ -1331,7 +1351,7 @@ export default function ItemDetailPage() {
                             {!!r.topics?.length && (
                               <div className="mt-2 flex flex-wrap gap-1.5">
                                 {r.topics.slice(0, 6).map((topic) => (
-                                  <span key={`${r.id}-${topic}`} className="rounded-full bg-white px-2 py-0.5 text-[11px] text-zinc-700 ring-1 ring-zinc-200">
+                                  <span key={`${r.id}-${topic}`} className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2 py-0.5 text-[11px] text-[var(--color-editorial-ink-soft)]">
                                     {topic}
                                   </span>
                                 ))}
@@ -1345,36 +1365,36 @@ export default function ItemDetailPage() {
                 })}
 
                 {singleRelated.map((r) => (
-                  <div key={r.id} className="rounded-lg border border-zinc-200 p-3">
-                    <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-                      <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                  <div key={r.id} className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3">
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-[var(--color-editorial-ink-faint)]">
+                      <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-0.5 text-[var(--color-editorial-ink-soft)]">
                         sim {r.similarity.toFixed(3)}
                       </span>
                       {r.summary_score != null && (
-                        <span className="rounded bg-zinc-100 px-2 py-0.5 text-zinc-700">
+                        <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-0.5 text-[var(--color-editorial-ink-soft)]">
                           score {r.summary_score.toFixed(2)}
                         </span>
                       )}
                       <span>{new Date(r.published_at ?? r.created_at).toLocaleString(dateLocale)}</span>
                     </div>
-                    <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-zinc-900 hover:underline">
+                    <Link href={`/items/${r.id}`} className="block text-sm font-semibold text-[var(--color-editorial-ink)] hover:underline">
                       {r.title ?? t("itemDetail.noTitle")}
                     </Link>
                     <a
                       href={r.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-1 block break-all text-xs text-blue-600 hover:underline"
+                      className="mt-1 block break-all text-xs text-sky-700 hover:underline"
                     >
                       {r.url}
                     </a>
                     {r.summary && (
-                      <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-700">{r.summary}</p>
+                      <p className="mt-2 line-clamp-3 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">{r.summary}</p>
                     )}
                     {r.reason && (
-                      <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 text-xs leading-5 text-zinc-600">
+                      <div className="mt-2 rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2.5 py-1.5 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
                         <span className="inline-flex items-center gap-1 align-middle font-medium">
-                          <Info className="size-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
+                          <Info className="size-3.5 shrink-0 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
                           <span>{t("itemDetail.relatedReasonPrefix")}</span>
                         </span>
                         <span className="ml-1 align-middle">{localizeRelatedReason(r.reason, t)}</span>
@@ -1383,7 +1403,7 @@ export default function ItemDetailPage() {
                     {!!r.topics?.length && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {r.topics.slice(0, 6).map((topic) => (
-                          <span key={`${r.id}-${topic}`} className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-700">
+                          <span key={`${r.id}-${topic}`} className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-0.5 text-[11px] text-[var(--color-editorial-ink-soft)]">
                             {topic}
                           </span>
                         ))}
@@ -1391,26 +1411,27 @@ export default function ItemDetailPage() {
                     )}
                   </div>
                 ))}
-              </div>
-            )}
-          </TabPanel>
+                </div>
+              )}
+            </section>
+          </div>
+        ) : null}
 
-          <TabPanel value="notes" className="px-6 py-10 md:px-8">
-            <div className="mb-4">
-              <h2 className="text-sm font-semibold text-zinc-700">{t("itemDetail.savedNotes")}</h2>
-              <p className="mt-1 text-sm text-zinc-500">{t("itemDetail.savedNotesDesc")}</p>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <ItemNoteEditor note={item.note ?? null} onSave={saveNote} disabled={disableMutations} />
-              <ItemHighlightList
-                highlights={item.highlights ?? []}
-                onCreate={createHighlight}
-                onDelete={deleteHighlight}
-                disabled={disableMutations}
-              />
-            </div>
-          </TabPanel>
-        </Tabs>
+        {detailTab === "notes" ? (
+          <div className="min-w-0 px-5 py-6 md:px-7 md:py-7">
+            <section className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-5 py-4 md:px-6 md:py-5">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <ItemNoteEditor note={item.note ?? null} onSave={saveNote} disabled={disableMutations} />
+                <ItemHighlightList
+                  highlights={item.highlights ?? []}
+                  onCreate={createHighlight}
+                  onDelete={deleteHighlight}
+                  disabled={disableMutations}
+                />
+              </div>
+            </section>
+          </div>
+        ) : null}
       </section>
     </div>
   );

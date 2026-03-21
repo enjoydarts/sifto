@@ -166,6 +166,10 @@ func cacheKeyLLMUsageExecutionCurrentMonthVersioned(userID string, version int64
 	return fmt.Sprintf("%s:llm_usage:execution_current_month:%s:v=%d", cacheKeyVersion, userID, version)
 }
 
+func cacheKeyLLMUsageExecutionSummaryVersioned(userID string, version int64, days int) string {
+	return fmt.Sprintf("%s:llm_usage:execution:%s:v=%d:days=%d", cacheKeyVersion, userID, version, days)
+}
+
 func cacheKeyLLMUsageValueMetricsCurrentMonthVersioned(userID string, version int64) string {
 	return fmt.Sprintf("%s:llm_usage:value_metrics_current_month:%s:v=%d", cacheKeyVersion, userID, version)
 }

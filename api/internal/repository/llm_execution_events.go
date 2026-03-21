@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -113,6 +114,77 @@ func (r *LLMExecutionEventRepo) CurrentMonthSummaryByUser(ctx context.Context, u
 		GROUP BY 1,2,3,4
 		ORDER BY estimated_cost_usd DESC, failures DESC, retries DESC, attempts DESC, purpose ASC, provider ASC, model ASC
 	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]LLMExecutionCurrentMonthSummary, 0)
+	for rows.Next() {
+		var v LLMExecutionCurrentMonthSummary
+		if err := rows.Scan(
+			&v.MonthJST, &v.Purpose, &v.Provider, &v.Model,
+			&v.Attempts, &v.Successes, &v.Failures, &v.Retries, &v.EmptyResponses,
+			&v.EstimatedCostUSD,
+			&v.FailureRatePct, &v.RetryRatePct, &v.EmptyRatePct,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+func (r *LLMExecutionEventRepo) SummaryByUser(ctx context.Context, userID string, days int) ([]LLMExecutionCurrentMonthSummary, error) {
+	if days <= 0 || days > 365 {
+		days = 14
+	}
+	rows, err := r.db.Query(ctx, `
+		WITH bounds AS (
+			SELECT
+				date_trunc('day', NOW() AT TIME ZONE 'Asia/Tokyo') - (($2::int - 1) * INTERVAL '1 day') AS since_jst,
+				date_trunc('day', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 day' AS until_jst
+		),
+		usage_costs AS (
+			SELECT
+				l.user_id,
+				l.purpose,
+				l.provider,
+				l.model,
+				COALESCE(SUM(l.estimated_cost_usd), 0)::double precision AS estimated_cost_usd
+			FROM llm_usage_logs l
+			CROSS JOIN bounds b
+			WHERE l.user_id = $1
+			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.since_jst
+			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.until_jst
+			GROUP BY l.user_id, l.purpose, l.provider, l.model
+		)
+		SELECT $3 AS month_jst,
+		       e.purpose,
+		       e.provider,
+		       e.model,
+		       COUNT(*)::int AS attempts,
+		       COUNT(*) FILTER (WHERE e.status = 'success')::int AS successes,
+		       COUNT(*) FILTER (WHERE e.status = 'failure')::int AS failures,
+		       COUNT(*) FILTER (WHERE e.attempt_index > 0)::int AS retries,
+		       COUNT(*) FILTER (WHERE e.empty_response)::int AS empty_responses,
+		       COALESCE(MAX(u.estimated_cost_usd), 0)::double precision AS estimated_cost_usd,
+		       CASE WHEN COUNT(*) = 0 THEN 0 ELSE ROUND((COUNT(*) FILTER (WHERE e.status = 'failure')::numeric * 100.0) / COUNT(*), 1) END::double precision AS failure_rate_pct,
+		       CASE WHEN COUNT(*) = 0 THEN 0 ELSE ROUND((COUNT(*) FILTER (WHERE e.attempt_index > 0)::numeric * 100.0) / COUNT(*), 1) END::double precision AS retry_rate_pct,
+		       CASE WHEN COUNT(*) = 0 THEN 0 ELSE ROUND((COUNT(*) FILTER (WHERE e.empty_response)::numeric * 100.0) / COUNT(*), 1) END::double precision AS empty_rate_pct
+		FROM llm_execution_events e
+		CROSS JOIN bounds b
+		LEFT JOIN usage_costs u
+		  ON u.user_id = e.user_id
+		 AND u.purpose = e.purpose
+		 AND u.provider = e.provider
+		 AND u.model = e.model
+		WHERE e.user_id = $1
+		  AND (e.created_at AT TIME ZONE 'Asia/Tokyo') >= b.since_jst
+		  AND (e.created_at AT TIME ZONE 'Asia/Tokyo') < b.until_jst
+		GROUP BY 1,2,3,4
+		ORDER BY estimated_cost_usd DESC, failures DESC, retries DESC, attempts DESC, purpose ASC, provider ASC, model ASC
+	`, userID, days, fmt.Sprintf("last_%d_days", days))
 	if err != nil {
 		return nil, err
 	}

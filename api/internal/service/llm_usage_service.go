@@ -203,6 +203,14 @@ func (s *LLMUsageService) ExecutionSummaryCurrentMonth(ctx context.Context, user
 	return mapSlice(rows, mapExecutionMonthSummaryView), nil
 }
 
+func (s *LLMUsageService) ExecutionSummary(ctx context.Context, userID string, days int) ([]LLMExecutionCurrentMonthSummaryView, error) {
+	rows, err := s.executionRepo.SummaryByUser(ctx, userID, days)
+	if err != nil {
+		return nil, err
+	}
+	return mapSlice(rows, mapExecutionMonthSummaryView), nil
+}
+
 func (s *LLMUsageService) AnalysisSummary(ctx context.Context, userID string, days int) ([]LLMUsageAnalysisSummaryView, error) {
 	rows, err := s.repo.AnalysisSummaryByUser(ctx, userID, days)
 	if err != nil {

@@ -35,3 +35,18 @@ func TestBumpUserLLMUsageVersion(t *testing.T) {
 		t.Fatalf("version = %d, want %d", got, want)
 	}
 }
+
+func TestLLMUsageExecutionSummaryCacheKeyUsesVersionAndDays(t *testing.T) {
+	cache := newTestJSONCache()
+	cache.versions[cacheVersionKeyUserLLMUsage("u1")] = 6
+	handler := &LLMUsageHandler{cache: cache}
+
+	key, err := handler.llmUsageCacheKey(context.Background(), "u1", cacheKeyLLMUsageExecutionSummaryVersioned("u1", 6, 30))
+	if err != nil {
+		t.Fatalf("llmUsageCacheKey returned error: %v", err)
+	}
+	want := "v1:llm_usage:execution:u1:v=6:days=30"
+	if key != want {
+		t.Fatalf("key = %q, want %q", key, want)
+	}
+}

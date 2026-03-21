@@ -1373,8 +1373,11 @@ export const api = {
   getLLMUsageCurrentMonthByPurpose: () => {
     return apiFetch<LLMUsagePurposeMonthSummary[]>("/llm-usage/current-month/by-purpose");
   },
-  getLLMExecutionCurrentMonthSummary: () => {
-    return apiFetch<LLMExecutionCurrentMonthSummary[]>("/llm-usage/current-month/execution-summary");
+  getLLMExecutionCurrentMonthSummary: (params?: { days?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.days) q.set("days", String(params.days));
+    const qs = q.toString();
+    return apiFetch<LLMExecutionCurrentMonthSummary[]>(`/llm-usage/current-month/execution-summary${qs ? `?${qs}` : ""}`);
   },
   getLLMValueMetricsCurrentMonth: () => {
     return apiFetch<LLMValueMetric[]>("/llm-usage/current-month/value-metrics");

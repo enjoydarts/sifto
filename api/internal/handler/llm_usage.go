@@ -223,6 +223,33 @@ func (h *LLMUsageHandler) PurposeSummaryCurrentMonth(w http.ResponseWriter, r *h
 
 func (h *LLMUsageHandler) ExecutionSummaryCurrentMonth(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
+	daysRaw := strings.TrimSpace(r.URL.Query().Get("days"))
+	if daysRaw != "" {
+		days, ok := parseUsageDays(r)
+		if !ok {
+			http.Error(w, "invalid days", http.StatusBadRequest)
+			return
+		}
+		cacheBust := r.URL.Query().Get("cache_bust") == "1"
+		cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageExecutionSummaryVersioned(userID, 0, days))
+		if err == nil && h.cache != nil && !cacheBust {
+			var cached []service.LLMExecutionCurrentMonthSummaryView
+			if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
+				writeJSON(w, cached)
+				return
+			}
+		}
+		rows, err := h.usage.ExecutionSummary(r.Context(), userID, days)
+		if err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		if err == nil && h.cache != nil {
+			_ = h.cache.SetJSON(r.Context(), cacheKey, rows, llmUsageModelSummaryCacheTTL)
+		}
+		writeJSON(w, rows)
+		return
+	}
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageExecutionCurrentMonthVersioned(userID, 0))
 	if err == nil && h.cache != nil && !cacheBust {

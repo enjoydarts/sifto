@@ -264,7 +264,9 @@ export default function ClustersPage() {
                                   {item.translated_title || item.title || item.url}
                                 </strong>
                                 <span className="mt-1 block text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">
-                                  {item.summary || item.content_text || fmtDateTime(item.published_at || item.created_at, locale)}
+                                  {item.recommendation_reason ||
+                                    item.content_text ||
+                                    fmtDateTime(item.published_at || item.created_at, locale)}
                                 </span>
                               </Link>
                             ))}

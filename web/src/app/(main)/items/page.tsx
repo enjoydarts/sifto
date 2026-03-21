@@ -96,6 +96,7 @@ function ItemsPageContent() {
   const [searchDraft, setSearchDraft] = useState(searchQuery);
   const restoredScrollRef = useRef<string | null>(null);
   const prefetchedDetailIDsRef = useRef<Record<string, true>>({});
+  const [inlineQueueItemIds, setInlineQueueItemIds] = useState<string[]>([]);
 
   const listQueryKey = useMemo(
     () => [
@@ -490,6 +491,7 @@ function ItemsPageContent() {
       router.push(href);
     };
     const openInlineReader = () => {
+      setInlineQueueItemIds(sortedItems.map((v) => v.id));
       setInlineItemId(item.id);
       prefetchItemDetail(item.id);
     };
@@ -746,9 +748,12 @@ function ItemsPageContent() {
             open={!!inlineItemId}
             itemId={inlineItemId}
             locale={locale}
+            queueItemIds={inlineQueueItemIds}
             itemStatus={inlineItemStatus}
-            queueItemIds={sortedItems.map((v) => v.id)}
-            onClose={() => setInlineItemId(null)}
+            onClose={() => {
+              setInlineItemId(null);
+              setInlineQueueItemIds([]);
+            }}
             onOpenDetail={(itemId) => {
               setInlineItemId(null);
               rememberScroll(itemId);

@@ -128,6 +128,7 @@ export default function TriagePage() {
     () => queue.filter((entry) => !isEntryDone(entry, actioned)),
     [actioned, queue]
   );
+  const inlineQueueItemIds = useMemo(() => pendingItems.flatMap((entry) => entryItemIds(entry)), [pendingItems]);
   const current = pendingItems[0] ?? null;
   const done = queue.length - pendingItems.length;
   const progress = queue.length > 0 ? Math.round((done / queue.length) * 100) : 0;
@@ -698,6 +699,7 @@ export default function TriagePage() {
           open={!!inlineItemId}
           itemId={inlineItemId}
           locale={locale}
+          queueItemIds={inlineQueueItemIds}
           onClose={() => setInlineItemId(null)}
           onOpenDetail={(itemId) => {
             setInlineItemId(null);

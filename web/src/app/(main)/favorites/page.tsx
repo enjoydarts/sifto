@@ -6,14 +6,16 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Download, ExternalLink, Star } from "lucide-react";
 import { api, AskInsight, Item, ItemDetail } from "@/lib/api";
-import { ItemCard } from "@/components/items/item-card";
+import { CheckStatusBadges } from "@/components/items/check-status-badges";
 import { InlineReader } from "@/components/inline-reader";
 import { useConfirm } from "@/components/confirm-provider";
 import { EmptyState } from "@/components/empty-state";
 import { PageTransition } from "@/components/page-transition";
-import { SkeletonItemRow } from "@/components/skeleton";
+import { Thumbnail } from "@/components/thumbnail";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
+import { StatusPill } from "@/components/ui/status-pill";
+import { Tag } from "@/components/ui/tag";
 
 const EXPORT_RANGES = [
   { days: 7, key: "favorites.export.range.7" },
@@ -167,35 +169,44 @@ export default function FavoritesPage() {
 
   return (
     <PageTransition>
-      <div className="space-y-6">
-        <section className="rounded-3xl border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,1),rgba(255,255,255,0.96))] p-5 shadow-sm md:p-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-2xl">
-              <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white/80 px-3 py-1 text-xs font-medium text-amber-700">
-                <Star className="size-3.5 fill-current" aria-hidden="true" />
-                <span>{t("favorites.eyebrow")}</span>
-              </div>
-              <h1 className="mt-3 text-2xl font-bold tracking-tight text-zinc-950">{t("favorites.title")}</h1>
-              <p className="mt-2 text-sm leading-6 text-zinc-600">{t("favorites.subtitle")}</p>
-              <p className="mt-3 text-sm font-medium text-zinc-700">
+      <div className="space-y-6 overflow-x-hidden">
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(340px,0.82fr)]">
+          <div className="rounded-[28px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.78)] px-6 py-6 shadow-[var(--shadow-card)] md:px-7">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+              {t("favorites.eyebrow")}
+            </div>
+            <h1 className="mt-3 font-serif text-[40px] leading-[1.08] tracking-[-0.04em] text-[var(--color-editorial-ink)] md:text-[44px]">
+              {t("favorites.title")}
+            </h1>
+            <p className="mt-4 max-w-[64ch] text-[15px] leading-8 text-[var(--color-editorial-ink-soft)]">
+              {t("favorites.subtitle")}
+            </p>
+            <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-xs text-[var(--color-editorial-ink-soft)]">
+              <Star className="size-3.5 fill-current text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
+              <span>
                 {total}
                 {locale === "ja" ? t("favorites.countSuffix") : ` ${t("favorites.countSuffix")}`}
-              </p>
+              </span>
             </div>
+          </div>
 
-            <div className="w-full max-w-xl rounded-2xl border border-zinc-200 bg-white/90 p-4 shadow-sm">
-              <p className="text-sm font-semibold text-zinc-900">{t("favorites.export.title")}</p>
-              <p className="mt-1 text-sm text-zinc-500">{t("favorites.export.subtitle")}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
+          <div className="rounded-[24px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,253,249,0.98))] px-5 py-5 shadow-[var(--shadow-card)]">
+            <h2 className="font-serif text-[24px] leading-[1.2] text-[var(--color-editorial-ink)]">
+              {t("favorites.export.title")}
+            </h2>
+            <p className="mt-2 text-[14px] leading-7 text-[var(--color-editorial-ink-soft)]">
+              {t("favorites.export.subtitle")}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
                 {EXPORT_RANGES.map((range) => (
                   <button
                     key={range.days}
                     type="button"
                     onClick={() => setExportDays(range.days)}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-medium press focus-ring ${
+                    className={`rounded-full border px-3 py-2 text-xs font-medium press focus-ring ${
                       exportDays === range.days
-                        ? "border-zinc-900 bg-zinc-900 text-white"
-                        : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                        ? "border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                        : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
                     }`}
                   >
                     {t(range.key)}
@@ -207,7 +218,7 @@ export default function FavoritesPage() {
                   type="button"
                   onClick={() => void handleExport("copy")}
                   disabled={exporting != null}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 press focus-ring"
+                  className="inline-flex min-h-[42px] items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:cursor-not-allowed disabled:opacity-60 press focus-ring"
                 >
                   <Copy className="size-4" aria-hidden="true" />
                   <span>{exporting === "copy" ? t("common.loading") : t("favorites.export.copy")}</span>
@@ -216,27 +227,26 @@ export default function FavoritesPage() {
                   type="button"
                   onClick={() => void handleExport("download")}
                   disabled={exporting != null}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-900 bg-zinc-900 px-4 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 press focus-ring"
+                  className="inline-flex min-h-[42px] items-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60 press focus-ring"
                 >
                   <Download className="size-4" aria-hidden="true" />
                   <span>{exporting === "download" ? t("common.loading") : t("favorites.export.download")}</span>
                 </button>
                 <Link
                   href="/items?favorite=1&sort=score"
-                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-300 bg-white px-4 text-sm font-medium text-zinc-700 hover:bg-zinc-50 press focus-ring"
+                  className="inline-flex min-h-[42px] items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] press focus-ring"
                 >
                   <ExternalLink className="size-4" aria-hidden="true" />
                   <span>{t("favorites.openItems")}</span>
                 </Link>
               </div>
-            </div>
           </div>
         </section>
 
         <section className="space-y-3">
-          {loading && Array.from({ length: 5 }).map((_, idx) => <SkeletonItemRow key={idx} />)}
+          {loading && Array.from({ length: 4 }).map((_, idx) => <FavoriteArchiveSkeleton key={idx} />)}
           {!loading && error && (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="rounded-[22px] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {error}
             </div>
           )}
@@ -251,64 +261,50 @@ export default function FavoritesPage() {
           {!loading &&
             !error &&
             items.map((item, idx) => (
-              <div key={item.id} className="rounded-2xl border border-zinc-200 bg-white p-2 shadow-sm">
-                <ItemCard
-                  item={item}
-                  locale={locale}
-                  featured={idx === 0}
-                  rank={idx + 1}
-                  readUpdating={Boolean(readUpdatingIds[item.id])}
-                  retrying={false}
-                  onOpen={() => setInlineItemId(item.id)}
-                  onOpenDetail={() => router.push(`/items/${item.id}?from=${encodeURIComponent("/favorites")}`)}
-                  onToggleRead={() => void toggleRead(item)}
-                  onRetry={() => undefined}
-                  onPrefetch={() => {
-                    void prefetchDetail(item.id);
-                  }}
-                  t={t}
-                />
-                {detailNotes[item.id] ? (
-                  <div className="px-4 pb-1 text-sm text-zinc-500">
-                    {detailNotes[item.id]}
-                  </div>
-                ) : null}
-                <div className="mt-2 flex justify-end border-t border-zinc-100 px-4 pb-4 pt-3">
-                  <button
-                    type="button"
-                    onClick={() => void removeFavorite(item)}
-                    disabled={Boolean(favoriteUpdatingIds[item.id])}
-                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 press focus-ring"
-                  >
-                    <Star className="size-3.5 fill-current" aria-hidden="true" />
-                    <span>{favoriteUpdatingIds[item.id] ? t("common.loading") : t("favorites.remove")}</span>
-                  </button>
-                </div>
-              </div>
+              <FavoriteArchiveCard
+                key={item.id}
+                item={item}
+                locale={locale}
+                featured={idx === 0}
+                note={detailNotes[item.id]}
+                readUpdating={Boolean(readUpdatingIds[item.id])}
+                favoriteUpdating={Boolean(favoriteUpdatingIds[item.id])}
+                onOpen={() => setInlineItemId(item.id)}
+                onOpenDetail={() => router.push(`/items/${item.id}?from=${encodeURIComponent("/favorites")}`)}
+                onToggleRead={() => void toggleRead(item)}
+                onRemoveFavorite={() => void removeFavorite(item)}
+                onPrefetch={() => {
+                  void prefetchDetail(item.id);
+                }}
+                t={t}
+              />
             ))}
         </section>
 
         {insights.length > 0 ? (
-          <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <section className="rounded-[26px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.78)] p-5 shadow-[var(--shadow-card)]">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-zinc-950">{t("favorites.insights.title")}</h2>
-                <p className="mt-1 text-sm text-zinc-500">{t("favorites.insights.subtitle")}</p>
+                <h2 className="font-serif text-[24px] leading-[1.2] text-[var(--color-editorial-ink)]">
+                  {t("favorites.insights.title")}
+                </h2>
+                <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{t("favorites.insights.subtitle")}</p>
               </div>
             </div>
-            <div className="mt-4 grid gap-3">
+            <div className="mt-4 grid gap-3 xl:grid-cols-2">
               {insights.map((insight) => (
-                <div key={insight.id} className="rounded-2xl border border-zinc-200 p-4">
+                <div
+                  key={insight.id}
+                  className="rounded-[20px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.64)] p-4"
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-sm font-semibold text-zinc-900">{insight.title}</div>
-                      <p className="mt-2 line-clamp-3 text-sm text-zinc-600">{insight.body}</p>
+                      <div className="text-sm font-semibold leading-7 text-[var(--color-editorial-ink)]">{insight.title}</div>
+                      <p className="mt-2 line-clamp-3 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{insight.body}</p>
                       {insight.tags && insight.tags.length > 0 ? (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {insight.tags.map((tag) => (
-                            <span key={tag} className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-600">
-                              {tag}
-                            </span>
+                            <Tag key={tag}>{tag}</Tag>
                           ))}
                         </div>
                       ) : null}
@@ -317,7 +313,7 @@ export default function FavoritesPage() {
                       type="button"
                       onClick={() => void deleteInsight(insight)}
                       disabled={deletingInsightId === insight.id}
-                      className="rounded-lg border border-zinc-200 px-3 py-2 text-xs text-zinc-700 disabled:opacity-60"
+                      className="rounded-full border border-[var(--color-editorial-line)] px-3 py-2 text-xs text-[var(--color-editorial-ink-soft)] disabled:opacity-60"
                     >
                       {deletingInsightId === insight.id ? t("common.loading") : t("common.delete")}
                     </button>
@@ -346,4 +342,188 @@ export default function FavoritesPage() {
       />
     </PageTransition>
   );
+}
+
+function FavoriteArchiveCard({
+  item,
+  locale,
+  featured,
+  note,
+  readUpdating,
+  favoriteUpdating,
+  onOpen,
+  onOpenDetail,
+  onToggleRead,
+  onRemoveFavorite,
+  onPrefetch,
+  t,
+}: {
+  item: Item;
+  locale: "ja" | "en";
+  featured: boolean;
+  note?: string;
+  readUpdating: boolean;
+  favoriteUpdating: boolean;
+  onOpen: () => void;
+  onOpenDetail: () => void;
+  onToggleRead: () => void;
+  onRemoveFavorite: () => void;
+  onPrefetch: () => void;
+  t: (key: string) => string;
+}) {
+  const displayTitle = item.translated_title?.trim() ? item.translated_title : item.title;
+  const lead =
+    excerptText(item.content_text, 520) ||
+    item.recommendation_reason?.trim() ||
+    note?.trim() ||
+    null;
+  const savedReason = note?.trim() || item.recommendation_reason?.trim() || t("favorites.archive.savedReasonEmpty");
+  const isRead = item.is_read;
+
+  return (
+    <article className="overflow-hidden rounded-[24px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.78)] shadow-[var(--shadow-card)]">
+      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_190px] lg:p-[18px]">
+        <div className="grid min-w-0 gap-4 md:grid-cols-[188px_minmax(0,1fr)]">
+          <button
+            type="button"
+            onClick={onOpen}
+            onMouseEnter={onPrefetch}
+            onFocus={onPrefetch}
+            onTouchStart={onPrefetch}
+            className="block min-w-0 overflow-hidden rounded-[18px] border border-[var(--color-editorial-line)] text-left"
+          >
+            <Thumbnail
+              src={item.thumbnail_url}
+              title={displayTitle ?? item.url}
+              size="lg"
+              tone="editorial"
+              className={`h-full min-h-[138px] w-full ${featured ? "md:min-h-[160px]" : ""}`}
+            />
+          </button>
+
+          <div className="min-w-0">
+            <div className="flex flex-wrap gap-2">
+              <StatusPill tone={isRead ? "neutral" : "default"}>
+                {isRead ? t("items.read.read") : t("items.read.unread")}
+              </StatusPill>
+              {item.source_title ? <Tag tone="subtle">{item.source_title}</Tag> : null}
+              <Tag tone="subtle">{formatFavoriteDate(item.published_at ?? item.created_at, locale)}</Tag>
+            </div>
+
+            <button
+              type="button"
+              onClick={onOpen}
+              onMouseEnter={onPrefetch}
+              onFocus={onPrefetch}
+              onTouchStart={onPrefetch}
+              className="mt-3 block text-left"
+            >
+              <h2 className="font-serif text-[24px] leading-[1.18] tracking-[-0.03em] text-[var(--color-editorial-ink)] md:text-[29px]">
+                {displayTitle ?? item.url}
+              </h2>
+            </button>
+
+            {lead ? (
+              <p className="mt-3 text-[14px] leading-8 text-[var(--color-editorial-ink-soft)]">{lead}</p>
+            ) : null}
+
+            <div className="mt-3">
+              <CheckStatusBadges
+                factsCheckResult={item.facts_check_result}
+                faithfulnessResult={item.faithfulness_result}
+                t={t}
+                compact
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid content-start gap-3">
+          <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,#faf6ef,#fffdfa)] px-4 py-3">
+            <div className="text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+              {t("items.sort.score")}
+            </div>
+            <div className="mt-2 text-center font-serif text-[28px] leading-none text-[var(--color-editorial-ink)]">
+              {item.summary_score != null ? item.summary_score.toFixed(2) : "—"}
+            </div>
+          </div>
+
+          <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,#faf6ef,#fffdfa)] px-4 py-3">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+              {t("favorites.archive.savedReason")}
+            </div>
+            <p className="mt-2 text-[13px] leading-7 text-[var(--color-editorial-ink-soft)]">{savedReason}</p>
+          </div>
+
+          <div className="grid gap-2">
+            <button
+              type="button"
+              onClick={onOpenDetail}
+              className="inline-flex min-h-[42px] items-center justify-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 text-sm font-semibold text-[var(--color-editorial-panel-strong)]"
+            >
+              {t("items.action.openDetail")}
+            </button>
+            <button
+              type="button"
+              onClick={onToggleRead}
+              disabled={readUpdating}
+              className="inline-flex min-h-[42px] items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-semibold text-[var(--color-editorial-ink-soft)] disabled:opacity-60"
+            >
+              {readUpdating ? t("common.loading") : isRead ? t("items.read.markUnread") : t("items.read.markRead")}
+            </button>
+            <button
+              type="button"
+              onClick={onRemoveFavorite}
+              disabled={favoriteUpdating}
+              className="inline-flex min-h-[42px] items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-semibold text-[var(--color-editorial-ink-soft)] disabled:opacity-60"
+            >
+              <Star className="size-3.5 fill-current" aria-hidden="true" />
+              <span>{favoriteUpdating ? t("common.loading") : t("favorites.remove")}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function FavoriteArchiveSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-[24px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.78)] p-4 shadow-[var(--shadow-card)]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_190px]">
+        <div className="grid gap-4 md:grid-cols-[188px_minmax(0,1fr)]">
+          <div className="min-h-[138px] animate-pulse rounded-[18px] bg-[var(--color-editorial-panel)]" />
+          <div className="space-y-3">
+            <div className="h-5 w-40 animate-pulse rounded-full bg-[var(--color-editorial-panel)]" />
+            <div className="h-10 w-5/6 animate-pulse rounded-2xl bg-[var(--color-editorial-panel)]" />
+            <div className="h-20 animate-pulse rounded-2xl bg-[var(--color-editorial-panel)]" />
+          </div>
+        </div>
+        <div className="space-y-3">
+          <div className="h-24 animate-pulse rounded-[18px] bg-[var(--color-editorial-panel)]" />
+          <div className="h-24 animate-pulse rounded-[18px] bg-[var(--color-editorial-panel)]" />
+          <div className="h-11 animate-pulse rounded-full bg-[var(--color-editorial-panel)]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatFavoriteDate(value: string | null | undefined, locale: "ja" | "en") {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString(locale === "ja" ? "ja-JP" : "en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function excerptText(value: string | null | undefined, maxLength: number) {
+  const normalized = value?.trim().replace(/\s+/g, " ");
+  if (!normalized) return null;
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength).trimEnd()}...`;
 }

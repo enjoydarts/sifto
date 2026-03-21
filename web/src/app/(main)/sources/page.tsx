@@ -385,22 +385,22 @@ export default function SourcesPage() {
       [
         {
           key: "overview" as const,
-          title: "Overview",
+          title: t("sources.section.overviewTitle"),
           meta: t("sources.tabs.activityDesc"),
         },
         {
           key: "sources" as const,
-          title: "Sources",
+          title: t("sources.section.sourcesTitle"),
           meta: t("sources.tabs.manageDesc"),
         },
         {
           key: "optimization" as const,
-          title: "Optimization",
+          title: t("sources.optimization.title"),
           meta: t("sources.tabs.improveDesc"),
         },
         {
           key: "add" as const,
-          title: "Add Source",
+          title: t("sources.tabs.addSource"),
           meta: t("sources.tabs.discoverDesc"),
         },
       ] satisfies Array<{ key: "overview" | "sources" | "optimization" | "add"; title: string; meta: string }>,
@@ -423,8 +423,8 @@ export default function SourcesPage() {
 
         <section className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="surface-editorial rounded-[26px] px-4 py-4 xl:sticky xl:top-[6.25rem] xl:self-start">
-            <div className="grid gap-2">
-              {sectionItems.map((section) => (
+            <div className="mt-1">
+              {sectionItems.map((section, index) => (
                 <button
                   key={section.key}
                   type="button"
@@ -437,12 +437,20 @@ export default function SourcesPage() {
                     }
                     setActiveSection(section.key);
                   }}
-                  className={`rounded-[16px] border-l-2 px-3 py-3 text-left transition-colors ${
+                  className={`relative block w-full border-t border-[var(--color-editorial-line)] px-3 py-3 text-left transition-colors first:border-t-0 ${
                     activeSection === section.key
-                      ? "border-[var(--color-editorial-ink)] bg-[rgba(255,253,249,0.94)]"
-                      : "border-transparent hover:bg-[rgba(255,255,255,0.58)]"
+                      ? "bg-[linear-gradient(90deg,rgba(243,236,227,0.92),rgba(243,236,227,0.28)_78%,transparent)]"
+                      : "hover:bg-[var(--color-editorial-panel-strong)]"
                   }`}
                 >
+                  {activeSection === section.key ? (
+                    <span
+                      aria-hidden="true"
+                      className={`absolute left-0 w-[3px] rounded-full bg-[var(--color-editorial-ink)] ${
+                        index === 0 ? "top-0 bottom-3" : "top-3 bottom-3"
+                      }`}
+                    />
+                  ) : null}
                   <div className="text-[13px] font-semibold text-[var(--color-editorial-ink)]">{section.title}</div>
                   <div className="mt-1 text-xs leading-6 text-[var(--color-editorial-ink-soft)]">{section.meta}</div>
                 </button>

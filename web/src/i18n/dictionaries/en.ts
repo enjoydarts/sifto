@@ -405,6 +405,7 @@ export const enDict: Dict = {
   "sources.tabs.activityDesc": "Inspect daily ingestion volume per source to spot initial import spikes and recent changes.",
   "sources.tabs.improve": "Improve",
   "sources.tabs.improveDesc": "Review optimization suggestions based on recent consumption.",
+  "sources.tabs.addSource": "Add Source",
   "sources.tabs.discover": "Discover",
   "sources.tabs.discoverDesc": "Explore AI-picked source candidates and add new subscriptions.",
   "sources.activity.note": "Bars on the right show daily ingestion counts for the last 14 days. Averages only use days with actual ingestion in the last 30 days.",

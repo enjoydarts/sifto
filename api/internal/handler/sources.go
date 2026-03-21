@@ -599,6 +599,12 @@ type sourceSuggestionAgg struct {
 	Score         int
 }
 
+type probeSeed struct {
+	SourceID string
+	ProbeURL string
+	Reason   string
+}
+
 func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	q := r.URL.Query()
@@ -667,11 +673,6 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 		}
 		return 0
 	}
-	type probeSeed struct {
-		SourceID string
-		ProbeURL string
-		Reason   string
-	}
 	var probes []probeSeed
 	seenProbe := map[string]bool{}
 	for _, s := range sources {
@@ -719,64 +720,8 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 			remainingSuggestionBudget,
 		)
 	}
-	if !aiReady {
-		for _, p := range probes {
-			if isOverBudget() {
-				break
-			}
-			probeTimeout := capDuration(1200*time.Millisecond, remainingSuggestionBudget())
-			if probeTimeout <= 0 {
-				break
-			}
-			probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
-			feeds, err := discoverRSSFeeds(probeCtx, p.ProbeURL)
-			cancel()
-			if err != nil {
-				continue
-			}
-			for _, f := range feeds {
-				if isOverBudget() {
-					break
-				}
-				key := normalizeFeedURL(f.URL)
-				if key == "" || registered[key] {
-					continue
-				}
-				a := cands[key]
-				if a == nil {
-					a = &sourceSuggestionAgg{
-						URL:           f.URL,
-						Title:         f.Title,
-						Reasons:       map[string]bool{},
-						MatchedTopics: map[string]bool{},
-						SeedSourceIDs: map[string]bool{},
-					}
-					cands[key] = a
-				}
-				if a.Title == nil && f.Title != nil {
-					a.Title = f.Title
-				}
-				if !a.Reasons[p.Reason] {
-					a.Reasons[p.Reason] = true
-					a.Score++
-				}
-				if !a.SeedSourceIDs[p.SourceID] {
-					a.SeedSourceIDs[p.SourceID] = true
-					a.Score += 2
-				}
-				for _, topic := range preferredTopics {
-					if topic == "" {
-						continue
-					}
-					if sourceSuggestionTopicMatch(f, topic) {
-						if !a.MatchedTopics[topic] {
-							a.MatchedTopics[topic] = true
-							a.Score += 3
-						}
-					}
-				}
-			}
-		}
+	if !aiReady || len(cands) == 0 {
+		populateSourceSuggestionsFromProbes(ctx, probes, preferredTopics, registered, cands, remainingSuggestionBudget, discoverRSSFeeds)
 	}
 
 	out := make([]sourceSuggestionResponse, 0, len(cands))
@@ -889,6 +834,72 @@ func suggestionProbeURLs(raw string) []suggestionProbe {
 		}
 	}
 	return out
+}
+
+func populateSourceSuggestionsFromProbes(
+	ctx context.Context,
+	probes []probeSeed,
+	preferredTopics []string,
+	registered map[string]bool,
+	cands map[string]*sourceSuggestionAgg,
+	remainingSuggestionBudget func() time.Duration,
+	discover func(context.Context, string) ([]FeedCandidate, error),
+) {
+	if remainingSuggestionBudget == nil {
+		remainingSuggestionBudget = func() time.Duration { return 0 }
+	}
+	if discover == nil {
+		return
+	}
+	for _, p := range probes {
+		probeTimeout := capDuration(1200*time.Millisecond, remainingSuggestionBudget())
+		if probeTimeout <= 0 {
+			break
+		}
+		probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
+		feeds, err := discover(probeCtx, p.ProbeURL)
+		cancel()
+		if err != nil {
+			continue
+		}
+		for _, f := range feeds {
+			key := normalizeFeedURL(f.URL)
+			if key == "" || registered[key] {
+				continue
+			}
+			a := cands[key]
+			if a == nil {
+				a = &sourceSuggestionAgg{
+					URL:           f.URL,
+					Title:         f.Title,
+					Reasons:       map[string]bool{},
+					MatchedTopics: map[string]bool{},
+					SeedSourceIDs: map[string]bool{},
+				}
+				cands[key] = a
+			}
+			if a.Title == nil && f.Title != nil {
+				a.Title = f.Title
+			}
+			if !a.Reasons[p.Reason] {
+				a.Reasons[p.Reason] = true
+				a.Score++
+			}
+			if !a.SeedSourceIDs[p.SourceID] {
+				a.SeedSourceIDs[p.SourceID] = true
+				a.Score += 2
+			}
+			for _, topic := range preferredTopics {
+				if topic == "" {
+					continue
+				}
+				if sourceSuggestionTopicMatch(f, topic) && !a.MatchedTopics[topic] {
+					a.MatchedTopics[topic] = true
+					a.Score += 3
+				}
+			}
+		}
+	}
 }
 
 func normalizeFeedURL(raw string) string {

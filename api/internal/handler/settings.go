@@ -665,6 +665,20 @@ func (h *SettingsHandler) DeleteFireworksAPIKey(w http.ResponseWriter, r *http.R
 	})
 }
 
+func (h *SettingsHandler) SetPoeAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "poe", map[string]func(*model.UserSettings) any{
+		"has_poe_api_key":   func(s *model.UserSettings) any { return s.HasPoeAPIKey },
+		"poe_api_key_last4": func(s *model.UserSettings) any { return s.PoeAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeletePoeAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "poe", map[string]func(*model.UserSettings) any{
+		"has_poe_api_key":   func(s *model.UserSettings) any { return s.HasPoeAPIKey },
+		"poe_api_key_last4": func(s *model.UserSettings) any { return s.PoeAPIKeyLast4 },
+	})
+}
+
 func (h *SettingsHandler) SetOpenRouterAPIKey(w http.ResponseWriter, r *http.Request) {
 	h.setAPIKey(w, r, "openrouter", map[string]func(*model.UserSettings) any{
 		"has_openrouter_api_key":   func(s *model.UserSettings) any { return s.HasOpenRouterAPIKey },

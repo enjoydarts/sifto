@@ -10,6 +10,7 @@ from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import extract_facts as extract_facts_mistral
 from app.services.openai_service import extract_facts as extract_facts_openai
 from app.services.openrouter_service import extract_facts as extract_facts_openrouter
+from app.services.poe_service import extract_facts as extract_facts_poe
 from app.services.xai_service import extract_facts as extract_facts_xai
 from app.services.zai_service import extract_facts as extract_facts_zai
 from app.services.router_observe import llm_usage_summary, run_observed_request
@@ -50,6 +51,7 @@ def extract_facts_endpoint(req: FactsRequest, request: Request):
                     "xai": lambda api_key: extract_facts_xai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "zai": lambda api_key: extract_facts_zai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "openrouter": lambda api_key: extract_facts_openrouter(req.title, req.content, model=str(req.model), api_key=api_key or ""),
+                    "poe": lambda api_key: extract_facts_poe(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: extract_facts_openai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                 },
             ),

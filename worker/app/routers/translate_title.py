@@ -11,6 +11,7 @@ from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import translate_title as translate_title_mistral
 from app.services.openai_service import translate_title as translate_title_openai
 from app.services.openrouter_service import translate_title as translate_title_openrouter
+from app.services.poe_service import translate_title as translate_title_poe
 from app.services.xai_service import translate_title as translate_title_xai
 from app.services.zai_service import translate_title as translate_title_zai
 from app.services.router_observe import llm_usage_summary, run_observed_request
@@ -48,6 +49,7 @@ def translate_title_endpoint(req: TranslateTitleRequest, request: Request):
                 "xai": lambda api_key: translate_title_xai(req.title, model=str(req.model), api_key=api_key or ""),
                 "zai": lambda api_key: translate_title_zai(req.title, model=str(req.model), api_key=api_key or ""),
                 "openrouter": lambda api_key: translate_title_openrouter(req.title, model=str(req.model), api_key=api_key or ""),
+                "poe": lambda api_key: translate_title_poe(req.title, model=str(req.model), api_key=api_key or ""),
                 "openai": lambda api_key: translate_title_openai(req.title, model=str(req.model), api_key=api_key or ""),
             },
         ),

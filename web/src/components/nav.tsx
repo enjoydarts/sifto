@@ -45,6 +45,7 @@ const secondaryLinks = [
   { href: "/digests", labelKey: "nav.digests", icon: Mail },
   { href: "/llm-usage", labelKey: "nav.llmUsage", icon: Brain },
   { href: "/llm-analysis", labelKey: "nav.llmAnalysis", icon: TableProperties },
+  { href: "/poe-models", labelKey: "nav.poeModels", icon: Link2 },
   { href: "/openrouter-models", labelKey: "nav.openrouterModels", icon: Link2 },
   { href: "/settings", labelKey: "nav.settings", icon: SettingsIcon },
   { href: "/debug/digests", labelKey: "nav.debug", icon: Bug },
@@ -61,11 +62,11 @@ const secondaryLinkGroups = [
   },
   {
     labelKey: "nav.group.llm",
-    items: secondaryLinks.slice(6, 9),
+    items: secondaryLinks.slice(6, 10),
   },
   {
     labelKey: "nav.group.system",
-    items: secondaryLinks.slice(9),
+    items: secondaryLinks.slice(10),
   },
 ];
 

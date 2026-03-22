@@ -213,6 +213,8 @@ export default function SettingsPage() {
   const [deletingZAIKey, setDeletingZAIKey] = useState(false);
   const [savingFireworksKey, setSavingFireworksKey] = useState(false);
   const [deletingFireworksKey, setDeletingFireworksKey] = useState(false);
+  const [savingPoeKey, setSavingPoeKey] = useState(false);
+  const [deletingPoeKey, setDeletingPoeKey] = useState(false);
   const [savingOpenRouterKey, setSavingOpenRouterKey] = useState(false);
   const [deletingOpenRouterKey, setDeletingOpenRouterKey] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
@@ -241,6 +243,7 @@ export default function SettingsPage() {
   const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
   const [zaiApiKeyInput, setZaiApiKeyInput] = useState("");
   const [fireworksApiKeyInput, setFireworksApiKeyInput] = useState("");
+  const [poeApiKeyInput, setPoeApiKeyInput] = useState("");
   const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
   const [activeSection, setActiveSection] = useState<SettingsSectionID>("models");
@@ -652,6 +655,21 @@ export default function SettingsPage() {
           saving: savingFireworksKey,
           deleting: deletingFireworksKey,
           notSet: t("settings.fireworksNotSet"),
+        },
+        {
+          id: "poe",
+          title: t("settings.poeTitle"),
+          description: t("settings.poeDescription"),
+          configured: settings.has_poe_api_key,
+          last4: settings.poe_api_key_last4,
+          value: poeApiKeyInput,
+          onChange: setPoeApiKeyInput,
+          onSubmit: submitPoeApiKey,
+          onDelete: handleDeletePoeApiKey,
+          placeholder: "sk-...",
+          saving: savingPoeKey,
+          deleting: deletingPoeKey,
+          notSet: t("settings.poeNotSet"),
         },
         {
           id: "openrouter",
@@ -1254,6 +1272,45 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setSavingOpenRouterKey(false);
+    }
+  }
+
+  async function submitPoeApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingPoeKey(true);
+    try {
+      if (!poeApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setPoeApiKey(poeApiKeyInput.trim());
+      setPoeApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.poeSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingPoeKey(false);
+    }
+  }
+
+  async function handleDeletePoeApiKey() {
+    if (!(await confirm({
+      title: t("settings.poeDeleteTitle"),
+      message: t("settings.poeDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingPoeKey(true);
+    try {
+      await api.deletePoeApiKey();
+      await load();
+      showToast(t("settings.toast.poeDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingPoeKey(false);
     }
   }
 

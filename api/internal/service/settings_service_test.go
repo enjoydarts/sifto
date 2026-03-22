@@ -34,6 +34,8 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 		FactsFallbackModel:   strptr("google/gemini-2.5-flash"),
 		SummaryModel:         strptr("gpt-5.4"),
 		SummaryFallbackModel: strptr("openrouter::openai/gpt-oss-120b"),
+		HasPoeAPIKey:         true,
+		PoeAPIKeyLast4:       strptr("abcd"),
 	}
 
 	got := LLMModelSettingsPayload(settings)
@@ -43,5 +45,19 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 	}
 	if gotSummaryFallback, _ := got["summary_fallback"].(*string); gotSummaryFallback == nil || *gotSummaryFallback != "openrouter::openai/gpt-oss-120b" {
 		t.Fatalf("summary_fallback = %v, want %q", got["summary_fallback"], "openrouter::openai/gpt-oss-120b")
+	}
+}
+
+func TestSettingsGetPayloadSupportsPoeFields(t *testing.T) {
+	payload := &SettingsGetPayload{
+		HasPoeAPIKey:   true,
+		PoeAPIKeyLast4: strptr("abcd"),
+	}
+
+	if !payload.HasPoeAPIKey {
+		t.Fatal("HasPoeAPIKey should be true")
+	}
+	if payload.PoeAPIKeyLast4 == nil || *payload.PoeAPIKeyLast4 != "abcd" {
+		t.Fatalf("PoeAPIKeyLast4 = %v, want %q", payload.PoeAPIKeyLast4, "abcd")
 	}
 }

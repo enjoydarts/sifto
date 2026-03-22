@@ -668,6 +668,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 	xaiAPIKey := h.getUserXAIAPIKey(ctx, userID)
 	zaiAPIKey := h.getUserZAIAPIKey(ctx, userID)
 	openRouterAPIKey := h.getUserOpenRouterAPIKey(ctx, userID)
+	poeAPIKey := h.getUserPoeAPIKey(ctx, userID)
 	openAIAPIKey := h.getUserOpenAIAPIKey(ctx, userID)
 	anthropicSourceSuggestionModel := h.getUserSourceSuggestionModel(ctx, userID)
 	anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, openAIAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
@@ -681,6 +682,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 		xaiAPIKey,
 		zaiAPIKey,
 		openRouterAPIKey,
+		poeAPIKey,
 		openAIAPIKey,
 		anthropicSourceSuggestionModel,
 	)
@@ -1386,6 +1388,25 @@ func (h *SourceHandler) getUserOpenRouterAPIKey(ctx context.Context, userID stri
 	return &plain
 }
 
+func (h *SourceHandler) getUserPoeAPIKey(ctx context.Context, userID string) *string {
+	if h.settingsRepo == nil || h.cipher == nil {
+		return nil
+	}
+	enc, err := h.settingsRepo.GetPoeAPIKeyEncrypted(ctx, userID)
+	if err != nil || enc == nil || *enc == "" {
+		return nil
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil
+	}
+	plain = strings.TrimSpace(plain)
+	if plain == "" {
+		return nil
+	}
+	return &plain
+}
+
 func (h *SourceHandler) getUserOpenAIAPIKey(ctx context.Context, userID string) *string {
 	if h.settingsRepo == nil || h.cipher == nil {
 		return nil
@@ -1405,7 +1426,7 @@ func (h *SourceHandler) getUserOpenAIAPIKey(ctx context.Context, userID string) 
 	return &plain
 }
 
-func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, openAIAPIKey, model *string) (*string, *string, *string, *string, *string, *string, *string, *string, *string, *string, *string) {
+func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, poeAPIKey, openAIAPIKey, model *string) (*string, *string, *string, *string, *string, *string, *string, *string, *string, *string, *string) {
 	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
 	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
 	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
@@ -1416,6 +1437,7 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 	hasXAI := xaiAPIKey != nil && strings.TrimSpace(*xaiAPIKey) != ""
 	hasZAI := zaiAPIKey != nil && strings.TrimSpace(*zaiAPIKey) != ""
 	hasOpenRouter := openRouterAPIKey != nil && strings.TrimSpace(*openRouterAPIKey) != ""
+	hasPoe := poeAPIKey != nil && strings.TrimSpace(*poeAPIKey) != ""
 	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
 	purpose := "source_suggestion"
 
@@ -1461,6 +1483,10 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 		case "openrouter":
 			if hasOpenRouter {
 				return nil, nil, nil, nil, nil, nil, nil, nil, nil, openRouterAPIKey, resolved
+			}
+		case "poe":
+			if hasPoe {
+				return nil, nil, nil, nil, nil, nil, nil, nil, nil, poeAPIKey, resolved
 			}
 		case "openai":
 			if hasOpenAI {

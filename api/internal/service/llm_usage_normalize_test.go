@@ -5,7 +5,7 @@ import "testing"
 func float64Ptr(v float64) *float64 { return &v }
 
 func TestNormalizeCatalogPricedUsagePrefersOpenRouterAliasedPricing(t *testing.T) {
-	original := dynamicChatModels
+	original := cloneDynamicChatModelsForTest()
 	SetDynamicChatModels([]LLMModelCatalog{
 		{
 			ID:       OpenRouterAliasModelID("openai/gpt-oss-120b"),
@@ -18,7 +18,7 @@ func TestNormalizeCatalogPricedUsagePrefersOpenRouterAliasedPricing(t *testing.T
 			},
 		},
 	})
-	defer SetDynamicChatModels(original)
+	defer restoreDynamicChatModelsForTest(original)
 
 	usage := &LLMUsage{
 		Provider:             "openrouter",
@@ -53,7 +53,7 @@ func TestNormalizeCatalogPricedUsagePrefersOpenRouterAliasedPricing(t *testing.T
 }
 
 func TestNormalizeCatalogPricedUsagePrefersResolvedModelForOpenRouterAuto(t *testing.T) {
-	original := dynamicChatModels
+	original := cloneDynamicChatModelsForTest()
 	SetDynamicChatModels([]LLMModelCatalog{
 		{
 			ID:       OpenRouterAliasModelID("openai/gpt-oss-120b"),
@@ -66,7 +66,7 @@ func TestNormalizeCatalogPricedUsagePrefersResolvedModelForOpenRouterAuto(t *tes
 			},
 		},
 	})
-	defer SetDynamicChatModels(original)
+	defer restoreDynamicChatModelsForTest(original)
 
 	usage := &LLMUsage{
 		Provider:             "openrouter",
@@ -100,7 +100,7 @@ func TestNormalizeCatalogPricedUsagePrefersResolvedModelForOpenRouterAuto(t *tes
 }
 
 func TestNormalizeCatalogPricedUsageFallsBackToRequestedModelWhenResolvedModelMissing(t *testing.T) {
-	original := dynamicChatModels
+	original := cloneDynamicChatModelsForTest()
 	SetDynamicChatModels([]LLMModelCatalog{
 		{
 			ID:       OpenRouterAliasModelID("qwen/qwen3.5-flash-02-23"),
@@ -112,7 +112,7 @@ func TestNormalizeCatalogPricedUsageFallsBackToRequestedModelWhenResolvedModelMi
 			},
 		},
 	})
-	defer SetDynamicChatModels(original)
+	defer restoreDynamicChatModelsForTest(original)
 
 	usage := &LLMUsage{
 		Provider:       "openrouter",
@@ -167,7 +167,7 @@ func TestNormalizeCatalogPricedUsageKeepsOpenRouterBilledCostWhenPresent(t *test
 }
 
 func TestNormalizeCatalogPricedUsageNormalizesDatedAnthropicResolvedModel(t *testing.T) {
-	original := dynamicChatModels
+	original := cloneDynamicChatModelsForTest()
 	SetDynamicChatModels([]LLMModelCatalog{
 		{
 			ID:       OpenRouterAliasModelID("anthropic/claude-opus-4.6"),
@@ -179,7 +179,7 @@ func TestNormalizeCatalogPricedUsageNormalizesDatedAnthropicResolvedModel(t *tes
 			},
 		},
 	})
-	defer SetDynamicChatModels(original)
+	defer restoreDynamicChatModelsForTest(original)
 
 	usage := &LLMUsage{
 		Provider:       "openrouter",
@@ -200,5 +200,22 @@ func TestNormalizeCatalogPricedUsageNormalizesDatedAnthropicResolvedModel(t *tes
 	}
 	if got.EstimatedCostUSD != 17.5 {
 		t.Fatalf("estimated_cost_usd = %.4f, want 17.5", got.EstimatedCostUSD)
+	}
+}
+
+func cloneDynamicChatModelsForTest() map[string][]LLMModelCatalog {
+	out := make(map[string][]LLMModelCatalog, len(dynamicChatModels))
+	for provider, models := range dynamicChatModels {
+		out[provider] = append([]LLMModelCatalog{}, models...)
+	}
+	return out
+}
+
+func restoreDynamicChatModelsForTest(snapshot map[string][]LLMModelCatalog) {
+	dynamicCatalogMu.Lock()
+	defer dynamicCatalogMu.Unlock()
+	dynamicChatModels = make(map[string][]LLMModelCatalog, len(snapshot))
+	for provider, models := range snapshot {
+		dynamicChatModels[provider] = append([]LLMModelCatalog{}, models...)
 	}
 }

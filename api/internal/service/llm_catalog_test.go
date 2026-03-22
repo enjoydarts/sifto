@@ -40,6 +40,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "fireworks/gpt-oss-20b", provider: "fireworks"},
 		{model: "gpt-5.4-mini", provider: "openai"},
 		{model: "openrouter::openai/gpt-oss-120b", provider: "openrouter"},
+		{model: "poe::Claude-Sonnet-4.5", provider: "poe"},
 	}
 	for _, tt := range tests {
 		if got := CatalogProviderForModel(tt.model); got != tt.provider {
@@ -149,5 +150,27 @@ func TestCatalogModelSupportsCapability(t *testing.T) {
 	}
 	if CatalogModelSupportsCapability("does-not-exist", "structured_output") {
 		t.Fatal("unknown model should not support structured_output")
+	}
+}
+
+func TestDynamicChatModelsMergeAcrossProviders(t *testing.T) {
+	t.Cleanup(func() {
+		SetDynamicChatModelsForProvider("openrouter", nil)
+		SetDynamicChatModelsForProvider("poe", nil)
+	})
+
+	SetDynamicChatModelsForProvider("openrouter", []LLMModelCatalog{
+		{ID: OpenRouterAliasModelID("openai/gpt-oss-120b"), Provider: "openrouter"},
+	})
+	SetDynamicChatModelsForProvider("poe", []LLMModelCatalog{
+		{ID: PoeAliasModelID("Claude-Sonnet-4.5"), Provider: "poe"},
+	})
+
+	catalog := LLMCatalogData()
+	if CatalogModelByIDInCatalog(catalog, OpenRouterAliasModelID("openai/gpt-oss-120b")) == nil {
+		t.Fatal("openrouter dynamic model should remain in merged catalog")
+	}
+	if CatalogModelByIDInCatalog(catalog, PoeAliasModelID("Claude-Sonnet-4.5")) == nil {
+		t.Fatal("poe dynamic model should be present in merged catalog")
 	}
 }

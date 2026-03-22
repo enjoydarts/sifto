@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
@@ -33,6 +34,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var xaiAPIKeyEnc *string
 	var zaiAPIKeyEnc *string
 	var fireworksAPIKeyEnc *string
+	var poeAPIKeyEnc *string
 	var openrouterAPIKeyEnc *string
 	var inoreaderAccessTokenEnc *string
 	err := r.db.QueryRow(ctx, `
@@ -57,6 +59,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       zai_api_key_last4,
 		       fireworks_api_key_enc,
 		       fireworks_api_key_last4,
+		       poe_api_key_enc,
+		       poe_api_key_last4,
 		       openrouter_api_key_enc,
 		       openrouter_api_key_last4,
 		       monthly_budget_usd,
@@ -107,6 +111,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.ZAIAPIKeyLast4,
 		&fireworksAPIKeyEnc,
 		&v.FireworksAPIKeyLast4,
+		&poeAPIKeyEnc,
+		&v.PoeAPIKeyLast4,
 		&openrouterAPIKeyEnc,
 		&v.OpenRouterAPIKeyLast4,
 		&v.MonthlyBudgetUSD,
@@ -146,6 +152,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasXAIAPIKey = xaiAPIKeyEnc != nil && *xaiAPIKeyEnc != ""
 	v.HasZAIAPIKey = zaiAPIKeyEnc != nil && *zaiAPIKeyEnc != ""
 	v.HasFireworksAPIKey = fireworksAPIKeyEnc != nil && *fireworksAPIKeyEnc != ""
+	v.HasPoeAPIKey = poeAPIKeyEnc != nil && *poeAPIKeyEnc != ""
 	v.HasOpenRouterAPIKey = openrouterAPIKeyEnc != nil && *openrouterAPIKeyEnc != ""
 	v.HasInoreaderOAuth = inoreaderAccessTokenEnc != nil && *inoreaderAccessTokenEnc != ""
 	return &v, nil
@@ -497,6 +504,22 @@ func (r *UserSettingsRepo) GetOpenRouterAPIKeyEncrypted(ctx context.Context, use
 	return v, nil
 }
 
+func (r *UserSettingsRepo) GetPoeAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT poe_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1
+	`, userID).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
 func (r *UserSettingsRepo) GetInoreaderTokensEncrypted(ctx context.Context, userID string) (accessTokenEnc, refreshTokenEnc *string, expiresAt *time.Time, err error) {
 	err = r.db.QueryRow(ctx, `
 		SELECT inoreader_access_token_enc, inoreader_refresh_token_enc, inoreader_token_expires_at
@@ -707,6 +730,22 @@ func (r *UserSettingsRepo) SetFireworksAPIKey(ctx context.Context, userID, encry
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetPoeAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, poe_api_key_enc, poe_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET poe_api_key_enc = EXCLUDED.poe_api_key_enc,
+		    poe_api_key_last4 = EXCLUDED.poe_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) SetOpenRouterAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, openrouter_api_key_enc, openrouter_api_key_last4)
@@ -874,6 +913,22 @@ func (r *UserSettingsRepo) ClearFireworksAPIKey(ctx context.Context, userID stri
 		ON CONFLICT (user_id) DO UPDATE
 		SET fireworks_api_key_enc = NULL,
 		    fireworks_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearPoeAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, poe_api_key_enc, poe_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET poe_api_key_enc = NULL,
+		    poe_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

@@ -767,6 +767,8 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				fireworksKey, err = h.loadFireworksAPIKey(r.Context(), t.UserID)
 			case "openai":
 				openAIKey, err = h.loadOpenAIAPIKey(r.Context(), t.UserID)
+			case "poe":
+				openAIKey, err = h.loadPoeAPIKey(r.Context(), t.UserID)
 			default:
 				anthropicKey, err = h.loadAnthropicAPIKey(r.Context(), t.UserID)
 			}
@@ -1007,6 +1009,24 @@ func (h *InternalHandler) loadOpenAIAPIKey(ctx context.Context, userID string) (
 	}
 	if enc == nil || *enc == "" {
 		return nil, fmt.Errorf("openai api key is not set")
+	}
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+func (h *InternalHandler) loadPoeAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetPoeAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("poe api key is not set")
 	}
 	if !h.cipher.Enabled() {
 		return nil, fmt.Errorf("secret cipher is not configured")

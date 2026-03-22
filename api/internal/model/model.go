@@ -43,6 +43,8 @@ type UserSettings struct {
 	HasZAIAPIKey               bool       `json:"has_zai_api_key"`
 	FireworksAPIKeyLast4       *string    `json:"fireworks_api_key_last4,omitempty"`
 	HasFireworksAPIKey         bool       `json:"has_fireworks_api_key"`
+	PoeAPIKeyLast4             *string    `json:"poe_api_key_last4,omitempty"`
+	HasPoeAPIKey               bool       `json:"has_poe_api_key"`
 	OpenRouterAPIKeyLast4      *string    `json:"openrouter_api_key_last4,omitempty"`
 	HasOpenRouterAPIKey        bool       `json:"has_openrouter_api_key"`
 	MonthlyBudgetUSD           *float64   `json:"monthly_budget_usd,omitempty"`

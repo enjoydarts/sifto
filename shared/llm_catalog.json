@@ -153,6 +153,11 @@
       "default_models": {}
     },
     {
+      "id": "poe",
+      "api_key_header": "x-openai-api-key",
+      "default_models": {}
+    },
+    {
       "id": "openai",
       "api_key_header": "x-openai-api-key",
       "match_prefixes": ["gpt-5"],

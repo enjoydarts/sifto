@@ -4,12 +4,15 @@ from functools import lru_cache
 from pathlib import Path
 
 OPENROUTER_ALIAS_PREFIX = "openrouter::"
+POE_ALIAS_PREFIX = "poe::"
 
 
 def resolve_model_id(model: str | None) -> str:
     m = str(model or "").strip()
     if m.startswith(OPENROUTER_ALIAS_PREFIX):
         return m[len(OPENROUTER_ALIAS_PREFIX) :]
+    if m.startswith(POE_ALIAS_PREFIX):
+        return m[len(POE_ALIAS_PREFIX) :]
     return m
 
 
@@ -44,6 +47,8 @@ def provider_for_model(model: str | None) -> str:
         return ""
     if m.startswith(OPENROUTER_ALIAS_PREFIX):
         return "openrouter"
+    if m.startswith(POE_ALIAS_PREFIX):
+        return "poe"
     catalog = load_llm_catalog()
     for group in ("chat_models", "embedding_models"):
         for item in catalog.get(group, []):

@@ -82,6 +82,7 @@ func main() {
 	llmExecutionRepo := repository.NewLLMExecutionEventRepo(db)
 	providerModelUpdateRepo := repository.NewProviderModelUpdateRepo(db)
 	openRouterModelRepo := repository.NewOpenRouterModelRepo(db)
+	poeModelRepo := repository.NewPoeModelRepo(db)
 	openRouterModelOverrideRepo := repository.NewOpenRouterModelOverrideRepo(db)
 	briefingSnapshotRepo := repository.NewBriefingSnapshotRepo(db)
 	streakRepo := repository.NewReadingStreakRepo(db)
@@ -95,6 +96,8 @@ func main() {
 	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo)
 	openRouterCatalogSvc := service.NewOpenRouterCatalogService()
 	openRouterModelsH := handler.NewOpenRouterModelsHandler(openRouterModelRepo, openRouterModelOverrideRepo, providerModelUpdateRepo, openRouterCatalogSvc, cache)
+	poeCatalogSvc := service.NewPoeCatalogService()
+	poeModelsH := handler.NewPoeModelsHandler(poeModelRepo, providerModelUpdateRepo, poeCatalogSvc)
 
 	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp, search)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, sourceOptimizationRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher, cache)
@@ -109,7 +112,12 @@ func main() {
 	if latestModels, _, err := openRouterModelRepo.ListLatestSnapshots(ctx); err != nil {
 		log.Printf("openrouter snapshot preload failed: %v", err)
 	} else {
-		service.SetDynamicChatModels(service.OpenRouterSnapshotsToCatalogModels(latestModels))
+		service.SetDynamicChatModelsForProvider("openrouter", service.OpenRouterSnapshotsToCatalogModels(latestModels))
+	}
+	if latestModels, _, err := poeModelRepo.ListLatestSnapshots(ctx); err != nil {
+		log.Printf("poe snapshot preload failed: %v", err)
+	} else {
+		service.SetDynamicChatModelsForProvider("poe", service.PoeSnapshotsToCatalogModels(latestModels))
 	}
 
 	inngestHandler := inngestfn.NewHandler(db, worker, resend, oneSignal, obsidianExportSvc, cache, search)
@@ -246,6 +254,11 @@ func main() {
 			r.Post("/sync", openRouterModelsH.Sync)
 			r.Put("/overrides/structured-output", openRouterModelsH.UpdateStructuredOutputOverride)
 		})
+		r.Route("/poe-models", func(r chi.Router) {
+			r.Get("/", poeModelsH.List)
+			r.Get("/status", poeModelsH.Status)
+			r.Post("/sync", poeModelsH.Sync)
+		})
 
 		r.Get("/briefing/today", briefingH.Today)
 		r.Get("/dashboard", dashboardH.Get)
@@ -301,6 +314,8 @@ func main() {
 			r.Delete("/zai-key", settingsH.DeleteZAIAPIKey)
 			r.Post("/fireworks-key", settingsH.SetFireworksAPIKey)
 			r.Delete("/fireworks-key", settingsH.DeleteFireworksAPIKey)
+			r.Post("/poe-key", settingsH.SetPoeAPIKey)
+			r.Delete("/poe-key", settingsH.DeletePoeAPIKey)
 			r.Post("/openrouter-key", settingsH.SetOpenRouterAPIKey)
 			r.Delete("/openrouter-key", settingsH.DeleteOpenRouterAPIKey)
 		})

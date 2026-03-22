@@ -96,6 +96,49 @@ export interface OpenRouterSyncStatusResponse {
   run: OpenRouterSyncRun | null;
 }
 
+export interface PoeSyncRun {
+  id: string;
+  started_at: string;
+  finished_at?: string | null;
+  last_progress_at?: string | null;
+  status: string;
+  trigger_type: string;
+  fetched_count: number;
+  accepted_count: number;
+  translation_target_count: number;
+  translation_completed_count: number;
+  translation_failed_count: number;
+  error_message?: string | null;
+}
+
+export interface PoeSyncStatusResponse {
+  run: PoeSyncRun | null;
+}
+
+export interface PoeModelSnapshot {
+  model_id: string;
+  canonical_slug?: string | null;
+  display_name: string;
+  owned_by: string;
+  description_en?: string | null;
+  description_ja?: string | null;
+  context_length?: number | null;
+  pricing_json: Record<string, unknown> | string;
+  architecture_json: Record<string, unknown> | string;
+  modality_flags_json: Record<string, unknown> | string;
+  is_active: boolean;
+  transport_supports_openai_compat: boolean;
+  transport_supports_anthropic_compat: boolean;
+  preferred_transport: "openai" | "anthropic" | string;
+  fetched_at: string;
+}
+
+export interface PoeModelsResponse {
+  latest_run: PoeSyncRun | null;
+  latest_change_summary?: ProviderModelChangeSummary | null;
+  models: PoeModelSnapshot[];
+}
+
 export interface OpenRouterModelSnapshot {
   model_id: string;
   canonical_slug?: string | null;
@@ -901,6 +944,8 @@ export interface UserSettings {
   zai_api_key_last4: string | null;
   has_fireworks_api_key: boolean;
   fireworks_api_key_last4: string | null;
+  has_poe_api_key: boolean;
+  poe_api_key_last4: string | null;
   has_openrouter_api_key: boolean;
   openrouter_api_key_last4: string | null;
   has_inoreader_oauth?: boolean;
@@ -1677,6 +1722,16 @@ export const api = {
       "/settings/fireworks-key",
       { method: "DELETE" }
     ),
+  setPoeApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_poe_api_key: boolean; poe_api_key_last4: string | null }>(
+      "/settings/poe-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deletePoeApiKey: () =>
+    apiFetch<{ user_id: string; has_poe_api_key: boolean; poe_api_key_last4: string | null }>(
+      "/settings/poe-key",
+      { method: "DELETE" }
+    ),
   setOpenRouterApiKey: (apiKey: string) =>
     apiFetch<{ user_id: string; has_openrouter_api_key: boolean; openrouter_api_key_last4: string | null }>(
       "/settings/openrouter-key",
@@ -1698,6 +1753,12 @@ export const api = {
       "/openrouter-models/overrides/structured-output",
       { method: "PUT", body: JSON.stringify({ model_id: modelId, allow_structured_output: allowStructuredOutput }) }
     ),
+  getPoeModels: () =>
+    apiFetch<PoeModelsResponse>("/poe-models"),
+  getPoeSyncStatus: () =>
+    apiFetch<PoeSyncStatusResponse>("/poe-models/status"),
+  syncPoeModels: () =>
+    apiFetch<PoeModelsResponse>("/poe-models/sync", { method: "POST" }),
   deleteInoreaderOAuth: () =>
     apiFetch<{ user_id: string; has_inoreader_oauth: boolean; inoreader_token_expires: string | null }>(
       "/settings/inoreader-oauth",

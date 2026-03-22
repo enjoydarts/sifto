@@ -61,10 +61,11 @@ var (
 	llmCatalogLoadedAt time.Time
 	llmCatalogPath     string
 	dynamicCatalogMu   sync.RWMutex
-	dynamicChatModels  []LLMModelCatalog
+	dynamicChatModels  = map[string][]LLMModelCatalog{}
 )
 
 const openRouterAliasPrefix = "openrouter::"
+const poeAliasPrefix = "poe::"
 
 var anthropicOpenRouterResolvedPattern = regexp.MustCompile(`^anthropic/claude-(\d+(?:\.\d+)*)-(opus|sonnet|haiku)-\d{8}$`)
 
@@ -97,6 +98,26 @@ func CanonicalizeOpenRouterModelID(model string) string {
 
 func IsOpenRouterAliasedModel(model string) bool {
 	return strings.HasPrefix(strings.TrimSpace(model), openRouterAliasPrefix)
+}
+
+func PoeAliasModelID(model string) string {
+	m := strings.TrimSpace(model)
+	if m == "" {
+		return ""
+	}
+	if strings.HasPrefix(m, poeAliasPrefix) {
+		return m
+	}
+	return poeAliasPrefix + m
+}
+
+func ResolvePoeModelID(model string) string {
+	m := strings.TrimSpace(model)
+	return strings.TrimPrefix(m, poeAliasPrefix)
+}
+
+func IsPoeAliasedModel(model string) bool {
+	return strings.HasPrefix(strings.TrimSpace(model), poeAliasPrefix)
 }
 
 func LLMCatalogData() *LLMCatalog {
@@ -160,30 +181,44 @@ func mergedCatalog(base *LLMCatalog) *LLMCatalog {
 		return &snapshot
 	}
 	merged := *base
-	seen := make(map[string]struct{}, len(base.ChatModels)+len(dynamicChatModels))
-	merged.ChatModels = make([]LLMModelCatalog, 0, len(base.ChatModels)+len(dynamicChatModels))
+	totalDynamic := 0
+	for _, models := range dynamicChatModels {
+		totalDynamic += len(models)
+	}
+	seen := make(map[string]struct{}, len(base.ChatModels)+totalDynamic)
+	merged.ChatModels = make([]LLMModelCatalog, 0, len(base.ChatModels)+totalDynamic)
 	for _, model := range base.ChatModels {
 		merged.ChatModels = append(merged.ChatModels, model)
 		seen[model.ID] = struct{}{}
 	}
-	for _, model := range dynamicChatModels {
-		if _, exists := seen[model.ID]; exists {
-			continue
+	for _, models := range dynamicChatModels {
+		for _, model := range models {
+			if _, exists := seen[model.ID]; exists {
+				continue
+			}
+			merged.ChatModels = append(merged.ChatModels, model)
+			seen[model.ID] = struct{}{}
 		}
-		merged.ChatModels = append(merged.ChatModels, model)
-		seen[model.ID] = struct{}{}
 	}
 	return &merged
 }
 
 func SetDynamicChatModels(models []LLMModelCatalog) {
+	SetDynamicChatModelsForProvider("default", models)
+}
+
+func SetDynamicChatModelsForProvider(provider string, models []LLMModelCatalog) {
 	dynamicCatalogMu.Lock()
 	defer dynamicCatalogMu.Unlock()
+	key := strings.TrimSpace(provider)
+	if key == "" {
+		key = "default"
+	}
 	if len(models) == 0 {
-		dynamicChatModels = nil
+		delete(dynamicChatModels, key)
 		return
 	}
-	dynamicChatModels = append([]LLMModelCatalog{}, models...)
+	dynamicChatModels[key] = append([]LLMModelCatalog{}, models...)
 }
 
 func catalogPath() string {
@@ -256,6 +291,9 @@ func CatalogProviderForModel(model string) string {
 	}
 	if IsOpenRouterAliasedModel(m) {
 		return "openrouter"
+	}
+	if IsPoeAliasedModel(m) {
+		return "poe"
 	}
 	if entry := findModelCatalog(m); entry != nil && entry.Provider != "" {
 		return entry.Provider

@@ -213,7 +213,7 @@ export default function SourcesPage() {
     setLoadingSuggestions(true);
     setSuggestionsError(null);
     try {
-      const res = await api.getRecommendedSources({ limit: 24 });
+      const res = await api.getSourceSuggestions({ limit: 24 });
       const next = Array.isArray(res.items) ? res.items.map(normalizeSuggestion).filter((v): v is SourceSuggestion => v !== null) : [];
       setRecommendations(next);
       setSuggestionsLLM(res.llm ?? null);

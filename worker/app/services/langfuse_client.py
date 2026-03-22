@@ -268,6 +268,7 @@ def span(name: str, *, input=None, metadata=None, tags=None, as_type: str = "spa
             _prompt_refs_var.reset(token)
             _current_span_var.reset(span_token)
         return
+
     merged_metadata = dict(metadata or {})
     if tags:
         merged_metadata["tags"] = list(tags)
@@ -276,17 +277,25 @@ def span(name: str, *, input=None, metadata=None, tags=None, as_type: str = "spa
         kwargs["input"] = input
     if merged_metadata:
         kwargs["metadata"] = merged_metadata
-    try:  # pragma: no cover
+
+    try:
         if as_type == "span":
             span_cm = client.start_as_current_span(**kwargs)
         else:
             span_cm = client.start_as_current_observation(as_type=as_type, **kwargs)
+    except Exception as e:
+        _log.warning("langfuse span failed name=%s err=%s", name, e)
+        try:
+            yield None
+        finally:
+            _prompt_refs_var.reset(token)
+            _current_span_var.reset(span_token)
+        return
+
+    try:
         with span_cm as current_span:
             _current_span_var.set(current_span)
             yield current_span
-    except Exception as e:
-        _log.warning("langfuse span failed name=%s err=%s", name, e)
-        yield None
     finally:
         _prompt_refs_var.reset(token)
         _current_span_var.reset(span_token)

@@ -298,6 +298,34 @@ Few-shot（避けたい傾向の既存Feed例）:
     }
 
 
+def build_seed_sites_rescue_prompt(existing_sources: list[dict], preferred_topics: list[str]) -> str:
+    return f"""既存ソースと重複しないサイトURL候補を必ず10件以上返してください。JSONのみ。
+{{
+  "items": [
+    {{"url":"https://...", "reason":"..."}}
+  ]
+}}
+既存ソース:
+{json.dumps(existing_sources, ensure_ascii=False)}
+興味トピック:
+{json.dumps(preferred_topics, ensure_ascii=False)}
+"""
+
+
+def merge_llm_usage(*usages: dict | None) -> dict:
+    keys = (
+        "input_tokens",
+        "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+        "reasoning_output_tokens",
+    )
+    out: dict[str, int] = {}
+    for key in keys:
+        out[key] = sum(int((usage or {}).get(key, 0) or 0) for usage in usages)
+    return out
+
+
 def parse_seed_sites_result(text: str, existing_sources: list[dict]) -> list[dict]:
     data = extract_first_json_object(text) or {}
     rows = data.get("items", []) if isinstance(data.get("items"), list) else []

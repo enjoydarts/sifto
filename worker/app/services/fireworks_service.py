@@ -20,7 +20,9 @@ from app.services.facts_task_common import build_facts_localization_task, build_
 from app.services.feed_task_common import (
     build_ask_task,
     build_rank_feed_task,
+    build_seed_sites_rescue_prompt,
     build_seed_sites_task,
+    merge_llm_usage,
     parse_ask_result,
     parse_rank_feed_result,
     parse_seed_sites_result,
@@ -416,7 +418,19 @@ def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list
         response_schema=task["schema"],
         schema_name="suggest_feed_seed_sites",
     )
-    return {"items": parse_seed_sites_result(text, task["existing_sources"]), "llm": _llm_meta(model, "source_suggestion", usage)}
+    out = parse_seed_sites_result(text, task["existing_sources"])
+    if len(out) == 0:
+        rescue_text, rescue_usage = _chat_json(
+            build_seed_sites_rescue_prompt(task["existing_sources"], task["preferred_topics"]),
+            model,
+            api_key,
+            max_output_tokens=1800,
+            response_schema=task["schema"],
+            schema_name="suggest_feed_seed_sites",
+        )
+        out.extend(parse_seed_sites_result(rescue_text, task["existing_sources"]))
+        usage = merge_llm_usage(usage, rescue_usage)
+    return {"items": out, "llm": _llm_meta(model, "source_suggestion", usage)}
 
 
 def localize_facts_to_japanese(title: str | None, facts: list[str], model: str, api_key: str) -> dict:

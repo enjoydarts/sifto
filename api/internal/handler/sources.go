@@ -1035,7 +1035,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 		})
 		byID[id] = &suggestions[i]
 	}
-	rankBudget := capDuration(6*time.Second, remainingSuggestionBudget())
+	rankBudget := capDuration(10*time.Second, remainingSuggestionBudget())
 	if rankBudget <= 0 {
 		return map[string]any{
 			"warning": "source suggestion rank skipped due timeout budget",

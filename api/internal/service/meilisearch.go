@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 )
@@ -219,6 +221,13 @@ type MeilisearchSearchResult struct {
 	Mode  string
 }
 
+type meilisearchSearchPage struct {
+	Hits        []MeilisearchSearchHit
+	Total       int
+	Mode        string
+	RawHitCount int
+}
+
 type MeilisearchSuggestionParams struct {
 	Query   string
 	UserID  string
@@ -256,6 +265,84 @@ func (s *MeilisearchService) SearchItems(ctx context.Context, params Meilisearch
 	if err := s.ensureItemsIndex(ctx); err != nil {
 		return nil, err
 	}
+	if requiresContiguousJapaneseMatch(params.Query) {
+		return s.searchItemsStrict(ctx, params)
+	}
+	page, err := s.searchItemsPage(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return &MeilisearchSearchResult{
+		Hits:  page.Hits,
+		Total: page.Total,
+		Mode:  page.Mode,
+	}, nil
+}
+
+func (s *MeilisearchService) searchItemsStrict(ctx context.Context, params MeilisearchSearchParams) (*MeilisearchSearchResult, error) {
+	pageSize := params.Limit
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	filteredHits := make([]MeilisearchSearchHit, 0, pageSize)
+	rawOffset := 0
+	rawTotal := 0
+	mode := NormalizeSearchMode(params.SearchMode)
+	batchSize := strictSearchBatchSize(pageSize)
+
+	for {
+		batchParams := params
+		batchParams.Offset = rawOffset
+		batchParams.Limit = batchSize
+
+		page, err := s.searchItemsPage(ctx, batchParams)
+		if err != nil {
+			return nil, err
+		}
+		mode = page.Mode
+		rawTotal = page.Total
+		filteredHits = append(filteredHits, page.Hits...)
+
+		if page.RawHitCount == 0 || rawOffset+page.RawHitCount >= rawTotal {
+			break
+		}
+		rawOffset += page.RawHitCount
+	}
+
+	offset := params.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > len(filteredHits) {
+		offset = len(filteredHits)
+	}
+	end := offset + pageSize
+	if end > len(filteredHits) {
+		end = len(filteredHits)
+	}
+
+	return &MeilisearchSearchResult{
+		Hits:  filteredHits[offset:end],
+		Total: len(filteredHits),
+		Mode:  mode,
+	}, nil
+}
+
+func strictSearchBatchSize(pageSize int) int {
+	if pageSize <= 0 {
+		return 50
+	}
+	size := pageSize * 4
+	if size < 50 {
+		size = 50
+	}
+	if size > 200 {
+		size = 200
+	}
+	return size
+}
+
+func (s *MeilisearchService) searchItemsPage(ctx context.Context, params MeilisearchSearchParams) (*meilisearchSearchPage, error) {
 	mode := NormalizeSearchMode(params.SearchMode)
 	if params.Limit <= 0 {
 		params.Limit = 20
@@ -306,16 +393,20 @@ func (s *MeilisearchService) SearchItems(ctx context.Context, params Meilisearch
 		return nil, err
 	}
 
-	result := &MeilisearchSearchResult{
-		Hits:  make([]MeilisearchSearchHit, 0, len(raw.Hits)),
-		Total: raw.EstimatedTotalHits,
-		Mode:  mode,
+	result := &meilisearchSearchPage{
+		Hits:        make([]MeilisearchSearchHit, 0, len(raw.Hits)),
+		Total:       raw.EstimatedTotalHits,
+		Mode:        mode,
+		RawHitCount: len(raw.Hits),
 	}
 	if result.Total == 0 {
 		result.Total = raw.TotalHits
 	}
 	for _, hit := range raw.Hits {
-		snippets := buildSearchSnippets(hit.Formatted)
+		snippets := buildSearchSnippetsForQuery(params.Query, hit.Formatted)
+		if requiresContiguousJapaneseMatch(params.Query) && len(snippets) == 0 {
+			continue
+		}
 		result.Hits = append(result.Hits, MeilisearchSearchHit{
 			ItemID:         hit.ID,
 			SearchSnippets: snippets,
@@ -420,6 +511,44 @@ func buildSearchSnippets(formatted map[string]any) []model.ItemSearchSnippet {
 		}
 	}
 	return snippets
+}
+
+func buildSearchSnippetsForQuery(query string, formatted map[string]any) []model.ItemSearchSnippet {
+	snippets := buildSearchSnippets(formatted)
+	if !requiresContiguousJapaneseMatch(query) {
+		return snippets
+	}
+	normalizedQuery := normalizeSearchSuggestionText(query)
+	if normalizedQuery == "" {
+		return snippets
+	}
+	filtered := make([]model.ItemSearchSnippet, 0, len(snippets))
+	for _, snippet := range snippets {
+		normalizedSnippet := normalizeSearchSuggestionText(stripSearchHighlightTags(snippet.SnippetHTML))
+		if strings.Contains(normalizedSnippet, normalizedQuery) {
+			filtered = append(filtered, snippet)
+		}
+	}
+	return filtered
+}
+
+func requiresContiguousJapaneseMatch(query string) bool {
+	normalizedQuery := normalizeSearchSuggestionText(query)
+	if normalizedQuery == "" || strings.Contains(normalizedQuery, " ") || utf8.RuneCountInString(normalizedQuery) < 2 {
+		return false
+	}
+	for _, r := range normalizedQuery {
+		if unicode.In(r, unicode.Hiragana, unicode.Katakana, unicode.Han) {
+			return true
+		}
+	}
+	return false
+}
+
+func stripSearchHighlightTags(input string) string {
+	input = strings.ReplaceAll(input, "<mark>", "")
+	input = strings.ReplaceAll(input, "</mark>", "")
+	return input
 }
 
 func (s *MeilisearchService) doJSON(ctx context.Context, method, path string, body any, out any, allowConflict bool) error {

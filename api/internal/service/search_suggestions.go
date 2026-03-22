@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
@@ -53,13 +54,17 @@ func (s *SearchSuggestionService) Search(ctx context.Context, q SearchSuggestion
 		return nil, err
 	}
 
-	items := distributeSearchSuggestionHits(raw.Hits, limit)
+	items := distributeSearchSuggestionHits(query, raw.Hits, limit)
 	return &model.SearchSuggestionResponse{Items: items}, nil
 }
 
-func distributeSearchSuggestionHits(hits []MeilisearchSuggestionHit, limit int) []model.SearchSuggestionItem {
+func distributeSearchSuggestionHits(query string, hits []MeilisearchSuggestionHit, limit int) []model.SearchSuggestionItem {
 	if limit <= 0 {
 		limit = searchSuggestionLimit
+	}
+	normalizedQuery := normalizeSearchSuggestionText(query)
+	if normalizedQuery == "" {
+		return []model.SearchSuggestionItem{}
 	}
 	articles := make([]model.SearchSuggestionItem, 0, len(hits))
 	sources := make([]model.SearchSuggestionItem, 0, len(hits))
@@ -68,6 +73,9 @@ func distributeSearchSuggestionHits(hits []MeilisearchSuggestionHit, limit int) 
 
 	for _, hit := range hits {
 		if strings.TrimSpace(hit.ID) == "" || strings.TrimSpace(hit.Label) == "" {
+			continue
+		}
+		if searchSuggestionMatchRank(normalizedQuery, hit.Label) == 0 {
 			continue
 		}
 		if _, exists := seen[hit.ID]; exists {
@@ -134,4 +142,53 @@ func distributeSearchSuggestionHits(hits []MeilisearchSuggestionHit, limit int) 
 	}
 
 	return out
+}
+
+func searchSuggestionMatchRank(normalizedQuery, label string) int {
+	normalizedLabel := normalizeSearchSuggestionText(label)
+	if normalizedQuery == "" || normalizedLabel == "" {
+		return 0
+	}
+	switch {
+	case normalizedLabel == normalizedQuery:
+		return 3
+	case strings.HasPrefix(normalizedLabel, normalizedQuery):
+		return 2
+	case strings.Contains(normalizedLabel, normalizedQuery):
+		return 1
+	default:
+		return 0
+	}
+}
+
+func normalizeSearchSuggestionText(input string) string {
+	input = strings.TrimSpace(strings.ToLower(input))
+	if input == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(input))
+	lastSpace := false
+	for _, r := range input {
+		if unicode.IsSpace(r) {
+			if !lastSpace {
+				b.WriteByte(' ')
+				lastSpace = true
+			}
+			continue
+		}
+		lastSpace = false
+		b.WriteRune(foldSearchSuggestionRune(r))
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func foldSearchSuggestionRune(r rune) rune {
+	if r >= 'ァ' && r <= 'ヶ' {
+		return r - 0x60
+	}
+	if r == 'ヴ' {
+		return 'ゔ'
+	}
+	return unicode.ToLower(r)
 }

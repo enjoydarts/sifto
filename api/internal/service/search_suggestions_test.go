@@ -19,7 +19,7 @@ func TestDistributeSearchSuggestionHitsAppliesKindCaps(t *testing.T) {
 		{ID: "article:7", Kind: "article", Label: "Article 7"},
 	}
 
-	got := distributeSearchSuggestionHits(hits, 10)
+	got := distributeSearchSuggestionHits("c", hits, 10)
 	if len(got) != 10 {
 		t.Fatalf("len(got) = %d, want 10", len(got))
 	}
@@ -53,7 +53,7 @@ func TestDistributeSearchSuggestionHitsSpillsUnusedSlotsIntoArticles(t *testing.
 		{ID: "article:8", Kind: "article", Label: "Article 8"},
 	}
 
-	got := distributeSearchSuggestionHits(hits, 10)
+	got := distributeSearchSuggestionHits("c", hits, 10)
 	if len(got) != 10 {
 		t.Fatalf("len(got) = %d, want 10", len(got))
 	}
@@ -70,5 +70,31 @@ func TestDistributeSearchSuggestionHitsSpillsUnusedSlotsIntoArticles(t *testing.
 	}
 	if counts["article"] != 8 {
 		t.Fatalf("article count = %d, want 8", counts["article"])
+	}
+}
+
+func TestDistributeSearchSuggestionHitsFiltersWeakJapaneseMatches(t *testing.T) {
+	hits := []MeilisearchSuggestionHit{
+		{ID: "topic_1", Kind: "topic", Label: "インフラ"},
+		{ID: "topic_2", Kind: "topic", Label: "イラン"},
+		{ID: "topic_3", Kind: "topic", Label: "イラン情勢"},
+	}
+
+	got := distributeSearchSuggestionHits("イラン", hits, 10)
+	if len(got) != 2 {
+		t.Fatalf("len(got) = %d, want 2", len(got))
+	}
+	if got[0].Label != "イラン" {
+		t.Fatalf("got[0].Label = %q, want %q", got[0].Label, "イラン")
+	}
+	if got[1].Label != "イラン情勢" {
+		t.Fatalf("got[1].Label = %q, want %q", got[1].Label, "イラン情勢")
+	}
+}
+
+func TestNormalizeSearchSuggestionTextFoldsKana(t *testing.T) {
+	got := normalizeSearchSuggestionText(" インスタライブ ")
+	if got != "いんすたらいぶ" {
+		t.Fatalf("normalizeSearchSuggestionText = %q, want %q", got, "いんすたらいぶ")
 	}
 }

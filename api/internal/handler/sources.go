@@ -830,6 +830,14 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 	if timedOutInAiStep {
 		llmMeta = mergeLLMWarning(llmMeta, "source suggestion timed out during AI seed generation", "seed_generation")
 	}
+	if anthropicSourceSuggestionModel != nil && strings.TrimSpace(*anthropicSourceSuggestionModel) != "" {
+		if llmMeta == nil {
+			llmMeta = map[string]any{}
+		}
+		if _, ok := llmMeta["requested_model"]; !ok {
+			llmMeta["requested_model"] = strings.TrimSpace(*anthropicSourceSuggestionModel)
+		}
+	}
 	if len(out) > limit {
 		out = out[:limit]
 	}

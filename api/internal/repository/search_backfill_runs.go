@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -93,6 +94,17 @@ func (r *SearchBackfillRunRepo) ListRecent(ctx context.Context, limit int) ([]Se
 		runs = append(runs, *run)
 	}
 	return runs, rows.Err()
+}
+
+func (r *SearchBackfillRunRepo) DeleteFinished(ctx context.Context) (int64, error) {
+	tag, err := r.db.Exec(ctx, `
+		DELETE FROM search_backfill_runs
+		WHERE status IN ('completed', 'failed', 'partial_failed')
+	`)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
 
 func (r *SearchBackfillRunRepo) MarkRunning(ctx context.Context, runID string) (*SearchBackfillRun, error) {
@@ -196,6 +208,9 @@ func scanSearchBackfillRun(row searchBackfillRunScanner) (*SearchBackfillRun, er
 		&run.StartedAt,
 		&run.FinishedAt,
 	); err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, err
+		}
 		return nil, err
 	}
 	return &run, nil

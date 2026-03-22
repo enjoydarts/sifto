@@ -1256,6 +1256,8 @@ export const enDict: Dict = {
   "debug.searchBackfill.all": "Run all summarized items",
   "debug.searchBackfill.run": "Run Backfill",
   "debug.searchBackfill.runDone": "Search backfill was queued",
+  "debug.searchBackfill.clear": "Clear completed runs",
+  "debug.searchBackfill.clearDone": "Removed {{count}} finished runs",
   "debug.searchBackfill.refresh": "Refresh status",
   "debug.searchBackfill.noRuns": "No search backfill runs yet.",
   "debug.searchBackfill.modeAll": "All Run",

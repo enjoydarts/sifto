@@ -1256,6 +1256,8 @@ export const jaDict: Dict = {
   "debug.searchBackfill.all": "全 summarized 記事をまとめて実行",
   "debug.searchBackfill.run": "バックフィルを実行",
   "debug.searchBackfill.runDone": "検索バックフィルをキューに追加しました",
+  "debug.searchBackfill.clear": "完了済みを消去",
+  "debug.searchBackfill.clearDone": "完了済み run を {{count}} 件削除しました",
   "debug.searchBackfill.refresh": "状況を更新",
   "debug.searchBackfill.noRuns": "まだ検索バックフィル run はありません。",
   "debug.searchBackfill.modeAll": "All Run",

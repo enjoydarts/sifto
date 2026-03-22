@@ -72,3 +72,30 @@ export async function POST(req: NextRequest) {
     headers: { "Content-Type": res.headers.get("Content-Type") ?? "application/json" },
   });
 }
+
+export async function DELETE() {
+  const user = await getServerAuthUser();
+  if (!user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const apiUrl = resolveServerAPIURL();
+  const secret = getInternalAPISecret();
+  if (!secret) {
+    return NextResponse.json({ error: getInternalAPISecretError() }, { status: 500 });
+  }
+
+  const res = await fetch(`${apiUrl}/api/internal/debug/search/backfill`, {
+    method: "DELETE",
+    headers: {
+      "X-Internal-Secret": secret,
+    },
+    cache: "no-store",
+  });
+
+  const text = await res.text();
+  return new NextResponse(text, {
+    status: res.status,
+    headers: { "Content-Type": res.headers.get("Content-Type") ?? "application/json" },
+  });
+}

@@ -660,6 +660,25 @@ func (h *InternalHandler) DebugGetItemSearchBackfillRuns(w http.ResponseWriter, 
 	})
 }
 
+func (h *InternalHandler) DebugDeleteFinishedItemSearchBackfillRuns(w http.ResponseWriter, r *http.Request) {
+	if !checkInternalSecret(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	runRepo := repository.NewSearchBackfillRunRepo(h.db)
+	deleted, err := runRepo.DeleteFinished(r.Context())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("delete finished backfill runs failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"ok":            true,
+		"deleted_count": deleted,
+	})
+}
+
 func parseBoolQuery(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "1", "true", "yes", "on":

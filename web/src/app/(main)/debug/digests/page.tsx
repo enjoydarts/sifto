@@ -100,6 +100,11 @@ type SearchBackfillRunsResponse = {
   runs: SearchBackfillRun[];
 };
 
+type SearchBackfillClearResponse = {
+  ok: boolean;
+  deleted_count: number;
+};
+
 type DebugSystemStatusResponse = {
   proxy_status: number;
   proxy_latency_ms: number;
@@ -259,6 +264,7 @@ export default function DebugDigestsPage() {
   const [searchBackfillAll, setSearchBackfillAll] = useState(false);
   const [busySearchBackfill, setBusySearchBackfill] = useState(false);
   const [busySearchBackfillRuns, setBusySearchBackfillRuns] = useState(false);
+  const [busySearchBackfillClear, setBusySearchBackfillClear] = useState(false);
   const [searchBackfillResult, setSearchBackfillResult] = useState<SearchBackfillResponse | null>(null);
   const [searchBackfillRuns, setSearchBackfillRuns] = useState<SearchBackfillRun[]>([]);
   const [retrySourceId, setRetrySourceId] = useState("");
@@ -280,6 +286,10 @@ export default function DebugDigestsPage() {
     () =>
       t("debug.digest.helperText"),
     [t]
+  );
+  const hasFinishedSearchBackfillRuns = useMemo(
+    () => searchBackfillRuns.some((run) => run.status === "completed" || run.status === "failed" || run.status === "partial_failed"),
+    [searchBackfillRuns]
   );
   const loadSearchBackfillRuns = useCallback(async () => {
     setBusySearchBackfillRuns(true);
@@ -654,6 +664,29 @@ export default function DebugDigestsPage() {
       showToast(message, "error");
     } finally {
       setBusySearchBackfill(false);
+    }
+  };
+
+  const onClearFinishedSearchBackfillRuns = async () => {
+    setBusySearchBackfillClear(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/debug/search/backfill", {
+        method: "DELETE",
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        throw new Error(`${res.status}: ${text || res.statusText}`);
+      }
+      const data = text ? (JSON.parse(text) as SearchBackfillClearResponse) : { ok: true, deleted_count: 0 };
+      showToast(t("debug.searchBackfill.clearDone").replace("{{count}}", String(data.deleted_count)), "success");
+      await loadSearchBackfillRuns();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setBusySearchBackfillClear(false);
     }
   };
 
@@ -1267,14 +1300,24 @@ export default function DebugDigestsPage() {
       <section className="surface-editorial rounded-[28px] p-5">
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("debug.searchBackfill.title")}</h2>
-          <button
-            type="button"
-            onClick={() => void loadSearchBackfillRuns()}
-            disabled={busySearchBackfillRuns}
-            className="rounded-full border border-[var(--color-editorial-line)] px-3 py-1.5 text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-50"
-          >
-            {busySearchBackfillRuns ? t("debug.running") : t("debug.searchBackfill.refresh")}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClearFinishedSearchBackfillRuns}
+              disabled={busySearchBackfillClear || !hasFinishedSearchBackfillRuns}
+              className="rounded-full border border-[var(--color-editorial-line)] px-3 py-1.5 text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-50"
+            >
+              {busySearchBackfillClear ? t("debug.running") : t("debug.searchBackfill.clear")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void loadSearchBackfillRuns()}
+              disabled={busySearchBackfillRuns}
+              className="rounded-full border border-[var(--color-editorial-line)] px-3 py-1.5 text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-50"
+            >
+              {busySearchBackfillRuns ? t("debug.running") : t("debug.searchBackfill.refresh")}
+            </button>
+          </div>
         </div>
         <form onSubmit={onBackfillSearch} className="space-y-3">
           <p className="text-xs text-[var(--color-editorial-ink-faint)]">{t("debug.searchBackfill.description")}</p>

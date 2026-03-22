@@ -30,6 +30,9 @@ func (h *PoeModelsHandler) List(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	if models == nil {
+		models = make([]repository.PoeModelSnapshot, 0)
+	}
 	var latestChangeSummary any
 	if h.providerUpdateRepo != nil {
 		summary, err := h.providerUpdateRepo.ListLatestProviderSummary(r.Context(), "poe")
@@ -92,6 +95,9 @@ func (h *PoeModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeRepoError(w, err)
 		return
+	}
+	if latest == nil {
+		latest = make([]repository.PoeModelSnapshot, 0)
 	}
 	prevModels, err := h.repo.ListPreviousSuccessfulSnapshots(r.Context(), latestRun.ID)
 	if err != nil {

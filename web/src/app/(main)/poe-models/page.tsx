@@ -215,8 +215,8 @@ export default function PoeModelsPage() {
 
   const latestSummary = data?.latest_change_summary ?? null;
   const latestRunLabel = data?.latest_run?.finished_at ? new Date(data.latest_run.finished_at).toLocaleString() : t("poeModels.latestRunEmpty");
-  const fetchedCount = data?.latest_run?.fetched_count ?? data?.models.length ?? 0;
-  const acceptedCount = data?.latest_run?.accepted_count ?? data?.models.length ?? 0;
+  const fetchedCount = data?.latest_run?.fetched_count ?? data?.models?.length ?? 0;
+  const acceptedCount = data?.latest_run?.accepted_count ?? data?.models?.length ?? 0;
   const translatedCount = data?.latest_run?.translation_completed_count ?? 0;
   const translationTargetCount = data?.latest_run?.translation_target_count ?? 0;
   const removedCount = latestSummary?.removed?.length ?? 0;

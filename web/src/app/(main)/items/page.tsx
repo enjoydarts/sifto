@@ -172,12 +172,9 @@ function ItemsPageContent() {
     queryFn: async () => api.getItemSearchSuggestions({ q: normalizedSearchDraft, limit: 10 }),
     enabled: suggestionsEnabled,
     staleTime: 15_000,
+    placeholderData: (prev) => prev,
   });
   const suggestions = useMemo(() => suggestionsQuery.data?.items ?? [], [suggestionsQuery.data]);
-
-  useEffect(() => {
-    setActiveSuggestionIndex(-1);
-  }, [normalizedSearchDraft]);
 
   useEffect(() => {
     if (!searchOpen || suggestions.length === 0) {

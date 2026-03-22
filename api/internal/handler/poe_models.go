@@ -123,27 +123,28 @@ func (h *PoeModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PoeModelsHandler) translateDescriptions(syncRunID string, models []repository.PoeModelSnapshot) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			msg := "Poe description translation panicked"
 			log.Printf("poe description translation panic sync_run_id=%s panic=%v", syncRunID, recovered)
-			_ = h.repo.FailSyncRun(context.Background(), syncRunID, msg)
+			h.failSyncRun(syncRunID, msg)
 		}
 	}()
 	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	if apiKey == "" {
-		_ = h.repo.FinishSyncRun(ctx, syncRunID, len(models), len(models), nil)
+		h.finishSyncRun(syncRunID, len(models), len(models), nil)
 		return
 	}
+	ctx := context.Background()
 	openAI := service.NewOpenAIClient()
 	total, completed := poeTranslationProgress(models)
 	pending := poePendingTranslationModels(models)
 	for _, pendingModel := range pending {
-		translated, err := openAI.TranslateTextsToJA(ctx, apiKey, service.OpenRouterDescriptionTranslationModel(), map[string]string{
+		translateCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+		translated, err := openAI.TranslateTextsToJA(translateCtx, apiKey, service.OpenRouterDescriptionTranslationModel(), map[string]string{
 			pendingModel.ModelID: strings.TrimSpace(derefOptionalString(pendingModel.DescriptionEN)),
 		})
+		cancel()
 		if err != nil {
 			_ = h.repo.RecordTranslationFailure(ctx, syncRunID, pendingModel.ModelID, err.Error())
 			completed++
@@ -160,7 +161,7 @@ func (h *PoeModelsHandler) translateDescriptions(syncRunID string, models []repo
 		}
 		if err := h.repo.UpdateDescriptionsJA(ctx, syncRunID, map[string]string{pendingModel.ModelID: ja}); err != nil {
 			msg := err.Error()
-			_ = h.repo.FinishSyncRun(ctx, syncRunID, len(models), len(models), &msg)
+			h.finishSyncRun(syncRunID, len(models), len(models), &msg)
 			return
 		}
 		for i := range models {
@@ -173,8 +174,22 @@ func (h *PoeModelsHandler) translateDescriptions(syncRunID string, models []repo
 		_ = h.repo.UpdateTranslationProgress(ctx, syncRunID, total, completed)
 	}
 	service.SetDynamicChatModelsForProvider("poe", service.PoeSnapshotsToCatalogModels(models))
-	if err := h.repo.FinishSyncRun(ctx, syncRunID, len(models), len(models), nil); err != nil {
+	h.finishSyncRun(syncRunID, len(models), len(models), nil)
+}
+
+func (h *PoeModelsHandler) finishSyncRun(syncRunID string, fetchedCount, acceptedCount int, errMsg *string) {
+	finishCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := h.repo.FinishSyncRun(finishCtx, syncRunID, fetchedCount, acceptedCount, errMsg); err != nil {
 		log.Printf("poe sync finish failed sync_run_id=%s err=%v", syncRunID, err)
+	}
+}
+
+func (h *PoeModelsHandler) failSyncRun(syncRunID, errMsg string) {
+	failCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := h.repo.FailSyncRun(failCtx, syncRunID, errMsg); err != nil {
+		log.Printf("poe sync fail update failed sync_run_id=%s err=%v", syncRunID, err)
 	}
 }
 

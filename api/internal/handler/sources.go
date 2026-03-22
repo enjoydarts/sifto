@@ -1637,11 +1637,11 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 		}
 		for _, probe := range probeURLs {
 			if remainingSuggestionBudget() <= 0 {
-				return mergeLLMWarning(meta, "source suggestion timed out during AI seed probing", "seed_generation"), true
+				break
 			}
 			probeTimeout := capDuration(1500*time.Millisecond, remainingSuggestionBudget())
 			if probeTimeout <= 0 {
-				return mergeLLMWarning(meta, "source suggestion timed out during AI seed probing", "seed_generation"), true
+				break
 			}
 			ctxOne, cancel := context.WithTimeout(ctx, probeTimeout)
 			feeds, err := discoverRSSFeeds(ctxOne, probe)
@@ -1684,6 +1684,9 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 				}
 				addedFromSeed = true
 			}
+		}
+		if remainingSuggestionBudget() <= 0 && !addedFromSeed {
+			meta = mergeLLMWarning(meta, "source suggestion timed out during AI seed probing", "seed_generation")
 		}
 		// Feed検出に失敗しても、AIシードURL自体を候補として残す。
 		// 登録時に再discoverを試みる前提で、候補ゼロ化を防ぐ。

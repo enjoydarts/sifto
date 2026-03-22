@@ -1798,7 +1798,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			Name: "Process Item",
 			Concurrency: []inngestgo.ConfigStepConcurrency{
 				{
-					Limit: 6,
+					Limit: 5,
 				},
 			},
 			Throttle: &inngestgo.ConfigThrottle{

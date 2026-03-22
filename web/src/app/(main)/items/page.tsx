@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "rea
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCheck, Newspaper, Search, X } from "lucide-react";
-import { api, Item } from "@/lib/api";
+import { api, Item, ItemSearchSuggestion } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -101,6 +101,7 @@ function ItemsPageContent() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchDraft, setSearchDraft] = useState(searchQuery);
   const [searchModeDraft, setSearchModeDraft] = useState<"natural" | "and" | "or">(searchMode);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
   const restoredScrollRef = useRef<string | null>(null);
   const prefetchedDetailIDsRef = useRef<Record<string, true>>({});
   const [inlineQueueItemIds, setInlineQueueItemIds] = useState<string[]>([]);
@@ -163,6 +164,29 @@ function ItemsPageContent() {
       setSearchModeDraft(searchMode);
     }
   }, [searchMode, searchOpen, searchQuery]);
+
+  const normalizedSearchDraft = useMemo(() => searchDraft.trim(), [searchDraft]);
+  const suggestionsEnabled = searchOpen && normalizedSearchDraft.length >= 2;
+  const suggestionsQuery = useQuery({
+    queryKey: ["item-search-suggestions", normalizedSearchDraft],
+    queryFn: async () => api.getItemSearchSuggestions({ q: normalizedSearchDraft, limit: 10 }),
+    enabled: suggestionsEnabled,
+    staleTime: 15_000,
+    placeholderData: (prev) => prev,
+  });
+  const suggestions = suggestionsQuery.data?.items ?? [];
+
+  useEffect(() => {
+    if (!searchOpen || suggestions.length === 0) {
+      setActiveSuggestionIndex(0);
+      return;
+    }
+    setActiveSuggestionIndex((prev) => {
+      if (prev < 0) return 0;
+      if (prev >= suggestions.length) return suggestions.length - 1;
+      return prev;
+    });
+  }, [searchOpen, suggestions.length]);
 
   const replaceItemsQuery = useCallback(
     (
@@ -237,9 +261,31 @@ function ItemsPageContent() {
   }, [deletedMode, favoriteOnly, feedMode, filter, laterMode, page, pendingMode, searchMode, searchQuery, sortMode, sourceID, topic, unreadOnly]);
 
   const submitSearch = useCallback(() => {
-    replaceItemsQuery({ q: searchDraft.trim(), searchMode: searchModeDraft, page: 1 });
+    replaceItemsQuery({ q: normalizedSearchDraft, searchMode: searchModeDraft, page: 1 });
     setSearchOpen(false);
-  }, [replaceItemsQuery, searchDraft, searchModeDraft]);
+  }, [normalizedSearchDraft, replaceItemsQuery, searchModeDraft]);
+
+  const applySuggestion = useCallback(
+    (suggestion: ItemSearchSuggestion) => {
+      if (suggestion.kind === "source" && suggestion.source_id) {
+        replaceItemsQuery({ sourceId: suggestion.source_id, q: "", page: 1 });
+        setSearchOpen(false);
+        return;
+      }
+      if (suggestion.kind === "topic" && suggestion.topic) {
+        replaceItemsQuery({ topic: suggestion.topic, q: "", page: 1 });
+        setSearchOpen(false);
+        return;
+      }
+      if (suggestion.label.trim()) {
+        const nextQuery = suggestion.label.trim();
+        setSearchDraft(nextQuery);
+        replaceItemsQuery({ q: nextQuery, searchMode: searchModeDraft, page: 1 });
+        setSearchOpen(false);
+      }
+    },
+    [replaceItemsQuery, searchModeDraft]
+  );
 
   const currentItemsHref = useMemo(
     () => (itemsQueryString ? `${pathname}?${itemsQueryString}` : pathname),
@@ -539,13 +585,33 @@ function ItemsPageContent() {
         {t("items.topic")}: {topic}
       </Tag>
     ) : null,
-    sourceID ? <Tag key="source">{t("items.filter.sourceApplied")}</Tag> : null,
+    sourceID ? (
+      <Tag
+        key="source"
+        tone="accent"
+        removable
+        removeLabel={t("common.clear")}
+        onRemove={() => replaceItemsQuery({ sourceId: "", page: 1 })}
+      >
+        {t("items.filter.sourceApplied")}
+      </Tag>
+    ) : null,
     searchQuery ? (
       <Tag key="search" tone="success" removable onRemove={() => replaceItemsQuery({ q: "", page: 1 })}>
         {t("items.search.active")}: {searchQuery}
       </Tag>
     ) : null,
-    filter && filter !== "pending" && filter !== "deleted" ? <Tag key="status">{t(`items.filter.${filter}`)}</Tag> : null,
+    filter && filter !== "pending" && filter !== "deleted" ? (
+      <Tag
+        key="status"
+        tone="accent"
+        removable
+        removeLabel={t("common.clear")}
+        onRemove={() => replaceItemsQuery({ status: "", page: 1 })}
+      >
+        {t(`items.filter.${filter}`)}
+      </Tag>
+    ) : null,
   ].filter(Boolean);
 
   return (
@@ -858,16 +924,86 @@ function ItemsPageContent() {
                   autoFocus
                   type="search"
                   value={searchDraft}
-                  onChange={(e) => setSearchDraft(e.target.value)}
+                  onChange={(e) => {
+                    setSearchDraft(e.target.value);
+                    setActiveSuggestionIndex(0);
+                  }}
                   onKeyDown={(e) => {
+                    if (e.key === "ArrowDown" && suggestions.length > 0) {
+                      e.preventDefault();
+                      setActiveSuggestionIndex((prev) => (prev + 1) % suggestions.length);
+                      return;
+                    }
+                    if (e.key === "ArrowUp" && suggestions.length > 0) {
+                      e.preventDefault();
+                      setActiveSuggestionIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
+                      return;
+                    }
                     if (e.key === "Enter") {
                       e.preventDefault();
+                      if (suggestions.length > 0 && suggestions[activeSuggestionIndex]) {
+                        applySuggestion(suggestions[activeSuggestionIndex]);
+                        return;
+                      }
                       submitSearch();
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setSearchOpen(false);
                     }
                   }}
                   placeholder={t("items.search.placeholder")}
                   className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus-ring"
                 />
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-2">
+                  {!suggestionsEnabled ? (
+                    <div className="px-2 py-1 text-xs text-zinc-500">{t("items.search.suggestions.helper")}</div>
+                  ) : suggestionsQuery.isFetching ? (
+                    <div className="px-2 py-1 text-xs text-zinc-500">{t("items.search.suggestions.loading")}</div>
+                  ) : suggestions.length === 0 ? (
+                    <div className="px-2 py-1 text-xs text-zinc-500">{t("items.search.suggestions.empty")}</div>
+                  ) : (
+                    <div className="space-y-1">
+                      {suggestions.map((suggestion, index) => {
+                        const kindKey =
+                          suggestion.kind === "source"
+                            ? "items.search.suggestion.kind.source"
+                            : suggestion.kind === "topic"
+                              ? "items.search.suggestion.kind.topic"
+                              : "items.search.suggestion.kind.article";
+                        const active = index === activeSuggestionIndex;
+                        return (
+                          <button
+                            key={`${suggestion.kind}:${suggestion.source_id ?? suggestion.topic ?? suggestion.item_id ?? suggestion.label}:${index}`}
+                            type="button"
+                            onClick={() => applySuggestion(suggestion)}
+                            className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition ${
+                              active ? "bg-zinc-900 text-white" : "bg-white text-zinc-900 hover:bg-zinc-100"
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                                    active ? "bg-white/15 text-white" : "bg-zinc-100 text-zinc-600"
+                                  }`}
+                                >
+                                  {t(kindKey)}
+                                </span>
+                                <span className="truncate text-sm font-medium">{suggestion.label}</span>
+                              </div>
+                            </div>
+                            {suggestion.kind !== "article" && suggestion.article_count != null ? (
+                              <span className={`shrink-0 text-xs ${active ? "text-zinc-200" : "text-zinc-500"}`}>
+                                {`${suggestion.article_count}${t("items.search.suggestion.countSuffix")}`}
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
                     {t("items.search.modeLabel")}

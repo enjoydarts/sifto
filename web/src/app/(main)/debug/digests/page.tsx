@@ -69,6 +69,12 @@ type OpenRouterCostBackfillResponse = {
   targets?: unknown[];
 };
 
+type SearchBackfillResponse = {
+  ok: boolean;
+  offset: number;
+  limit: number;
+};
+
 type DebugSystemStatusResponse = {
   proxy_status: number;
   proxy_latency_ms: number;
@@ -218,6 +224,10 @@ export default function DebugDigestsPage() {
   const [openRouterCostDryRun, setOpenRouterCostDryRun] = useState(true);
   const [busyOpenRouterCostBackfill, setBusyOpenRouterCostBackfill] = useState(false);
   const [openRouterCostBackfillResult, setOpenRouterCostBackfillResult] = useState<OpenRouterCostBackfillResponse | null>(null);
+  const [searchBackfillOffset, setSearchBackfillOffset] = useState("0");
+  const [searchBackfillLimit, setSearchBackfillLimit] = useState("200");
+  const [busySearchBackfill, setBusySearchBackfill] = useState(false);
+  const [searchBackfillResult, setSearchBackfillResult] = useState<SearchBackfillResponse | null>(null);
   const [retrySourceId, setRetrySourceId] = useState("");
   const [busyRetryFailed, setBusyRetryFailed] = useState(false);
   const [retryFailedResult, setRetryFailedResult] = useState<BulkRetryFailedResult | null>(null);
@@ -548,6 +558,35 @@ export default function DebugDigestsPage() {
       showToast(message, "error");
     } finally {
       setBusyOpenRouterCostBackfill(false);
+    }
+  };
+
+  const onBackfillSearch = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusySearchBackfill(true);
+    setError(null);
+    setSearchBackfillResult(null);
+    try {
+      const parsedOffset = Number(searchBackfillOffset);
+      const parsedLimit = Number(searchBackfillLimit);
+      if (!Number.isFinite(parsedOffset) || parsedOffset < 0) {
+        throw new Error(t("debug.searchBackfill.offsetError"));
+      }
+      if (!Number.isFinite(parsedLimit) || parsedLimit < 1 || parsedLimit > 500) {
+        throw new Error(t("debug.searchBackfill.limitError"));
+      }
+      const res = await postJSON<SearchBackfillResponse>("/api/debug/search/backfill", {
+        offset: parsedOffset,
+        limit: parsedLimit,
+      });
+      setSearchBackfillResult(res);
+      showToast(t("debug.searchBackfill.runDone"), "success");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setBusySearchBackfill(false);
     }
   };
 
@@ -1157,6 +1196,49 @@ export default function DebugDigestsPage() {
           </pre>
         )}
       </section>
+
+      <section className="surface-editorial rounded-[28px] p-5">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--color-editorial-ink)]">{t("debug.searchBackfill.title")}</h2>
+        <form onSubmit={onBackfillSearch} className="space-y-3">
+          <p className="text-xs text-[var(--color-editorial-ink-faint)]">{t("debug.searchBackfill.description")}</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm">
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("debug.searchBackfill.offset")}</div>
+              <input
+                type="number"
+                min={0}
+                value={searchBackfillOffset}
+                onChange={(e) => setSearchBackfillOffset(e.target.value)}
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
+              />
+            </label>
+            <label className="text-sm">
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("debug.searchBackfill.limit")}</div>
+              <input
+                type="number"
+                min={1}
+                max={500}
+                value={searchBackfillLimit}
+                onChange={(e) => setSearchBackfillLimit(e.target.value)}
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
+              />
+            </label>
+          </div>
+          <button
+            type="submit"
+            disabled={busySearchBackfill}
+            className="rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-95 disabled:opacity-50"
+          >
+            {busySearchBackfill ? t("debug.running") : t("debug.searchBackfill.run")}
+          </button>
+        </form>
+
+        {searchBackfillResult && (
+          <pre className="mt-4 overflow-x-auto rounded-[18px] bg-zinc-950 p-3 text-xs text-zinc-100">
+            {JSON.stringify(searchBackfillResult, null, 2)}
+          </pre>
+        )}
+      </section>
     </div>
   );
 
@@ -1220,7 +1302,7 @@ export default function DebugDigestsPage() {
             {[
               { key: "system" as const, label: "System", meta: "health, OneSignal, push test, cache" },
               { key: "digestOps" as const, label: "Digest Ops", meta: "generate, send, inspect" },
-              { key: "backfills" as const, label: "Backfills", meta: "embeddings, titles, OpenRouter costs" },
+              { key: "backfills" as const, label: "Backfills", meta: "embeddings, titles, search, OpenRouter costs" },
               { key: "recovery" as const, label: "Recovery", meta: "retry failed items" },
             ].map((section) => (
               <button

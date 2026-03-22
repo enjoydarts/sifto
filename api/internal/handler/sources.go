@@ -670,7 +670,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 	openRouterAPIKey := h.getUserOpenRouterAPIKey(ctx, userID)
 	openAIAPIKey := h.getUserOpenAIAPIKey(ctx, userID)
 	anthropicSourceSuggestionModel := h.getUserSourceSuggestionModel(ctx, userID)
-	anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
+	anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, openAIAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
 		anthropicAPIKey,
 		googleAPIKey,
 		groqAPIKey,

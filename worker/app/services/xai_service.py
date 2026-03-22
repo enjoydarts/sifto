@@ -424,14 +424,17 @@ def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list
     text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=2200, response_schema=task["schema"], schema_name="suggest_feed_seed_sites")
     out = parse_seed_sites_result(text, task["existing_sources"])
     if len(out) == 0:
-        rescue_text, rescue_usage = _chat_json(
-            build_seed_sites_rescue_prompt(task["existing_sources"], task["preferred_topics"]),
-            model,
-            api_key,
-            max_output_tokens=1800,
-            response_schema=task["schema"],
-            schema_name="suggest_feed_seed_sites",
-        )
-        out.extend(parse_seed_sites_result(rescue_text, task["existing_sources"]))
-        usage = merge_llm_usage(usage, rescue_usage)
+        try:
+            rescue_text, rescue_usage = _chat_json(
+                build_seed_sites_rescue_prompt(task["existing_sources"], task["preferred_topics"]),
+                model,
+                api_key,
+                max_output_tokens=1800,
+                response_schema=task["schema"],
+                schema_name="suggest_feed_seed_sites",
+            )
+            out.extend(parse_seed_sites_result(rescue_text, task["existing_sources"]))
+            usage = merge_llm_usage(usage, rescue_usage)
+        except Exception as exc:
+            _log.warning("xai suggest_feed_seed_sites rescue failed: %s", exc)
     return {"items": out, "llm": _llm_meta(model, "source_suggestion", usage)}

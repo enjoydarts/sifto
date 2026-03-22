@@ -51,6 +51,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("json cache: %v", err)
 	}
+	redisClient, redisPrefix := service.RedisClientFromCache(cache)
 	eventPublisher, err := service.NewEventPublisher()
 	if err != nil {
 		log.Fatalf("event publisher: %v", err)
@@ -82,7 +83,7 @@ func main() {
 	streakRepo := repository.NewReadingStreakRepo(db)
 	prefProfileRepo := repository.NewPreferenceProfileRepo(db)
 	obsidianExportSvc := service.NewObsidianExportService(itemRepo, itemExportRepo, obsidianExportRepo, githubApp)
-	settingsH := handler.NewSettingsHandler(userSettingsRepo, obsidianExportRepo, notificationPriorityRepo, llmUsageRepo, openRouterModelOverrideRepo, secretCipher, githubApp, obsidianExportSvc, cache)
+	settingsH := handler.NewSettingsHandler(userSettingsRepo, obsidianExportRepo, notificationPriorityRepo, prefProfileRepo, llmUsageRepo, openRouterModelOverrideRepo, secretCipher, githubApp, obsidianExportSvc, cache)
 	readingGoalsH := handler.NewReadingGoalsHandler(readingGoalRepo)
 	itemNotesH := handler.NewItemNotesHandler(itemRepo, reviewQueueRepo)
 	reviewsH := handler.NewReviewsHandler(reviewQueueRepo, weeklyReviewRepo)
@@ -99,6 +100,7 @@ func main() {
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
 	briefingH := handler.NewBriefingHandler(itemRepo, briefingSnapshotRepo, streakRepo, cache)
 	askH := handler.NewAskHandler(itemRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, openAI, cache)
+	rateLimiter := middleware.NewRateLimiter(redisClient, redisPrefix)
 
 	if latestModels, _, err := openRouterModelRepo.ListLatestSnapshots(ctx); err != nil {
 		log.Printf("openrouter snapshot preload failed: %v", err)
@@ -141,6 +143,7 @@ func main() {
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(middleware.Auth(userIdentityRepo, clerkVerifier))
+		r.Use(rateLimiter.Middleware)
 
 		r.Route("/sources", func(r chi.Router) {
 			r.Get("/", sourceH.List)
@@ -251,6 +254,9 @@ func main() {
 
 		r.Route("/settings", func(r chi.Router) {
 			r.Get("/", settingsH.Get)
+			r.Get("/preference-profile", settingsH.GetPreferenceProfile)
+			r.Get("/preference-profile/summary", settingsH.GetPreferenceProfileSummary)
+			r.Delete("/preference-profile", settingsH.ResetPreferenceProfile)
 			r.Get("/reading-goals", readingGoalsH.List)
 			r.Post("/reading-goals", readingGoalsH.Create)
 			r.Patch("/reading-goals/{id}", readingGoalsH.Update)

@@ -24,6 +24,10 @@ func cacheVersionKeyUserSettings(userID string) string {
 	return fmt.Sprintf("cache_version:user_settings:%s", userID)
 }
 
+func cacheVersionKeyUserPreferenceProfile(userID string) string {
+	return fmt.Sprintf("cache_version:user_preference_profile:%s", userID)
+}
+
 func cacheVersionKeyUserLLMUsage(userID string) string {
 	return service.UserLLMUsageCacheVersionKey(userID)
 }
@@ -97,6 +101,14 @@ func cacheKeyItemDetailVersioned(userID, itemID string, version int64) string {
 
 func cacheKeySettingsGetVersioned(userID string, version int64) string {
 	return fmt.Sprintf("%s:settings:get:%s:v=%d", cacheKeyVersion, userID, version)
+}
+
+func cacheKeyPreferenceProfile(userID string, version int64) string {
+	return fmt.Sprintf("%s:settings:preference_profile:%s:v=%d", cacheKeyVersion, userID, version)
+}
+
+func cacheKeyPreferenceProfileSummary(userID string, version int64) string {
+	return fmt.Sprintf("%s:settings:preference_profile_summary:%s:v=%d", cacheKeyVersion, userID, version)
 }
 
 func cacheKeyDashboard(userID string, llmDays, topicLimit, digestLimit int) string {

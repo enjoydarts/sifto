@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brain, ChevronDown, KeyRound, Settings as SettingsIcon } from "lucide-react";
-import { api, LLMCatalog, LLMCatalogModel, NotificationPriorityRule, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
+import { api, LLMCatalog, LLMCatalogModel, NotificationPriorityRule, PreferenceProfile, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -10,6 +10,7 @@ import OneSignalSettings from "@/components/onesignal-settings";
 import ApiKeyCard from "@/components/settings/api-key-card";
 import ModelGuideModal from "@/components/settings/model-guide-modal";
 import ModelSelect, { type ModelOption } from "@/components/settings/model-select";
+import { PreferenceProfilePanel } from "@/components/settings/preference-profile-panel";
 import ProviderModelUpdatesPanel from "@/components/settings/provider-model-updates-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
@@ -152,12 +153,23 @@ function localizeSettingsErrorMessage(raw: unknown, t: (key: string, fallback?: 
   return message;
 }
 
+function localizePreferenceProfileErrorMessage(raw: unknown, t: (key: string, fallback?: string) => string): string {
+  const message = String(raw instanceof Error ? raw.message : raw).replace(/^Error:\s*/, "").trim();
+  if (message.startsWith("401:")) return t("settings.personalization.error.auth");
+  if (message.startsWith("403:")) return t("settings.personalization.error.auth");
+  if (message.startsWith("429:")) return t("settings.personalization.error.rateLimited");
+  if (message.startsWith("500:")) return t("settings.personalization.error.server");
+  if (!message) return t("settings.personalization.error.unknown");
+  return t("settings.personalization.error.detail").replace("{{message}}", message);
+}
+
 function isUnavailableOpenRouterModel(item: LLMCatalogModel): boolean {
   return item.provider === "openrouter" && item.capabilities?.supports_structured_output === false;
 }
 
 type SettingsSectionID =
   | "reading-plan"
+  | "personalization"
   | "digest"
   | "notifications"
   | "integrations"
@@ -204,8 +216,11 @@ export default function SettingsPage() {
   const [savingOpenRouterKey, setSavingOpenRouterKey] = useState(false);
   const [deletingOpenRouterKey, setDeletingOpenRouterKey] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
+  const [resettingPreferenceProfile, setResettingPreferenceProfile] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [preferenceProfile, setPreferenceProfile] = useState<PreferenceProfile | null>(null);
+  const [preferenceProfileError, setPreferenceProfileError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<LLMCatalog | null>(null);
   const [providerModelUpdates, setProviderModelUpdates] = useState<ProviderModelChangeEvent[]>([]);
   const [dismissedModelUpdatesAt, setDismissedModelUpdatesAt] = useState<string | null>(() => {
@@ -286,13 +301,18 @@ export default function SettingsPage() {
     const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
-      const [data, nextCatalog] = await Promise.all([
+      const [data, nextCatalog, preferenceProfileResult] = await Promise.all([
         api.getSettings(),
         api.getLLMCatalog(),
+        api.getPreferenceProfile()
+          .then((profile) => ({ profile, error: null as string | null }))
+          .catch((profileError) => ({ profile: null, error: localizePreferenceProfileErrorMessage(profileError, t) })),
       ]);
       if (seq !== loadSeqRef.current) return;
       setSettings(data);
       setCatalog(nextCatalog);
+      setPreferenceProfile(preferenceProfileResult.profile);
+      setPreferenceProfileError(preferenceProfileResult.error);
       setBudgetUSD(data.monthly_budget_usd == null ? "" : String(data.monthly_budget_usd));
       setAlertEnabled(Boolean(data.budget_alert_enabled));
       setThresholdPct(data.budget_alert_threshold_pct ?? 20);
@@ -319,7 +339,7 @@ export default function SettingsPage() {
         setLoading(false);
       }
     }
-  }, [syncLLMModelForm]);
+  }, [syncLLMModelForm, t]);
 
   useEffect(() => {
     load();
@@ -1279,6 +1299,27 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleResetPreferenceProfile() {
+    if (!(await confirm({
+      title: t("settings.personalization.resetTitle"),
+      message: t("settings.personalization.resetMessage"),
+      confirmLabel: t("settings.personalization.reset"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setResettingPreferenceProfile(true);
+    try {
+      await api.resetPreferenceProfile();
+      await load();
+      showToast(t("settings.personalization.resetDone"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setResettingPreferenceProfile(false);
+    }
+  }
+
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!settings) return null;
@@ -1297,6 +1338,15 @@ export default function SettingsPage() {
       id: "reading-plan",
       title: t("settings.recommendedTitle"),
       summary: `${t(`settings.window.${readingPlanWindow}`)} / ${readingPlanSize} / ${readingPlanDiversifyTopics ? t("settings.on") : t("settings.off")}`,
+    },
+    {
+      id: "personalization",
+      title: t("settings.personalization.title"),
+      summary: preferenceProfile
+        ? `${t(`settings.personalization.status.${preferenceProfile.status}`, preferenceProfile.status)} / ${Math.round(preferenceProfile.confidence * 100)}%`
+        : preferenceProfileError
+          ? t("settings.personalization.loadFailedShort")
+          : t("settings.personalization.unavailable"),
     },
     {
       id: "digest",
@@ -1354,6 +1404,11 @@ export default function SettingsPage() {
       kicker: t("settings.recommendedTitle"),
       title: t("settings.controlRoom.readingPlanTitle"),
       description: t("settings.controlRoom.readingPlanDescription"),
+    },
+    personalization: {
+      kicker: t("settings.personalization.title"),
+      title: t("settings.personalization.title"),
+      description: t("settings.personalization.description.default"),
     },
     digest: {
       kicker: t("settings.digestTitle"),
@@ -1549,6 +1604,22 @@ export default function SettingsPage() {
                   {savingReadingPlan ? t("common.saving") : t("settings.saveRecommended")}
                 </button>
               </form>
+            </SectionCard>
+          ) : null}
+
+          {activeSection === "personalization" ? (
+            <SectionCard>
+              <PreferenceProfilePanel
+                profile={preferenceProfile}
+                error={preferenceProfileError}
+                onReset={() => {
+                  void handleResetPreferenceProfile();
+                }}
+                onRetry={() => {
+                  void load();
+                }}
+                resetting={resettingPreferenceProfile}
+              />
             </SectionCard>
           ) : null}
 

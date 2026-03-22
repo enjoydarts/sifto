@@ -98,6 +98,9 @@ func (r *ItemRepo) loadSummaryDetail(ctx context.Context, itemID string, detail 
 		return err
 	}
 	detail.Summary = summary
+	detail.SummaryScore = summary.Score
+	detail.SummaryScoreBreakdown = summary.ScoreBreakdown
+	detail.SummaryTopics = summary.Topics
 	if llm, llmErr := loadLatestItemLLMUsage(ctx, r.db, itemID, "summary"); llmErr == nil {
 		detail.SummaryLLM = llm
 	}

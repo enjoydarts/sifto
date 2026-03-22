@@ -990,7 +990,41 @@ func (h *ItemHandler) GetDetail(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	h.applyPersonalizationToDetail(r.Context(), userID, item)
 	writeJSON(w, item)
+}
+
+func (h *ItemHandler) applyPersonalizationToDetail(ctx context.Context, userID string, item *model.ItemDetail) {
+	if item == nil || h.prefProfileRepo == nil {
+		return
+	}
+
+	var profile *model.UserPreferenceProfile
+	nextProfile, err := h.prefProfileRepo.GetProfile(ctx, userID)
+	if err != nil && err != repository.ErrNotFound {
+		log.Printf("item detail preference profile load failed user_id=%s item_id=%s err=%v", userID, item.ID, err)
+	} else {
+		profile = nextProfile
+	}
+
+	input := repository.PersonalScoreInput{
+		SummaryScore:   item.SummaryScore,
+		ScoreBreakdown: item.SummaryScoreBreakdown,
+		Topics:         item.SummaryTopics,
+		SourceID:       item.SourceID,
+	}
+	if h.repo != nil {
+		if embByID, embErr := h.repo.LoadItemEmbeddingsByID(ctx, []string{item.ID}); embErr == nil {
+			input.Embedding = embByID[item.ID]
+		} else {
+			log.Printf("item detail embedding load failed item_id=%s err=%v", item.ID, embErr)
+		}
+	}
+
+	result := repository.CalcPersonalScoreDetailed(input, profile)
+	item.PersonalScore = &result.Score
+	item.PersonalScoreReason = &result.Reason
+	item.PersonalScoreBreakdown = result.Breakdown
 }
 
 func (h *ItemHandler) Delete(w http.ResponseWriter, r *http.Request) {

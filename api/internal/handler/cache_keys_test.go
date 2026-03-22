@@ -15,6 +15,9 @@ func TestCacheKeyVersionKeys(t *testing.T) {
 	if got, want := cacheVersionKeyUserSettings("u1"), "cache_version:user_settings:u1"; got != want {
 		t.Fatalf("cacheVersionKeyUserSettings = %q, want %q", got, want)
 	}
+	if got, want := cacheVersionKeyUserPreferenceProfile("u1"), "cache_version:user_preference_profile:u1"; got != want {
+		t.Fatalf("cacheVersionKeyUserPreferenceProfile = %q, want %q", got, want)
+	}
 	if got, want := cacheVersionKeyUserLLMUsage("u1"), "cache_version:user_llm_usage:u1"; got != want {
 		t.Fatalf("cacheVersionKeyUserLLMUsage = %q, want %q", got, want)
 	}
@@ -56,6 +59,13 @@ func TestCacheKeySettingsGetVersioned(t *testing.T) {
 	want := "v1:settings:get:u1:v=9"
 	if got != want {
 		t.Fatalf("cacheKeySettingsGetVersioned = %q, want %q", got, want)
+	}
+
+	if got, want = cacheKeyPreferenceProfile("u1", 3), "v1:settings:preference_profile:u1:v=3"; got != want {
+		t.Fatalf("cacheKeyPreferenceProfile = %q, want %q", got, want)
+	}
+	if got, want = cacheKeyPreferenceProfileSummary("u1", 4), "v1:settings:preference_profile_summary:u1:v=4"; got != want {
+		t.Fatalf("cacheKeyPreferenceProfileSummary = %q, want %q", got, want)
 	}
 }
 

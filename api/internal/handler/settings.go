@@ -18,6 +18,7 @@ type SettingsHandler struct {
 	settings         *service.SettingsService
 	obsidianRepo     *repository.ObsidianExportRepo
 	notificationRepo *repository.NotificationPriorityRepo
+	prefProfileRepo  *repository.PreferenceProfileRepo
 	oauth            *service.InoreaderOAuthService
 	github           *service.GitHubAppClient
 	obsidianExport   *service.ObsidianExportService
@@ -26,11 +27,12 @@ type SettingsHandler struct {
 
 const settingsCacheTTL = 2 * time.Minute
 
-func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {
+func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {
 	return &SettingsHandler{
 		settings:         service.NewSettingsService(repo, obsidianRepo, llmUsageRepo, openRouterOverrideRepo, cipher, github),
 		obsidianRepo:     obsidianRepo,
 		notificationRepo: notificationRepo,
+		prefProfileRepo:  prefProfileRepo,
 		oauth:            service.NewInoreaderOAuthService(repo, cipher),
 		github:           github,
 		obsidianExport:   obsidianExport,

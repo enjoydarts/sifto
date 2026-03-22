@@ -77,6 +77,14 @@ func NewJSONCacheFromEnv() (JSONCache, error) {
 	return &RedisJSONCache{client: client, prefix: prefix}, nil
 }
 
+func RedisClientFromCache(cache JSONCache) (*redis.Client, string) {
+	redisCache, ok := cache.(*RedisJSONCache)
+	if !ok || redisCache == nil {
+		return nil, ""
+	}
+	return redisCache.client, redisCache.prefix
+}
+
 func (c *RedisJSONCache) key(k string) string {
 	if c == nil {
 		return k

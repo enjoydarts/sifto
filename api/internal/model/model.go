@@ -181,32 +181,33 @@ type RecommendedSource struct {
 }
 
 type Item struct {
-	ID                    string                     `json:"id"`
-	SourceID              string                     `json:"source_id"`
-	SourceTitle           *string                    `json:"source_title,omitempty"`
-	URL                   string                     `json:"url"`
-	Title                 *string                    `json:"title"`
-	ThumbnailURL          *string                    `json:"thumbnail_url,omitempty"`
-	ContentText           *string                    `json:"content_text,omitempty"`
-	Summary               *string                    `json:"summary,omitempty"`
-	Status                string                     `json:"status"` // new | fetched | facts_extracted | summarized | failed
-	ProcessingError       *string                    `json:"processing_error,omitempty"`
-	FactsCheckResult      *string                    `json:"facts_check_result,omitempty"`
-	FaithfulnessResult    *string                    `json:"faithfulness_result,omitempty"`
-	IsRead                bool                       `json:"is_read"`
-	IsFavorite            bool                       `json:"is_favorite"`
-	FeedbackRating        int                        `json:"feedback_rating"` // -1 | 0 | 1
-	SummaryScore          *float64                   `json:"summary_score,omitempty"`
-	SummaryScoreBreakdown *ItemSummaryScoreBreakdown `json:"summary_score_breakdown,omitempty"`
-	PersonalScore         *float64                   `json:"personal_score,omitempty"`
-	PersonalScoreReason   *string                    `json:"personal_score_reason,omitempty"`
-	SummaryTopics         []string                   `json:"summary_topics,omitempty"`
-	RecommendationReason  *string                    `json:"recommendation_reason,omitempty"`
-	TranslatedTitle       *string                    `json:"translated_title,omitempty"`
-	PublishedAt           *time.Time                 `json:"published_at,omitempty"`
-	FetchedAt             *time.Time                 `json:"fetched_at,omitempty"`
-	CreatedAt             time.Time                  `json:"created_at"`
-	UpdatedAt             time.Time                  `json:"updated_at"`
+	ID                     string                     `json:"id"`
+	SourceID               string                     `json:"source_id"`
+	SourceTitle            *string                    `json:"source_title,omitempty"`
+	URL                    string                     `json:"url"`
+	Title                  *string                    `json:"title"`
+	ThumbnailURL           *string                    `json:"thumbnail_url,omitempty"`
+	ContentText            *string                    `json:"content_text,omitempty"`
+	Summary                *string                    `json:"summary,omitempty"`
+	Status                 string                     `json:"status"` // new | fetched | facts_extracted | summarized | failed
+	ProcessingError        *string                    `json:"processing_error,omitempty"`
+	FactsCheckResult       *string                    `json:"facts_check_result,omitempty"`
+	FaithfulnessResult     *string                    `json:"faithfulness_result,omitempty"`
+	IsRead                 bool                       `json:"is_read"`
+	IsFavorite             bool                       `json:"is_favorite"`
+	FeedbackRating         int                        `json:"feedback_rating"` // -1 | 0 | 1
+	SummaryScore           *float64                   `json:"summary_score,omitempty"`
+	SummaryScoreBreakdown  *ItemSummaryScoreBreakdown `json:"summary_score_breakdown,omitempty"`
+	PersonalScore          *float64                   `json:"personal_score,omitempty"`
+	PersonalScoreReason    *string                    `json:"personal_score_reason,omitempty"`
+	PersonalScoreBreakdown *PersonalScoreBreakdown    `json:"personal_score_breakdown,omitempty"`
+	SummaryTopics          []string                   `json:"summary_topics,omitempty"`
+	RecommendationReason   *string                    `json:"recommendation_reason,omitempty"`
+	TranslatedTitle        *string                    `json:"translated_title,omitempty"`
+	PublishedAt            *time.Time                 `json:"published_at,omitempty"`
+	FetchedAt              *time.Time                 `json:"fetched_at,omitempty"`
+	CreatedAt              time.Time                  `json:"created_at"`
+	UpdatedAt              time.Time                  `json:"updated_at"`
 }
 
 type ItemFacts struct {
@@ -275,6 +276,20 @@ type ItemSummaryScoreBreakdown struct {
 	Actionability *float64 `json:"actionability,omitempty"`
 	Reliability   *float64 `json:"reliability,omitempty"`
 	Relevance     *float64 `json:"relevance,omitempty"`
+}
+
+type PersonalScoreComponent struct {
+	Value  float64 `json:"value"`
+	Weight float64 `json:"weight"`
+}
+
+type PersonalScoreBreakdown struct {
+	LearnedWeightScore  PersonalScoreComponent `json:"learned_weight_score"`
+	TopicRelevance      PersonalScoreComponent `json:"topic_relevance"`
+	EmbeddingSimilarity PersonalScoreComponent `json:"embedding_similarity"`
+	SourceAffinity      PersonalScoreComponent `json:"source_affinity"`
+	MatchedTopics       []string               `json:"matched_topics,omitempty"`
+	DominantDimension   *string                `json:"dominant_dimension,omitempty"`
 }
 
 type ItemDetail struct {
@@ -688,6 +703,52 @@ type UserPreferenceProfile struct {
 	FeedbackCount    int                `json:"feedback_count"`
 	ReadCount        int                `json:"read_count"`
 	ComputedAt       *time.Time         `json:"computed_at,omitempty"`
+}
+
+type PreferenceProfileWeight struct {
+	Value   float64 `json:"value"`
+	Default float64 `json:"default"`
+	Delta   float64 `json:"delta"`
+}
+
+type PreferenceProfileTopic struct {
+	Topic       string  `json:"topic"`
+	Score       float64 `json:"score"`
+	SignalCount int     `json:"signal_count"`
+}
+
+type PreferenceProfileSource struct {
+	SourceID    string  `json:"source_id"`
+	SourceTitle string  `json:"source_title"`
+	Score       float64 `json:"score"`
+}
+
+type PreferenceProfileReadingPattern struct {
+	AvgScoreRead    float64 `json:"avg_score_read"`
+	AvgScoreSkipped float64 `json:"avg_score_skipped"`
+	FavoriteRate    float64 `json:"favorite_rate"`
+	NoteRate        float64 `json:"note_rate"`
+}
+
+type PreferenceProfileResponse struct {
+	Status         string                             `json:"status"`
+	Confidence     float64                            `json:"confidence"`
+	FeedbackCount  int                                `json:"feedback_count"`
+	ReadCount      int                                `json:"read_count"`
+	ComputedAt     *time.Time                         `json:"computed_at,omitempty"`
+	LearnedWeights map[string]PreferenceProfileWeight `json:"learned_weights"`
+	TopTopics      []PreferenceProfileTopic           `json:"top_topics"`
+	TopSources     []PreferenceProfileSource          `json:"top_sources"`
+	ReadingPattern PreferenceProfileReadingPattern    `json:"reading_pattern"`
+}
+
+type PreferenceProfileSummaryResponse struct {
+	Status          string     `json:"status"`
+	Confidence      float64    `json:"confidence"`
+	FeedbackCount   int        `json:"feedback_count"`
+	TopTopics       []string   `json:"top_topics"`
+	StrongestWeight string     `json:"strongest_weight"`
+	ComputedAt      *time.Time `json:"computed_at,omitempty"`
 }
 
 var DefaultScoreWeights = map[string]float64{

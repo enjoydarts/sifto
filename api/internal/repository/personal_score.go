@@ -2,10 +2,17 @@ package repository
 
 import (
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 )
+
+type PersonalScoreResult struct {
+	Score     float64
+	Reason    string
+	Breakdown *model.PersonalScoreBreakdown
+}
 
 // PersonalScoreInput holds the item-level data needed for personal scoring.
 type PersonalScoreInput struct {
@@ -19,6 +26,11 @@ type PersonalScoreInput struct {
 // CalcPersonalScore computes a personal relevance score for an item given a user profile.
 // Returns the score and a reason string explaining the dominant signal.
 func CalcPersonalScore(item PersonalScoreInput, profile *model.UserPreferenceProfile) (float64, string) {
+	result := CalcPersonalScoreDetailed(item, profile)
+	return result.Score, result.Reason
+}
+
+func CalcPersonalScoreDetailed(item PersonalScoreInput, profile *model.UserPreferenceProfile) PersonalScoreResult {
 	base := 0.0
 	if item.SummaryScore != nil {
 		base = *item.SummaryScore
@@ -26,7 +38,7 @@ func CalcPersonalScore(item PersonalScoreInput, profile *model.UserPreferencePro
 
 	// Cold start: not enough feedback
 	if profile == nil || profile.FeedbackCount < 10 {
-		return base, "attention"
+		return PersonalScoreResult{Score: base, Reason: "attention"}
 	}
 
 	// Component weights
@@ -57,15 +69,21 @@ func CalcPersonalScore(item PersonalScoreInput, profile *model.UserPreferencePro
 	score := alpha*lwScore + beta*topicRel + gamma*embSim + delta*srcAff
 
 	// Clamp to [0, 1]
-	if score < 0 {
-		score = 0
-	}
-	if score > 1 {
-		score = 1
-	}
+	score = clamp01(score)
 
 	reason := determineReason(item, profile, embSim, topicRel, srcAff)
-	return score, reason
+	return PersonalScoreResult{
+		Score:  score,
+		Reason: reason,
+		Breakdown: &model.PersonalScoreBreakdown{
+			LearnedWeightScore:  model.PersonalScoreComponent{Value: clamp01(lwScore), Weight: alpha},
+			TopicRelevance:      model.PersonalScoreComponent{Value: clamp01(topicRel), Weight: beta},
+			EmbeddingSimilarity: model.PersonalScoreComponent{Value: clamp01(embSim), Weight: gamma},
+			SourceAffinity:      model.PersonalScoreComponent{Value: clamp01(srcAff), Weight: delta},
+			MatchedTopics:       matchedTopics(item.Topics, profile.TopicInterests),
+			DominantDimension:   dominantDimension(item.ScoreBreakdown, profile.LearnedWeights),
+		},
+	}
 }
 
 // calcLearnedWeightScore computes a weighted sum of breakdown dimensions.
@@ -151,25 +169,57 @@ func determineReason(item PersonalScoreInput, profile *model.UserPreferenceProfi
 	}
 
 	// Find the breakdown dimension contributing the most
-	if item.ScoreBreakdown != nil && len(profile.LearnedWeights) > 0 {
-		m := breakdownToMap(*item.ScoreBreakdown)
-		bestKey := ""
-		bestContrib := -1.0
-		for k, w := range profile.LearnedWeights {
-			if v, ok := m[k]; ok {
-				contrib := v * w
-				if contrib > bestContrib {
-					bestContrib = contrib
-					bestKey = k
-				}
-			}
-		}
-		if bestKey != "" && bestContrib > 0 {
-			return "weight:" + bestKey
-		}
+	if bestKey := dominantDimension(item.ScoreBreakdown, profile.LearnedWeights); bestKey != nil {
+		return "weight:" + *bestKey
 	}
 
 	return "attention"
+}
+
+func dominantDimension(bd *model.ItemSummaryScoreBreakdown, weights map[string]float64) *string {
+	if bd == nil || len(weights) == 0 {
+		return nil
+	}
+	m := breakdownToMap(*bd)
+	bestKey := ""
+	bestContrib := -1.0
+	for k, w := range weights {
+		if v, ok := m[k]; ok {
+			contrib := v * w
+			if contrib > bestContrib {
+				bestContrib = contrib
+				bestKey = k
+			}
+		}
+	}
+	if bestKey == "" || bestContrib <= 0 {
+		return nil
+	}
+	return &bestKey
+}
+
+func matchedTopics(topics []string, interests map[string]float64) []string {
+	if len(topics) == 0 || len(interests) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(topics))
+	seen := make(map[string]struct{}, len(topics))
+	for _, topic := range topics {
+		norm := strings.ToLower(strings.TrimSpace(topic))
+		if norm == "" {
+			continue
+		}
+		if _, ok := interests[norm]; !ok {
+			continue
+		}
+		if _, ok := seen[norm]; ok {
+			continue
+		}
+		seen[norm] = struct{}{}
+		out = append(out, norm)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // clamp01 clamps a value to [0, 1]. Kept for potential future use.

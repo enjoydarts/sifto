@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Bell, BookOpen, Flame, Sparkles, X } from "lucide-react";
-import { api, BriefingCluster, Item, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
+import { api, BriefingCluster, Item, PreferenceProfileSummary, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
+import { PreferenceProfileCard } from "@/components/briefing/preference-profile-card";
 import { ReadingGoalsPanel } from "@/components/briefing/reading-goals-panel";
 import { DueReviewPanel } from "@/components/reviews/due-review-panel";
 import { WeeklyReviewPanel } from "@/components/reviews/weekly-review-panel";
@@ -21,6 +22,7 @@ import { Tag } from "@/components/ui/tag";
 const EMPTY_ITEMS: Item[] = [];
 const EMPTY_CLUSTERS: BriefingCluster[] = [];
 const EMPTY_MODEL_UPDATES: ProviderModelChangeEvent[] = [];
+const EMPTY_PROFILE_SUMMARY: PreferenceProfileSummary | null = null;
 const EMPTY_GOALS: ReadingGoal[] = [];
 const EMPTY_TODAY_QUEUE: TodayQueueItem[] = [];
 const EMPTY_REVIEW_QUEUE: ReviewQueueItem[] = [];
@@ -54,6 +56,12 @@ export default function BriefingPage() {
     queryKey: ["reading-goals"] as const,
     queryFn: () => api.getReadingGoals(),
     staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+  const preferenceProfileSummaryQuery = useQuery({
+    queryKey: ["preference-profile-summary"] as const,
+    queryFn: () => api.getPreferenceProfileSummary(),
+    staleTime: 5 * 60_000,
     placeholderData: (prev) => prev,
   });
   const todayQueueQuery = useQuery({
@@ -90,6 +98,7 @@ export default function BriefingPage() {
   const todayQueue = todayQueueQuery.data?.items ?? EMPTY_TODAY_QUEUE;
   const reviewQueue = reviewQueueQuery.data?.items ?? EMPTY_REVIEW_QUEUE;
   const weeklyReview = (weeklyReviewQuery.data ?? null) as WeeklyReviewSnapshot | null;
+  const preferenceProfileSummary = preferenceProfileSummaryQuery.data ?? EMPTY_PROFILE_SUMMARY;
   const clusters = data?.clusters ?? EMPTY_CLUSTERS;
   const unreadHighlights = useMemo(() => highlights.filter((item) => !item.is_read), [highlights]);
   const nowReading = unreadHighlights[0] ?? highlights[0] ?? null;
@@ -369,6 +378,8 @@ export default function BriefingPage() {
               ) : null}
           </div>
         </SectionCard>
+
+        <PreferenceProfileCard summary={preferenceProfileSummary} />
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_340px] xl:items-start">
           <div className="grid gap-6">

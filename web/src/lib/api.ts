@@ -177,10 +177,25 @@ export interface Item {
   recommendation_reason?: string | null;
   personal_score?: number;
   personal_score_reason?: string;
+  personal_score_breakdown?: PersonalScoreBreakdown | null;
   published_at: string | null;
   fetched_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PersonalScoreComponent {
+  value: number;
+  weight: number;
+}
+
+export interface PersonalScoreBreakdown {
+  learned_weight_score: PersonalScoreComponent;
+  topic_relevance: PersonalScoreComponent;
+  embedding_similarity: PersonalScoreComponent;
+  source_affinity: PersonalScoreComponent;
+  matched_topics?: string[];
+  dominant_dimension?: string | null;
 }
 
 export interface ItemFacts {
@@ -292,6 +307,52 @@ export interface ItemDetail extends Item {
   feedback?: ItemFeedback | null;
   note?: ItemNote | null;
   highlights?: ItemHighlight[];
+}
+
+export interface PreferenceProfileWeight {
+  value: number;
+  default: number;
+  delta: number;
+}
+
+export interface PreferenceProfileTopic {
+  topic: string;
+  score: number;
+  signal_count: number;
+}
+
+export interface PreferenceProfileSource {
+  source_id: string;
+  source_title: string;
+  score: number;
+}
+
+export interface PreferenceProfileReadingPattern {
+  avg_score_read: number;
+  avg_score_skipped: number;
+  favorite_rate: number;
+  note_rate: number;
+}
+
+export interface PreferenceProfile {
+  status: "cold_start" | "learning" | "active" | string;
+  confidence: number;
+  feedback_count: number;
+  read_count: number;
+  computed_at?: string | null;
+  learned_weights: Record<string, PreferenceProfileWeight>;
+  top_topics: PreferenceProfileTopic[];
+  top_sources: PreferenceProfileSource[];
+  reading_pattern: PreferenceProfileReadingPattern;
+}
+
+export interface PreferenceProfileSummary {
+  status: "cold_start" | "learning" | "active" | string;
+  confidence: number;
+  feedback_count: number;
+  top_topics: string[];
+  strongest_weight: string;
+  computed_at?: string | null;
 }
 
 export interface RelatedItem {
@@ -1213,6 +1274,9 @@ export const api = {
     });
   },
   getWeeklyReviewLatest: () => apiFetch<WeeklyReviewSnapshot>("/reviews/weekly/latest"),
+  getPreferenceProfile: () => apiFetch<PreferenceProfile>("/settings/preference-profile"),
+  getPreferenceProfileSummary: () => apiFetch<PreferenceProfileSummary>("/settings/preference-profile/summary"),
+  resetPreferenceProfile: () => apiFetch<{ success: boolean }>("/settings/preference-profile", { method: "DELETE" }),
   ask: (body: {
     query: string;
     days?: number;

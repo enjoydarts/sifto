@@ -159,3 +159,42 @@ func TestPreferenceProfileIncludesNewSignals(t *testing.T) {
 		t.Fatalf("ai (%f) should be > infra (%f)", interests["ai"], interests["infra"])
 	}
 }
+
+func TestPreferenceProfileStatusAndConfidence(t *testing.T) {
+	if got, want := preferenceStatusFromFeedbackCount(0), "cold_start"; got != want {
+		t.Fatalf("status(0) = %q, want %q", got, want)
+	}
+	if got, want := preferenceStatusFromFeedbackCount(10), "learning"; got != want {
+		t.Fatalf("status(10) = %q, want %q", got, want)
+	}
+	if got, want := preferenceStatusFromFeedbackCount(30), "active"; got != want {
+		t.Fatalf("status(30) = %q, want %q", got, want)
+	}
+	if got := preferenceConfidenceFromFeedbackCount(15); math.Abs(got-0.5) > 1e-9 {
+		t.Fatalf("confidence(15) = %f, want 0.5", got)
+	}
+	if got := preferenceConfidenceFromFeedbackCount(99); got != 1 {
+		t.Fatalf("confidence should clamp to 1, got %f", got)
+	}
+}
+
+func TestTopTopicsWithSignalCounts(t *testing.T) {
+	topics := topTopicsWithSignalCounts(
+		map[string]float64{"go": 1.0, "rust": 0.8, "ml": 0.3},
+		[]topicAction{
+			{Topics: []string{"Go", "Rust"}, Signal: 1.0},
+			{Topics: []string{"Go"}, Signal: 1.0},
+			{Topics: []string{"ML"}, Signal: 1.0},
+		},
+		2,
+	)
+	if len(topics) != 2 {
+		t.Fatalf("len(topics) = %d, want 2", len(topics))
+	}
+	if topics[0].Topic != "go" || topics[0].SignalCount != 2 {
+		t.Fatalf("top topic = %+v, want go with 2 signals", topics[0])
+	}
+	if topics[1].Topic != "rust" {
+		t.Fatalf("second topic = %+v, want rust", topics[1])
+	}
+}

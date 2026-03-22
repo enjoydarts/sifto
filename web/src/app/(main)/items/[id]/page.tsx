@@ -10,6 +10,7 @@ import { formatModelDisplayName } from "@/lib/model-display";
 import { InlineReader } from "@/components/inline-reader";
 import { ItemHighlightList } from "@/components/items/item-highlight-list";
 import { ItemNoteEditor } from "@/components/items/item-note-editor";
+import { PersonalScoreExplainer } from "@/components/items/personal-score-explainer";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -1098,6 +1099,11 @@ export default function ItemDetailPage() {
                     <p className="text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.summary.score_reason}</p>
                   </DetailInfoBox>
                 )}
+                <PersonalScoreExplainer
+                  score={item.personal_score}
+                  reason={item.personal_score_reason}
+                  breakdown={item.personal_score_breakdown}
+                />
                 {item.summary?.score_breakdown && (
                   <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                     {[

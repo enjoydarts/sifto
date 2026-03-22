@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"log"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -254,7 +256,289 @@ func (r *PreferenceProfileRepo) GetProfile(ctx context.Context, userID string) (
 	return &p, nil
 }
 
+func (r *PreferenceProfileRepo) DeleteProfile(ctx context.Context, userID string) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM user_preference_profiles WHERE user_id = $1`, userID)
+	return err
+}
+
+func (r *PreferenceProfileRepo) GetProfileView(ctx context.Context, userID string) (*model.PreferenceProfileResponse, error) {
+	profile, err := r.GetProfile(ctx, userID)
+	if err != nil {
+		if err != ErrNotFound {
+			return nil, err
+		}
+		profile = &model.UserPreferenceProfile{
+			UserID:           userID,
+			LearnedWeights:   cloneDefaultWeights(),
+			TopicInterests:   map[string]float64{},
+			SourceAffinities: map[string]float64{},
+		}
+		readCount, readErr := r.countReads(ctx, userID)
+		if readErr != nil {
+			return nil, readErr
+		}
+		profile.ReadCount = readCount
+	}
+	if len(profile.LearnedWeights) == 0 {
+		profile.LearnedWeights = cloneDefaultWeights()
+	}
+	if profile.TopicInterests == nil {
+		profile.TopicInterests = map[string]float64{}
+	}
+	if profile.SourceAffinities == nil {
+		profile.SourceAffinities = map[string]float64{}
+	}
+
+	actions, err := r.loadTopicActions(ctx, userID)
+	if err != nil {
+		log.Printf("GetProfileView loadTopicActions failed user_id=%s err=%v", userID, err)
+		return nil, err
+	}
+	topTopics := topTopicsWithSignalCounts(profile.TopicInterests, actions, 10)
+
+	topSources, err := r.loadTopSourceAffinitiesWithTitles(ctx, userID, profile.SourceAffinities, 5)
+	if err != nil {
+		log.Printf("GetProfileView loadTopSourceAffinitiesWithTitles failed user_id=%s err=%v", userID, err)
+		return nil, err
+	}
+
+	readingPattern, err := r.loadReadingPattern(ctx, userID)
+	if err != nil {
+		log.Printf("GetProfileView loadReadingPattern failed user_id=%s err=%v", userID, err)
+		return nil, err
+	}
+
+	learnedWeights := make(map[string]model.PreferenceProfileWeight, len(scoreKeys))
+	for _, key := range scoreKeys {
+		current := profile.LearnedWeights[key]
+		def := model.DefaultScoreWeights[key]
+		learnedWeights[key] = model.PreferenceProfileWeight{
+			Value:   current,
+			Default: def,
+			Delta:   current - def,
+		}
+	}
+
+	return &model.PreferenceProfileResponse{
+		Status:         preferenceStatusFromFeedbackCount(profile.FeedbackCount),
+		Confidence:     preferenceConfidenceFromFeedbackCount(profile.FeedbackCount),
+		FeedbackCount:  profile.FeedbackCount,
+		ReadCount:      profile.ReadCount,
+		ComputedAt:     profile.ComputedAt,
+		LearnedWeights: learnedWeights,
+		TopTopics:      topTopics,
+		TopSources:     topSources,
+		ReadingPattern: readingPattern,
+	}, nil
+}
+
+func (r *PreferenceProfileRepo) GetProfileSummary(ctx context.Context, userID string) (*model.PreferenceProfileSummaryResponse, error) {
+	view, err := r.GetProfileView(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	topLimit := len(view.TopTopics)
+	if topLimit > 3 {
+		topLimit = 3
+	}
+	topTopics := make([]string, 0, topLimit)
+	for _, topic := range view.TopTopics {
+		topTopics = append(topTopics, topic.Topic)
+		if len(topTopics) == 3 {
+			break
+		}
+	}
+
+	strongestWeight := ""
+	bestWeight := -1.0
+	for key, weight := range view.LearnedWeights {
+		if weight.Value > bestWeight {
+			bestWeight = weight.Value
+			strongestWeight = key
+		}
+	}
+
+	return &model.PreferenceProfileSummaryResponse{
+		Status:          view.Status,
+		Confidence:      view.Confidence,
+		FeedbackCount:   view.FeedbackCount,
+		TopTopics:       topTopics,
+		StrongestWeight: strongestWeight,
+		ComputedAt:      view.ComputedAt,
+	}, nil
+}
+
 // --- internal helpers ---
+
+func preferenceStatusFromFeedbackCount(feedbackCount int) string {
+	switch {
+	case feedbackCount >= 30:
+		return "active"
+	case feedbackCount >= 10:
+		return "learning"
+	default:
+		return "cold_start"
+	}
+}
+
+func preferenceConfidenceFromFeedbackCount(feedbackCount int) float64 {
+	return math.Min(float64(feedbackCount)/30.0, 1.0)
+}
+
+func cloneDefaultWeights() map[string]float64 {
+	out := make(map[string]float64, len(model.DefaultScoreWeights))
+	for key, value := range model.DefaultScoreWeights {
+		out[key] = value
+	}
+	return out
+}
+
+func topTopicsWithSignalCounts(interests map[string]float64, actions []topicAction, limit int) []model.PreferenceProfileTopic {
+	if limit <= 0 || len(interests) == 0 {
+		return nil
+	}
+	counts := make(map[string]int, len(interests))
+	for _, action := range actions {
+		seen := map[string]struct{}{}
+		for _, topic := range action.Topics {
+			norm := strings.ToLower(strings.TrimSpace(topic))
+			if norm == "" {
+				continue
+			}
+			if _, ok := seen[norm]; ok {
+				continue
+			}
+			seen[norm] = struct{}{}
+			counts[norm]++
+		}
+	}
+
+	out := make([]model.PreferenceProfileTopic, 0, len(interests))
+	for topic, score := range interests {
+		if score <= 0 {
+			continue
+		}
+		out = append(out, model.PreferenceProfileTopic{
+			Topic:       topic,
+			Score:       score,
+			SignalCount: counts[topic],
+		})
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Score == out[j].Score {
+			if out[i].SignalCount == out[j].SignalCount {
+				return out[i].Topic < out[j].Topic
+			}
+			return out[i].SignalCount > out[j].SignalCount
+		}
+		return out[i].Score > out[j].Score
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+func (r *PreferenceProfileRepo) loadTopSourceAffinitiesWithTitles(ctx context.Context, userID string, affinities map[string]float64, limit int) ([]model.PreferenceProfileSource, error) {
+	if limit <= 0 || len(affinities) == 0 {
+		return nil, nil
+	}
+	type scoredSource struct {
+		sourceID string
+		score    float64
+	}
+	sources := make([]scoredSource, 0, len(affinities))
+	for sourceID, score := range affinities {
+		if score <= 0 {
+			continue
+		}
+		sources = append(sources, scoredSource{sourceID: sourceID, score: score})
+	}
+	sort.Slice(sources, func(i, j int) bool {
+		if sources[i].score == sources[j].score {
+			return sources[i].sourceID < sources[j].sourceID
+		}
+		return sources[i].score > sources[j].score
+	})
+	if len(sources) > limit {
+		sources = sources[:limit]
+	}
+
+	sourceIDs := make([]string, 0, len(sources))
+	for _, source := range sources {
+		sourceIDs = append(sourceIDs, source.sourceID)
+	}
+
+	rows, err := r.db.Query(ctx, `
+		SELECT id, title
+		FROM sources
+		WHERE user_id = $1
+		  AND id::text = ANY($2)`, userID, sourceIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	titles := make(map[string]string, len(sourceIDs))
+	for rows.Next() {
+		var id string
+		var title *string
+		if err := rows.Scan(&id, &title); err != nil {
+			return nil, err
+		}
+		if title != nil {
+			titles[id] = *title
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	out := make([]model.PreferenceProfileSource, 0, len(sources))
+	for _, source := range sources {
+		out = append(out, model.PreferenceProfileSource{
+			SourceID:    source.sourceID,
+			SourceTitle: titles[source.sourceID],
+			Score:       source.score,
+		})
+	}
+	return out, nil
+}
+
+func (r *PreferenceProfileRepo) loadReadingPattern(ctx context.Context, userID string) (model.PreferenceProfileReadingPattern, error) {
+	var out model.PreferenceProfileReadingPattern
+	err := r.db.QueryRow(ctx, `
+		WITH scoped AS (
+			SELECT
+				COALESCE(sm.score, 0)::double precision AS score,
+				(ir.item_id IS NOT NULL) AS is_read,
+				COALESCE(fb.is_favorite, false) AS is_favorite,
+				EXISTS (
+					SELECT 1
+					FROM item_notes n
+					WHERE n.user_id = $2
+					  AND n.item_id = i.id
+				) AS has_note
+			FROM items i
+			JOIN sources s ON s.id = i.source_id
+			LEFT JOIN item_summaries sm ON sm.item_id = i.id
+			LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1::uuid
+			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1::uuid
+			WHERE s.user_id = $1::uuid
+			  AND i.deleted_at IS NULL
+			  AND i.status = 'summarized'
+			  AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '90 days'
+		)
+		SELECT
+			COALESCE(AVG(score) FILTER (WHERE is_read), 0),
+			COALESCE(AVG(score) FILTER (WHERE NOT is_read), 0),
+			COALESCE(AVG(CASE WHEN is_favorite THEN 1.0 ELSE 0.0 END), 0),
+			COALESCE(AVG(CASE WHEN has_note THEN 1.0 ELSE 0.0 END), 0)
+		FROM scoped`, userID, userID,
+	).Scan(&out.AvgScoreRead, &out.AvgScoreSkipped, &out.FavoriteRate, &out.NoteRate)
+	return out, err
+}
 
 func (r *PreferenceProfileRepo) loadFeedbackBreakdowns(ctx context.Context, userID string) (positive, negative []model.ItemSummaryScoreBreakdown, feedbackCount int, err error) {
 	rows, err := r.db.Query(ctx, `
@@ -279,16 +563,19 @@ func (r *PreferenceProfileRepo) loadFeedbackBreakdowns(ctx context.Context, user
 	for rows.Next() {
 		var rating int
 		var isFav bool
-		var bd model.ItemSummaryScoreBreakdown
-		if err := rows.Scan(&rating, &isFav, &bd); err != nil {
+		var bd *model.ItemSummaryScoreBreakdown
+		if err := rows.Scan(&rating, &isFav, scoreBreakdownScanner{dst: &bd}); err != nil {
 			return nil, nil, 0, err
+		}
+		if bd == nil {
+			continue
 		}
 		feedbackCount++
 		if rating > 0 || isFav {
-			positive = append(positive, bd)
+			positive = append(positive, *bd)
 		}
 		if rating < 0 {
-			negative = append(negative, bd)
+			negative = append(negative, *bd)
 		}
 	}
 	return positive, negative, feedbackCount, rows.Err()
@@ -311,9 +598,9 @@ func (r *PreferenceProfileRepo) loadTopicActions(ctx context.Context, userID str
 			FROM items i
 			JOIN sources s ON s.id = i.source_id
 			JOIN item_summaries isb ON isb.item_id = i.id
-			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
-			LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
-			WHERE s.user_id = $1
+			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1::uuid
+			LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1::uuid
+			WHERE s.user_id = $1::uuid
 			  AND i.deleted_at IS NULL
 			  AND isb.topics IS NOT NULL
 			  AND array_length(isb.topics, 1) > 0
@@ -323,15 +610,15 @@ func (r *PreferenceProfileRepo) loadTopicActions(ctx context.Context, userID str
 			SELECT isb.topics, 2.0::double precision AS signal, n.updated_at AS acted_at
 			FROM item_notes n
 			JOIN items i ON i.id = n.item_id
-			JOIN sources s ON s.id = i.source_id AND s.user_id = n.user_id
+			JOIN sources s ON s.id = i.source_id AND s.user_id::text = n.user_id
 			JOIN item_summaries isb ON isb.item_id = i.id
-			WHERE n.user_id = $1
+			WHERE n.user_id = $2
 			  AND i.deleted_at IS NULL
 			  AND n.updated_at >= NOW() - INTERVAL '90 days'
 			UNION ALL
 			SELECT isb.topics, 1.8::double precision AS signal, ai.created_at AS acted_at
 			FROM ask_insight_items aii
-			JOIN ask_insights ai ON ai.id = aii.insight_id AND ai.user_id = $1
+			JOIN ask_insights ai ON ai.id = aii.insight_id AND ai.user_id = $2
 			JOIN items i ON i.id = aii.item_id
 			JOIN item_summaries isb ON isb.item_id = i.id
 			WHERE ai.created_at >= NOW() - INTERVAL '90 days'
@@ -341,14 +628,14 @@ func (r *PreferenceProfileRepo) loadTopicActions(ctx context.Context, userID str
 			FROM review_queue rq
 			JOIN items i ON i.id = rq.item_id
 			JOIN item_summaries isb ON isb.item_id = i.id
-			WHERE rq.user_id = $1
+			WHERE rq.user_id = $2
 			  AND i.deleted_at IS NULL
 			  AND rq.status = 'done'
 			  AND rq.completed_at IS NOT NULL
 			  AND rq.completed_at >= NOW() - INTERVAL '90 days'
 		)
 		SELECT topics, signal, EXTRACT(EPOCH FROM (NOW() - acted_at)) / 86400.0 AS days_ago
-		FROM actions`, userID)
+		FROM actions`, userID, userID)
 	if err != nil {
 		return nil, err
 	}

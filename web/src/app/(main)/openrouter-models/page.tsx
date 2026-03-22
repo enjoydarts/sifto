@@ -5,7 +5,8 @@ import { Copy, Link2, RefreshCw, Search, X } from "lucide-react";
 import { api, OpenRouterModelListEntry, OpenRouterModelsResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
-import { Tabs, TabList, Tab, TabPanel } from "@/components/tabs";
+import { PageTransition } from "@/components/page-transition";
+import { PageHeader } from "@/components/ui/page-header";
 
 function parseObject(raw: unknown): Record<string, unknown> {
   if (!raw) return {};
@@ -70,6 +71,7 @@ function syncProgressLabel(t: (key: string, fallback?: string) => string, run: O
 
 type SortKey = "provider" | "model" | "context" | "pricing" | "params";
 type SortDirection = "asc" | "desc";
+type OpenRouterSection = "overview" | "available" | "constrained";
 
 function pricingScore(model: OpenRouterModelListEntry) {
   const pricing = parseObject(model.pricing_json);
@@ -125,7 +127,7 @@ export default function OpenRouterModelsPage() {
   const [providerFilter, setProviderFilter] = useState("");
   const [data, setData] = useState<OpenRouterModelsResponse | null>(null);
   const [selectedModel, setSelectedModel] = useState<OpenRouterModelListEntry | null>(null);
-  const [activeTab, setActiveTab] = useState<"available" | "unavailable">("available");
+  const [activeSection, setActiveSection] = useState<OpenRouterSection>("overview");
   const [sortKey, setSortKey] = useState<SortKey>("provider");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [savingOverrideModelId, setSavingOverrideModelId] = useState<string | null>(null);
@@ -284,6 +286,14 @@ export default function OpenRouterModelsPage() {
   const latestSummaryTriggerLabel =
     latestSummary?.trigger === "manual" ? t("openrouterModels.summaryTrigger.manual") : t("openrouterModels.summaryTrigger.cron");
 
+  const translatedCount = data?.latest_run?.translation_completed_count ?? 0;
+  const translationTargetCount = data?.latest_run?.translation_target_count ?? 0;
+  const fetchedCount = data?.latest_run?.fetched_count ?? data?.models.length ?? 0;
+  const acceptedCount = data?.latest_run?.accepted_count ?? data?.models.length ?? 0;
+  const constrainedCount = data?.unavailable_models.filter((model) => model.availability === "constrained").length ?? 0;
+  const removedCount = data?.unavailable_models.filter((model) => model.availability === "removed").length ?? 0;
+  const latestRunLabel = data?.latest_run?.finished_at ? new Date(data.latest_run.finished_at).toLocaleString() : t("openrouterModels.latestRunEmpty");
+
   const isOverrideEligible = useCallback(
     (model: OpenRouterModelListEntry) => model.raw_availability === "constrained" || model.override_enabled,
     [],
@@ -292,196 +302,333 @@ export default function OpenRouterModelsPage() {
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
 
-  return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight text-zinc-900">
-            <Link2 className="size-6 text-zinc-500" aria-hidden="true" />
-            <span>{t("openrouterModels.title")}</span>
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500">{t("openrouterModels.subtitle")}</p>
-        </div>
-        <button
-          type="button"
-          onClick={handleSync}
-          disabled={syncing}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60"
-        >
-          <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} aria-hidden="true" />
-          {syncing ? t("openrouterModels.syncing") : t("openrouterModels.sync")}
-        </button>
-      </div>
-
-      <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-            <div className="text-xs font-medium text-zinc-500">{t("openrouterModels.latestRun")}</div>
-            <div className="mt-1 text-sm font-semibold text-zinc-900">
-              {data?.latest_run?.finished_at ? new Date(data.latest_run.finished_at).toLocaleString() : t("openrouterModels.latestRunEmpty")}
-            </div>
-          </div>
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-            <div className="text-xs font-medium text-zinc-500">{t("openrouterModels.fetched")}</div>
-            <div className="mt-1 text-sm font-semibold text-zinc-900">{data?.latest_run?.fetched_count ?? 0}</div>
-          </div>
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-            <div className="text-xs font-medium text-zinc-500">{t("openrouterModels.accepted")}</div>
-            <div className="mt-1 text-sm font-semibold text-zinc-900">{data?.latest_run?.accepted_count ?? 0}</div>
-          </div>
-        </div>
-        {data?.latest_run?.status === "running" && data.latest_run.trigger_type === "manual" ? (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <div className="font-medium">{t("openrouterModels.progressRunning")}</div>
-            <div className="mt-1 text-amber-800">
-              {syncProgressLabel(t, data.latest_run) ?? t("openrouterModels.progressPreparing")}
-            </div>
-          </div>
-        ) : null}
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <label className="flex shrink-0 items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-            <span className="whitespace-nowrap text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
-              {t("openrouterModels.providerFilter")}
-            </span>
-            <select
-              value={providerFilter}
-              onChange={(e) => setProviderFilter(e.target.value)}
-              className="min-w-0 bg-transparent text-sm text-zinc-900 outline-none"
+  const renderFilters = (
+    <section className="surface-editorial rounded-[24px] p-4">
+      <div className="flex flex-col gap-3 md:flex-row">
+        <label className="flex shrink-0 items-center gap-2 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm text-[var(--color-editorial-ink-soft)]">
+          <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-editorial-ink-faint)]">
+            {t("openrouterModels.providerFilter")}
+          </span>
+          <select
+            value={providerFilter}
+            onChange={(e) => setProviderFilter(e.target.value)}
+            className="min-w-0 bg-transparent text-sm text-[var(--color-editorial-ink)] outline-none"
+          >
+            <option value="">{t("openrouterModels.providerAll")}</option>
+            {providerOptions.map((provider) => (
+              <option key={provider} value={provider}>
+                {provider}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2">
+          <Search className="size-4 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("openrouterModels.search")}
+            className="w-full bg-transparent text-sm text-[var(--color-editorial-ink)] outline-none placeholder:text-[var(--color-editorial-ink-faint)]"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="shrink-0 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
             >
-              <option value="">{t("openrouterModels.providerAll")}</option>
-              {providerOptions.map((provider) => (
-                <option key={provider} value={provider}>
-                  {provider}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-            <Search className="size-4 text-zinc-400" aria-hidden="true" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("openrouterModels.search")}
-              className="w-full bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400"
-            />
-            {query ? (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-zinc-500 hover:bg-white hover:text-zinc-700"
-              >
-                {t("common.clear")}
-              </button>
-            ) : null}
-          </label>
-        </div>
-      </section>
+              {t("common.clear")}
+            </button>
+          ) : null}
+        </label>
+      </div>
+    </section>
+  );
 
-      {latestSummary && (latestSummary.added.length > 0 || latestSummary.constrained.length > 0 || latestSummary.removed.length > 0) ? (
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-zinc-900">{t("openrouterModels.latestSummary.title")}</h2>
-              <p className="mt-1 text-sm text-zinc-500">
-                {latestSummaryTriggerLabel} · {new Date(latestSummary.detected_at).toLocaleString()}
-              </p>
+  return (
+    <PageTransition>
+      <div className="space-y-6 overflow-x-hidden">
+        <PageHeader
+          title={
+            <span className="flex items-center gap-2 font-serif">
+              <Link2 className="size-6 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
+              <span>{t("openrouterModels.title")}</span>
+            </span>
+          }
+          description={t("openrouterModels.subtitle")}
+          actions={
+            <button
+              type="button"
+              onClick={handleSync}
+              disabled={syncing}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:opacity-60"
+            >
+              <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} aria-hidden="true" />
+              {syncing ? t("openrouterModels.syncing") : t("openrouterModels.sync")}
+            </button>
+          }
+        />
+
+        <div className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
+          <aside className="surface-editorial rounded-[24px] p-4">
+            <div className="space-y-1">
+              {[
+                {
+                  key: "overview" as const,
+                  label: "Overview",
+                  meta: `${t("openrouterModels.latestRun")} · ${latestRunLabel}`,
+                },
+                {
+                  key: "available" as const,
+                  label: t("openrouterModels.table.availableModels"),
+                  meta: `${availableModels.length} ${t("common.rows")}`,
+                },
+                {
+                  key: "constrained" as const,
+                  label: t("openrouterModels.table.unavailableModels"),
+                  meta: `${unavailableModels.length} ${t("common.rows")}`,
+                },
+              ].map((section) => (
+                <button
+                  key={section.key}
+                  type="button"
+                  onClick={() => setActiveSection(section.key)}
+                  className={`relative block w-full rounded-[16px] px-4 py-[13px] text-left ${
+                    activeSection === section.key
+                      ? "bg-[linear-gradient(90deg,rgba(243,236,227,0.92),rgba(243,236,227,0.28)_78%,transparent)]"
+                      : "bg-transparent"
+                  }`}
+                >
+                  {activeSection === section.key ? (
+                    <span className="absolute bottom-3 left-0 top-3 w-[3px] rounded-full bg-[var(--color-editorial-ink)]" />
+                  ) : null}
+                  <div className="text-[15px] font-semibold text-[var(--color-editorial-ink)]">{section.label}</div>
+                  <div className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-faint)]">{section.meta}</div>
+                </button>
+              ))}
             </div>
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            {[
-              { key: "added", label: t("openrouterModels.recentChange.added"), models: latestSummary.added, className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
-              { key: "constrained", label: t("openrouterModels.recentChange.constrained"), models: latestSummary.constrained, className: "border-amber-200 bg-amber-50 text-amber-800" },
-              { key: "removed", label: t("openrouterModels.recentChange.removed"), models: latestSummary.removed, className: "border-red-200 bg-red-50 text-red-800" },
-            ].map((group) => {
-              const summary = limitSummaryModels(group.models);
-              return (
-                <div key={group.key} className={`rounded-xl border px-4 py-3 ${group.className}`}>
-                  <div className="text-sm font-semibold">
-                    {group.label} {group.models.length > 0 ? `(${group.models.length})` : ""}
+
+            <div className="mt-5 border-t border-[var(--color-editorial-line)] pt-5">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                Status
+              </div>
+              <div className="mt-3 space-y-2 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                <div>{t("openrouterModels.latestRun")} · {latestRunLabel}</div>
+                <div>{t("openrouterModels.fetched")} · {fetchedCount}</div>
+                <div>{t("openrouterModels.accepted")} · {acceptedCount}</div>
+                <div>{syncProgressLabel(t, data?.latest_run) ?? t("openrouterModels.progressPreparing")}</div>
+              </div>
+            </div>
+          </aside>
+
+          <section className="min-w-0 space-y-4">
+            {activeSection === "overview" ? (
+              <>
+                <section className="surface-editorial rounded-[28px] p-5">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        Overview
+                      </div>
+                      <h2 className="mt-2 font-serif text-[2rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                        最新の変化と運用状態
+                      </h2>
+                      <p className="mt-3 max-w-3xl text-[14px] leading-7 text-[var(--color-editorial-ink-soft)]">
+                        最新同期、翻訳進捗、採用と制約の差分を先に把握してから、利用可能モデル一覧か制約ありモデル一覧へ降ります。
+                      </p>
+                    </div>
+                    <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3 text-sm text-[var(--color-editorial-ink-soft)]">
+                      {data?.latest_run?.status === "running" && data.latest_run.trigger_type === "manual"
+                        ? t("openrouterModels.progressRunning")
+                        : latestRunLabel}
+                    </div>
                   </div>
-                  {group.models.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
-                      {summary.items.map((modelID) => (
-                        <span key={modelID} className="rounded-full border border-current/20 bg-white/70 px-2 py-1">
-                          {modelID}
-                        </span>
-                      ))}
-                      {summary.remaining > 0 ? (
-                        <span className="rounded-full border border-current/20 bg-white/70 px-2 py-1">+{summary.remaining}</span>
-                      ) : null}
+
+                  <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("openrouterModels.fetched")}
+                      </div>
+                      <div className="mt-3 font-serif text-[1.8rem] leading-none text-[var(--color-editorial-ink)]">{fetchedCount}</div>
+                    </div>
+                    <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("openrouterModels.accepted")}
+                      </div>
+                      <div className="mt-3 font-serif text-[1.8rem] leading-none text-[var(--color-editorial-ink)]">{acceptedCount}</div>
+                    </div>
+                    <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("openrouterModels.recentChange.constrained")}
+                      </div>
+                      <div className="mt-3 font-serif text-[1.8rem] leading-none text-[var(--color-editorial-ink)]">{constrainedCount}</div>
+                    </div>
+                    <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        Translated
+                      </div>
+                      <div className="mt-3 font-serif text-[1.8rem] leading-none text-[var(--color-editorial-ink)]">
+                        {translatedCount} / {translationTargetCount}
+                      </div>
+                    </div>
+                  </div>
+
+                  {data?.latest_run?.status === "running" && data.latest_run.trigger_type === "manual" ? (
+                    <div className="mt-4 rounded-[22px] border border-[#ead5af] bg-[#faf1dd] px-4 py-3 text-sm text-[#916321]">
+                      <div className="font-medium">{t("openrouterModels.progressRunning")}</div>
+                      <div className="mt-1">{syncProgressLabel(t, data.latest_run) ?? t("openrouterModels.progressPreparing")}</div>
+                    </div>
+                  ) : null}
+                </section>
+
+                <section className="grid gap-4 xl:grid-cols-[1.25fr_1fr]">
+                  <section className="surface-editorial rounded-[28px] p-5">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("openrouterModels.latestSummary.title")}
+                    </div>
+                    <h3 className="mt-2 font-serif text-[1.6rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                      最新のモデル差分
+                    </h3>
+                    {latestSummary ? (
+                      <p className="mt-3 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                        {latestSummaryTriggerLabel} · {new Date(latestSummary.detected_at).toLocaleString()}
+                      </p>
+                    ) : (
+                      <p className="mt-3 text-sm leading-7 text-[var(--color-editorial-ink-faint)]">{t("openrouterModels.latestSummary.none")}</p>
+                    )}
+
+                    <div className="mt-4 space-y-3">
+                      {[
+                        {
+                          key: "added",
+                          label: t("openrouterModels.recentChange.added"),
+                          models: latestSummary?.added ?? [],
+                          className: "border-emerald-200 bg-emerald-50 text-emerald-800",
+                        },
+                        {
+                          key: "constrained",
+                          label: t("openrouterModels.recentChange.constrained"),
+                          models: latestSummary?.constrained ?? [],
+                          className: "border-amber-200 bg-amber-50 text-amber-800",
+                        },
+                        {
+                          key: "removed",
+                          label: t("openrouterModels.recentChange.removed"),
+                          models: latestSummary?.removed ?? [],
+                          className: "border-red-200 bg-red-50 text-red-800",
+                        },
+                      ].map((group) => {
+                        const summary = limitSummaryModels(group.models);
+                        return (
+                          <div key={group.key} className={`rounded-[22px] border px-4 py-3 ${group.className}`}>
+                            <div className="text-sm font-semibold">
+                              {group.label} {group.models.length > 0 ? `(${group.models.length})` : ""}
+                            </div>
+                            {group.models.length > 0 ? (
+                              <div className="mt-3 space-y-2 text-xs">
+                                {summary.items.map((modelID) => (
+                                  <div key={modelID} className="rounded-[14px] border border-current/15 bg-white/70 px-3 py-2">
+                                    {modelID}
+                                  </div>
+                                ))}
+                                {summary.remaining > 0 ? (
+                                  <div className="rounded-[14px] border border-current/15 bg-white/70 px-3 py-2">
+                                    +{summary.remaining}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <div className="mt-3 text-xs opacity-70">{t("openrouterModels.latestSummary.none")}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <section className="surface-editorial rounded-[28px] p-5">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      Translation
+                    </div>
+                    <h3 className="mt-2 font-serif text-[1.6rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                      日本語説明の反映状況
+                    </h3>
+                    <div className="mt-4 rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("openrouterModels.progressGlobal")}
+                      </div>
+                      <div className="mt-3 text-lg leading-none text-[var(--color-editorial-ink)]">
+                        {translatedCount} / {translationTargetCount}
+                      </div>
+                      <div className="mt-3 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                        {syncProgressLabel(t, data?.latest_run) ?? t("openrouterModels.progressPreparing")}
+                      </div>
+                    </div>
+                    <div className="mt-3 rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                      {t("openrouterModels.latestRun")} · {latestRunLabel}
+                      <br />
+                      {t("openrouterModels.recentChange.removed")} · {removedCount}
+                    </div>
+                  </section>
+                </section>
+              </>
+            ) : null}
+
+            {activeSection === "available" ? (
+              <>
+                {renderFilters}
+                <section className="surface-editorial rounded-[28px] p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("openrouterModels.providerGroup")}
+                      </div>
+                      <h2 className="mt-2 font-serif text-[2rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                        {t("openrouterModels.table.availableModels")}
+                      </h2>
+                    </div>
+                    <div className="text-xs text-[var(--color-editorial-ink-faint)]">
+                      {availableModels.length} {t("common.rows")}
+                    </div>
+                  </div>
+
+                  {availableModels.length === 0 ? (
+                    <div className="mt-4 rounded-[22px] border border-dashed border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-4 py-6 text-sm text-[var(--color-editorial-ink-faint)]">
+                      {t("openrouterModels.noAvailableModels")}
                     </div>
                   ) : (
-                    <div className="mt-2 text-xs opacity-70">{t("openrouterModels.latestSummary.none")}</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-
-      {sorted.length === 0 ? (
-        <section className="rounded-2xl border border-dashed border-zinc-300 bg-white p-6 text-sm text-zinc-500">
-          {t("openrouterModels.noModels")}
-        </section>
-      ) : (
-        <div className="space-y-6">
-          <section className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
-            <Tabs defaultValue="available" value={activeTab} onChange={(value) => setActiveTab(value as "available" | "unavailable")}>
-              <div className="flex items-center justify-between gap-3 px-4 pt-4 md:px-5">
-                <div>
-                  <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-400">{t("openrouterModels.providerGroup")}</div>
-                  <h2 className="mt-1 text-lg font-semibold text-zinc-900">
-                    {activeTab === "available" ? t("openrouterModels.table.availableModels") : t("openrouterModels.table.unavailableModels")}
-                  </h2>
-                </div>
-                <div className="text-xs text-zinc-500">
-                  {(activeTab === "available" ? availableModels.length : unavailableModels.length)} {t("common.rows")}
-                </div>
-              </div>
-              <TabList className="px-4 pt-3 md:px-5">
-                <Tab value="available">{t("openrouterModels.table.availableModels")}</Tab>
-                <Tab value="unavailable">{t("openrouterModels.table.unavailableModels")}</Tab>
-              </TabList>
-              <TabPanel value="available" className="px-4 py-4 md:px-5">
-                {availableModels.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-sm text-zinc-500">
-                    {t("openrouterModels.noAvailableModels")}
-                  </div>
-                ) : (
-                  <div className="overflow-hidden rounded-xl border border-zinc-200">
-                    <div className="overflow-x-auto">
-                      <table className="min-w-[1120px] divide-y divide-zinc-200 text-sm">
-                <thead className="bg-zinc-50">
+                    <div className="mt-4 overflow-hidden rounded-[22px] border border-[var(--color-editorial-line)]">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-[1120px] divide-y divide-[var(--color-editorial-line)] text-sm">
+                          <thead className="bg-[var(--color-editorial-panel)]">
                   <tr className="text-left text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
                     <th className="px-4 py-3">
-                      <button type="button" className="hover:text-zinc-700" onClick={() => setSort("provider")}>
+                      <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("provider")}>
                         {t("openrouterModels.table.provider")}{sortMarker("provider")}
                       </button>
                     </th>
                     <th className="px-4 py-3">
-                      <button type="button" className="hover:text-zinc-700" onClick={() => setSort("model")}>
+                      <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("model")}>
                         {t("openrouterModels.table.model")}{sortMarker("model")}
                       </button>
                     </th>
                     <th className="px-4 py-3">
-                      <button type="button" className="hover:text-zinc-700" onClick={() => setSort("context")}>
+                      <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("context")}>
                         {t("openrouterModels.table.context")}{sortMarker("context")}
                       </button>
                     </th>
                     <th className="px-4 py-3">
-                      <button type="button" className="hover:text-zinc-700" onClick={() => setSort("pricing")}>
+                      <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("pricing")}>
                         {t("openrouterModels.table.pricing")}{sortMarker("pricing")}
                       </button>
                     </th>
                     <th className="px-4 py-3">
-                      <button type="button" className="hover:text-zinc-700" onClick={() => setSort("params")}>
+                      <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("params")}>
                         {t("openrouterModels.table.params")}{sortMarker("params")}
                       </button>
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-200 bg-white">
+                <tbody className="divide-y divide-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]">
                   {availableModels.map((model) => {
                     const supported = parseStringArray(model.supported_parameters_json);
                     const pricing = pricingSummary(model);
@@ -489,20 +636,20 @@ export default function OpenRouterModelsPage() {
                     return (
                       <tr
                         key={model.model_id}
-                        className="cursor-pointer transition hover:bg-zinc-50"
+                        className="cursor-pointer transition hover:bg-[var(--color-editorial-panel)]"
                         onClick={() => setSelectedModel(model)}
                       >
-                        <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{model.provider_slug || "—"}</td>
+                        <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">{model.provider_slug || "—"}</td>
                         <td className="whitespace-nowrap px-4 py-3 align-top">
                           <div className="flex items-center gap-2 whitespace-nowrap">
-                            <div className="whitespace-nowrap font-medium text-zinc-900">{model.display_name || model.model_id}</div>
+                            <div className="whitespace-nowrap font-medium text-[var(--color-editorial-ink)]">{model.display_name || model.model_id}</div>
                             {recentChangeKey ? (
                               <span className={`rounded-full border px-2 py-1 text-[11px] font-medium ${recentChangeClassName(model.recent_change)}`}>
                                 {t(recentChangeKey)}
                               </span>
                             ) : null}
                           </div>
-                          <div className="mt-1 whitespace-nowrap text-xs text-zinc-500">{model.model_id}</div>
+                          <div className="mt-1 whitespace-nowrap text-xs text-[var(--color-editorial-ink-faint)]">{model.model_id}</div>
                           {model.override_enabled ? (
                             <div className="mt-2">
                               <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">
@@ -511,23 +658,23 @@ export default function OpenRouterModelsPage() {
                             </div>
                           ) : null}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">
+                        <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">
                           {model.context_length ? model.context_length.toLocaleString() : "—"}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{pricing ?? "—"}</td>
-                        <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">
+                        <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">{pricing ?? "—"}</td>
+                        <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">
                           {supported.length > 0 ? (
                             <div className="flex flex-nowrap gap-1.5">
                               {supported.slice(0, 4).map((param) => (
                                 <span
                                   key={param}
-                                  className="whitespace-nowrap rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] text-zinc-600"
+                                  className="whitespace-nowrap rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-1 text-[11px] text-[var(--color-editorial-ink-soft)]"
                                 >
                                   {param}
                                 </span>
                               ))}
                               {supported.length > 4 ? (
-                                <span className="whitespace-nowrap rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] text-zinc-500">
+                                <span className="whitespace-nowrap rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-1 text-[11px] text-[var(--color-editorial-ink-faint)]">
                                   +{supported.length - 4}
                                 </span>
                               ) : null}
@@ -542,50 +689,70 @@ export default function OpenRouterModelsPage() {
                 </tbody>
                       </table>
                     </div>
+                    </div>
+                  )}
+                </section>
+              </>
+            ) : null}
+
+            {activeSection === "constrained" ? (
+              <>
+                {renderFilters}
+                <section className="surface-editorial rounded-[28px] p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("openrouterModels.providerGroup")}
+                      </div>
+                      <h2 className="mt-2 font-serif text-[2rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                        {t("openrouterModels.table.unavailableModels")}
+                      </h2>
+                    </div>
+                    <div className="text-xs text-[var(--color-editorial-ink-faint)]">
+                      {unavailableModels.length} {t("common.rows")}
+                    </div>
                   </div>
-                )}
-              </TabPanel>
-              <TabPanel value="unavailable" className="px-4 py-4 md:px-5">
-                {unavailableModels.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-6 text-sm text-zinc-500">
-                    {t("openrouterModels.noUnavailableModels")}
-                  </div>
-                ) : (
-                  <div className="overflow-hidden rounded-xl border border-zinc-200">
-                    <div className="overflow-x-auto">
-                      <table className="min-w-[1240px] divide-y divide-zinc-200 text-sm">
-                  <thead className="bg-zinc-50">
+
+                  {unavailableModels.length === 0 ? (
+                    <div className="mt-4 rounded-[22px] border border-dashed border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-4 py-6 text-sm text-[var(--color-editorial-ink-faint)]">
+                      {t("openrouterModels.noUnavailableModels")}
+                    </div>
+                  ) : (
+                    <div className="mt-4 overflow-hidden rounded-[22px] border border-[var(--color-editorial-line)]">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-[1240px] divide-y divide-[var(--color-editorial-line)] text-sm">
+                          <thead className="bg-[var(--color-editorial-panel)]">
                     <tr className="text-left text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
                       <th className="px-4 py-3">{t("openrouterModels.table.state")}</th>
                       <th className="px-4 py-3">
-                        <button type="button" className="hover:text-zinc-700" onClick={() => setSort("provider")}>
+                        <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("provider")}>
                           {t("openrouterModels.table.provider")}{sortMarker("provider")}
                         </button>
                       </th>
                       <th className="px-4 py-3">
-                        <button type="button" className="hover:text-zinc-700" onClick={() => setSort("model")}>
+                        <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("model")}>
                           {t("openrouterModels.table.model")}{sortMarker("model")}
                         </button>
                       </th>
                       <th className="px-4 py-3">{t("openrouterModels.table.reason")}</th>
                       <th className="px-4 py-3">
-                        <button type="button" className="hover:text-zinc-700" onClick={() => setSort("context")}>
+                        <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("context")}>
                           {t("openrouterModels.table.context")}{sortMarker("context")}
                         </button>
                       </th>
                       <th className="px-4 py-3">
-                        <button type="button" className="hover:text-zinc-700" onClick={() => setSort("pricing")}>
+                        <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("pricing")}>
                           {t("openrouterModels.table.pricing")}{sortMarker("pricing")}
                         </button>
                       </th>
                       <th className="px-4 py-3">
-                        <button type="button" className="hover:text-zinc-700" onClick={() => setSort("params")}>
+                        <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("params")}>
                           {t("openrouterModels.table.params")}{sortMarker("params")}
                         </button>
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-200 bg-white">
+                  <tbody className="divide-y divide-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]">
                     {unavailableModels.map((model) => {
                       const supported = parseStringArray(model.supported_parameters_json);
                       const pricing = pricingSummary(model);
@@ -593,21 +760,21 @@ export default function OpenRouterModelsPage() {
                       const reasonKey = model.reason === "removed" ? "openrouterModels.reason.removed" : "openrouterModels.reason.structuredOutput";
                       const recentChangeKey = recentChangeLabelKey(model.recent_change);
                       return (
-                        <tr key={model.model_id} className="cursor-pointer transition hover:bg-zinc-50" onClick={() => setSelectedModel(model)}>
+                        <tr key={model.model_id} className="cursor-pointer transition hover:bg-[var(--color-editorial-panel)]" onClick={() => setSelectedModel(model)}>
                           <td className="whitespace-nowrap px-4 py-3 align-top">
-                            <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] text-zinc-700">{t(stateKey)}</span>
+                            <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-1 text-[11px] text-[var(--color-editorial-ink-soft)]">{t(stateKey)}</span>
                           </td>
-                          <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{model.provider_slug || "—"}</td>
+                          <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">{model.provider_slug || "—"}</td>
                           <td className="whitespace-nowrap px-4 py-3 align-top">
                             <div className="flex items-center gap-2 whitespace-nowrap">
-                              <div className="whitespace-nowrap font-medium text-zinc-900">{model.display_name || model.model_id}</div>
+                              <div className="whitespace-nowrap font-medium text-[var(--color-editorial-ink)]">{model.display_name || model.model_id}</div>
                               {recentChangeKey ? (
                                 <span className={`rounded-full border px-2 py-1 text-[11px] font-medium ${recentChangeClassName(model.recent_change)}`}>
                                   {t(recentChangeKey)}
                                 </span>
                               ) : null}
                             </div>
-                            <div className="mt-1 whitespace-nowrap text-xs text-zinc-500">{model.model_id}</div>
+                            <div className="mt-1 whitespace-nowrap text-xs text-[var(--color-editorial-ink-faint)]">{model.model_id}</div>
                             {model.override_enabled ? (
                               <div className="mt-2">
                                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700">
@@ -616,18 +783,18 @@ export default function OpenRouterModelsPage() {
                               </div>
                             ) : null}
                           </td>
-                          <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{t(reasonKey)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{model.context_length ? model.context_length.toLocaleString() : "—"}</td>
-                          <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">{pricing ?? "—"}</td>
-                          <td className="whitespace-nowrap px-4 py-3 align-top text-zinc-700">
+                          <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">{t(reasonKey)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">{model.context_length ? model.context_length.toLocaleString() : "—"}</td>
+                          <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">{pricing ?? "—"}</td>
+                          <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">
                             {supported.length > 0 ? (
                               <div className="flex flex-nowrap gap-1.5">
                                 {supported.slice(0, 4).map((param) => (
-                                  <span key={param} className="whitespace-nowrap rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] text-zinc-600">
+                                  <span key={param} className="whitespace-nowrap rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-1 text-[11px] text-[var(--color-editorial-ink-soft)]">
                                     {param}
                                   </span>
                                 ))}
-                                {supported.length > 4 ? <span className="whitespace-nowrap rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] text-zinc-500">+{supported.length - 4}</span> : null}
+                                {supported.length > 4 ? <span className="whitespace-nowrap rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-1 text-[11px] text-[var(--color-editorial-ink-faint)]">+{supported.length - 4}</span> : null}
                               </div>
                             ) : (
                               "—"
@@ -637,39 +804,45 @@ export default function OpenRouterModelsPage() {
                       );
                     })}
                   </tbody>
-                      </table>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </TabPanel>
-            </Tabs>
+                  )}
+                </section>
+              </>
+            ) : null}
+
+            {sorted.length === 0 ? (
+              <section className="surface-editorial rounded-[28px] border border-dashed border-[var(--color-editorial-line-strong)] p-6 text-sm text-[var(--color-editorial-ink-faint)]">
+                {t("openrouterModels.noModels")}
+              </section>
+            ) : null}
           </section>
         </div>
-      )}
 
       {selectedModel ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 py-6"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(31,26,23,0.45)] px-4 py-6"
           onClick={() => setSelectedModel(null)}
         >
           <div
-            className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl"
+            className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] shadow-[var(--shadow-card)]"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
+            <div className="flex items-start justify-between gap-4 border-b border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(255,253,249,0.96))] px-5 py-4">
               <div className="min-w-0">
-                <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-400">
+                <div className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--color-editorial-ink-faint)]">
                   {selectedModel.provider_slug || t("common.unknown")}
                 </div>
-                <h2 className="mt-1 break-words text-base font-semibold text-zinc-900">
+                <h2 className="mt-2 break-words font-serif text-[1.55rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">
                   {selectedModel.display_name || selectedModel.model_id}
                 </h2>
                 <div className="mt-1 flex items-center gap-2">
-                  <p className="min-w-0 break-all text-xs text-zinc-500">{selectedModel.model_id}</p>
+                  <p className="min-w-0 break-all text-xs text-[var(--color-editorial-ink-faint)]">{selectedModel.model_id}</p>
                   <button
                     type="button"
                     onClick={handleCopyModelId}
-                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:text-zinc-800"
+                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-faint)] hover:border-[var(--color-editorial-line-strong)] hover:text-[var(--color-editorial-ink)]"
                     aria-label={t("openrouterModels.modal.copyModelId")}
                     title={t("openrouterModels.modal.copyModelId")}
                   >
@@ -680,7 +853,7 @@ export default function OpenRouterModelsPage() {
               <button
                 type="button"
                 onClick={() => setSelectedModel(null)}
-                className="inline-flex size-9 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
+                className="inline-flex size-9 items-center justify-center rounded-lg border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)] hover:border-[var(--color-editorial-line-strong)] hover:text-[var(--color-editorial-ink)]"
                 aria-label={t("common.close")}
               >
                 <X className="size-4" aria-hidden="true" />
@@ -688,54 +861,54 @@ export default function OpenRouterModelsPage() {
             </div>
             <div className="overflow-auto px-5 py-4">
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                  <div className="text-xs font-medium text-zinc-500">{t("openrouterModels.context")}</div>
-                  <div className="mt-1 text-sm font-semibold text-zinc-900">
+                <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                  <div className="text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("openrouterModels.context")}</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--color-editorial-ink)]">
                     {selectedModel.context_length ? selectedModel.context_length.toLocaleString() : "—"}
                   </div>
                 </div>
-                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 sm:col-span-2">
-                  <div className="text-xs font-medium text-zinc-500">{t("openrouterModels.pricing")}</div>
-                  <div className="mt-1 text-sm font-semibold text-zinc-900">{selectedPricing ?? "—"}</div>
+                <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4 sm:col-span-2">
+                  <div className="text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("openrouterModels.pricing")}</div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--color-editorial-ink)]">{selectedPricing ?? "—"}</div>
                 </div>
               </div>
 
               <section className="mt-4">
-                <h3 className="text-sm font-semibold text-zinc-900">{t("openrouterModels.modal.descriptionJa")}</h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-zinc-700">{selectedDescription}</p>
+                <h3 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("openrouterModels.modal.descriptionJa")}</h3>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{selectedDescription}</p>
               </section>
 
               {selectedDescriptionEn && selectedDescriptionEn !== selectedDescription ? (
                 <section className="mt-4">
-                  <h3 className="text-sm font-semibold text-zinc-900">{t("openrouterModels.modal.descriptionEn")}</h3>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-zinc-700">{selectedDescriptionEn}</p>
+                  <h3 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("openrouterModels.modal.descriptionEn")}</h3>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{selectedDescriptionEn}</p>
                 </section>
               ) : null}
 
               <section className="mt-4">
-                <h3 className="text-sm font-semibold text-zinc-900">{t("openrouterModels.supportedParameters")}</h3>
+                <h3 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("openrouterModels.supportedParameters")}</h3>
                 {selectedSupported.length > 0 ? (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {selectedSupported.map((param) => (
-                      <span key={param} className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs text-zinc-600">
+                      <span key={param} className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-1 text-xs text-[var(--color-editorial-ink-soft)]">
                         {param}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-2 text-sm text-zinc-500">—</p>
+                  <p className="mt-2 text-sm text-[var(--color-editorial-ink-faint)]">—</p>
                 )}
               </section>
               {isOverrideEligible(selectedModel) ? (
-                <section className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                  <h3 className="text-sm font-semibold text-zinc-900">{t("openrouterModels.override.title")}</h3>
-                  <p className="mt-2 text-sm leading-6 text-zinc-600">{t("openrouterModels.override.help")}</p>
+                <section className="mt-4 rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                  <h3 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("openrouterModels.override.title")}</h3>
+                  <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{t("openrouterModels.override.help")}</p>
                   <div className="mt-3">
                     <button
                       type="button"
                       disabled={savingOverrideModelId === selectedModel.model_id}
                       onClick={() => void handleStructuredOutputOverride(selectedModel, !selectedModel.override_enabled)}
-                      className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-800 hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-60"
+                      className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink)] hover:bg-[var(--color-editorial-panel)] disabled:opacity-60"
                     >
                       {selectedModel.override_enabled
                         ? t("openrouterModels.override.disable")
@@ -748,6 +921,7 @@ export default function OpenRouterModelsPage() {
           </div>
         </div>
       ) : null}
-    </div>
+      </div>
+    </PageTransition>
   );
 }

@@ -1059,6 +1059,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 		mistralAPIKey,
 		xaiAPIKey,
 		zaiAPIKey,
+		fireworksAPIKey,
 		openAIAPIKey,
 		model,
 	)
@@ -1583,6 +1584,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 		mistralAPIKey,
 		xaiAPIKey,
 		zaiAPIKey,
+		fireworksAPIKey,
 		openAIAPIKey,
 		model,
 	)

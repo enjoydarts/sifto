@@ -94,6 +94,11 @@ export default function SourcesPage() {
     }
     return out;
   }, [normalizeSuggestionText]);
+  const suggestionLLMLabel = useMemo(() => {
+    if (!suggestionsLLM) return null;
+    if (suggestionsLLM.stage === "seed_generation") return t("sources.suggest.aiSeed");
+    return t("sources.suggest.aiRanked");
+  }, [suggestionsLLM, t]);
   const normalizeSuggestion = useCallback(
     (raw: unknown): SourceSuggestion | null => {
       if (!raw || typeof raw !== "object") return null;
@@ -761,9 +766,13 @@ export default function SourcesPage() {
                     </button>
                   </div>
                   {suggestionsLLM ? (
-                    <p className="mt-3 text-xs text-[var(--color-editorial-ink-soft)]">
-                      {t("sources.suggest.aiRanked")}: {suggestionsLLM.provider ?? t("common.unknown")} / {suggestionsLLM.model ?? t("common.unknown")}
-                    </p>
+                    <div className="mt-3 space-y-1 text-xs text-[var(--color-editorial-ink-soft)]">
+                      <p>
+                        {suggestionLLMLabel}: {suggestionsLLM.provider ?? t("common.unknown")} / {suggestionsLLM.model ?? t("common.unknown")}
+                      </p>
+                      {suggestionsLLM.warning ? <p>{t("sources.suggest.warningPrefix")}: {suggestionsLLM.warning}</p> : null}
+                      {suggestionsLLM.error ? <p className="text-red-600">{t("sources.suggest.errorPrefix")}: {suggestionsLLM.error}</p> : null}
+                    </div>
                   ) : null}
                   {suggestionsError ? <p className="mt-3 text-sm text-red-600">{suggestionsError}</p> : null}
                   {!suggestionsError && !loadingSuggestions && hasLoadedSuggestions && recommendations.length === 0 ? (

@@ -609,6 +609,31 @@ type probeSeed struct {
 	Reason   string
 }
 
+func llmUsageMetaMap(llm *service.LLMUsage, stage string) map[string]any {
+	llm = service.NormalizeCatalogPricedUsage("source_suggestion", llm)
+	if llm == nil {
+		if stage == "" {
+			return nil
+		}
+		return map[string]any{"stage": stage}
+	}
+	meta := map[string]any{
+		"provider":             llm.Provider,
+		"model":                llm.Model,
+		"requested_model":      llm.RequestedModel,
+		"resolved_model":       llm.ResolvedModel,
+		"estimated_cost_usd":   llm.EstimatedCostUSD,
+		"input_tokens":         llm.InputTokens,
+		"output_tokens":        llm.OutputTokens,
+		"pricing_source":       llm.PricingSource,
+		"pricing_model_family": llm.PricingModelFamily,
+	}
+	if stage != "" {
+		meta["stage"] = stage
+	}
+	return meta
+}
+
 func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	q := r.URL.Query()
@@ -699,9 +724,10 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 
 	cands := map[string]*sourceSuggestionAgg{}
 	aiReady := (anthropicAPIKey != nil || googleAPIKey != nil || groqAPIKey != nil || fireworksAPIKey != nil || deepseekAPIKey != nil || alibabaAPIKey != nil || mistralAPIKey != nil || xaiAPIKey != nil || zaiAPIKey != nil || openAIAPIKey != nil) && h.worker != nil
+	var seedLLMMeta map[string]any
 	timedOutInAiStep := false
 	if aiReady {
-		timedOutInAiStep = h.expandSourceSuggestionsWithLLMSeeds(
+		seedLLMMeta, timedOutInAiStep = h.expandSourceSuggestionsWithLLMSeeds(
 			ctx,
 			userID,
 			sources,
@@ -795,6 +821,9 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 		anthropicSourceSuggestionModel,
 		remainingSuggestionBudget,
 	)
+	if llmMeta == nil && seedLLMMeta != nil {
+		llmMeta = seedLLMMeta
+	}
 	if isOverBudget() {
 		llmMeta = mergeLLMWarning(llmMeta, "source suggestion timed out; partial results returned", "timeout")
 	}
@@ -1516,12 +1545,15 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	openAIAPIKey *string,
 	model *string,
 	remainingSuggestionBudget func() time.Duration,
-) bool {
+) (map[string]any, bool) {
 	if remainingSuggestionBudget == nil {
 		remainingSuggestionBudget = func() time.Duration { return 0 }
 	}
 	if remainingSuggestionBudget() <= 0 {
-		return true
+		return map[string]any{
+			"warning": "source suggestion seed skipped due timeout budget",
+			"stage":   "seed_generation",
+		}, true
 	}
 	existing := make([]service.RankFeedSuggestionsExistingSource, 0, len(sources))
 	for _, s := range sources {
@@ -1529,7 +1561,10 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	}
 	seedBudget := capDuration(8*time.Second, remainingSuggestionBudget())
 	if seedBudget <= 0 {
-		return true
+		return map[string]any{
+			"warning": "source suggestion seed skipped due timeout budget",
+			"stage":   "seed_generation",
+		}, true
 	}
 	ctxSeed, cancelSeed := context.WithTimeout(ctx, seedBudget)
 	defer cancelSeed()
@@ -1553,19 +1588,40 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	)
 	if err != nil || resp == nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return true
+			return map[string]any{
+				"warning": "source suggestion seed generation timed out",
+				"stage":   "seed_generation",
+			}, true
 		}
-		return false
+		if err != nil {
+			return map[string]any{
+				"error": err.Error(),
+				"stage": "seed_generation",
+			}, false
+		}
+		return map[string]any{
+			"error": "empty response from suggest-feed-seed-sites",
+			"stage": "seed_generation",
+		}, false
 	}
 	if remainingSuggestionBudget() <= 0 {
-		return true
+		return map[string]any{
+			"warning": "source suggestion seed generation timed out",
+			"stage":   "seed_generation",
+		}, true
 	}
 	resp.LLM = service.NormalizeCatalogPricedUsage("source_suggestion", resp.LLM)
 	h.recordSourceSuggestionLLMUsage(ctx, userID, resp.LLM)
+	meta := llmUsageMetaMap(resp.LLM, "seed_generation")
+	if meta == nil {
+		meta = map[string]any{"stage": "seed_generation"}
+	}
+	meta["items_count"] = len(resp.Items)
 	seedItems := resp.Items
 	if len(seedItems) > 10 {
 		seedItems = seedItems[:10]
 	}
+	beforeCount := len(cands)
 	for _, seed := range seedItems {
 		seedURL := coerceHTTPURL(strings.TrimSpace(seed.URL))
 		if seedURL == "" {
@@ -1581,11 +1637,11 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 		}
 		for _, probe := range probeURLs {
 			if remainingSuggestionBudget() <= 0 {
-				return true
+				return mergeLLMWarning(meta, "source suggestion timed out during AI seed probing", "seed_generation"), true
 			}
 			probeTimeout := capDuration(1500*time.Millisecond, remainingSuggestionBudget())
 			if probeTimeout <= 0 {
-				return true
+				return mergeLLMWarning(meta, "source suggestion timed out during AI seed probing", "seed_generation"), true
 			}
 			ctxOne, cancel := context.WithTimeout(ctx, probeTimeout)
 			feeds, err := discoverRSSFeeds(ctxOne, probe)
@@ -1657,7 +1713,12 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 			}
 		}
 	}
-	return false
+	if len(seedItems) == 0 {
+		meta = mergeLLMWarning(meta, "seed returned no items", "seed_generation")
+	} else if len(cands) == beforeCount {
+		meta = mergeLLMWarning(meta, "seed produced no usable candidates", "seed_generation")
+	}
+	return meta, false
 }
 
 func aiSeedFeedProbeURLs(raw string) []string {

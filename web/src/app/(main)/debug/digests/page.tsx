@@ -4,6 +4,8 @@ import { FormEvent, useMemo, useState } from "react";
 import { useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
 import { api, BulkRetryFailedResult, DigestDetail } from "@/lib/api";
+import { PageTransition } from "@/components/page-transition";
+import { PageHeader } from "@/components/ui/page-header";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 
@@ -157,6 +159,8 @@ type PushTestResponse = {
   };
 };
 
+type DebugSection = "system" | "digestOps" | "backfills" | "recovery";
+
 async function postJSON<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
@@ -226,6 +230,7 @@ export default function DebugDigestsPage() {
   const [pushTestTitle, setPushTestTitle] = useState("Sifto: テスト通知");
   const [pushTestMessage, setPushTestMessage] = useState("デバッグ画面からのテスト通知です。");
   const [pushTestResult, setPushTestResult] = useState<PushTestResponse | null>(null);
+  const [activeSection, setActiveSection] = useState<DebugSection>("system");
 
   const helperText = useMemo(
     () =>
@@ -583,162 +588,156 @@ export default function DebugDigestsPage() {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Debug Digests</h1>
-        <p className="mt-2 text-sm text-zinc-500">{helperText}</p>
-      </div>
-
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-800">System Health (Debug)</h2>
+  const systemSection = (
+    <div className="space-y-4">
+      <section className="surface-editorial min-w-0 rounded-[28px] p-5">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">System</div>
+            <h2 className="mt-2 font-serif text-[1.8rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">System Health</h2>
+          </div>
           <button
             type="button"
             onClick={loadSystemHealth}
             disabled={busySystemHealth}
-            className="rounded border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-50"
           >
             {busySystemHealth ? t("common.loading") : t("common.refresh")}
           </button>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded border border-zinc-200 p-3">
-            <div className="mb-2 text-xs font-medium text-zinc-600">Web /health</div>
+          <div className="min-w-0 rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+            <div className="mb-2 text-xs font-medium text-[var(--color-editorial-ink-faint)]">Web /health</div>
             {webHealth ? (
               <div className="space-y-2 text-xs">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <StatusPill ok={webHealth.status >= 200 && webHealth.status < 400} label={`HTTP ${webHealth.status}`} />
-                  <span className="text-zinc-500">{webHealth.latency_ms} ms</span>
+                  <span className="text-[var(--color-editorial-ink-faint)]">{webHealth.latency_ms} ms</span>
                 </div>
-                <pre className="overflow-x-auto rounded bg-zinc-950 p-2 text-[11px] text-zinc-100">
+                <pre className="max-w-full overflow-x-auto rounded-[16px] bg-zinc-950 p-3 text-[11px] text-zinc-100">
                   {JSON.stringify(webHealth.body, null, 2)}
                 </pre>
               </div>
             ) : (
-              <p className="text-xs text-zinc-400">{t("debug.notFetched")}</p>
+              <p className="text-xs text-[var(--color-editorial-ink-faint)]">{t("debug.notFetched")}</p>
             )}
           </div>
-          <div className="rounded border border-zinc-200 p-3">
-            <div className="mb-2 text-xs font-medium text-zinc-600">API Internal System Status</div>
+          <div className="min-w-0 rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+            <div className="mb-2 text-xs font-medium text-[var(--color-editorial-ink-faint)]">API Internal System Status</div>
             {systemHealth ? (
               <div className="space-y-3 text-xs">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <StatusPill ok={systemHealth.data?.status === "ok"} label={systemHealth.data?.status ?? "unknown"} />
-                  <span className="text-zinc-500">proxy {systemHealth.proxy_latency_ms} ms</span>
+                  <span className="text-[var(--color-editorial-ink-faint)]">proxy {systemHealth.proxy_latency_ms} ms</span>
                 </div>
                 <div className="space-y-2">
                   {Object.entries(systemHealth.data?.checks ?? {}).map(([name, row]) => (
-                    <div key={name} className="rounded border border-zinc-200 px-2 py-2">
+                    <div key={name} className="rounded-[16px] border border-[var(--color-editorial-line)] px-3 py-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="font-medium text-zinc-800">{name}</div>
+                        <div className="font-medium text-[var(--color-editorial-ink)]">{name}</div>
                         <div className="flex items-center gap-2">
                           <StatusPill ok={row.status === "ok"} label={row.status ?? "unknown"} />
                           {typeof row.latency_ms === "number" && (
-                            <span className="text-zinc-500">{row.latency_ms} ms</span>
+                            <span className="text-[var(--color-editorial-ink-faint)]">{row.latency_ms} ms</span>
                           )}
                           {typeof row.http_status === "number" && row.http_status > 0 && (
-                            <span className="text-zinc-500">HTTP {row.http_status}</span>
+                            <span className="text-[var(--color-editorial-ink-faint)]">HTTP {row.http_status}</span>
                           )}
                         </div>
                       </div>
-                      {row.detail && <div className="mt-1 text-zinc-500">{row.detail}</div>}
+                      {row.detail && <div className="mt-1 text-[var(--color-editorial-ink-faint)]">{row.detail}</div>}
                     </div>
                   ))}
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-zinc-400">{t("debug.notFetched")}</p>
+              <p className="text-xs text-[var(--color-editorial-ink-faint)]">{t("debug.notFetched")}</p>
             )}
           </div>
         </div>
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-800">OneSignal Debug</h2>
-          <button
-            type="button"
-            onClick={loadOneSignalDebug}
-            disabled={busyOneSignalDebug}
-            className="rounded border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="surface-editorial min-w-0 rounded-[28px] p-5">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-sm font-semibold text-[var(--color-editorial-ink)]">OneSignal Debug</h2>
+            <button
+              type="button"
+              onClick={loadOneSignalDebug}
+              disabled={busyOneSignalDebug}
+              className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-50"
           >
             {busyOneSignalDebug ? t("common.loading") : t("common.refresh")}
           </button>
-        </div>
-        {oneSignalDebug ? (
-          <pre className="overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
-            {JSON.stringify(oneSignalDebug, null, 2)}
-          </pre>
-        ) : (
-          <p className="text-xs text-zinc-400">{t("debug.notFetched")}</p>
-        )}
-      </section>
+          </div>
+          {oneSignalDebug ? (
+            <pre className="max-w-full overflow-x-auto rounded-[18px] bg-zinc-950 p-3 text-xs text-zinc-100">
+              {JSON.stringify(oneSignalDebug, null, 2)}
+            </pre>
+          ) : (
+            <p className="text-xs text-[var(--color-editorial-ink-faint)]">{t("debug.notFetched")}</p>
+          )}
+        </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-800">Push Test (Debug)</h2>
-        <form onSubmit={onPushTest} className="space-y-3">
-          <label className="block text-sm">
-            <div className="mb-1 text-xs font-medium text-zinc-600">Subscription ID (optional)</div>
-            <input
-              value={pushTestSubscriptionId}
-              onChange={(e) => setPushTestSubscriptionId(e.target.value)}
-              className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-              placeholder="onesignal subscription id"
-            />
-          </label>
-          <label className="block text-sm">
-            <div className="mb-1 text-xs font-medium text-zinc-600">Title</div>
-            <input
-              value={pushTestTitle}
-              onChange={(e) => setPushTestTitle(e.target.value)}
-              className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-              placeholder="notification title"
-            />
-          </label>
-          <label className="block text-sm">
-            <div className="mb-1 text-xs font-medium text-zinc-600">Message</div>
-            <input
-              value={pushTestMessage}
-              onChange={(e) => setPushTestMessage(e.target.value)}
-              className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-              placeholder="notification body"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={busyPushTest}
-            className="rounded bg-zinc-900 px-3 py-2 text-xs font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
-          >
-            {busyPushTest ? t("debug.running") : "Send Push Test"}
-          </button>
-        </form>
-        {pushTestResult && (
-          <pre className="mt-3 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
-            {JSON.stringify(pushTestResult, null, 2)}
-          </pre>
-        )}
-      </section>
+        <section className="surface-editorial min-w-0 rounded-[28px] p-5">
+          <h2 className="mb-3 text-sm font-semibold text-[var(--color-editorial-ink)]">Push Test</h2>
+          <form onSubmit={onPushTest} className="space-y-3">
+            <label className="block text-sm">
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">Subscription ID (optional)</div>
+              <input
+                value={pushTestSubscriptionId}
+                onChange={(e) => setPushTestSubscriptionId(e.target.value)}
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
+                placeholder="onesignal subscription id"
+              />
+            </label>
+            <label className="block text-sm">
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">Title</div>
+              <input
+                value={pushTestTitle}
+                onChange={(e) => setPushTestTitle(e.target.value)}
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
+                placeholder="notification title"
+              />
+            </label>
+            <label className="block text-sm">
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">Message</div>
+              <input
+                value={pushTestMessage}
+                onChange={(e) => setPushTestMessage(e.target.value)}
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
+                placeholder="notification body"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={busyPushTest}
+              className="rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-xs font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-95 disabled:opacity-60"
+            >
+              {busyPushTest ? t("debug.running") : "Send Push Test"}
+            </button>
+          </form>
+          {pushTestResult && (
+            <pre className="mt-3 max-w-full overflow-x-auto rounded-[18px] bg-zinc-950 p-3 text-xs text-zinc-100">
+              {JSON.stringify(pushTestResult, null, 2)}
+            </pre>
+          )}
+        </section>
+      </div>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-800">Cache Hit Rate (Debug)</h2>
+      <section className="surface-editorial min-w-0 rounded-[28px] p-5">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--color-editorial-ink)]">Cache Hit Rate</h2>
         {!systemHealth ? (
-          <p className="text-xs text-zinc-400">{t("debug.systemHealthFirst")}</p>
+          <p className="text-xs text-[var(--color-editorial-ink-faint)]">{t("debug.systemHealthFirst")}</p>
         ) : (
           <div className="space-y-4">
-            <div className="rounded border border-zinc-200 p-3">
-              <div className="mb-2 text-xs font-medium text-zinc-600">Current Process Counters</div>
+            <div className="min-w-0 rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+              <div className="mb-2 text-xs font-medium text-[var(--color-editorial-ink-faint)]">Current Process Counters</div>
               <div className="grid gap-2 sm:grid-cols-2">
                 {Object.entries(systemHealth.data?.cache_stats ?? {}).map(([name, stat]) => (
-                  <div key={name} className="rounded border border-zinc-200 px-2 py-2">
-                    <div className="mb-1 text-[11px] font-medium text-zinc-800">{name}</div>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-zinc-600">
+                  <div key={name} className="min-w-0 rounded-[16px] border border-[var(--color-editorial-line)] px-3 py-3">
+                    <div className="mb-1 break-all text-[11px] font-medium text-[var(--color-editorial-ink)]">{name}</div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-[var(--color-editorial-ink-soft)]">
                       <span>hit</span><span className="text-right">{stat.hits ?? 0}</span>
                       <span>miss</span><span className="text-right">{stat.misses ?? 0}</span>
                       <span>bypass</span><span className="text-right">{stat.bypass ?? 0}</span>
@@ -750,10 +749,10 @@ export default function DebugDigestsPage() {
             </div>
 
             {cacheWindowRows.length > 0 && (
-              <div className="rounded border border-zinc-200 p-3">
-                <div className="mb-2 text-xs font-medium text-zinc-600">Windowed Hit Rate</div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border-separate border-spacing-0 text-[11px]">
+              <div className="min-w-0 rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                <div className="mb-2 text-xs font-medium text-[var(--color-editorial-ink-faint)]">Windowed Hit Rate</div>
+                <div className="max-w-full overflow-x-auto">
+                  <table className="min-w-[540px] border-separate border-spacing-0 text-[11px]">
                     <thead>
                       <tr className="text-zinc-500">
                         <th className="border-b border-zinc-200 px-2 py-1 text-left font-medium">Window</th>
@@ -790,12 +789,12 @@ export default function DebugDigestsPage() {
             )}
 
             {cacheWindowRowsUser.length > 0 && (
-              <div className="rounded border border-zinc-200 p-3">
-                <div className="mb-2 text-xs font-medium text-zinc-600">
+              <div className="min-w-0 rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                <div className="mb-2 break-all text-xs font-medium text-[var(--color-editorial-ink-faint)]">
                   User Windowed Hit Rate ({systemHealth.data?.cache_metrics_user_id ?? "n/a"})
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full border-separate border-spacing-0 text-[11px]">
+                <div className="max-w-full overflow-x-auto">
+                  <table className="min-w-[540px] border-separate border-spacing-0 text-[11px]">
                     <thead>
                       <tr className="text-zinc-500">
                         <th className="border-b border-zinc-200 px-2 py-1 text-left font-medium">Window</th>
@@ -834,8 +833,8 @@ export default function DebugDigestsPage() {
             {Object.keys(systemHealth.data?.cache_stats_by_window ?? {}).length > 0 && (
               <div className="space-y-2">
                 {Object.entries(systemHealth.data?.cache_stats_by_window ?? {}).map(([win, row]) => (
-                  <div key={win} className="rounded border border-zinc-200 px-2 py-2">
-                    <div className="mb-1 text-[11px] font-medium text-zinc-800">{win}</div>
+                  <div key={win} className="rounded-[16px] border border-[var(--color-editorial-line)] px-3 py-3">
+                    <div className="mb-1 text-[11px] font-medium text-[var(--color-editorial-ink)]">{win}</div>
                     {"error" in row && row.error ? (
                       <div className="text-[11px] text-red-600">{row.error}</div>
                     ) : (
@@ -844,12 +843,12 @@ export default function DebugDigestsPage() {
                           const v = row[k];
                           const rate = typeof v?.hit_rate === "number" ? `${(v.hit_rate * 100).toFixed(1)}%` : "N/A";
                           return (
-                            <div key={k} className="rounded bg-zinc-50 px-2 py-1.5">
+                            <div key={k} className="rounded-[14px] bg-[var(--color-editorial-panel-strong)] px-3 py-2">
                               <div className="flex items-center justify-between text-[11px]">
-                                <span className="font-medium text-zinc-700">{k}</span>
-                                <span className="text-zinc-900">{rate}</span>
+                                <span className="font-medium text-[var(--color-editorial-ink-soft)]">{k}</span>
+                                <span className="text-[var(--color-editorial-ink)]">{rate}</span>
                               </div>
-                              <div className="mt-0.5 text-[10px] text-zinc-500">
+                              <div className="mt-0.5 text-[10px] text-[var(--color-editorial-ink-faint)]">
                                 h {v?.hits ?? 0} / m {v?.misses ?? 0} / b {v?.bypass ?? 0} / e {v?.errors ?? 0}
                               </div>
                             </div>
@@ -864,31 +863,41 @@ export default function DebugDigestsPage() {
           </div>
         )}
       </section>
+    </div>
+  );
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-800">Generate Digest (Debug)</h2>
+  const digestOpsSection = (
+    <div className="space-y-4">
+      <section className="surface-editorial rounded-[28px] p-5">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">Digest Ops</div>
+        <h2 className="mt-2 font-serif text-[1.8rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">Generate / Send / Inspect</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{helperText}</p>
+      </section>
+
+      <section className="surface-editorial rounded-[28px] p-5">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--color-editorial-ink)]">Generate Digest</h2>
         <form onSubmit={onGenerate} className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
-              <div className="mb-1 text-xs font-medium text-zinc-600">User ID (optional)</div>
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">User ID (optional)</div>
               <input
                 value={userId}
                 onChange={(e) => setUserId(e.target.value)}
-                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
                 placeholder="all users if empty"
               />
             </label>
             <label className="text-sm">
-              <div className="mb-1 text-xs font-medium text-zinc-600">Digest Date (JST)</div>
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">Digest Date (JST)</div>
               <input
                 type="date"
                 value={digestDate}
                 onChange={(e) => setDigestDate(e.target.value)}
-                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
               />
             </label>
           </div>
-          <label className="flex items-center gap-2 text-sm text-zinc-700">
+          <label className="flex items-center gap-2 text-sm text-[var(--color-editorial-ink-soft)]">
             <input
               type="checkbox"
               checked={skipSend}
@@ -900,35 +909,35 @@ export default function DebugDigestsPage() {
           <button
             type="submit"
             disabled={busyGenerate}
-            className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+            className="rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-95 disabled:opacity-50"
           >
             {busyGenerate ? t("debug.running") : "Generate Debug"}
           </button>
         </form>
 
         {generateResult && (
-          <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+          <pre className="mt-4 overflow-x-auto rounded-[18px] bg-zinc-950 p-3 text-xs text-zinc-100">
             {JSON.stringify(generateResult, null, 2)}
           </pre>
         )}
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-800">Send Digest (Debug)</h2>
+      <section className="surface-editorial rounded-[28px] p-5">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--color-editorial-ink)]">Send Digest</h2>
         <form onSubmit={onSend} className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="flex-1 text-sm">
-            <div className="mb-1 text-xs font-medium text-zinc-600">Digest ID</div>
+            <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">Digest ID</div>
             <input
               value={digestId}
               onChange={(e) => setDigestId(e.target.value)}
-              className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
               placeholder="00000000-0000-0000-0000-0000000000dd"
             />
           </label>
           <button
             type="submit"
             disabled={busySend || !digestId.trim()}
-            className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+            className="rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-95 disabled:opacity-50"
           >
             {busySend ? t("debug.running") : "Queue Send"}
           </button>
@@ -936,60 +945,69 @@ export default function DebugDigestsPage() {
             type="button"
             disabled={busyInspect || !digestId.trim()}
             onClick={inspectDigest}
-            className="rounded border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-50"
           >
             {busyInspect ? t("debug.inspecting") : t("debug.statusCheck")}
           </button>
         </form>
 
         {sendResult && (
-          <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+          <pre className="mt-4 overflow-x-auto rounded-[18px] bg-zinc-950 p-3 text-xs text-zinc-100">
             {JSON.stringify(sendResult, null, 2)}
           </pre>
         )}
 
         {digestDetail && (
-          <div className="mt-4 rounded border border-zinc-200 bg-zinc-50 p-3 text-sm">
+          <div className="mt-4 rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4 text-sm">
             <div><span className="font-medium">digest_id:</span> {digestDetail.id}</div>
             <div><span className="font-medium">send_status:</span> {digestDetail.send_status ?? "-"}</div>
             <div><span className="font-medium">send_tried_at:</span> {digestDetail.send_tried_at ?? "-"}</div>
             <div><span className="font-medium">sent_at:</span> {digestDetail.sent_at ?? "-"}</div>
             <div><span className="font-medium">email_copy:</span> {digestDetail.email_subject && digestDetail.email_body ? "generated" : "not generated"}</div>
             {digestDetail.send_error && (
-              <pre className="mt-2 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+              <pre className="mt-3 overflow-x-auto rounded-[18px] bg-zinc-950 p-3 text-xs text-zinc-100">
                 {digestDetail.send_error}
               </pre>
             )}
           </div>
         )}
       </section>
+    </div>
+  );
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-800">Embeddings Backfill (Debug)</h2>
+  const backfillsSection = (
+    <div className="space-y-4">
+      <section className="surface-editorial rounded-[28px] p-5">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">Backfills</div>
+        <h2 className="mt-2 font-serif text-[1.8rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">Embeddings / Titles / OpenRouter Costs</h2>
+      </section>
+
+      <section className="surface-editorial rounded-[28px] p-5">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--color-editorial-ink)]">Embeddings Backfill</h2>
         <form onSubmit={onBackfillEmbeddings} className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="text-sm sm:col-span-2">
-              <div className="mb-1 text-xs font-medium text-zinc-600">User ID (optional)</div>
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">User ID (optional)</div>
               <input
                 value={backfillUserId}
                 onChange={(e) => setBackfillUserId(e.target.value)}
-                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
                 placeholder="all users if empty"
               />
             </label>
             <label className="text-sm">
-              <div className="mb-1 text-xs font-medium text-zinc-600">Limit (1-1000)</div>
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">Limit (1-1000)</div>
               <input
                 type="number"
                 min={1}
                 max={1000}
                 value={backfillLimit}
                 onChange={(e) => setBackfillLimit(e.target.value)}
-                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
               />
             </label>
           </div>
-          <label className="flex items-center gap-2 text-sm text-zinc-700">
+          <label className="flex items-center gap-2 text-sm text-[var(--color-editorial-ink-soft)]">
             <input
               type="checkbox"
               checked={backfillDryRun}
@@ -1001,66 +1019,66 @@ export default function DebugDigestsPage() {
           <button
             type="submit"
             disabled={busyBackfill}
-            className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+            className="rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-95 disabled:opacity-50"
           >
             {busyBackfill ? t("debug.running") : backfillDryRun ? "Preview Backfill" : "Queue Backfill"}
           </button>
         </form>
 
         {backfillResult && (
-          <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+          <pre className="mt-4 overflow-x-auto rounded-[18px] bg-zinc-950 p-3 text-xs text-zinc-100">
             {JSON.stringify(backfillResult, null, 2)}
           </pre>
         )}
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-800">{t("debug.openrouterCost.title")}</h2>
+      <section className="surface-editorial rounded-[28px] p-5">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--color-editorial-ink)]">{t("debug.openrouterCost.title")}</h2>
         <form onSubmit={onBackfillOpenRouterCosts} className="space-y-3">
-          <p className="text-xs text-zinc-500">{t("debug.openrouterCost.description")}</p>
+          <p className="text-xs text-[var(--color-editorial-ink-faint)]">{t("debug.openrouterCost.description")}</p>
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="text-sm sm:col-span-2">
-              <div className="mb-1 text-xs font-medium text-zinc-600">{t("debug.openrouterCost.userId")}</div>
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("debug.openrouterCost.userId")}</div>
               <input
                 value={openRouterCostUserId}
                 onChange={(e) => setOpenRouterCostUserId(e.target.value)}
-                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
                 placeholder={t("debug.openrouterCost.userPlaceholder")}
               />
             </label>
             <label className="text-sm">
-              <div className="mb-1 text-xs font-medium text-zinc-600">{t("debug.openrouterCost.limit")}</div>
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("debug.openrouterCost.limit")}</div>
               <input
                 type="number"
                 min={1}
                 max={5000}
                 value={openRouterCostLimit}
                 onChange={(e) => setOpenRouterCostLimit(e.target.value)}
-                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
               />
             </label>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
-              <div className="mb-1 text-xs font-medium text-zinc-600">{t("debug.openrouterCost.from")}</div>
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("debug.openrouterCost.from")}</div>
               <input
                 value={openRouterCostFrom}
                 onChange={(e) => setOpenRouterCostFrom(e.target.value)}
-                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
                 placeholder={t("debug.openrouterCost.datePlaceholder")}
               />
             </label>
             <label className="text-sm">
-              <div className="mb-1 text-xs font-medium text-zinc-600">{t("debug.openrouterCost.to")}</div>
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("debug.openrouterCost.to")}</div>
               <input
                 value={openRouterCostTo}
                 onChange={(e) => setOpenRouterCostTo(e.target.value)}
-                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
                 placeholder={t("debug.openrouterCost.datePlaceholder")}
               />
             </label>
           </div>
-          <label className="flex items-center gap-2 text-sm text-zinc-700">
+          <label className="flex items-center gap-2 text-sm text-[var(--color-editorial-ink-soft)]">
             <input
               type="checkbox"
               checked={openRouterCostDryRun}
@@ -1072,7 +1090,7 @@ export default function DebugDigestsPage() {
           <button
             type="submit"
             disabled={busyOpenRouterCostBackfill}
-            className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+            className="rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-95 disabled:opacity-50"
           >
             {busyOpenRouterCostBackfill
               ? t("debug.running")
@@ -1083,38 +1101,38 @@ export default function DebugDigestsPage() {
         </form>
 
         {openRouterCostBackfillResult && (
-          <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+          <pre className="mt-4 overflow-x-auto rounded-[18px] bg-zinc-950 p-3 text-xs text-zinc-100">
             {JSON.stringify(openRouterCostBackfillResult, null, 2)}
           </pre>
         )}
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-800">Translated Title Backfill (Debug)</h2>
+      <section className="surface-editorial rounded-[28px] p-5">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--color-editorial-ink)]">Translated Title Backfill</h2>
         <form onSubmit={onBackfillTranslatedTitles} className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="text-sm sm:col-span-2">
-              <div className="mb-1 text-xs font-medium text-zinc-600">User ID (optional)</div>
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">User ID (optional)</div>
               <input
                 value={titleBackfillUserId}
                 onChange={(e) => setTitleBackfillUserId(e.target.value)}
-                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
                 placeholder="all users if empty"
               />
             </label>
             <label className="text-sm">
-              <div className="mb-1 text-xs font-medium text-zinc-600">Limit (1-2000)</div>
+              <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">Limit (1-2000)</div>
               <input
                 type="number"
                 min={1}
                 max={2000}
                 value={titleBackfillLimit}
                 onChange={(e) => setTitleBackfillLimit(e.target.value)}
-                className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+                className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
               />
             </label>
           </div>
-          <label className="flex items-center gap-2 text-sm text-zinc-700">
+          <label className="flex items-center gap-2 text-sm text-[var(--color-editorial-ink-soft)]">
             <input
               type="checkbox"
               checked={titleBackfillDryRun}
@@ -1126,37 +1144,46 @@ export default function DebugDigestsPage() {
           <button
             type="submit"
             disabled={busyTitleBackfill}
-            className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+            className="rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-95 disabled:opacity-50"
           >
             {busyTitleBackfill ? t("debug.running") : titleBackfillDryRun ? "Preview Backfill" : "Run Backfill"}
           </button>
         </form>
 
         {titleBackfillResult && (
-          <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+          <pre className="mt-4 overflow-x-auto rounded-[18px] bg-zinc-950 p-3 text-xs text-zinc-100">
             {JSON.stringify(titleBackfillResult, null, 2)}
           </pre>
         )}
       </section>
+    </div>
+  );
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-800">{t("debug.retryPending.title")}</h2>
+  const recoverySection = (
+    <div className="space-y-4">
+      <section className="surface-editorial rounded-[28px] p-5">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">Recovery</div>
+        <h2 className="mt-2 font-serif text-[1.8rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">Retry Failed Items</h2>
+      </section>
+
+      <section className="surface-editorial rounded-[28px] p-5">
+        <h2 className="mb-3 text-sm font-semibold text-[var(--color-editorial-ink)]">{t("debug.retryPending.title")}</h2>
         <form onSubmit={onRetryFailedItems} className="space-y-4">
           <label className="block text-sm">
-            <div className="mb-1 text-xs font-medium text-zinc-600">{t("debug.retryPending.sourceId")}</div>
+            <div className="mb-1 text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("debug.retryPending.sourceId")}</div>
             <input
               value={retrySourceId}
               onChange={(e) => setRetrySourceId(e.target.value)}
-              className="w-full rounded border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
+              className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
               placeholder={t("debug.retryPending.sourcePlaceholder")}
             />
           </label>
-          <p className="text-xs text-zinc-500">{t("debug.retryPending.description")}</p>
+          <p className="text-xs text-[var(--color-editorial-ink-faint)]">{t("debug.retryPending.description")}</p>
           <div className="pt-1">
             <button
               type="submit"
               disabled={busyRetryFailed}
-              className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+              className="rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-95 disabled:opacity-50"
             >
               {busyRetryFailed ? t("debug.running") : t("debug.retryPending.run")}
             </button>
@@ -1164,12 +1191,64 @@ export default function DebugDigestsPage() {
         </form>
 
         {retryFailedResult && (
-          <pre className="mt-4 overflow-x-auto rounded bg-zinc-950 p-3 text-xs text-zinc-100">
+          <pre className="mt-4 overflow-x-auto rounded-[18px] bg-zinc-950 p-3 text-xs text-zinc-100">
             {JSON.stringify(retryFailedResult, null, 2)}
           </pre>
         )}
       </section>
     </div>
+  );
+
+  return (
+    <PageTransition>
+      <div className="space-y-6">
+        <PageHeader
+          title="Debug Digests"
+          description={helperText}
+        />
+
+        {error && (
+          <div className="rounded-[22px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-[var(--shadow-card)]">
+            {error}
+          </div>
+        )}
+
+        <div className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
+          <aside className="surface-editorial rounded-[24px] p-4">
+            {[
+              { key: "system" as const, label: "System", meta: "health, OneSignal, push test, cache" },
+              { key: "digestOps" as const, label: "Digest Ops", meta: "generate, send, inspect" },
+              { key: "backfills" as const, label: "Backfills", meta: "embeddings, titles, OpenRouter costs" },
+              { key: "recovery" as const, label: "Recovery", meta: "retry failed items" },
+            ].map((section) => (
+              <button
+                key={section.key}
+                type="button"
+                onClick={() => setActiveSection(section.key)}
+                className={`relative block w-full rounded-[16px] px-4 py-[13px] text-left ${
+                  activeSection === section.key
+                    ? "bg-[linear-gradient(90deg,rgba(243,236,227,0.92),rgba(243,236,227,0.28)_78%,transparent)]"
+                    : "bg-transparent"
+                }`}
+              >
+                {activeSection === section.key ? (
+                  <span className="absolute bottom-3 left-0 top-3 w-[3px] rounded-full bg-[var(--color-editorial-ink)]" />
+                ) : null}
+                <div className="text-[15px] font-semibold text-[var(--color-editorial-ink)]">{section.label}</div>
+                <div className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-faint)]">{section.meta}</div>
+              </button>
+            ))}
+          </aside>
+
+          <section className="min-w-0">
+            {activeSection === "system" ? systemSection : null}
+            {activeSection === "digestOps" ? digestOpsSection : null}
+            {activeSection === "backfills" ? backfillsSection : null}
+            {activeSection === "recovery" ? recoverySection : null}
+          </section>
+        </div>
+      </div>
+    </PageTransition>
   );
 }
 

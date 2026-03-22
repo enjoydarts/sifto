@@ -29,6 +29,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      meilisearch:
+        condition: service_started
     environment:
       DATABASE_URL: ${DOCKER_DATABASE_URL}
       PYTHON_WORKER_URL: ${DOCKER_PYTHON_WORKER_URL}
@@ -43,6 +45,9 @@ services:
       INNGEST_BASE_URL: ${DOCKER_INNGEST_BASE_URL}
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET}
       USER_SECRET_ENCRYPTION_KEY: ${USER_SECRET_ENCRYPTION_KEY}
+      MEILISEARCH_URL: ${MEILISEARCH_URL:-http://meilisearch:7700}
+      MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:-change-me}
+      MEILISEARCH_ITEMS_INDEX: ${MEILISEARCH_ITEMS_INDEX:-items}
       LLM_CATALOG_PATH: /shared/llm_catalog.json
     env_file:
       - .env
@@ -79,6 +84,15 @@ services:
     ports:
       - "6379:6379"
 
+  meilisearch:
+    image: getmeili/meilisearch:v1.13
+    ports:
+      - "7700:7700"
+    environment:
+      MEILI_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:-change-me}
+    volumes:
+      - meilisearch_data:/meili_data
+
   inngest:
     image: inngest/inngest:latest
     ports:
@@ -114,4 +128,5 @@ services:
 
 volumes:
   postgres_data:
+  meilisearch_data:
   web_node_modules:

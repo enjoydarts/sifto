@@ -26,6 +26,8 @@ const FILTERS = ["", "summarized", "pending", "new", "fetched", "facts_extracted
 type ItemsFeedQueryData = {
   items: Item[];
   total: number;
+  searchUnavailable?: boolean;
+  searchMode?: "natural" | "and" | "or" | string | null;
 };
 
 function ItemsPageContent() {
@@ -59,6 +61,9 @@ function ItemsPageContent() {
     const topic = (searchParams.get("topic") ?? "").trim();
     const sourceID = (searchParams.get("source_id") ?? "").trim();
     const searchQuery = (searchParams.get("q") ?? "").trim();
+    const qSearchMode = searchParams.get("search_mode");
+    const searchMode: "natural" | "and" | "or" =
+      qSearchMode === "and" ? "and" : qSearchMode === "or" ? "or" : "natural";
 
     const pendingFeed = qFeed === "pending";
     const unreadOnly = !pendingFeed && searchParams.get("unread") === "1";
@@ -74,12 +79,13 @@ function ItemsPageContent() {
       topic,
       sourceID,
       searchQuery,
+      searchMode,
       unreadOnly,
       favoriteOnly,
       page,
     };
   }, [searchParams]);
-  const { feedMode, sortMode, filter, topic, sourceID, searchQuery, unreadOnly, favoriteOnly, page } = queryState;
+  const { feedMode, sortMode, filter, topic, sourceID, searchQuery, searchMode, unreadOnly, favoriteOnly, page } = queryState;
   const unreadMode = feedMode === "unread";
   const readMode = feedMode === "read";
   const laterMode = feedMode === "later";
@@ -94,6 +100,7 @@ function ItemsPageContent() {
   const [toolbarAction, setToolbarAction] = useState<"" | "triage_all" | "bulk_filtered" | "bulk_older">("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchDraft, setSearchDraft] = useState(searchQuery);
+  const [searchModeDraft, setSearchModeDraft] = useState<"natural" | "and" | "or">(searchMode);
   const restoredScrollRef = useRef<string | null>(null);
   const prefetchedDetailIDsRef = useRef<Record<string, true>>({});
   const [inlineQueueItemIds, setInlineQueueItemIds] = useState<string[]>([]);
@@ -106,13 +113,14 @@ function ItemsPageContent() {
       topic,
       sourceID,
       searchQuery,
+      searchMode,
       page,
       sortMode,
       unreadOnly ? 1 : 0,
       favoriteOnly ? 1 : 0,
       readMode ? 1 : 0,
     ] as const,
-    [favoriteOnly, feedMode, filter, page, readMode, searchQuery, sortMode, sourceID, topic, unreadOnly]
+    [favoriteOnly, feedMode, filter, page, readMode, searchMode, searchQuery, sortMode, sourceID, topic, unreadOnly]
   );
 
   const listQuery = useQuery<ItemsFeedQueryData>({
@@ -123,6 +131,7 @@ function ItemsPageContent() {
         ...(sourceID ? { source_id: sourceID } : {}),
         ...(topic ? { topic } : {}),
         ...(searchQuery ? { q: searchQuery } : {}),
+        ...(searchQuery ? { search_mode: searchMode } : {}),
         page,
         page_size: pageSize,
         sort: pendingMode ? "newest" : sortMode,
@@ -134,6 +143,8 @@ function ItemsPageContent() {
       return {
         items: data?.items ?? [],
         total: data?.total ?? 0,
+        searchUnavailable: data?.search_unavailable ?? false,
+        searchMode: data?.search_mode ?? searchMode,
       };
     },
     placeholderData: (prev) => prev,
@@ -141,6 +152,7 @@ function ItemsPageContent() {
   const cachedItemsLength = listQuery.data?.items?.length ?? 0;
   const items = listQuery.data?.items ?? [];
   const itemsTotal = listQuery.data?.total ?? 0;
+  const searchUnavailable = listQuery.data?.searchUnavailable ?? false;
   const loading = !listQuery.data && (listQuery.isLoading || listQuery.isFetching);
   const queryError = listQuery.error ? String(listQuery.error) : null;
   const visibleError = error ?? queryError;
@@ -148,8 +160,9 @@ function ItemsPageContent() {
   useEffect(() => {
     if (!searchOpen) {
       setSearchDraft(searchQuery);
+      setSearchModeDraft(searchMode);
     }
-  }, [searchOpen, searchQuery]);
+  }, [searchMode, searchOpen, searchQuery]);
 
   const replaceItemsQuery = useCallback(
     (
@@ -160,6 +173,7 @@ function ItemsPageContent() {
           topic: string;
           sourceId: string;
           q: string;
+          searchMode: "natural" | "and" | "or";
           unread: boolean;
           favorite: boolean;
           page: number;
@@ -176,6 +190,7 @@ function ItemsPageContent() {
       const nextTopic = patch.topic ?? topic;
       const nextSourceID = patch.sourceId ?? sourceID;
       const nextSearch = patch.q ?? searchQuery;
+      const nextSearchMode = patch.searchMode ?? searchMode;
       const isDeletedFeed = nextFeed === "deleted";
       const nextUnread = nextFeed === "pending" || isDeletedFeed ? false : nextFeed === "later" ? true : patch.unread ?? unreadOnly;
       const nextFavorite = nextFeed === "pending" || isDeletedFeed ? false : patch.favorite ?? favoriteOnly;
@@ -189,6 +204,8 @@ function ItemsPageContent() {
       else q.delete("topic");
       if (nextSearch) q.set("q", nextSearch);
       else q.delete("q");
+      if (nextSearch) q.set("search_mode", nextSearchMode);
+      else q.delete("search_mode");
       q.set("sort", nextFeed === "pending" ? "newest" : nextSort);
       if (nextUnread) q.set("unread", "1");
       else q.delete("unread");
@@ -201,7 +218,7 @@ function ItemsPageContent() {
       const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
       router.replace(nextUrl, { scroll: false });
     },
-    [favoriteOnly, feedMode, filter, page, pathname, router, searchParams, searchQuery, sortMode, sourceID, topic, unreadOnly]
+    [favoriteOnly, feedMode, filter, page, pathname, router, searchMode, searchParams, searchQuery, sortMode, sourceID, topic, unreadOnly]
   );
 
   const itemsQueryString = useMemo(() => {
@@ -211,17 +228,18 @@ function ItemsPageContent() {
     if (sourceID) q.set("source_id", sourceID);
     if (topic) q.set("topic", topic);
     if (searchQuery) q.set("q", searchQuery);
+    if (searchQuery) q.set("search_mode", searchMode);
     q.set("sort", pendingMode ? "newest" : sortMode);
     if (page > 1) q.set("page", String(page));
     if (!pendingMode && !deletedMode && (unreadOnly || laterMode)) q.set("unread", "1");
     if (!pendingMode && !deletedMode && favoriteOnly) q.set("favorite", "1");
     return q.toString();
-  }, [deletedMode, favoriteOnly, feedMode, filter, laterMode, page, pendingMode, searchQuery, sortMode, sourceID, topic, unreadOnly]);
+  }, [deletedMode, favoriteOnly, feedMode, filter, laterMode, page, pendingMode, searchMode, searchQuery, sortMode, sourceID, topic, unreadOnly]);
 
   const submitSearch = useCallback(() => {
-    replaceItemsQuery({ q: searchDraft.trim(), page: 1 });
+    replaceItemsQuery({ q: searchDraft.trim(), searchMode: searchModeDraft, page: 1 });
     setSearchOpen(false);
-  }, [replaceItemsQuery, searchDraft]);
+  }, [replaceItemsQuery, searchDraft, searchModeDraft]);
 
   const currentItemsHref = useMemo(
     () => (itemsQueryString ? `${pathname}?${itemsQueryString}` : pathname),
@@ -565,6 +583,7 @@ function ItemsPageContent() {
                   type="button"
                   onClick={() => {
                     setSearchDraft(searchQuery);
+                    setSearchModeDraft(searchMode);
                     setSearchOpen(true);
                   }}
                   className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-full border px-3 py-2 text-sm font-medium press focus-ring ${
@@ -619,6 +638,7 @@ function ItemsPageContent() {
                     type="button"
                     onClick={() => {
                       setSearchDraft(searchQuery);
+                      setSearchModeDraft(searchMode);
                       setSearchOpen(true);
                     }}
                     className={`inline-flex min-h-9 items-center justify-center rounded-full border px-3 py-1.5 text-sm font-medium press focus-ring ${
@@ -714,6 +734,12 @@ function ItemsPageContent() {
             >
               {showFilterBadges ? <div className="flex flex-wrap items-center gap-2">{railFilterTags}</div> : null}
             </FilterBar>
+
+            {searchQuery && searchUnavailable ? (
+              <SectionCard className="border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                {t("items.search.unavailable")}
+              </SectionCard>
+            ) : null}
 
             {loading || items.length === 0 || !!visibleError ? (
               <ItemsListState
@@ -842,6 +868,36 @@ function ItemsPageContent() {
                   placeholder={t("items.search.placeholder")}
                   className="min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus-ring"
                 />
+                <div className="space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                    {t("items.search.modeLabel")}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["natural", "and", "or"] as const).map((mode) => {
+                      const active = searchModeDraft === mode;
+                      const labelKey =
+                        mode === "natural"
+                          ? "items.search.mode.natural"
+                          : mode === "and"
+                            ? "items.search.mode.and"
+                            : "items.search.mode.or";
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setSearchModeDraft(mode)}
+                          className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${
+                            active
+                              ? "border-zinc-900 bg-zinc-900 text-white"
+                              : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                          }`}
+                        >
+                          {t(labelKey)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div className="flex items-center justify-between gap-3">
                   <button
                     type="button"

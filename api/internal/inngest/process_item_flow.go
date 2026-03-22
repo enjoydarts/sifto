@@ -37,6 +37,7 @@ type processItemDeps struct {
 	worker             *service.WorkerClient
 	openAI             *service.OpenAIClient
 	oneSignal          *service.OneSignalClient
+	publisher          *service.EventPublisher
 	secretCipher       *service.SecretCipher
 	cache              service.JSONCache
 	pickScoreThreshold float64
@@ -584,6 +585,9 @@ func summarizeAndPersistItem(
 		return nil, fmt.Errorf("insert summary: %w", err)
 	}
 	bumpProcessItemDetailCacheVersion(ctx, deps.cache, itemID)
+	if err := deps.publisher.SendItemSearchUpsertE(ctx, itemID); err != nil {
+		log.Printf("process-item search upsert event failed item_id=%s err=%v", itemID, err)
+	}
 	log.Printf("process-item summarize done item_id=%s topics=%d score=%.3f retries=%d faithfulness=%s", itemID, len(summary.Topics), summary.Score, summaryRetryCount, finalFaithfulness.Verdict)
 
 	return &processSummaryStageResult{

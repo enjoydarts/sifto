@@ -32,15 +32,16 @@ func cacheVersionKeyUserLLMUsage(userID string) string {
 	return service.UserLLMUsageCacheVersionKey(userID)
 }
 
-func cacheKeyItemsList(userID, status, sourceID, topic, query string, unreadOnly, readOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) string {
+func cacheKeyItemsList(userID, status, sourceID, topic, query, searchMode string, unreadOnly, readOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) string {
 	return fmt.Sprintf(
-		"%s:items:list:%s:status=%s:source=%s:topic=%s:q=%s:unread=%t:read=%t:fav=%t:later=%t:sort=%s:page=%d:size=%d",
+		"%s:items:list:%s:status=%s:source=%s:topic=%s:q=%s:mode=%s:unread=%t:read=%t:fav=%t:later=%t:sort=%s:page=%d:size=%d",
 		cacheKeyVersion,
 		userID,
 		status,
 		sourceID,
 		topic,
 		query,
+		searchMode,
 		unreadOnly,
 		readOnly,
 		favoriteOnly,
@@ -51,9 +52,9 @@ func cacheKeyItemsList(userID, status, sourceID, topic, query string, unreadOnly
 	)
 }
 
-func cacheKeyItemsListVersioned(userID string, version int64, status, sourceID, topic, query string, unreadOnly, readOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) string {
+func cacheKeyItemsListVersioned(userID string, version int64, status, sourceID, topic, query, searchMode string, unreadOnly, readOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) string {
 	return fmt.Sprintf(
-		"%s:items:list:%s:v=%d:status=%s:source=%s:topic=%s:q=%s:unread=%t:read=%t:fav=%t:later=%t:sort=%s:page=%d:size=%d",
+		"%s:items:list:%s:v=%d:status=%s:source=%s:topic=%s:q=%s:mode=%s:unread=%t:read=%t:fav=%t:later=%t:sort=%s:page=%d:size=%d",
 		cacheKeyVersion,
 		userID,
 		version,
@@ -61,6 +62,7 @@ func cacheKeyItemsListVersioned(userID string, version int64, status, sourceID, 
 		sourceID,
 		topic,
 		query,
+		searchMode,
 		unreadOnly,
 		readOnly,
 		favoriteOnly,

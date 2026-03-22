@@ -32,6 +32,7 @@ type InternalHandler struct {
 	worker       *service.WorkerClient
 	oneSignal    *service.OneSignalClient
 	githubApp    *service.GitHubAppClient
+	search       *service.MeilisearchService
 }
 
 func NewInternalHandler(
@@ -48,6 +49,7 @@ func NewInternalHandler(
 	worker *service.WorkerClient,
 	oneSignal *service.OneSignalClient,
 	githubApp *service.GitHubAppClient,
+	search *service.MeilisearchService,
 ) *InternalHandler {
 	return &InternalHandler{
 		userRepo:     userRepo,
@@ -63,6 +65,7 @@ func NewInternalHandler(
 		worker:       worker,
 		oneSignal:    oneSignal,
 		githubApp:    githubApp,
+		search:       search,
 	}
 }
 
@@ -554,6 +557,39 @@ func (h *InternalHandler) DebugSendPushTest(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+func (h *InternalHandler) DebugBackfillItemSearch(w http.ResponseWriter, r *http.Request) {
+	if !checkInternalSecret(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	if h.publisher == nil {
+		http.Error(w, "event publisher unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	offset := parseIntOrDefault(strings.TrimSpace(r.URL.Query().Get("offset")), 0)
+	limit := parseIntOrDefault(strings.TrimSpace(r.URL.Query().Get("limit")), 100)
+	if limit < 1 || limit > 500 {
+		http.Error(w, "invalid limit", http.StatusBadRequest)
+		return
+	}
+	if offset < 0 {
+		http.Error(w, "invalid offset", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.publisher.SendItemSearchBackfillE(r.Context(), offset, limit); err != nil {
+		http.Error(w, fmt.Sprintf("enqueue backfill failed: %v", err), http.StatusBadGateway)
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"ok":     true,
+		"offset": offset,
+		"limit":  limit,
+	})
+}
+
 func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalSecret(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
@@ -937,6 +973,13 @@ func (h *InternalHandler) DebugSystemStatus(w http.ResponseWriter, r *http.Reque
 		}
 		err := h.worker.Health(ctx)
 		return "GET /health", 200, nil, err
+	})
+	run("meilisearch", func(ctx context.Context) (string, int, map[string]any, error) {
+		if h.search == nil {
+			return "", 0, nil, fmt.Errorf("meilisearch client not configured")
+		}
+		err := h.search.Health(ctx)
+		return "GET /health", 200, map[string]any{"items_index": h.search.ItemsIndexName()}, err
 	})
 	run("inngest", func(ctx context.Context) (string, int, map[string]any, error) {
 		base := service.InngestBaseURLFromEnv()

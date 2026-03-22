@@ -178,10 +178,17 @@ export interface Item {
   personal_score?: number;
   personal_score_reason?: string;
   personal_score_breakdown?: PersonalScoreBreakdown | null;
+  search_match_count?: number;
+  search_snippets?: ItemSearchSnippet[];
   published_at: string | null;
   fetched_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ItemSearchSnippet {
+  field: "title" | "summary" | "facts" | "content" | string;
+  snippet_html: string;
 }
 
 export interface PersonalScoreComponent {
@@ -425,6 +432,8 @@ export interface ItemListResponse {
   sort: "newest" | "score" | string;
   status?: string | null;
   source_id?: string | null;
+  search_mode?: "natural" | "and" | "or" | string | null;
+  search_unavailable?: boolean;
 }
 
 export interface ReadingPlanResponse {
@@ -1150,12 +1159,13 @@ export const api = {
     ),
 
   // Items
-  getItems: (params?: { status?: string; source_id?: string; topic?: string; q?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean; read_only?: boolean; favorite_only?: boolean; later_only?: boolean }) => {
+  getItems: (params?: { status?: string; source_id?: string; topic?: string; q?: string; search_mode?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean; read_only?: boolean; favorite_only?: boolean; later_only?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.source_id) q.set("source_id", params.source_id);
     if (params?.topic) q.set("topic", params.topic);
     if (params?.q) q.set("q", params.q);
+    if (params?.search_mode) q.set("search_mode", params.search_mode);
     if (params?.page) q.set("page", String(params.page));
     if (params?.page_size) q.set("page_size", String(params.page_size));
     if (params?.sort) q.set("sort", params.sort);

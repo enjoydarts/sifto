@@ -30,6 +30,8 @@ type ItemHandler struct {
 	reviewQueueRepo *repository.ReviewQueueRepo
 	publisher       *service.EventPublisher
 	cache           service.JSONCache
+	search          *service.MeilisearchService
+	searchItems     *service.ItemSearchService
 	detail          *service.ItemDetailService
 }
 
@@ -161,6 +163,7 @@ func NewItemHandler(
 	reviewQueueRepo *repository.ReviewQueueRepo,
 	publisher *service.EventPublisher,
 	cache service.JSONCache,
+	search *service.MeilisearchService,
 ) *ItemHandler {
 	return &ItemHandler{
 		repo:            repo,
@@ -172,6 +175,8 @@ func NewItemHandler(
 		reviewQueueRepo: reviewQueueRepo,
 		publisher:       publisher,
 		cache:           cache,
+		search:          search,
+		searchItems:     service.NewItemSearchService(search, repo),
 		detail:          service.NewItemDetailService(repo),
 	}
 }
@@ -187,7 +192,7 @@ func itemsListCacheTTLForSort(sort string) time.Duration {
 	}
 }
 
-func (h *ItemHandler) itemsListCacheKey(ctx context.Context, userID, status, sourceID, topic, searchQuery string, unreadOnly, readOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) (string, error) {
+func (h *ItemHandler) itemsListCacheKey(ctx context.Context, userID, status, sourceID, topic, searchQuery, searchMode string, unreadOnly, readOnly, favoriteOnly, laterOnly bool, sort string, page, pageSize int) (string, error) {
 	version := int64(0)
 	if h.cache != nil {
 		var err error
@@ -196,7 +201,7 @@ func (h *ItemHandler) itemsListCacheKey(ctx context.Context, userID, status, sou
 			return "", err
 		}
 	}
-	return cacheKeyItemsListVersioned(userID, version, status, sourceID, topic, searchQuery, unreadOnly, readOnly, favoriteOnly, laterOnly, sort, page, pageSize), nil
+	return cacheKeyItemsListVersioned(userID, version, status, sourceID, topic, searchQuery, searchMode, unreadOnly, readOnly, favoriteOnly, laterOnly, sort, page, pageSize), nil
 }
 
 func (h *ItemHandler) bumpUserItemsVersion(ctx context.Context, userID string) error {
@@ -299,7 +304,8 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unread_only and read_only cannot both be true", http.StatusBadRequest)
 		return
 	}
-	cacheKey, cacheKeyErr := h.itemsListCacheKey(r.Context(), userID, q.Get("status"), q.Get("source_id"), q.Get("topic"), searchQuery, unreadOnly, readOnly, favoriteOnly, laterOnly, sort, page, pageSize)
+	searchMode := strings.TrimSpace(q.Get("search_mode"))
+	cacheKey, cacheKeyErr := h.itemsListCacheKey(r.Context(), userID, q.Get("status"), q.Get("source_id"), q.Get("topic"), searchQuery, searchMode, unreadOnly, readOnly, favoriteOnly, laterOnly, sort, page, pageSize)
 	cacheBust := q.Get("cache_bust") == "1"
 	if cacheKeyErr != nil {
 		itemsListCacheCounter.errors.Add(1)
@@ -331,25 +337,60 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 	if searchQuery != "" {
 		queryPtr = &searchQuery
 	}
-	resp, err := h.repo.ListPage(r.Context(), userID, repository.ItemListParams{
-		Status:       status,
-		SourceID:     sourceID,
-		Topic:        topic,
-		Query:        queryPtr,
-		UnreadOnly:   unreadOnly,
-		ReadOnly:     readOnly,
-		FavoriteOnly: favoriteOnly,
-		LaterOnly:    laterOnly,
-		Sort:         sort,
-		Page:         page,
-		PageSize:     pageSize,
-	})
-	if err != nil {
-		writeRepoError(w, err)
-		return
-	}
-	if sort == "personal_score" && resp != nil && len(resp.Items) > 0 {
-		h.applyPersonalScoreSort(r.Context(), userID, resp)
+	var resp *model.ItemListResponse
+	var err error
+	if queryPtr != nil && h.searchItems != nil {
+		resp, err = h.searchItems.Search(r.Context(), service.ItemSearchQuery{
+			UserID:       userID,
+			Query:        searchQuery,
+			SearchMode:   searchMode,
+			Status:       status,
+			SourceID:     sourceID,
+			Topic:        topic,
+			UnreadOnly:   unreadOnly,
+			ReadOnly:     readOnly,
+			FavoriteOnly: favoriteOnly,
+			LaterOnly:    laterOnly,
+			Page:         page,
+			PageSize:     pageSize,
+		})
+		if err != nil {
+			log.Printf("items search unavailable user_id=%s err=%v", userID, err)
+			resp = &model.ItemListResponse{
+				Items:             []model.Item{},
+				Page:              page,
+				PageSize:          pageSize,
+				Total:             0,
+				HasNext:           false,
+				Sort:              "relevance",
+				Status:            status,
+				SourceID:          sourceID,
+				SearchUnavailable: true,
+			}
+			mode := service.NormalizeSearchMode(searchMode)
+			resp.SearchMode = &mode
+		}
+	} else {
+		resp, err = h.repo.ListPage(r.Context(), userID, repository.ItemListParams{
+			Status:       status,
+			SourceID:     sourceID,
+			Topic:        topic,
+			Query:        queryPtr,
+			UnreadOnly:   unreadOnly,
+			ReadOnly:     readOnly,
+			FavoriteOnly: favoriteOnly,
+			LaterOnly:    laterOnly,
+			Sort:         sort,
+			Page:         page,
+			PageSize:     pageSize,
+		})
+		if err != nil {
+			writeRepoError(w, err)
+			return
+		}
+		if sort == "personal_score" && resp != nil && len(resp.Items) > 0 {
+			h.applyPersonalScoreSort(r.Context(), userID, resp)
+		}
 	}
 	if h.cache != nil && resp != nil && cacheKeyErr == nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, itemsListCacheTTLForSort(sort)); err != nil {
@@ -1037,6 +1078,9 @@ func (h *ItemHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
 		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
 	}
+	if err := h.publisher.SendItemSearchDeleteE(r.Context(), id); err != nil {
+		log.Printf("item-search delete enqueue failed item_id=%s err=%v", id, err)
+	}
 	h.invalidateUserCaches(r.Context(), userID)
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -1050,6 +1094,9 @@ func (h *ItemHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
 		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
+	}
+	if err := h.publisher.SendItemSearchUpsertE(r.Context(), id); err != nil {
+		log.Printf("item-search upsert enqueue failed item_id=%s err=%v", id, err)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
 	item, err := h.getItemDetail(r.Context(), userID, id, true)
@@ -1351,6 +1398,9 @@ func (h *ItemHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
 	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
 		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
 	}
+	if err := h.publisher.SendItemSearchUpsertE(r.Context(), id); err != nil {
+		log.Printf("item-search upsert enqueue failed item_id=%s err=%v", id, err)
+	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"item_id": id, "is_read": true})
 }
@@ -1367,6 +1417,9 @@ func (h *ItemHandler) MarkUnread(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
 		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
+	}
+	if err := h.publisher.SendItemSearchUpsertE(r.Context(), id); err != nil {
+		log.Printf("item-search upsert enqueue failed item_id=%s err=%v", id, err)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"item_id": id, "is_read": false})
@@ -1444,6 +1497,9 @@ func (h *ItemHandler) MarkLater(w http.ResponseWriter, r *http.Request) {
 	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
 		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
 	}
+	if err := h.publisher.SendItemSearchUpsertE(r.Context(), id); err != nil {
+		log.Printf("item-search upsert enqueue failed item_id=%s err=%v", id, err)
+	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"item_id": id, "is_later": true})
 }
@@ -1460,6 +1516,9 @@ func (h *ItemHandler) UnmarkLater(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
 		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
+	}
+	if err := h.publisher.SendItemSearchUpsertE(r.Context(), id); err != nil {
+		log.Printf("item-search upsert enqueue failed item_id=%s err=%v", id, err)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, map[string]any{"item_id": id, "is_later": false})
@@ -1524,6 +1583,9 @@ func (h *ItemHandler) SetFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.bumpItemDetailVersion(r.Context(), id); err != nil {
 		log.Printf("item-detail version bump failed item_id=%s err=%v", id, err)
+	}
+	if err := h.publisher.SendItemSearchUpsertE(r.Context(), id); err != nil {
+		log.Printf("item-search upsert enqueue failed item_id=%s err=%v", id, err)
 	}
 	if h.reviewQueueRepo != nil && body.IsFavorite {
 		_ = h.reviewQueueRepo.EnqueueDefault(r.Context(), userID, id, "favorite", time.Now())

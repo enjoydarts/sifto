@@ -204,10 +204,36 @@ type Item struct {
 	SummaryTopics          []string                   `json:"summary_topics,omitempty"`
 	RecommendationReason   *string                    `json:"recommendation_reason,omitempty"`
 	TranslatedTitle        *string                    `json:"translated_title,omitempty"`
+	SearchMatchCount       int                        `json:"search_match_count,omitempty"`
+	SearchSnippets         []ItemSearchSnippet        `json:"search_snippets,omitempty"`
 	PublishedAt            *time.Time                 `json:"published_at,omitempty"`
 	FetchedAt              *time.Time                 `json:"fetched_at,omitempty"`
 	CreatedAt              time.Time                  `json:"created_at"`
 	UpdatedAt              time.Time                  `json:"updated_at"`
+}
+
+type ItemSearchSnippet struct {
+	Field       string `json:"field"`
+	SnippetHTML string `json:"snippet_html"`
+}
+
+type ItemSearchDocument struct {
+	ID              string     `json:"id"`
+	UserID          string     `json:"user_id"`
+	SourceID        string     `json:"source_id"`
+	Status          string     `json:"status"`
+	IsDeleted       bool       `json:"is_deleted"`
+	IsRead          bool       `json:"is_read"`
+	IsFavorite      bool       `json:"is_favorite"`
+	IsLater         bool       `json:"is_later"`
+	Title           string     `json:"title"`
+	TranslatedTitle string     `json:"translated_title"`
+	Summary         string     `json:"summary"`
+	FactsText       string     `json:"facts_text"`
+	ContentText     string     `json:"content_text"`
+	Topics          []string   `json:"topics"`
+	PublishedAt     *time.Time `json:"published_at,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
 }
 
 type ItemFacts struct {
@@ -384,14 +410,16 @@ type AskLLM struct {
 }
 
 type ItemListResponse struct {
-	Items    []Item  `json:"items"`
-	Page     int     `json:"page"`
-	PageSize int     `json:"page_size"`
-	Total    int     `json:"total"`
-	HasNext  bool    `json:"has_next"`
-	Sort     string  `json:"sort"`
-	Status   *string `json:"status,omitempty"`
-	SourceID *string `json:"source_id,omitempty"`
+	Items             []Item   `json:"items"`
+	Page              int      `json:"page"`
+	PageSize          int      `json:"page_size"`
+	Total             int      `json:"total"`
+	HasNext           bool     `json:"has_next"`
+	Sort              string   `json:"sort"`
+	Status            *string  `json:"status,omitempty"`
+	SourceID          *string  `json:"source_id,omitempty"`
+	SearchMode        *string  `json:"search_mode,omitempty"`
+	SearchUnavailable bool     `json:"search_unavailable,omitempty"`
 }
 
 type FavoriteExportItem struct {

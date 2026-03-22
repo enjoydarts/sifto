@@ -24,13 +24,14 @@ func TestCacheKeyVersionKeys(t *testing.T) {
 }
 
 func TestCacheKeyItemsListVersioned(t *testing.T) {
-	got := cacheKeyItemsListVersioned("u1", 7, "summarized", "src-1", "go", "openai", true, false, true, false, "score", 2, 50)
+	got := cacheKeyItemsListVersioned("u1", 7, "summarized", "src-1", "go", "openai", "and", true, false, true, false, "score", 2, 50)
 	wantParts := []string{
 		"v1:items:list:u1:v=7",
 		"status=summarized",
 		"source=src-1",
 		"topic=go",
 		"q=openai",
+		"mode=and",
 		"unread=true",
 		"read=false",
 		"fav=true",

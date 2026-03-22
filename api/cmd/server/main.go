@@ -51,6 +51,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("json cache: %v", err)
 	}
+	search, err := service.NewMeilisearchServiceFromEnv()
+	if err != nil {
+		log.Fatalf("meilisearch: %v", err)
+	}
 	redisClient, redisPrefix := service.RedisClientFromCache(cache)
 	eventPublisher, err := service.NewEventPublisher()
 	if err != nil {
@@ -92,9 +96,9 @@ func main() {
 	openRouterCatalogSvc := service.NewOpenRouterCatalogService()
 	openRouterModelsH := handler.NewOpenRouterModelsHandler(openRouterModelRepo, openRouterModelOverrideRepo, providerModelUpdateRepo, openRouterCatalogSvc, cache)
 
-	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp)
+	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp, search)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, sourceOptimizationRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher, cache)
-	itemH := handler.NewItemHandler(itemRepo, sourceRepo, readingGoalRepo, streakRepo, briefingSnapshotRepo, prefProfileRepo, reviewQueueRepo, eventPublisher, cache)
+	itemH := handler.NewItemHandler(itemRepo, sourceRepo, readingGoalRepo, streakRepo, briefingSnapshotRepo, prefProfileRepo, reviewQueueRepo, eventPublisher, cache, search)
 	digestH := handler.NewDigestHandler(digestRepo)
 	llmUsageH := handler.NewLLMUsageHandlerWithValueMetrics(llmUsageRepo, llmExecutionRepo, llmValueMetricsRepo, cache)
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
@@ -108,7 +112,7 @@ func main() {
 		service.SetDynamicChatModels(service.OpenRouterSnapshotsToCatalogModels(latestModels))
 	}
 
-	inngestHandler := inngestfn.NewHandler(db, worker, resend, oneSignal, obsidianExportSvc, cache)
+	inngestHandler := inngestfn.NewHandler(db, worker, resend, oneSignal, obsidianExportSvc, cache, search)
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Logger)
@@ -138,6 +142,7 @@ func main() {
 	r.Post("/api/internal/debug/embeddings/backfill", internalH.DebugBackfillEmbeddings)
 	r.Post("/api/internal/debug/titles/backfill", internalH.DebugBackfillTranslatedTitles)
 	r.Post("/api/internal/debug/llm-usage/backfill-openrouter-costs", internalH.DebugBackfillOpenRouterCosts)
+	r.Post("/api/internal/debug/search/backfill", internalH.DebugBackfillItemSearch)
 	r.Post("/api/internal/debug/push/test", internalH.DebugSendPushTest)
 	r.Get("/api/internal/debug/system-status", internalH.DebugSystemStatus)
 

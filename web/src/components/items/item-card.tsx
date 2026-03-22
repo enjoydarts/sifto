@@ -23,6 +23,21 @@ function processingStatusLabel(status: Item["status"], t: (key: string) => strin
   }
 }
 
+function searchSnippetLabel(field: string, t: (key: string) => string) {
+  switch (field) {
+    case "title":
+      return t("items.search.snippet.title");
+    case "summary":
+      return t("items.search.snippet.summary");
+    case "facts":
+      return t("items.search.snippet.facts");
+    case "content":
+      return t("items.search.snippet.content");
+    default:
+      return field;
+  }
+}
+
 export function ItemCard({
   item,
   featured = false,
@@ -145,6 +160,25 @@ export function ItemCard({
               <p className="mt-2 line-clamp-3 break-words text-[15px] leading-[1.7] text-[var(--color-editorial-ink-soft)] sm:line-clamp-2 sm:text-[14px] sm:leading-[1.65]">
                 {dek}
               </p>
+            ) : null}
+
+            {Array.isArray(item.search_snippets) && item.search_snippets.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                {item.search_snippets.slice(0, 3).map((snippet, index) => (
+                  <div
+                    key={`${snippet.field}-${index}`}
+                    className="rounded-xl border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-muted)] px-3 py-2"
+                  >
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {searchSnippetLabel(snippet.field, t)}
+                    </div>
+                    <div
+                      className="mt-1 text-[13px] leading-6 text-[var(--color-editorial-ink-soft)] [&_mark]:rounded-[4px] [&_mark]:bg-[rgba(246,199,94,0.42)] [&_mark]:px-1 [&_mark]:py-0.5"
+                      dangerouslySetInnerHTML={{ __html: snippet.snippet_html }}
+                    />
+                  </div>
+                ))}
+              </div>
             ) : null}
 
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-[0.1em] text-[var(--color-editorial-ink-faint)] sm:mt-2 sm:text-xs">

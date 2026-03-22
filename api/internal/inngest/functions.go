@@ -1074,10 +1074,11 @@ type DigestCopyComposedData struct {
 }
 
 // NewHandler registers all Inngest functions and returns the HTTP handler.
-func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, oneSignal *service.OneSignalClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) http.Handler {
+func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.ResendClient, oneSignal *service.OneSignalClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache, search *service.MeilisearchService) http.Handler {
 	secretCipher := service.NewSecretCipher()
 	openAI := service.NewOpenAIClient()
 	llmUsageCache = cache
+	_ = search
 	client, err := service.NewInngestClient("sifto-api")
 	if err != nil {
 		log.Fatalf("inngest client: %v", err)
@@ -1091,6 +1092,9 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 
 	register(fetchRSSFn(client, db))
 	register(processItemFn(client, db, worker, openAI, oneSignal, secretCipher, cache))
+	register(itemSearchUpsertFn(client, db, search))
+	register(itemSearchDeleteFn(client, search))
+	register(itemSearchBackfillFn(client, db, search))
 	register(embedItemFn(client, db, openAI, secretCipher))
 	register(generateBriefingSnapshotsFn(client, db, oneSignal))
 	register(notifyReviewQueueFn(client, db, oneSignal))
@@ -1779,6 +1783,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 		worker:             worker,
 		openAI:             openAI,
 		oneSignal:          oneSignal,
+		publisher:          mustEventPublisher(),
 		secretCipher:       secretCipher,
 		cache:              cache,
 		pickScoreThreshold: envFloat64OrDefault("ONESIGNAL_PICK_SCORE_THRESHOLD", 0.90),
@@ -1865,6 +1870,14 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 			return map[string]string{"item_id": itemID, "status": "summarized"}, nil
 		},
 	)
+}
+
+func mustEventPublisher() *service.EventPublisher {
+	publisher, err := service.NewEventPublisher()
+	if err != nil {
+		log.Fatalf("event publisher: %v", err)
+	}
+	return publisher
 }
 
 func embedItemFn(client inngestgo.Client, db *pgxpool.Pool, openAI *service.OpenAIClient, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/inngest/inngestgo"
@@ -86,6 +87,58 @@ func (p *EventPublisher) SendItemEmbedE(ctx context.Context, itemID, sourceID st
 		},
 	}); err != nil {
 		log.Printf("send item/embed: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (p *EventPublisher) SendItemSearchUpsertE(ctx context.Context, itemID string) error {
+	if p == nil || strings.TrimSpace(itemID) == "" {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, inngestgo.Event{
+		Name: "item/search.upsert",
+		Data: map[string]any{
+			"item_id": itemID,
+		},
+	}); err != nil {
+		log.Printf("send item/search.upsert: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (p *EventPublisher) SendItemSearchDeleteE(ctx context.Context, itemID string) error {
+	if p == nil || strings.TrimSpace(itemID) == "" {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, inngestgo.Event{
+		Name: "item/search.delete",
+		Data: map[string]any{
+			"item_id": itemID,
+		},
+	}); err != nil {
+		log.Printf("send item/search.delete: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (p *EventPublisher) SendItemSearchBackfillE(ctx context.Context, offset, limit int) error {
+	if p == nil {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if _, err := p.client.Send(ctx, inngestgo.Event{
+		Name: "item/search.backfill",
+		Data: map[string]any{
+			"offset": offset,
+			"limit":  limit,
+		},
+	}); err != nil {
+		log.Printf("send item/search.backfill: %v", err)
 		return err
 	}
 	return nil

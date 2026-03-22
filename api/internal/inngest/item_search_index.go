@@ -17,8 +17,13 @@ type itemSearchUpsertEvent struct {
 }
 
 type itemSearchBackfillEvent struct {
-	Offset int `json:"offset"`
-	Limit  int `json:"limit"`
+	RunID  string `json:"run_id"`
+	Offset int    `json:"offset"`
+	Limit  int    `json:"limit"`
+}
+
+type itemSearchBackfillRunEvent struct {
+	RunID string `json:"run_id"`
 }
 
 func itemSearchUpsertFn(client inngestgo.Client, db *pgxpool.Pool, search *service.MeilisearchService) (inngestgo.ServableFunction, error) {
@@ -67,24 +72,109 @@ func itemSearchDeleteFn(client inngestgo.Client, search *service.MeilisearchServ
 
 func itemSearchBackfillFn(client inngestgo.Client, db *pgxpool.Pool, search *service.MeilisearchService) (inngestgo.ServableFunction, error) {
 	docRepo := repository.NewItemSearchDocumentRepo(db)
+	runRepo := repository.NewSearchBackfillRunRepo(db)
 
 	return inngestgo.CreateFunction(
 		client,
 		inngestgo.FunctionOpts{ID: "item-search-backfill", Name: "Backfill Item Search Documents"},
 		inngestgo.EventTrigger("item/search.backfill", nil),
 		func(ctx context.Context, input inngestgo.Input[itemSearchBackfillEvent]) (any, error) {
+			if input.Event.Data.RunID == "" {
+				return nil, fmt.Errorf("run_id is required")
+			}
 			docs, err := docRepo.ListSummarizedPage(ctx, input.Event.Data.Offset, input.Event.Data.Limit)
 			if err != nil {
-				return nil, err
+				if _, markErr := runRepo.MarkBatchFailed(ctx, input.Event.Data.RunID, err.Error()); markErr != nil {
+					return nil, markErr
+				}
+				return map[string]any{
+					"run_id": input.Event.Data.RunID,
+					"offset": input.Event.Data.Offset,
+					"limit":  input.Event.Data.Limit,
+					"status": "failed",
+					"error":  err.Error(),
+				}, nil
 			}
 			if err := search.UpsertItemDocuments(ctx, docs); err != nil {
+				if _, markErr := runRepo.MarkBatchFailed(ctx, input.Event.Data.RunID, err.Error()); markErr != nil {
+					return nil, markErr
+				}
+				return map[string]any{
+					"run_id": input.Event.Data.RunID,
+					"offset": input.Event.Data.Offset,
+					"limit":  input.Event.Data.Limit,
+					"status": "failed",
+					"error":  err.Error(),
+				}, nil
+			}
+			if _, err := runRepo.MarkBatchSucceeded(ctx, input.Event.Data.RunID, len(docs)); err != nil {
 				return nil, err
 			}
 			return map[string]any{
+				"run_id": input.Event.Data.RunID,
 				"offset": input.Event.Data.Offset,
 				"limit":  input.Event.Data.Limit,
 				"count":  len(docs),
 				"status": "upserted",
+			}, nil
+		},
+	)
+}
+
+func itemSearchBackfillRunFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFunction, error) {
+	runRepo := repository.NewSearchBackfillRunRepo(db)
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "item-search-backfill-run", Name: "Queue Item Search Backfill Run"},
+		inngestgo.EventTrigger("item/search.backfill.run", nil),
+		func(ctx context.Context, input inngestgo.Input[itemSearchBackfillRunEvent]) (any, error) {
+			if input.Event.Data.RunID == "" {
+				return nil, fmt.Errorf("run_id is required")
+			}
+
+			run, err := runRepo.GetByID(ctx, input.Event.Data.RunID)
+			if err != nil {
+				return nil, err
+			}
+			if run.QueuedBatches == 0 {
+				return map[string]any{
+					"run_id":         run.ID,
+					"queued_batches": 0,
+					"status":         "completed",
+				}, nil
+			}
+
+			for batch := 0; batch < run.QueuedBatches; batch++ {
+				offset := run.RequestedOffset + batch*run.BatchSize
+				if _, err := client.Send(ctx, inngestgo.Event{
+					Name: "item/search.backfill",
+					Data: map[string]any{
+						"run_id": run.ID,
+						"offset": offset,
+						"limit":  run.BatchSize,
+					},
+				}); err != nil {
+					if _, markErr := runRepo.MarkFanoutFailed(ctx, run.ID, err.Error()); markErr != nil {
+						return nil, markErr
+					}
+					return map[string]any{
+						"run_id":         run.ID,
+						"queued_batches": batch,
+						"status":         "failed",
+						"error":          err.Error(),
+					}, nil
+				}
+			}
+
+			if _, err := runRepo.MarkRunning(ctx, run.ID); err != nil {
+				return nil, err
+			}
+
+			return map[string]any{
+				"run_id":         run.ID,
+				"queued_batches": run.QueuedBatches,
+				"status":         "queued",
 			}, nil
 		},
 	)

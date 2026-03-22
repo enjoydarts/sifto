@@ -1,7 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
-import { useEffect } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { Bug } from "lucide-react";
 import { api, BulkRetryFailedResult, DigestDetail } from "@/lib/api";
@@ -71,8 +70,34 @@ type OpenRouterCostBackfillResponse = {
 
 type SearchBackfillResponse = {
   ok: boolean;
+  run_id: string;
   offset: number;
   limit: number;
+  all: boolean;
+  total_items: number;
+  queued_batches: number;
+};
+
+type SearchBackfillRun = {
+  id: string;
+  requested_offset: number;
+  batch_size: number;
+  all_items: boolean;
+  total_items: number;
+  queued_batches: number;
+  completed_batches: number;
+  failed_batches: number;
+  processed_items: number;
+  status: string;
+  last_error?: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+};
+
+type SearchBackfillRunsResponse = {
+  runs: SearchBackfillRun[];
 };
 
 type DebugSystemStatusResponse = {
@@ -191,6 +216,11 @@ function todayJstPlusOneDateString() {
   return `${y}-${m}-${d}`;
 }
 
+function searchBackfillProgress(run: SearchBackfillRun) {
+  if (run.queued_batches <= 0) return 100;
+  return Math.min(100, Math.round(((run.completed_batches + run.failed_batches) / run.queued_batches) * 100));
+}
+
 export default function DebugDigestsPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -225,9 +255,12 @@ export default function DebugDigestsPage() {
   const [busyOpenRouterCostBackfill, setBusyOpenRouterCostBackfill] = useState(false);
   const [openRouterCostBackfillResult, setOpenRouterCostBackfillResult] = useState<OpenRouterCostBackfillResponse | null>(null);
   const [searchBackfillOffset, setSearchBackfillOffset] = useState("0");
-  const [searchBackfillLimit, setSearchBackfillLimit] = useState("200");
+  const [searchBackfillLimit, setSearchBackfillLimit] = useState("500");
+  const [searchBackfillAll, setSearchBackfillAll] = useState(false);
   const [busySearchBackfill, setBusySearchBackfill] = useState(false);
+  const [busySearchBackfillRuns, setBusySearchBackfillRuns] = useState(false);
   const [searchBackfillResult, setSearchBackfillResult] = useState<SearchBackfillResponse | null>(null);
+  const [searchBackfillRuns, setSearchBackfillRuns] = useState<SearchBackfillRun[]>([]);
   const [retrySourceId, setRetrySourceId] = useState("");
   const [busyRetryFailed, setBusyRetryFailed] = useState(false);
   const [retryFailedResult, setRetryFailedResult] = useState<BulkRetryFailedResult | null>(null);
@@ -248,6 +281,38 @@ export default function DebugDigestsPage() {
       t("debug.digest.helperText"),
     [t]
   );
+  const loadSearchBackfillRuns = useCallback(async () => {
+    setBusySearchBackfillRuns(true);
+    try {
+      const res = await fetch("/api/debug/search/backfill?limit=12", { cache: "no-store" });
+      const text = await res.text();
+      if (!res.ok) {
+        throw new Error(`${res.status}: ${text || res.statusText}`);
+      }
+      const data = text ? (JSON.parse(text) as SearchBackfillRunsResponse) : { runs: [] };
+      setSearchBackfillRuns(data.runs ?? []);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+    } finally {
+      setBusySearchBackfillRuns(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSearchBackfillRuns();
+  }, [loadSearchBackfillRuns]);
+
+  useEffect(() => {
+    if (!searchBackfillRuns.some((run) => run.status === "queued" || run.status === "running")) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void loadSearchBackfillRuns();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [loadSearchBackfillRuns, searchBackfillRuns]);
+
   const cacheWindowRows = useMemo(() => {
     const rows = systemHealth?.data?.cache_stats_by_window ?? {};
     const order = ["1h", "3h", "8h", "24h", "3d", "7d"];
@@ -572,15 +637,17 @@ export default function DebugDigestsPage() {
       if (!Number.isFinite(parsedOffset) || parsedOffset < 0) {
         throw new Error(t("debug.searchBackfill.offsetError"));
       }
-      if (!Number.isFinite(parsedLimit) || parsedLimit < 1 || parsedLimit > 500) {
+      if (!Number.isFinite(parsedLimit) || parsedLimit < 1 || parsedLimit > 5000) {
         throw new Error(t("debug.searchBackfill.limitError"));
       }
       const res = await postJSON<SearchBackfillResponse>("/api/debug/search/backfill", {
         offset: parsedOffset,
         limit: parsedLimit,
+        all: searchBackfillAll,
       });
       setSearchBackfillResult(res);
       showToast(t("debug.searchBackfill.runDone"), "success");
+      await loadSearchBackfillRuns();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -1198,7 +1265,17 @@ export default function DebugDigestsPage() {
       </section>
 
       <section className="surface-editorial rounded-[28px] p-5">
-        <h2 className="mb-3 text-sm font-semibold text-[var(--color-editorial-ink)]">{t("debug.searchBackfill.title")}</h2>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("debug.searchBackfill.title")}</h2>
+          <button
+            type="button"
+            onClick={() => void loadSearchBackfillRuns()}
+            disabled={busySearchBackfillRuns}
+            className="rounded-full border border-[var(--color-editorial-line)] px-3 py-1.5 text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-50"
+          >
+            {busySearchBackfillRuns ? t("debug.running") : t("debug.searchBackfill.refresh")}
+          </button>
+        </div>
         <form onSubmit={onBackfillSearch} className="space-y-3">
           <p className="text-xs text-[var(--color-editorial-ink-faint)]">{t("debug.searchBackfill.description")}</p>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1217,13 +1294,22 @@ export default function DebugDigestsPage() {
               <input
                 type="number"
                 min={1}
-                max={500}
+                max={5000}
                 value={searchBackfillLimit}
                 onChange={(e) => setSearchBackfillLimit(e.target.value)}
                 className="w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm outline-none"
               />
             </label>
           </div>
+          <label className="flex items-center gap-2 text-sm text-[var(--color-editorial-ink-soft)]">
+            <input
+              type="checkbox"
+              checked={searchBackfillAll}
+              onChange={(e) => setSearchBackfillAll(e.target.checked)}
+              className="accent-zinc-900"
+            />
+            {t("debug.searchBackfill.all")}
+          </label>
           <button
             type="submit"
             disabled={busySearchBackfill}
@@ -1238,6 +1324,39 @@ export default function DebugDigestsPage() {
             {JSON.stringify(searchBackfillResult, null, 2)}
           </pre>
         )}
+
+        <div className="mt-4 space-y-3">
+          {searchBackfillRuns.length === 0 ? (
+            <div className="rounded-[16px] border border-dashed border-[var(--color-editorial-line)] px-4 py-3 text-xs text-[var(--color-editorial-ink-faint)]">
+              {t("debug.searchBackfill.noRuns")}
+            </div>
+          ) : (
+            searchBackfillRuns.map((run) => (
+              <div key={run.id} className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs font-semibold text-[var(--color-editorial-ink)]">
+                    {run.all_items ? t("debug.searchBackfill.modeAll") : t("debug.searchBackfill.modePage")} · {run.status}
+                  </div>
+                  <div className="text-[11px] text-[var(--color-editorial-ink-faint)]">{new Date(run.created_at).toLocaleString()}</div>
+                </div>
+                <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-editorial-line)]">
+                  <div className="h-full rounded-full bg-[var(--color-editorial-ink)] transition-all" style={{ width: `${searchBackfillProgress(run)}%` }} />
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-[var(--color-editorial-ink-soft)] sm:grid-cols-2 lg:grid-cols-4">
+                  <div>{t("debug.searchBackfill.progress")}: {run.completed_batches + run.failed_batches} / {Math.max(run.queued_batches, 0)}</div>
+                  <div>{t("debug.searchBackfill.processed")}: {run.processed_items} / {run.total_items}</div>
+                  <div>{t("debug.searchBackfill.offset")}: {run.requested_offset}</div>
+                  <div>{t("debug.searchBackfill.limit")}: {run.batch_size}</div>
+                </div>
+                {run.last_error ? (
+                  <div className="mt-3 rounded-[14px] border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    {run.last_error}
+                  </div>
+                ) : null}
+              </div>
+            ))
+          )}
+        </div>
       </section>
     </div>
   );

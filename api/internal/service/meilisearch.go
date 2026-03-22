@@ -136,12 +136,12 @@ func (s *MeilisearchService) DeleteItemDocuments(ctx context.Context, itemIDs []
 }
 
 type MeilisearchSearchParams struct {
-	Query       string
-	SearchMode  string
-	Filters     []string
-	Offset      int
-	Limit       int
-	CropLength  int
+	Query      string
+	SearchMode string
+	Filters    []string
+	Offset     int
+	Limit      int
+	CropLength int
 }
 
 type MeilisearchSearchHit struct {
@@ -150,9 +150,9 @@ type MeilisearchSearchHit struct {
 }
 
 type MeilisearchSearchResult struct {
-	Hits       []MeilisearchSearchHit
-	Total      int
-	Mode       string
+	Hits  []MeilisearchSearchHit
+	Total int
+	Mode  string
 }
 
 func NormalizeSearchMode(mode string) string {
@@ -179,9 +179,9 @@ func (s *MeilisearchService) SearchItems(ctx context.Context, params Meilisearch
 	}
 
 	payload := map[string]any{
-		"q": params.Query,
+		"q":      params.Query,
 		"filter": params.Filters,
-		"limit": params.Limit,
+		"limit":  params.Limit,
 		"offset": params.Offset,
 		"attributesToHighlight": []string{
 			"title",
@@ -195,9 +195,9 @@ func (s *MeilisearchService) SearchItems(ctx context.Context, params Meilisearch
 			"facts_text",
 			"content_text",
 		},
-		"cropLength": params.CropLength,
-		"highlightPreTag": "<mark>",
-		"highlightPostTag": "</mark>",
+		"cropLength":          params.CropLength,
+		"highlightPreTag":     "<mark>",
+		"highlightPostTag":    "</mark>",
 		"showMatchesPosition": true,
 	}
 	if mode == "and" {

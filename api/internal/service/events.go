@@ -143,3 +143,19 @@ func (p *EventPublisher) SendItemSearchBackfillE(ctx context.Context, offset, li
 	}
 	return nil
 }
+
+func (p *EventPublisher) SendItemSearchBackfillRunE(ctx context.Context, runID string) error {
+	if p == nil || strings.TrimSpace(runID) == "" {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, inngestgo.Event{
+		Name: "item/search.backfill.run",
+		Data: map[string]any{
+			"run_id": runID,
+		},
+	}); err != nil {
+		log.Printf("send item/search.backfill.run: %v", err)
+		return err
+	}
+	return nil
+}

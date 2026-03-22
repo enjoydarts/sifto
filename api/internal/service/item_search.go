@@ -81,7 +81,7 @@ func (s *ItemSearchService) Search(ctx context.Context, q ItemSearchQuery) (*mod
 		Page:       q.Page,
 		PageSize:   q.PageSize,
 		Total:      searchResp.Total,
-		HasNext:    (q.Page*q.PageSize) < searchResp.Total,
+		HasNext:    (q.Page * q.PageSize) < searchResp.Total,
 		Sort:       "relevance",
 		Status:     q.Status,
 		SourceID:   q.SourceID,

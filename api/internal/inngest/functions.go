@@ -1094,6 +1094,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(processItemFn(client, db, worker, openAI, oneSignal, secretCipher, cache))
 	register(itemSearchUpsertFn(client, db, search))
 	register(itemSearchDeleteFn(client, search))
+	register(itemSearchBackfillRunFn(client, db))
 	register(itemSearchBackfillFn(client, db, search))
 	register(embedItemFn(client, db, openAI, secretCipher))
 	register(generateBriefingSnapshotsFn(client, db, oneSignal))

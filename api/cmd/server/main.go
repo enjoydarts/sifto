@@ -142,6 +142,7 @@ func main() {
 	r.Post("/api/internal/debug/embeddings/backfill", internalH.DebugBackfillEmbeddings)
 	r.Post("/api/internal/debug/titles/backfill", internalH.DebugBackfillTranslatedTitles)
 	r.Post("/api/internal/debug/llm-usage/backfill-openrouter-costs", internalH.DebugBackfillOpenRouterCosts)
+	r.Get("/api/internal/debug/search/backfill", internalH.DebugGetItemSearchBackfillRuns)
 	r.Post("/api/internal/debug/search/backfill", internalH.DebugBackfillItemSearch)
 	r.Post("/api/internal/debug/push/test", internalH.DebugSendPushTest)
 	r.Get("/api/internal/debug/system-status", internalH.DebugSystemStatus)

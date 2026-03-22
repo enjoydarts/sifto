@@ -567,9 +567,12 @@ func (h *InternalHandler) DebugBackfillItemSearch(w http.ResponseWriter, r *http
 		return
 	}
 
+	docRepo := repository.NewItemSearchDocumentRepo(h.db)
+	runRepo := repository.NewSearchBackfillRunRepo(h.db)
 	offset := parseIntOrDefault(strings.TrimSpace(r.URL.Query().Get("offset")), 0)
-	limit := parseIntOrDefault(strings.TrimSpace(r.URL.Query().Get("limit")), 100)
-	if limit < 1 || limit > 500 {
+	limit := parseIntOrDefault(strings.TrimSpace(r.URL.Query().Get("limit")), 500)
+	allItems := parseBoolQuery(r.URL.Query().Get("all"))
+	if limit < 1 || limit > 5000 {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
@@ -578,16 +581,92 @@ func (h *InternalHandler) DebugBackfillItemSearch(w http.ResponseWriter, r *http
 		return
 	}
 
-	if err := h.publisher.SendItemSearchBackfillE(r.Context(), offset, limit); err != nil {
-		http.Error(w, fmt.Sprintf("enqueue backfill failed: %v", err), http.StatusBadGateway)
+	totalSummarized, err := docRepo.CountSummarized(r.Context())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("count search targets failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	remaining := totalSummarized - offset
+	if remaining < 0 {
+		remaining = 0
+	}
+	totalItems := limit
+	queuedBatches := 1
+	if allItems {
+		totalItems = remaining
+		if totalItems == 0 {
+			queuedBatches = 0
+		} else {
+			queuedBatches = (totalItems + limit - 1) / limit
+		}
+	} else {
+		if remaining <= 0 {
+			totalItems = 0
+			queuedBatches = 0
+		} else if remaining < limit {
+			totalItems = remaining
+		}
+	}
+
+	run, err := runRepo.Create(r.Context(), offset, limit, allItems, totalItems, queuedBatches)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("create backfill run failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if queuedBatches > 0 {
+		if err := h.publisher.SendItemSearchBackfillRunE(r.Context(), run.ID); err != nil {
+			if _, markErr := runRepo.MarkFanoutFailed(r.Context(), run.ID, err.Error()); markErr != nil {
+				http.Error(w, fmt.Sprintf("mark backfill run failed: %v", markErr), http.StatusInternalServerError)
+				return
+			}
+			http.Error(w, fmt.Sprintf("enqueue backfill failed: %v", err), http.StatusBadGateway)
+			return
+		}
+	}
+
+	writeJSON(w, map[string]any{
+		"ok":             true,
+		"run_id":         run.ID,
+		"offset":         offset,
+		"limit":          limit,
+		"all":            allItems,
+		"total_items":    totalItems,
+		"queued_batches": queuedBatches,
+	})
+}
+
+func (h *InternalHandler) DebugGetItemSearchBackfillRuns(w http.ResponseWriter, r *http.Request) {
+	if !checkInternalSecret(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	runRepo := repository.NewSearchBackfillRunRepo(h.db)
+	limit := parseIntOrDefault(strings.TrimSpace(r.URL.Query().Get("limit")), 10)
+	if limit < 1 || limit > 100 {
+		http.Error(w, "invalid limit", http.StatusBadRequest)
+		return
+	}
+
+	runs, err := runRepo.ListRecent(r.Context(), limit)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("list backfill runs failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	writeJSON(w, map[string]any{
-		"ok":     true,
-		"offset": offset,
-		"limit":  limit,
+		"runs": runs,
 	})
+}
+
+func parseBoolQuery(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r *http.Request) {

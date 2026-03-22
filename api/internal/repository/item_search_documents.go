@@ -34,10 +34,21 @@ func (r *ItemSearchDocumentRepo) ListSummarizedPage(ctx context.Context, offset,
 	if limit <= 0 {
 		limit = 100
 	}
-	if limit > 500 {
-		limit = 500
+	if limit > 5000 {
+		limit = 5000
 	}
 	return r.load(ctx, `ORDER BY i.created_at DESC OFFSET $1 LIMIT $2`, offset, limit)
+}
+
+func (r *ItemSearchDocumentRepo) CountSummarized(ctx context.Context) (int, error) {
+	var count int
+	err := r.db.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM items i
+		JOIN item_summaries sm ON sm.item_id = i.id
+		WHERE i.status = 'summarized'
+	`).Scan(&count)
+	return count, err
 }
 
 func (r *ItemSearchDocumentRepo) load(ctx context.Context, suffix string, args ...any) ([]model.ItemSearchDocument, error) {

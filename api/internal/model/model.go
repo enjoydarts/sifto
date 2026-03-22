@@ -410,16 +410,16 @@ type AskLLM struct {
 }
 
 type ItemListResponse struct {
-	Items             []Item   `json:"items"`
-	Page              int      `json:"page"`
-	PageSize          int      `json:"page_size"`
-	Total             int      `json:"total"`
-	HasNext           bool     `json:"has_next"`
-	Sort              string   `json:"sort"`
-	Status            *string  `json:"status,omitempty"`
-	SourceID          *string  `json:"source_id,omitempty"`
-	SearchMode        *string  `json:"search_mode,omitempty"`
-	SearchUnavailable bool     `json:"search_unavailable,omitempty"`
+	Items             []Item  `json:"items"`
+	Page              int     `json:"page"`
+	PageSize          int     `json:"page_size"`
+	Total             int     `json:"total"`
+	HasNext           bool    `json:"has_next"`
+	Sort              string  `json:"sort"`
+	Status            *string `json:"status,omitempty"`
+	SourceID          *string `json:"source_id,omitempty"`
+	SearchMode        *string `json:"search_mode,omitempty"`
+	SearchUnavailable bool    `json:"search_unavailable,omitempty"`
 }
 
 type FavoriteExportItem struct {

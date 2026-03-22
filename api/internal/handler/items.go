@@ -32,6 +32,7 @@ type ItemHandler struct {
 	cache           service.JSONCache
 	search          *service.MeilisearchService
 	searchItems     *service.ItemSearchService
+	searchSuggest   *service.SearchSuggestionService
 	detail          *service.ItemDetailService
 }
 
@@ -177,6 +178,7 @@ func NewItemHandler(
 		cache:           cache,
 		search:          search,
 		searchItems:     service.NewItemSearchService(search, repo),
+		searchSuggest:   service.NewSearchSuggestionService(search),
 		detail:          service.NewItemDetailService(repo),
 	}
 }
@@ -1035,6 +1037,32 @@ func (h *ItemHandler) GetDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, item)
 }
 
+func (h *ItemHandler) SearchSuggestions(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	if h.searchSuggest == nil {
+		http.Error(w, "search suggestions unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	limit := parseIntOrDefault(r.URL.Query().Get("limit"), 10)
+	if limit < 1 || limit > 10 {
+		http.Error(w, "invalid limit", http.StatusBadRequest)
+		return
+	}
+
+	resp, err := h.searchSuggest.Search(r.Context(), service.SearchSuggestionQuery{
+		UserID: userID,
+		Query:  query,
+		Limit:  limit,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, resp)
+}
+
 func (h *ItemHandler) applyPersonalizationToDetail(ctx context.Context, userID string, item *model.ItemDetail) {
 	if item == nil || h.prefProfileRepo == nil {
 		return
@@ -1071,6 +1099,11 @@ func (h *ItemHandler) applyPersonalizationToDetail(ctx context.Context, userID s
 func (h *ItemHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	id := chi.URLParam(r, "id")
+	item, err := h.getItemDetail(r.Context(), userID, id, false)
+	if err != nil {
+		log.Printf("item delete detail preload failed item_id=%s user_id=%s err=%v", id, userID, err)
+		item = nil
+	}
 	if err := h.repo.Delete(r.Context(), id, userID); err != nil {
 		writeRepoError(w, err)
 		return
@@ -1081,6 +1114,7 @@ func (h *ItemHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.publisher.SendItemSearchDeleteE(r.Context(), id); err != nil {
 		log.Printf("item-search delete enqueue failed item_id=%s err=%v", id, err)
 	}
+	h.enqueueSearchSuggestionDelete(r.Context(), userID, item, id)
 	h.invalidateUserCaches(r.Context(), userID)
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -1104,7 +1138,46 @@ func (h *ItemHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	h.enqueueSearchSuggestionUpsert(r.Context(), userID, item, id)
 	writeJSON(w, item)
+}
+
+func (h *ItemHandler) enqueueSearchSuggestionUpsert(ctx context.Context, userID string, item *model.ItemDetail, itemID string) {
+	if h.publisher == nil {
+		return
+	}
+	if err := h.publisher.SendSearchSuggestionArticleUpsertE(ctx, itemID); err != nil {
+		log.Printf("search suggestion article upsert enqueue failed item_id=%s err=%v", itemID, err)
+	}
+	if item != nil && strings.TrimSpace(item.SourceID) != "" {
+		if err := h.publisher.SendSearchSuggestionSourceUpsertE(ctx, item.SourceID); err != nil {
+			log.Printf("search suggestion source upsert enqueue failed item_id=%s source_id=%s err=%v", itemID, item.SourceID, err)
+		}
+	}
+	if strings.TrimSpace(userID) != "" {
+		if err := h.publisher.SendSearchSuggestionTopicsRefreshE(ctx, userID); err != nil {
+			log.Printf("search suggestion topics refresh enqueue failed item_id=%s user_id=%s err=%v", itemID, userID, err)
+		}
+	}
+}
+
+func (h *ItemHandler) enqueueSearchSuggestionDelete(ctx context.Context, userID string, item *model.ItemDetail, itemID string) {
+	if h.publisher == nil {
+		return
+	}
+	if err := h.publisher.SendSearchSuggestionArticleDeleteE(ctx, itemID); err != nil {
+		log.Printf("search suggestion article delete enqueue failed item_id=%s err=%v", itemID, err)
+	}
+	if item != nil && strings.TrimSpace(item.SourceID) != "" {
+		if err := h.publisher.SendSearchSuggestionSourceUpsertE(ctx, item.SourceID); err != nil {
+			log.Printf("search suggestion source upsert enqueue failed item_id=%s source_id=%s err=%v", itemID, item.SourceID, err)
+		}
+	}
+	if strings.TrimSpace(userID) != "" {
+		if err := h.publisher.SendSearchSuggestionTopicsRefreshE(ctx, userID); err != nil {
+			log.Printf("search suggestion topics refresh enqueue failed item_id=%s user_id=%s err=%v", itemID, userID, err)
+		}
+	}
 }
 
 func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {

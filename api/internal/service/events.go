@@ -159,3 +159,83 @@ func (p *EventPublisher) SendItemSearchBackfillRunE(ctx context.Context, runID s
 	}
 	return nil
 }
+
+func (p *EventPublisher) SendSearchSuggestionArticleUpsertE(ctx context.Context, itemID string) error {
+	if p == nil || strings.TrimSpace(itemID) == "" {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, inngestgo.Event{
+		Name: "search/suggestions.article.upsert",
+		Data: map[string]any{
+			"item_id": itemID,
+		},
+	}); err != nil {
+		log.Printf("send search/suggestions.article.upsert: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (p *EventPublisher) SendSearchSuggestionArticleDeleteE(ctx context.Context, itemID string) error {
+	if p == nil || strings.TrimSpace(itemID) == "" {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, inngestgo.Event{
+		Name: "search/suggestions.article.delete",
+		Data: map[string]any{
+			"item_id": itemID,
+		},
+	}); err != nil {
+		log.Printf("send search/suggestions.article.delete: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (p *EventPublisher) SendSearchSuggestionSourceUpsertE(ctx context.Context, sourceID string) error {
+	if p == nil || strings.TrimSpace(sourceID) == "" {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, inngestgo.Event{
+		Name: "search/suggestions.source.upsert",
+		Data: map[string]any{
+			"source_id": sourceID,
+		},
+	}); err != nil {
+		log.Printf("send search/suggestions.source.upsert: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (p *EventPublisher) SendSearchSuggestionSourceDeleteE(ctx context.Context, sourceID string) error {
+	if p == nil || strings.TrimSpace(sourceID) == "" {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, inngestgo.Event{
+		Name: "search/suggestions.source.delete",
+		Data: map[string]any{
+			"source_id": sourceID,
+		},
+	}); err != nil {
+		log.Printf("send search/suggestions.source.delete: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (p *EventPublisher) SendSearchSuggestionTopicsRefreshE(ctx context.Context, userID string) error {
+	if p == nil || strings.TrimSpace(userID) == "" {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, inngestgo.Event{
+		Name: "search/suggestions.topics.refresh",
+		Data: map[string]any{
+			"user_id": userID,
+		},
+	}); err != nil {
+		log.Printf("send search/suggestions.topics.refresh: %v", err)
+		return err
+	}
+	return nil
+}

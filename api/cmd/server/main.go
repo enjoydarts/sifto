@@ -171,6 +171,7 @@ func main() {
 
 		r.Route("/items", func(r chi.Router) {
 			r.Get("/", itemH.List)
+			r.Get("/search-suggestions", itemH.SearchSuggestions)
 			r.Get("/favorites/export-markdown", itemH.ExportFavoritesMarkdown)
 			r.Get("/stats", itemH.Stats)
 			r.Get("/ux-metrics", itemH.UXMetrics)

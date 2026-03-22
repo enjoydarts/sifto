@@ -236,6 +236,33 @@ type ItemSearchDocument struct {
 	CreatedAt       time.Time  `json:"created_at"`
 }
 
+type SearchSuggestionDocument struct {
+	ID           string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	Kind         string    `json:"kind"`
+	Label        string    `json:"label"`
+	Normalized   string    `json:"normalized"`
+	Score        int       `json:"score"`
+	ItemID       *string   `json:"item_id,omitempty"`
+	SourceID     *string   `json:"source_id,omitempty"`
+	Topic        *string   `json:"topic,omitempty"`
+	ArticleCount *int      `json:"article_count,omitempty"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type SearchSuggestionItem struct {
+	Kind         string  `json:"kind"`
+	Label        string  `json:"label"`
+	ItemID       *string `json:"item_id,omitempty"`
+	SourceID     *string `json:"source_id,omitempty"`
+	Topic        *string `json:"topic,omitempty"`
+	ArticleCount *int    `json:"article_count,omitempty"`
+}
+
+type SearchSuggestionResponse struct {
+	Items []SearchSuggestionItem `json:"items"`
+}
+
 type ItemFacts struct {
 	ID          string    `json:"id"`
 	ItemID      string    `json:"item_id"`

@@ -191,6 +191,19 @@ export interface ItemSearchSnippet {
   snippet_html: string;
 }
 
+export interface ItemSearchSuggestion {
+  kind: "article" | "source" | "topic" | string;
+  label: string;
+  item_id?: string | null;
+  source_id?: string | null;
+  topic?: string | null;
+  article_count?: number | null;
+}
+
+export interface ItemSearchSuggestionResponse {
+  items: ItemSearchSuggestion[];
+}
+
 export interface PersonalScoreComponent {
   value: number;
   weight: number;
@@ -1175,6 +1188,13 @@ export const api = {
     if (params?.later_only != null) q.set("later_only", String(params.later_only));
     const qs = q.toString();
     return apiFetch<ItemListResponse>(`/items${qs ? `?${qs}` : ""}`);
+  },
+  getItemSearchSuggestions: (params: { q: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    q.set("q", params.q);
+    if (params.limit != null) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiFetch<ItemSearchSuggestionResponse>(`/items/search-suggestions?${qs}`);
   },
   exportFavoritesMarkdown: async (params?: FavoritesMarkdownExportParams) => {
     const q = new URLSearchParams();

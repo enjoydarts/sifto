@@ -588,6 +588,17 @@ func summarizeAndPersistItem(
 	if err := deps.publisher.SendItemSearchUpsertE(ctx, itemID); err != nil {
 		log.Printf("process-item search upsert event failed item_id=%s err=%v", itemID, err)
 	}
+	if err := deps.publisher.SendSearchSuggestionArticleUpsertE(ctx, itemID); err != nil {
+		log.Printf("process-item search suggestion article upsert failed item_id=%s err=%v", itemID, err)
+	}
+	if err := deps.publisher.SendSearchSuggestionSourceUpsertE(ctx, data.SourceID); err != nil {
+		log.Printf("process-item search suggestion source upsert failed item_id=%s source_id=%s err=%v", itemID, data.SourceID, err)
+	}
+	if userIDPtr != nil {
+		if err := deps.publisher.SendSearchSuggestionTopicsRefreshE(ctx, *userIDPtr); err != nil {
+			log.Printf("process-item search suggestion topics refresh failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
+		}
+	}
 	log.Printf("process-item summarize done item_id=%s topics=%d score=%.3f retries=%d faithfulness=%s", itemID, len(summary.Topics), summary.Score, summaryRetryCount, finalFaithfulness.Verdict)
 
 	return &processSummaryStageResult{

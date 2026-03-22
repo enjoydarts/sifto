@@ -174,15 +174,15 @@ function ItemsPageContent() {
     staleTime: 15_000,
     placeholderData: (prev) => prev,
   });
-  const suggestions = suggestionsQuery.data?.items ?? [];
+  const suggestions = useMemo(() => suggestionsQuery.data?.items ?? [], [suggestionsQuery.data]);
 
   useEffect(() => {
     if (!searchOpen || suggestions.length === 0) {
-      setActiveSuggestionIndex(0);
+      setActiveSuggestionIndex(-1);
       return;
     }
     setActiveSuggestionIndex((prev) => {
-      if (prev < 0) return 0;
+      if (prev < 0) return -1;
       if (prev >= suggestions.length) return suggestions.length - 1;
       return prev;
     });
@@ -265,21 +265,19 @@ function ItemsPageContent() {
     setSearchOpen(false);
   }, [normalizedSearchDraft, replaceItemsQuery, searchModeDraft]);
 
+  const visibleSearchValue = useMemo(() => {
+    if (activeSuggestionIndex >= 0 && suggestions[activeSuggestionIndex]) {
+      return suggestions[activeSuggestionIndex].label;
+    }
+    return searchDraft;
+  }, [activeSuggestionIndex, searchDraft, suggestions]);
+
   const applySuggestion = useCallback(
     (suggestion: ItemSearchSuggestion) => {
-      if (suggestion.kind === "source" && suggestion.source_id) {
-        replaceItemsQuery({ sourceId: suggestion.source_id, q: "", page: 1 });
-        setSearchOpen(false);
-        return;
-      }
-      if (suggestion.kind === "topic" && suggestion.topic) {
-        replaceItemsQuery({ topic: suggestion.topic, q: "", page: 1 });
-        setSearchOpen(false);
-        return;
-      }
       if (suggestion.label.trim()) {
         const nextQuery = suggestion.label.trim();
         setSearchDraft(nextQuery);
+        setActiveSuggestionIndex(-1);
         replaceItemsQuery({ q: nextQuery, searchMode: searchModeDraft, page: 1 });
         setSearchOpen(false);
       }
@@ -923,25 +921,31 @@ function ItemsPageContent() {
                 <input
                   autoFocus
                   type="search"
-                  value={searchDraft}
+                  value={visibleSearchValue}
                   onChange={(e) => {
                     setSearchDraft(e.target.value);
-                    setActiveSuggestionIndex(0);
+                    setActiveSuggestionIndex(-1);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "ArrowDown" && suggestions.length > 0) {
                       e.preventDefault();
-                      setActiveSuggestionIndex((prev) => (prev + 1) % suggestions.length);
+                      setActiveSuggestionIndex((prev) => {
+                        if (prev < 0) return 0;
+                        return (prev + 1) % suggestions.length;
+                      });
                       return;
                     }
                     if (e.key === "ArrowUp" && suggestions.length > 0) {
                       e.preventDefault();
-                      setActiveSuggestionIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
+                      setActiveSuggestionIndex((prev) => {
+                        if (prev < 0) return suggestions.length - 1;
+                        return (prev - 1 + suggestions.length) % suggestions.length;
+                      });
                       return;
                     }
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      if (suggestions.length > 0 && suggestions[activeSuggestionIndex]) {
+                      if (activeSuggestionIndex >= 0 && suggestions[activeSuggestionIndex]) {
                         applySuggestion(suggestions[activeSuggestionIndex]);
                         return;
                       }
@@ -965,39 +969,17 @@ function ItemsPageContent() {
                   ) : (
                     <div className="space-y-1">
                       {suggestions.map((suggestion, index) => {
-                        const kindKey =
-                          suggestion.kind === "source"
-                            ? "items.search.suggestion.kind.source"
-                            : suggestion.kind === "topic"
-                              ? "items.search.suggestion.kind.topic"
-                              : "items.search.suggestion.kind.article";
                         const active = index === activeSuggestionIndex;
                         return (
                           <button
                             key={`${suggestion.kind}:${suggestion.source_id ?? suggestion.topic ?? suggestion.item_id ?? suggestion.label}:${index}`}
                             type="button"
                             onClick={() => applySuggestion(suggestion)}
-                            className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition ${
+                            className={`block w-full rounded-lg px-3 py-2 text-left text-sm transition ${
                               active ? "bg-zinc-900 text-white" : "bg-white text-zinc-900 hover:bg-zinc-100"
                             }`}
                           >
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
-                                    active ? "bg-white/15 text-white" : "bg-zinc-100 text-zinc-600"
-                                  }`}
-                                >
-                                  {t(kindKey)}
-                                </span>
-                                <span className="truncate text-sm font-medium">{suggestion.label}</span>
-                              </div>
-                            </div>
-                            {suggestion.kind !== "article" && suggestion.article_count != null ? (
-                              <span className={`shrink-0 text-xs ${active ? "text-zinc-200" : "text-zinc-500"}`}>
-                                {`${suggestion.article_count}${t("items.search.suggestion.countSuffix")}`}
-                              </span>
-                            ) : null}
+                            <span className="block truncate font-medium">{suggestion.label}</span>
                           </button>
                         );
                       })}
@@ -1037,7 +1019,10 @@ function ItemsPageContent() {
                 <div className="flex items-center justify-between gap-3">
                   <button
                     type="button"
-                    onClick={() => setSearchDraft("")}
+                    onClick={() => {
+                      setSearchDraft("");
+                      setActiveSuggestionIndex(-1);
+                    }}
                     className="text-sm font-medium text-zinc-500 hover:text-zinc-700 press"
                   >
                     {t("common.clear")}

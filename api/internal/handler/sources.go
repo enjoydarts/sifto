@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -544,6 +545,9 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeRepoError(w, err)
 		return
+	}
+	if err := h.publisher.SendSearchSuggestionSourceUpsertE(r.Context(), s.ID); err != nil {
+		log.Printf("search suggestion source upsert enqueue failed source_id=%s err=%v", s.ID, err)
 	}
 
 	// For one-off URLs, seed an item immediately and trigger async processing.
@@ -1793,6 +1797,9 @@ func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
+	if err := h.publisher.SendSearchSuggestionSourceUpsertE(r.Context(), s.ID); err != nil {
+		log.Printf("search suggestion source upsert enqueue failed source_id=%s err=%v", s.ID, err)
+	}
 	writeJSON(w, s)
 }
 
@@ -1802,6 +1809,12 @@ func (h *SourceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.Delete(r.Context(), id, userID); err != nil {
 		writeRepoError(w, err)
 		return
+	}
+	if err := h.publisher.SendSearchSuggestionSourceDeleteE(r.Context(), id); err != nil {
+		log.Printf("search suggestion source delete enqueue failed source_id=%s err=%v", id, err)
+	}
+	if err := h.publisher.SendSearchSuggestionTopicsRefreshE(r.Context(), userID); err != nil {
+		log.Printf("search suggestion topics refresh enqueue failed source_id=%s user_id=%s err=%v", id, userID, err)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

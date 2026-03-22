@@ -15,10 +15,11 @@ import (
 )
 
 type MeilisearchService struct {
-	baseURL    string
-	masterKey  string
-	itemsIndex string
-	client     *http.Client
+	baseURL          string
+	masterKey        string
+	itemsIndex       string
+	suggestionsIndex string
+	client           *http.Client
 }
 
 func NewMeilisearchServiceFromEnv() (*MeilisearchService, error) {
@@ -31,11 +32,16 @@ func NewMeilisearchServiceFromEnv() (*MeilisearchService, error) {
 	if itemsIndex == "" {
 		itemsIndex = "items"
 	}
+	suggestionsIndex := strings.TrimSpace(os.Getenv("MEILISEARCH_SUGGESTIONS_INDEX"))
+	if suggestionsIndex == "" {
+		suggestionsIndex = "search_suggestions"
+	}
 
 	return &MeilisearchService{
-		baseURL:    baseURL,
-		masterKey:  strings.TrimSpace(os.Getenv("MEILISEARCH_MASTER_KEY")),
-		itemsIndex: itemsIndex,
+		baseURL:          baseURL,
+		masterKey:        strings.TrimSpace(os.Getenv("MEILISEARCH_MASTER_KEY")),
+		itemsIndex:       itemsIndex,
+		suggestionsIndex: suggestionsIndex,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
@@ -51,6 +57,13 @@ func (s *MeilisearchService) ItemsIndexName() string {
 		return ""
 	}
 	return s.itemsIndex
+}
+
+func (s *MeilisearchService) SuggestionsIndexName() string {
+	if s == nil {
+		return ""
+	}
+	return s.suggestionsIndex
 }
 
 func (s *MeilisearchService) Health(ctx context.Context) error {
@@ -79,18 +92,6 @@ func (s *MeilisearchService) Health(ctx context.Context) error {
 }
 
 func (s *MeilisearchService) ensureItemsIndex(ctx context.Context) error {
-	if !s.Enabled() {
-		return fmt.Errorf("meilisearch not configured")
-	}
-
-	body := map[string]any{
-		"uid":        s.itemsIndex,
-		"primaryKey": "id",
-	}
-	if err := s.doJSON(ctx, http.MethodPost, "/indexes", body, nil, true); err != nil {
-		return err
-	}
-
 	settings := map[string]any{
 		"searchableAttributes": []string{
 			"title",
@@ -115,7 +116,43 @@ func (s *MeilisearchService) ensureItemsIndex(ctx context.Context) error {
 			"created_at",
 		},
 	}
-	return s.doJSON(ctx, http.MethodPatch, "/indexes/"+s.itemsIndex+"/settings", settings, nil, false)
+	return s.ensureIndex(ctx, s.itemsIndex, settings)
+}
+
+func (s *MeilisearchService) ensureSuggestionsIndex(ctx context.Context) error {
+	settings := map[string]any{
+		"searchableAttributes": []string{
+			"label",
+			"normalized",
+		},
+		"filterableAttributes": []string{
+			"user_id",
+			"kind",
+			"source_id",
+			"topic",
+		},
+		"sortableAttributes": []string{
+			"score",
+			"article_count",
+			"updated_at",
+		},
+	}
+	return s.ensureIndex(ctx, s.suggestionsIndex, settings)
+}
+
+func (s *MeilisearchService) ensureIndex(ctx context.Context, indexName string, settings map[string]any) error {
+	if !s.Enabled() {
+		return fmt.Errorf("meilisearch not configured")
+	}
+
+	body := map[string]any{
+		"uid":        indexName,
+		"primaryKey": "id",
+	}
+	if err := s.doJSON(ctx, http.MethodPost, "/indexes", body, nil, true); err != nil {
+		return err
+	}
+	return s.doJSON(ctx, http.MethodPatch, "/indexes/"+indexName+"/settings", settings, nil, false)
 }
 
 func (s *MeilisearchService) UpsertItemDocuments(ctx context.Context, docs []model.ItemSearchDocument) error {
@@ -133,6 +170,33 @@ func (s *MeilisearchService) DeleteItemDocuments(ctx context.Context, itemIDs []
 		return nil
 	}
 	return s.doJSON(ctx, http.MethodPost, "/indexes/"+s.itemsIndex+"/documents/delete-batch", itemIDs, nil, false)
+}
+
+func (s *MeilisearchService) UpsertSearchSuggestionDocuments(ctx context.Context, docs []model.SearchSuggestionDocument) error {
+	if len(docs) == 0 {
+		return nil
+	}
+	if err := s.ensureSuggestionsIndex(ctx); err != nil {
+		return err
+	}
+	return s.doJSON(ctx, http.MethodPost, "/indexes/"+s.suggestionsIndex+"/documents", docs, nil, false)
+}
+
+func (s *MeilisearchService) DeleteSearchSuggestionDocuments(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return s.doJSON(ctx, http.MethodPost, "/indexes/"+s.suggestionsIndex+"/documents/delete-batch", ids, nil, false)
+}
+
+func (s *MeilisearchService) DeleteSearchSuggestionDocumentsByFilter(ctx context.Context, filter string) error {
+	if !s.Enabled() || strings.TrimSpace(filter) == "" {
+		return nil
+	}
+	body := map[string]any{
+		"filter": strings.TrimSpace(filter),
+	}
+	return s.doJSON(ctx, http.MethodPost, "/indexes/"+s.suggestionsIndex+"/documents/delete", body, nil, false)
 }
 
 type MeilisearchSearchParams struct {
@@ -153,6 +217,28 @@ type MeilisearchSearchResult struct {
 	Hits  []MeilisearchSearchHit
 	Total int
 	Mode  string
+}
+
+type MeilisearchSuggestionParams struct {
+	Query   string
+	UserID  string
+	Limit   int
+	Filters []string
+}
+
+type MeilisearchSuggestionHit struct {
+	ID           string
+	Kind         string
+	Label        string
+	ItemID       *string
+	SourceID     *string
+	Topic        *string
+	ArticleCount *int
+	Score        int
+}
+
+type MeilisearchSuggestionResult struct {
+	Hits []MeilisearchSuggestionHit
 }
 
 func NormalizeSearchMode(mode string) string {
@@ -233,6 +319,65 @@ func (s *MeilisearchService) SearchItems(ctx context.Context, params Meilisearch
 		result.Hits = append(result.Hits, MeilisearchSearchHit{
 			ItemID:         hit.ID,
 			SearchSnippets: snippets,
+		})
+	}
+	return result, nil
+}
+
+func (s *MeilisearchService) SearchSuggestions(ctx context.Context, params MeilisearchSuggestionParams) (*MeilisearchSuggestionResult, error) {
+	if err := s.ensureSuggestionsIndex(ctx); err != nil {
+		return nil, err
+	}
+	if params.Limit <= 0 {
+		params.Limit = 10
+	}
+
+	filters := make([]string, 0, len(params.Filters)+1)
+	if strings.TrimSpace(params.UserID) != "" {
+		filters = append(filters, "user_id = "+QuoteMeilisearchFilter(params.UserID))
+	}
+	filters = append(filters, params.Filters...)
+
+	payload := map[string]any{
+		"q":      params.Query,
+		"filter": filters,
+		"limit":  params.Limit,
+		"sort": []string{
+			"score:desc",
+			"article_count:desc",
+			"updated_at:desc",
+		},
+	}
+
+	var raw struct {
+		Hits []struct {
+			ID           string  `json:"id"`
+			Kind         string  `json:"kind"`
+			Label        string  `json:"label"`
+			ItemID       *string `json:"item_id"`
+			SourceID     *string `json:"source_id"`
+			Topic        *string `json:"topic"`
+			ArticleCount *int    `json:"article_count"`
+			Score        int     `json:"score"`
+		} `json:"hits"`
+	}
+	if err := s.doJSON(ctx, http.MethodPost, "/indexes/"+s.suggestionsIndex+"/search", payload, &raw, false); err != nil {
+		return nil, err
+	}
+
+	result := &MeilisearchSuggestionResult{
+		Hits: make([]MeilisearchSuggestionHit, 0, len(raw.Hits)),
+	}
+	for _, hit := range raw.Hits {
+		result.Hits = append(result.Hits, MeilisearchSuggestionHit{
+			ID:           hit.ID,
+			Kind:         hit.Kind,
+			Label:        hit.Label,
+			ItemID:       hit.ItemID,
+			SourceID:     hit.SourceID,
+			Topic:        hit.Topic,
+			ArticleCount: hit.ArticleCount,
+			Score:        hit.Score,
 		})
 	}
 	return result, nil

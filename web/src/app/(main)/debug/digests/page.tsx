@@ -74,6 +74,7 @@ type SearchBackfillResponse = {
   offset: number;
   limit: number;
   all: boolean;
+  indexes?: string[];
   total_items: number;
   queued_batches: number;
 };
@@ -1367,6 +1368,11 @@ export default function DebugDigestsPage() {
             {JSON.stringify(searchBackfillResult, null, 2)}
           </pre>
         )}
+
+        <div className="mt-3 rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3 text-xs text-[var(--color-editorial-ink-faint)]">
+          <span className="font-medium text-[var(--color-editorial-ink-soft)]">{t("debug.searchBackfill.targetIndexes")}:</span>{" "}
+          <code>items</code>, <code>search_suggestions</code>
+        </div>
 
         <div className="mt-4 space-y-3">
           {searchBackfillRuns.length === 0 ? (

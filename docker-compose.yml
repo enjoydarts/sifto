@@ -48,6 +48,7 @@ services:
       MEILISEARCH_URL: ${MEILISEARCH_URL:-http://meilisearch:7700}
       MEILISEARCH_MASTER_KEY: ${MEILISEARCH_MASTER_KEY:-change-me}
       MEILISEARCH_ITEMS_INDEX: ${MEILISEARCH_ITEMS_INDEX:-items}
+      MEILISEARCH_SUGGESTIONS_INDEX: ${MEILISEARCH_SUGGESTIONS_INDEX:-search_suggestions}
       LLM_CATALOG_PATH: /shared/llm_catalog.json
     env_file:
       - .env

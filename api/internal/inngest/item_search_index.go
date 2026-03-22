@@ -72,6 +72,7 @@ func itemSearchDeleteFn(client inngestgo.Client, search *service.MeilisearchServ
 
 func itemSearchBackfillFn(client inngestgo.Client, db *pgxpool.Pool, search *service.MeilisearchService) (inngestgo.ServableFunction, error) {
 	docRepo := repository.NewItemSearchDocumentRepo(db)
+	suggestionRepo := repository.NewSearchSuggestionDocumentRepo(db)
 	runRepo := repository.NewSearchBackfillRunRepo(db)
 
 	return inngestgo.CreateFunction(
@@ -106,6 +107,115 @@ func itemSearchBackfillFn(client inngestgo.Client, db *pgxpool.Pool, search *ser
 					"status": "failed",
 					"error":  err.Error(),
 				}, nil
+			}
+			articleDocs, err := suggestionRepo.ListArticlePage(ctx, input.Event.Data.Offset, input.Event.Data.Limit)
+			if err != nil {
+				if _, markErr := runRepo.MarkBatchFailed(ctx, input.Event.Data.RunID, err.Error()); markErr != nil {
+					return nil, markErr
+				}
+				return map[string]any{
+					"run_id": input.Event.Data.RunID,
+					"offset": input.Event.Data.Offset,
+					"limit":  input.Event.Data.Limit,
+					"status": "failed",
+					"error":  err.Error(),
+				}, nil
+			}
+			if err := search.UpsertSearchSuggestionDocuments(ctx, articleDocs); err != nil {
+				if _, markErr := runRepo.MarkBatchFailed(ctx, input.Event.Data.RunID, err.Error()); markErr != nil {
+					return nil, markErr
+				}
+				return map[string]any{
+					"run_id": input.Event.Data.RunID,
+					"offset": input.Event.Data.Offset,
+					"limit":  input.Event.Data.Limit,
+					"status": "failed",
+					"error":  err.Error(),
+				}, nil
+			}
+			sourceIDs := map[string]struct{}{}
+			userIDs := map[string]struct{}{}
+			for _, doc := range articleDocs {
+				if doc.SourceID != nil && *doc.SourceID != "" {
+					sourceIDs[*doc.SourceID] = struct{}{}
+				}
+				if doc.UserID != "" {
+					userIDs[doc.UserID] = struct{}{}
+				}
+			}
+			sourceDocs := make([]model.SearchSuggestionDocument, 0, len(sourceIDs))
+			for sourceID := range sourceIDs {
+				doc, getErr := suggestionRepo.GetSourceBySourceID(ctx, sourceID)
+				if getErr != nil {
+					if getErr == pgx.ErrNoRows {
+						continue
+					}
+					if _, markErr := runRepo.MarkBatchFailed(ctx, input.Event.Data.RunID, getErr.Error()); markErr != nil {
+						return nil, markErr
+					}
+					return map[string]any{
+						"run_id": input.Event.Data.RunID,
+						"offset": input.Event.Data.Offset,
+						"limit":  input.Event.Data.Limit,
+						"status": "failed",
+						"error":  getErr.Error(),
+					}, nil
+				}
+				sourceDocs = append(sourceDocs, *doc)
+			}
+			if err := search.UpsertSearchSuggestionDocuments(ctx, sourceDocs); err != nil {
+				if _, markErr := runRepo.MarkBatchFailed(ctx, input.Event.Data.RunID, err.Error()); markErr != nil {
+					return nil, markErr
+				}
+				return map[string]any{
+					"run_id": input.Event.Data.RunID,
+					"offset": input.Event.Data.Offset,
+					"limit":  input.Event.Data.Limit,
+					"status": "failed",
+					"error":  err.Error(),
+				}, nil
+			}
+			for userID := range userIDs {
+				if err := search.DeleteSearchSuggestionDocumentsByFilter(
+					ctx,
+					"user_id = "+service.QuoteMeilisearchFilter(userID)+" AND kind = topic",
+				); err != nil {
+					if _, markErr := runRepo.MarkBatchFailed(ctx, input.Event.Data.RunID, err.Error()); markErr != nil {
+						return nil, markErr
+					}
+					return map[string]any{
+						"run_id": input.Event.Data.RunID,
+						"offset": input.Event.Data.Offset,
+						"limit":  input.Event.Data.Limit,
+						"status": "failed",
+						"error":  err.Error(),
+					}, nil
+				}
+				topicDocs, topicErr := suggestionRepo.ListTopicsByUser(ctx, userID)
+				if topicErr != nil {
+					if _, markErr := runRepo.MarkBatchFailed(ctx, input.Event.Data.RunID, topicErr.Error()); markErr != nil {
+						return nil, markErr
+					}
+					return map[string]any{
+						"run_id": input.Event.Data.RunID,
+						"offset": input.Event.Data.Offset,
+						"limit":  input.Event.Data.Limit,
+						"status": "failed",
+						"error":  topicErr.Error(),
+					}, nil
+				}
+				if err := search.UpsertSearchSuggestionDocuments(ctx, topicDocs); err != nil {
+					if _, markErr := runRepo.MarkBatchFailed(ctx, input.Event.Data.RunID, err.Error()); markErr != nil {
+						return nil, markErr
+					}
+					return map[string]any{
+						"run_id": input.Event.Data.RunID,
+						"offset": input.Event.Data.Offset,
+						"limit":  input.Event.Data.Limit,
+						"status": "failed",
+						"error":  err.Error(),
+					}, nil
+				}
 			}
 			if _, err := runRepo.MarkBatchSucceeded(ctx, input.Event.Data.RunID, len(docs)); err != nil {
 				return nil, err

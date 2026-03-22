@@ -631,6 +631,7 @@ func (h *InternalHandler) DebugBackfillItemSearch(w http.ResponseWriter, r *http
 		"offset":         offset,
 		"limit":          limit,
 		"all":            allItems,
+		"indexes":        []string{"items", "search_suggestions"},
 		"total_items":    totalItems,
 		"queued_batches": queuedBatches,
 	})

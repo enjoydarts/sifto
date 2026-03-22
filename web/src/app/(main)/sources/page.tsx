@@ -21,6 +21,8 @@ import { PageTransition } from "@/components/page-transition";
 import { PageHeader } from "@/components/ui/page-header";
 import { Tag } from "@/components/ui/tag";
 
+type ChartTooltipValue = number | string | ReadonlyArray<number | string>;
+
 export default function SourcesPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
@@ -522,8 +524,8 @@ export default function SourcesPage() {
                           <Tooltip
                             cursor={{ stroke: "#beb3a0", strokeDasharray: "3 3" }}
                             contentStyle={{ borderRadius: 16, borderColor: "#d9d1c4", boxShadow: "0 8px 24px rgba(24,24,27,0.08)" }}
-                            formatter={(value: number | string | undefined) => [
-                              typeof value === "number" ? value.toLocaleString() : String(value ?? 0),
+                            formatter={(value: ChartTooltipValue | undefined) => [
+                              Array.isArray(value) ? value.map(String).join(", ") : typeof value === "number" ? value.toLocaleString() : String(value ?? 0),
                               t("common.rows"),
                             ]}
                             labelFormatter={(_, payload) => {

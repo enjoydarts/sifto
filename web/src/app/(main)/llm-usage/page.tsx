@@ -76,6 +76,18 @@ function joinClassNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+type ChartTooltipValue = number | string | ReadonlyArray<number | string>;
+type ChartTooltipName = number | string;
+
+function tooltipValueToNumber(value: ChartTooltipValue | undefined) {
+  if (Array.isArray(value)) return Number(value[0] ?? 0);
+  return Number(value ?? 0);
+}
+
+function tooltipNameToText(name: ChartTooltipName | undefined) {
+  return String(name ?? "");
+}
+
 type LLMUsageSectionID =
   | "overview"
   | "forecast"
@@ -881,9 +893,9 @@ export default function LLMUsagePage() {
                           tickFormatter={(v) => fmtUSDShort(Number(v))}
                         />
                         <Tooltip
-                          formatter={(value: number | string | undefined, name?: string) => [
-                            fmtUSD(Number(value ?? 0)),
-                            providerLabel(name ?? ""),
+                          formatter={(value: ChartTooltipValue | undefined, name?: ChartTooltipName) => [
+                            fmtUSD(tooltipValueToNumber(value)),
+                            providerLabel(tooltipNameToText(name)),
                           ]}
                           labelFormatter={(label) => `${label}`}
                           contentStyle={{ borderRadius: 16, borderColor: "#d9d1c4", background: "#fff" }}
@@ -990,8 +1002,8 @@ export default function LLMUsagePage() {
                           tickFormatter={(v) => fmtUSDShort(Number(v))}
                         />
                         <Tooltip
-                          formatter={(value: number | string | undefined, name?: string) => [
-                            fmtUSD(Number(value ?? 0)),
+                          formatter={(value: ChartTooltipValue | undefined, name?: ChartTooltipName) => [
+                            fmtUSD(tooltipValueToNumber(value)),
                             name === "actual" ? t("llm.actualCumulative") : t("llm.forecastLabel"),
                           ]}
                           labelFormatter={(label) => `${monthlyForecast.monthLabel}-${String(label).padStart(2, "0")}`}
@@ -1124,9 +1136,9 @@ export default function LLMUsagePage() {
                     axisLine={false}
                   />
                   <Tooltip
-                    formatter={(value: number | string | undefined, name?: string) => [
-                      name === "calls" ? fmtNum(Number(value ?? 0)) : fmtUSD(Number(value ?? 0)),
-                      name ?? "",
+                    formatter={(value: ChartTooltipValue | undefined, name?: ChartTooltipName) => [
+                      name === "calls" ? fmtNum(tooltipValueToNumber(value)) : fmtUSD(tooltipValueToNumber(value)),
+                      tooltipNameToText(name),
                     ]}
                     labelFormatter={(_, payload) => {
                       const row = payload?.[0]?.payload as { label?: string; pricingSource?: string } | undefined;

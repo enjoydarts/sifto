@@ -91,6 +91,23 @@ function joinClassNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+type ChartTooltipValue = number | string | ReadonlyArray<number | string>;
+type ChartTooltipName = number | string;
+
+function tooltipValueToNumber(value: ChartTooltipValue | undefined) {
+  if (Array.isArray(value)) return Number(value[0] ?? 0);
+  return Number(value ?? 0);
+}
+
+function tooltipValueToText(value: ChartTooltipValue | undefined) {
+  if (Array.isArray(value)) return value.map(String).join(", ");
+  return String(value ?? "");
+}
+
+function tooltipNameToText(name: ChartTooltipName | undefined) {
+  return String(name ?? "");
+}
+
 type AnalysisRow = LLMUsageAnalysisSummary & {
   avg_input_tokens_per_call: number;
   avg_output_tokens_per_call: number;
@@ -823,11 +840,11 @@ export default function LLMAnalysisPage() {
                             <ZAxis type="number" dataKey="bubbleSize" range={[80, 460]} />
                             <Tooltip
                               cursor={{ strokeDasharray: "4 4" }}
-                              formatter={(value: number | string | undefined, name?: string) => {
-                                if (name === "Cost / call") return [fmtUSD(Number(value ?? 0)), name];
-                                if (name === "Tokens / call") return [fmtNum(Number(value ?? 0)), name];
-                                if (name === "Calls") return [fmtNum(Number(value ?? 0)), name];
-                                return [String(value ?? ""), name ?? ""];
+                              formatter={(value: ChartTooltipValue | undefined, name?: ChartTooltipName) => {
+                                if (name === "Cost / call") return [fmtUSD(tooltipValueToNumber(value)), tooltipNameToText(name)];
+                                if (name === "Tokens / call") return [fmtNum(tooltipValueToNumber(value)), tooltipNameToText(name)];
+                                if (name === "Calls") return [fmtNum(tooltipValueToNumber(value)), tooltipNameToText(name)];
+                                return [tooltipValueToText(value), tooltipNameToText(name)];
                               }}
                               labelFormatter={(_, payload) => {
                                 const row = payload?.[0]?.payload as (typeof scatterRows)[number] | undefined;
@@ -897,7 +914,7 @@ export default function LLMAnalysisPage() {
                             <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12, fill: "#8f877f" }} tickFormatter={(v) => `${v}%`} tickLine={false} axisLine={false} />
                             <YAxis type="category" dataKey="purpose" width={130} tick={{ fontSize: 12, fill: "#5f5750" }} tickLine={false} axisLine={false} />
                             <Tooltip
-                              formatter={(value: number | string | undefined, name?: string) => [`${Number(value ?? 0).toFixed(1)}%`, providerLabel(String(name ?? ""))]}
+                              formatter={(value: ChartTooltipValue | undefined, name?: ChartTooltipName) => [`${tooltipValueToNumber(value).toFixed(1)}%`, providerLabel(tooltipNameToText(name))]}
                               contentStyle={{ borderRadius: 16, borderColor: "#d9d1c4", background: "#fff" }}
                             />
                             {providers.map((provider, index) => (
@@ -988,11 +1005,11 @@ export default function LLMAnalysisPage() {
                         <ZAxis type="number" dataKey="bubbleSize" range={[80, 460]} />
                         <Tooltip
                           cursor={{ strokeDasharray: "4 4" }}
-                          formatter={(value: number | string | undefined, name?: string) => {
-                            if (name === "Cost / call") return [fmtUSD(Number(value ?? 0)), name];
-                            if (name === "Tokens / call") return [fmtNum(Number(value ?? 0)), name];
-                            if (name === "Calls") return [fmtNum(Number(value ?? 0)), name];
-                            return [String(value ?? ""), name ?? ""];
+                          formatter={(value: ChartTooltipValue | undefined, name?: ChartTooltipName) => {
+                            if (name === "Cost / call") return [fmtUSD(tooltipValueToNumber(value)), tooltipNameToText(name)];
+                            if (name === "Tokens / call") return [fmtNum(tooltipValueToNumber(value)), tooltipNameToText(name)];
+                            if (name === "Calls") return [fmtNum(tooltipValueToNumber(value)), tooltipNameToText(name)];
+                            return [tooltipValueToText(value), tooltipNameToText(name)];
                           }}
                         />
                         <Scatter
@@ -1038,7 +1055,7 @@ export default function LLMAnalysisPage() {
                         <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12, fill: "#8f877f" }} tickFormatter={(v) => `${v}%`} tickLine={false} axisLine={false} />
                         <YAxis type="category" dataKey="purpose" width={130} tick={{ fontSize: 12, fill: "#5f5750" }} tickLine={false} axisLine={false} />
                         <Tooltip
-                          formatter={(value: number | string | undefined, name?: string) => [`${Number(value ?? 0).toFixed(1)}%`, providerLabel(String(name ?? ""))]}
+                          formatter={(value: ChartTooltipValue | undefined, name?: ChartTooltipName) => [`${tooltipValueToNumber(value).toFixed(1)}%`, providerLabel(tooltipNameToText(name))]}
                           contentStyle={{ borderRadius: 16, borderColor: "#d9d1c4", background: "#fff" }}
                         />
                         {providers.map((provider, index) => (
@@ -1079,10 +1096,10 @@ export default function LLMAnalysisPage() {
                         <YAxis type="number" dataKey="failure_rate_pct" name="Failure Rate" tick={{ fontSize: 12, fill: "#8f877f" }} tickLine={false} axisLine={false} tickFormatter={(v) => `${Number(v).toFixed(1)}%`} />
                         <ZAxis type="number" dataKey="calls" range={[80, 420]} />
                         <Tooltip
-                          formatter={(value: number | string | undefined, name?: string) => {
-                            if (name === "Failure Rate") return [`${Number(value ?? 0).toFixed(1)}%`, name];
-                            if (name === "Calls") return [fmtNum(Number(value ?? 0)), name];
-                            return [String(value ?? ""), name ?? ""];
+                          formatter={(value: ChartTooltipValue | undefined, name?: ChartTooltipName) => {
+                            if (name === "Failure Rate") return [`${tooltipValueToNumber(value).toFixed(1)}%`, tooltipNameToText(name)];
+                            if (name === "Calls") return [fmtNum(tooltipValueToNumber(value)), tooltipNameToText(name)];
+                            return [tooltipValueToText(value), tooltipNameToText(name)];
                           }}
                         />
                         <Scatter

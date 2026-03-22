@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
@@ -18,6 +19,7 @@ type PoeModelsHandler struct {
 	repo               *repository.PoeModelRepo
 	service            *service.PoeCatalogService
 	providerUpdateRepo *repository.ProviderModelUpdateRepo
+	activeTranslations sync.Map
 }
 
 func NewPoeModelsHandler(repo *repository.PoeModelRepo, providerUpdateRepo *repository.ProviderModelUpdateRepo, svc *service.PoeCatalogService) *PoeModelsHandler {
@@ -33,6 +35,7 @@ func (h *PoeModelsHandler) List(w http.ResponseWriter, r *http.Request) {
 	if models == nil {
 		models = make([]repository.PoeModelSnapshot, 0)
 	}
+	latestRun = h.resumeTranslationIfNeeded(latestRun, models)
 	var latestChangeSummary any
 	if h.providerUpdateRepo != nil {
 		summary, err := h.providerUpdateRepo.ListLatestProviderSummary(r.Context(), "poe")
@@ -55,17 +58,23 @@ func (h *PoeModelsHandler) Status(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
-	if poeSyncRunIsStale(run, time.Now().UTC()) {
-		if err := h.repo.FailSyncRun(r.Context(), run.ID, "Poe description translation stalled"); err != nil {
+	if run != nil {
+		models, latestRun, err := h.repo.ListLatestSnapshots(r.Context())
+		if err != nil {
 			writeRepoError(w, err)
 			return
 		}
-		run = nil
+		if latestRun != nil && latestRun.ID == run.ID {
+			run = h.resumeTranslationIfNeeded(run, models)
+		}
 	}
 	writeJSON(w, map[string]any{"run": run})
 }
 
 func (h *PoeModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
+	if run, err := h.repo.GetLatestManualRunningSyncRun(r.Context()); err == nil && poeSyncRunIsStale(run, time.Now().UTC()) {
+		h.failSyncRun(run.ID, "Poe description translation interrupted by local restart")
+	}
 	syncRunID, err := h.repo.StartSyncRun(r.Context(), "manual")
 	if err != nil {
 		writeRepoError(w, err)
@@ -125,10 +134,11 @@ func (h *PoeModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		"latest_change_summary": latestChangeSummary,
 	})
 
-	go h.translateDescriptions(syncRunID, latest)
+	h.startTranslation(syncRunID, latest)
 }
 
 func (h *PoeModelsHandler) translateDescriptions(syncRunID string, models []repository.PoeModelSnapshot) {
+	defer h.activeTranslations.Delete(syncRunID)
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			msg := "Poe description translation panicked"
@@ -181,6 +191,30 @@ func (h *PoeModelsHandler) translateDescriptions(syncRunID string, models []repo
 	}
 	service.SetDynamicChatModelsForProvider("poe", service.PoeSnapshotsToCatalogModels(models))
 	h.finishSyncRun(syncRunID, len(models), len(models), nil)
+}
+
+func (h *PoeModelsHandler) startTranslation(syncRunID string, models []repository.PoeModelSnapshot) {
+	if _, loaded := h.activeTranslations.LoadOrStore(syncRunID, struct{}{}); loaded {
+		return
+	}
+	go h.translateDescriptions(syncRunID, models)
+}
+
+func (h *PoeModelsHandler) resumeTranslationIfNeeded(run *repository.PoeSyncRun, models []repository.PoeModelSnapshot) *repository.PoeSyncRun {
+	if !poeSyncRunIsStale(run, time.Now().UTC()) {
+		return run
+	}
+	if len(poePendingTranslationModels(models)) == 0 {
+		h.finishSyncRun(run.ID, len(models), len(models), nil)
+		finishedAt := time.Now().UTC()
+		run.FinishedAt = &finishedAt
+		run.LastProgressAt = &finishedAt
+		run.Status = "success"
+		run.ErrorMessage = nil
+		return run
+	}
+	h.startTranslation(run.ID, models)
+	return run
 }
 
 func (h *PoeModelsHandler) finishSyncRun(syncRunID string, fetchedCount, acceptedCount int, errMsg *string) {

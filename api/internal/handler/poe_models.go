@@ -20,10 +20,16 @@ type PoeModelsHandler struct {
 	service            *service.PoeCatalogService
 	providerUpdateRepo *repository.ProviderModelUpdateRepo
 	activeTranslations sync.Map
+	processStartedAt   time.Time
 }
 
 func NewPoeModelsHandler(repo *repository.PoeModelRepo, providerUpdateRepo *repository.ProviderModelUpdateRepo, svc *service.PoeCatalogService) *PoeModelsHandler {
-	return &PoeModelsHandler{repo: repo, providerUpdateRepo: providerUpdateRepo, service: svc}
+	return &PoeModelsHandler{
+		repo:               repo,
+		providerUpdateRepo: providerUpdateRepo,
+		service:            svc,
+		processStartedAt:   time.Now().UTC(),
+	}
 }
 
 func (h *PoeModelsHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -201,6 +207,10 @@ func (h *PoeModelsHandler) startTranslation(syncRunID string, models []repositor
 }
 
 func (h *PoeModelsHandler) resumeTranslationIfNeeded(run *repository.PoeSyncRun, models []repository.PoeModelSnapshot) *repository.PoeSyncRun {
+	if h.shouldResumeAfterProcessRestart(run, models) {
+		h.startTranslation(run.ID, models)
+		return run
+	}
 	if !poeSyncRunIsStale(run, time.Now().UTC()) {
 		return run
 	}
@@ -215,6 +225,23 @@ func (h *PoeModelsHandler) resumeTranslationIfNeeded(run *repository.PoeSyncRun,
 	}
 	h.startTranslation(run.ID, models)
 	return run
+}
+
+func (h *PoeModelsHandler) shouldResumeAfterProcessRestart(run *repository.PoeSyncRun, models []repository.PoeModelSnapshot) bool {
+	if run == nil || run.Status != "running" {
+		return false
+	}
+	if len(poePendingTranslationModels(models)) == 0 {
+		return false
+	}
+	if _, active := h.activeTranslations.Load(run.ID); active {
+		return false
+	}
+	ref := run.StartedAt
+	if run.LastProgressAt != nil {
+		ref = *run.LastProgressAt
+	}
+	return ref.Before(h.processStartedAt)
 }
 
 func (h *PoeModelsHandler) finishSyncRun(syncRunID string, fetchedCount, acceptedCount int, errMsg *string) {

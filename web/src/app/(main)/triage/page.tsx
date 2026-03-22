@@ -4,12 +4,13 @@ import { type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowUp, ArrowRight, ExternalLink } from "lucide-react";
+import { CheckCheck, ArrowLeft, ArrowRight, ArrowUp, ExternalLink } from "lucide-react";
 import { api, Item, TriageBundle, TriageQueueEntry, TriageQueueResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { InlineReader } from "@/components/inline-reader";
 import { PageTransition } from "@/components/page-transition";
+import { PageHeader } from "@/components/ui/page-header";
 
 type ActionType = "read" | "favorite" | "later";
 type TriageMode = "quick" | "all";
@@ -394,37 +395,20 @@ export default function TriagePage() {
   return (
     <PageTransition>
       <div className="space-y-5 overflow-x-hidden">
-        <div className="sm:hidden">
-          <Link
-            href={triageMode === "all" ? "/items?feed=all" : "/items?feed=recommended"}
-            className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
-          >
-            {triageMode === "all" ? t("triage.backToAllItems") : t("triage.backToItems")}
-          </Link>
-        </div>
-
-        <div className="hidden sm:block">
-          <section className="surface-editorial rounded-[var(--radius-panel)] px-4 py-3 sm:px-5 sm:py-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0 space-y-1.5">
-                <h1 className="min-w-0 font-serif text-[1.8rem] leading-none tracking-[-0.03em] text-editorial-strong">
-                  {t("triage.title")}
-                </h1>
-                <div className="max-w-3xl text-[14px] leading-6 text-editorial-muted">
-                  {triageMode === "all" ? t("triage.subtitleAll") : t("triage.subtitle")}
-                </div>
-              </div>
-              <div className="flex w-full justify-end lg:w-auto">
-                <Link
-                  href={triageMode === "all" ? "/items?feed=all" : "/items?feed=recommended"}
-                  className="inline-flex min-h-11 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
-                >
-                  {triageMode === "all" ? t("triage.backToAllItems") : t("triage.backToItems")}
-                </Link>
-              </div>
-            </div>
-          </section>
-        </div>
+        <PageHeader
+          title={t("triage.title")}
+          titleIcon={CheckCheck}
+          description={triageMode === "all" ? t("triage.subtitleAll") : t("triage.subtitle")}
+          compact
+          actions={
+            <Link
+              href={triageMode === "all" ? "/items?feed=all" : "/items?feed=recommended"}
+              className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+            >
+              {triageMode === "all" ? t("triage.backToAllItems") : t("triage.backToItems")}
+            </Link>
+          }
+        />
 
         <section className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)]">
           <aside className="surface-editorial hidden rounded-[24px] p-4 xl:block">

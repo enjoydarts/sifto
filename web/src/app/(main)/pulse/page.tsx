@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, TrendingUp } from "lucide-react";
+import { Sparkles, TrendingUp } from "lucide-react";
 import {
   CartesianGrid,
   Line,
@@ -103,12 +103,8 @@ export default function PulsePage() {
     <PageTransition>
       <div className="space-y-6">
         <PageHeader
-          title={
-            <span className="flex items-center gap-2 font-serif">
-              <Activity className="size-6 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
-              <span>{t("pulse.title")}</span>
-            </span>
-          }
+          title={t("pulse.title")}
+          titleIcon={Sparkles}
           description={t("pulse.subtitle")}
           actions={
             <div className="flex items-center gap-2">

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
-import { Activity, Download, Lightbulb, Sparkles, Upload } from "lucide-react";
+import { Activity, Download, Lightbulb, Rss, Sparkles, Upload } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -412,7 +412,8 @@ export default function SourcesPage() {
       <div className="space-y-5 overflow-x-hidden">
         <PageHeader
           eyebrow="Sources"
-          title={<span className="font-serif">{t("sources.title")}</span>}
+          title={t("nav.sources")}
+          titleIcon={Rss}
           description={t("sources.controlRoomSubtitle")}
           meta={
             <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-xs">

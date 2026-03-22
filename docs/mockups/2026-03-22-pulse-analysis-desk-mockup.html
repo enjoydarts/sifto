@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pulse Analysis Desk Mockup</title>
+    <style>
+      :root {
+        --bg: #f6f1e8;
+        --paper: #fbf8f2;
+        --panel: #fffdf9;
+        --panel-strong: #fffaf1;
+        --line: #d9d1c4;
+        --line-strong: #beb3a0;
+        --ink: #1f1a17;
+        --ink-soft: #5f554b;
+        --ink-faint: #8b7f71;
+        --accent: #234a73;
+        --shadow: 0 18px 40px rgba(48, 33, 17, 0.08);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Sawarabi Gothic", "Hiragino Sans", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(255,255,255,0.65), transparent 30%),
+          linear-gradient(180deg, #f8f3ea 0%, var(--bg) 100%);
+      }
+
+      .page {
+        max-width: 1360px;
+        margin: 0 auto;
+        padding: 28px 20px 56px;
+      }
+
+      .header,
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,253,249,0.96)), var(--paper);
+        box-shadow: var(--shadow);
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: flex-end;
+        padding: 24px 28px;
+      }
+
+      .eyebrow {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: var(--accent);
+      }
+
+      h1 {
+        margin: 10px 0 0;
+        font-family: "Sawarabi Mincho", serif;
+        font-size: 42px;
+        line-height: 1.02;
+        font-weight: 400;
+        letter-spacing: -0.03em;
+      }
+
+      .lede {
+        margin: 12px 0 0;
+        max-width: 760px;
+        font-size: 15px;
+        line-height: 1.9;
+        color: var(--ink-soft);
+      }
+
+      .filters {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .control {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+        padding: 10px 14px;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+
+      .panel {
+        margin-top: 20px;
+        padding: 20px;
+      }
+
+      .panel-kicker {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--ink-faint);
+      }
+
+      h2 {
+        margin: 10px 0 0;
+        font-family: "Sawarabi Mincho", serif;
+        font-size: 30px;
+        line-height: 1.08;
+        font-weight: 400;
+      }
+
+      .copy {
+        margin: 10px 0 0;
+        font-size: 14px;
+        line-height: 1.8;
+        color: var(--ink-soft);
+      }
+
+      .chart-frame {
+        margin-top: 18px;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: var(--panel);
+        padding: 18px;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 14px;
+        margin-bottom: 14px;
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+
+      .legend span::before {
+        content: "";
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        margin-right: 8px;
+        vertical-align: -1px;
+      }
+
+      .l1::before { background: #274c77; }
+      .l2::before { background: #3f7d4d; }
+      .l3::before { background: #b25a21; }
+      .l4::before { background: #8c5bb1; }
+      .l5::before { background: #2b8b97; }
+
+      .chart-box {
+        height: 300px;
+        border: 1px dashed var(--line-strong);
+        border-radius: 18px;
+        background:
+          linear-gradient(to right, transparent 0, transparent calc(20% - 1px), rgba(190,179,160,0.22) calc(20% - 1px), rgba(190,179,160,0.22) 20%, transparent 20%),
+          linear-gradient(to right, transparent 0, transparent calc(40% - 1px), rgba(190,179,160,0.22) calc(40% - 1px), rgba(190,179,160,0.22) 40%, transparent 40%),
+          linear-gradient(to right, transparent 0, transparent calc(60% - 1px), rgba(190,179,160,0.22) calc(60% - 1px), rgba(190,179,160,0.22) 60%, transparent 60%),
+          linear-gradient(to right, transparent 0, transparent calc(80% - 1px), rgba(190,179,160,0.22) calc(80% - 1px), rgba(190,179,160,0.22) 80%, transparent 80%),
+          linear-gradient(to top, rgba(190,179,160,0.16) 1px, transparent 1px);
+        background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%, 100% 20%;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .curve {
+        position: absolute;
+        inset: 0;
+      }
+
+      .curve svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      .heatmap {
+        margin-top: 16px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .heat-head,
+      .heat-row {
+        display: grid;
+        grid-template-columns: 200px repeat(7, minmax(0, 1fr));
+        gap: 8px;
+        align-items: center;
+      }
+
+      .heat-head {
+        font-size: 11px;
+        color: var(--ink-faint);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+
+      .topic-name {
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .heat-cell {
+        border-radius: 10px;
+        padding: 8px 0;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: #fff;
+      }
+
+      .c1 { background: #e7edf7; color: #54606f; }
+      .c2 { background: #c9d7ef; color: #23384f; }
+      .c3 { background: #98b4e3; }
+      .c4 { background: #5f8fd6; }
+      .c5 { background: #274c77; }
+
+      .table {
+        margin-top: 16px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        overflow: hidden;
+        background: var(--panel);
+      }
+
+      .table-head,
+      .table-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.7fr) 90px 90px 110px 110px;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 16px;
+      }
+
+      .table-head {
+        background: rgba(250,246,238,0.95);
+        border-bottom: 1px solid var(--line);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+
+      .table-row {
+        border-top: 1px solid #ece4d6;
+        font-size: 14px;
+      }
+
+      .delta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .up { background: #edf6ef; color: #2f6b42; }
+      .flat { background: #eef1f5; color: #5d6672; }
+
+      @media (max-width: 980px) {
+        .header { display: grid; grid-template-columns: 1fr; }
+      }
+
+      @media (max-width: 760px) {
+        .heat-head,
+        .heat-row,
+        .table-head,
+        .table-row {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .page { padding: 18px 14px 40px; }
+        .header, .panel { border-radius: 22px; }
+        h1 { font-size: 34px; }
+        h2 { font-size: 24px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="header">
+        <div>
+          <div class="eyebrow">Pulse Analysis Desk</div>
+          <h1>Topic Pulse</h1>
+          <p class="lede">構成は変えず、トレンドを読む analysis desk に寄せる。主役は折れ線チャート、その下にヒートマップ、最後に rising topics table を置く。</p>
+        </div>
+        <div class="filters">
+          <div class="control">7日</div>
+          <div class="control">Top 12</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-kicker">Trend Chart</div>
+        <h2>トピックの伸びを時系列で追う</h2>
+        <p class="copy">主役は折れ線チャート。どのトピックがこの数日で伸びてきたかを、まず全幅で落ち着いて読む。</p>
+        <div class="chart-frame">
+          <div class="legend">
+            <span class="l1">AI Agents</span>
+            <span class="l2">Frontend Infra</span>
+            <span class="l3">Design Systems</span>
+            <span class="l4">Mistral Models</span>
+            <span class="l5">RSS Workflows</span>
+          </div>
+          <div class="chart-box">
+            <div class="curve">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+                <polyline fill="none" stroke="#274c77" stroke-width="1.3" points="0,76 15,70 30,72 45,58 60,50 75,42 100,26" />
+                <polyline fill="none" stroke="#3f7d4d" stroke-width="1.3" points="0,82 15,79 30,75 45,68 60,55 75,49 100,46" />
+                <polyline fill="none" stroke="#b25a21" stroke-width="1.3" points="0,64 15,63 30,61 45,57 60,54 75,50 100,48" />
+                <polyline fill="none" stroke="#8c5bb1" stroke-width="1.3" points="0,90 15,89 30,83 45,75 60,66 75,58 100,55" />
+                <polyline fill="none" stroke="#2b8b97" stroke-width="1.3" points="0,74 15,73 30,69 45,68 60,62 75,59 100,52" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+          <div class="panel-kicker">Heatmap</div>
+          <h2>話題の密度を見る</h2>
+          <p class="copy">折れ線で流れを読んだあとに、ヒートマップでどの日にどの話題が濃かったかを面で確認する。</p>
+          <div class="heatmap">
+            <div class="heat-head">
+              <div>Topic</div>
+              <div>03-16</div>
+              <div>03-17</div>
+              <div>03-18</div>
+              <div>03-19</div>
+              <div>03-20</div>
+              <div>03-21</div>
+              <div>03-22</div>
+            </div>
+            <div class="heat-row">
+              <div class="topic-name">AI Agents</div>
+              <div class="heat-cell c2">4</div><div class="heat-cell c3">6</div><div class="heat-cell c2">3</div><div class="heat-cell c4">8</div><div class="heat-cell c4">9</div><div class="heat-cell c5">12</div><div class="heat-cell c4">8</div>
+            </div>
+            <div class="heat-row">
+              <div class="topic-name">Frontend Infra</div>
+              <div class="heat-cell c1">1</div><div class="heat-cell c2">4</div><div class="heat-cell c3">5</div><div class="heat-cell c3">6</div><div class="heat-cell c4">8</div><div class="heat-cell c3">5</div><div class="heat-cell c3">5</div>
+            </div>
+            <div class="heat-row">
+              <div class="topic-name">Design Systems</div>
+              <div class="heat-cell c2">2</div><div class="heat-cell c2">3</div><div class="heat-cell c2">3</div><div class="heat-cell c3">5</div><div class="heat-cell c3">5</div><div class="heat-cell c3">6</div><div class="heat-cell c3">6</div>
+            </div>
+          </div>
+      </section>
+
+      <section class="panel">
+          <div class="panel-kicker">Rising Topics</div>
+          <h2>いま伸びている話題</h2>
+          <p class="copy">最後に table で着地する。delta、total、max score を並べて、どのトピックを今すぐ開くかを決める。</p>
+          <div class="table">
+            <div class="table-head">
+              <div>Topic</div>
+              <div>Total</div>
+              <div>Delta</div>
+              <div>Max Score</div>
+              <div>Open</div>
+            </div>
+            <div class="table-row">
+              <div>AI Agents</div>
+              <div>42</div>
+              <div><span class="delta up">+9</span></div>
+              <div>0.92</div>
+              <div>記事を開く</div>
+            </div>
+            <div class="table-row">
+              <div>Frontend Infra</div>
+              <div>31</div>
+              <div><span class="delta up">+5</span></div>
+              <div>0.81</div>
+              <div>記事を開く</div>
+            </div>
+            <div class="table-row">
+              <div>Design Systems</div>
+              <div>27</div>
+              <div><span class="delta flat">0</span></div>
+              <div>0.76</div>
+              <div>記事を開く</div>
+            </div>
+          </div>
+      </section>
+    </main>
+  </body>
+</html>

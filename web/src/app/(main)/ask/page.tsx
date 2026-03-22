@@ -123,7 +123,8 @@ export default function AskPage() {
       <div className="space-y-5 overflow-x-hidden">
         <PageHeader
           eyebrow="Ask Desk"
-          title={<span className="font-serif">{t("ask.title")}</span>}
+          title={t("ask.title")}
+          titleIcon={Search}
           description={t("ask.subtitle")}
         />
 

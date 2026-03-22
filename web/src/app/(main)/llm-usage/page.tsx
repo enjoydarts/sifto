@@ -690,7 +690,8 @@ export default function LLMUsagePage() {
     <div className="space-y-6 overflow-x-hidden">
       <PageHeader
         eyebrow={t("llm.title")}
-        title={<span className="font-serif">{t("llm.title")}</span>}
+        title={t("llm.title")}
+        titleIcon={Brain}
         description={t("llm.subtitle")}
         compact
         meta={

@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Layers3 } from "lucide-react";
 import { api, BriefingCluster, Item } from "@/lib/api";
 import { PageTransition } from "@/components/page-transition";
+import { PageHeader } from "@/components/ui/page-header";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 
@@ -115,26 +117,17 @@ export default function ClustersPage() {
   return (
     <PageTransition>
       <div className="space-y-6">
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-                {t("clusters.eyebrow")}
-              </div>
-              <h1 className="mt-2 font-serif text-[40px] leading-[1.08] tracking-[-0.04em] text-[var(--color-editorial-ink)] md:text-[44px]">
-                {t("clusters.title")}
-              </h1>
-              <p className="mt-3 max-w-[70ch] text-[15px] leading-8 text-[var(--color-editorial-ink-soft)]">
-                {t("clusters.subtitle")}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1.5 text-xs text-[var(--color-editorial-ink-soft)]">
-                {rows.length} {t("clusters.summary.clusterCountSuffix")} / {totalUnread} {t("clusters.summary.unreadCountSuffix")}
-              </span>
-            </div>
-          </div>
-        </section>
+        <PageHeader
+          eyebrow={t("clusters.eyebrow")}
+          title={t("nav.clusters")}
+          titleIcon={Layers3}
+          description={t("clusters.subtitle")}
+          meta={
+            <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1.5 text-xs text-[var(--color-editorial-ink-soft)]">
+              {rows.length} {t("clusters.summary.clusterCountSuffix")} / {totalUnread} {t("clusters.summary.unreadCountSuffix")}
+            </span>
+          }
+        />
 
         {briefingQuery.isLoading && !briefingQuery.data ? (
           <section className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.72)] px-5 py-5 text-sm text-[var(--color-editorial-ink-soft)] shadow-[var(--shadow-card)]">

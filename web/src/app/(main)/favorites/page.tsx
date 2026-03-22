@@ -11,6 +11,7 @@ import { InlineReader } from "@/components/inline-reader";
 import { useConfirm } from "@/components/confirm-provider";
 import { EmptyState } from "@/components/empty-state";
 import { PageTransition } from "@/components/page-transition";
+import { PageHeader } from "@/components/ui/page-header";
 import { Thumbnail } from "@/components/thumbnail";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -171,24 +172,22 @@ export default function FavoritesPage() {
     <PageTransition>
       <div className="space-y-6 overflow-x-hidden">
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(340px,0.82fr)]">
-          <div className="rounded-[28px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.78)] px-6 py-6 shadow-[var(--shadow-card)] md:px-7">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-              {t("favorites.eyebrow")}
-            </div>
-            <h1 className="mt-3 font-serif text-[40px] leading-[1.08] tracking-[-0.04em] text-[var(--color-editorial-ink)] md:text-[44px]">
-              {t("favorites.title")}
-            </h1>
-            <p className="mt-4 max-w-[64ch] text-[15px] leading-8 text-[var(--color-editorial-ink-soft)]">
-              {t("favorites.subtitle")}
-            </p>
-            <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-xs text-[var(--color-editorial-ink-soft)]">
+          <PageHeader
+            title={t("favorites.title")}
+            titleIcon={Star}
+            eyebrow={t("favorites.eyebrow")}
+            description={t("favorites.subtitle")}
+            compact
+            actions={
+              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-xs text-[var(--color-editorial-ink-soft)]">
               <Star className="size-3.5 fill-current text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
               <span>
                 {total}
                 {locale === "ja" ? t("favorites.countSuffix") : ` ${t("favorites.countSuffix")}`}
               </span>
             </div>
-          </div>
+            }
+          />
 
           <div className="rounded-[24px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,253,249,0.98))] px-5 py-5 shadow-[var(--shadow-card)]">
             <h2 className="font-serif text-[24px] leading-[1.2] text-[var(--color-editorial-ink)]">

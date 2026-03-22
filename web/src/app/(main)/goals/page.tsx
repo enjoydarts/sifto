@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Brain } from "lucide-react";
+import { Target } from "lucide-react";
 import { api, ReadingGoal } from "@/lib/api";
 import { PageTransition } from "@/components/page-transition";
 import { PageHeader } from "@/components/ui/page-header";
@@ -133,12 +133,8 @@ export default function GoalsPage() {
     <PageTransition>
       <div className="space-y-6">
         <PageHeader
-          title={
-            <span className="flex items-center gap-2 font-serif">
-              <Brain className="size-5 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
-              <span>{t("settings.readingGoals.title")}</span>
-            </span>
-          }
+          title={t("settings.readingGoals.title")}
+          titleIcon={Target}
           description={t("settings.readingGoals.description")}
           actions={
             <div className="flex flex-wrap items-center gap-2">

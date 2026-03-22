@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 
 type ModelOption = {
@@ -87,31 +87,41 @@ export default function ModelSelect({
     [options, pendingValue],
   );
 
-  useEffect(() => {
-    if (!open) {
-      setQuery("");
-      setProviderFilter("");
-      setPendingValue(null);
+  const closeSelect = useCallback(() => {
+    setQuery("");
+    setProviderFilter("");
+    setPendingValue(null);
+    setOpen(false);
+  }, []);
+
+  const toggleSelect = useCallback(() => {
+    if (open) {
+      closeSelect();
       return;
     }
+    setOpen(true);
+  }, [closeSelect, open]);
+
+  useEffect(() => {
+    if (!open) return;
     searchInputRef.current?.focus();
   }, [open]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+        closeSelect();
       }
     }
     if (!open) return;
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [open]);
+  }, [closeSelect, open]);
 
   const selectAndClose = (nextValue: string) => {
     onChange(nextValue);
     setPendingValue(null);
-    setOpen(false);
+    closeSelect();
   };
 
   if (variant === "modal") {
@@ -120,7 +130,7 @@ export default function ModelSelect({
         {!hideLabel ? <label className="block text-sm font-medium text-zinc-700">{label}</label> : null}
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={toggleSelect}
           className={`${hideLabel ? "" : "mt-1 "}flex w-full items-start justify-between gap-3 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-left text-sm text-zinc-900 shadow-sm hover:border-zinc-400`}
         >
           <span className="min-w-0">
@@ -137,7 +147,7 @@ export default function ModelSelect({
         </button>
 
         {open ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 py-6" onClick={() => setOpen(false)}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 py-6" onClick={closeSelect}>
             <div
               className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl"
               onClick={(event) => event.stopPropagation()}
@@ -149,7 +159,7 @@ export default function ModelSelect({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setOpen(false)}
+                  onClick={closeSelect}
                   className="inline-flex size-9 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:border-zinc-400 hover:text-zinc-900"
                   aria-label={labels.close}
                 >
@@ -269,7 +279,7 @@ export default function ModelSelect({
       {!hideLabel ? <label className="block text-sm font-medium text-zinc-700">{label}</label> : null}
       <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={toggleSelect}
         className={`${hideLabel ? "" : "mt-1 "}flex w-full items-start justify-between gap-3 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-left text-sm text-zinc-900 shadow-sm hover:border-zinc-400`}
       >
         <span className="min-w-0">
@@ -303,7 +313,7 @@ export default function ModelSelect({
               type="button"
               onClick={() => {
                 onChange("");
-                setOpen(false);
+                closeSelect();
               }}
               className={`flex w-full items-start justify-between rounded-lg px-3 py-2 text-left hover:bg-zinc-50 ${
                 value === "" ? "bg-zinc-100" : ""
@@ -329,7 +339,7 @@ export default function ModelSelect({
                         type="button"
                         onClick={() => {
                           onChange(opt.value);
-                          setOpen(false);
+                          closeSelect();
                         }}
                         className={`flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left hover:bg-zinc-50 ${
                           value === opt.value ? "bg-zinc-100" : ""

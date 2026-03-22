@@ -1,10 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { type LucideIcon } from "lucide-react";
 
 type PageHeaderProps = {
   eyebrow?: ReactNode;
   title: ReactNode;
+  titleIcon?: LucideIcon;
   description?: ReactNode;
   meta?: ReactNode;
   actions?: ReactNode;
@@ -19,12 +21,27 @@ function joinClassNames(...parts: Array<string | false | null | undefined>) {
 export function PageHeader({
   eyebrow,
   title,
+  titleIcon,
   description,
   meta,
   actions,
   compact = false,
   className = "",
 }: PageHeaderProps) {
+  const resolvedTitle =
+    typeof title === "string" || typeof title === "number" ? <span className="font-serif">{title}</span> : title;
+  const titleNode = titleIcon ? (
+    <span className="flex items-center gap-2 font-serif">
+      {(() => {
+        const Icon = titleIcon;
+        return <Icon className="size-6 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />;
+      })()}
+      {resolvedTitle}
+    </span>
+  ) : (
+    resolvedTitle
+  );
+
   return (
     <section
       className={joinClassNames(
@@ -54,7 +71,7 @@ export function PageHeader({
                 compact ? "text-[1.65rem] leading-none sm:text-[1.8rem]" : "text-[2rem] sm:text-[2.6rem]"
               )}
             >
-              {title}
+              {titleNode}
             </h1>
             {description && (
               <div className={joinClassNames(

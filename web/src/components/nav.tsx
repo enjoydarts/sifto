@@ -216,7 +216,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
             </Link>
 
             <nav className="flex min-w-0 flex-1 flex-wrap gap-2">
-              {primaryLinks.map(({ href, activeHref, labelKey, icon: Icon }) => {
+              {primaryLinks.map(({ href, activeHref, labelKey }) => {
                 const active = isLinkActive(href, activeHref);
                 return (
                   <Link

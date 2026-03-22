@@ -604,7 +604,8 @@ function ItemsPageContent() {
               compact
               className="overflow-hidden"
               eyebrow={t("items.state.eyebrow")}
-              title={t("items.title")}
+              title={t("nav.items")}
+              titleIcon={Newspaper}
               description={`${t(pageSubtitleKey)} · ${itemsTotal.toLocaleString()} ${t("common.rows")}`}
               meta={(
                 <div className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">

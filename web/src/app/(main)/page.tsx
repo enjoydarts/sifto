@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Bell, BookOpen, Flame, Sparkles, X } from "lucide-react";
 import { api, BriefingCluster, Item, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
@@ -32,8 +32,10 @@ export default function BriefingPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
-  const [dismissedModelUpdatesAt, setDismissedModelUpdatesAt] = useState<string | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  const [dismissedModelUpdatesAt, setDismissedModelUpdatesAt] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(MODEL_UPDATES_DISMISSED_AT_KEY);
+  });
   const briefingQuery = useQuery({
     queryKey: ["briefing-today", 18] as const,
     queryFn: () => api.getBriefingToday({ size: 18 }),
@@ -206,13 +208,6 @@ export default function BriefingPage() {
     setDismissedModelUpdatesAt(latest);
   };
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setHydrated(true);
-    setDismissedModelUpdatesAt(window.localStorage.getItem(MODEL_UPDATES_DISMISSED_AT_KEY));
-  }, []);
-
-  const isRefreshing = hydrated && briefingQuery.isFetching;
   const refreshBriefingData = async () => {
     const next = await api.getBriefingToday({ size: 18, cache_bust: true });
     queryClient.setQueryData(["briefing-today", 18], next);

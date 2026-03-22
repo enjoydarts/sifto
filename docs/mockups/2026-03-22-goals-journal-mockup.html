@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Goals Journal Mockup</title>
+    <style>
+      :root {
+        --bg: #f6f1e8;
+        --paper: #fbf8f2;
+        --panel: #fffdf9;
+        --panel-strong: #fffaf1;
+        --line: #d9d1c4;
+        --line-strong: #beb3a0;
+        --ink: #1f1a17;
+        --ink-soft: #5f554b;
+        --ink-faint: #8b7f71;
+        --accent: #234a73;
+        --good-bg: #edf6ef;
+        --good-ink: #2f6b42;
+        --warn-bg: #faf1dd;
+        --warn-ink: #916321;
+        --shadow: 0 18px 40px rgba(48, 33, 17, 0.08);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, rgba(255,255,255,0.65), transparent 30%),
+          linear-gradient(180deg, #f8f3ea 0%, var(--bg) 100%);
+        color: var(--ink);
+        font-family: "Sawarabi Gothic", "Hiragino Sans", sans-serif;
+      }
+
+      .page {
+        max-width: 1360px;
+        margin: 0 auto;
+        padding: 28px 20px 56px;
+      }
+
+      .header,
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,253,249,0.96)), var(--paper);
+        box-shadow: var(--shadow);
+      }
+
+      .header {
+        display: grid;
+        gap: 16px;
+        padding: 24px 28px;
+      }
+
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      h1 {
+        margin: 8px 0 0;
+        font-family: "Sawarabi Mincho", serif;
+        font-size: 42px;
+        line-height: 1.02;
+        font-weight: 400;
+        letter-spacing: -0.03em;
+      }
+
+      .lede {
+        margin: 12px 0 0;
+        max-width: 760px;
+        font-size: 15px;
+        line-height: 1.9;
+        color: var(--ink-soft);
+      }
+
+      .hero-grid {
+        margin-top: 20px;
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 16px;
+      }
+
+      .hero-card {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: var(--panel);
+        padding: 20px;
+      }
+
+      .kicker {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+      }
+
+      h2 {
+        margin: 10px 0 0;
+        font-family: "Sawarabi Mincho", serif;
+        font-size: 30px;
+        line-height: 1.08;
+        font-weight: 400;
+      }
+
+      .copy {
+        margin: 10px 0 0;
+        font-size: 14px;
+        line-height: 1.8;
+        color: var(--ink-soft);
+      }
+
+      .goal-line {
+        margin-top: 18px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .pill {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel-strong);
+        padding: 8px 12px;
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+
+      .progress {
+        margin-top: 18px;
+      }
+
+      .bar {
+        height: 8px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #ece4d6;
+      }
+
+      .bar > span {
+        display: block;
+        width: 68%;
+        height: 100%;
+        border-radius: 999px;
+        background: var(--ink);
+      }
+
+      .progress-meta {
+        margin-top: 10px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+
+      .status-box {
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: var(--panel-strong);
+        padding: 18px;
+      }
+
+      .status-number {
+        margin-top: 10px;
+        font-family: "Sawarabi Mincho", serif;
+        font-size: 34px;
+        line-height: 1;
+      }
+
+      .status-note {
+        margin-top: 10px;
+        font-size: 13px;
+        line-height: 1.7;
+        color: var(--ink-soft);
+      }
+
+      .sections {
+        margin-top: 20px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .panel {
+        padding: 20px;
+      }
+
+      .list {
+        margin-top: 16px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .entry {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: var(--panel);
+        padding: 16px;
+      }
+
+      .entry-title {
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .entry-copy {
+        margin-top: 8px;
+        font-size: 13px;
+        line-height: 1.8;
+        color: var(--ink-soft);
+      }
+
+      .entry-meta {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tag {
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 12px;
+        border: 1px solid var(--line);
+        background: var(--panel-strong);
+        color: var(--ink-soft);
+      }
+
+      .tag.good { background: var(--good-bg); color: var(--good-ink); border-color: #c8ddcc; }
+      .tag.warn { background: var(--warn-bg); color: var(--warn-ink); border-color: #ead5af; }
+
+      .journal {
+        margin-top: 20px;
+      }
+
+      .note {
+        border-left: 3px solid var(--ink);
+        padding: 0 0 0 14px;
+      }
+
+      .note + .note {
+        margin-top: 18px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        border-left-width: 3px;
+      }
+
+      .note-date {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+
+      .note-title {
+        margin-top: 8px;
+        font-family: "Sawarabi Mincho", serif;
+        font-size: 22px;
+        line-height: 1.2;
+      }
+
+      .note-copy {
+        margin-top: 10px;
+        font-size: 14px;
+        line-height: 1.9;
+        color: var(--ink-soft);
+      }
+
+      @media (max-width: 980px) {
+        .hero-grid,
+        .sections {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .page { padding: 18px 14px 40px; }
+        .header, .panel { border-radius: 22px; }
+        h1 { font-size: 34px; }
+        h2 { font-size: 24px; }
+        .progress-meta { display: grid; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="header">
+        <div class="eyebrow">Goals Journal</div>
+        <div>
+          <h1>Reading Goals</h1>
+          <p class="lede">設定画面ではなく、目標の運用ノートとして見せる。いま何を目指しているか、どこまで進んだか、どう調整したかを一続きで読める構成にする。</p>
+        </div>
+      </section>
+
+      <section class="hero-grid">
+        <article class="hero-card">
+          <div class="kicker">Current Goal</div>
+          <h2>平日は 6 本、週末は 10 本を読む</h2>
+          <p class="copy">ニュース全体を広く追うより、設計・AI・プロダクト運用に関わる記事を優先して読み切る。今週は “読み残しを増やさない” が最優先。</p>
+          <div class="goal-line">
+            <span class="pill">平日: 6 本</span>
+            <span class="pill">週末: 10 本</span>
+            <span class="pill">未読優先</span>
+            <span class="pill">お気に入りを再訪</span>
+          </div>
+          <div class="progress">
+            <div class="bar"><span></span></div>
+            <div class="progress-meta">
+              <span>今日 4 / 6 本</span>
+              <span>今週 29 / 42 本</span>
+              <span>達成率 68%</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="status-box">
+          <div class="kicker">This Week</div>
+          <div class="status-number">+3</div>
+          <div class="status-note">先週より 3 本多く読めている。要約だけ読んで流した件数は減り、詳細まで読んだ割合は増えている。</div>
+          <div class="goal-line">
+            <span class="tag good">detail read up</span>
+            <span class="tag warn">later queue still heavy</span>
+          </div>
+        </article>
+      </section>
+
+      <section class="sections">
+        <section class="panel">
+          <div class="kicker">Today / This Week</div>
+          <h2>進み具合と次の調整</h2>
+          <div class="list">
+            <article class="entry">
+              <div class="entry-title">今日の読み進め</div>
+              <p class="entry-copy">午前で 2 本、午後で 2 本。設計・AI 運用の記事に偏っていて、ニュース全体の幅は少し狭い。</p>
+              <div class="entry-meta">
+                <span class="tag">4 / 6 本</span>
+                <span class="tag">あと 2 本</span>
+                <span class="tag warn">topic diversity low</span>
+              </div>
+            </article>
+            <article class="entry">
+              <div class="entry-title">今週のペース</div>
+              <p class="entry-copy">平日は目標に近いが、あとで読むが積み上がりやすい。金曜の時点で再訪の時間を確保する必要がある。</p>
+              <div class="entry-meta">
+                <span class="tag">29 / 42 本</span>
+                <span class="tag">未読 17 本</span>
+                <span class="tag good">pace stable</span>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="kicker">Adjustment Notes</div>
+          <h2>調整メモと短い振り返り</h2>
+          <div class="journal">
+            <article class="note">
+              <div class="note-date">2026-03-22</div>
+              <div class="note-title">要約だけで流す記事を減らす</div>
+              <p class="note-copy">速報系は要約だけで流してもいいが、設計・実装・比較判断に効く記事は本文まで読む。明日から「あとで読む」の上限を厳しくする。</p>
+            </article>
+            <article class="note">
+              <div class="note-date">2026-03-19</div>
+              <div class="note-title">平日目標を 5 本から 6 本へ</div>
+              <p class="note-copy">briefing と triage の改善で処理速度が上がったので、目標本数を増やした。週後半で失速しないかを 1 週間だけ観察する。</p>
+            </article>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

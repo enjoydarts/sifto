@@ -3,6 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useEffect } from "react";
 import { useUser } from "@clerk/nextjs";
+import { Bug } from "lucide-react";
 import { api, BulkRetryFailedResult, DigestDetail } from "@/lib/api";
 import { PageTransition } from "@/components/page-transition";
 import { PageHeader } from "@/components/ui/page-header";
@@ -1202,10 +1203,11 @@ export default function DebugDigestsPage() {
   return (
     <PageTransition>
       <div className="space-y-6">
-        <PageHeader
-          title="Debug Digests"
-          description={helperText}
-        />
+      <PageHeader
+        title={t("nav.debug")}
+        titleIcon={Bug}
+        description={helperText}
+      />
 
         {error && (
           <div className="rounded-[22px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-[var(--shadow-card)]">

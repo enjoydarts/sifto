@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { Mail } from "lucide-react";
 import Pagination from "@/components/pagination";
 import { PageTransition } from "@/components/page-transition";
 import { useI18n } from "@/components/i18n-provider";
@@ -116,7 +117,8 @@ export default function DigestsPage() {
       <div className="space-y-5 overflow-x-hidden">
         <PageHeader
           eyebrow="Digest Archive"
-          title={<span className="font-serif">{t("digests.title")}</span>}
+          title={t("nav.digests")}
+          titleIcon={Mail}
           description={t("digests.archiveSubtitle")}
           meta={
             <div className="flex flex-wrap gap-2 text-xs">

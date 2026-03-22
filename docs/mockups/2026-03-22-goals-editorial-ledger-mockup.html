@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Goals Editorial Ledger Mockup</title>
+    <style>
+      :root {
+        --bg: #f6f1e8;
+        --paper: #fbf8f2;
+        --panel: #fffdf9;
+        --panel-strong: #fffaf1;
+        --line: #d9d1c4;
+        --line-strong: #beb3a0;
+        --ink: #1f1a17;
+        --ink-soft: #5f554b;
+        --ink-faint: #8b7f71;
+        --accent: #234a73;
+        --danger: #9a4337;
+        --shadow: 0 18px 40px rgba(48, 33, 17, 0.08);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Sawarabi Gothic", "Hiragino Sans", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(255,255,255,0.65), transparent 30%),
+          linear-gradient(180deg, #f8f3ea 0%, var(--bg) 100%);
+      }
+
+      .page {
+        max-width: 1360px;
+        margin: 0 auto;
+        padding: 28px 20px 56px;
+      }
+
+      .header,
+      .section,
+      .modal {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,253,249,0.96)), var(--paper);
+        box-shadow: var(--shadow);
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: flex-end;
+        padding: 24px 28px;
+      }
+
+      .eyebrow {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: var(--accent);
+      }
+
+      h1 {
+        margin: 10px 0 0;
+        font-family: "Sawarabi Mincho", serif;
+        font-size: 42px;
+        line-height: 1.02;
+        font-weight: 400;
+        letter-spacing: -0.03em;
+      }
+
+      .lede {
+        margin: 12px 0 0;
+        max-width: 760px;
+        font-size: 15px;
+        line-height: 1.9;
+        color: var(--ink-soft);
+      }
+
+      .header-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .badge,
+      .button,
+      .pill {
+        border-radius: 999px;
+        border: 1px solid var(--line);
+      }
+
+      .badge {
+        padding: 8px 12px;
+        font-size: 12px;
+        color: var(--ink-soft);
+        background: var(--panel);
+      }
+
+      .button {
+        padding: 10px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        background: var(--panel);
+        color: var(--ink-soft);
+      }
+
+      .button.primary {
+        background: var(--ink);
+        color: var(--panel);
+        border-color: var(--ink);
+      }
+
+      .section {
+        margin-top: 20px;
+        overflow: hidden;
+      }
+
+      .section-head {
+        border-bottom: 1px solid var(--line);
+        background: rgba(250,246,238,0.95);
+        padding: 16px 20px;
+      }
+
+      .section-head-title {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--ink-faint);
+      }
+
+      .section-head-row {
+        margin-top: 8px;
+        display: grid;
+        grid-template-columns: minmax(0, 1.8fr) 96px 120px 220px;
+        gap: 16px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--ink-faint);
+        font-weight: 700;
+      }
+
+      .goal-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1.8fr) 96px 120px 220px;
+        gap: 16px;
+        align-items: center;
+        padding: 18px 20px;
+        border-top: 1px solid #ece4d6;
+        background: rgba(255,255,255,0.55);
+      }
+
+      .goal-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--ink);
+      }
+
+      .goal-copy {
+        margin-top: 8px;
+        font-size: 13px;
+        line-height: 1.8;
+        color: var(--ink-soft);
+      }
+
+      .priority {
+        font-family: "Sawarabi Mincho", serif;
+        font-size: 24px;
+        line-height: 1;
+      }
+
+      .due {
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        font-size: 13px;
+      }
+
+      .actions a {
+        color: var(--ink-soft);
+        text-decoration: none;
+      }
+
+      .actions a.danger {
+        color: var(--danger);
+      }
+
+      .empty {
+        padding: 24px 20px;
+        color: var(--ink-faint);
+        font-size: 14px;
+      }
+
+      .archived {
+        border-top: 1px solid var(--line);
+        background: rgba(250,246,238,0.72);
+        padding: 18px 20px;
+      }
+
+      .archived-title {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--ink-faint);
+      }
+
+      .archived-list {
+        margin-top: 14px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .archived-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .archived-row:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .archived-name {
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+
+      .restore {
+        font-size: 12px;
+        color: var(--ink);
+      }
+
+      .modal-wrap {
+        margin-top: 24px;
+        display: flex;
+        justify-content: center;
+      }
+
+      .modal {
+        width: 100%;
+        max-width: 760px;
+        padding: 22px;
+      }
+
+      .modal-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      h2 {
+        margin: 8px 0 0;
+        font-family: "Sawarabi Mincho", serif;
+        font-size: 30px;
+        line-height: 1.08;
+        font-weight: 400;
+      }
+
+      .copy {
+        margin: 10px 0 0;
+        font-size: 14px;
+        line-height: 1.8;
+        color: var(--ink-soft);
+      }
+
+      .form {
+        margin-top: 18px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .label {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink-soft);
+      }
+
+      .field,
+      .textarea,
+      .select {
+        width: 100%;
+        margin-top: 8px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel);
+        padding: 12px 14px;
+        font: inherit;
+        color: var(--ink);
+      }
+
+      .textarea { min-height: 124px; resize: vertical; }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+
+      .modal-actions {
+        margin-top: 18px;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      @media (max-width: 920px) {
+        .header {
+          display: grid;
+          align-items: start;
+        }
+
+        .section-head-row,
+        .goal-row {
+          grid-template-columns: 1fr;
+        }
+
+        .grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .page { padding: 18px 14px 40px; }
+        .header, .section, .modal { border-radius: 22px; }
+        h1 { font-size: 34px; }
+        h2 { font-size: 24px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="header">
+        <div>
+          <div class="eyebrow">Goals Ledger</div>
+          <h1>Reading Goals</h1>
+          <p class="lede">現在の機能構成はそのままに、active goals、archived、create/edit modal を同じ editorial tone に揃える。目標の管理台帳として読みやすく整理する。</p>
+        </div>
+        <div class="header-actions">
+          <div class="badge">active 3 / 7</div>
+          <button class="button primary">目標を追加</button>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div class="section-head-title">Active Goals</div>
+          <div class="section-head-row">
+            <div>Goal</div>
+            <div>Priority</div>
+            <div>Due Date</div>
+            <div>Actions</div>
+          </div>
+        </div>
+
+        <article class="goal-row">
+          <div>
+            <div class="goal-title">設計判断に効く記事を平日 6 本読む</div>
+            <p class="goal-copy">AI、設計、プロダクト運用の記事を優先し、要約だけで流さず本文まで読む。速報よりも意思決定に効く記事を重視する。</p>
+          </div>
+          <div class="priority">P4</div>
+          <div class="due">2026-03-31</div>
+          <div class="actions">
+            <a href="#">編集</a>
+            <a href="#">アーカイブ</a>
+            <a href="#" class="danger">削除</a>
+          </div>
+        </article>
+
+        <article class="goal-row">
+          <div>
+            <div class="goal-title">お気に入りを週 2 回は再訪する</div>
+            <p class="goal-copy">保存したまま放置しない。週中と週末に 1 回ずつ見直して、再読から insight を作る。</p>
+          </div>
+          <div class="priority">P3</div>
+          <div class="due">—</div>
+          <div class="actions">
+            <a href="#">編集</a>
+            <a href="#">アーカイブ</a>
+            <a href="#" class="danger">削除</a>
+          </div>
+        </article>
+
+        <article class="goal-row">
+          <div>
+            <div class="goal-title">週末に未読キューを 10 本以上減らす</div>
+            <p class="goal-copy">平日に積み上がった未読を週末で解消する。あとで読むへの逃がしすぎを防ぐための調整目標。</p>
+          </div>
+          <div class="priority">P2</div>
+          <div class="due">2026-04-07</div>
+          <div class="actions">
+            <a href="#">編集</a>
+            <a href="#">アーカイブ</a>
+            <a href="#" class="danger">削除</a>
+          </div>
+        </article>
+
+        <div class="archived">
+          <div class="archived-title">Archived</div>
+          <div class="archived-list">
+            <div class="archived-row">
+              <div class="archived-name">デザイン記事だけを毎日 3 本読む</div>
+              <div class="restore">復元</div>
+            </div>
+            <div class="archived-row">
+              <div class="archived-name">朝に digest を必ず全部読む</div>
+              <div class="restore">復元</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="modal-wrap">
+        <section class="modal">
+          <div class="modal-head">
+            <div>
+              <div class="eyebrow">Goal Modal</div>
+              <h2>読書目標を編集</h2>
+              <p class="copy">active 目標は最大 7 件。タイトル、説明、優先度、期限だけを静かな面で編集する。</p>
+            </div>
+            <button class="button">閉じる</button>
+          </div>
+
+          <div class="form">
+            <label class="label">目標タイトル
+              <input class="field" value="設計判断に効く記事を平日 6 本読む" />
+            </label>
+
+            <label class="label">説明
+              <textarea class="textarea">AI、設計、プロダクト運用の記事を優先し、要約だけで流さず本文まで読む。速報よりも意思決定に効く記事を重視する。</textarea>
+            </label>
+
+            <div class="grid-2">
+              <label class="label">優先度
+                <select class="select">
+                  <option>P5</option>
+                  <option selected>P4</option>
+                  <option>P3</option>
+                  <option>P2</option>
+                  <option>P1</option>
+                </select>
+              </label>
+              <label class="label">期限
+                <input class="field" type="date" value="2026-03-31" />
+              </label>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button class="button">キャンセル</button>
+            <button class="button primary">更新する</button>
+          </div>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Brain, Filter } from "lucide-react";
+import { Brain, Filter, TableProperties } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -616,7 +616,8 @@ export default function LLMAnalysisPage() {
     <div className="space-y-6 overflow-x-hidden">
       <PageHeader
         eyebrow={t("llmAnalysis.title")}
-        title={<span className="font-serif">{t("llmAnalysis.title")}</span>}
+        title={t("llmAnalysis.title")}
+        titleIcon={TableProperties}
         description={t("llmAnalysis.subtitle")}
         compact
         meta={

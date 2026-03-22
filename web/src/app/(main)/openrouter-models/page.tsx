@@ -351,12 +351,8 @@ export default function OpenRouterModelsPage() {
     <PageTransition>
       <div className="space-y-6 overflow-x-hidden">
         <PageHeader
-          title={
-            <span className="flex items-center gap-2 font-serif">
-              <Link2 className="size-6 text-[var(--color-editorial-ink-faint)]" aria-hidden="true" />
-              <span>{t("openrouterModels.title")}</span>
-            </span>
-          }
+          title={t("nav.openrouterModels")}
+          titleIcon={Link2}
           description={t("openrouterModels.subtitle")}
           actions={
             <button

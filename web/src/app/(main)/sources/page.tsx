@@ -792,9 +792,14 @@ export default function SourcesPage() {
                               <div className="text-sm font-semibold leading-7 text-[var(--color-editorial-ink)]">{suggestion.title ?? suggestion.url}</div>
                               {suggestion.title ? <div className="truncate text-xs text-[var(--color-editorial-ink-soft)]">{suggestion.url}</div> : null}
                               {suggestion.reasons.length > 0 ? (
-                                <div className="mt-2 flex flex-wrap gap-2">
+                                <div className="mt-3 space-y-2">
                                   {suggestion.reasons.slice(0, 2).map((reason) => (
-                                    <Tag key={`${suggestion.url}-${reason}`} tone="subtle">{reason}</Tag>
+                                    <p
+                                      key={`${suggestion.url}-${reason}`}
+                                      className="rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm leading-6 text-[var(--color-editorial-ink-soft)]"
+                                    >
+                                      {reason}
+                                    </p>
                                   ))}
                                 </div>
                               ) : null}
@@ -806,7 +811,7 @@ export default function SourcesPage() {
                                 </div>
                               ) : null}
                               {hasDistinctAIReason && suggestion.ai_reason ? (
-                                <p className="mt-2 text-xs leading-6 text-[var(--color-editorial-ink-soft)]">
+                                <p className="mt-3 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
                                   <span className="font-medium text-[var(--color-editorial-ink)]">{t("sources.suggest.aiReason")}:</span> {suggestion.ai_reason}
                                 </p>
                               ) : null}

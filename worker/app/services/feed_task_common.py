@@ -89,6 +89,7 @@ SEED_SITES_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "url": {"type": "string"},
+                    "title": {"type": "string"},
                     "reason": {"type": "string"},
                 },
                 "required": ["url", "reason"],
@@ -261,6 +262,7 @@ def build_seed_sites_task(
 - 同一ドメインや親URLの周辺だけに限定しない
 - 既存ソースと似たテーマ・編集方針・専門性を持つ別ドメインの媒体を優先する
 - 技術メディア、企業ブログ、研究機関、ニュースレター、専門ブログなども対象に含めてよい
+- 各候補には、人間が読める短いタイトルも付ける
 - RSS/AtomのURLを知っている場合は feed URL を返してよい
 - feed URL が不明な場合はサイトトップURLでよい（後段でRSS探索する）
 
@@ -274,7 +276,7 @@ def build_seed_sites_task(
 返却形式（必須）:
 {{
   "items": [
-    {{"url":"https://...", "reason":"..."}}
+    {{"url":"https://...", "title":"サイト名", "reason":"..."}}
   ]
 }}
 
@@ -299,10 +301,10 @@ Few-shot（避けたい傾向の既存Feed例）:
 
 
 def build_seed_sites_rescue_prompt(existing_sources: list[dict], preferred_topics: list[str]) -> str:
-    return f"""既存ソースと重複しないサイトURL候補を必ず10件以上返してください。JSONのみ。
+    return f"""既存ソースと重複しないサイトURL候補を必ず10件以上返してください。各候補には短いタイトルも付けてください。JSONのみ。
 {{
   "items": [
-    {{"url":"https://...", "reason":"..."}}
+    {{"url":"https://...", "title":"サイト名", "reason":"..."}}
   ]
 }}
 既存ソース:
@@ -337,5 +339,6 @@ def parse_seed_sites_result(text: str, existing_sources: list[dict]) -> list[dic
         url = str(row.get("url") or "").strip()
         if not url or normalize_url_for_match(url) in existing_set:
             continue
-        out.append({"url": url, "reason": str(row.get("reason") or "").strip()[:180]})
+        title = str(row.get("title") or "").strip()[:120]
+        out.append({"url": url, "title": title, "reason": str(row.get("reason") or "").strip()[:180]})
     return out

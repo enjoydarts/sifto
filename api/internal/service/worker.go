@@ -217,8 +217,9 @@ type AskResponse struct {
 }
 
 type SuggestFeedSeedSitesItem struct {
-	URL    string `json:"url"`
-	Reason string `json:"reason"`
+	URL    string  `json:"url"`
+	Title  *string `json:"title,omitempty"`
+	Reason string  `json:"reason"`
 }
 
 type SuggestFeedSeedSitesResponse struct {

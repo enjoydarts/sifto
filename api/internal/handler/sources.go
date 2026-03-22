@@ -1707,12 +1707,15 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 			if a == nil {
 				a = &sourceSuggestionAgg{
 					URL:           seedURL,
-					Title:         nil,
+					Title:         seed.Title,
 					Reasons:       map[string]bool{},
 					MatchedTopics: map[string]bool{},
 					SeedSourceIDs: map[string]bool{},
 				}
 				cands[key] = a
+			}
+			if a.Title == nil && seed.Title != nil && strings.TrimSpace(*seed.Title) != "" {
+				a.Title = seed.Title
 			}
 			reason := "AI提案サイト（登録時にFeed検出）"
 			if strings.TrimSpace(seed.Reason) != "" {

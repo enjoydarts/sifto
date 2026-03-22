@@ -39,6 +39,7 @@ class FeedSeedSuggestionRequest(BaseModel):
 
 class FeedSeedSuggestionItem(BaseModel):
     url: str
+    title: str | None = None
     reason: str
 
 

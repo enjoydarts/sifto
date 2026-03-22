@@ -62,7 +62,10 @@ function pricingSummary(model: OpenRouterModelListEntry) {
   return parts.length > 0 ? `${parts.join(" / ")} / 1M tok` : null;
 }
 
-function syncProgressLabel(t: (key: string, fallback?: string) => string, run: OpenRouterModelsResponse["latest_run"]) {
+function syncProgressLabel(
+  t: (key: string, fallback?: string) => string,
+  run: OpenRouterModelsResponse["latest_run"] | undefined,
+) {
   if (!run || run.translation_target_count <= 0) return null;
   return t("openrouterModels.progressLabel")
     .replace("{{completed}}", String(run.translation_completed_count))

@@ -217,6 +217,7 @@ export default function SourcesPage() {
     setHasLoadedSuggestions(false);
     setLoadingSuggestions(true);
     setSuggestionsError(null);
+    setSuggestionsLLM(null);
     try {
       const res = await api.getSourceSuggestions({ limit: 24 });
       const next = Array.isArray(res.items) ? res.items.map(normalizeSuggestion).filter((v): v is SourceSuggestion => v !== null) : [];

@@ -694,7 +694,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 
 	registered := map[string]bool{}
 	startAt := time.Now()
-	const suggestionMaxLatency = 24 * time.Second
+	const suggestionMaxLatency = 35 * time.Second
 	isOverBudget := func() bool { return time.Since(startAt) >= suggestionMaxLatency }
 	remainingSuggestionBudget := func() time.Duration {
 		if d := suggestionMaxLatency - time.Since(startAt); d > 0 {
@@ -1559,7 +1559,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	for _, s := range sources {
 		existing = append(existing, service.RankFeedSuggestionsExistingSource{URL: s.URL, Title: s.Title})
 	}
-	seedBudget := capDuration(8*time.Second, remainingSuggestionBudget())
+	seedBudget := capDuration(15*time.Second, remainingSuggestionBudget())
 	if seedBudget <= 0 {
 		return map[string]any{
 			"warning": "source suggestion seed skipped due timeout budget",

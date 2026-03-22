@@ -175,7 +175,15 @@ body {
   .animate-slide-out-right,
   .press {
     animation: none !important;
-    transition: none !important;
+  transition: none !important;
+}
+}
+
+@supports (-webkit-overflow-scrolling: touch) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
   }
 }
 

@@ -724,7 +724,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 			remainingSuggestionBudget,
 		)
 	}
-	if !aiReady || len(cands) == 0 {
+	if !aiReady {
 		populateSourceSuggestionsFromProbes(ctx, probes, preferredTopics, registered, cands, remainingSuggestionBudget, discoverRSSFeeds)
 	}
 

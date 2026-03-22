@@ -55,13 +55,13 @@ export function PersonalScoreExplainer({ score, reason, breakdown }: PersonalSco
         ) : null}
       </div>
 
-      <p className="mt-3 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+      <p className="mt-2 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">
         {t("itemDetail.personal.description")}
       </p>
 
-      <div className="mt-4 grid gap-3">
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {rows.map(([key, label, component]) => (
-          <div key={key} className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-3">
+          <div key={key} className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5">
             <div className="flex items-center justify-between gap-3 text-xs text-[var(--color-editorial-ink-faint)]">
               <span>{label}</span>
               <span className="tabular-nums">{component.weight.toFixed(2)}</span>

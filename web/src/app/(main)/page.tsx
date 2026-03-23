@@ -633,7 +633,7 @@ export default function BriefingPage() {
         )}
 
         {navigator && (!navigatorDismissed || navigatorPreview) && navigator.picks.length > 0 ? (
-          <aside className="fixed bottom-4 right-4 z-40 w-[min(420px,calc(100vw-1.5rem))]">
+          <aside className="fixed right-4 z-40 w-[min(420px,calc(100vw-1.5rem))] bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-4">
             <div className={`flex max-h-[min(80vh,720px)] flex-col overflow-hidden rounded-[24px] border shadow-[0_24px_60px_rgba(15,23,42,0.22)] ${navigatorTheme?.shell ?? "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]"}`}>
               <div className={`flex items-start gap-3 px-4 py-4 ${navigatorTheme?.header ?? ""}`}>
                 <div className={`flex size-11 shrink-0 items-center justify-center rounded-full ${navigatorTheme?.avatar ?? ""}`}>
@@ -714,7 +714,7 @@ export default function BriefingPage() {
           <button
             type="button"
             onClick={() => setNavigatorDismissed(false)}
-            className={`fixed bottom-4 right-4 z-40 inline-flex size-14 items-center justify-center rounded-full border shadow-[0_16px_36px_rgba(15,23,42,0.2)] transition hover:scale-[1.03] ${navigatorTheme?.shell ?? "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]"}`}
+            className={`fixed right-4 z-40 inline-flex size-14 items-center justify-center rounded-full border shadow-[0_16px_36px_rgba(15,23,42,0.2)] transition hover:scale-[1.03] bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-4 ${navigatorTheme?.shell ?? "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]"}`}
             aria-label={t("briefing.navigator.label", "AI Navigator")}
           >
             <AINavigatorAvatar persona={navigator.persona} className="size-12" />

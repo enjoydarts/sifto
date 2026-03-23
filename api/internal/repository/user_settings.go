@@ -22,6 +22,29 @@ type BudgetAlertTarget struct {
 	BudgetAlertThresholdPct int
 }
 
+func (r *UserSettingsRepo) ListUserIDsWithPoeAPIKey(ctx context.Context) ([]string, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT user_id
+		FROM user_settings
+		WHERE poe_api_key_enc IS NOT NULL
+		  AND poe_api_key_enc <> ''
+		ORDER BY user_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]string, 0)
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		out = append(out, userID)
+	}
+	return out, rows.Err()
+}
+
 func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*model.UserSettings, error) {
 	var v model.UserSettings
 	var anthropicKeyEnc *string

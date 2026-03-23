@@ -3,6 +3,8 @@ package service
 import (
 	"testing"
 	"time"
+
+	"github.com/enjoydarts/sifto/api/internal/timeutil"
 )
 
 func TestNormalizePoeUsageTimestampSupportsSecondsMillisAndMicros(t *testing.T) {
@@ -92,6 +94,12 @@ func TestSummarizePoeUsageBuildsTotalsAndModelRollups(t *testing.T) {
 	if summary.ChatEntryCount != 1 {
 		t.Fatalf("ChatEntryCount = %d, want 1", summary.ChatEntryCount)
 	}
+	if summary.AverageCostPoints != 800 {
+		t.Fatalf("AverageCostPoints = %v, want 800", summary.AverageCostPoints)
+	}
+	if summary.AverageCostUSD != (2.5 / 3.0) {
+		t.Fatalf("AverageCostUSD = %v, want %v", summary.AverageCostUSD, 2.5/3.0)
+	}
 	if summary.LatestEntryAt == nil || !summary.LatestEntryAt.Equal(now.Add(-2*time.Hour)) {
 		t.Fatalf("LatestEntryAt = %v, want %v", summary.LatestEntryAt, now.Add(-2*time.Hour))
 	}
@@ -110,5 +118,31 @@ func TestSummarizePoeUsageBuildsTotalsAndModelRollups(t *testing.T) {
 	}
 	if byModel[0].TotalCostUSD != 2.0 {
 		t.Fatalf("top model TotalCostUSD = %v, want 2.0", byModel[0].TotalCostUSD)
+	}
+	if byModel[0].AverageCostPoints != 1000 {
+		t.Fatalf("top model AverageCostPoints = %v, want 1000", byModel[0].AverageCostPoints)
+	}
+	if byModel[0].AverageCostUSD != 1.0 {
+		t.Fatalf("top model AverageCostUSD = %v, want 1.0", byModel[0].AverageCostUSD)
+	}
+}
+
+func TestPoeUsageRangeBoundsUseJSTWindows(t *testing.T) {
+	now := time.Date(2026, 3, 23, 15, 4, 0, 0, timeutil.JST)
+
+	start, end := poeUsageRangeBounds(PoeUsageRangeLast14Days, now)
+	if got, want := start.Format(time.RFC3339), time.Date(2026, 3, 10, 0, 0, 0, 0, timeutil.JST).Format(time.RFC3339); got != want {
+		t.Fatalf("14d start = %s, want %s", got, want)
+	}
+	if got, want := end.Format(time.RFC3339), time.Date(2026, 3, 24, 0, 0, 0, 0, timeutil.JST).Format(time.RFC3339); got != want {
+		t.Fatalf("14d end = %s, want %s", got, want)
+	}
+
+	start, end = poeUsageRangeBounds(PoeUsageRangePrevMonth, now)
+	if got, want := start.Format(time.RFC3339), time.Date(2026, 2, 1, 0, 0, 0, 0, timeutil.JST).Format(time.RFC3339); got != want {
+		t.Fatalf("prev month start = %s, want %s", got, want)
+	}
+	if got, want := end.Format(time.RFC3339), time.Date(2026, 3, 1, 0, 0, 0, 0, timeutil.JST).Format(time.RFC3339); got != want {
+		t.Fatalf("prev month end = %s, want %s", got, want)
 	}
 }

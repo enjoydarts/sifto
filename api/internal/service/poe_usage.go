@@ -11,48 +11,79 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/enjoydarts/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/timeutil"
 )
 
 const (
-	poeUsagePageLimit   = 100
-	poeUsageMaxPages    = 20
+	poeUsagePageLimit          = 100
+	poeUsageMaxPages           = 20
 	poeUsageDefaultRecentLimit = 100
+	poeUsageDefaultModelLimit  = 20
 )
 
 type PoeUsageService struct {
 	http *http.Client
+	repo *repository.PoeUsageRepo
 }
 
-func NewPoeUsageService() *PoeUsageService {
+func NewPoeUsageService(repo *repository.PoeUsageRepo) *PoeUsageService {
 	return &PoeUsageService{
 		http: &http.Client{Timeout: 20 * time.Second},
+		repo: repo,
 	}
 }
 
+type PoeUsageRange string
+
+const (
+	PoeUsageRangeToday       PoeUsageRange = "today"
+	PoeUsageRangeYesterday   PoeUsageRange = "yesterday"
+	PoeUsageRangeLast7Days   PoeUsageRange = "7d"
+	PoeUsageRangeLast14Days  PoeUsageRange = "14d"
+	PoeUsageRangeLast30Days  PoeUsageRange = "30d"
+	PoeUsageRangeMonthToDate PoeUsageRange = "mtd"
+	PoeUsageRangePrevMonth   PoeUsageRange = "prev_month"
+)
+
 type PoeUsageOverview struct {
-	Configured          bool                  `json:"configured"`
-	CurrentPointBalance *int                  `json:"current_point_balance,omitempty"`
-	Summary             PoeUsageSummary       `json:"summary"`
-	ModelSummaries      []PoeUsageModelRollup `json:"model_summaries"`
-	Entries             []PoeUsageEntry       `json:"entries"`
-	Truncated           bool                  `json:"truncated"`
+	Configured          bool                        `json:"configured"`
+	SelectedRange       string                      `json:"selected_range"`
+	RangeStartedAt      *time.Time                  `json:"range_started_at,omitempty"`
+	RangeEndedAt        *time.Time                  `json:"range_ended_at,omitempty"`
+	CurrentPointBalance *int                        `json:"current_point_balance,omitempty"`
+	Summary             PoeUsageSummary             `json:"summary"`
+	ModelSummaries      []PoeUsageModelRollup       `json:"model_summaries"`
+	Entries             []PoeUsageEntry             `json:"entries"`
+	EntryLimit          int                         `json:"entry_limit"`
+	AvailableRanges     []PoeUsageRangeOption       `json:"available_ranges"`
+	LastSyncRun         *repository.PoeUsageSyncRun `json:"last_sync_run,omitempty"`
+}
+
+type PoeUsageRangeOption struct {
+	Key string `json:"key"`
 }
 
 type PoeUsageSummary struct {
-	EntryCount      int        `json:"entry_count"`
-	APIEntryCount   int        `json:"api_entry_count"`
-	ChatEntryCount  int        `json:"chat_entry_count"`
-	TotalCostPoints int        `json:"total_cost_points"`
-	TotalCostUSD    float64    `json:"total_cost_usd"`
-	LatestEntryAt   *time.Time `json:"latest_entry_at,omitempty"`
+	EntryCount        int        `json:"entry_count"`
+	APIEntryCount     int        `json:"api_entry_count"`
+	ChatEntryCount    int        `json:"chat_entry_count"`
+	TotalCostPoints   int        `json:"total_cost_points"`
+	TotalCostUSD      float64    `json:"total_cost_usd"`
+	AverageCostPoints float64    `json:"average_cost_points"`
+	AverageCostUSD    float64    `json:"average_cost_usd"`
+	LatestEntryAt     *time.Time `json:"latest_entry_at,omitempty"`
 }
 
 type PoeUsageModelRollup struct {
-	BotName         string     `json:"bot_name"`
-	EntryCount      int        `json:"entry_count"`
-	TotalCostPoints int        `json:"total_cost_points"`
-	TotalCostUSD    float64    `json:"total_cost_usd"`
-	LatestEntryAt   *time.Time `json:"latest_entry_at,omitempty"`
+	BotName           string     `json:"bot_name"`
+	EntryCount        int        `json:"entry_count"`
+	TotalCostPoints   int        `json:"total_cost_points"`
+	TotalCostUSD      float64    `json:"total_cost_usd"`
+	AverageCostPoints float64    `json:"average_cost_points"`
+	AverageCostUSD    float64    `json:"average_cost_usd"`
+	LatestEntryAt     *time.Time `json:"latest_entry_at,omitempty"`
 }
 
 type PoeUsageEntry struct {
@@ -88,30 +119,156 @@ type poePointsHistoryRow struct {
 	ChatName   string            `json:"chat_name"`
 }
 
-func (s *PoeUsageService) FetchOverview(ctx context.Context, apiKey string, recentLimit int) (*PoeUsageOverview, error) {
+func AvailablePoeUsageRanges() []PoeUsageRangeOption {
+	return []PoeUsageRangeOption{
+		{Key: string(PoeUsageRangeToday)},
+		{Key: string(PoeUsageRangeYesterday)},
+		{Key: string(PoeUsageRangeLast7Days)},
+		{Key: string(PoeUsageRangeLast14Days)},
+		{Key: string(PoeUsageRangeLast30Days)},
+		{Key: string(PoeUsageRangeMonthToDate)},
+		{Key: string(PoeUsageRangePrevMonth)},
+	}
+}
+
+func NormalizePoeUsageRange(raw string) PoeUsageRange {
+	switch PoeUsageRange(strings.TrimSpace(raw)) {
+	case PoeUsageRangeToday, PoeUsageRangeYesterday, PoeUsageRangeLast7Days, PoeUsageRangeLast14Days, PoeUsageRangeLast30Days, PoeUsageRangeMonthToDate, PoeUsageRangePrevMonth:
+		return PoeUsageRange(strings.TrimSpace(raw))
+	default:
+		return PoeUsageRangeLast30Days
+	}
+}
+
+func (s *PoeUsageService) SyncHistory(ctx context.Context, userID, apiKey, syncSource string) (*repository.PoeUsageSyncRun, error) {
+	syncRunID, err := s.repo.StartSyncRun(ctx, userID, syncSource)
+	if err != nil {
+		return nil, err
+	}
+	entries, _, err := s.fetchPointsHistory(ctx, apiKey)
+	if err != nil {
+		msg := err.Error()
+		_ = s.repo.FinishSyncRun(context.Background(), syncRunID, 0, 0, 0, nil, nil, &msg)
+		return nil, err
+	}
+	records := make([]repository.PoeUsageEntryRecord, 0, len(entries))
+	var oldestAt *time.Time
+	var latestAt *time.Time
+	for _, entry := range entries {
+		records = append(records, repository.PoeUsageEntryRecord{
+			QueryID:    entry.QueryID,
+			BotName:    entry.BotName,
+			CreatedAt:  entry.CreatedAt,
+			CostUSD:    entry.CostUSD,
+			RawCostUSD: entry.RawCostUSD,
+			CostPoints: entry.CostPoints,
+			Breakdown:  entry.Breakdown,
+			UsageType:  entry.UsageType,
+			ChatName:   entry.ChatName,
+		})
+		if latestAt == nil || entry.CreatedAt.After(*latestAt) {
+			t := entry.CreatedAt
+			latestAt = &t
+		}
+		if oldestAt == nil || entry.CreatedAt.Before(*oldestAt) {
+			t := entry.CreatedAt
+			oldestAt = &t
+		}
+	}
+	insertedCount, updatedCount, err := s.repo.UpsertEntries(ctx, userID, syncRunID, records)
+	if err != nil {
+		msg := err.Error()
+		_ = s.repo.FinishSyncRun(context.Background(), syncRunID, len(records), 0, 0, oldestAt, latestAt, &msg)
+		return nil, err
+	}
+	if err := s.repo.FinishSyncRun(ctx, syncRunID, len(records), insertedCount, updatedCount, oldestAt, latestAt, nil); err != nil {
+		return nil, err
+	}
+	return s.repo.GetLatestSyncRun(ctx, userID)
+}
+
+func (s *PoeUsageService) GetOverview(ctx context.Context, userID, apiKey string, usageRange PoeUsageRange, recentLimit int) (*PoeUsageOverview, error) {
 	balance, err := s.fetchCurrentBalance(ctx, apiKey)
 	if err != nil {
 		return nil, err
 	}
-	entries, truncated, err := s.fetchPointsHistory(ctx, apiKey)
+	startedAt, endedAt := poeUsageRangeBounds(usageRange, timeutil.NowJST())
+	summaryRow, err := s.repo.SummaryBetween(ctx, userID, startedAt, endedAt)
 	if err != nil {
 		return nil, err
 	}
-	summary, rollups := summarizePoeUsage(entries)
+	modelRows, err := s.repo.ListModelRollupsBetween(ctx, userID, startedAt, endedAt, poeUsageDefaultModelLimit)
+	if err != nil {
+		return nil, err
+	}
 	if recentLimit <= 0 {
 		recentLimit = poeUsageDefaultRecentLimit
 	}
-	recent := entries
-	if len(recent) > recentLimit {
-		recent = recent[:recentLimit]
+	entryRows, err := s.repo.ListEntriesBetween(ctx, userID, startedAt, endedAt, recentLimit)
+	if err != nil {
+		return nil, err
 	}
+	lastSyncRun, err := s.repo.GetLatestSyncRun(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	summary := PoeUsageSummary{
+		EntryCount:      summaryRow.EntryCount,
+		APIEntryCount:   summaryRow.APIEntryCount,
+		ChatEntryCount:  summaryRow.ChatEntryCount,
+		TotalCostPoints: summaryRow.TotalCostPoints,
+		TotalCostUSD:    summaryRow.TotalCostUSD,
+		LatestEntryAt:   summaryRow.LatestEntryAt,
+	}
+	if summary.EntryCount > 0 {
+		summary.AverageCostPoints = float64(summary.TotalCostPoints) / float64(summary.EntryCount)
+		summary.AverageCostUSD = summary.TotalCostUSD / float64(summary.EntryCount)
+	}
+	models := make([]PoeUsageModelRollup, 0, len(modelRows))
+	for _, row := range modelRows {
+		model := PoeUsageModelRollup{
+			BotName:         row.BotName,
+			EntryCount:      row.EntryCount,
+			TotalCostPoints: row.TotalCostPoints,
+			TotalCostUSD:    row.TotalCostUSD,
+			LatestEntryAt:   row.LatestEntryAt,
+		}
+		if row.EntryCount > 0 {
+			model.AverageCostPoints = float64(row.TotalCostPoints) / float64(row.EntryCount)
+			model.AverageCostUSD = row.TotalCostUSD / float64(row.EntryCount)
+		}
+		models = append(models, model)
+	}
+	entries := make([]PoeUsageEntry, 0, len(entryRows))
+	for _, row := range entryRows {
+		entries = append(entries, PoeUsageEntry{
+			QueryID:    row.QueryID,
+			BotName:    row.BotName,
+			CreatedAt:  row.CreatedAt,
+			CostUSD:    row.CostUSD,
+			RawCostUSD: row.RawCostUSD,
+			CostPoints: row.CostPoints,
+			Breakdown:  row.Breakdown,
+			UsageType:  row.UsageType,
+			ChatName:   row.ChatName,
+		})
+	}
+
+	startUTC := startedAt.UTC()
+	endUTC := endedAt.UTC()
 	return &PoeUsageOverview{
 		Configured:          true,
+		SelectedRange:       string(usageRange),
+		RangeStartedAt:      &startUTC,
+		RangeEndedAt:        &endUTC,
 		CurrentPointBalance: &balance,
 		Summary:             summary,
-		ModelSummaries:      rollups,
-		Entries:             recent,
-		Truncated:           truncated,
+		ModelSummaries:      models,
+		Entries:             entries,
+		EntryLimit:          recentLimit,
+		AvailableRanges:     AvailablePoeUsageRanges(),
+		LastSyncRun:         lastSyncRun,
 	}, nil
 }
 
@@ -250,9 +407,16 @@ func summarizePoeUsage(entries []PoeUsageEntry) (PoeUsageSummary, []PoeUsageMode
 			row.LatestEntryAt = &t
 		}
 	}
-
+	if summary.EntryCount > 0 {
+		summary.AverageCostPoints = float64(summary.TotalCostPoints) / float64(summary.EntryCount)
+		summary.AverageCostUSD = summary.TotalCostUSD / float64(summary.EntryCount)
+	}
 	rollups := make([]PoeUsageModelRollup, 0, len(byModel))
 	for _, row := range byModel {
+		if row.EntryCount > 0 {
+			row.AverageCostPoints = float64(row.TotalCostPoints) / float64(row.EntryCount)
+			row.AverageCostUSD = row.TotalCostUSD / float64(row.EntryCount)
+		}
 		rollups = append(rollups, *row)
 	}
 	sort.Slice(rollups, func(i, j int) bool {
@@ -265,6 +429,30 @@ func summarizePoeUsage(entries []PoeUsageEntry) (PoeUsageSummary, []PoeUsageMode
 		return rollups[i].TotalCostPoints > rollups[j].TotalCostPoints
 	})
 	return summary, rollups
+}
+
+func poeUsageRangeBounds(usageRange PoeUsageRange, now time.Time) (time.Time, time.Time) {
+	today := timeutil.StartOfDayJST(now)
+	switch usageRange {
+	case PoeUsageRangeToday:
+		return today, today.AddDate(0, 0, 1)
+	case PoeUsageRangeYesterday:
+		start := today.AddDate(0, 0, -1)
+		return start, today
+	case PoeUsageRangeLast7Days:
+		return today.AddDate(0, 0, -6), today.AddDate(0, 0, 1)
+	case PoeUsageRangeLast14Days:
+		return today.AddDate(0, 0, -13), today.AddDate(0, 0, 1)
+	case PoeUsageRangeMonthToDate:
+		start := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, timeutil.JST)
+		return start, today.AddDate(0, 0, 1)
+	case PoeUsageRangePrevMonth:
+		thisMonth := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, timeutil.JST)
+		prevMonth := thisMonth.AddDate(0, -1, 0)
+		return prevMonth, thisMonth
+	default:
+		return today.AddDate(0, 0, -29), today.AddDate(0, 0, 1)
+	}
 }
 
 func poeCurrentBalanceURL() string {

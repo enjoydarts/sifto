@@ -264,3 +264,30 @@ func (r *PoeModelRepo) ListPreviousSuccessfulSnapshots(ctx context.Context, befo
 	}
 	return out, rows.Err()
 }
+
+type PoeDescriptionCacheEntry struct {
+	ModelID       string
+	DescriptionEN *string
+	DescriptionJA *string
+}
+
+func (r *PoeModelRepo) ListLatestDescriptionCache(ctx context.Context) (map[string]PoeDescriptionCacheEntry, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT DISTINCT ON (model_id) model_id, description_en, description_ja
+		FROM poe_model_snapshots
+		ORDER BY model_id, fetched_at DESC, id DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make(map[string]PoeDescriptionCacheEntry)
+	for rows.Next() {
+		var entry PoeDescriptionCacheEntry
+		if err := rows.Scan(&entry.ModelID, &entry.DescriptionEN, &entry.DescriptionJA); err != nil {
+			return nil, err
+		}
+		out[entry.ModelID] = entry
+	}
+	return out, rows.Err()
+}

@@ -74,6 +74,27 @@ func (s *PoeCatalogService) FetchModels(ctx context.Context, apiKey string) ([]r
 	return out, nil
 }
 
+func ApplyPoeDescriptionCache(
+	models []repository.PoeModelSnapshot,
+	cache map[string]repository.PoeDescriptionCacheEntry,
+) ([]repository.PoeModelSnapshot, map[string]string) {
+	missing := make(map[string]string)
+	for i := range models {
+		descEN := strings.TrimSpace(derefPoeOptionalString(models[i].DescriptionEN))
+		if descEN == "" {
+			continue
+		}
+		if cached, ok := cache[models[i].ModelID]; ok && strings.TrimSpace(derefPoeOptionalString(cached.DescriptionEN)) == descEN {
+			if translated := strings.TrimSpace(derefPoeOptionalString(cached.DescriptionJA)); translated != "" && translated != descEN {
+				models[i].DescriptionJA = &translated
+				continue
+			}
+		}
+		missing[models[i].ModelID] = descEN
+	}
+	return models, missing
+}
+
 func PoeSupportsAnthropicCompat(model repository.PoeModelSnapshot) bool {
 	id := strings.ToLower(strings.TrimSpace(model.ModelID))
 	ownedBy := strings.ToLower(strings.TrimSpace(model.OwnedBy))

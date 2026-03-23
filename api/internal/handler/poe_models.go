@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -94,24 +94,46 @@ func (h *PoeModelsHandler) Usage(w http.ResponseWriter, r *http.Request) {
 	}
 	if poeKey == nil || strings.TrimSpace(*poeKey) == "" {
 		writeJSON(w, &service.PoeUsageOverview{
-			Configured:     false,
-			ModelSummaries: make([]service.PoeUsageModelRollup, 0),
-			Entries:        make([]service.PoeUsageEntry, 0),
+			Configured:      false,
+			SelectedRange:   string(service.NormalizePoeUsageRange(r.URL.Query().Get("range"))),
+			ModelSummaries:  make([]service.PoeUsageModelRollup, 0),
+			Entries:         make([]service.PoeUsageEntry, 0),
+			AvailableRanges: service.AvailablePoeUsageRanges(),
 		})
 		return
 	}
+	usageRange := service.NormalizePoeUsageRange(r.URL.Query().Get("range"))
 	entryLimit := 100
 	if raw := strings.TrimSpace(r.URL.Query().Get("entries_limit")); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 500 {
 			entryLimit = parsed
 		}
 	}
-	overview, err := h.usageService.FetchOverview(r.Context(), *poeKey, entryLimit)
+	overview, err := h.usageService.GetOverview(r.Context(), userID, *poeKey, usageRange, entryLimit)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
 	writeJSON(w, overview)
+}
+
+func (h *PoeModelsHandler) SyncUsage(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	poeKey, err := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if poeKey == nil || strings.TrimSpace(*poeKey) == "" {
+		http.Error(w, "poe api key is not configured", http.StatusBadRequest)
+		return
+	}
+	run, err := h.usageService.SyncHistory(r.Context(), userID, *poeKey, "manual")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, map[string]any{"run": run})
 }
 
 func (h *PoeModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
@@ -130,6 +152,9 @@ func (h *PoeModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		_ = h.repo.FinishSyncRun(r.Context(), syncRunID, 0, 0, &msg)
 		http.Error(w, fetchErr.Error(), http.StatusBadGateway)
 		return
+	}
+	if cache, err := h.repo.ListLatestDescriptionCache(r.Context()); err == nil {
+		models, _ = service.ApplyPoeDescriptionCache(models, cache)
 	}
 	if err := h.repo.InsertSnapshots(r.Context(), syncRunID, fetchedAt, models); err != nil {
 		msg := err.Error()

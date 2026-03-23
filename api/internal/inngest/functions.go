@@ -1136,6 +1136,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(exportObsidianFavoritesFn(client, db, obsidianExport))
 	register(trackProviderModelUpdatesFn(client, db, oneSignal))
 	register(syncOpenRouterModelsFn(client, db, resend, oneSignal))
+	register(syncPoeUsageHistoryFn(client, db, secretCipher))
 	register(generateDigestFn(client, db))
 	register(composeDigestCopyFn(client, db, worker, secretCipher))
 	register(sendDigestFn(client, db, worker, resend, oneSignal, secretCipher))
@@ -1680,6 +1681,52 @@ func syncOpenRouterModelsFn(client inngestgo.Client, db *pgxpool.Pool, resend *s
 				"added_models":       len(addedModelIDs),
 				"constrained_models": len(constrainedModelIDs),
 				"removed_models":     len(removedModelIDs),
+			}, nil
+		},
+	)
+}
+
+func syncPoeUsageHistoryFn(client inngestgo.Client, db *pgxpool.Pool, secretCipher *service.SecretCipher) (inngestgo.ServableFunction, error) {
+	settingsRepo := repository.NewUserSettingsRepo(db)
+	poeUsageRepo := repository.NewPoeUsageRepo(db)
+	poeUsageSvc := service.NewPoeUsageService(poeUsageRepo)
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "sync-poe-usage-history", Name: "Sync Poe Usage History"},
+		inngestgo.CronTrigger("0 */6 * * *"),
+		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
+			userIDs, err := settingsRepo.ListUserIDsWithPoeAPIKey(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("list users with poe api key: %w", err)
+			}
+			synced := 0
+			failed := 0
+			skipped := 0
+			for _, userID := range userIDs {
+				id := userID
+				apiKey, err := loadUserPoeAPIKey(ctx, settingsRepo, secretCipher, &id)
+				if err != nil {
+					log.Printf("sync-poe-usage-history load key user=%s: %v", userID, err)
+					failed++
+					continue
+				}
+				if apiKey == nil || strings.TrimSpace(*apiKey) == "" {
+					skipped++
+					continue
+				}
+				if _, err := poeUsageSvc.SyncHistory(ctx, userID, *apiKey, "cron"); err != nil {
+					log.Printf("sync-poe-usage-history sync user=%s: %v", userID, err)
+					failed++
+					continue
+				}
+				synced++
+			}
+			return map[string]any{
+				"users":   len(userIDs),
+				"synced":  synced,
+				"failed":  failed,
+				"skipped": skipped,
 			}, nil
 		},
 	)

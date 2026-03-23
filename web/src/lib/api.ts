@@ -145,6 +145,8 @@ export interface PoeUsageSummary {
   chat_entry_count: number;
   total_cost_points: number;
   total_cost_usd: number;
+  average_cost_points: number;
+  average_cost_usd: number;
   latest_entry_at?: string | null;
 }
 
@@ -153,6 +155,8 @@ export interface PoeUsageModelSummary {
   entry_count: number;
   total_cost_points: number;
   total_cost_usd: number;
+  average_cost_points: number;
+  average_cost_usd: number;
   latest_entry_at?: string | null;
 }
 
@@ -170,11 +174,29 @@ export interface PoeUsageEntry {
 
 export interface PoeUsageResponse {
   configured: boolean;
+  selected_range: string;
+  range_started_at?: string | null;
+  range_ended_at?: string | null;
   current_point_balance?: number | null;
   summary: PoeUsageSummary;
   model_summaries: PoeUsageModelSummary[];
   entries: PoeUsageEntry[];
-  truncated: boolean;
+  entry_limit: number;
+  available_ranges: { key: string }[];
+  last_sync_run?: {
+    id: string;
+    user_id: string;
+    started_at: string;
+    finished_at?: string | null;
+    status: string;
+    sync_source: string;
+    fetched_count: number;
+    inserted_count: number;
+    updated_count: number;
+    latest_entry_at?: string | null;
+    oldest_entry_at?: string | null;
+    error_message?: string | null;
+  } | null;
 }
 
 export interface OpenRouterModelSnapshot {
@@ -1793,8 +1815,10 @@ export const api = {
     ),
   getPoeModels: () =>
     apiFetch<PoeModelsResponse>("/poe-models"),
-  getPoeUsage: (entriesLimit = 100) =>
-    apiFetch<PoeUsageResponse>(`/poe-models/usage?entries_limit=${entriesLimit}`),
+  getPoeUsage: (range = "30d", entriesLimit = 100) =>
+    apiFetch<PoeUsageResponse>(`/poe-models/usage?range=${encodeURIComponent(range)}&entries_limit=${entriesLimit}`),
+  syncPoeUsage: () =>
+    apiFetch<{ run: PoeUsageResponse["last_sync_run"] }>("/poe-models/usage/sync", { method: "POST" }),
   getPoeSyncStatus: () =>
     apiFetch<PoeSyncStatusResponse>("/poe-models/status"),
   syncPoeModels: () =>

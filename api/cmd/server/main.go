@@ -83,6 +83,7 @@ func main() {
 	providerModelUpdateRepo := repository.NewProviderModelUpdateRepo(db)
 	openRouterModelRepo := repository.NewOpenRouterModelRepo(db)
 	poeModelRepo := repository.NewPoeModelRepo(db)
+	poeUsageRepo := repository.NewPoeUsageRepo(db)
 	openRouterModelOverrideRepo := repository.NewOpenRouterModelOverrideRepo(db)
 	briefingSnapshotRepo := repository.NewBriefingSnapshotRepo(db)
 	streakRepo := repository.NewReadingStreakRepo(db)
@@ -97,7 +98,7 @@ func main() {
 	openRouterCatalogSvc := service.NewOpenRouterCatalogService()
 	openRouterModelsH := handler.NewOpenRouterModelsHandler(openRouterModelRepo, openRouterModelOverrideRepo, providerModelUpdateRepo, openRouterCatalogSvc, cache)
 	poeCatalogSvc := service.NewPoeCatalogService()
-	poeUsageSvc := service.NewPoeUsageService()
+	poeUsageSvc := service.NewPoeUsageService(poeUsageRepo)
 	poeModelsH := handler.NewPoeModelsHandler(poeModelRepo, userSettingsRepo, secretCipher, providerModelUpdateRepo, poeCatalogSvc, poeUsageSvc)
 
 	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp, search)
@@ -258,6 +259,7 @@ func main() {
 		r.Route("/poe-models", func(r chi.Router) {
 			r.Get("/", poeModelsH.List)
 			r.Get("/usage", poeModelsH.Usage)
+			r.Post("/usage/sync", poeModelsH.SyncUsage)
 			r.Get("/status", poeModelsH.Status)
 			r.Post("/sync", poeModelsH.Sync)
 		})

@@ -6,66 +6,59 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/repository"
 )
 
-func TestPoePreferredTransportPrefersAnthropicForOfficialClaudeModels(t *testing.T) {
-	model := repository.PoeModelSnapshot{
-		ModelID:  "Claude-Sonnet-4.5",
-		OwnedBy:  "Anthropic",
-		IsActive: true,
-	}
+func TestApplyPoeDescriptionCachePrefillsExistingJapaneseTranslation(t *testing.T) {
+	en := "English description"
+	ja := "既存の日本語説明"
 
-	if got := PoePreferredTransport(model); got != "anthropic" {
-		t.Fatalf("PoePreferredTransport() = %q, want %q", got, "anthropic")
-	}
-	if !PoeSupportsAnthropicCompat(model) {
-		t.Fatal("Anthropic Claude model should support anthropic compat")
-	}
-}
-
-func TestPoePreferredTransportFallsBackToOpenAIForNonClaudeModels(t *testing.T) {
-	model := repository.PoeModelSnapshot{
-		ModelID:  "GPT-5",
-		OwnedBy:  "OpenAI",
-		IsActive: true,
-	}
-
-	if got := PoePreferredTransport(model); got != "openai" {
-		t.Fatalf("PoePreferredTransport() = %q, want %q", got, "openai")
-	}
-	if PoeSupportsAnthropicCompat(model) {
-		t.Fatal("non-Claude model should not support anthropic compat")
-	}
-}
-
-func TestPoeSnapshotsToCatalogModelsUsesPoeAliasAndSnapshotPricing(t *testing.T) {
-	description := "Model description"
 	models := []repository.PoeModelSnapshot{
 		{
-			ModelID:                          "Claude-Sonnet-4.5",
-			DisplayName:                      "Claude-Sonnet-4.5",
-			OwnedBy:                          "Anthropic",
-			DescriptionEN:                    &description,
-			PricingJSON:                      []byte(`{"prompt":"0.000003","completion":"0.000015"}`),
-			TransportSupportsOpenAICompat:    true,
-			TransportSupportsAnthropicCompat: true,
-			PreferredTransport:               "anthropic",
-			IsActive:                         true,
+			ModelID:       "Claude-Sonnet-4.5",
+			DescriptionEN: &en,
+			DescriptionJA: nil,
+		},
+	}
+	cache := map[string]repository.PoeDescriptionCacheEntry{
+		"Claude-Sonnet-4.5": {
+			ModelID:       "Claude-Sonnet-4.5",
+			DescriptionEN: &en,
+			DescriptionJA: &ja,
 		},
 	}
 
-	out := PoeSnapshotsToCatalogModels(models)
-	if len(out) != 1 {
-		t.Fatalf("len(out) = %d, want 1", len(out))
+	out, missing := ApplyPoeDescriptionCache(models, cache)
+	if len(missing) != 0 {
+		t.Fatalf("missing = %v, want empty", missing)
 	}
-	if out[0].ID != PoeAliasModelID("Claude-Sonnet-4.5") {
-		t.Fatalf("id = %q", out[0].ID)
+	if out[0].DescriptionJA == nil || *out[0].DescriptionJA != ja {
+		t.Fatalf("description_ja = %v, want %q", out[0].DescriptionJA, ja)
 	}
-	if out[0].Provider != "poe" {
-		t.Fatalf("provider = %q, want poe", out[0].Provider)
+}
+
+func TestApplyPoeDescriptionCacheMarksChangedEnglishDescriptionAsMissing(t *testing.T) {
+	newEN := "New description"
+	oldEN := "Old description"
+	ja := "古い日本語説明"
+
+	models := []repository.PoeModelSnapshot{
+		{
+			ModelID:       "Claude-Sonnet-4.5",
+			DescriptionEN: &newEN,
+			DescriptionJA: nil,
+		},
 	}
-	if out[0].Pricing == nil || out[0].Pricing.PricingSource != "poe_snapshot" {
-		t.Fatalf("pricing = %#v, want poe_snapshot", out[0].Pricing)
+	cache := map[string]repository.PoeDescriptionCacheEntry{
+		"Claude-Sonnet-4.5": {
+			ModelID:       "Claude-Sonnet-4.5",
+			DescriptionEN: &oldEN,
+			DescriptionJA: &ja,
+		},
 	}
-	if out[0].Capabilities == nil || !out[0].Capabilities.SupportsStructuredOutput {
-		t.Fatalf("capabilities = %#v, want structured output support", out[0].Capabilities)
+
+	out, missing := ApplyPoeDescriptionCache(models, cache)
+	if out[0].DescriptionJA != nil {
+		t.Fatalf("description_ja = %v, want nil", out[0].DescriptionJA)
+	}
+	if got := missing["Claude-Sonnet-4.5"]; got != newEN {
+		t.Fatalf("missing description = %q, want %q", got, newEN)
 	}
 }

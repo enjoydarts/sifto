@@ -100,6 +100,11 @@ function formatMetricNumber(value: number) {
   }).format(value);
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString();
+}
+
 export default function PoeModelsPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -115,7 +120,9 @@ export default function PoeModelsPage() {
   const [data, setData] = useState<PoeModelsResponse | null>(null);
   const [usageData, setUsageData] = useState<PoeUsageResponse | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
+  const [usageSyncing, setUsageSyncing] = useState(false);
   const [usageError, setUsageError] = useState<string | null>(null);
+  const [usageRange, setUsageRange] = useState("30d");
   const [usageEntryLimit, setUsageEntryLimit] = useState(100);
   const models = useMemo(() => (Array.isArray(data?.models) ? data?.models : []), [data?.models]);
 
@@ -142,10 +149,10 @@ export default function PoeModelsPage() {
     return () => window.clearInterval(timer);
   }, [data?.latest_run, load]);
 
-  const loadUsage = useCallback(async (force = false) => {
+  const loadUsage = useCallback(async () => {
     setUsageLoading(true);
     try {
-      const next = await api.getPoeUsage(usageEntryLimit);
+      const next = await api.getPoeUsage(usageRange, usageEntryLimit);
       setUsageData(next);
       setUsageError(null);
     } catch (e) {
@@ -153,12 +160,26 @@ export default function PoeModelsPage() {
     } finally {
       setUsageLoading(false);
     }
-  }, [usageEntryLimit]);
+  }, [usageEntryLimit, usageRange]);
 
   useEffect(() => {
     if (activeSection !== "usage") return;
     loadUsage();
   }, [activeSection, loadUsage]);
+
+  const handleUsageSync = useCallback(async () => {
+    setUsageSyncing(true);
+    try {
+      await api.syncPoeUsage();
+      await loadUsage();
+      showToast(t("poeModels.usage.syncCompleted"), "success");
+    } catch (e) {
+      setUsageError(String(e));
+      showToast(String(e), "error");
+    } finally {
+      setUsageSyncing(false);
+    }
+  }, [loadUsage, showToast, t]);
 
   const handleSync = useCallback(async () => {
     setSyncing(true);
@@ -264,8 +285,8 @@ export default function PoeModelsPage() {
   const selectedDescriptionEn = selectedModel?.description_en ?? "";
   const usageEntryCount = usageData?.summary.entry_count ?? 0;
   const usageConfigured = usageData?.configured ?? false;
-  const averagePointsPerCall = usageEntryCount > 0 ? (usageData?.summary.total_cost_points ?? 0) / usageEntryCount : 0;
-  const averageUsdPerCall = usageEntryCount > 0 ? (usageData?.summary.total_cost_usd ?? 0) / usageEntryCount : 0;
+  const averagePointsPerCall = usageData?.summary.average_cost_points ?? 0;
+  const averageUsdPerCall = usageData?.summary.average_cost_usd ?? 0;
 
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
@@ -656,30 +677,65 @@ export default function PoeModelsPage() {
                         {t("poeModels.usage.description")}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => loadUsage(true)}
-                      disabled={usageLoading}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:opacity-60"
-                    >
-                      <RefreshCw className={`size-4 ${usageLoading ? "animate-spin" : ""}`} aria-hidden="true" />
-                      {usageLoading ? t("poeModels.usage.refreshing") : t("poeModels.usage.refresh")}
-                    </button>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={handleUsageSync}
+                        disabled={usageSyncing}
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:opacity-60"
+                      >
+                        <RefreshCw className={`size-4 ${usageSyncing ? "animate-spin" : ""}`} aria-hidden="true" />
+                        {usageSyncing ? t("poeModels.usage.syncing") : t("poeModels.usage.sync")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => loadUsage()}
+                        disabled={usageLoading}
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:opacity-60"
+                      >
+                        <RefreshCw className={`size-4 ${usageLoading ? "animate-spin" : ""}`} aria-hidden="true" />
+                        {usageLoading ? t("poeModels.usage.refreshing") : t("poeModels.usage.refresh")}
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="mt-4 flex items-center justify-end gap-2 text-sm text-[var(--color-editorial-ink-soft)]">
-                    <span>{t("poeModels.usage.entryLimit")}</span>
-                    <select
-                      value={usageEntryLimit}
-                      onChange={(e) => setUsageEntryLimit(Number(e.target.value))}
-                      className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink)] outline-none"
-                    >
-                      {[50, 100, 200].map((value) => (
-                        <option key={value} value={value}>
-                          {value}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--color-editorial-ink-soft)]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>{t("poeModels.usage.range")}</span>
+                      <select
+                        value={usageRange}
+                        onChange={(e) => setUsageRange(e.target.value)}
+                        className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink)] outline-none"
+                      >
+                        {(usageData?.available_ranges ?? [
+                          { key: "today" },
+                          { key: "yesterday" },
+                          { key: "7d" },
+                          { key: "14d" },
+                          { key: "30d" },
+                          { key: "mtd" },
+                          { key: "prev_month" },
+                        ]).map((option) => (
+                          <option key={option.key} value={option.key}>
+                            {t(`poeModels.usage.range.${option.key}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>{t("poeModels.usage.entryLimit")}</span>
+                      <select
+                        value={usageEntryLimit}
+                        onChange={(e) => setUsageEntryLimit(Number(e.target.value))}
+                        className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink)] outline-none"
+                      >
+                        {[50, 100, 200].map((value) => (
+                          <option key={value} value={value}>
+                            {value}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
                   {usageLoading && !usageData ? (
@@ -697,7 +753,21 @@ export default function PoeModelsPage() {
                   {usageData && !usageData.configured ? (
                     <div className="mt-4 rounded-[22px] border border-dashed border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-4 py-6 text-sm text-[var(--color-editorial-ink-faint)]">
                       <div className="font-medium text-[var(--color-editorial-ink)]">{t("poeModels.usage.notConfiguredTitle")}</div>
-                      <div className="mt-2 leading-7">{t("poeModels.usage.notConfiguredDescription")}</div>
+                          <div className="mt-2 leading-7">{t("poeModels.usage.notConfiguredDescription")}</div>
+                        </div>
+                      ) : null}
+
+                  {usageConfigured ? (
+                    <div className="mt-4 rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                      <div>
+                        {t("poeModels.usage.lastSync")} · {formatDateTime(usageData?.last_sync_run?.finished_at ?? usageData?.last_sync_run?.started_at)}
+                      </div>
+                      <div>
+                        {t("poeModels.usage.syncStatus")} · {usageData?.last_sync_run?.status ?? "—"}
+                      </div>
+                      <div>
+                        {t("poeModels.usage.rangeWindow")} · {formatDateTime(usageData?.range_started_at)} - {formatDateTime(usageData?.range_ended_at)}
+                      </div>
                     </div>
                   ) : null}
 
@@ -746,11 +816,6 @@ export default function PoeModelsPage() {
                     </div>
                   ) : null}
 
-                  {usageConfigured && usageData?.truncated ? (
-                    <div className="mt-4 rounded-[22px] border border-[#ead5af] bg-[#faf1dd] px-4 py-3 text-sm text-[#916321]">
-                      {t("poeModels.usage.truncated")}
-                    </div>
-                  ) : null}
                 </section>
 
                 {usageConfigured ? (
@@ -782,12 +847,8 @@ export default function PoeModelsPage() {
                                     <td className="px-4 py-3 text-[var(--color-editorial-ink)]">{row.bot_name}</td>
                                     <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">{row.total_cost_points.toLocaleString()}</td>
                                     <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">{formatUSD(row.total_cost_usd)}</td>
-                                    <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">
-                                      {formatMetricNumber(row.entry_count > 0 ? row.total_cost_points / row.entry_count : 0)}
-                                    </td>
-                                    <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">
-                                      {formatUSD(row.entry_count > 0 ? row.total_cost_usd / row.entry_count : 0)}
-                                    </td>
+                                    <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">{formatMetricNumber(row.average_cost_points)}</td>
+                                    <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">{formatUSD(row.average_cost_usd)}</td>
                                     <td className="px-4 py-3 text-[var(--color-editorial-ink-soft)]">{row.entry_count.toLocaleString()}</td>
                                   </tr>
                                 ))}
@@ -837,7 +898,7 @@ export default function PoeModelsPage() {
                                     <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">{row.cost_points.toLocaleString()}</td>
                                     <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">{formatUSD(row.cost_usd)}</td>
                                     <td className="whitespace-nowrap px-4 py-3 text-[var(--color-editorial-ink-soft)]">
-                                      {new Date(row.created_at).toLocaleString()}
+                                      {formatDateTime(row.created_at)}
                                     </td>
                                   </tr>
                                 ))}

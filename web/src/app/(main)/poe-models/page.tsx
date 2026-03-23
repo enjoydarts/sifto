@@ -97,6 +97,7 @@ export default function PoeModelsPage() {
   const [sortKey, setSortKey] = useState<SortKey>("provider");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [data, setData] = useState<PoeModelsResponse | null>(null);
+  const models = useMemo(() => (Array.isArray(data?.models) ? data?.models : []), [data?.models]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -147,15 +148,15 @@ export default function PoeModelsPage() {
 
   const providerOptions = useMemo(() => {
     const values = new Set<string>();
-    for (const model of data?.models ?? []) {
+    for (const model of models) {
       if (model.owned_by) values.add(model.owned_by);
     }
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [data?.models]);
+  }, [models]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (data?.models ?? []).filter((model) => {
+    return models.filter((model) => {
       if (providerFilter && model.owned_by !== providerFilter) return false;
       if (!q) return true;
       return [model.model_id, model.display_name, model.owned_by, model.description_en, model.description_ja]
@@ -164,7 +165,7 @@ export default function PoeModelsPage() {
         .toLowerCase()
         .includes(q);
     });
-  }, [data?.models, providerFilter, query]);
+  }, [models, providerFilter, query]);
 
   const sorted = useMemo(() => {
     const models = [...filtered];
@@ -215,8 +216,8 @@ export default function PoeModelsPage() {
 
   const latestSummary = data?.latest_change_summary ?? null;
   const latestRunLabel = data?.latest_run?.finished_at ? new Date(data.latest_run.finished_at).toLocaleString() : t("poeModels.latestRunEmpty");
-  const fetchedCount = data?.latest_run?.fetched_count ?? data?.models?.length ?? 0;
-  const acceptedCount = data?.latest_run?.accepted_count ?? data?.models?.length ?? 0;
+  const fetchedCount = data?.latest_run?.fetched_count ?? models.length;
+  const acceptedCount = data?.latest_run?.accepted_count ?? models.length;
   const translatedCount = data?.latest_run?.translation_completed_count ?? 0;
   const translationTargetCount = data?.latest_run?.translation_target_count ?? 0;
   const removedCount = latestSummary?.removed?.length ?? 0;

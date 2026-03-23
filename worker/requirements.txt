@@ -8,3 +8,4 @@ redis==5.2.1
 sentry-sdk[fastapi]==2.22.0
 langfuse>=3,<4
 json-repair>=0.39,<1
+PyMuPDF==1.27.2.2

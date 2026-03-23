@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 
 import httpx
 import trafilatura
+from app.services.pdf_service import extract_pdf_body, extract_pdf_body_from_bytes
 from trafilatura.settings import use_config
 
 _log = logging.getLogger(__name__)
@@ -59,8 +60,21 @@ def _result_value(result, key: str, default=None):
     return getattr(result, key, default)
 
 
+def is_pdf_response(url: str, content_type: str | None, content: bytes | None) -> bool:
+    normalized_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if normalized_type == "application/pdf":
+        return True
+    if url.strip().lower().split("?", 1)[0].endswith(".pdf"):
+        return True
+    if content and content[:5] == b"%PDF-":
+        return True
+    return False
+
+
 def extract_body(url: str) -> dict | None:
     try:
+        if url.strip().lower().split("?", 1)[0].endswith(".pdf"):
+            return extract_pdf_body(url)
         config = use_config()
         config.set("DEFAULT", "EXTRACTION_TIMEOUT", "30")
 
@@ -69,6 +83,8 @@ def extract_body(url: str) -> dict | None:
             try:
                 resp = httpx.get(url, timeout=30.0, follow_redirects=True)
                 resp.raise_for_status()
+                if is_pdf_response(str(resp.url), resp.headers.get("content-type"), resp.content):
+                    return extract_pdf_body_from_bytes(resp.content, str(resp.url))
                 downloaded = resp.text
             except Exception as e:
                 _log.warning("extract fetch failed url=%s err=%s", url, e)

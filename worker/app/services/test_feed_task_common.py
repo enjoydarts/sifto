@@ -2,9 +2,11 @@ import unittest
 from unittest.mock import patch
 
 from app.services.feed_task_common import (
+    ASK_NAVIGATOR_SCHEMA,
     BRIEFING_NAVIGATOR_SCHEMA,
     SOURCE_NAVIGATOR_SCHEMA,
     _resolve_persona_file,
+    build_ask_navigator_task,
     build_briefing_navigator_task,
     build_source_navigator_task,
 )
@@ -135,6 +137,34 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("picks は空配列 [] を返す", prompt)
         self.assertIn("記事推薦は捏造しない", prompt)
         self.assertIn("candidates が空のときは", prompt)
+
+    def test_ask_navigator_schema_requires_all_fields(self):
+        self.assertEqual(
+            ASK_NAVIGATOR_SCHEMA["required"],
+            ["headline", "commentary", "next_angles"],
+        )
+
+    def test_build_ask_navigator_task_forces_premise_and_next_angles(self):
+        task = build_ask_navigator_task(
+            persona="native",
+            ask_input={
+                "query": "今週のAI業界で本当に見るべき論点は？",
+                "answer": "回答本文",
+                "bullets": ["論点1", "論点2"],
+                "citations": [{"item_id": "item-1", "title": "記事1", "url": "https://example.com/1"}],
+                "related_items": [{"item_id": "item-1", "title": "記事1", "url": "https://example.com/1", "summary": "summary"}],
+            },
+        )
+
+        prompt = task["prompt"]
+        self.assertIn("前提・留保・次に掘る論点", prompt)
+        self.assertIn("5〜8文", prompt)
+        self.assertIn("回答の要約や言い換えを主目的にしない", prompt)
+        self.assertIn("next_angles", prompt)
+        self.assertIn("このペルソナの主観", prompt)
+        self.assertIn("他のキャラクター名を名乗らない", prompt)
+        self.assertIn("一人称は", prompt)
+        self.assertIn("次にどこを見るべきか", prompt)
 
     def test_source_navigator_schema_requires_all_sections(self):
         self.assertEqual(

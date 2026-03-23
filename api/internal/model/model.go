@@ -478,6 +478,23 @@ type AskResponse struct {
 	AskLLM       *AskLLM        `json:"ask_llm,omitempty"`
 }
 
+type AskNavigator struct {
+	Enabled        bool       `json:"enabled"`
+	Persona        string     `json:"persona"`
+	CharacterName  string     `json:"character_name"`
+	CharacterTitle string     `json:"character_title"`
+	AvatarStyle    string     `json:"avatar_style"`
+	SpeechStyle    string     `json:"speech_style"`
+	Headline       string     `json:"headline"`
+	Commentary     string     `json:"commentary"`
+	NextAngles     []string   `json:"next_angles,omitempty"`
+	GeneratedAt    *time.Time `json:"generated_at,omitempty"`
+}
+
+type AskNavigatorEnvelope struct {
+	Navigator *AskNavigator `json:"navigator,omitempty"`
+}
+
 type AskLLM struct {
 	Provider      string `json:"provider"`
 	Model         string `json:"model"`

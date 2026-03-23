@@ -114,6 +114,17 @@ ITEM_NAVIGATOR_SCHEMA = {
     "additionalProperties": False,
 }
 
+ASK_NAVIGATOR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "headline": {"type": "string"},
+        "commentary": {"type": "string"},
+        "next_angles": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["headline", "commentary", "next_angles"],
+    "additionalProperties": False,
+}
+
 SOURCE_NAVIGATOR_SCHEMA = {
     "type": "object",
     "properties": {
@@ -580,6 +591,101 @@ def parse_item_navigator_result(text: str, article: dict) -> dict:
             pieces.append(f"一方で、{facts[1][:80]}という留保もあり、額面どおりには受け取りにくいところがあります。")
         commentary = " ".join(pieces).strip() or "この話題は単なる要点整理より、どこに意味がありどこを留保して読むべきかを見る価値があります。"
     return {"headline": headline[:60], "commentary": commentary[:900], "stance_tags": stance_tags}
+
+
+def build_ask_navigator_task(persona: str, ask_input: dict) -> dict:
+    persona_key, profile = resolve_navigator_persona_profile(persona, "item")
+    prompt = f"""あなたはAsk画面の回答直後に出るAIナビゲーターです。
+
+キャラクター:
+- persona: {persona_key}
+- display_name: {profile["name"]}
+- 性別: {profile["gender"]}
+- 年代感: {profile["age_vibe"]}
+- 一人称: {profile["first_person"]}
+- 話し方: {profile["speech_style"]}
+- 職業: {profile["occupation"]}
+- 経験: {profile["experience"]}
+- 性格: {profile["personality"]}
+- 価値観: {profile["values"]}
+- 関心: {profile["interests"]}
+- 嫌いなもの: {profile["dislikes"]}
+- tone: {profile["voice"]}
+
+タスク:
+- Ask の回答を言い直すのではなく、この問いの前提・留保・次に掘る論点を、このペルソナの主観で論評する
+- 日本語で 5〜8文の、やや長めの commentary を返す
+- next_angles は 2〜4件返す
+
+ルール:
+- 出力は headline / commentary / next_angles を持つ JSON のみ
+- 回答の要約や言い換えを主目的にしない
+- 「その答えで終わりにしないなら、次にどこを見るべきか」を中心に語る
+- 前提のズレ、留保、見落としやすい論点、次に掘ると面白い角度を入れる
+- commentary は 5〜8文
+- 客観的レビューではなく、このペルソナの主観で語る
+- ペルソナの価値観に基づいて評価する
+- 「この人ならこう感じる」という自然な語りにする
+- 他のキャラクター名を名乗らない。別ペルソナの名前・肩書き・口調を混ぜない
+- 自分を名乗るなら、必ず {profile["name"]} とだけ名乗る
+- 一人称は {profile["first_person"]} を基本にし、別の一人称へぶれない
+- 話し方は {profile["speech_style"]} と {profile["voice"]} に寄せ、他ペルソナの文体へ寄らない
+- 1文目か2文目で、この質問の面白さか危うさを掴む
+- その後、なぜその前提を少し疑ったほうがよいか、どこに留保があるか、次に何を見ると視界が広がるかを語る
+- citations と related_items にある範囲を土台にする
+- 入力から読めない事実を捏造しない
+- snark でも不快・攻撃的・見下し表現は禁止
+- snark では、問いや状況に対する軽い皮肉、ツッコミ、呆れ気味の言い回しは許可する
+- next_angles は短い日本語フレーズで 2〜4件
+- headline は 16〜40字程度で、この論評の切り口が伝わる見出しにする
+
+返却形式:
+{{
+  "headline": "短い見出し",
+  "commentary": "5〜8文の論評",
+  "next_angles": ["次に掘る論点1", "次に掘る論点2"]
+}}
+
+入力:
+{json.dumps(ask_input, ensure_ascii=False)}
+"""
+    return {
+        "prompt": prompt,
+        "schema": ASK_NAVIGATOR_SCHEMA,
+        "persona": persona_key,
+        "input": ask_input,
+        "profile": profile,
+    }
+
+
+def parse_ask_navigator_result(text: str, ask_input: dict) -> dict:
+    data = extract_first_json_object(text) or {}
+    headline = str(data.get("headline") or "").strip()
+    commentary = str(data.get("commentary") or "").strip()
+    raw_angles = data.get("next_angles") or []
+    next_angles = [str(v).strip() for v in raw_angles if str(v).strip()][:4]
+    if not headline:
+        query = str(ask_input.get("query") or "").strip()
+        headline = (query[:36] + "の見方") if query else "この問いの見どころ"
+    if not commentary:
+        answer = re.sub(r"\s+", " ", str(ask_input.get("answer") or "").strip())
+        bullets = [str(v).strip() for v in (ask_input.get("bullets") or []) if str(v).strip()]
+        pieces = []
+        if answer:
+            pieces.append(f"この問いは、{answer[:110]}で答えが尽きた気になりやすいところがまず危ないです。")
+        if bullets:
+            pieces.append(f"実際には、{bullets[0][:80]}のような論点をそのまま受け取らず、どこに前提があるかを見たほうがいいです。")
+        if len(bullets) >= 2:
+            pieces.append(f"もう一段掘るなら、{bullets[1][:80]}がどの条件で成り立つのかを確かめると見え方が変わります。")
+        pieces.append("答えを消費して終わるより、何がまだ抜けているかを拾い直す問いとして扱うほうが収穫があります。")
+        commentary = " ".join(pieces).strip()
+    if not next_angles:
+        next_angles = [
+            "前提条件の確認",
+            "反例になりうる事例",
+            "今後の変化点",
+        ]
+    return {"headline": headline[:60], "commentary": commentary[:1200], "next_angles": next_angles}
 
 
 def build_source_navigator_task(persona: str, candidates: list[dict]) -> dict:

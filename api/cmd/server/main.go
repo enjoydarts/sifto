@@ -226,6 +226,7 @@ func main() {
 		})
 
 		r.Post("/ask", askH.Ask)
+		r.Post("/ask/navigator", askH.Navigator)
 		r.Get("/ask/insights", askInsightsH.ListRecent)
 		r.Post("/ask/insights", askInsightsH.Save)
 		r.Delete("/ask/insights/{id}", func(w http.ResponseWriter, r *http.Request) {

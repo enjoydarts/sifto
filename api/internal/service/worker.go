@@ -296,6 +296,40 @@ type AskResponse struct {
 	LLM       *LLMUsage     `json:"llm,omitempty"`
 }
 
+type AskNavigatorCitation struct {
+	ItemID      string   `json:"item_id"`
+	Title       string   `json:"title"`
+	URL         string   `json:"url"`
+	Reason      string   `json:"reason,omitempty"`
+	PublishedAt *string  `json:"published_at,omitempty"`
+	Topics      []string `json:"topics,omitempty"`
+}
+
+type AskNavigatorRelatedItem struct {
+	ItemID          string   `json:"item_id"`
+	Title           *string  `json:"title,omitempty"`
+	TranslatedTitle *string  `json:"translated_title,omitempty"`
+	URL             string   `json:"url"`
+	Summary         string   `json:"summary"`
+	Topics          []string `json:"topics,omitempty"`
+	PublishedAt     *string  `json:"published_at,omitempty"`
+}
+
+type AskNavigatorInput struct {
+	Query        string                    `json:"query"`
+	Answer       string                    `json:"answer"`
+	Bullets      []string                  `json:"bullets,omitempty"`
+	Citations    []AskNavigatorCitation    `json:"citations,omitempty"`
+	RelatedItems []AskNavigatorRelatedItem `json:"related_items,omitempty"`
+}
+
+type AskNavigatorResponse struct {
+	Headline   string    `json:"headline"`
+	Commentary string    `json:"commentary"`
+	NextAngles []string  `json:"next_angles,omitempty"`
+	LLM        *LLMUsage `json:"llm,omitempty"`
+}
+
 type SuggestFeedSeedSitesItem struct {
 	URL    string  `json:"url"`
 	Title  *string `json:"title,omitempty"`
@@ -493,6 +527,34 @@ func (w *WorkerClient) AskWithModel(
 		"query":      query,
 		"candidates": candidates,
 		"model":      model,
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, w.internalSecret))
+}
+
+func (w *WorkerClient) GenerateAskNavigatorWithModel(
+	ctx context.Context,
+	persona string,
+	input AskNavigatorInput,
+	anthropicAPIKey *string,
+	googleAPIKey *string,
+	groqAPIKey *string,
+	deepseekAPIKey *string,
+	alibabaAPIKey *string,
+	mistralAPIKey *string,
+	xaiAPIKey *string,
+	zaiAPIKey *string,
+	fireworksAPIKey *string,
+	openAIAPIKey *string,
+	model *string,
+) (*AskNavigatorResponse, error) {
+	if _, ok := ctx.Deadline(); !ok && w.askTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.askTimeout)
+		defer cancel()
+	}
+	return postWithHeaders[AskNavigatorResponse](ctx, w, "/ask-navigator", map[string]any{
+		"persona": persona,
+		"input":   input,
+		"model":   model,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, w.internalSecret))
 }
 

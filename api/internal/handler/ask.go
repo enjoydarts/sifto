@@ -50,6 +50,7 @@ func NewAskHandler(
 }
 
 const askCacheTTL = 2 * time.Minute
+const askNavigatorCacheTTL = 30 * time.Minute
 
 func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
@@ -291,6 +292,154 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, resp)
+}
+
+func (h *AskHandler) Navigator(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		Query        string               `json:"query"`
+		Answer       string               `json:"answer"`
+		Bullets      []string             `json:"bullets"`
+		Citations    []model.AskCitation  `json:"citations"`
+		RelatedItems []model.AskCandidate `json:"related_items"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	body.Query = strings.TrimSpace(body.Query)
+	body.Answer = strings.TrimSpace(body.Answer)
+	if body.Query == "" || body.Answer == "" {
+		http.Error(w, "query and answer are required", http.StatusBadRequest)
+		return
+	}
+	settings, err := h.settingsRepo.EnsureDefaults(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	if settings == nil || !settings.NavigatorEnabled {
+		writeJSON(w, model.AskNavigatorEnvelope{})
+		return
+	}
+	modelName := resolveBriefingNavigatorModel(settings)
+	if modelName == nil {
+		writeJSON(w, model.AskNavigatorEnvelope{})
+		return
+	}
+	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
+	resolvedModel := strings.TrimSpace(*modelName)
+	cacheKey := cacheKeyAskNavigator(userID, body.Query, body.Answer, persona, resolvedModel)
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
+	if h.cache != nil && !cacheBust {
+		var cached model.AskNavigatorEnvelope
+		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok && cached.Navigator != nil && strings.TrimSpace(cached.Navigator.Commentary) != "" {
+			writeJSON(w, cached)
+			return
+		}
+	}
+
+	anthropicKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAnthropicAPIKeyEncrypted, h.cipher, userID, "")
+	googleKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGoogleAPIKeyEncrypted, h.cipher, userID, "")
+	groqKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGroqAPIKeyEncrypted, h.cipher, userID, "")
+	fireworksKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetFireworksAPIKeyEncrypted, h.cipher, userID, "")
+	deepseekKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
+	alibabaKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
+	mistralKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
+	xaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
+	zaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
+	openRouterKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
+	poeKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
+	openAIKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
+	switch service.LLMProviderForModel(modelName) {
+	case "openrouter":
+		openAIKey = openRouterKey
+	case "poe":
+		openAIKey = poeKey
+	}
+
+	workerCitations := make([]service.AskNavigatorCitation, 0, len(body.Citations))
+	for _, citation := range body.Citations {
+		workerCitations = append(workerCitations, service.AskNavigatorCitation{
+			ItemID:      strings.TrimSpace(citation.ItemID),
+			Title:       strings.TrimSpace(citation.Title),
+			URL:         strings.TrimSpace(citation.URL),
+			Reason:      strings.TrimSpace(citation.Reason),
+			PublishedAt: citation.PublishedAt,
+			Topics:      citation.Topics,
+		})
+	}
+	workerRelated := make([]service.AskNavigatorRelatedItem, 0, len(body.RelatedItems))
+	for _, item := range body.RelatedItems {
+		var publishedAt *string
+		if item.PublishedAt != nil {
+			v := item.PublishedAt.Format(time.RFC3339)
+			publishedAt = &v
+		}
+		workerRelated = append(workerRelated, service.AskNavigatorRelatedItem{
+			ItemID:          item.ID,
+			Title:           item.Title,
+			TranslatedTitle: item.TranslatedTitle,
+			URL:             item.URL,
+			Summary:         strings.TrimSpace(item.Summary),
+			Topics:          item.SummaryTopics,
+			PublishedAt:     publishedAt,
+		})
+	}
+
+	workerCtx := service.WithWorkerTraceMetadata(r.Context(), "ask_navigator", &userID, nil, nil, nil)
+	resp, err := h.worker.GenerateAskNavigatorWithModel(
+		workerCtx,
+		persona,
+		service.AskNavigatorInput{
+			Query:        body.Query,
+			Answer:       body.Answer,
+			Bullets:      body.Bullets,
+			Citations:    workerCitations,
+			RelatedItems: workerRelated,
+		},
+		anthropicKey,
+		googleKey,
+		groqKey,
+		deepseekKey,
+		alibabaKey,
+		mistralKey,
+		xaiKey,
+		zaiKey,
+		fireworksKey,
+		openAIKey,
+		modelName,
+	)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("ask navigator worker: %v", err), http.StatusBadGateway)
+		return
+	}
+	recordAskLLMUsage(r.Context(), h.llmUsageRepo, h.cache, "ask_navigator", resp.LLM, &userID)
+	if strings.TrimSpace(resp.Commentary) == "" {
+		writeJSON(w, model.AskNavigatorEnvelope{})
+		return
+	}
+	meta := briefingNavigatorPersonaMeta(persona)
+	envelope := model.AskNavigatorEnvelope{
+		Navigator: &model.AskNavigator{
+			Enabled:        true,
+			Persona:        persona,
+			CharacterName:  meta.CharacterName,
+			CharacterTitle: meta.CharacterTitle,
+			AvatarStyle:    meta.AvatarStyle,
+			SpeechStyle:    meta.SpeechStyle,
+			Headline:       strings.TrimSpace(resp.Headline),
+			Commentary:     strings.TrimSpace(resp.Commentary),
+			NextAngles:     resp.NextAngles,
+			GeneratedAt:    func() *time.Time { now := time.Now(); return &now }(),
+		},
+	}
+	if h.cache != nil {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, envelope, askNavigatorCacheTTL); err != nil {
+			log.Printf("ask navigator cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
+	}
+	writeJSON(w, envelope)
 }
 
 func askCitationTitle(item model.AskCandidate) string {

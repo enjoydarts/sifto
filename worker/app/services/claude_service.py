@@ -48,12 +48,14 @@ from app.services.digest_task_common import (
 )
 from app.services.feed_task_common import (
     build_ask_task,
+    build_ask_navigator_task,
     build_briefing_navigator_task,
     build_item_navigator_task,
     build_source_navigator_task,
     build_rank_feed_task,
     build_seed_sites_task,
     parse_ask_result,
+    parse_ask_navigator_result,
     parse_briefing_navigator_result,
     parse_item_navigator_result,
     parse_source_navigator_result,
@@ -1102,6 +1104,48 @@ def generate_item_navigator(
         "commentary": out["commentary"],
         "stance_tags": out["stance_tags"],
         "llm": _llm_meta(message, "item_navigator", used_model or _feed_suggest_model),
+    }
+
+
+def generate_ask_navigator(
+    persona: str,
+    ask_input: dict,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
+    task = build_ask_navigator_task(persona, ask_input)
+    if _client_for_api_key(api_key) is None:
+        out = parse_ask_navigator_result("{}", task["input"])
+        return {
+            "headline": out["headline"],
+            "commentary": out["commentary"],
+            "next_angles": out["next_angles"],
+            "llm": empty_llm_meta("local-dev", "local-fallback"),
+        }
+
+    message, used_model, _execution_failures = _call_with_model_fallback(
+        task["prompt"],
+        str(model or _feed_suggest_model),
+        _feed_suggest_model_fallback,
+        max_tokens=2400,
+        api_key=api_key,
+    )
+    if message is None:
+        out = parse_ask_navigator_result("{}", task["input"])
+        return {
+            "headline": out["headline"],
+            "commentary": out["commentary"],
+            "next_angles": out["next_angles"],
+            "llm": empty_llm_meta("local-fallback", used_model or _feed_suggest_model),
+        }
+
+    text = message.content[0].text.strip()
+    out = parse_ask_navigator_result(text, task["input"])
+    return {
+        "headline": out["headline"],
+        "commentary": out["commentary"],
+        "next_angles": out["next_angles"],
+        "llm": _llm_meta(message, "ask_navigator", used_model or _feed_suggest_model),
     }
 
 

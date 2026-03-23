@@ -169,6 +169,20 @@ func cacheKeyAsk(userID, query, answerModel, embeddingModel string, days int, un
 	)
 }
 
+func cacheKeyAskNavigator(userID, query, answer, persona, model string) string {
+	queryHash := sha256.Sum256([]byte(strings.TrimSpace(query)))
+	answerHash := sha256.Sum256([]byte(strings.TrimSpace(answer)))
+	return fmt.Sprintf(
+		"%s:ask:navigator:%s:q=%s:a=%s:persona=%s:model=%s",
+		navigatorCacheKeyVersion,
+		userID,
+		hex.EncodeToString(queryHash[:8]),
+		hex.EncodeToString(answerHash[:8]),
+		persona,
+		model,
+	)
+}
+
 func cacheKeyLLMUsageDailySummaryVersioned(userID string, version int64, days int) string {
 	return fmt.Sprintf("%s:llm_usage:daily:%s:v=%d:days=%d", cacheKeyVersion, userID, version, days)
 }

@@ -1211,6 +1211,23 @@ export interface AskResponse {
   ask_llm?: AskLLM | null;
 }
 
+export interface AskNavigator {
+  enabled: boolean;
+  persona: string;
+  character_name: string;
+  character_title: string;
+  avatar_style: string;
+  speech_style: string;
+  headline: string;
+  commentary: string;
+  next_angles?: string[];
+  generated_at?: string | null;
+}
+
+export interface AskNavigatorResponse {
+  navigator?: AskNavigator | null;
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const requestPath = withCacheBust(path, options?.method);
   const authHeaders = await getAuthHeaders();
@@ -1537,6 +1554,21 @@ export const api = {
       citations: Array.isArray(resp?.citations) ? resp.citations : [],
       related_items: Array.isArray(resp?.related_items) ? resp.related_items : [],
     })),
+  getAskNavigator: (body: {
+    query: string;
+    answer: string;
+    bullets?: string[];
+    citations?: AskCitation[];
+    related_items?: AskCandidate[];
+  }, params?: { cache_bust?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.cache_bust) q.set("cache_bust", "1");
+    const qs = q.toString();
+    return apiFetch<AskNavigatorResponse>(`/ask/navigator${qs ? `?${qs}` : ""}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
   getAskInsights: (params?: { limit?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));

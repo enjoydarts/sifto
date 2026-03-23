@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, X } from "lucide-react";
 import { InsightSaveDialog } from "@/components/ask/insight-save-dialog";
+import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { PageHeader } from "@/components/ui/page-header";
-import { api, AskResponse, ReadingGoal } from "@/lib/api";
+import { api, AskNavigator, AskResponse, ReadingGoal } from "@/lib/api";
 import { formatModelDisplayName } from "@/lib/model-display";
 import { useToast } from "@/components/toast-provider";
 
@@ -58,9 +59,19 @@ export default function AskPage() {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AskResponse | null>(EMPTY);
+  const [askNavigator, setAskNavigator] = useState<AskNavigator | null>(null);
+  const [askNavigatorLoading, setAskNavigatorLoading] = useState(false);
+  const [askNavigatorError, setAskNavigatorError] = useState<string | null>(null);
+  const [askNavigatorDismissed, setAskNavigatorDismissed] = useState(false);
   const readingGoalsQuery = useQuery({
     queryKey: ["reading-goals"] as const,
     queryFn: () => api.getReadingGoals(),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+  const settingsQuery = useQuery({
+    queryKey: ["settings"] as const,
+    queryFn: () => api.getSettings(),
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
@@ -75,12 +86,38 @@ export default function AskPage() {
     () => `${days}d / ${unreadOnly ? t("ask.unreadOnly") : t("ask.allItems")}`,
     [days, unreadOnly, t]
   );
+  const askNavigatorDisplayPersona = askNavigator?.avatar_style?.trim() || askNavigator?.persona?.trim() || settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor";
+
+  async function loadAskNavigator(next: AskResponse) {
+    setAskNavigator(null);
+    setAskNavigatorError(null);
+    setAskNavigatorLoading(true);
+    setAskNavigatorDismissed(false);
+    try {
+      const resp = await api.getAskNavigator({
+        query: next.query,
+        answer: next.answer,
+        bullets: next.bullets ?? [],
+        citations: next.citations ?? [],
+        related_items: next.related_items ?? [],
+      });
+      setAskNavigator(resp.navigator ?? null);
+    } catch (_err) {
+      setAskNavigatorError(t("ask.navigator.error"));
+    } finally {
+      setAskNavigatorLoading(false);
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!canSubmit) return;
     setLoading(true);
     setError(null);
+    setAskNavigator(null);
+    setAskNavigatorError(null);
+    setAskNavigatorLoading(false);
+    setAskNavigatorDismissed(false);
     try {
       const next = await api.ask({
         query: query.trim(),
@@ -89,6 +126,7 @@ export default function AskPage() {
         limit: ASK_LIMIT,
       });
       setResult(next);
+      void loadAskNavigator(next);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -225,6 +263,78 @@ export default function AskPage() {
                       {bullet}
                     </div>
                   ))}
+                </div>
+              ) : null}
+
+              {!askNavigatorDismissed && (askNavigatorLoading || askNavigator || askNavigatorError) ? (
+                <div className="mt-5 rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-1.5 shadow-sm">
+                      <AINavigatorAvatar persona={askNavigatorDisplayPersona} className="size-10" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                            {t("ask.navigator.label")}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <h3 className="font-serif text-[1rem] font-semibold leading-none text-[var(--color-editorial-ink)]">
+                              {askNavigator?.character_name ?? t("ask.navigator.label")}
+                            </h3>
+                            {askNavigator?.character_title ? (
+                              <span className="text-xs text-[var(--color-editorial-ink-faint)]">{askNavigator.character_title}</span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAskNavigatorDismissed(true)}
+                          className="inline-flex size-8 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-white/70 text-[var(--color-editorial-ink-soft)] hover:bg-white"
+                          aria-label={t("briefing.navigator.close")}
+                        >
+                          <X className="size-4" aria-hidden="true" />
+                        </button>
+                      </div>
+
+                      {askNavigatorLoading ? (
+                        <div className="mt-3 flex items-center gap-2 text-sm text-[var(--color-editorial-ink-soft)]">
+                          <Loader2 className="size-4 animate-spin" />
+                          <span>{t("ask.navigator.loading")}</span>
+                        </div>
+                      ) : null}
+
+                      {askNavigatorError ? (
+                        <p className="mt-3 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{askNavigatorError}</p>
+                      ) : null}
+
+                      {askNavigator ? (
+                        <div className="mt-3 space-y-3">
+                          <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3">
+                            <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{askNavigator.headline}</div>
+                            <p className="mt-2 whitespace-pre-line text-[14px] leading-7 text-[var(--color-editorial-ink-soft)]">{askNavigator.commentary}</p>
+                          </div>
+                          {askNavigator.next_angles && askNavigator.next_angles.length > 0 ? (
+                            <div>
+                              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                                {t("ask.navigator.nextAngles")}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {askNavigator.next_angles.map((angle) => (
+                                  <span
+                                    key={angle}
+                                    className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-1.5 text-xs font-medium text-[var(--color-editorial-ink-soft)]"
+                                  >
+                                    {angle}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               ) : null}
             </section>

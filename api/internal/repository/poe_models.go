@@ -32,21 +32,21 @@ type PoeSyncRun struct {
 }
 
 type PoeModelSnapshot struct {
-	ModelID                        string          `json:"model_id"`
-	CanonicalSlug                  *string         `json:"canonical_slug,omitempty"`
-	DisplayName                    string          `json:"display_name"`
-	OwnedBy                        string          `json:"owned_by"`
-	DescriptionEN                  *string         `json:"description_en,omitempty"`
-	DescriptionJA                  *string         `json:"description_ja,omitempty"`
-	ContextLength                  *int            `json:"context_length,omitempty"`
-	PricingJSON                    json.RawMessage `json:"pricing_json"`
-	ArchitectureJSON               json.RawMessage `json:"architecture_json"`
-	ModalityFlagsJSON              json.RawMessage `json:"modality_flags_json"`
-	IsActive                       bool            `json:"is_active"`
-	TransportSupportsOpenAICompat  bool            `json:"transport_supports_openai_compat"`
-	TransportSupportsAnthropicCompat bool          `json:"transport_supports_anthropic_compat"`
-	PreferredTransport             string          `json:"preferred_transport"`
-	FetchedAt                      time.Time       `json:"fetched_at"`
+	ModelID                          string          `json:"model_id"`
+	CanonicalSlug                    *string         `json:"canonical_slug,omitempty"`
+	DisplayName                      string          `json:"display_name"`
+	OwnedBy                          string          `json:"owned_by"`
+	DescriptionEN                    *string         `json:"description_en,omitempty"`
+	DescriptionJA                    *string         `json:"description_ja,omitempty"`
+	ContextLength                    *int            `json:"context_length,omitempty"`
+	PricingJSON                      json.RawMessage `json:"pricing_json"`
+	ArchitectureJSON                 json.RawMessage `json:"architecture_json"`
+	ModalityFlagsJSON                json.RawMessage `json:"modality_flags_json"`
+	IsActive                         bool            `json:"is_active"`
+	TransportSupportsOpenAICompat    bool            `json:"transport_supports_openai_compat"`
+	TransportSupportsAnthropicCompat bool            `json:"transport_supports_anthropic_compat"`
+	PreferredTransport               string          `json:"preferred_transport"`
+	FetchedAt                        time.Time       `json:"fetched_at"`
 }
 
 func (r *PoeModelRepo) StartSyncRun(ctx context.Context, triggerType string) (string, error) {

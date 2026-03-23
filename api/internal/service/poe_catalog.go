@@ -151,18 +151,18 @@ func normalizePoeModel(item poeModel, fetchedAt time.Time) repository.PoeModelSn
 	architectureJSON, _ := json.Marshal(item.Architecture)
 	modalityFlagsJSON, _ := json.Marshal(map[string]any{"modalities": item.Modalities})
 	snapshot := repository.PoeModelSnapshot{
-		ModelID:                        modelID,
-		DisplayName:                    displayName,
-		OwnedBy:                        strings.TrimSpace(item.OwnedBy),
-		DescriptionEN:                  descriptionPtr,
-		ContextLength:                  contextLength,
-		PricingJSON:                    pricingJSON,
-		ArchitectureJSON:               architectureJSON,
-		ModalityFlagsJSON:              modalityFlagsJSON,
-		IsActive:                       true,
-		TransportSupportsOpenAICompat:  true,
+		ModelID:                          modelID,
+		DisplayName:                      displayName,
+		OwnedBy:                          strings.TrimSpace(item.OwnedBy),
+		DescriptionEN:                    descriptionPtr,
+		ContextLength:                    contextLength,
+		PricingJSON:                      pricingJSON,
+		ArchitectureJSON:                 architectureJSON,
+		ModalityFlagsJSON:                modalityFlagsJSON,
+		IsActive:                         true,
+		TransportSupportsOpenAICompat:    true,
 		TransportSupportsAnthropicCompat: false,
-		FetchedAt:                      fetchedAt,
+		FetchedAt:                        fetchedAt,
 	}
 	snapshot.TransportSupportsAnthropicCompat = PoeSupportsAnthropicCompat(snapshot)
 	snapshot.PreferredTransport = PoePreferredTransport(snapshot)

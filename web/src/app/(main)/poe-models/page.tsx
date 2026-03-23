@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, Link2, RefreshCw, Search, X } from "lucide-react";
-import { api, PoeModelSnapshot, PoeModelsResponse } from "@/lib/api";
+import { api, PoeModelSnapshot, PoeModelsResponse, PoeUsageResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { PageTransition } from "@/components/page-transition";
@@ -67,7 +67,7 @@ function limitSummaryModels(models: { model_id: string }[], limit = 5) {
   };
 }
 
-type PoeSection = "overview" | "available" | "removed";
+type PoeSection = "overview" | "available" | "removed" | "usage";
 type SortKey = "provider" | "model" | "context" | "pricing" | "transport";
 type SortDirection = "asc" | "desc";
 
@@ -84,6 +84,22 @@ function pricingScore(model: PoeModelSnapshot) {
   return [prompt, completion, cacheRead].reduce((sum, value) => (Number.isFinite(value) ? sum + value : sum), 0);
 }
 
+function formatUSD(value: number) {
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: value >= 1 ? 2 : 4,
+    maximumFractionDigits: value >= 1 ? 2 : 4,
+  }).format(value);
+}
+
+function formatMetricNumber(value: number) {
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits: value >= 100 ? 0 : value >= 10 ? 1 : 2,
+    maximumFractionDigits: value >= 100 ? 0 : value >= 10 ? 1 : 2,
+  }).format(value);
+}
+
 export default function PoeModelsPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -97,6 +113,10 @@ export default function PoeModelsPage() {
   const [sortKey, setSortKey] = useState<SortKey>("provider");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [data, setData] = useState<PoeModelsResponse | null>(null);
+  const [usageData, setUsageData] = useState<PoeUsageResponse | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageError, setUsageError] = useState<string | null>(null);
+  const [usageEntryLimit, setUsageEntryLimit] = useState(100);
   const models = useMemo(() => (Array.isArray(data?.models) ? data?.models : []), [data?.models]);
 
   const load = useCallback(async () => {
@@ -121,6 +141,24 @@ export default function PoeModelsPage() {
     const timer = window.setInterval(load, 3000);
     return () => window.clearInterval(timer);
   }, [data?.latest_run, load]);
+
+  const loadUsage = useCallback(async (force = false) => {
+    setUsageLoading(true);
+    try {
+      const next = await api.getPoeUsage(usageEntryLimit);
+      setUsageData(next);
+      setUsageError(null);
+    } catch (e) {
+      setUsageError(String(e));
+    } finally {
+      setUsageLoading(false);
+    }
+  }, [usageEntryLimit]);
+
+  useEffect(() => {
+    if (activeSection !== "usage") return;
+    loadUsage();
+  }, [activeSection, loadUsage]);
 
   const handleSync = useCallback(async () => {
     setSyncing(true);
@@ -224,6 +262,10 @@ export default function PoeModelsPage() {
   const addedCount = latestSummary?.added?.length ?? 0;
   const selectedDescription = selectedModel ? selectedModel.description_ja ?? selectedModel.description_en ?? t("poeModels.descriptionFallback") : "";
   const selectedDescriptionEn = selectedModel?.description_en ?? "";
+  const usageEntryCount = usageData?.summary.entry_count ?? 0;
+  const usageConfigured = usageData?.configured ?? false;
+  const averagePointsPerCall = usageEntryCount > 0 ? (usageData?.summary.total_cost_points ?? 0) / usageEntryCount : 0;
+  const averageUsdPerCall = usageEntryCount > 0 ? (usageData?.summary.total_cost_usd ?? 0) / usageEntryCount : 0;
 
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
@@ -308,6 +350,11 @@ export default function PoeModelsPage() {
                   key: "removed" as const,
                   label: t("poeModels.table.removedModels"),
                   meta: `${removedCount} ${t("common.rows")}`,
+                },
+                {
+                  key: "usage" as const,
+                  label: t("poeModels.section.usage"),
+                  meta: usageConfigured ? `${usageEntryCount} ${t("common.rows")}` : t("poeModels.usage.meta"),
                 },
               ].map((section) => (
                 <button
@@ -502,8 +549,8 @@ export default function PoeModelsPage() {
                       {t("poeModels.noAvailableModels")}
                     </div>
                   ) : (
-                    <div className="mt-4 overflow-hidden rounded-[22px] border border-[var(--color-editorial-line)]">
-                      <div className="overflow-x-auto">
+                    <div className="mt-4 rounded-[22px] border border-[var(--color-editorial-line)]">
+                      <div className="overflow-x-auto rounded-[22px]">
                         <table className="min-w-[1080px] divide-y divide-[var(--color-editorial-line)] text-sm">
                           <thead className="bg-[var(--color-editorial-panel)]">
                             <tr className="text-left text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
@@ -591,6 +638,221 @@ export default function PoeModelsPage() {
                     ))}
                   </div>
                 )}
+              </section>
+            ) : null}
+
+            {activeSection === "usage" ? (
+              <section className="space-y-4">
+                <section className="surface-editorial rounded-[28px] p-5">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("poeModels.section.usage")}
+                      </div>
+                      <h2 className="mt-2 font-serif text-[2rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                        {t("poeModels.usage.title")}
+                      </h2>
+                      <p className="mt-3 max-w-3xl text-[14px] leading-7 text-[var(--color-editorial-ink-soft)]">
+                        {t("poeModels.usage.description")}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => loadUsage(true)}
+                      disabled={usageLoading}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:opacity-60"
+                    >
+                      <RefreshCw className={`size-4 ${usageLoading ? "animate-spin" : ""}`} aria-hidden="true" />
+                      {usageLoading ? t("poeModels.usage.refreshing") : t("poeModels.usage.refresh")}
+                    </button>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-end gap-2 text-sm text-[var(--color-editorial-ink-soft)]">
+                    <span>{t("poeModels.usage.entryLimit")}</span>
+                    <select
+                      value={usageEntryLimit}
+                      onChange={(e) => setUsageEntryLimit(Number(e.target.value))}
+                      className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink)] outline-none"
+                    >
+                      {[50, 100, 200].map((value) => (
+                        <option key={value} value={value}>
+                          {value}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {usageLoading && !usageData ? (
+                    <div className="mt-4 rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-6 text-sm text-[var(--color-editorial-ink-faint)]">
+                      {t("common.loading")}
+                    </div>
+                  ) : null}
+
+                  {usageError ? (
+                    <div className="mt-4 rounded-[22px] border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-800">
+                      {usageError}
+                    </div>
+                  ) : null}
+
+                  {usageData && !usageData.configured ? (
+                    <div className="mt-4 rounded-[22px] border border-dashed border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-4 py-6 text-sm text-[var(--color-editorial-ink-faint)]">
+                      <div className="font-medium text-[var(--color-editorial-ink)]">{t("poeModels.usage.notConfiguredTitle")}</div>
+                      <div className="mt-2 leading-7">{t("poeModels.usage.notConfiguredDescription")}</div>
+                    </div>
+                  ) : null}
+
+                  {usageConfigured ? (
+                    <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                      <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                          {t("poeModels.usage.currentBalance")}
+                        </div>
+                        <div className="mt-3 font-serif text-[1.8rem] leading-none text-[var(--color-editorial-ink)]">
+                          {(usageData?.current_point_balance ?? 0).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                          {t("poeModels.usage.totalPoints")}
+                        </div>
+                        <div className="mt-3 font-serif text-[1.8rem] leading-none text-[var(--color-editorial-ink)]">
+                          {(usageData?.summary.total_cost_points ?? 0).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                          {t("poeModels.usage.totalUsd")}
+                        </div>
+                        <div className="mt-3 font-serif text-[1.8rem] leading-none text-[var(--color-editorial-ink)]">
+                          {formatUSD(usageData?.summary.total_cost_usd ?? 0)}
+                        </div>
+                      </div>
+                      <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                          {t("poeModels.usage.avgPointsPerCall")}
+                        </div>
+                        <div className="mt-3 font-serif text-[1.8rem] leading-none text-[var(--color-editorial-ink)]">
+                          {formatMetricNumber(averagePointsPerCall)}
+                        </div>
+                      </div>
+                      <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                          {t("poeModels.usage.avgUsdPerCall")}
+                        </div>
+                        <div className="mt-3 font-serif text-[1.8rem] leading-none text-[var(--color-editorial-ink)]">
+                          {formatUSD(averageUsdPerCall)}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {usageConfigured && usageData?.truncated ? (
+                    <div className="mt-4 rounded-[22px] border border-[#ead5af] bg-[#faf1dd] px-4 py-3 text-sm text-[#916321]">
+                      {t("poeModels.usage.truncated")}
+                    </div>
+                  ) : null}
+                </section>
+
+                {usageConfigured ? (
+                  <section className="space-y-4">
+                    <section className="surface-editorial rounded-[28px] p-5">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("poeModels.usage.byModel")}
+                      </div>
+                      <h3 className="mt-2 font-serif text-[1.6rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                        {t("poeModels.usage.byModelTitle")}
+                      </h3>
+                      {usageData?.model_summaries?.length ? (
+                        <div className="mt-4 rounded-[22px] border border-[var(--color-editorial-line)]">
+                          <div className="overflow-x-auto rounded-[22px]">
+                            <table className="w-full divide-y divide-[var(--color-editorial-line)] text-sm">
+                              <thead className="bg-[var(--color-editorial-panel)] text-left text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
+                                <tr>
+                                  <th className="px-4 py-3">{t("poeModels.usage.table.model")}</th>
+                                  <th className="px-4 py-3 text-right">{t("poeModels.usage.totalPoints")}</th>
+                                  <th className="px-4 py-3 text-right">{t("poeModels.usage.totalUsd")}</th>
+                                  <th className="px-4 py-3 text-right">{t("poeModels.usage.avgPointsPerCall")}</th>
+                                  <th className="px-4 py-3 text-right">{t("poeModels.usage.avgUsdPerCall")}</th>
+                                  <th className="px-4 py-3">{t("poeModels.usage.table.calls")}</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]">
+                                {usageData.model_summaries.slice(0, 8).map((row) => (
+                                  <tr key={row.bot_name}>
+                                    <td className="px-4 py-3 text-[var(--color-editorial-ink)]">{row.bot_name}</td>
+                                    <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">{row.total_cost_points.toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">{formatUSD(row.total_cost_usd)}</td>
+                                    <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">
+                                      {formatMetricNumber(row.entry_count > 0 ? row.total_cost_points / row.entry_count : 0)}
+                                    </td>
+                                    <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">
+                                      {formatUSD(row.entry_count > 0 ? row.total_cost_usd / row.entry_count : 0)}
+                                    </td>
+                                    <td className="px-4 py-3 text-[var(--color-editorial-ink-soft)]">{row.entry_count.toLocaleString()}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-4 rounded-[22px] border border-dashed border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-4 py-6 text-sm text-[var(--color-editorial-ink-faint)]">
+                          {t("poeModels.usage.empty")}
+                        </div>
+                      )}
+                    </section>
+
+                    <section className="surface-editorial rounded-[28px] p-5">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("poeModels.usage.recent")}
+                      </div>
+                      <h3 className="mt-2 font-serif text-[1.6rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                        {t("poeModels.usage.recentTitle")}
+                      </h3>
+                      {usageData?.entries?.length ? (
+                        <div className="mt-4 rounded-[22px] border border-[var(--color-editorial-line)]">
+                          <div className="overflow-x-auto rounded-[22px]">
+                            <table className="w-full divide-y divide-[var(--color-editorial-line)] text-sm">
+                              <thead className="bg-[var(--color-editorial-panel)] text-left text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
+                                <tr>
+                                  <th className="px-4 py-3">{t("poeModels.usage.table.model")}</th>
+                                  <th className="px-4 py-3">{t("poeModels.usage.table.type")}</th>
+                                  <th className="px-4 py-3 text-right">{t("poeModels.usage.totalPoints")}</th>
+                                  <th className="px-4 py-3 text-right">{t("poeModels.usage.totalUsd")}</th>
+                                  <th className="px-4 py-3">{t("poeModels.usage.table.createdAt")}</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]">
+                                {usageData.entries.map((row) => (
+                                  <tr key={row.query_id}>
+                                    <td className="px-4 py-3">
+                                      <div className="text-[var(--color-editorial-ink)]">{row.bot_name}</div>
+                                      {row.chat_name ? (
+                                        <div className="mt-1 text-xs text-[var(--color-editorial-ink-faint)]">{row.chat_name}</div>
+                                      ) : (
+                                        <div className="mt-1 text-xs text-[var(--color-editorial-ink-faint)]">{row.query_id}</div>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 text-[var(--color-editorial-ink-soft)]">{row.usage_type || "API"}</td>
+                                    <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">{row.cost_points.toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-right text-[var(--color-editorial-ink-soft)]">{formatUSD(row.cost_usd)}</td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-[var(--color-editorial-ink-soft)]">
+                                      {new Date(row.created_at).toLocaleString()}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-4 rounded-[22px] border border-dashed border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-4 py-6 text-sm text-[var(--color-editorial-ink-faint)]">
+                          {t("poeModels.usage.empty")}
+                        </div>
+                      )}
+                    </section>
+                  </section>
+                ) : null}
               </section>
             ) : null}
           </section>

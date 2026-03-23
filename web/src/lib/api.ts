@@ -139,6 +139,44 @@ export interface PoeModelsResponse {
   models: PoeModelSnapshot[];
 }
 
+export interface PoeUsageSummary {
+  entry_count: number;
+  api_entry_count: number;
+  chat_entry_count: number;
+  total_cost_points: number;
+  total_cost_usd: number;
+  latest_entry_at?: string | null;
+}
+
+export interface PoeUsageModelSummary {
+  bot_name: string;
+  entry_count: number;
+  total_cost_points: number;
+  total_cost_usd: number;
+  latest_entry_at?: string | null;
+}
+
+export interface PoeUsageEntry {
+  query_id: string;
+  bot_name: string;
+  created_at: string;
+  cost_usd: number;
+  raw_cost_usd: string;
+  cost_points: number;
+  cost_breakdown_in_points: Record<string, string>;
+  usage_type: string;
+  chat_name?: string | null;
+}
+
+export interface PoeUsageResponse {
+  configured: boolean;
+  current_point_balance?: number | null;
+  summary: PoeUsageSummary;
+  model_summaries: PoeUsageModelSummary[];
+  entries: PoeUsageEntry[];
+  truncated: boolean;
+}
+
 export interface OpenRouterModelSnapshot {
   model_id: string;
   canonical_slug?: string | null;
@@ -1755,6 +1793,8 @@ export const api = {
     ),
   getPoeModels: () =>
     apiFetch<PoeModelsResponse>("/poe-models"),
+  getPoeUsage: (entriesLimit = 100) =>
+    apiFetch<PoeUsageResponse>(`/poe-models/usage?entries_limit=${entriesLimit}`),
   getPoeSyncStatus: () =>
     apiFetch<PoeSyncStatusResponse>("/poe-models/status"),
   syncPoeModels: () =>

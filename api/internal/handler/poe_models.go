@@ -5,11 +5,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/enjoydarts/sifto/api/internal/middleware"
 	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
@@ -17,17 +19,23 @@ import (
 
 type PoeModelsHandler struct {
 	repo               *repository.PoeModelRepo
+	settingsRepo       *repository.UserSettingsRepo
 	service            *service.PoeCatalogService
+	usageService       *service.PoeUsageService
+	cipher             *service.SecretCipher
 	providerUpdateRepo *repository.ProviderModelUpdateRepo
 	activeTranslations sync.Map
 	processStartedAt   time.Time
 }
 
-func NewPoeModelsHandler(repo *repository.PoeModelRepo, providerUpdateRepo *repository.ProviderModelUpdateRepo, svc *service.PoeCatalogService) *PoeModelsHandler {
+func NewPoeModelsHandler(repo *repository.PoeModelRepo, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, providerUpdateRepo *repository.ProviderModelUpdateRepo, svc *service.PoeCatalogService, usageSvc *service.PoeUsageService) *PoeModelsHandler {
 	return &PoeModelsHandler{
 		repo:               repo,
+		settingsRepo:       settingsRepo,
+		cipher:             cipher,
 		providerUpdateRepo: providerUpdateRepo,
 		service:            svc,
+		usageService:       usageSvc,
 		processStartedAt:   time.Now().UTC(),
 	}
 }
@@ -75,6 +83,35 @@ func (h *PoeModelsHandler) Status(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, map[string]any{"run": run})
+}
+
+func (h *PoeModelsHandler) Usage(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	poeKey, err := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if poeKey == nil || strings.TrimSpace(*poeKey) == "" {
+		writeJSON(w, &service.PoeUsageOverview{
+			Configured:     false,
+			ModelSummaries: make([]service.PoeUsageModelRollup, 0),
+			Entries:        make([]service.PoeUsageEntry, 0),
+		})
+		return
+	}
+	entryLimit := 100
+	if raw := strings.TrimSpace(r.URL.Query().Get("entries_limit")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 500 {
+			entryLimit = parsed
+		}
+	}
+	overview, err := h.usageService.FetchOverview(r.Context(), *poeKey, entryLimit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, overview)
 }
 
 func (h *PoeModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {

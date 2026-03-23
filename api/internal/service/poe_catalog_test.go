@@ -40,15 +40,15 @@ func TestPoeSnapshotsToCatalogModelsUsesPoeAliasAndSnapshotPricing(t *testing.T)
 	description := "Model description"
 	models := []repository.PoeModelSnapshot{
 		{
-			ModelID:                        "Claude-Sonnet-4.5",
-			DisplayName:                    "Claude-Sonnet-4.5",
-			OwnedBy:                        "Anthropic",
-			DescriptionEN:                  &description,
-			PricingJSON:                    []byte(`{"prompt":"0.000003","completion":"0.000015"}`),
-			TransportSupportsOpenAICompat:  true,
+			ModelID:                          "Claude-Sonnet-4.5",
+			DisplayName:                      "Claude-Sonnet-4.5",
+			OwnedBy:                          "Anthropic",
+			DescriptionEN:                    &description,
+			PricingJSON:                      []byte(`{"prompt":"0.000003","completion":"0.000015"}`),
+			TransportSupportsOpenAICompat:    true,
 			TransportSupportsAnthropicCompat: true,
-			PreferredTransport:             "anthropic",
-			IsActive:                       true,
+			PreferredTransport:               "anthropic",
+			IsActive:                         true,
 		},
 	}
 

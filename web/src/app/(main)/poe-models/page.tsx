@@ -125,6 +125,7 @@ export default function PoeModelsPage() {
   const [usageRange, setUsageRange] = useState("30d");
   const [usageEntryLimit, setUsageEntryLimit] = useState(100);
   const models = useMemo(() => (Array.isArray(data?.models) ? data?.models : []), [data?.models]);
+  const removedModels = useMemo(() => (Array.isArray(data?.removed_models) ? data?.removed_models : []), [data?.removed_models]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -213,9 +214,9 @@ export default function PoeModelsPage() {
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [models]);
 
-  const filtered = useMemo(() => {
+  const filterModels = useCallback((input: PoeModelSnapshot[]) => {
     const q = query.trim().toLowerCase();
-    return models.filter((model) => {
+    return input.filter((model) => {
       if (providerFilter && model.owned_by !== providerFilter) return false;
       if (!q) return true;
       return [model.model_id, model.display_name, model.owned_by, model.description_en, model.description_ja]
@@ -224,10 +225,10 @@ export default function PoeModelsPage() {
         .toLowerCase()
         .includes(q);
     });
-  }, [models, providerFilter, query]);
+  }, [providerFilter, query]);
 
-  const sorted = useMemo(() => {
-    const models = [...filtered];
+  const sortModels = useCallback((input: PoeModelSnapshot[]) => {
+    const models = [...input];
     models.sort((a, b) => {
       let result = 0;
       switch (sortKey) {
@@ -251,7 +252,12 @@ export default function PoeModelsPage() {
       return sortDirection === "asc" ? result : -result;
     });
     return models;
-  }, [filtered, sortDirection, sortKey]);
+  }, [sortDirection, sortKey]);
+
+  const filtered = useMemo(() => filterModels(models), [filterModels, models]);
+  const filteredRemoved = useMemo(() => filterModels(removedModels), [filterModels, removedModels]);
+  const sorted = useMemo(() => sortModels(filtered), [filtered, sortModels]);
+  const sortedRemoved = useMemo(() => sortModels(filteredRemoved), [filteredRemoved, sortModels]);
 
   const setSort = useCallback(
     (nextKey: SortKey) => {
@@ -331,6 +337,74 @@ export default function PoeModelsPage() {
         </label>
       </div>
     </section>
+  );
+
+  const renderModelTable = (
+    rows: PoeModelSnapshot[],
+    emptyLabel: string,
+    rowClassName = "cursor-pointer transition hover:bg-[var(--color-editorial-panel)]",
+  ) => (
+    rows.length === 0 ? (
+      <div className="mt-4 rounded-[22px] border border-dashed border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-4 py-6 text-sm text-[var(--color-editorial-ink-faint)]">
+        {emptyLabel}
+      </div>
+    ) : (
+      <div className="mt-4 rounded-[22px] border border-[var(--color-editorial-line)]">
+        <div className="overflow-x-auto rounded-[22px]">
+          <table className="min-w-[1080px] divide-y divide-[var(--color-editorial-line)] text-sm">
+            <thead className="bg-[var(--color-editorial-panel)]">
+              <tr className="text-left text-xs font-medium uppercase tracking-[0.08em] text-zinc-500">
+                <th className="px-4 py-3">
+                  <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("provider")}>
+                    {t("poeModels.table.provider")}{sortMarker("provider")}
+                  </button>
+                </th>
+                <th className="px-4 py-3">
+                  <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("model")}>
+                    {t("poeModels.table.model")}{sortMarker("model")}
+                  </button>
+                </th>
+                <th className="px-4 py-3">
+                  <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("transport")}>
+                    {t("poeModels.table.transport")}{sortMarker("transport")}
+                  </button>
+                </th>
+                <th className="px-4 py-3">
+                  <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("context")}>
+                    {t("poeModels.table.context")}{sortMarker("context")}
+                  </button>
+                </th>
+                <th className="px-4 py-3">
+                  <button type="button" className="hover:text-[var(--color-editorial-ink)]" onClick={() => setSort("pricing")}>
+                    {t("poeModels.table.pricing")}{sortMarker("pricing")}
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]">
+              {rows.map((model) => (
+                <tr
+                  key={model.model_id}
+                  className={rowClassName}
+                  onClick={() => setSelectedModel(model)}
+                >
+                  <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">{model.owned_by || "—"}</td>
+                  <td className="whitespace-nowrap px-4 py-3 align-top">
+                    <div className="whitespace-nowrap font-medium text-[var(--color-editorial-ink)]">{model.display_name || model.model_id}</div>
+                    <div className="mt-1 whitespace-nowrap text-xs text-[var(--color-editorial-ink-faint)]">{model.model_id}</div>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">{transportLabel(model)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">
+                    {model.context_length ? model.context_length.toLocaleString() : "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 align-top text-[var(--color-editorial-ink-soft)]">{pricingSummary(model) ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
   );
 
   return (
@@ -631,35 +705,26 @@ export default function PoeModelsPage() {
             ) : null}
 
             {activeSection === "removed" ? (
-              <section className="surface-editorial rounded-[28px] p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                      {t("poeModels.providerGroup")}
-                    </div>
-                    <h2 className="mt-2 font-serif text-[2rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">
-                      {t("poeModels.table.removedModels")}
-                    </h2>
-                  </div>
-                  <div className="text-xs text-[var(--color-editorial-ink-faint)]">
-                    {removedCount} {t("common.rows")}
-                  </div>
-                </div>
-
-                {removedCount === 0 ? (
-                  <div className="mt-4 rounded-[22px] border border-dashed border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] px-4 py-6 text-sm text-[var(--color-editorial-ink-faint)]">
-                    {t("poeModels.noUnavailableModels")}
-                  </div>
-                ) : (
-                  <div className="mt-4 space-y-3">
-                    {(latestSummary?.removed ?? []).map((model) => (
-                      <div key={model.model_id} className="rounded-[22px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                        {model.model_id}
+              <>
+                {renderFilters}
+                <section className="surface-editorial rounded-[28px] p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("poeModels.providerGroup")}
                       </div>
-                    ))}
+                      <h2 className="mt-2 font-serif text-[2rem] leading-none tracking-[-0.03em] text-[var(--color-editorial-ink)]">
+                        {t("poeModels.table.removedModels")}
+                      </h2>
+                    </div>
+                    <div className="text-xs text-[var(--color-editorial-ink-faint)]">
+                      {sortedRemoved.length} {t("common.rows")}
+                    </div>
                   </div>
-                )}
-              </section>
+
+                  {renderModelTable(sortedRemoved, t("poeModels.noUnavailableModels"), "cursor-pointer bg-red-50/35 transition hover:bg-red-50/60")}
+                </section>
+              </>
             ) : null}
 
             {activeSection === "usage" ? (
@@ -686,15 +751,6 @@ export default function PoeModelsPage() {
                       >
                         <RefreshCw className={`size-4 ${usageSyncing ? "animate-spin" : ""}`} aria-hidden="true" />
                         {usageSyncing ? t("poeModels.usage.syncing") : t("poeModels.usage.sync")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => loadUsage()}
-                        disabled={usageLoading}
-                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:opacity-60"
-                      >
-                        <RefreshCw className={`size-4 ${usageLoading ? "animate-spin" : ""}`} aria-hidden="true" />
-                        {usageLoading ? t("poeModels.usage.refreshing") : t("poeModels.usage.refresh")}
                       </button>
                     </div>
                   </div>

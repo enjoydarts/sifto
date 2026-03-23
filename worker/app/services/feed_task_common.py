@@ -279,10 +279,10 @@ def build_briefing_navigator_task(persona: str, candidates: list[dict], intro_co
         },
         "snark": {
             "name": "毒舌ガイド ジン",
-            "voice": "軽口で面白いが不快にしない。皮肉は弱めで、攻撃的にしない。",
+            "voice": "軽口で面白い毒舌。皮肉やツッコミは少し強めでよいが、不快にしない。",
             "comment_range": "45〜90字",
             "intro_range": "80〜130字",
-            "intro_style": "乾いたユーモアを少し混ぜるが、不快にせず、軽口レベルで記事へつなぐ。",
+            "intro_style": "乾いたユーモア、ツッコミ、少し呆れ気味の一言を混ぜてよい。ただし不快にせず、記事や状況への皮肉に留めて記事へつなぐ。",
         },
     }
     profile = persona_profiles.get(persona_key) or persona_profiles["editor"]
@@ -313,6 +313,8 @@ def build_briefing_navigator_task(persona: str, candidates: list[dict], intro_co
 - 1本ずつ観点を変える。すべて同じ理由にしない
 - summary や title の言い換えをそのまま並べるのではなく、なぜ今読む価値があるかを一言で再構成する
 - snark でも不快・攻撃的・見下し表現は禁止
+- snark では、記事や状況に対する軽い皮肉、ツッコミ、呆れ気味の言い回しは許可する
+- snark でも読者個人をいじらない。人ではなく話題や状況に対して毒づく
 - 事実を捏造しない。候補から読めることだけで薦める
 - JSONのみを返す
 

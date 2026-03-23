@@ -137,6 +137,7 @@ export interface PoeModelsResponse {
   latest_run: PoeSyncRun | null;
   latest_change_summary?: ProviderModelChangeSummary | null;
   models: PoeModelSnapshot[];
+  removed_models?: PoeModelSnapshot[];
 }
 
 export interface PoeUsageSummary {

@@ -53,7 +53,10 @@ class FeedTaskCommonTests(unittest.TestCase):
 
         prompt = task["prompt"]
         self.assertIn("軽口", prompt)
+        self.assertIn("ツッコミ", prompt)
+        self.assertIn("呆れ気味", prompt)
         self.assertIn("不快・攻撃的・見下し表現は禁止", prompt)
+        self.assertIn("人ではなく話題や状況に対して毒づく", prompt)
 
 
 if __name__ == "__main__":

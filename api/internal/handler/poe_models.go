@@ -51,6 +51,7 @@ func (h *PoeModelsHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	latestRun = h.resumeTranslationIfNeeded(latestRun, models)
 	var latestChangeSummary any
+	removedModels := make([]repository.PoeModelSnapshot, 0)
 	if h.providerUpdateRepo != nil {
 		summary, err := h.providerUpdateRepo.ListLatestProviderSummary(r.Context(), "poe")
 		if err != nil {
@@ -58,10 +59,19 @@ func (h *PoeModelsHandler) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		latestChangeSummary = summary
+		if summary != nil && len(summary.Removed) > 0 && latestRun != nil {
+			prevModels, err := h.repo.ListPreviousSuccessfulSnapshots(r.Context(), latestRun.ID)
+			if err != nil {
+				writeRepoError(w, err)
+				return
+			}
+			removedModels = filterPoeRemovedModels(prevModels, summary.Removed)
+		}
 	}
 	writeJSON(w, map[string]any{
 		"latest_run":            latestRun,
 		"models":                models,
+		"removed_models":        removedModels,
 		"latest_change_summary": latestChangeSummary,
 	})
 }
@@ -188,6 +198,7 @@ func (h *PoeModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var latestChangeSummary any
+	removedModels := make([]repository.PoeModelSnapshot, 0)
 	if h.providerUpdateRepo != nil {
 		summary, err := h.providerUpdateRepo.ListLatestProviderSummary(r.Context(), "poe")
 		if err != nil {
@@ -195,14 +206,45 @@ func (h *PoeModelsHandler) Sync(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		latestChangeSummary = summary
+		if summary != nil && len(summary.Removed) > 0 {
+			removedModels = filterPoeRemovedModels(prevModels, summary.Removed)
+		}
 	}
 	writeJSON(w, map[string]any{
 		"latest_run":            latestRun,
 		"models":                latest,
+		"removed_models":        removedModels,
 		"latest_change_summary": latestChangeSummary,
 	})
 
 	h.startTranslation(syncRunID, latest)
+}
+
+func filterPoeRemovedModels(previous []repository.PoeModelSnapshot, removed []model.ProviderModelChangeEvent) []repository.PoeModelSnapshot {
+	if len(previous) == 0 || len(removed) == 0 {
+		return make([]repository.PoeModelSnapshot, 0)
+	}
+	removedIDs := make(map[string]struct{}, len(removed))
+	for _, ev := range removed {
+		modelID := strings.TrimSpace(ev.ModelID)
+		if modelID == "" {
+			continue
+		}
+		removedIDs[modelID] = struct{}{}
+	}
+	out := make([]repository.PoeModelSnapshot, 0, len(removedIDs))
+	for _, snapshot := range previous {
+		if _, ok := removedIDs[snapshot.ModelID]; ok {
+			out = append(out, snapshot)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].OwnedBy == out[j].OwnedBy {
+			return out[i].DisplayName < out[j].DisplayName
+		}
+		return out[i].OwnedBy < out[j].OwnedBy
+	})
+	return out
 }
 
 func (h *PoeModelsHandler) translateDescriptions(syncRunID string, models []repository.PoeModelSnapshot) {

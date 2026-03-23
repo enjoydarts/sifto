@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback, useMemo, useRef, startTransition } from "react";
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCheck, Newspaper, Search, X } from "lucide-react";
@@ -148,6 +148,7 @@ function ItemsPageContent() {
         searchMode: data?.search_mode ?? searchMode,
       };
     },
+    placeholderData: (prev) => prev,
   });
   const cachedItemsLength = listQuery.data?.items?.length ?? 0;
   const items = listQuery.data?.items ?? [];
@@ -202,9 +203,7 @@ function ItemsPageContent() {
           page: number;
       }>
     ) => {
-      const baseSearch =
-        typeof window !== "undefined" ? window.location.search : searchParams.toString() ? `?${searchParams.toString()}` : "";
-      const q = new URLSearchParams(baseSearch);
+      const q = new URLSearchParams(searchParams.toString());
 
       const nextFeed = patch.feed ?? feedMode;
       q.set("feed", nextFeed);
@@ -241,9 +240,7 @@ function ItemsPageContent() {
 
       const nextQuery = q.toString();
       const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
-      startTransition(() => {
-        router.replace(nextUrl, { scroll: false });
-      });
+      router.replace(nextUrl, { scroll: false });
     },
     [favoriteOnly, feedMode, filter, page, pathname, router, searchMode, searchParams, searchQuery, sortMode, sourceID, topic, unreadOnly]
   );

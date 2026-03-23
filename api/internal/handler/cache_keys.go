@@ -97,6 +97,10 @@ func cacheKeyBriefingToday(userID string, size int) string {
 	return fmt.Sprintf("%s:briefing:today:%s:size=%d", cacheKeyVersion, userID, size)
 }
 
+func cacheKeyBriefingNavigator(userID, persona, model string, preview bool) string {
+	return fmt.Sprintf("%s:briefing:navigator:%s:persona=%s:model=%s:preview=%t", cacheKeyVersion, userID, persona, model, preview)
+}
+
 func cacheKeyItemDetailVersioned(userID, itemID string, version int64) string {
 	return fmt.Sprintf("%s:items:detail:%s:item=%s:v=%d", cacheKeyVersion, userID, itemID, version)
 }

@@ -130,6 +130,10 @@ function localizeLLMSettingKey(settingKey: string, t: (key: string, fallback?: s
       return t("settings.model.factsCheck");
     case "faithfulness_check":
       return t("settings.model.faithfulnessCheck");
+    case "navigator":
+      return t("settings.model.navigator");
+    case "navigator_fallback":
+      return t("settings.model.navigatorFallback");
     case "embedding":
       return t("settings.model.embeddings");
     default:
@@ -174,6 +178,7 @@ type SettingsSectionID =
   | "notifications"
   | "integrations"
   | "models"
+  | "navigator"
   | "budget"
   | "system";
 
@@ -277,6 +282,10 @@ export default function SettingsPage() {
   const [openAIEmbeddingModel, setOpenAIEmbeddingModel] = useState("");
   const [factsCheckModel, setFactsCheckModel] = useState("");
   const [faithfulnessCheckModel, setFaithfulnessCheckModel] = useState("");
+  const [navigatorEnabled, setNavigatorEnabled] = useState(false);
+  const [navigatorPersona, setNavigatorPersona] = useState("editor");
+  const [navigatorModel, setNavigatorModel] = useState("");
+  const [navigatorFallbackModel, setNavigatorFallbackModel] = useState("");
   const loadSeqRef = useRef(0);
   const llmModelsDirtyRef = useRef(false);
   const llmExtrasRef = useRef<HTMLDivElement | null>(null);
@@ -293,6 +302,10 @@ export default function SettingsPage() {
     setOpenAIEmbeddingModel(llmModels?.embedding ?? "");
     setFactsCheckModel(llmModels?.facts_check ?? "");
     setFaithfulnessCheckModel(llmModels?.faithfulness_check ?? "");
+    setNavigatorEnabled(Boolean(llmModels?.navigator_enabled ?? false));
+    setNavigatorPersona(llmModels?.navigator_persona ?? "editor");
+    setNavigatorModel(llmModels?.navigator ?? "");
+    setNavigatorFallbackModel(llmModels?.navigator_fallback ?? "");
   }, []);
 
   const onChangeLLMModel = useCallback((setter: (value: string) => void, value: string) => {
@@ -454,6 +467,8 @@ export default function SettingsPage() {
       ["source_suggestion", llmModels.source_suggestion],
       ["facts_check", llmModels.facts_check],
       ["faithfulness_check", llmModels.faithfulness_check],
+      ["navigator", llmModels.navigator],
+      ["navigator_fallback", llmModels.navigator_fallback],
     ];
     for (const [settingKey, modelID] of candidates) {
       if (!modelID) continue;
@@ -763,6 +778,10 @@ export default function SettingsPage() {
         embedding: emptyToNull(openAIEmbeddingModel),
         facts_check: emptyToNull(factsCheckModel),
         faithfulness_check: emptyToNull(faithfulnessCheckModel),
+        navigator_enabled: navigatorEnabled,
+        navigator_persona: navigatorPersona,
+        navigator: emptyToNull(navigatorModel),
+        navigator_fallback: emptyToNull(navigatorFallbackModel),
       };
       const resp = await api.updateLLMModelSettings(nextModels);
       setSettings((prev) => {
@@ -1397,6 +1416,13 @@ export default function SettingsPage() {
       summary: `${t(`settings.window.${readingPlanWindow}`)} / ${readingPlanSize} / ${readingPlanDiversifyTopics ? t("settings.on") : t("settings.off")}`,
     },
     {
+      id: "navigator",
+      title: t("settings.group.navigator"),
+      summary: navigatorEnabled
+        ? `${t(`settings.navigator.persona.${navigatorPersona}`, navigatorPersona)} / ${navigatorModel || t("settings.default")}`
+        : t("settings.off"),
+    },
+    {
       id: "personalization",
       title: t("settings.personalization.title"),
       summary: preferenceProfile
@@ -1481,6 +1507,11 @@ export default function SettingsPage() {
       kicker: t("settings.section.integrations"),
       title: t("settings.controlRoom.integrationsTitle"),
       description: t("settings.controlRoom.integrationsDescription"),
+    },
+    navigator: {
+      kicker: t("settings.group.navigator"),
+      title: t("settings.controlRoom.navigatorTitle"),
+      description: t("settings.controlRoom.navigatorDescription"),
     },
     models: {
       kicker: t("settings.section.llm"),
@@ -1980,6 +2011,79 @@ export default function SettingsPage() {
                 </div>
               ) : null}
             </div>
+          ) : null}
+
+          {activeSection === "navigator" ? (
+            <SectionCard>
+              <form onSubmit={submitLLMModels} className="space-y-5">
+                <div>
+                  <h3 className="text-base font-semibold text-[var(--color-editorial-ink)]">{t("settings.group.navigator")}</h3>
+                  <p className="mt-1 text-sm text-[var(--color-editorial-ink-soft)]">{t("settings.navigator.description")}</p>
+                </div>
+
+                <section className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                    <div>
+                      <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.enabled")}</h4>
+                      <p className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">{t("settings.navigator.enabledHelp")}</p>
+                    </div>
+                    <label className="inline-flex min-h-10 items-center gap-2 self-center text-sm text-[var(--color-editorial-ink)] md:justify-self-end">
+                      <input
+                        type="checkbox"
+                        checked={navigatorEnabled}
+                        onChange={(e) => {
+                          llmModelsDirtyRef.current = true;
+                          setNavigatorEnabled(e.target.checked);
+                        }}
+                        className="size-4 rounded border-[var(--color-editorial-line)] text-[var(--color-editorial-ink)] focus:ring-[var(--color-editorial-ink)]"
+                      />
+                      {navigatorEnabled ? t("settings.on") : t("settings.off")}
+                    </label>
+                  </div>
+                </section>
+
+                <section className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                  <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.persona")}</h4>
+                  <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)] md:items-start">
+                    <div>
+                      <select
+                        value={navigatorPersona}
+                        onChange={(e) => {
+                          llmModelsDirtyRef.current = true;
+                          setNavigatorPersona(e.target.value);
+                        }}
+                        className="w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm text-[var(--color-editorial-ink)]"
+                      >
+                        <option value="editor">{t("settings.navigator.persona.editor")}</option>
+                        <option value="hype">{t("settings.navigator.persona.hype")}</option>
+                        <option value="analyst">{t("settings.navigator.persona.analyst")}</option>
+                        <option value="concierge">{t("settings.navigator.persona.concierge")}</option>
+                        <option value="snark">{t("settings.navigator.persona.snark")}</option>
+                      </select>
+                    </div>
+                    <div className="flex min-h-10 items-center rounded-[14px] border border-dashed border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
+                      {t(`settings.navigator.personaHelp.${navigatorPersona}`, t("settings.navigator.personaHelp.editor"))}
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                  <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.modelsTitle")}</h4>
+                  <div className="mt-3 grid gap-4 md:grid-cols-2">
+                    <ModelSelect label={t("settings.model.navigator")} value={navigatorModel} onChange={(value) => onChangeLLMModel(setNavigatorModel, value)} options={optionsForPurpose("summary", navigatorModel)} labels={modelSelectLabels} variant="modal" />
+                    <ModelSelect label={t("settings.model.navigatorFallback")} value={navigatorFallbackModel} onChange={(value) => onChangeLLMModel(setNavigatorFallbackModel, value)} options={optionsForPurpose("summary", navigatorFallbackModel)} labels={modelSelectLabels} variant="modal" />
+                  </div>
+                </section>
+
+                <button
+                  type="submit"
+                  disabled={savingLLMModels}
+                  className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                >
+                  {savingLLMModels ? t("common.saving") : t("settings.saveModels")}
+                </button>
+              </form>
+            </SectionCard>
           ) : null}
 
           {activeSection === "budget" ? (

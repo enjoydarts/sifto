@@ -921,6 +921,66 @@ func (r *ItemRepo) CountSummarizedReadUnreadOnDateJST(ctx context.Context, userI
 	return readCount, unreadCount, nil
 }
 
+func (r *ItemRepo) BriefingNavigatorCandidates24h(ctx context.Context, userID string, limit int) ([]model.BriefingNavigatorCandidate, error) {
+	if limit <= 0 {
+		limit = 12
+	}
+	if limit > 24 {
+		limit = 24
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT i.id,
+		       i.title,
+		       sm.translated_title,
+		       s.title AS source_title,
+		       sm.summary,
+		       COALESCE(sm.topics, '{}'::text[]) AS topics,
+		       sm.score,
+		       COALESCE(i.published_at, i.created_at) AS published_at
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		JOIN item_summaries sm ON sm.item_id = i.id
+		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
+		  AND i.status = 'summarized'
+		  AND ir.item_id IS NULL
+		  AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '24 hours'
+		  AND NOT EXISTS (
+			SELECT 1 FROM item_laters il
+			WHERE il.user_id = $1
+			  AND il.item_id = i.id
+		  )
+		  AND NULLIF(BTRIM(sm.summary), '') IS NOT NULL
+		ORDER BY COALESCE(i.published_at, i.created_at) DESC, sm.score DESC NULLS LAST
+		LIMIT $2`,
+		userID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]model.BriefingNavigatorCandidate, 0, limit)
+	for rows.Next() {
+		var row model.BriefingNavigatorCandidate
+		if err := rows.Scan(
+			&row.ItemID,
+			&row.Title,
+			&row.TranslatedTitle,
+			&row.SourceTitle,
+			&row.Summary,
+			&row.Topics,
+			&row.Score,
+			&row.PublishedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
 func (r *ItemRepo) CountNewOnDateJST(ctx context.Context, userID, date string) (int, error) {
 	var count int
 	err := r.db.QueryRow(ctx, `

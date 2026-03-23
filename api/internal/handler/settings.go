@@ -216,6 +216,10 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		Embedding         *string `json:"embedding"`
 		FactsCheck        *string `json:"facts_check"`
 		FaithfulnessCheck *string `json:"faithfulness_check"`
+		NavigatorEnabled  bool    `json:"navigator_enabled"`
+		NavigatorPersona  *string `json:"navigator_persona"`
+		Navigator         *string `json:"navigator"`
+		NavigatorFallback *string `json:"navigator_fallback"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -233,6 +237,10 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		Embedding:         body.Embedding,
 		FactsCheck:        body.FactsCheck,
 		FaithfulnessCheck: body.FaithfulnessCheck,
+		NavigatorEnabled:  body.NavigatorEnabled,
+		NavigatorPersona:  body.NavigatorPersona,
+		Navigator:         body.Navigator,
+		NavigatorFallback: body.NavigatorFallback,
 	})
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "invalid model for ") || strings.HasPrefix(err.Error(), "model missing required capability for ") || err.Error() == "invalid embedding model" {

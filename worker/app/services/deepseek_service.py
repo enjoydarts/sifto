@@ -43,11 +43,13 @@ from app.services.digest_task_common import (
 )
 from app.services.feed_task_common import (
     build_ask_task,
+    build_briefing_navigator_task,
     build_rank_feed_task,
     build_seed_sites_rescue_prompt,
     build_seed_sites_task,
     merge_llm_usage,
     parse_ask_result,
+    parse_briefing_navigator_result,
     parse_rank_feed_result,
     parse_seed_sites_result,
 )
@@ -421,6 +423,13 @@ def rank_feed_suggestions(existing_sources: list[dict], preferred_topics: list[s
     task = build_rank_feed_task(existing_sources, preferred_topics, candidates, positive_examples, negative_examples)
     text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=2800, response_schema=task["schema"], schema_name="rank_feed_suggestions")
     return {"items": parse_rank_feed_result(text, task["candidates"]), "llm": _llm_meta(model, "source_suggestion", usage)}
+
+
+def generate_briefing_navigator(persona: str, candidates: list[dict], intro_context: dict, model: str, api_key: str) -> dict:
+    task = build_briefing_navigator_task(persona, candidates, intro_context)
+    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=1800, response_schema=task["schema"], schema_name="briefing_navigator")
+    out = parse_briefing_navigator_result(text, task["candidates"])
+    return {"intro": out["intro"], "picks": out["picks"], "llm": _llm_meta(model, "briefing_navigator", usage)}
 
 
 def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list[str], positive_examples: list[dict] | None, negative_examples: list[dict] | None, model: str, api_key: str) -> dict:

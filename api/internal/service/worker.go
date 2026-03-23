@@ -192,6 +192,37 @@ type RankFeedSuggestionsResponse struct {
 	LLM   *LLMUsage                 `json:"llm,omitempty"`
 }
 
+type BriefingNavigatorCandidate struct {
+	ItemID          string   `json:"item_id"`
+	Title           *string  `json:"title,omitempty"`
+	TranslatedTitle *string  `json:"translated_title,omitempty"`
+	SourceTitle     *string  `json:"source_title,omitempty"`
+	Summary         string   `json:"summary"`
+	Topics          []string `json:"topics,omitempty"`
+	PublishedAt     *string  `json:"published_at,omitempty"`
+	Score           *float64 `json:"score,omitempty"`
+}
+
+type BriefingNavigatorIntroContext struct {
+	NowJST     string `json:"now_jst"`
+	DateJST    string `json:"date_jst"`
+	WeekdayJST string `json:"weekday_jst"`
+	TimeOfDay  string `json:"time_of_day"`
+	SeasonHint string `json:"season_hint"`
+}
+
+type BriefingNavigatorPick struct {
+	ItemID     string   `json:"item_id"`
+	Comment    string   `json:"comment"`
+	ReasonTags []string `json:"reason_tags,omitempty"`
+}
+
+type BriefingNavigatorResponse struct {
+	Intro string                  `json:"intro"`
+	Picks []BriefingNavigatorPick `json:"picks"`
+	LLM   *LLMUsage               `json:"llm,omitempty"`
+}
+
 type AskCandidate struct {
 	ItemID          string   `json:"item_id"`
 	Title           *string  `json:"title,omitempty"`
@@ -523,6 +554,31 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 		"positive_examples": positiveExamples,
 		"negative_examples": negativeExamples,
 		"model":             model,
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, w.internalSecret))
+}
+
+func (w *WorkerClient) GenerateBriefingNavigatorWithModel(
+	ctx context.Context,
+	persona string,
+	candidates []BriefingNavigatorCandidate,
+	introContext BriefingNavigatorIntroContext,
+	anthropicAPIKey *string,
+	googleAPIKey *string,
+	groqAPIKey *string,
+	deepseekAPIKey *string,
+	alibabaAPIKey *string,
+	mistralAPIKey *string,
+	xaiAPIKey *string,
+	zaiAPIKey *string,
+	fireworksAPIKey *string,
+	openAIAPIKey *string,
+	model *string,
+) (*BriefingNavigatorResponse, error) {
+	return postWithHeaders[BriefingNavigatorResponse](ctx, w, "/briefing-navigator", map[string]any{
+		"persona":       persona,
+		"candidates":    candidates,
+		"intro_context": introContext,
+		"model":         model,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, w.internalSecret))
 }
 

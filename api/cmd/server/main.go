@@ -107,7 +107,7 @@ func main() {
 	digestH := handler.NewDigestHandler(digestRepo)
 	llmUsageH := handler.NewLLMUsageHandlerWithValueMetrics(llmUsageRepo, llmExecutionRepo, llmValueMetricsRepo, cache)
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
-	briefingH := handler.NewBriefingHandler(itemRepo, briefingSnapshotRepo, streakRepo, cache)
+	briefingH := handler.NewBriefingHandler(itemRepo, briefingSnapshotRepo, streakRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, cache)
 	askH := handler.NewAskHandler(itemRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, openAI, cache)
 	rateLimiter := middleware.NewRateLimiter(redisClient, redisPrefix)
 
@@ -265,6 +265,7 @@ func main() {
 		})
 
 		r.Get("/briefing/today", briefingH.Today)
+		r.Get("/briefing/navigator", briefingH.Navigator)
 		r.Get("/dashboard", dashboardH.Get)
 		r.Route("/reviews", func(r chi.Router) {
 			r.Get("/due", reviewsH.Due)

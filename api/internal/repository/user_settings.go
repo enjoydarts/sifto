@@ -102,10 +102,14 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       digest_model,
 		       ask_model,
 		       source_suggestion_model,
-		       embedding_model,
-		       facts_check_model,
-		       faithfulness_check_model,
-		       inoreader_access_token_enc,
+	       embedding_model,
+	       facts_check_model,
+	       faithfulness_check_model,
+	       navigator_enabled,
+	       navigator_persona,
+	       navigator_model,
+	       navigator_fallback_model,
+	       inoreader_access_token_enc,
 		       inoreader_token_expires_at,
 		       created_at,
 		       updated_at
@@ -157,6 +161,10 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.EmbeddingModel,
 		&v.FactsCheckModel,
 		&v.FaithfulnessCheckModel,
+		&v.NavigatorEnabled,
+		&v.NavigatorPersona,
+		&v.NavigatorModel,
+		&v.NavigatorFallbackModel,
 		&inoreaderAccessTokenEnc,
 		&v.InoreaderTokenExpiresAt,
 		&v.CreatedAt,
@@ -279,6 +287,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 	ctx context.Context,
 	userID string,
 	factsModel, factsFallbackModel, summaryModel, summaryFallbackModel, digestClusterModel, digestModel, askModel, sourceSuggestionModel, embeddingModel, factsCheckModel, faithfulnessCheckModel *string,
+	navigatorEnabled bool, navigatorPersona string, navigatorModel, navigatorFallbackModel *string,
 ) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (
@@ -293,8 +302,12 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 				source_suggestion_model,
 				embedding_model,
 				facts_check_model,
-				faithfulness_check_model
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+				faithfulness_check_model,
+				navigator_enabled,
+				navigator_persona,
+				navigator_model,
+				navigator_fallback_model
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 			ON CONFLICT (user_id) DO UPDATE
 			SET facts_model = EXCLUDED.facts_model,
 			    facts_fallback_model = EXCLUDED.facts_fallback_model,
@@ -307,6 +320,10 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 			    embedding_model = EXCLUDED.embedding_model,
 			    facts_check_model = EXCLUDED.facts_check_model,
 			    faithfulness_check_model = EXCLUDED.faithfulness_check_model,
+			    navigator_enabled = EXCLUDED.navigator_enabled,
+			    navigator_persona = EXCLUDED.navigator_persona,
+			    navigator_model = EXCLUDED.navigator_model,
+			    navigator_fallback_model = EXCLUDED.navigator_fallback_model,
 			    updated_at = NOW()`,
 		userID,
 		factsModel,
@@ -320,6 +337,10 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 		embeddingModel,
 		factsCheckModel,
 		faithfulnessCheckModel,
+		navigatorEnabled,
+		navigatorPersona,
+		navigatorModel,
+		navigatorFallbackModel,
 	)
 	if err != nil {
 		return nil, err

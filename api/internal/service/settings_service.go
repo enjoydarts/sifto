@@ -71,6 +71,10 @@ type UpdateLLMModelsInput struct {
 	Embedding         *string
 	FactsCheck        *string
 	FaithfulnessCheck *string
+	NavigatorEnabled  bool
+	NavigatorPersona  *string
+	Navigator         *string
+	NavigatorFallback *string
 }
 
 var modelSettingPurposes = map[string]string{
@@ -84,6 +88,8 @@ var modelSettingPurposes = map[string]string{
 	"source_suggestion":  "source_suggestion",
 	"facts_check":        "facts",
 	"faithfulness_check": "summary",
+	"navigator":          "summary",
+	"navigator_fallback": "summary",
 }
 
 var modelSettingRequiredCapabilities = map[string][]string{
@@ -97,6 +103,8 @@ var modelSettingRequiredCapabilities = map[string][]string{
 	"source_suggestion":  {"structured_output"},
 	"facts_check":        {"structured_output"},
 	"faithfulness_check": {"structured_output"},
+	"navigator":          {"structured_output"},
+	"navigator_fallback": {"structured_output"},
 }
 
 func NewSettingsService(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *SecretCipher, githubApp *GitHubAppClient) *SettingsService {
@@ -142,6 +150,10 @@ func LLMModelSettingsPayload(settings *model.UserSettings) map[string]any {
 		"embedding":          settings.EmbeddingModel,
 		"facts_check":        settings.FactsCheckModel,
 		"faithfulness_check": settings.FaithfulnessCheckModel,
+		"navigator_enabled":  settings.NavigatorEnabled,
+		"navigator_persona":  settings.NavigatorPersona,
+		"navigator":          settings.NavigatorModel,
+		"navigator_fallback": settings.NavigatorFallbackModel,
 	}
 }
 
@@ -244,6 +256,18 @@ func normalizeOptionalModel(v *string) *string {
 	return &s
 }
 
+func normalizeNavigatorPersona(v *string) string {
+	if v == nil {
+		return "editor"
+	}
+	switch strings.TrimSpace(*v) {
+	case "editor", "hype", "analyst", "concierge", "snark":
+		return strings.TrimSpace(*v)
+	default:
+		return "editor"
+	}
+}
+
 func validateCatalogModelForPurpose(catalog *LLMCatalog, model *string, purpose string) error {
 	if model == nil {
 		return nil
@@ -295,6 +319,8 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		"embedding":          normalizeOptionalModel(in.Embedding),
 		"facts_check":        normalizeOptionalModel(in.FactsCheck),
 		"faithfulness_check": normalizeOptionalModel(in.FaithfulnessCheck),
+		"navigator":          normalizeOptionalModel(in.Navigator),
+		"navigator_fallback": normalizeOptionalModel(in.NavigatorFallback),
 	}
 	for settingKey, purpose := range modelSettingPurposes {
 		if err := validateCatalogModelForPurpose(catalog, normalized[settingKey], purpose); err != nil {
@@ -322,6 +348,10 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		embeddingModel,
 		normalized["facts_check"],
 		normalized["faithfulness_check"],
+		in.NavigatorEnabled,
+		normalizeNavigatorPersona(in.NavigatorPersona),
+		normalized["navigator"],
+		normalized["navigator_fallback"],
 	)
 }
 

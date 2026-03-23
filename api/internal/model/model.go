@@ -66,6 +66,10 @@ type UserSettings struct {
 	EmbeddingModel             *string    `json:"embedding_model,omitempty"`
 	FactsCheckModel            *string    `json:"facts_check_model,omitempty"`
 	FaithfulnessCheckModel     *string    `json:"faithfulness_check_model,omitempty"`
+	NavigatorEnabled           bool       `json:"navigator_enabled"`
+	NavigatorPersona           string     `json:"navigator_persona"`
+	NavigatorModel             *string    `json:"navigator_model,omitempty"`
+	NavigatorFallbackModel     *string    `json:"navigator_fallback_model,omitempty"`
 	HasInoreaderOAuth          bool       `json:"has_inoreader_oauth"`
 	InoreaderTokenExpiresAt    *time.Time `json:"inoreader_token_expires_at,omitempty"`
 	CreatedAt                  time.Time  `json:"created_at"`
@@ -690,14 +694,51 @@ type BriefingStats struct {
 }
 
 type BriefingTodayResponse struct {
-	Date           string            `json:"date"`
-	Greeting       string            `json:"greeting"`
-	GreetingKey    string            `json:"greeting_key,omitempty"`
-	Status         string            `json:"status"` // pending | ready | stale
-	GeneratedAt    *time.Time        `json:"generated_at,omitempty"`
-	HighlightItems []Item            `json:"highlight_items"`
-	Clusters       []BriefingCluster `json:"clusters"`
-	Stats          BriefingStats     `json:"stats"`
+	Date           string             `json:"date"`
+	Greeting       string             `json:"greeting"`
+	GreetingKey    string             `json:"greeting_key,omitempty"`
+	Status         string             `json:"status"` // pending | ready | stale
+	GeneratedAt    *time.Time         `json:"generated_at,omitempty"`
+	HighlightItems []Item             `json:"highlight_items"`
+	Clusters       []BriefingCluster  `json:"clusters"`
+	Stats          BriefingStats      `json:"stats"`
+	Navigator      *BriefingNavigator `json:"navigator,omitempty"`
+}
+
+type BriefingNavigatorPick struct {
+	ItemID      string   `json:"item_id"`
+	Rank        int      `json:"rank"`
+	Title       string   `json:"title"`
+	SourceTitle *string  `json:"source_title,omitempty"`
+	Comment     string   `json:"comment"`
+	ReasonTags  []string `json:"reason_tags,omitempty"`
+}
+
+type BriefingNavigatorCandidate struct {
+	ItemID          string     `json:"item_id"`
+	Title           *string    `json:"title,omitempty"`
+	TranslatedTitle *string    `json:"translated_title,omitempty"`
+	SourceTitle     *string    `json:"source_title,omitempty"`
+	Summary         string     `json:"summary"`
+	Topics          []string   `json:"topics,omitempty"`
+	Score           *float64   `json:"score,omitempty"`
+	PublishedAt     *time.Time `json:"published_at,omitempty"`
+}
+
+type BriefingNavigator struct {
+	Enabled        bool                    `json:"enabled"`
+	Persona        string                  `json:"persona"`
+	CharacterName  string                  `json:"character_name"`
+	CharacterTitle string                  `json:"character_title"`
+	AvatarStyle    string                  `json:"avatar_style"`
+	SpeechStyle    string                  `json:"speech_style"`
+	Intro          string                  `json:"intro"`
+	GeneratedAt    *time.Time              `json:"generated_at,omitempty"`
+	Picks          []BriefingNavigatorPick `json:"picks"`
+}
+
+type BriefingNavigatorEnvelope struct {
+	Navigator *BriefingNavigator `json:"navigator,omitempty"`
 }
 
 type Digest struct {

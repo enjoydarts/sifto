@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Bell, BookOpen, Flame, Sparkles, X } from "lucide-react";
 import { api, BriefingCluster, Item, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
@@ -14,6 +14,7 @@ import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { EmptyState } from "@/components/empty-state";
 import { SkeletonCard } from "@/components/skeleton";
+import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { useToast } from "@/components/toast-provider";
 import { SectionCard } from "@/components/ui/section-card";
 import { Tag } from "@/components/ui/tag";
@@ -30,8 +31,10 @@ export default function BriefingPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
+  const [navigatorDismissed, setNavigatorDismissed] = useState(false);
   const [dismissedModelUpdatesAt, setDismissedModelUpdatesAt] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     return window.localStorage.getItem(MODEL_UPDATES_DISMISSED_AT_KEY);
@@ -42,6 +45,13 @@ export default function BriefingPage() {
     staleTime: 15_000,
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
+    placeholderData: (prev) => prev,
+  });
+  const navigatorPreview = searchParams.get("navigator_preview") === "1";
+  const navigatorQuery = useQuery({
+    queryKey: ["briefing-navigator", navigatorPreview] as const,
+    queryFn: () => api.getBriefingNavigator({ navigator_preview: navigatorPreview }),
+    staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
   const modelUpdatesQuery = useQuery({
@@ -79,6 +89,8 @@ export default function BriefingPage() {
   const error = briefingQuery.error ? String(briefingQuery.error) : null;
   const data = briefingQuery.data;
   const modelUpdates = modelUpdatesQuery.data ?? EMPTY_MODEL_UPDATES;
+  const navigator = navigatorQuery.data?.navigator ?? null;
+  const navigatorTheme = navigator ? navigatorThemeTokens(navigator.persona, navigator.avatar_style) : null;
   const visibleModelUpdates = useMemo(() => {
     if (!dismissedModelUpdatesAt) return modelUpdates;
     const dismissedMs = Date.parse(dismissedModelUpdatesAt);
@@ -207,6 +219,12 @@ export default function BriefingPage() {
     window.localStorage.setItem(MODEL_UPDATES_DISMISSED_AT_KEY, latest);
     setDismissedModelUpdatesAt(latest);
   };
+
+  useEffect(() => {
+    if (navigatorPreview) {
+      setNavigatorDismissed(false);
+    }
+  }, [navigatorPreview, navigator?.generated_at]);
 
   const refreshBriefingData = async () => {
     const next = await api.getBriefingToday({ size: 18, cache_bust: true });
@@ -613,6 +631,85 @@ export default function BriefingPage() {
             }}
           />
         )}
+
+        {navigator && (!navigatorDismissed || navigatorPreview) && navigator.picks.length > 0 ? (
+          <aside className="fixed bottom-4 right-4 z-40 w-[min(420px,calc(100vw-1.5rem))]">
+            <div className={`overflow-hidden rounded-[24px] border shadow-[0_24px_60px_rgba(15,23,42,0.22)] ${navigatorTheme?.shell ?? "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]"}`}>
+              <div className={`flex items-start gap-3 px-4 py-4 ${navigatorTheme?.header ?? ""}`}>
+                <div className={`flex size-11 shrink-0 items-center justify-center rounded-full ${navigatorTheme?.avatar ?? ""}`}>
+                  <AINavigatorAvatar persona={navigator.persona} className="size-11" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                    {t("briefing.navigator.label", "AI Navigator")}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <h3 className="font-serif text-[1.1rem] font-semibold leading-none text-[var(--color-editorial-ink)]">
+                      {navigator.character_name}
+                    </h3>
+                    <span className="font-sans text-xs text-[var(--color-editorial-ink-soft)]">{navigator.character_title}</span>
+                  </div>
+                </div>
+                {navigatorPreview ? null : (
+                  <button
+                    type="button"
+                    onClick={() => setNavigatorDismissed(true)}
+                    className="inline-flex size-9 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-white/70 text-[var(--color-editorial-ink-soft)] hover:bg-white"
+                    aria-label={t("briefing.navigator.close", "Close navigator")}
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+              <div className="space-y-4 px-4 pb-4">
+                <div className={`rounded-[18px] border px-4 py-3 ${navigatorTheme?.bubble ?? "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)]"}`}>
+                  <p className="text-sm leading-7 text-[var(--color-editorial-ink)]">{navigator.intro}</p>
+                </div>
+                <div className="space-y-3">
+                  {navigator.picks.map((pick) => (
+                    <button
+                      key={pick.item_id}
+                      type="button"
+                      onClick={() => {
+                        if (navigatorPreview && pick.item_id.startsWith("preview-")) {
+                          return;
+                        }
+                        setInlineItemId(pick.item_id);
+                      }}
+                      className="block w-full rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3 text-left hover:bg-[var(--color-editorial-panel-strong)]"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${navigatorTheme?.badge ?? ""}`}>
+                          {pick.rank}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <h4 className="line-clamp-2 font-serif text-[1rem] font-semibold leading-[1.35] text-[var(--color-editorial-ink)]">
+                              {pick.title}
+                            </h4>
+                            {pick.source_title ? (
+                              <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">
+                                {pick.source_title}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{pick.comment}</p>
+                          {pick.reason_tags && pick.reason_tags.length > 0 ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {pick.reason_tags.map((tag) => (
+                                <Tag key={`${pick.item_id}-${tag}`}>{tag}</Tag>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
+        ) : null}
       </div>
     </PageTransition>
   );
@@ -647,4 +744,50 @@ function fmtDate(value: string | null | undefined, locale: "ja" | "en") {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleDateString(locale === "ja" ? "ja-JP" : "en-US");
+}
+
+function navigatorThemeTokens(persona: string, avatarStyle?: string) {
+  const key = avatarStyle || persona;
+  switch (key) {
+    case "hype":
+      return {
+        shell: "border-[#f0b677] bg-[linear-gradient(180deg,#fff6e9_0%,#fffdf8_100%)]",
+        header: "",
+        avatar: "bg-[#d96c28] text-white",
+        bubble: "border-[#f0b677] bg-[#fff0da]",
+        badge: "bg-[#d96c28] text-white",
+      };
+    case "analyst":
+      return {
+        shell: "border-[#9db5d5] bg-[linear-gradient(180deg,#eef4fb_0%,#fbfdff_100%)]",
+        header: "",
+        avatar: "bg-[#365f93] text-white",
+        bubble: "border-[#c8d8ec] bg-[#f3f8fd]",
+        badge: "bg-[#365f93] text-white",
+      };
+    case "concierge":
+      return {
+        shell: "border-[#d9c7b2] bg-[linear-gradient(180deg,#fbf5ef_0%,#fffdfb_100%)]",
+        header: "",
+        avatar: "bg-[#8c6a52] text-white",
+        bubble: "border-[#e7d8c8] bg-[#fff8f1]",
+        badge: "bg-[#8c6a52] text-white",
+      };
+    case "snark":
+      return {
+        shell: "border-[#caa8a8] bg-[linear-gradient(180deg,#f9eeee_0%,#fffdfd_100%)]",
+        header: "",
+        avatar: "bg-[#7d3f3f] text-white",
+        bubble: "border-[#dfc2c2] bg-[#fff5f5]",
+        badge: "bg-[#7d3f3f] text-white",
+      };
+    default:
+      return {
+        shell: "border-[#c7b79c] bg-[linear-gradient(180deg,#f8f3e7_0%,#fffdf8_100%)]",
+        header: "",
+        avatar: "bg-[#8f5a24] text-white",
+        bubble: "border-[#ddcfb7] bg-[#fff8ea]",
+        badge: "bg-[#8f5a24] text-white",
+      };
+  }
 }

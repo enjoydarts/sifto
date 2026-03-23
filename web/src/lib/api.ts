@@ -1027,6 +1027,10 @@ export interface UserSettings {
     embedding?: string | null;
     facts_check?: string | null;
     faithfulness_check?: string | null;
+    navigator_enabled?: boolean;
+    navigator_persona?: string | null;
+    navigator?: string | null;
+    navigator_fallback?: string | null;
   };
   obsidian_export?: {
     enabled: boolean;
@@ -1090,6 +1094,28 @@ export interface BriefingTodayResponse {
     streak_remaining?: number;
     streak_at_risk?: boolean;
   };
+  navigator?: {
+    enabled: boolean;
+    persona: string;
+    character_name: string;
+    character_title: string;
+    avatar_style: string;
+    speech_style: string;
+    intro: string;
+    generated_at?: string | null;
+    picks: Array<{
+      item_id: string;
+      rank: number;
+      title: string;
+      source_title?: string | null;
+      comment: string;
+      reason_tags?: string[];
+    }>;
+  } | null;
+}
+
+export interface BriefingNavigatorResponse {
+  navigator?: BriefingTodayResponse["navigator"];
 }
 
 export interface AskCitation {
@@ -1392,6 +1418,13 @@ export const api = {
     const qs = q.toString();
     return apiFetch<BriefingTodayResponse>(`/briefing/today${qs ? `?${qs}` : ""}`);
   },
+  getBriefingNavigator: (params?: { cache_bust?: boolean; navigator_preview?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.cache_bust) q.set("cache_bust", "1");
+    if (params?.navigator_preview) q.set("navigator_preview", "1");
+    const qs = q.toString();
+    return apiFetch<BriefingNavigatorResponse>(`/briefing/navigator${qs ? `?${qs}` : ""}`);
+  },
   getReviewQueue: (params?: { size?: number }) => {
     const q = new URLSearchParams();
     if (params?.size) q.set("size", String(params.size));
@@ -1677,6 +1710,10 @@ export const api = {
     embedding?: string | null;
     facts_check?: string | null;
     faithfulness_check?: string | null;
+    navigator_enabled?: boolean;
+    navigator_persona?: string | null;
+    navigator?: string | null;
+    navigator_fallback?: string | null;
   }) =>
     apiFetch<{ user_id: string; llm_models: UserSettings["llm_models"] }>("/settings/llm-models", {
       method: "PATCH",

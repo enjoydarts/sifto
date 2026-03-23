@@ -79,6 +79,28 @@ RANK_FEED_SCHEMA = {
     "additionalProperties": False,
 }
 
+BRIEFING_NAVIGATOR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "intro": {"type": "string"},
+        "picks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "item_id": {"type": "string"},
+                    "comment": {"type": "string"},
+                    "reason_tags": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["item_id", "comment"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["intro", "picks"],
+    "additionalProperties": False,
+}
+
 
 SEED_SITES_SCHEMA = {
     "type": "object",
@@ -223,6 +245,106 @@ Few-shot（避けたい傾向の既存Feed例）:
     }
 
 
+def build_briefing_navigator_task(persona: str, candidates: list[dict], intro_context: dict | None = None) -> dict:
+    persona_key = str(persona or "editor").strip() or "editor"
+    intro_context = dict(intro_context or {})
+    persona_profiles = {
+        "editor": {
+            "name": "編集長 水城",
+            "voice": "落ち着いた編集者。要点を整理し、重要度の理由を短く添える。",
+            "comment_range": "55〜95字",
+            "intro_range": "80〜140字",
+            "intro_style": "端正で落ち着いた挨拶から始め、季節感は控えめに、最後は簡潔に記事へつなぐ。",
+        },
+        "hype": {
+            "name": "ハイプ担当 ルカ",
+            "voice": "熱量高めの案内役。テンポよく、勢いで読みたくさせる。",
+            "comment_range": "70〜120字",
+            "intro_range": "90〜150字",
+            "intro_style": "明るく勢いのある挨拶にし、時間帯に合う高揚感を少し入れてから記事へつなぐ。",
+        },
+        "analyst": {
+            "name": "分析官 藍",
+            "voice": "背景や含意を示すアナリスト。やや理詰めだが堅すぎない。",
+            "comment_range": "75〜130字",
+            "intro_range": "90〜160字",
+            "intro_style": "曜日や時間帯の意味づけを少し添え、文脈を整理してから記事へ橋渡しする。",
+        },
+        "concierge": {
+            "name": "案内人 凪",
+            "voice": "やわらかいコンシェルジュ。親しみがあり、押しつけない。",
+            "comment_range": "55〜100字",
+            "intro_range": "85〜145字",
+            "intro_style": "生活感のあるやわらかい挨拶にし、時節の空気を自然に混ぜてから勧める。",
+        },
+        "snark": {
+            "name": "毒舌ガイド ジン",
+            "voice": "軽口で面白いが不快にしない。皮肉は弱めで、攻撃的にしない。",
+            "comment_range": "45〜90字",
+            "intro_range": "80〜130字",
+            "intro_style": "乾いたユーモアを少し混ぜるが、不快にせず、軽口レベルで記事へつなぐ。",
+        },
+    }
+    profile = persona_profiles.get(persona_key) or persona_profiles["editor"]
+    trimmed_candidates = candidates[:12]
+    prompt = f"""あなたはブリーフィング画面に出るAIナビゲーターです。
+
+キャラクター:
+- persona: {persona_key}
+- display_name: {profile["name"]}
+- tone: {profile["voice"]}
+
+タスク:
+- 候補記事の中から、いま読む価値が高い未読記事を3件選ぶ
+- 各記事に日本語で短い推薦コメントを付ける
+- 最初に2〜3文の導入トークを付ける
+
+ルール:
+- 候補にない item_id を作らない
+- picks は必ず3件。候補が3件未満なら存在する件数だけ返す
+- comment は {profile["comment_range"]} を目安にする
+- intro は {profile["intro_range"]} を目安にする
+- intro は 2〜3文で構成する
+- intro の1文目は時間帯に合った自然な挨拶にする
+- intro の2文目では、時間帯・曜日・日付・季節に沿った自然な小話を入れる
+- intro の最後の文では、今日のおすすめ記事への橋渡しをする
+- 時間帯や季節の空気に沿った雑談はよいが、不確かな記念日を断定しない
+- 実在の祝日・イベント・「今日は何の日」を自信満々に言い切らない
+- 1本ずつ観点を変える。すべて同じ理由にしない
+- summary や title の言い換えをそのまま並べるのではなく、なぜ今読む価値があるかを一言で再構成する
+- snark でも不快・攻撃的・見下し表現は禁止
+- 事実を捏造しない。候補から読めることだけで薦める
+- JSONのみを返す
+
+導入トークの文脈:
+- now_jst: {intro_context.get("now_jst", "")}
+- date_jst: {intro_context.get("date_jst", "")}
+- weekday_jst: {intro_context.get("weekday_jst", "")}
+- time_of_day: {intro_context.get("time_of_day", "")}
+- season_hint: {intro_context.get("season_hint", "")}
+- intro_style: {profile["intro_style"]}
+
+返却形式:
+{{
+  "intro": "導入コメント",
+  "picks": [
+    {{"item_id":"uuid", "comment":"推薦コメント", "reason_tags":["重要","背景"]}}
+  ]
+}}
+
+候補記事:
+{json.dumps(trimmed_candidates, ensure_ascii=False)}
+"""
+    return {
+        "prompt": prompt,
+        "schema": BRIEFING_NAVIGATOR_SCHEMA,
+        "persona": persona_key,
+        "candidates": trimmed_candidates,
+        "intro_context": intro_context,
+        "profile": profile,
+    }
+
+
 def parse_rank_feed_result(text: str, candidates: list[dict]) -> list[dict]:
     data = extract_first_json_object(text) or {}
     rows = data.get("items", []) if isinstance(data.get("items"), list) else []
@@ -243,6 +365,56 @@ def parse_rank_feed_result(text: str, candidates: list[dict]) -> list[dict]:
             }
         )
     return out
+
+
+def parse_briefing_navigator_result(text: str, candidates: list[dict]) -> dict:
+    data = extract_first_json_object(text) or {}
+    intro = str(data.get("intro") or "").strip() or "今日の流れがつかみやすい3本を選びました。"
+    rows = data.get("picks") if isinstance(data.get("picks"), list) else []
+    allowed = {str(c.get("item_id") or "").strip(): c for c in candidates if str(c.get("item_id") or "").strip()}
+    picks: list[dict] = []
+    seen: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        item_id = str(row.get("item_id") or "").strip()
+        if not item_id or item_id not in allowed or item_id in seen:
+            continue
+        comment = str(row.get("comment") or "").strip()
+        if not comment:
+            continue
+        raw_tags = row.get("reason_tags") or []
+        reason_tags = [str(v).strip() for v in raw_tags if str(v).strip()][:3]
+        picks.append(
+            {
+                "item_id": item_id,
+                "comment": comment[:180],
+                "reason_tags": reason_tags,
+            }
+        )
+        seen.add(item_id)
+        if len(picks) >= min(3, len(allowed)):
+            break
+    if len(picks) < min(3, len(allowed)):
+        for candidate in candidates:
+            item_id = str(candidate.get("item_id") or "").strip()
+            if not item_id or item_id in seen:
+                continue
+            title = str(candidate.get("translated_title") or candidate.get("title") or "この1本").strip()
+            summary = str(candidate.get("summary") or "").strip()
+            summary = re.sub(r"\s+", " ", summary)
+            comment = (summary[:90] + "。" if summary else f"{title}は今日の流れを押さえるのに向いています。")
+            picks.append(
+                {
+                    "item_id": item_id,
+                    "comment": comment[:180],
+                    "reason_tags": [],
+                }
+            )
+            seen.add(item_id)
+            if len(picks) >= min(3, len(allowed)):
+                break
+    return {"intro": intro[:180], "picks": picks}
 
 
 def build_seed_sites_task(

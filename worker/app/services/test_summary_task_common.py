@@ -7,6 +7,8 @@ class SummaryTaskCommonTests(unittest.TestCase):
     def test_system_instruction_discourages_fact_by_fact_rewrites(self):
         self.assertIn("関連する facts を統合", SUMMARY_SYSTEM_INSTRUCTION)
         self.assertIn("「〜である。」の連続を避け", SUMMARY_SYSTEM_INSTRUCTION)
+        self.assertIn("ニュースレター編集者", SUMMARY_SYSTEM_INSTRUCTION)
+        self.assertIn("短文の羅列", SUMMARY_SYSTEM_INSTRUCTION)
 
     def test_build_summary_task_fallback_requests_natural_connected_prose(self):
         task = build_summary_task(
@@ -23,6 +25,9 @@ class SummaryTaskCommonTests(unittest.TestCase):
         self.assertIn("各 fact を1文ずつ順番に言い換えるのではなく", prompt)
         self.assertIn("同じ文末表現を3文以上連続させない", prompt)
         self.assertIn("1段落目で記事の要点をまとめ", prompt)
+        self.assertIn("ニュースレターの編集者が書く前文のように", prompt)
+        self.assertIn("短文を切って並べるのではなく", prompt)
+        self.assertIn("必要に応じて主語や関係を補い", prompt)
 
 
 if __name__ == "__main__":

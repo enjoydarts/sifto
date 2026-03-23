@@ -4,7 +4,7 @@ from app.services.summary_parse_common import finalize_summary_result
 
 
 class SummaryParseCommonTests(unittest.TestCase):
-    def test_finalize_summary_result_sets_score_policy_version_v3(self):
+    def test_finalize_summary_result_sets_score_policy_version_v4(self):
         result = finalize_summary_result(
             title="Example",
             summary_text="要約です。",
@@ -24,7 +24,7 @@ class SummaryParseCommonTests(unittest.TestCase):
             response_text='{"summary":"要約です。"}',
         )
 
-        self.assertEqual(result["score_policy_version"], "v3")
+        self.assertEqual(result["score_policy_version"], "v4")
 
 
 if __name__ == "__main__":

@@ -430,7 +430,7 @@ def summarize(
             "score": _summary_composite_score(score_breakdown),
             "score_breakdown": score_breakdown,
             "score_reason": "ローカルフォールバックのため簡易スコアです。",
-            "score_policy_version": "v3",
+            "score_policy_version": "v4",
             "llm": {
                 "provider": "local-dev",
                 "model": "local-fallback",
@@ -470,7 +470,7 @@ def summarize(
             "score": _summary_composite_score(score_breakdown),
             "score_breakdown": score_breakdown,
             "score_reason": "Anthropic応答を取得できなかったため簡易スコアです。",
-            "score_policy_version": "v3",
+            "score_policy_version": "v4",
             "llm": _with_execution_failures({
                 "provider": "local-fallback",
                 "model": used_model or _summary_model,

@@ -36,6 +36,6 @@ def finalize_summary_result(
         "score": summary_composite_score(score_breakdown),
         "score_breakdown": score_breakdown,
         "score_reason": (str(score_reason or "").strip() or DEFAULT_SCORE_REASON)[:400],
-        "score_policy_version": "v2",
+        "score_policy_version": "v3",
         "llm": llm,
     }

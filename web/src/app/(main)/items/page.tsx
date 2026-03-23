@@ -86,8 +86,6 @@ function ItemsPageContent() {
     };
   }, [searchParams]);
   const { feedMode, sortMode, filter, topic, sourceID, searchQuery, searchMode, unreadOnly, favoriteOnly, page } = queryState;
-  const [pendingFeedMode, setPendingFeedMode] = useState<FeedMode | null>(null);
-  const activeFeedMode = pendingFeedMode ?? feedMode;
   const unreadMode = feedMode === "unread";
   const readMode = feedMode === "read";
   const laterMode = feedMode === "later";
@@ -107,10 +105,6 @@ function ItemsPageContent() {
   const restoredScrollRef = useRef<string | null>(null);
   const prefetchedDetailIDsRef = useRef<Record<string, true>>({});
   const [inlineQueueItemIds, setInlineQueueItemIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    setPendingFeedMode(null);
-  }, [feedMode]);
 
   const listQueryKey = useMemo(
     () => [
@@ -745,9 +739,8 @@ function ItemsPageContent() {
               compact
               leading={(
                 <FeedTabs
-                  feedMode={activeFeedMode}
+                  feedMode={feedMode}
                   onSelect={(feed) => {
-                    setPendingFeedMode(feed);
                     replaceItemsQuery({ feed, page: 1, unread: false });
                   }}
                   t={t}

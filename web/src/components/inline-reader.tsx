@@ -64,7 +64,7 @@ export function InlineReader({
 
   const item = detailQuery.data ?? null;
   const effectiveStatus = itemStatus ?? item?.status ?? null;
-  const canMarkRead = effectiveStatus === "summarized";
+  const canMarkRead = effectiveStatus !== "deleted";
   const related = useMemo(() => relatedQuery.data?.items ?? [], [relatedQuery.data?.items]);
   const nextQueueItemId = useMemo(() => {
     if (!itemId || !queueItemIds || queueItemIds.length === 0) return null;

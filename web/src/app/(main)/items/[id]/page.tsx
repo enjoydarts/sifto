@@ -498,7 +498,7 @@ export default function ItemDetailPage() {
   }, [item, queryClient, refreshReadDependentQueries, syncItemReadInFeedCaches]);
 
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
-  const canMarkRead = item?.status === "summarized";
+  const canMarkRead = !!item && item.status !== "deleted";
   const isDeleted = item?.status === "deleted";
   const disableMutations = Boolean(isDeleted);
   const backHref = useMemo(() => {
@@ -596,7 +596,7 @@ export default function ItemDetailPage() {
   );
 
   const toggleRead = async () => {
-    if (!item || item.status !== "summarized") return;
+    if (!item || item.status === "deleted") return;
     setReadUpdating(true);
     try {
       const next = item.is_read ? await api.markItemUnread(item.id) : await api.markItemRead(item.id);

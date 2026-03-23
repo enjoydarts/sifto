@@ -69,7 +69,7 @@ export function ItemCard({
 }) {
   const displayTitle = item.translated_title?.trim() ? item.translated_title : item.title;
   const isRead = item.is_read;
-  const canToggleRead = item.status === "summarized";
+  const canToggleRead = item.status !== "deleted";
   const pendingState = item.status !== "summarized";
   const isFailed = item.status === "failed";
   const processingErrorSnippet = item.processing_error?.trim()

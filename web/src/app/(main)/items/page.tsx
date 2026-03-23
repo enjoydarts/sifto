@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef, startTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCheck, Newspaper, Search, X } from "lucide-react";
@@ -86,6 +86,8 @@ function ItemsPageContent() {
     };
   }, [searchParams]);
   const { feedMode, sortMode, filter, topic, sourceID, searchQuery, searchMode, unreadOnly, favoriteOnly, page } = queryState;
+  const [pendingFeedMode, setPendingFeedMode] = useState<FeedMode | null>(null);
+  const activeFeedMode = pendingFeedMode ?? feedMode;
   const unreadMode = feedMode === "unread";
   const readMode = feedMode === "read";
   const laterMode = feedMode === "later";
@@ -105,6 +107,10 @@ function ItemsPageContent() {
   const restoredScrollRef = useRef<string | null>(null);
   const prefetchedDetailIDsRef = useRef<Record<string, true>>({});
   const [inlineQueueItemIds, setInlineQueueItemIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setPendingFeedMode(null);
+  }, [feedMode]);
 
   const listQueryKey = useMemo(
     () => [
@@ -148,7 +154,6 @@ function ItemsPageContent() {
         searchMode: data?.search_mode ?? searchMode,
       };
     },
-    placeholderData: (prev) => prev,
   });
   const cachedItemsLength = listQuery.data?.items?.length ?? 0;
   const items = listQuery.data?.items ?? [];
@@ -203,7 +208,9 @@ function ItemsPageContent() {
           page: number;
       }>
     ) => {
-      const q = new URLSearchParams(searchParams.toString());
+      const baseSearch =
+        typeof window !== "undefined" ? window.location.search : searchParams.toString() ? `?${searchParams.toString()}` : "";
+      const q = new URLSearchParams(baseSearch);
 
       const nextFeed = patch.feed ?? feedMode;
       q.set("feed", nextFeed);
@@ -240,7 +247,9 @@ function ItemsPageContent() {
 
       const nextQuery = q.toString();
       const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
-      router.replace(nextUrl, { scroll: false });
+      startTransition(() => {
+        router.replace(nextUrl, { scroll: false });
+      });
     },
     [favoriteOnly, feedMode, filter, page, pathname, router, searchMode, searchParams, searchQuery, sortMode, sourceID, topic, unreadOnly]
   );
@@ -736,8 +745,11 @@ function ItemsPageContent() {
               compact
               leading={(
                 <FeedTabs
-                  feedMode={feedMode}
-                  onSelect={(feed) => replaceItemsQuery({ feed, page: 1, unread: false })}
+                  feedMode={activeFeedMode}
+                  onSelect={(feed) => {
+                    setPendingFeedMode(feed);
+                    replaceItemsQuery({ feed, page: 1, unread: false });
+                  }}
                   t={t}
                 />
               )}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
@@ -373,6 +374,102 @@ func (r *SourceRepo) DailyStatsByUser(ctx context.Context, userID string, days i
 			return out[i].SourceID < out[j].SourceID
 		}
 		return out[i].Last30DaysTotal > out[j].Last30DaysTotal
+	})
+	return out, nil
+}
+
+func (r *SourceRepo) NavigatorCandidates30d(ctx context.Context, userID string) ([]model.SourceNavigatorCandidate, error) {
+	sources, err := r.List(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	healthRows, err := r.HealthByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	itemStatsRows, err := r.ItemStatsByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	dailyStatsRows, err := r.DailyStatsByUser(ctx, userID, 30)
+	if err != nil {
+		return nil, err
+	}
+
+	favoriteCounts := map[string]int{}
+	favRows, err := r.db.Query(ctx, `
+		SELECT s.id AS source_id, COUNT(*)::int AS favorite_count
+		FROM sources s
+		LEFT JOIN items i ON i.source_id = s.id AND i.deleted_at IS NULL
+		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = s.user_id
+		WHERE s.user_id = $1
+		  AND fb.is_favorite = true
+		  AND i.created_at >= NOW() - INTERVAL '30 days'
+		GROUP BY s.id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer favRows.Close()
+	for favRows.Next() {
+		var sourceID string
+		var count int
+		if err := favRows.Scan(&sourceID, &count); err != nil {
+			return nil, err
+		}
+		favoriteCounts[sourceID] = count
+	}
+	if err := favRows.Err(); err != nil {
+		return nil, err
+	}
+
+	healthBySourceID := map[string]model.SourceHealth{}
+	for _, row := range healthRows {
+		healthBySourceID[row.SourceID] = row
+	}
+	itemStatsBySourceID := map[string]model.SourceItemStats{}
+	for _, row := range itemStatsRows {
+		itemStatsBySourceID[row.SourceID] = row
+	}
+	dailyStatsBySourceID := map[string]model.SourceDailyStats{}
+	for _, row := range dailyStatsRows {
+		dailyStatsBySourceID[row.SourceID] = row
+	}
+
+	out := make([]model.SourceNavigatorCandidate, 0, len(sources))
+	for _, source := range sources {
+		title := strings.TrimSpace(source.URL)
+		if source.Title != nil && strings.TrimSpace(*source.Title) != "" {
+			title = strings.TrimSpace(*source.Title)
+		}
+		health := healthBySourceID[source.ID]
+		itemStat := itemStatsBySourceID[source.ID]
+		dailyStat := dailyStatsBySourceID[source.ID]
+		out = append(out, model.SourceNavigatorCandidate{
+			SourceID:               source.ID,
+			Title:                  title,
+			URL:                    source.URL,
+			Enabled:                source.Enabled,
+			Status:                 health.Status,
+			LastFetchedAt:          source.LastFetchedAt,
+			LastItemAt:             health.LastItemAt,
+			TotalItems30d:          dailyStat.Last30DaysTotal,
+			UnreadItems30d:         itemStat.UnreadItems,
+			ReadItems30d:           itemStat.ReadItems,
+			FavoriteCount30d:       favoriteCounts[source.ID],
+			AvgItemsPerDay30d:      itemStat.AvgItemsPerDay30Days,
+			ActiveDays30d:          dailyStat.ActiveDays30d,
+			AvgItemsPerActiveDay30: dailyStat.AvgItemsPerActiveDay30,
+			FailureRate:            health.FailureRate,
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].FavoriteCount30d != out[j].FavoriteCount30d {
+			return out[i].FavoriteCount30d > out[j].FavoriteCount30d
+		}
+		if out[i].ReadItems30d != out[j].ReadItems30d {
+			return out[i].ReadItems30d > out[j].ReadItems30d
+		}
+		return out[i].Title < out[j].Title
 	})
 	return out, nil
 }

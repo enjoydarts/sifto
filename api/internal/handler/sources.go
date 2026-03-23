@@ -204,6 +204,192 @@ func (h *SourceHandler) Optimization(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"items": out})
 }
 
+func (h *SourceHandler) Navigator(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
+
+	if h.settingsRepo == nil {
+		writeJSON(w, model.SourceNavigatorEnvelope{})
+		return
+	}
+	settings, err := h.settingsRepo.EnsureDefaults(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	if settings == nil || !settings.NavigatorEnabled {
+		writeJSON(w, model.SourceNavigatorEnvelope{})
+		return
+	}
+	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
+	modelName := resolveBriefingNavigatorModel(settings)
+	resolvedModel := ""
+	if modelName != nil {
+		resolvedModel = strings.TrimSpace(*modelName)
+	}
+	cacheKey := cacheKeySourceNavigator(userID, persona, resolvedModel)
+	if h.cache != nil && !cacheBust {
+		var cached model.SourceNavigatorEnvelope
+		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
+			if cached.Navigator != nil && strings.TrimSpace(cached.Navigator.Overview) != "" {
+				writeJSON(w, cached)
+				return
+			}
+		}
+	}
+
+	navigator := h.buildSourceNavigator(r.Context(), userID, time.Now())
+	resp := model.SourceNavigatorEnvelope{Navigator: navigator}
+	if h.cache != nil && navigator != nil && strings.TrimSpace(navigator.Overview) != "" {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, briefingNavigatorCacheTTL); err != nil {
+			log.Printf("source navigator cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
+	}
+	writeJSON(w, resp)
+}
+
+func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string, generatedAt time.Time) *model.SourceNavigator {
+	if h.repo == nil || h.settingsRepo == nil || h.worker == nil || h.cipher == nil {
+		return nil
+	}
+	settings, err := h.settingsRepo.EnsureDefaults(ctx, userID)
+	if err != nil {
+		log.Printf("source navigator settings user=%s: %v", userID, err)
+		return nil
+	}
+	if settings == nil || !settings.NavigatorEnabled {
+		return nil
+	}
+	modelName := resolveBriefingNavigatorModel(settings)
+	if modelName == nil {
+		return nil
+	}
+	candidates, err := h.repo.NavigatorCandidates30d(ctx, userID)
+	if err != nil {
+		log.Printf("source navigator candidates user=%s: %v", userID, err)
+		return nil
+	}
+
+	anthropicKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAnthropicAPIKeyEncrypted, h.cipher, userID, "")
+	googleKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetGoogleAPIKeyEncrypted, h.cipher, userID, "")
+	groqKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetGroqAPIKeyEncrypted, h.cipher, userID, "")
+	fireworksKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetFireworksAPIKeyEncrypted, h.cipher, userID, "")
+	deepseekKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
+	alibabaKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
+	mistralKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
+	xaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
+	zaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
+	openRouterKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
+	poeKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
+	openAIKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
+	switch service.LLMProviderForModel(modelName) {
+	case "openrouter":
+		openAIKey = openRouterKey
+	case "poe":
+		openAIKey = poeKey
+	}
+
+	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
+	workerCandidates := make([]service.SourceNavigatorCandidate, 0, len(candidates))
+	titleBySourceID := make(map[string]string, len(candidates))
+	for _, candidate := range candidates {
+		var lastFetchedAt *string
+		if candidate.LastFetchedAt != nil {
+			v := candidate.LastFetchedAt.Format(time.RFC3339)
+			lastFetchedAt = &v
+		}
+		var lastItemAt *string
+		if candidate.LastItemAt != nil {
+			v := candidate.LastItemAt.Format(time.RFC3339)
+			lastItemAt = &v
+		}
+		titleBySourceID[candidate.SourceID] = candidate.Title
+		workerCandidates = append(workerCandidates, service.SourceNavigatorCandidate{
+			SourceID:               candidate.SourceID,
+			Title:                  candidate.Title,
+			URL:                    candidate.URL,
+			Enabled:                candidate.Enabled,
+			Status:                 candidate.Status,
+			LastFetchedAt:          lastFetchedAt,
+			LastItemAt:             lastItemAt,
+			TotalItems30d:          candidate.TotalItems30d,
+			UnreadItems30d:         candidate.UnreadItems30d,
+			ReadItems30d:           candidate.ReadItems30d,
+			FavoriteCount30d:       candidate.FavoriteCount30d,
+			AvgItemsPerDay30d:      candidate.AvgItemsPerDay30d,
+			ActiveDays30d:          candidate.ActiveDays30d,
+			AvgItemsPerActiveDay30: candidate.AvgItemsPerActiveDay30,
+			FailureRate:            candidate.FailureRate,
+		})
+	}
+
+	workerCtx := service.WithWorkerTraceMetadata(ctx, "source_navigator", &userID, nil, nil, nil)
+	resp, err := h.worker.GenerateSourceNavigatorWithModel(
+		workerCtx,
+		persona,
+		workerCandidates,
+		derefString(anthropicKey),
+		derefString(googleKey),
+		derefString(groqKey),
+		derefString(deepseekKey),
+		derefString(alibabaKey),
+		derefString(mistralKey),
+		derefString(xaiKey),
+		derefString(zaiKey),
+		derefString(fireworksKey),
+		derefString(openAIKey),
+		modelName,
+	)
+	if err != nil {
+		log.Printf("source navigator worker user=%s model=%s: %v", userID, strings.TrimSpace(*modelName), err)
+		return nil
+	}
+	recordAskLLMUsage(ctx, h.llmUsageRepo, h.cache, "source_navigator", resp.LLM, &userID)
+	if strings.TrimSpace(resp.Overview) == "" {
+		return nil
+	}
+	meta := briefingNavigatorPersonaMeta(persona)
+	return &model.SourceNavigator{
+		Enabled:        true,
+		Persona:        persona,
+		CharacterName:  meta.CharacterName,
+		CharacterTitle: meta.CharacterTitle,
+		AvatarStyle:    meta.AvatarStyle,
+		SpeechStyle:    meta.SpeechStyle,
+		Overview:       strings.TrimSpace(resp.Overview),
+		Keep:           mapSourceNavigatorPicks(resp.Keep, titleBySourceID),
+		Watch:          mapSourceNavigatorPicks(resp.Watch, titleBySourceID),
+		Standout:       mapSourceNavigatorPicks(resp.Standout, titleBySourceID),
+		GeneratedAt:    &generatedAt,
+	}
+}
+
+func mapSourceNavigatorPicks(in []service.SourceNavigatorPick, titleBySourceID map[string]string) []model.SourceNavigatorPick {
+	out := make([]model.SourceNavigatorPick, 0, len(in))
+	seen := map[string]bool{}
+	for _, row := range in {
+		sourceID := strings.TrimSpace(row.SourceID)
+		if sourceID == "" || seen[sourceID] {
+			continue
+		}
+		title := strings.TrimSpace(row.Title)
+		if title == "" {
+			title = strings.TrimSpace(titleBySourceID[sourceID])
+		}
+		comment := strings.TrimSpace(row.Comment)
+		if title == "" || comment == "" {
+			continue
+		}
+		out = append(out, model.SourceNavigatorPick{
+			SourceID: sourceID,
+			Title:    title,
+			Comment:  comment,
+		})
+		seen[sourceID] = true
+	}
+	return out
+}
+
 func (h *SourceHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	sources, err := h.repo.List(r.Context(), userID)

@@ -223,6 +223,38 @@ type BriefingNavigatorResponse struct {
 	LLM   *LLMUsage               `json:"llm,omitempty"`
 }
 
+type SourceNavigatorCandidate struct {
+	SourceID               string  `json:"source_id"`
+	Title                  string  `json:"title"`
+	URL                    string  `json:"url"`
+	Enabled                bool    `json:"enabled"`
+	Status                 string  `json:"status"`
+	LastFetchedAt          *string `json:"last_fetched_at,omitempty"`
+	LastItemAt             *string `json:"last_item_at,omitempty"`
+	TotalItems30d          int     `json:"total_items_30d"`
+	UnreadItems30d         int     `json:"unread_items_30d"`
+	ReadItems30d           int     `json:"read_items_30d"`
+	FavoriteCount30d       int     `json:"favorite_count_30d"`
+	AvgItemsPerDay30d      float64 `json:"avg_items_per_day_30d"`
+	ActiveDays30d          int     `json:"active_days_30d"`
+	AvgItemsPerActiveDay30 float64 `json:"avg_items_per_active_day_30d"`
+	FailureRate            float64 `json:"failure_rate"`
+}
+
+type SourceNavigatorPick struct {
+	SourceID string `json:"source_id"`
+	Title    string `json:"title"`
+	Comment  string `json:"comment"`
+}
+
+type SourceNavigatorResponse struct {
+	Overview string                `json:"overview"`
+	Keep     []SourceNavigatorPick `json:"keep"`
+	Watch    []SourceNavigatorPick `json:"watch"`
+	Standout []SourceNavigatorPick `json:"standout"`
+	LLM      *LLMUsage             `json:"llm,omitempty"`
+}
+
 type ItemNavigatorArticle struct {
 	ItemID          string   `json:"item_id"`
 	Title           *string  `json:"title,omitempty"`
@@ -597,6 +629,57 @@ func (w *WorkerClient) GenerateBriefingNavigatorWithModel(
 		"intro_context": introContext,
 		"model":         model,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, w.internalSecret))
+}
+
+func (w *WorkerClient) GenerateSourceNavigatorWithModel(
+	ctx context.Context,
+	persona string,
+	candidates []SourceNavigatorCandidate,
+	anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey string,
+	model *string,
+) (*SourceNavigatorResponse, error) {
+	headers := map[string]string{
+		"X-LLM-Provider": LLMProviderForModel(model),
+		"X-LLM-Model":    strings.TrimSpace(derefString(model)),
+	}
+	if w.internalSecret != "" {
+		headers["X-Internal-Worker-Secret"] = w.internalSecret
+	}
+	if anthropicAPIKey != "" {
+		headers["X-Anthropic-Api-Key"] = anthropicAPIKey
+	}
+	if googleAPIKey != "" {
+		headers["X-Google-Api-Key"] = googleAPIKey
+	}
+	if groqAPIKey != "" {
+		headers["X-Groq-Api-Key"] = groqAPIKey
+	}
+	if deepseekAPIKey != "" {
+		headers["X-DeepSeek-Api-Key"] = deepseekAPIKey
+	}
+	if alibabaAPIKey != "" {
+		headers["X-Alibaba-Api-Key"] = alibabaAPIKey
+	}
+	if mistralAPIKey != "" {
+		headers["X-Mistral-Api-Key"] = mistralAPIKey
+	}
+	if xaiAPIKey != "" {
+		headers["X-XAI-Api-Key"] = xaiAPIKey
+	}
+	if zaiAPIKey != "" {
+		headers["X-ZAI-Api-Key"] = zaiAPIKey
+	}
+	if fireworksAPIKey != "" {
+		headers["X-Fireworks-Api-Key"] = fireworksAPIKey
+	}
+	if openAIAPIKey != "" {
+		headers["X-OpenAI-Api-Key"] = openAIAPIKey
+	}
+	return postWithHeaders[SourceNavigatorResponse](ctx, w, "/source-navigator", map[string]any{
+		"persona":    persona,
+		"candidates": candidates,
+		"model":      model,
+	}, headers)
 }
 
 func (w *WorkerClient) GenerateItemNavigatorWithModel(

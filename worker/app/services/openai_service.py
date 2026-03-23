@@ -45,6 +45,7 @@ from app.services.feed_task_common import (
     build_ask_task,
     build_briefing_navigator_task,
     build_item_navigator_task,
+    build_source_navigator_task,
     build_rank_feed_task,
     build_seed_sites_rescue_prompt,
     build_seed_sites_task,
@@ -52,6 +53,7 @@ from app.services.feed_task_common import (
     parse_ask_result,
     parse_briefing_navigator_result,
     parse_item_navigator_result,
+    parse_source_navigator_result,
     parse_rank_feed_result,
     parse_seed_sites_result,
 )
@@ -525,6 +527,13 @@ def generate_item_navigator(persona: str, article: dict, model: str, api_key: st
     text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=2200, response_schema=task["schema"], schema_name="item_navigator")
     out = parse_item_navigator_result(text, task["article"])
     return {"headline": out["headline"], "commentary": out["commentary"], "stance_tags": out["stance_tags"], "llm": _llm_meta(model, "item_navigator", usage)}
+
+
+def generate_source_navigator(persona: str, candidates: list[dict], model: str, api_key: str) -> dict:
+    task = build_source_navigator_task(persona, candidates)
+    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=2600, response_schema=task["schema"], schema_name="source_navigator")
+    out = parse_source_navigator_result(text, task["candidates"])
+    return {"overview": out["overview"], "keep": out["keep"], "watch": out["watch"], "standout": out["standout"], "llm": _llm_meta(model, "source_navigator", usage)}
 
 
 def suggest_feed_seed_sites(existing_sources: list[dict], preferred_topics: list[str], positive_examples: list[dict] | None, negative_examples: list[dict] | None, model: str, api_key: str) -> dict:

@@ -165,6 +165,48 @@ type SourceDailyStats struct {
 	DailyCounts            []SourceDailyCount `json:"daily_counts"`
 }
 
+type SourceNavigatorCandidate struct {
+	SourceID               string     `json:"source_id"`
+	Title                  string     `json:"title"`
+	URL                    string     `json:"url"`
+	Enabled                bool       `json:"enabled"`
+	Status                 string     `json:"status"`
+	LastFetchedAt          *time.Time `json:"last_fetched_at,omitempty"`
+	LastItemAt             *time.Time `json:"last_item_at,omitempty"`
+	TotalItems30d          int        `json:"total_items_30d"`
+	UnreadItems30d         int        `json:"unread_items_30d"`
+	ReadItems30d           int        `json:"read_items_30d"`
+	FavoriteCount30d       int        `json:"favorite_count_30d"`
+	AvgItemsPerDay30d      float64    `json:"avg_items_per_day_30d"`
+	ActiveDays30d          int        `json:"active_days_30d"`
+	AvgItemsPerActiveDay30 float64    `json:"avg_items_per_active_day_30d"`
+	FailureRate            float64    `json:"failure_rate"`
+}
+
+type SourceNavigatorPick struct {
+	SourceID string `json:"source_id"`
+	Title    string `json:"title"`
+	Comment  string `json:"comment"`
+}
+
+type SourceNavigator struct {
+	Enabled        bool                  `json:"enabled"`
+	Persona        string                `json:"persona"`
+	CharacterName  string                `json:"character_name"`
+	CharacterTitle string                `json:"character_title"`
+	AvatarStyle    string                `json:"avatar_style"`
+	SpeechStyle    string                `json:"speech_style"`
+	Overview       string                `json:"overview"`
+	Keep           []SourceNavigatorPick `json:"keep"`
+	Watch          []SourceNavigatorPick `json:"watch"`
+	Standout       []SourceNavigatorPick `json:"standout"`
+	GeneratedAt    *time.Time            `json:"generated_at,omitempty"`
+}
+
+type SourceNavigatorEnvelope struct {
+	Navigator *SourceNavigator `json:"navigator,omitempty"`
+}
+
 type SourcesDailyOverview struct {
 	TodayCount             int                `json:"today_count"`
 	YesterdayCount         int                `json:"yesterday_count"`

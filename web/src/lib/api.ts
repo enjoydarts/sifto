@@ -1159,6 +1159,28 @@ export interface ItemNavigatorResponse {
   } | null;
 }
 
+export interface SourceNavigatorPick {
+  source_id: string;
+  title: string;
+  comment: string;
+}
+
+export interface SourceNavigatorResponse {
+  navigator?: {
+    enabled: boolean;
+    persona: string;
+    character_name: string;
+    character_title: string;
+    avatar_style: string;
+    speech_style: string;
+    overview: string;
+    keep: SourceNavigatorPick[];
+    watch: SourceNavigatorPick[];
+    standout: SourceNavigatorPick[];
+    generated_at?: string | null;
+  } | null;
+}
+
 export interface AskCitation {
   item_id: string;
   title: string;
@@ -1287,6 +1309,12 @@ export const api = {
   getSourceDailyStats: (days = 30) => apiFetch<{ items: SourceDailyStats[]; overview: SourcesDailyOverview }>(`/sources/daily-stats?days=${days}`),
   getSourceHealth: () => apiFetch<{ items: SourceHealth[] }>("/sources/health"),
   getSourceOptimization: () => apiFetch<{ items: SourceOptimizationItem[] }>("/sources/optimization"),
+  getSourceNavigator: (params?: { cache_bust?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.cache_bust) q.set("cache_bust", "1");
+    const qs = q.toString();
+    return apiFetch<SourceNavigatorResponse>(`/sources/navigator${qs ? `?${qs}` : ""}`);
+  },
   exportSourcesOPML: async () => {
     const authHeaders = await getAuthHeaders();
     const res = await fetch("/api/sources/opml", {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
-import { Activity, Download, Lightbulb, Rss, Sparkles, Upload } from "lucide-react";
+import { Activity, Download, Lightbulb, Rss, Sparkles, Upload, X } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { api, Source, SourceDailyStats, SourceHealth, SourceItemStats, SourceOptimizationItem, SourceSuggestion, SourcesDailyOverview } from "@/lib/api";
+import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import Pagination from "@/components/pagination";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -66,6 +67,11 @@ export default function SourcesPage() {
   const [exportingOPML, setExportingOPML] = useState(false);
   const [importingOPML, setImportingOPML] = useState(false);
   const [importingInoreader, setImportingInoreader] = useState(false);
+  const [navigatorPersona, setNavigatorPersona] = useState("editor");
+  const [sourceNavigator, setSourceNavigator] = useState<Awaited<ReturnType<typeof api.getSourceNavigator>>["navigator"] | null>(null);
+  const [sourceNavigatorLoading, setSourceNavigatorLoading] = useState(false);
+  const [sourceNavigatorError, setSourceNavigatorError] = useState<string | null>(null);
+  const [sourceNavigatorOpen, setSourceNavigatorOpen] = useState(false);
   const opmlInputRef = useRef<HTMLInputElement | null>(null);
   const pageSize = 10;
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
@@ -147,6 +153,20 @@ export default function SourcesPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .getSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        setNavigatorPersona(settings?.llm_models?.navigator_persona?.trim() || "editor");
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadDailyStats = useCallback(async () => {
     setLoadingDailyStats(true);
@@ -414,6 +434,33 @@ export default function SourcesPage() {
       ] satisfies Array<{ key: "overview" | "sources" | "optimization" | "add"; title: string; meta: string }>,
     [t]
   );
+  const sourceNavigatorDisplayPersona = sourceNavigator?.avatar_style || sourceNavigator?.persona || navigatorPersona;
+  const sourceNavigatorTheme = sourceNavigator ? navigatorThemeTokens(sourceNavigator.persona, sourceNavigator.avatar_style) : navigatorThemeTokens(navigatorPersona);
+
+  const openSourceNavigator = useCallback(async () => {
+    if (sourceNavigatorLoading) return;
+    if (sourceNavigator) {
+      setSourceNavigatorOpen(true);
+      setSourceNavigatorError(null);
+      return;
+    }
+    setSourceNavigatorLoading(true);
+    setSourceNavigatorError(null);
+    try {
+      const resp = await api.getSourceNavigator();
+      if (!resp?.navigator) {
+        setSourceNavigatorError(t("sources.navigator.unavailable"));
+        return;
+      }
+      setSourceNavigator(resp.navigator);
+      setSourceNavigatorOpen(true);
+    } catch (e) {
+      setSourceNavigatorError(t("sources.navigator.error"));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setSourceNavigatorLoading(false);
+    }
+  }, [showToast, sourceNavigator, sourceNavigatorLoading, t]);
 
   return (
     <PageTransition>
@@ -830,6 +877,97 @@ export default function SourcesPage() {
           </div>
         </section>
 
+        <div className="fixed right-4 z-40 bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-6 md:right-6">
+          {sourceNavigatorOpen && sourceNavigator ? (
+            <aside className="absolute bottom-0 right-0 w-[min(calc(100vw-1.5rem),38rem)]">
+              <div className={`flex max-h-[min(78vh,44rem)] flex-col overflow-hidden rounded-[26px] border shadow-[0_24px_80px_rgba(58,42,27,0.18)] ${sourceNavigatorTheme.shell}`}>
+                <div className={`flex items-start gap-3 border-b px-4 py-4 ${sourceNavigatorTheme.header} border-[var(--color-editorial-line)]`}>
+                  <div className={`shrink-0 rounded-full border border-[var(--color-editorial-line)] p-1.5 shadow-sm ${sourceNavigatorTheme.avatar}`}>
+                    <AINavigatorAvatar persona={sourceNavigatorDisplayPersona} className="size-[42px]" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("briefing.navigator.label")}
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-[var(--color-editorial-ink)]">
+                      {sourceNavigator.character_name}
+                      <span className="ml-2 text-xs font-medium text-[var(--color-editorial-ink-faint)]">{sourceNavigator.character_title}</span>
+                    </div>
+                    <p className="mt-2 text-sm font-medium leading-6 text-[var(--color-editorial-ink-soft)]">
+                      {t("sources.navigator.subtitle")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSourceNavigatorOpen(false)}
+                    className="inline-flex size-9 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-white/70 text-[var(--color-editorial-ink-soft)] hover:bg-white"
+                    aria-label={t("briefing.navigator.close")}
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="space-y-4 overflow-y-auto px-4 py-4">
+                  <div className={`rounded-[20px] border px-4 py-4 ${sourceNavigatorTheme.bubble}`}>
+                    <div className="space-y-2 whitespace-pre-line text-[15px] leading-7 text-[var(--color-editorial-ink-soft)]">
+                      {sourceNavigator.overview}
+                    </div>
+                  </div>
+                  <SourceNavigatorSection
+                    title={t("sources.navigator.keep")}
+                    items={sourceNavigator.keep}
+                    badgeClassName={sourceNavigatorTheme.badge}
+                  />
+                  <SourceNavigatorSection
+                    title={t("sources.navigator.watch")}
+                    items={sourceNavigator.watch}
+                    badgeClassName={sourceNavigatorTheme.badge}
+                  />
+                  <SourceNavigatorSection
+                    title={t("sources.navigator.standout")}
+                    items={sourceNavigator.standout}
+                    badgeClassName={sourceNavigatorTheme.badge}
+                  />
+                </div>
+              </div>
+            </aside>
+          ) : null}
+
+          {!sourceNavigatorOpen && !sourceNavigatorLoading ? (
+            <button
+              type="button"
+              onClick={() => {
+                void openSourceNavigator();
+              }}
+              className={`rounded-full border p-2 shadow-[0_18px_40px_rgba(58,42,27,0.16)] transition hover:-translate-y-0.5 ${sourceNavigatorTheme.shell}`}
+              aria-label={t("sources.navigator.open")}
+            >
+              <AINavigatorAvatar persona={sourceNavigatorDisplayPersona} className="size-11" />
+            </button>
+          ) : null}
+
+          {sourceNavigatorLoading && !sourceNavigatorOpen ? (
+            <div className="flex items-center gap-3 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2 py-2 shadow-[0_18px_40px_rgba(58,42,27,0.16)]">
+              <div className={`rounded-full border border-[var(--color-editorial-line)] p-1.5 ${sourceNavigatorTheme.shell}`}>
+                <AINavigatorAvatar persona={sourceNavigatorDisplayPersona} className="size-10" />
+              </div>
+              <div className="pr-2">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                  {t("briefing.navigator.label")}
+                </div>
+                <div className="mt-0.5 text-sm font-medium text-[var(--color-editorial-ink-soft)]">
+                  {t("sources.navigator.loading")}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {sourceNavigatorError && !sourceNavigatorOpen ? (
+            <div className="mt-3 max-w-[min(calc(100vw-2rem),24rem)] rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-xs leading-5 text-[var(--color-editorial-ink-soft)] shadow-[0_12px_32px_rgba(58,42,27,0.12)]">
+              {sourceNavigatorError}
+            </div>
+          ) : null}
+        </div>
+
       {editingSource && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/40 px-4">
           <div className="w-full max-w-lg rounded-xl border border-zinc-200 bg-white p-5 shadow-xl">
@@ -977,4 +1115,92 @@ function SourceStat({ label, value }: { label: string; value: string }) {
       <div className="mt-2 text-[17px] font-semibold text-[var(--color-editorial-ink)]">{value}</div>
     </div>
   );
+}
+
+function SourceNavigatorSection({
+  title,
+  items,
+  badgeClassName,
+}: {
+  title: string;
+  items: Array<{ source_id: string; title: string; comment: string }>;
+  badgeClassName: string;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <section className="rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-4">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+        {title}
+      </div>
+      <div className="mt-3 space-y-3">
+        {items.map((item, index) => (
+          <div key={`${title}-${item.source_id}`} className="flex items-start gap-3 rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-3">
+            <div className={`mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${badgeClassName}`}>
+              {index + 1}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-serif text-[1rem] font-semibold leading-[1.35] text-[var(--color-editorial-ink)]">
+                {item.title}
+              </div>
+              <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{item.comment}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function navigatorThemeTokens(persona: string, avatarStyle?: string) {
+  const key = avatarStyle || persona;
+  switch (key) {
+    case "hype":
+      return {
+        shell: "border-[#f0b677] bg-[linear-gradient(180deg,#fff6e9_0%,#fffdf8_100%)]",
+        header: "",
+        avatar: "bg-[#d96c28] text-white",
+        bubble: "border-[#f0b677] bg-[#fff0da]",
+        badge: "bg-[#d96c28] text-white",
+      };
+    case "analyst":
+      return {
+        shell: "border-[#9db5d5] bg-[linear-gradient(180deg,#eef4fb_0%,#fbfdff_100%)]",
+        header: "",
+        avatar: "bg-[#365f93] text-white",
+        bubble: "border-[#c8d8ec] bg-[#f3f8fd]",
+        badge: "bg-[#365f93] text-white",
+      };
+    case "concierge":
+      return {
+        shell: "border-[#d9c7b2] bg-[linear-gradient(180deg,#fbf5ef_0%,#fffdfb_100%)]",
+        header: "",
+        avatar: "bg-[#8c6a52] text-white",
+        bubble: "border-[#e7d8c8] bg-[#fff8f1]",
+        badge: "bg-[#8c6a52] text-white",
+      };
+    case "snark":
+      return {
+        shell: "border-[#caa8a8] bg-[linear-gradient(180deg,#f9eeee_0%,#fffdfd_100%)]",
+        header: "",
+        avatar: "bg-[#7d3f3f] text-white",
+        bubble: "border-[#dfc2c2] bg-[#fff5f5]",
+        badge: "bg-[#7d3f3f] text-white",
+      };
+    case "native":
+      return {
+        shell: "border-[#efb2c6] bg-[linear-gradient(180deg,#fff0f6_0%,#fffdfd_100%)]",
+        header: "",
+        avatar: "bg-[#d24f7a] text-white",
+        bubble: "border-[#f3c8d7] bg-[#fff5f8]",
+        badge: "bg-[#d24f7a] text-white",
+      };
+    default:
+      return {
+        shell: "border-[#c7b79c] bg-[linear-gradient(180deg,#f8f3e7_0%,#fffdf8_100%)]",
+        header: "",
+        avatar: "bg-[#8f5a24] text-white",
+        bubble: "border-[#ddcfb7] bg-[#fff8ea]",
+        badge: "bg-[#8f5a24] text-white",
+      };
+  }
 }

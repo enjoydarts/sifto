@@ -114,6 +114,51 @@ ITEM_NAVIGATOR_SCHEMA = {
     "additionalProperties": False,
 }
 
+SOURCE_NAVIGATOR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "overview": {"type": "string"},
+        "keep": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "source_id": {"type": "string"},
+                    "comment": {"type": "string"},
+                },
+                "required": ["source_id", "comment"],
+                "additionalProperties": False,
+            },
+        },
+        "watch": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "source_id": {"type": "string"},
+                    "comment": {"type": "string"},
+                },
+                "required": ["source_id", "comment"],
+                "additionalProperties": False,
+            },
+        },
+        "standout": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "source_id": {"type": "string"},
+                    "comment": {"type": "string"},
+                },
+                "required": ["source_id", "comment"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["overview", "keep", "watch", "standout"],
+    "additionalProperties": False,
+}
+
 
 def _resolve_persona_file() -> Path:
     explicit = str(os.getenv("NAVIGATOR_PERSONAS_PATH") or "").strip()
@@ -535,6 +580,121 @@ def parse_item_navigator_result(text: str, article: dict) -> dict:
             pieces.append(f"一方で、{facts[1][:80]}という留保もあり、額面どおりには受け取りにくいところがあります。")
         commentary = " ".join(pieces).strip() or "この話題は単なる要点整理より、どこに意味がありどこを留保して読むべきかを見る価値があります。"
     return {"headline": headline[:60], "commentary": commentary[:900], "stance_tags": stance_tags}
+
+
+def build_source_navigator_task(persona: str, candidates: list[dict]) -> dict:
+    persona_key, profile = resolve_navigator_persona_profile(persona, "briefing")
+    trimmed_candidates = candidates[:24]
+    prompt = f"""あなたはSources管理画面の右下から呼び出されるAIナビゲーターです。
+
+キャラクター:
+- persona: {persona_key}
+- display_name: {profile["name"]}
+- 性別: {profile["gender"]}
+- 年代感: {profile["age_vibe"]}
+- 一人称: {profile["first_person"]}
+- 話し方: {profile["speech_style"]}
+- 職業: {profile["occupation"]}
+- 経験: {profile["experience"]}
+- 性格: {profile["personality"]}
+- 価値観: {profile["values"]}
+- 関心: {profile["interests"]}
+- 嫌いなもの: {profile["dislikes"]}
+- tone: {profile["voice"]}
+
+タスク:
+- ソース一覧全体を見て、購読バランスを棚卸しする
+- 6〜10文の、かなりしっかりした総評 overview を返す
+- あわせて keep / watch / standout を最大3件ずつ返す
+
+ルール:
+- 出力は JSON のみ
+- overview は 6〜10文で、短評ではなくまとまった総評にする
+- overview では、全体の傾向、ノイズ源、残す価値がある流れ、見直すべき偏り、直近の温度感を織り込む
+- overview は客観的レポートではなく、このペルソナの主観で語る
+- ペルソナの価値観に基づいて評価する
+- 「この人ならこう見る」という自然な語りにする
+- 他のキャラクター名を名乗らない。別ペルソナの名前・肩書き・口調を混ぜない
+- 自分を名乗るなら、必ず {profile["name"]} とだけ名乗る
+- 一人称は {profile["first_person"]} を基本にし、別の一人称へぶれない
+- 話し方は {profile["speech_style"]} と {profile["voice"]} に寄せ、他ペルソナの文体へ寄らない
+- 数字をそのまま列挙するだけで終わらせず、「この構成が何を意味するか」を論評する
+- source_id は候補にあるものだけを使う
+- keep は「残したい/効いている」ソース
+- watch は「見直したい/ノイズや停滞が気になる」ソース
+- standout は「最近とくに働いている/効いている」ソース
+- 各 comment は 1〜2文、70〜160字程度
+- comment でも title や数字の言い換えだけにせず、なぜそう見るかを短く添える
+- 同じ source_id を複数カテゴリに重複させない
+- 不確かなことは断定しない。候補データから読める範囲だけで論評する
+- snark では軽口やツッコミを入れてよい
+- snark でも不快・攻撃的・見下し表現は禁止
+- snark でも読者個人をいじらない。人ではなく状況や構成に対して毒づく
+
+返却形式:
+{{
+  "overview": "6〜10文の総評",
+  "keep": [
+    {{"source_id":"uuid", "comment":"残したい理由"}}
+  ],
+  "watch": [
+    {{"source_id":"uuid", "comment":"見直したい理由"}}
+  ],
+  "standout": [
+    {{"source_id":"uuid", "comment":"最近効いている理由"}}
+  ]
+}}
+
+ソース候補:
+{json.dumps(trimmed_candidates, ensure_ascii=False)}
+"""
+    return {
+        "prompt": prompt,
+        "schema": SOURCE_NAVIGATOR_SCHEMA,
+        "persona": persona_key,
+        "candidates": trimmed_candidates,
+        "profile": profile,
+    }
+
+
+def parse_source_navigator_result(text: str, candidates: list[dict]) -> dict:
+    data = extract_first_json_object(text) or {}
+    overview = str(data.get("overview") or "").strip()
+    allowed = {str(c.get("source_id") or "").strip(): c for c in candidates if str(c.get("source_id") or "").strip()}
+
+    def _parse_rows(key: str, seen: set[str]) -> list[dict]:
+        rows = data.get(key) if isinstance(data.get(key), list) else []
+        out: list[dict] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            source_id = str(row.get("source_id") or "").strip()
+            comment = str(row.get("comment") or "").strip()
+            if not source_id or source_id not in allowed or source_id in seen or not comment:
+                continue
+            title = str(allowed[source_id].get("title") or "").strip()
+            out.append({"source_id": source_id, "title": title, "comment": comment[:200]})
+            seen.add(source_id)
+            if len(out) >= 3:
+                break
+        return out
+
+    seen: set[str] = set()
+    keep = _parse_rows("keep", seen)
+    watch = _parse_rows("watch", seen)
+    standout = _parse_rows("standout", seen)
+
+    if not overview:
+        enabled_count = sum(1 for c in candidates if c.get("enabled"))
+        unread_total = sum(int(c.get("unread_items_30d") or 0) for c in candidates)
+        favorite_total = sum(int(c.get("favorite_count_30d") or 0) for c in candidates)
+        overview = (
+            f"いまの購読構成は、{len(candidates)}本のうち{enabled_count}本が有効で、全体の温度差がかなり見えやすい状態です。"
+            f"未読は合計で{unread_total}件あり、流量の強いソースと置いておけるソースの差がそのまま backlog に表れています。"
+            f"一方でお気に入り反応は合計{favorite_total}件あり、明確に効いている領域も残っています。"
+            "だから、全部を均等に扱うより、残す価値がある線と見直すべき線を分けて考えるのが自然です。"
+        )
+    return {"overview": overview[:1800], "keep": keep, "watch": watch, "standout": standout}
 
 
 def build_seed_sites_task(

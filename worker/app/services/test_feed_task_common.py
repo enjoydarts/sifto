@@ -1,7 +1,13 @@
 import unittest
 from unittest.mock import patch
 
-from app.services.feed_task_common import BRIEFING_NAVIGATOR_SCHEMA, _resolve_persona_file, build_briefing_navigator_task
+from app.services.feed_task_common import (
+    BRIEFING_NAVIGATOR_SCHEMA,
+    SOURCE_NAVIGATOR_SCHEMA,
+    _resolve_persona_file,
+    build_briefing_navigator_task,
+    build_source_navigator_task,
+)
 
 
 class FeedTaskCommonTests(unittest.TestCase):
@@ -129,6 +135,44 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("picks は空配列 [] を返す", prompt)
         self.assertIn("記事推薦は捏造しない", prompt)
         self.assertIn("candidates が空のときは", prompt)
+
+    def test_source_navigator_schema_requires_all_sections(self):
+        self.assertEqual(
+            SOURCE_NAVIGATOR_SCHEMA["required"],
+            ["overview", "keep", "watch", "standout"],
+        )
+
+    def test_build_source_navigator_task_requires_long_overview_and_structured_lists(self):
+        task = build_source_navigator_task(
+            persona="editor",
+            candidates=[
+                {
+                    "source_id": "source-1",
+                    "title": "Example Source",
+                    "url": "https://example.com/feed",
+                    "enabled": True,
+                    "status": "ok",
+                    "total_items_30d": 14,
+                    "unread_items_30d": 4,
+                    "read_items_30d": 10,
+                    "favorite_count_30d": 3,
+                    "avg_items_per_day_30d": 0.5,
+                    "active_days_30d": 12,
+                    "avg_items_per_active_day_30d": 1.2,
+                    "failure_rate": 0.0,
+                }
+            ],
+        )
+
+        prompt = task["prompt"]
+        self.assertIn("6〜10文", prompt)
+        self.assertIn("総評", prompt)
+        self.assertIn("keep", prompt)
+        self.assertIn("watch", prompt)
+        self.assertIn("standout", prompt)
+        self.assertIn("客観的レポートではなく", prompt)
+        self.assertIn("数字をそのまま列挙するだけで終わらせず", prompt)
+        self.assertIn("同じ source_id を複数カテゴリに重複させない", prompt)
 
 
 if __name__ == "__main__":

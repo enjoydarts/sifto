@@ -186,6 +186,26 @@ func (h *BriefingHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		navigator = h.buildNavigator(r.Context(), userID, generatedAt)
 	}
 	resp := model.BriefingNavigatorEnvelope{Navigator: navigator}
+	log.Printf(
+		"briefing navigator response user_id=%s preview=%t model=%s persona=%s present=%t intro_len=%d picks=%d",
+		userID,
+		preview,
+		resolvedModel,
+		persona,
+		resp.Navigator != nil,
+		func() int {
+			if resp.Navigator == nil {
+				return 0
+			}
+			return len(resp.Navigator.Intro)
+		}(),
+		func() int {
+			if resp.Navigator == nil {
+				return 0
+			}
+			return len(resp.Navigator.Picks)
+		}(),
+	)
 	if h.cache != nil && shouldCacheBriefingNavigatorResponse(&resp) {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, briefingNavigatorCacheTTL); err != nil {
 			log.Printf("briefing navigator cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
@@ -313,6 +333,14 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 		log.Printf("briefing navigator llm missing user=%s model=%s", userID, strings.TrimSpace(*modelName))
 	}
 	recordAskLLMUsage(ctx, h.llmUsageRepo, h.cache, "briefing_navigator", resp.LLM, &userID)
+	log.Printf(
+		"briefing navigator llm result user_id=%s model=%s candidates=%d raw_intro_len=%d raw_picks=%d",
+		userID,
+		strings.TrimSpace(*modelName),
+		len(candidates),
+		len(resp.Intro),
+		len(resp.Picks),
+	)
 	meta := briefingNavigatorPersonaMeta(persona)
 	picks := make([]model.BriefingNavigatorPick, 0, len(resp.Picks))
 	for idx, pick := range resp.Picks {
@@ -331,9 +359,6 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 			Comment:     strings.TrimSpace(pick.Comment),
 			ReasonTags:  pick.ReasonTags,
 		})
-	}
-	if len(picks) == 0 && strings.TrimSpace(resp.Intro) == "" {
-		return nil
 	}
 	return &model.BriefingNavigator{
 		Enabled:        true,

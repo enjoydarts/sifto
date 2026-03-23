@@ -171,6 +171,7 @@ func main() {
 			r.Get("/daily-stats", sourceH.DailyStats)
 			r.Get("/health", sourceH.Health)
 			r.Get("/optimization", sourceH.Optimization)
+			r.Get("/navigator", sourceH.Navigator)
 			r.Get("/recommended", sourceH.Recommended)
 			r.Post("/", sourceH.Create)
 			r.Post("/discover", sourceH.Discover)

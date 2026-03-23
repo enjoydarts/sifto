@@ -333,7 +333,7 @@ export function InlineReader({
                   <X className="size-4" aria-hidden="true" />
                 </button>
               </div>
-              <h3 className="text-2xl font-bold leading-snug text-[var(--color-editorial-ink)] sm:text-[30px]">
+              <h3 className="font-serif text-2xl font-bold leading-snug text-[var(--color-editorial-ink)] sm:text-[30px]">
                 {item.translated_title || item.title || item.url}
               </h3>
               <a

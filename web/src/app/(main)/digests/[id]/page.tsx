@@ -115,7 +115,7 @@ export default function DigestDetailPage() {
                 {digest.digest_llm.provider} / {digest.digest_llm.model}
               </div>
             ) : null}
-            <div className="mt-4 whitespace-pre-wrap break-words text-[15px] leading-[2] text-[var(--color-editorial-ink-soft)]">
+            <div className="mt-4 whitespace-pre-wrap break-words font-serif text-[18px] leading-[1.95] text-[var(--color-editorial-ink)]">
               {digest.email_body}
             </div>
           </section>
@@ -151,7 +151,7 @@ export default function DigestDetailPage() {
                       <span className="text-xs text-[var(--color-editorial-ink-soft)]">score {draft.max_score.toFixed(2)}</span>
                     ) : null}
                   </div>
-                  <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-8 text-[var(--color-editorial-ink-soft)]">
+                  <div className="mt-3 whitespace-pre-wrap break-words font-serif text-[17px] leading-[1.95] text-[var(--color-editorial-ink)]">
                     {draft.draft_summary}
                   </div>
                 </article>
@@ -195,7 +195,9 @@ export default function DigestDetailPage() {
                   >
                     {di.item.url}
                   </a>
-                  <p className="mt-3 text-sm leading-8 text-[var(--color-editorial-ink-soft)]">{di.summary.summary}</p>
+                  <p className="mt-3 whitespace-pre-wrap font-serif text-[17px] leading-[1.95] text-[var(--color-editorial-ink)]">
+                    {di.summary.summary}
+                  </p>
                   {di.summary.topics.length > 0 ? (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {di.summary.topics.map((topic) => (

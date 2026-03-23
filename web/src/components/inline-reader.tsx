@@ -459,9 +459,9 @@ export function InlineReader({
                       faithfulnessResult={item.faithfulness?.final_result}
                       t={t}
                     />
-                    <p className="mt-3 whitespace-pre-wrap text-base leading-[1.8] text-[var(--color-editorial-ink)]">
+                    <div className="mt-3 whitespace-pre-wrap font-serif text-[18px] leading-[1.95] text-[var(--color-editorial-ink)]">
                       {item.summary.summary}
-                    </p>
+                    </div>
                   </div>
                 ) : (
                   <p className="text-base text-[var(--color-editorial-ink-faint)]">{t("common.noData")}</p>
@@ -482,7 +482,7 @@ export function InlineReader({
 
               <TabPanel value="body" className="px-5 py-7 sm:px-6">
                 {item.content_text ? (
-                  <div className="max-w-prose whitespace-pre-wrap text-base leading-[1.8] text-[var(--color-editorial-ink)]">
+                  <div className="whitespace-pre-wrap font-serif text-[18px] leading-[2] text-[var(--color-editorial-ink)]">
                     {item.content_text}
                   </div>
                 ) : (

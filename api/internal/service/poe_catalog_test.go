@@ -65,4 +65,7 @@ func TestPoeSnapshotsToCatalogModelsUsesPoeAliasAndSnapshotPricing(t *testing.T)
 	if out[0].Pricing == nil || out[0].Pricing.PricingSource != "poe_snapshot" {
 		t.Fatalf("pricing = %#v, want poe_snapshot", out[0].Pricing)
 	}
+	if out[0].Capabilities == nil || !out[0].Capabilities.SupportsStructuredOutput {
+		t.Fatalf("capabilities = %#v, want structured output support", out[0].Capabilities)
+	}
 }

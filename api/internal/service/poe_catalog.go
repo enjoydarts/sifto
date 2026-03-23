@@ -107,7 +107,7 @@ func PoeSnapshotsToCatalogModels(models []repository.PoeModelSnapshot) []LLMMode
 			Highlights:        []string{"experimental"},
 			Comment:           comment,
 			Capabilities: &LLMModelCapabilities{
-				SupportsStructuredOutput:  false,
+				SupportsStructuredOutput:  true,
 				SupportsStrictJSONSchema:  false,
 				SupportsReasoning:         false,
 				SupportsToolCalling:       false,

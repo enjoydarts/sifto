@@ -1,0 +1,29 @@
+import unittest
+
+from app.services.summary_task_common import SUMMARY_SYSTEM_INSTRUCTION, build_summary_task
+
+
+class SummaryTaskCommonTests(unittest.TestCase):
+    def test_system_instruction_discourages_fact_by_fact_rewrites(self):
+        self.assertIn("関連する facts を統合", SUMMARY_SYSTEM_INSTRUCTION)
+        self.assertIn("「〜である。」の連続を避け", SUMMARY_SYSTEM_INSTRUCTION)
+
+    def test_build_summary_task_fallback_requests_natural_connected_prose(self):
+        task = build_summary_task(
+            "OpenAI updates model lineup",
+            [
+                "OpenAI announced a new lineup.",
+                "The company said the release targets enterprise use.",
+                "Pricing will change next month.",
+            ],
+            source_text_chars=2400,
+        )
+
+        prompt = task["prompt"]
+        self.assertIn("各 fact を1文ずつ順番に言い換えるのではなく", prompt)
+        self.assertIn("同じ文末表現を3文以上連続させない", prompt)
+        self.assertIn("1段落目で記事の要点をまとめ", prompt)
+
+
+if __name__ == "__main__":
+    unittest.main()

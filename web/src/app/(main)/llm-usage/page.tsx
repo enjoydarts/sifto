@@ -59,6 +59,7 @@ const PROVIDER_COLORS: Record<string, { stroke: string; fill: string; fillOpacit
   zai: { stroke: "#0891b2", fill: "#22d3ee", fillOpacity: 0.55, label: "Z.ai" },
   fireworks: { stroke: "#c2410c", fill: "#fb923c", fillOpacity: 0.55, label: "Fireworks" },
   openrouter: { stroke: "#7c3aed", fill: "#c4b5fd", fillOpacity: 0.55, label: "OpenRouter" },
+  poe: { stroke: "#0f766e", fill: "#2dd4bf", fillOpacity: 0.55, label: "Poe" },
 };
 
 const FALLBACK_PROVIDER_COLORS = [
@@ -67,6 +68,14 @@ const FALLBACK_PROVIDER_COLORS = [
   { stroke: "#4338ca", fill: "#818cf8", fillOpacity: 0.55 },
   { stroke: "#a16207", fill: "#facc15", fillOpacity: 0.55 },
 ];
+
+function normalizeProvider(provider: string) {
+  const p = provider.trim().toLowerCase();
+  if (p.startsWith("poe::") || p.startsWith("poe/")) {
+    return "poe";
+  }
+  return p;
+}
 
 function providerLabel(provider: string) {
   return PROVIDER_COLORS[provider]?.label ?? provider;
@@ -126,6 +135,13 @@ export default function LLMUsagePage() {
   const [logs, setLogs] = useState<LLMUsageLog[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
 
+  const normalizedSummaryRows = useMemo(() => {
+    return summaryRows.map((row) => ({
+      ...row,
+      provider: normalizeProvider(row.provider),
+    }));
+  }, [summaryRows]);
+
   const selectedDays = useMemo(() => {
     if (daysFilter !== "mtd") {
       return Number(daysFilter);
@@ -181,7 +197,7 @@ export default function LLMUsagePage() {
       cost: 0,
       byProviderCost: new Map<string, number>(),
     };
-    for (const r of summaryRows) {
+    for (const r of normalizedSummaryRows) {
       t.calls += r.calls;
       t.input += r.input_tokens;
       t.output += r.output_tokens;
@@ -191,7 +207,7 @@ export default function LLMUsagePage() {
       t.byProviderCost.set(r.provider, (t.byProviderCost.get(r.provider) ?? 0) + r.estimated_cost_usd);
     }
     return t;
-  }, [summaryRows]);
+  }, [normalizedSummaryRows]);
 
   const providerTotals = useMemo(() => {
     return Array.from(totals.byProviderCost.entries())
@@ -327,25 +343,25 @@ export default function LLMUsagePage() {
 
   const groupedByDate = useMemo(() => {
     const m = new Map<string, SummaryRow[]>();
-    for (const row of summaryRows) {
+    for (const row of normalizedSummaryRows) {
       const key = `${row.date_jst}:${row.provider}:${row.purpose}:${row.pricing_source}`;
       const list = m.get(row.date_jst) ?? [];
       list.push({ ...row, key });
       m.set(row.date_jst, list);
     }
     return Array.from(m.entries());
-  }, [summaryRows]);
+  }, [normalizedSummaryRows]);
 
   const dailyChartRows = useMemo(() => {
     const m = new Map<string, { date: string; total: number; [provider: string]: string | number }>();
-    for (const row of summaryRows) {
+    for (const row of normalizedSummaryRows) {
       const cur = m.get(row.date_jst) ?? { date: row.date_jst, total: 0 };
       cur.total = Number(cur.total ?? 0) + row.estimated_cost_usd;
       cur[row.provider] = Number(cur[row.provider] ?? 0) + row.estimated_cost_usd;
       m.set(row.date_jst, cur);
     }
     const providers = Array.from(
-      summaryRows.reduce((acc, row) => {
+      normalizedSummaryRows.reduce((acc, row) => {
         acc.add(row.provider);
         return acc;
       }, new Set<string>())
@@ -360,7 +376,7 @@ export default function LLMUsagePage() {
         return row;
       })
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [summaryRows]);
+  }, [normalizedSummaryRows]);
 
   const chartProviders = useMemo(() => {
     return Array.from(totals.byProviderCost.keys()).sort((a, b) => {
@@ -881,7 +897,7 @@ export default function LLMUsagePage() {
                 {dailyChartRows.length === 0 ? (
                   <p className="text-sm text-[var(--color-editorial-ink-faint)]">{t("llm.noSummary")}</p>
                 ) : (
-                  <div className="h-72 w-full overflow-hidden rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3">
+                  <div className="h-72 w-full overflow-visible rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={dailyChartRows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#d9d1c4" vertical={false} />
@@ -990,7 +1006,7 @@ export default function LLMUsagePage() {
                       ? `${t("llm.forecast.modeLabel")} ${forecastMode === "month_avg" ? t("llm.forecast.monthAvg") : t("llm.forecast.recent7d")}${t("llm.forecast.refOpen")}${t("llm.forecast.refMonthAvg")} ${fmtUSD(monthlyForecast.monthAvgDailyPace)} / ${t("llm.forecast.refRecent7d")} ${fmtUSD(monthlyForecast.recent7dDailyPace)}${t("llm.forecast.refClose")}`
                       : t("llm.forecast.pastMonthsOnly")}
                   </p>
-                  <div className="h-80 w-full overflow-hidden rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3">
+                  <div className="h-80 w-full overflow-visible rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={monthlyForecast.rows} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#d9d1c4" vertical={false} />
@@ -1112,7 +1128,7 @@ export default function LLMUsagePage() {
           <p className="text-sm text-zinc-400">{t("llm.noSummary")}</p>
         ) : (
           <div className="space-y-4">
-            <div className="h-80 w-full overflow-hidden rounded border border-zinc-100 p-2">
+            <div className="h-80 w-full overflow-visible rounded border border-zinc-100 p-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={modelChartRows}

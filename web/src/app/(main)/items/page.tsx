@@ -776,8 +776,12 @@ function ItemsPageContent() {
                 />
               )}
               actions={
-                !pendingMode && !readMode ? (
-                  <div className="hidden w-full flex-wrap items-center justify-end gap-2 xl:flex xl:w-auto xl:flex-nowrap">
+                <div
+                  aria-hidden={pendingMode || readMode}
+                  className={`hidden w-full flex-wrap items-center justify-end gap-2 xl:flex xl:w-auto xl:flex-nowrap ${
+                    pendingMode || readMode ? "pointer-events-none invisible" : ""
+                  }`}
+                >
                     <select
                       value={toolbarAction}
                       onChange={(e) => setToolbarAction(e.target.value as typeof toolbarAction)}
@@ -805,7 +809,6 @@ function ItemsPageContent() {
                       {bulkMarkingRead ? t("common.saving") : t("items.actions.run")}
                     </button>
                   </div>
-                ) : null
               }
             >
               {showFilterBadges ? <div className="flex flex-wrap items-center gap-2">{railFilterTags}</div> : null}

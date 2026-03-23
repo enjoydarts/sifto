@@ -26,7 +26,6 @@ export function FiltersBar({
 }) {
   const focusMode = feedMode === "recommended";
   const pendingMode = feedMode === "pending";
-  const showPrimaryRow = !focusMode && !pendingMode;
   const sortIcons: Record<SortMode, typeof ArrowDownAZ> = {
     newest: ArrowDownAZ,
     score: TrendingUp,
@@ -35,8 +34,13 @@ export function FiltersBar({
 
   return (
     <div className="flex flex-col gap-2">
-      {showPrimaryRow && (
-        <div className="flex min-w-0 max-w-full flex-wrap gap-2 sm:pb-0">
+      {!focusMode && (
+        <div
+          className={`flex min-w-0 max-w-full flex-wrap gap-2 sm:pb-0 ${
+            pendingMode ? "max-xl:hidden xl:pointer-events-none xl:invisible" : ""
+          }`}
+          aria-hidden={pendingMode}
+        >
           <div className="flex min-w-0 items-center gap-1 rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-1">
             {(["newest", "score", "personal_score"] as SortMode[]).map((s) => (
               (() => {
@@ -103,7 +107,6 @@ export function FiltersBar({
           </div>
         </div>
       )}
-
     </div>
   );
 }

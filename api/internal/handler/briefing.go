@@ -303,6 +303,9 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 		log.Printf("briefing navigator worker user=%s model=%s: %v", userID, strings.TrimSpace(*modelName), err)
 		return nil
 	}
+	if resp.LLM == nil {
+		log.Printf("briefing navigator llm missing user=%s model=%s", userID, strings.TrimSpace(*modelName))
+	}
 	recordAskLLMUsage(ctx, h.llmUsageRepo, h.cache, "briefing_navigator", resp.LLM, &userID)
 	meta := briefingNavigatorPersonaMeta(persona)
 	picks := make([]model.BriefingNavigatorPick, 0, len(resp.Picks))

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -595,6 +596,8 @@ func recordAskLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, ca
 		EstimatedCostUSD:         usage.EstimatedCostUSD,
 	}); err == nil {
 		_ = service.BumpUserLLMUsageCacheVersion(ctx, cache, *userID)
+	} else {
+		log.Printf("llm usage insert failed purpose=%s user_id=%s provider=%s model=%s err=%v", purpose, *userID, usage.Provider, usage.Model, err)
 	}
 }
 

@@ -148,7 +148,6 @@ function ItemsPageContent() {
         searchMode: data?.search_mode ?? searchMode,
       };
     },
-    placeholderData: (prev) => prev,
   });
   const cachedItemsLength = listQuery.data?.items?.length ?? 0;
   const items = listQuery.data?.items ?? [];

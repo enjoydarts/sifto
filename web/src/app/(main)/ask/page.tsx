@@ -231,7 +231,7 @@ export default function AskPage() {
 
         {result ? (
           <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-            <section className="surface-editorial rounded-[28px] px-5 py-5 sm:px-6">
+            <section className="min-w-0 surface-editorial rounded-[28px] px-5 py-5 sm:px-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
@@ -251,7 +251,7 @@ export default function AskPage() {
                 </button>
               </div>
 
-              <div className="mt-5 whitespace-pre-wrap">{renderAnswerWithCitationSuperscript(result.answer)}</div>
+              <div className="mt-5 min-w-0 whitespace-pre-wrap break-words">{renderAnswerWithCitationSuperscript(result.answer)}</div>
 
               {bullets.length > 0 ? (
                 <div className="mt-5 grid gap-2">
@@ -339,8 +339,8 @@ export default function AskPage() {
               ) : null}
             </section>
 
-            <aside className="grid gap-4">
-              <section className="surface-editorial rounded-[28px] px-5 py-5">
+            <aside className="min-w-0 grid gap-4">
+              <section className="min-w-0 surface-editorial rounded-[28px] px-5 py-5">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
                   {t("ask.citationsLabel")}
                 </div>
@@ -350,28 +350,28 @@ export default function AskPage() {
                       <span className="inline-grid min-h-[30px] min-w-[30px] place-items-center rounded-full bg-[var(--color-editorial-ink)] px-2 text-xs font-semibold text-[var(--color-editorial-panel-strong)]">
                         [{index + 1}]
                       </span>
-                      <Link href={`/items/${citation.item_id}`} className="mt-3 block text-[15px] font-semibold leading-6 text-[var(--color-editorial-ink)] hover:underline">
+                      <Link href={`/items/${citation.item_id}`} className="mt-3 block break-words text-[15px] font-semibold leading-6 text-[var(--color-editorial-ink)] hover:underline">
                         {citation.title}
                       </Link>
                       {citation.reason ? (
-                        <p className="mt-2 text-[12px] leading-[1.75] text-[var(--color-editorial-ink-faint)]">{citation.reason}</p>
+                        <p className="mt-2 break-words text-[12px] leading-[1.75] text-[var(--color-editorial-ink-faint)]">{citation.reason}</p>
                       ) : null}
                     </article>
                   ))}
                 </div>
               </section>
 
-              <section className="surface-editorial rounded-[28px] px-5 py-5">
+              <section className="min-w-0 surface-editorial rounded-[28px] px-5 py-5">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
                   {t("ask.relatedLabel")}
                 </div>
                 <div className="mt-4 grid gap-3">
                   {relatedItems.map((item) => (
                     <article key={item.id} className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] p-4">
-                      <Link href={`/items/${item.id}`} className="block text-[15px] font-semibold leading-6 text-[var(--color-editorial-ink)] hover:underline">
+                      <Link href={`/items/${item.id}`} className="block break-words text-[15px] font-semibold leading-6 text-[var(--color-editorial-ink)] hover:underline">
                         {item.translated_title || item.title || item.url}
                       </Link>
-                      <p className="mt-2 line-clamp-3 text-[13px] leading-7 text-[var(--color-editorial-ink-soft)]">{item.summary}</p>
+                      <p className="mt-2 break-words text-[13px] leading-7 text-[var(--color-editorial-ink-soft)]">{item.summary}</p>
                     </article>
                   ))}
                 </div>

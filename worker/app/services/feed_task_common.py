@@ -690,7 +690,6 @@ def parse_ask_navigator_result(text: str, ask_input: dict) -> dict:
 
 def build_source_navigator_task(persona: str, candidates: list[dict]) -> dict:
     persona_key, profile = resolve_navigator_persona_profile(persona, "briefing")
-    trimmed_candidates = candidates[:24]
     prompt = f"""あなたはSources管理画面の右下から呼び出されるAIナビゲーターです。
 
 キャラクター:
@@ -752,13 +751,13 @@ def build_source_navigator_task(persona: str, candidates: list[dict]) -> dict:
 }}
 
 ソース候補:
-{json.dumps(trimmed_candidates, ensure_ascii=False)}
+{json.dumps(candidates, ensure_ascii=False)}
 """
     return {
         "prompt": prompt,
         "schema": SOURCE_NAVIGATOR_SCHEMA,
         "persona": persona_key,
-        "candidates": trimmed_candidates,
+        "candidates": candidates,
         "profile": profile,
     }
 

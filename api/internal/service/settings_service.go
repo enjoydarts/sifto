@@ -261,7 +261,7 @@ func normalizeNavigatorPersona(v *string) string {
 		return "editor"
 	}
 	switch strings.TrimSpace(*v) {
-	case "editor", "hype", "analyst", "concierge", "snark":
+	case "editor", "hype", "analyst", "concierge", "snark", "native":
 		return strings.TrimSpace(*v)
 	default:
 		return "editor"

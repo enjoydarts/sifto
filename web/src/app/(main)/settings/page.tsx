@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Brain, ChevronDown, KeyRound, Settings as SettingsIcon } from "lucide-react";
-import { api, LLMCatalog, LLMCatalogModel, NotificationPriorityRule, PreferenceProfile, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
+import { api, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, PreferenceProfile, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -12,6 +12,7 @@ import ModelGuideModal from "@/components/settings/model-guide-modal";
 import ModelSelect, { type ModelOption } from "@/components/settings/model-select";
 import { PreferenceProfilePanel } from "@/components/settings/preference-profile-panel";
 import ProviderModelUpdatesPanel from "@/components/settings/provider-model-updates-panel";
+import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { formatModelDisplayName } from "@/lib/model-display";
@@ -186,6 +187,21 @@ function joinClassNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+type NavigatorPersonaKey = "editor" | "hype" | "analyst" | "concierge" | "snark" | "native";
+const EMPTY_NAVIGATOR_PERSONA: NavigatorPersonaDefinition = {
+  name: "",
+  gender: "",
+  age_vibe: "",
+  first_person: "",
+  speech_style: "",
+  occupation: "",
+  experience: "",
+  personality: "",
+  values: "",
+  interests: "",
+  dislikes: "",
+  voice: "",
+};
 
 export default function SettingsPage() {
   const { t } = useI18n();
@@ -286,9 +302,19 @@ export default function SettingsPage() {
   const [navigatorPersona, setNavigatorPersona] = useState("editor");
   const [navigatorModel, setNavigatorModel] = useState("");
   const [navigatorFallbackModel, setNavigatorFallbackModel] = useState("");
+  const [navigatorPersonaDefinitions, setNavigatorPersonaDefinitions] = useState<Record<string, NavigatorPersonaDefinition>>({});
   const loadSeqRef = useRef(0);
   const llmModelsDirtyRef = useRef(false);
   const llmExtrasRef = useRef<HTMLDivElement | null>(null);
+  const navigatorPersonaCards = useMemo(
+    () =>
+      (["editor", "hype", "analyst", "concierge", "snark", "native"] as NavigatorPersonaKey[]).map((key) => ({
+        key,
+        ...EMPTY_NAVIGATOR_PERSONA,
+        ...(navigatorPersonaDefinitions[key] as NavigatorPersonaDefinition | undefined),
+      })),
+    [navigatorPersonaDefinitions]
+  );
 
   const syncLLMModelForm = useCallback((llmModels?: UserSettings["llm_models"] | null) => {
     setAnthropicFactsModel(llmModels?.facts ?? "");
@@ -313,13 +339,100 @@ export default function SettingsPage() {
     setter(value);
   }, []);
 
+  const buildLLMModelPayload = useCallback(
+    (overrides?: Partial<{
+      facts: string | null;
+      facts_fallback: string | null;
+      summary: string | null;
+      summary_fallback: string | null;
+      digest_cluster: string | null;
+      digest: string | null;
+      ask: string | null;
+      source_suggestion: string | null;
+      embedding: string | null;
+      facts_check: string | null;
+      faithfulness_check: string | null;
+      navigator_enabled: boolean;
+      navigator_persona: string | null;
+      navigator: string | null;
+      navigator_fallback: string | null;
+    }>) => {
+      const emptyToNull = (v: string) => {
+        const s = v.trim();
+        return s === "" ? null : s;
+      };
+      return {
+        facts: emptyToNull(anthropicFactsModel),
+        facts_fallback: emptyToNull(anthropicFactsFallbackModel),
+        summary: emptyToNull(anthropicSummaryModel),
+        summary_fallback: emptyToNull(anthropicSummaryFallbackModel),
+        digest_cluster: emptyToNull(anthropicDigestClusterModel),
+        digest: emptyToNull(anthropicDigestModel),
+        ask: emptyToNull(anthropicAskModel),
+        source_suggestion: emptyToNull(anthropicSourceSuggestionModel),
+        embedding: emptyToNull(openAIEmbeddingModel),
+        facts_check: emptyToNull(factsCheckModel),
+        faithfulness_check: emptyToNull(faithfulnessCheckModel),
+        navigator_enabled: navigatorEnabled,
+        navigator_persona: navigatorPersona,
+        navigator: emptyToNull(navigatorModel),
+        navigator_fallback: emptyToNull(navigatorFallbackModel),
+        ...overrides,
+      };
+    },
+    [
+      anthropicAskModel,
+      anthropicDigestClusterModel,
+      anthropicDigestModel,
+      anthropicFactsFallbackModel,
+      anthropicFactsModel,
+      anthropicSourceSuggestionModel,
+      anthropicSummaryFallbackModel,
+      anthropicSummaryModel,
+      factsCheckModel,
+      faithfulnessCheckModel,
+      navigatorEnabled,
+      navigatorFallbackModel,
+      navigatorModel,
+      navigatorPersona,
+      openAIEmbeddingModel,
+    ]
+  );
+
+  const persistLLMModels = useCallback(
+    async (
+      payload: ReturnType<typeof buildLLMModelPayload>,
+      successMessage?: string
+    ) => {
+      const resp = await api.updateLLMModelSettings(payload);
+      setSettings((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          llm_models: {
+            ...prev.llm_models,
+            ...resp.llm_models,
+          },
+        };
+      });
+      syncLLMModelForm(resp.llm_models);
+      llmModelsDirtyRef.current = false;
+      if (successMessage) {
+        showToast(successMessage, "success");
+      }
+      return resp;
+    },
+    [buildLLMModelPayload, showToast, syncLLMModelForm]
+  );
+
   const load = useCallback(async () => {
     const seq = ++loadSeqRef.current;
     setLoading(true);
     try {
-      const [data, nextCatalog, preferenceProfileResult] = await Promise.all([
+      const [data, nextCatalog, navigatorPersonas, preferenceProfileResult] = await Promise.all([
         api.getSettings(),
         api.getLLMCatalog(),
+        api.getNavigatorPersonas(),
         api.getPreferenceProfile()
           .then((profile) => ({ profile, error: null as string | null }))
           .catch((profileError) => ({ profile: null, error: localizePreferenceProfileErrorMessage(profileError, t) })),
@@ -327,6 +440,7 @@ export default function SettingsPage() {
       if (seq !== loadSeqRef.current) return;
       setSettings(data);
       setCatalog(nextCatalog);
+      setNavigatorPersonaDefinitions(navigatorPersonas ?? {});
       setPreferenceProfile(preferenceProfileResult.profile);
       setPreferenceProfileError(preferenceProfileResult.error);
       setBudgetUSD(data.monthly_budget_usd == null ? "" : String(data.monthly_budget_usd));
@@ -762,41 +876,7 @@ export default function SettingsPage() {
     e.preventDefault();
     setSavingLLMModels(true);
     try {
-      const emptyToNull = (v: string) => {
-        const s = v.trim();
-        return s === "" ? null : s;
-      };
-      const nextModels = {
-        facts: emptyToNull(anthropicFactsModel),
-        facts_fallback: emptyToNull(anthropicFactsFallbackModel),
-        summary: emptyToNull(anthropicSummaryModel),
-        summary_fallback: emptyToNull(anthropicSummaryFallbackModel),
-        digest_cluster: emptyToNull(anthropicDigestClusterModel),
-        digest: emptyToNull(anthropicDigestModel),
-        ask: emptyToNull(anthropicAskModel),
-        source_suggestion: emptyToNull(anthropicSourceSuggestionModel),
-        embedding: emptyToNull(openAIEmbeddingModel),
-        facts_check: emptyToNull(factsCheckModel),
-        faithfulness_check: emptyToNull(faithfulnessCheckModel),
-        navigator_enabled: navigatorEnabled,
-        navigator_persona: navigatorPersona,
-        navigator: emptyToNull(navigatorModel),
-        navigator_fallback: emptyToNull(navigatorFallbackModel),
-      };
-      const resp = await api.updateLLMModelSettings(nextModels);
-      setSettings((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          llm_models: {
-            ...prev.llm_models,
-            ...resp.llm_models,
-          },
-        };
-      });
-      syncLLMModelForm(resp.llm_models);
-      llmModelsDirtyRef.current = false;
-      showToast(t("settings.toast.modelsSaved"), "success");
+      await persistLLMModels(buildLLMModelPayload(), t("settings.toast.modelsSaved"));
     } catch (e) {
       showToast(localizeSettingsErrorMessage(e, t), "error");
     } finally {
@@ -2044,26 +2124,112 @@ export default function SettingsPage() {
 
                 <section className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
                   <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.persona")}</h4>
-                  <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)] md:items-start">
-                    <div>
-                      <select
-                        value={navigatorPersona}
-                        onChange={(e) => {
-                          llmModelsDirtyRef.current = true;
-                          setNavigatorPersona(e.target.value);
-                        }}
-                        className="w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm text-[var(--color-editorial-ink)]"
-                      >
-                        <option value="editor">{t("settings.navigator.persona.editor")}</option>
-                        <option value="hype">{t("settings.navigator.persona.hype")}</option>
-                        <option value="analyst">{t("settings.navigator.persona.analyst")}</option>
-                        <option value="concierge">{t("settings.navigator.persona.concierge")}</option>
-                        <option value="snark">{t("settings.navigator.persona.snark")}</option>
-                      </select>
-                    </div>
-                    <div className="flex min-h-10 items-center rounded-[14px] border border-dashed border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
-                      {t(`settings.navigator.personaHelp.${navigatorPersona}`, t("settings.navigator.personaHelp.editor"))}
-                    </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    {navigatorPersonaCards.map((persona) => {
+                      const selected = persona.key === navigatorPersona;
+                      const briefingHints = persona.briefing ?? {};
+                      const itemHints = persona.item ?? {};
+                      return (
+                        <button
+                          key={persona.key}
+                          type="button"
+                          onClick={async () => {
+                            if (persona.key === navigatorPersona || savingLLMModels) return;
+                            const previousPersona = settings?.llm_models?.navigator_persona ?? "editor";
+                            llmModelsDirtyRef.current = true;
+                            setNavigatorPersona(persona.key);
+                            setSavingLLMModels(true);
+                            try {
+                              await persistLLMModels(
+                                buildLLMModelPayload({ navigator_persona: persona.key }),
+                                t("settings.toast.navigatorSaved")
+                              );
+                            } catch (e) {
+                              setNavigatorPersona(previousPersona);
+                              showToast(localizeSettingsErrorMessage(e, t), "error");
+                            } finally {
+                              setSavingLLMModels(false);
+                            }
+                          }}
+                          className={joinClassNames(
+                            "rounded-[18px] border bg-[var(--color-editorial-panel)] p-4 text-left transition hover:bg-[var(--color-editorial-panel-strong)]",
+                            selected
+                              ? "border-[var(--color-editorial-ink)] shadow-[0_12px_32px_rgba(58,42,27,0.08)]"
+                              : "border-[var(--color-editorial-line)]"
+                          )}
+                          aria-pressed={selected}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="shrink-0 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-1.5">
+                              <AINavigatorAvatar persona={persona.key} className="size-11" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{persona.name}</div>
+                                {selected ? (
+                                  <span className="rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-editorial-panel-strong)]">
+                                    {t("settings.navigator.card.selected")}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="mt-1 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
+                                {[persona.occupation, persona.gender, persona.age_vibe].filter(Boolean).join(" / ")}
+                              </p>
+                            </div>
+                          </div>
+                          <dl className="mt-4 space-y-3 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
+                            <div>
+                              <dt className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.card.personalityLabel")}</dt>
+                              <dd>{persona.personality}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.card.firstPersonLabel")}</dt>
+                              <dd>{persona.first_person}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.card.speechLabel")}</dt>
+                              <dd>{persona.speech_style}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.card.experienceLabel")}</dt>
+                              <dd>{persona.experience}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.card.valuesLabel")}</dt>
+                              <dd>{persona.values}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.card.interestsLabel")}</dt>
+                              <dd>{persona.interests}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.card.dislikesLabel")}</dt>
+                              <dd>{persona.dislikes}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.card.voiceLabel")}</dt>
+                              <dd>{persona.voice}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.card.briefingCommentRangeLabel")}</dt>
+                              <dd>{briefingHints.comment_range || "-"}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.card.briefingIntroRangeLabel")}</dt>
+                              <dd>{briefingHints.intro_range || "-"}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.card.briefingIntroStyleLabel")}</dt>
+                              <dd>{briefingHints.intro_style || "-"}</dd>
+                            </div>
+                            <div>
+                              <dt className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.card.itemStyleLabel")}</dt>
+                              <dd>{itemHints.style || "-"}</dd>
+                            </div>
+                          </dl>
+                        </button>
+                      );
+                    })}
                   </div>
                 </section>
 

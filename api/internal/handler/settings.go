@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -26,6 +29,30 @@ type SettingsHandler struct {
 }
 
 const settingsCacheTTL = 2 * time.Minute
+
+type navigatorPersonaTaskHints struct {
+	CommentRange string `json:"comment_range,omitempty"`
+	IntroRange   string `json:"intro_range,omitempty"`
+	IntroStyle   string `json:"intro_style,omitempty"`
+	Style        string `json:"style,omitempty"`
+}
+
+type navigatorPersonaDefinition struct {
+	Name        string                    `json:"name"`
+	Gender      string                    `json:"gender"`
+	AgeVibe     string                    `json:"age_vibe"`
+	FirstPerson string                    `json:"first_person"`
+	SpeechStyle string                    `json:"speech_style"`
+	Occupation  string                    `json:"occupation"`
+	Experience  string                    `json:"experience"`
+	Personality string                    `json:"personality"`
+	Values      string                    `json:"values"`
+	Interests   string                    `json:"interests"`
+	Dislikes    string                    `json:"dislikes"`
+	Voice       string                    `json:"voice"`
+	Briefing    navigatorPersonaTaskHints `json:"briefing"`
+	Item        navigatorPersonaTaskHints `json:"item"`
+}
 
 func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {
 	return &SettingsHandler{
@@ -100,6 +127,28 @@ func (h *SettingsHandler) GetLLMCatalog(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, catalog)
+}
+
+func (h *SettingsHandler) GetNavigatorPersonas(w http.ResponseWriter, r *http.Request) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		http.Error(w, "failed to resolve persona definitions", http.StatusInternalServerError)
+		return
+	}
+	personaPath := filepath.Join(filepath.Dir(file), "..", "..", "..", "shared", "ai_navigator_personas.json")
+	body, err := os.ReadFile(personaPath)
+	if err != nil {
+		log.Printf("navigator persona read failed path=%s err=%v", personaPath, err)
+		http.Error(w, "failed to load persona definitions", http.StatusInternalServerError)
+		return
+	}
+	var payload map[string]navigatorPersonaDefinition
+	if err := json.Unmarshal(body, &payload); err != nil {
+		log.Printf("navigator persona parse failed path=%s err=%v", personaPath, err)
+		http.Error(w, "failed to parse persona definitions", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, payload)
 }
 
 func (h *SettingsHandler) InoreaderConnect(w http.ResponseWriter, r *http.Request) {

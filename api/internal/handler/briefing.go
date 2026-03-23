@@ -198,7 +198,7 @@ func shouldCacheBriefingNavigatorResponse(resp *model.BriefingNavigatorEnvelope)
 	if resp == nil || resp.Navigator == nil {
 		return false
 	}
-	return len(resp.Navigator.Picks) > 0
+	return strings.TrimSpace(resp.Navigator.Intro) != "" || len(resp.Navigator.Picks) > 0
 }
 
 func isSnapshotFresh(generatedAt *time.Time, now time.Time) bool {
@@ -243,9 +243,6 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 	candidates, err := h.itemRepo.BriefingNavigatorCandidates24h(ctx, userID, 12)
 	if err != nil {
 		log.Printf("briefing navigator candidates user=%s: %v", userID, err)
-		return nil
-	}
-	if len(candidates) == 0 {
 		return nil
 	}
 	anthropicKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAnthropicAPIKeyEncrypted, h.cipher, userID, "")
@@ -335,7 +332,7 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 			ReasonTags:  pick.ReasonTags,
 		})
 	}
-	if len(picks) == 0 {
+	if len(picks) == 0 && strings.TrimSpace(resp.Intro) == "" {
 		return nil
 	}
 	return &model.BriefingNavigator{
@@ -478,6 +475,13 @@ func briefingNavigatorPersonaMeta(persona string) briefingNavigatorPersonaPresen
 			AvatarStyle:    "snark",
 			SpeechStyle:    "wry",
 		}
+	case "native":
+		return briefingNavigatorPersonaPresentation{
+			CharacterName:  "春香",
+			CharacterTitle: "Native Pulse",
+			AvatarStyle:    "native",
+			SpeechStyle:    "bright",
+		}
 	default:
 		return briefingNavigatorPersonaPresentation{
 			CharacterName:  "水城",
@@ -559,7 +563,7 @@ func hasNavigatorProviderKey(settings *model.UserSettings, provider string) bool
 
 func normalizeBriefingNavigatorPersona(v string) string {
 	switch strings.TrimSpace(v) {
-	case "editor", "hype", "analyst", "concierge", "snark":
+	case "editor", "hype", "analyst", "concierge", "snark", "native":
 		return strings.TrimSpace(v)
 	default:
 		return "editor"
@@ -643,6 +647,8 @@ func briefingNavigatorPreviewIntro(persona string) string {
 		return "プレビュー表示です。実際の生成では、やわらかい案内文で未読記事を紹介します。"
 	case "snark":
 		return "プレビュー表示です。本番では軽口を混ぜつつ、読む価値のある未読記事を拾います。"
+	case "native":
+		return "プレビュー表示です。本番ではいまの空気感やネット感覚に引きつけて、明るく未読記事を勧めます。"
 	default:
 		return "プレビュー表示です。本番では編集者っぽいトーンで未読記事を3本前後おすすめします。"
 	}
@@ -661,6 +667,8 @@ func briefingNavigatorPreviewComment(persona string, rank int) string {
 			return "ここ、本番なら『後回しにするとあとで追うのが面倒そう』くらいの軽口で勧めます。"
 		}
 		return "ここに少しだけ皮肉を混ぜた推薦コメントが入ります。"
+	case "native":
+		return "ここに『それ、いまの感覚だとこう見える』という距離感の近いコメントが入ります。"
 	default:
 		return "ここに編集者目線で読みどころを一言にまとめたコメントが入ります。"
 	}

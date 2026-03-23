@@ -11,6 +11,7 @@ import (
 )
 
 const cacheKeyVersion = "v1"
+const navigatorCacheKeyVersion = "v2"
 
 func cacheVersionKeyUserItems(userID string) string {
 	return fmt.Sprintf("cache_version:user_items:%s", userID)
@@ -98,11 +99,11 @@ func cacheKeyBriefingToday(userID string, size int) string {
 }
 
 func cacheKeyBriefingNavigator(userID, persona, model string, preview bool) string {
-	return fmt.Sprintf("%s:briefing:navigator:%s:persona=%s:model=%s:preview=%t", cacheKeyVersion, userID, persona, model, preview)
+	return fmt.Sprintf("%s:briefing:navigator:%s:persona=%s:model=%s:preview=%t", navigatorCacheKeyVersion, userID, persona, model, preview)
 }
 
 func cacheKeyItemNavigator(userID, itemID, persona, model string, preview bool) string {
-	return fmt.Sprintf("%s:item:navigator:%s:item=%s:persona=%s:model=%s:preview=%t", cacheKeyVersion, userID, itemID, persona, model, preview)
+	return fmt.Sprintf("%s:item:navigator:%s:item=%s:persona=%s:model=%s:preview=%t", navigatorCacheKeyVersion, userID, itemID, persona, model, preview)
 }
 
 func cacheKeyItemDetailVersioned(userID, itemID string, version int64) string {

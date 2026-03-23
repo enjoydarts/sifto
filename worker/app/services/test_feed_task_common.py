@@ -48,6 +48,10 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("嫌いなもの", prompt)
         self.assertIn("客観的な無味乾燥レビューではなく", prompt)
         self.assertIn("この人ならこう感じる", prompt)
+        self.assertIn("他のキャラクター名を名乗らない", prompt)
+        self.assertIn("自分を名乗るなら", prompt)
+        self.assertIn("一人称は", prompt)
+        self.assertIn("別ペルソナの名前", prompt)
 
     def test_build_briefing_navigator_task_keeps_snark_safety_rules(self):
         task = build_briefing_navigator_task(
@@ -101,6 +105,24 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("引っかかる点", prompt)
         self.assertIn("今読む理由", prompt)
         self.assertIn("ペルソナの価値観に基づいて選ぶ", prompt)
+
+    def test_build_briefing_navigator_task_allows_intro_only_when_no_candidates(self):
+        task = build_briefing_navigator_task(
+            persona="native",
+            candidates=[],
+            intro_context={
+                "now_jst": "2026-03-23T19:30:00+09:00",
+                "date_jst": "2026-03-23",
+                "weekday_jst": "Monday",
+                "time_of_day": "evening",
+                "season_hint": "early_spring",
+            },
+        )
+
+        prompt = task["prompt"]
+        self.assertIn("picks は空配列 [] を返す", prompt)
+        self.assertIn("記事推薦は捏造しない", prompt)
+        self.assertIn("candidates が空のときは", prompt)
 
 
 if __name__ == "__main__":

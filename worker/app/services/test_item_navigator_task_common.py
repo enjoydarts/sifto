@@ -46,6 +46,10 @@ class ItemNavigatorTaskCommonTests(unittest.TestCase):
         self.assertIn("客観的レビューではなく", prompt)
         self.assertIn("この人ならこう感じる", prompt)
         self.assertIn("どう行動するか", prompt)
+        self.assertIn("他のキャラクター名を名乗らない", prompt)
+        self.assertIn("自分を名乗るなら", prompt)
+        self.assertIn("一人称は", prompt)
+        self.assertIn("別ペルソナの名前", prompt)
 
     def test_build_item_navigator_task_keeps_snark_guardrails(self):
         task = build_item_navigator_task(

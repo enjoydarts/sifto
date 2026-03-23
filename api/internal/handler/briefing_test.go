@@ -53,4 +53,13 @@ func TestShouldCacheBriefingNavigatorResponse(t *testing.T) {
 	}) {
 		t.Fatal("response with picks should be cached")
 	}
+	if !shouldCacheBriefingNavigatorResponse(&model.BriefingNavigatorEnvelope{
+		Navigator: &model.BriefingNavigator{
+			Persona: "editor",
+			Intro:   "こんばんは。新しい未読が届いたらまた案内します。",
+			Picks:   []model.BriefingNavigatorPick{},
+		},
+	}) {
+		t.Fatal("response with intro only should be cached")
+	}
 }

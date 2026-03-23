@@ -983,6 +983,30 @@ export interface LLMCatalog {
   embedding_models: LLMCatalogModel[];
 }
 
+export interface NavigatorPersonaTaskHints {
+  comment_range?: string;
+  intro_range?: string;
+  intro_style?: string;
+  style?: string;
+}
+
+export interface NavigatorPersonaDefinition {
+  name: string;
+  gender: string;
+  age_vibe: string;
+  first_person: string;
+  speech_style: string;
+  occupation: string;
+  experience: string;
+  personality: string;
+  values: string;
+  interests: string;
+  dislikes: string;
+  voice: string;
+  briefing?: NavigatorPersonaTaskHints;
+  item?: NavigatorPersonaTaskHints;
+}
+
 export interface UserSettings {
   user_id: string;
   has_anthropic_api_key: boolean;
@@ -1648,6 +1672,7 @@ export const api = {
 
   // Settings
   getSettings: () => apiFetch<UserSettings>("/settings"),
+  getNavigatorPersonas: () => apiFetch<Record<string, NavigatorPersonaDefinition>>("/settings/navigator-personas"),
   updateNotificationPriority: (body: NotificationPriorityRule) =>
     apiFetch<{ user_id: string; notification_priority: NotificationPriorityRule }>("/settings/notification-priority", {
       method: "PATCH",

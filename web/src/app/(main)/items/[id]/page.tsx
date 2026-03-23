@@ -240,6 +240,7 @@ export default function ItemDetailPage() {
     placeholderData: (prev) => prev,
   });
   const itemNavigatorLoadingPersona = settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor";
+  const itemNavigatorDisplayPersona = itemNavigator?.avatar_style || itemNavigator?.persona || itemNavigatorLoadingPersona;
 
   const applyReadOverride = useCallback((nextItem: ItemDetail): ItemDetail => {
     const override = readStateOverrideRef.current[nextItem.id];
@@ -1514,7 +1515,7 @@ export default function ItemDetailPage() {
               <div className="mb-0 mr-0 flex max-h-[min(72vh,38rem)] flex-col overflow-hidden rounded-[26px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,252,247,0.98),rgba(246,240,232,0.96))] shadow-[0_24px_80px_rgba(58,42,27,0.18)] backdrop-blur">
                 <div className="flex items-start gap-3 border-b border-[var(--color-editorial-line)] px-4 py-4">
                   <div className="shrink-0 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-1.5 shadow-sm">
-                    <AINavigatorAvatar persona={itemNavigator.avatar_style || itemNavigator.persona || "editor"} className="size-[42px]" />
+                    <AINavigatorAvatar persona={itemNavigatorDisplayPersona} className="size-[42px]" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
@@ -1566,14 +1567,14 @@ export default function ItemDetailPage() {
               className="rounded-full border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,252,247,0.98),rgba(244,238,229,0.95))] p-2 shadow-[0_18px_40px_rgba(58,42,27,0.16)] transition hover:-translate-y-0.5 hover:bg-[var(--color-editorial-panel)]"
               aria-label={t("itemDetail.navigatorOpen")}
             >
-              <AINavigatorAvatar persona={itemNavigator?.avatar_style || itemNavigator?.persona || "editor"} className="size-11" />
+              <AINavigatorAvatar persona={itemNavigatorDisplayPersona} className="size-11" />
             </button>
           ) : null}
 
           {itemNavigatorLoading && !itemNavigatorOpen ? (
             <div className="flex items-center gap-3 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2 py-2 shadow-[0_18px_40px_rgba(58,42,27,0.16)]">
               <div className="rounded-full border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,252,247,0.98),rgba(244,238,229,0.95))] p-1.5">
-                <AINavigatorAvatar persona={itemNavigator?.avatar_style || itemNavigator?.persona || itemNavigatorLoadingPersona} className="size-10" />
+                <AINavigatorAvatar persona={itemNavigatorDisplayPersona} className="size-10" />
               </div>
               <div className="pr-2">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">

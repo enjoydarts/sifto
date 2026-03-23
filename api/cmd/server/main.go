@@ -281,6 +281,7 @@ func main() {
 
 		r.Route("/settings", func(r chi.Router) {
 			r.Get("/", settingsH.Get)
+			r.Get("/navigator-personas", settingsH.GetNavigatorPersonas)
 			r.Get("/preference-profile", settingsH.GetPreferenceProfile)
 			r.Get("/preference-profile/summary", settingsH.GetPreferenceProfileSummary)
 			r.Delete("/preference-profile", settingsH.ResetPreferenceProfile)

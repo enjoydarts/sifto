@@ -51,6 +51,18 @@ export function AINavigatorAvatar({ persona, className }: Props) {
           <path d="M46 18c3 0 5 2 5 5 0 4-3 6-8 9 2-4 3-7 3-9 0-2 0-4-1-5h1Z" fill="#F9EAF8" />
         </svg>
       );
+    case "native":
+      return (
+        <svg viewBox="0 0 64 64" className={common} aria-hidden="true" fill="none">
+          <circle cx="32" cy="32" r="30" fill="#D24F7A" />
+          <path d="M16 28c3-9 10-14 18-14 8 0 14 4 18 11l-7 1c-2-3-6-5-11-5-5 0-9 3-11 8h-7Z" fill="#FFF0F6" />
+          <circle cx="24" cy="35" r="2.8" fill="#FFF0F6" />
+          <circle cx="40" cy="35" r="2.8" fill="#FFF0F6" />
+          <path d="M23 44c3 3 6 4 9 4 4 0 7-1 10-4" stroke="#FFF0F6" strokeWidth="3.5" strokeLinecap="round" />
+          <path d="M47 16a6 6 0 1 1-12 0 6 6 0 0 1 12 0Z" fill="#FFF0F6" opacity=".9" />
+          <path d="M38 16h6M41 13v6" stroke="#D24F7A" strokeWidth="2.5" strokeLinecap="round" />
+        </svg>
+      );
     default:
       return (
         <svg viewBox="0 0 64 64" className={common} aria-hidden="true" fill="none">

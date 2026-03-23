@@ -48,16 +48,16 @@ export default function BriefingPage() {
     placeholderData: (prev) => prev,
   });
   const navigatorPreview = searchParams.get("navigator_preview") === "1";
-  const navigatorQuery = useQuery({
-    queryKey: ["briefing-navigator", navigatorPreview] as const,
-    queryFn: () => api.getBriefingNavigator({ navigator_preview: navigatorPreview }),
-    staleTime: 30 * 60 * 1000,
-    placeholderData: (prev) => prev,
-  });
   const settingsQuery = useQuery({
     queryKey: ["settings"] as const,
     queryFn: () => api.getSettings(),
     staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+  const navigatorQuery = useQuery({
+    queryKey: ["briefing-navigator", navigatorPreview, settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor"] as const,
+    queryFn: () => api.getBriefingNavigator({ navigator_preview: navigatorPreview }),
+    staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
   const modelUpdatesQuery = useQuery({
@@ -96,6 +96,7 @@ export default function BriefingPage() {
   const data = briefingQuery.data;
   const modelUpdates = modelUpdatesQuery.data ?? EMPTY_MODEL_UPDATES;
   const navigator = navigatorQuery.data?.navigator ?? null;
+  const navigatorDisplayPersona = navigator?.avatar_style || navigator?.persona || settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor";
   const navigatorTheme = navigator ? navigatorThemeTokens(navigator.persona, navigator.avatar_style) : null;
   const navigatorLoading = !navigator && (navigatorQuery.isLoading || navigatorQuery.isFetching);
   const navigatorLoadingPersona = settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor";
@@ -657,12 +658,12 @@ export default function BriefingPage() {
             </div>
           </aside>
         ) : null}
-        {navigator && (!navigatorDismissed || navigatorPreview) && navigator.picks.length > 0 ? (
+        {navigator && (!navigatorDismissed || navigatorPreview) ? (
           <aside className="fixed right-4 z-40 w-[min(420px,calc(100vw-1.5rem))] bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-4">
             <div className={`flex max-h-[min(80vh,720px)] flex-col overflow-hidden rounded-[24px] border shadow-[0_24px_60px_rgba(15,23,42,0.22)] ${navigatorTheme?.shell ?? "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]"}`}>
               <div className={`flex items-start gap-3 px-4 py-4 ${navigatorTheme?.header ?? ""}`}>
                 <div className={`flex size-11 shrink-0 items-center justify-center rounded-full ${navigatorTheme?.avatar ?? ""}`}>
-                  <AINavigatorAvatar persona={navigator.persona} className="size-11" />
+                  <AINavigatorAvatar persona={navigatorDisplayPersona} className="size-11" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
@@ -690,47 +691,55 @@ export default function BriefingPage() {
                 <div className={`rounded-[18px] border px-4 py-3 ${navigatorTheme?.bubble ?? "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)]"}`}>
                   <p className="text-sm leading-7 text-[var(--color-editorial-ink)]">{navigator.intro}</p>
                 </div>
-                <div className="space-y-3">
-                  {navigator.picks.map((pick) => (
-                    <button
-                      key={pick.item_id}
-                      type="button"
-                      onClick={() => {
-                        if (navigatorPreview && pick.item_id.startsWith("preview-")) {
-                          return;
-                        }
-                        setInlineItemId(pick.item_id);
-                      }}
-                      className="block w-full rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3 text-left hover:bg-[var(--color-editorial-panel-strong)]"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className={`mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${navigatorTheme?.badge ?? ""}`}>
-                          {pick.rank}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <h4 className="line-clamp-2 font-serif text-[1rem] font-semibold leading-[1.35] text-[var(--color-editorial-ink)]">
-                              {pick.title}
-                            </h4>
-                            {pick.source_title ? (
-                              <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">
-                                {pick.source_title}
-                              </span>
+                {navigator.picks.length > 0 ? (
+                  <div className="space-y-3">
+                    {navigator.picks.map((pick) => (
+                      <button
+                        key={pick.item_id}
+                        type="button"
+                        onClick={() => {
+                          if (navigatorPreview && pick.item_id.startsWith("preview-")) {
+                            return;
+                          }
+                          setInlineItemId(pick.item_id);
+                        }}
+                        className="block w-full rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3 text-left hover:bg-[var(--color-editorial-panel-strong)]"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${navigatorTheme?.badge ?? ""}`}>
+                            {pick.rank}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <h4 className="line-clamp-2 font-serif text-[1rem] font-semibold leading-[1.35] text-[var(--color-editorial-ink)]">
+                                {pick.title}
+                              </h4>
+                              {pick.source_title ? (
+                                <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">
+                                  {pick.source_title}
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{pick.comment}</p>
+                            {pick.reason_tags && pick.reason_tags.length > 0 ? (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {pick.reason_tags.map((tag) => (
+                                  <Tag key={`${pick.item_id}-${tag}`}>{tag}</Tag>
+                                ))}
+                              </div>
                             ) : null}
                           </div>
-                          <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{pick.comment}</p>
-                          {pick.reason_tags && pick.reason_tags.length > 0 ? (
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {pick.reason_tags.map((tag) => (
-                                <Tag key={`${pick.item_id}-${tag}`}>{tag}</Tag>
-                              ))}
-                            </div>
-                          ) : null}
                         </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3">
+                    <p className="text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                      {t("briefing.navigator.empty", "There are no fresh unread stories right now. Check back a little later.")}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </aside>
@@ -742,7 +751,7 @@ export default function BriefingPage() {
             className={`fixed right-4 z-40 inline-flex size-14 items-center justify-center rounded-full border shadow-[0_16px_36px_rgba(15,23,42,0.2)] transition hover:scale-[1.03] bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-4 ${navigatorTheme?.shell ?? "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]"}`}
             aria-label={t("briefing.navigator.label", "AI Navigator")}
           >
-            <AINavigatorAvatar persona={navigator.persona} className="size-12" />
+            <AINavigatorAvatar persona={navigatorDisplayPersona} className="size-12" />
           </button>
         ) : null}
       </div>
@@ -815,6 +824,14 @@ function navigatorThemeTokens(persona: string, avatarStyle?: string) {
         avatar: "bg-[#7d3f3f] text-white",
         bubble: "border-[#dfc2c2] bg-[#fff5f5]",
         badge: "bg-[#7d3f3f] text-white",
+      };
+    case "native":
+      return {
+        shell: "border-[#efb2c6] bg-[linear-gradient(180deg,#fff0f6_0%,#fffdfd_100%)]",
+        header: "",
+        avatar: "bg-[#d24f7a] text-white",
+        bubble: "border-[#f3c8d7] bg-[#fff5f8]",
+        badge: "bg-[#d24f7a] text-white",
       };
     default:
       return {

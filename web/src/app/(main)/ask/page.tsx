@@ -367,11 +367,11 @@ export default function AskPage() {
                 </div>
                 <div className="mt-4 grid gap-3">
                   {relatedItems.map((item) => (
-                    <article key={item.id} className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] p-4">
-                      <Link href={`/items/${item.id}`} className="block break-words text-[15px] font-semibold leading-6 text-[var(--color-editorial-ink)] hover:underline">
+                    <article key={item.id} className="min-w-0 rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] p-4">
+                      <Link href={`/items/${item.id}`} className="block min-w-0 break-all text-[15px] font-semibold leading-6 text-[var(--color-editorial-ink)] hover:underline">
                         {item.translated_title || item.title || item.url}
                       </Link>
-                      <p className="mt-2 break-words text-[13px] leading-7 text-[var(--color-editorial-ink-soft)]">{item.summary}</p>
+                      <p className="mt-2 min-w-0 break-all text-[13px] leading-7 text-[var(--color-editorial-ink-soft)]">{item.summary}</p>
                     </article>
                   ))}
                 </div>

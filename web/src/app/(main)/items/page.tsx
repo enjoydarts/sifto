@@ -30,6 +30,53 @@ type ItemsFeedQueryData = {
   searchMode?: "natural" | "and" | "or" | string | null;
 };
 
+function parseItemsQueryState(searchParams: URLSearchParams) {
+  const qFeed = searchParams.get("feed");
+  const qFilter = searchParams.get("status");
+  const deletedViaLegacyStatus = qFilter === "deleted";
+  const feedMode: FeedMode =
+    qFeed === "later"
+      ? "later"
+      : qFeed === "read"
+        ? "read"
+        : qFeed === "pending"
+          ? "pending"
+          : qFeed === "deleted"
+            ? "deleted"
+            : "unread";
+
+  const qSort = searchParams.get("sort");
+  const sortMode: SortMode = qSort === "score" ? "score" : qSort === "personal_score" ? "personal_score" : "newest";
+
+  const filter =
+    qFilter && FILTERS.includes(qFilter as (typeof FILTERS)[number]) && qFilter !== "deleted" ? qFilter : "";
+  const topic = (searchParams.get("topic") ?? "").trim();
+  const sourceID = (searchParams.get("source_id") ?? "").trim();
+  const searchQuery = (searchParams.get("q") ?? "").trim();
+  const qSearchMode = searchParams.get("search_mode");
+  const searchMode: "natural" | "and" | "or" = qSearchMode === "and" ? "and" : qSearchMode === "or" ? "or" : "natural";
+
+  const pendingFeed = qFeed === "pending";
+  const unreadOnly = !pendingFeed && searchParams.get("unread") === "1";
+  const favoriteOnly = !pendingFeed && searchParams.get("favorite") === "1";
+
+  const qPage = Number(searchParams.get("page"));
+  const page = Number.isFinite(qPage) && qPage >= 1 ? Math.floor(qPage) : 1;
+
+  return {
+    feedMode: deletedViaLegacyStatus ? "deleted" : feedMode,
+    sortMode,
+    filter,
+    topic,
+    sourceID,
+    searchQuery,
+    searchMode,
+    unreadOnly,
+    favoriteOnly,
+    page,
+  };
+}
+
 function ItemsPageContent() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
@@ -38,53 +85,7 @@ function ItemsPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const queryState = useMemo(() => {
-    const qFeed = searchParams.get("feed");
-    const feedMode: FeedMode =
-      qFeed === "later"
-        ? "later"
-        : qFeed === "read"
-          ? "read"
-          : qFeed === "pending"
-            ? "pending"
-            : qFeed === "deleted"
-              ? "deleted"
-          : "unread";
-
-    const qSort = searchParams.get("sort");
-    const sortMode: SortMode = qSort === "score" ? "score" : qSort === "personal_score" ? "personal_score" : "newest";
-
-    const qFilter = searchParams.get("status");
-    const deletedViaLegacyStatus = qFilter === "deleted";
-    const filter =
-      qFilter && FILTERS.includes(qFilter as (typeof FILTERS)[number]) && qFilter !== "deleted" ? qFilter : "";
-    const topic = (searchParams.get("topic") ?? "").trim();
-    const sourceID = (searchParams.get("source_id") ?? "").trim();
-    const searchQuery = (searchParams.get("q") ?? "").trim();
-    const qSearchMode = searchParams.get("search_mode");
-    const searchMode: "natural" | "and" | "or" =
-      qSearchMode === "and" ? "and" : qSearchMode === "or" ? "or" : "natural";
-
-    const pendingFeed = qFeed === "pending";
-    const unreadOnly = !pendingFeed && searchParams.get("unread") === "1";
-    const favoriteOnly = !pendingFeed && searchParams.get("favorite") === "1";
-
-    const qPage = Number(searchParams.get("page"));
-    const page = Number.isFinite(qPage) && qPage >= 1 ? Math.floor(qPage) : 1;
-
-    return {
-      feedMode: deletedViaLegacyStatus ? "deleted" : feedMode,
-      sortMode,
-      filter,
-      topic,
-      sourceID,
-      searchQuery,
-      searchMode,
-      unreadOnly,
-      favoriteOnly,
-      page,
-    };
-  }, [searchParams]);
+  const queryState = useMemo(() => parseItemsQueryState(new URLSearchParams(searchParams.toString())), [searchParams]);
   const { feedMode, sortMode, filter, topic, sourceID, searchQuery, searchMode, unreadOnly, favoriteOnly, page } = queryState;
   const unreadMode = feedMode === "unread";
   const readMode = feedMode === "read";
@@ -205,21 +206,22 @@ function ItemsPageContent() {
       const baseSearch =
         typeof window !== "undefined" ? window.location.search : searchParams.toString() ? `?${searchParams.toString()}` : "";
       const q = new URLSearchParams(baseSearch);
+      const current = parseItemsQueryState(q);
 
-      const nextFeed = patch.feed ?? feedMode;
+      const nextFeed = patch.feed ?? current.feedMode;
       q.set("feed", nextFeed);
 
-      const nextSort = patch.sort ?? sortMode;
+      const nextSort = patch.sort ?? current.sortMode;
       const implicitStatus = nextFeed === "pending" ? "pending" : "";
-      const nextStatus = patch.status ?? (patch.feed ? implicitStatus : filter);
-      const nextTopic = patch.topic ?? topic;
-      const nextSourceID = patch.sourceId ?? sourceID;
-      const nextSearch = patch.q ?? searchQuery;
-      const nextSearchMode = patch.searchMode ?? searchMode;
+      const nextStatus = patch.status ?? (patch.feed ? implicitStatus : current.filter);
+      const nextTopic = patch.topic ?? current.topic;
+      const nextSourceID = patch.sourceId ?? current.sourceID;
+      const nextSearch = patch.q ?? current.searchQuery;
+      const nextSearchMode = patch.searchMode ?? current.searchMode;
       const isDeletedFeed = nextFeed === "deleted";
-      const nextUnread = nextFeed === "pending" || isDeletedFeed ? false : nextFeed === "later" ? true : patch.unread ?? unreadOnly;
-      const nextFavorite = nextFeed === "pending" || isDeletedFeed ? false : patch.favorite ?? favoriteOnly;
-      const nextPage = patch.page ?? page;
+      const nextUnread = nextFeed === "pending" || isDeletedFeed ? false : nextFeed === "later" ? true : patch.unread ?? current.unreadOnly;
+      const nextFavorite = nextFeed === "pending" || isDeletedFeed ? false : patch.favorite ?? current.favoriteOnly;
+      const nextPage = patch.page ?? current.page;
 
       if (nextStatus) q.set("status", nextStatus);
       else q.delete("status");
@@ -245,7 +247,7 @@ function ItemsPageContent() {
         router.replace(nextUrl, { scroll: false });
       });
     },
-    [favoriteOnly, feedMode, filter, page, pathname, router, searchMode, searchParams, searchQuery, sortMode, sourceID, topic, unreadOnly]
+    [pathname, router, searchParams]
   );
 
   const itemsQueryString = useMemo(() => {

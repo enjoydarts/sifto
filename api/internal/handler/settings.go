@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -130,12 +129,12 @@ func (h *SettingsHandler) GetLLMCatalog(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *SettingsHandler) GetNavigatorPersonas(w http.ResponseWriter, r *http.Request) {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
+	personaPath, err := resolveNavigatorPersonasPath()
+	if err != nil {
+		log.Printf("navigator persona resolve failed err=%v", err)
 		http.Error(w, "failed to resolve persona definitions", http.StatusInternalServerError)
 		return
 	}
-	personaPath := filepath.Join(filepath.Dir(file), "..", "..", "..", "shared", "ai_navigator_personas.json")
 	body, err := os.ReadFile(personaPath)
 	if err != nil {
 		log.Printf("navigator persona read failed path=%s err=%v", personaPath, err)
@@ -149,6 +148,20 @@ func (h *SettingsHandler) GetNavigatorPersonas(w http.ResponseWriter, r *http.Re
 		return
 	}
 	writeJSON(w, payload)
+}
+
+func resolveNavigatorPersonasPath() (string, error) {
+	if v := strings.TrimSpace(os.Getenv("NAVIGATOR_PERSONAS_PATH")); v != "" {
+		return v, nil
+	}
+	if v := strings.TrimSpace(os.Getenv("LLM_CATALOG_PATH")); v != "" {
+		return filepath.Join(filepath.Dir(v), "ai_navigator_personas.json"), nil
+	}
+	execPath, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(execPath), "shared", "ai_navigator_personas.json"), nil
 }
 
 func (h *SettingsHandler) InoreaderConnect(w http.ResponseWriter, r *http.Request) {

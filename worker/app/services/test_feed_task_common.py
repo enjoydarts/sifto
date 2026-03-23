@@ -1,9 +1,15 @@
 import unittest
+from unittest.mock import patch
 
-from app.services.feed_task_common import BRIEFING_NAVIGATOR_SCHEMA, build_briefing_navigator_task
+from app.services.feed_task_common import BRIEFING_NAVIGATOR_SCHEMA, _resolve_persona_file, build_briefing_navigator_task
 
 
 class FeedTaskCommonTests(unittest.TestCase):
+    def test_resolve_persona_file_prefers_llm_catalog_dir(self):
+        with patch.dict("os.environ", {"NAVIGATOR_PERSONAS_PATH": "", "LLM_CATALOG_PATH": "/app/shared/llm_catalog.json"}, clear=False):
+            path = _resolve_persona_file()
+        self.assertEqual(path.as_posix(), "/app/shared/ai_navigator_personas.json")
+
     def test_briefing_navigator_schema_requires_all_pick_fields_for_strict_json_schema(self):
         pick_schema = BRIEFING_NAVIGATOR_SCHEMA["properties"]["picks"]["items"]
 

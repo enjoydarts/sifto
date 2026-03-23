@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from pathlib import Path
 
@@ -114,7 +115,17 @@ ITEM_NAVIGATOR_SCHEMA = {
 }
 
 
-_PERSONA_FILE = Path(__file__).resolve().parents[3] / "shared" / "ai_navigator_personas.json"
+def _resolve_persona_file() -> Path:
+    explicit = str(os.getenv("NAVIGATOR_PERSONAS_PATH") or "").strip()
+    if explicit:
+        return Path(explicit)
+    llm_catalog = str(os.getenv("LLM_CATALOG_PATH") or "").strip()
+    if llm_catalog:
+        return Path(llm_catalog).resolve().parent / "ai_navigator_personas.json"
+    return Path(__file__).resolve().parents[2] / "shared" / "ai_navigator_personas.json"
+
+
+_PERSONA_FILE = _resolve_persona_file()
 with _PERSONA_FILE.open("r", encoding="utf-8") as f:
     NAVIGATOR_PERSONA_PROFILES = json.load(f)
 

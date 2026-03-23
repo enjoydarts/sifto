@@ -24,6 +24,17 @@ app = FastAPI(title="sifto-worker")
 _INTERNAL_WORKER_SECRET = os.getenv("INTERNAL_WORKER_SECRET", "").strip()
 
 
+def _normalize_string_for_trace(value: str | None, limit: int | None = None) -> str:
+    if value is None:
+        return ""
+    normalized = str(value).encode("utf-8", "replace").decode("utf-8", "replace").strip()
+    if limit is None:
+        return normalized
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[:limit]
+
+
 @app.middleware("http")
 async def require_internal_worker_secret(request: Request, call_next):
     if request.url.path == "/health" or not _INTERNAL_WORKER_SECRET:
@@ -38,16 +49,23 @@ async def require_internal_worker_secret(request: Request, call_next):
 async def langfuse_request_tracing(request: Request, call_next):
     if request.url.path == "/health":
         return await call_next(request)
+    user_id = _normalize_string_for_trace(request.headers.get("x-sifto-user-id"))
+    provider_hint = _normalize_string_for_trace(request.headers.get("x-llm-provider"))
+    model_hint = _normalize_string_for_trace(request.headers.get("x-llm-model"))
+    item_id = _normalize_string_for_trace(request.headers.get("x-sifto-item-id"))
+    digest_id = _normalize_string_for_trace(request.headers.get("x-sifto-digest-id"))
+    source_id = _normalize_string_for_trace(request.headers.get("x-sifto-source-id"))
+    purpose = _normalize_string_for_trace(request.headers.get("x-sifto-purpose"))
     metadata = {
         "path": request.url.path,
         "method": request.method,
-        "user_id": request.headers.get("x-sifto-user-id", ""),
-        "provider_hint": request.headers.get("x-llm-provider", ""),
-        "model_hint": request.headers.get("x-llm-model", ""),
-        "item_id": request.headers.get("x-sifto-item-id", ""),
-        "digest_id": request.headers.get("x-sifto-digest-id", ""),
-        "source_id": request.headers.get("x-sifto-source-id", ""),
-        "purpose": request.headers.get("x-sifto-purpose", ""),
+        "user_id": user_id,
+        "provider_hint": provider_hint,
+        "model_hint": model_hint,
+        "item_id": item_id,
+        "digest_id": digest_id,
+        "source_id": source_id,
+        "purpose": purpose,
     }
     observation_type = "span" if request.url.path == "/extract-body" else "generation"
     with langfuse_span(
@@ -62,19 +80,19 @@ async def langfuse_request_tracing(request: Request, call_next):
     ) as current_span:
         request.state.langfuse_span = current_span
         session_id = ""
-        if metadata["item_id"]:
-            session_id = f"item:{metadata['item_id']}"
-        elif metadata["digest_id"]:
-            session_id = f"digest:{metadata['digest_id']}"
-        elif metadata["source_id"]:
-            session_id = f"source:{metadata['source_id']}"
+        if item_id:
+            session_id = f"item:{item_id}"
+        elif digest_id:
+            session_id = f"digest:{digest_id}"
+        elif source_id:
+            session_id = f"source:{source_id}"
         langfuse_update_current_trace(
-            user_id=metadata["user_id"] or None,
+            user_id=user_id or None,
             session_id=session_id or None,
             tags=[
                 "worker",
                 f"path:{request.url.path}",
-                f"purpose:{metadata['purpose'] or 'unknown'}",
+                f"purpose:{purpose or 'unknown'}",
             ],
         )
         try:
@@ -82,7 +100,7 @@ async def langfuse_request_tracing(request: Request, call_next):
             langfuse_update_current(metadata={"status_code": response.status_code})
             return response
         except Exception as e:
-            langfuse_update_current(level="ERROR", status_message=str(e)[:500])
+            langfuse_update_current(level="ERROR", status_message=_normalize_string_for_trace(str(e), 500))
             raise
 
 

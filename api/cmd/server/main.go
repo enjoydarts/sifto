@@ -103,7 +103,7 @@ func main() {
 
 	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp, search)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, sourceOptimizationRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher, cache)
-	itemH := handler.NewItemHandler(itemRepo, sourceRepo, readingGoalRepo, streakRepo, briefingSnapshotRepo, prefProfileRepo, reviewQueueRepo, eventPublisher, cache, search)
+	itemH := handler.NewItemHandler(itemRepo, sourceRepo, readingGoalRepo, streakRepo, briefingSnapshotRepo, prefProfileRepo, reviewQueueRepo, userSettingsRepo, llmUsageRepo, eventPublisher, secretCipher, worker, cache, search)
 	digestH := handler.NewDigestHandler(digestRepo)
 	llmUsageH := handler.NewLLMUsageHandlerWithValueMetrics(llmUsageRepo, llmExecutionRepo, llmValueMetricsRepo, cache)
 	dashboardH := handler.NewDashboardHandler(sourceRepo, itemRepo, digestRepo, llmUsageRepo, cache)
@@ -193,6 +193,7 @@ func main() {
 			r.Get("/today-queue", itemH.TodayQueue)
 			r.Get("/triage-all", itemH.TriageAll)
 			r.Get("/{id}/related", itemH.Related)
+			r.Get("/{id}/navigator", itemH.Navigator)
 			r.Put("/{id}/note", func(w http.ResponseWriter, r *http.Request) {
 				itemNotesH.UpsertNote(w, r, chi.URLParam(r, "id"))
 			})

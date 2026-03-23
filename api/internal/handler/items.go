@@ -28,7 +28,11 @@ type ItemHandler struct {
 	snapshotRepo    *repository.BriefingSnapshotRepo
 	prefProfileRepo *repository.PreferenceProfileRepo
 	reviewQueueRepo *repository.ReviewQueueRepo
+	settingsRepo    *repository.UserSettingsRepo
+	llmUsageRepo    *repository.LLMUsageLogRepo
 	publisher       *service.EventPublisher
+	cipher          *service.SecretCipher
+	worker          *service.WorkerClient
 	cache           service.JSONCache
 	search          *service.MeilisearchService
 	searchItems     *service.ItemSearchService
@@ -162,7 +166,11 @@ func NewItemHandler(
 	snapshotRepo *repository.BriefingSnapshotRepo,
 	prefProfileRepo *repository.PreferenceProfileRepo,
 	reviewQueueRepo *repository.ReviewQueueRepo,
+	settingsRepo *repository.UserSettingsRepo,
+	llmUsageRepo *repository.LLMUsageLogRepo,
 	publisher *service.EventPublisher,
+	cipher *service.SecretCipher,
+	worker *service.WorkerClient,
 	cache service.JSONCache,
 	search *service.MeilisearchService,
 ) *ItemHandler {
@@ -174,12 +182,204 @@ func NewItemHandler(
 		snapshotRepo:    snapshotRepo,
 		prefProfileRepo: prefProfileRepo,
 		reviewQueueRepo: reviewQueueRepo,
+		settingsRepo:    settingsRepo,
+		llmUsageRepo:    llmUsageRepo,
 		publisher:       publisher,
+		cipher:          cipher,
+		worker:          worker,
 		cache:           cache,
 		search:          search,
 		searchItems:     service.NewItemSearchService(search, repo),
 		searchSuggest:   service.NewSearchSuggestionService(search),
 		detail:          service.NewItemDetailService(repo),
+	}
+}
+
+func (h *ItemHandler) Navigator(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	itemID := chi.URLParam(r, "id")
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
+	preview := r.URL.Query().Get("navigator_preview") == "1"
+
+	if h.settingsRepo == nil {
+		writeJSON(w, model.ItemNavigatorEnvelope{})
+		return
+	}
+	settings, err := h.settingsRepo.EnsureDefaults(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	if settings == nil || !settings.NavigatorEnabled {
+		writeJSON(w, model.ItemNavigatorEnvelope{})
+		return
+	}
+	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
+	modelName := resolveBriefingNavigatorModel(settings)
+	resolvedModel := ""
+	if modelName != nil {
+		resolvedModel = strings.TrimSpace(*modelName)
+	}
+	cacheKey := cacheKeyItemNavigator(userID, itemID, persona, resolvedModel, preview)
+	if h.cache != nil && !cacheBust {
+		var cached model.ItemNavigatorEnvelope
+		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
+			if cached.Navigator != nil && strings.TrimSpace(cached.Navigator.Commentary) != "" {
+				writeJSON(w, cached)
+				return
+			}
+		}
+	}
+
+	generatedAt := timeutil.NowJST()
+	var navigator *model.ItemNavigator
+	if preview {
+		navigator = h.buildItemNavigatorPreview(r.Context(), userID, itemID, generatedAt)
+	} else {
+		navigator = h.buildItemNavigator(r.Context(), userID, itemID, generatedAt)
+	}
+	resp := model.ItemNavigatorEnvelope{Navigator: navigator}
+	if h.cache != nil && navigator != nil && strings.TrimSpace(navigator.Commentary) != "" {
+		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, briefingNavigatorCacheTTL); err != nil {
+			log.Printf("item navigator cache set failed user_id=%s item_id=%s key=%s err=%v", userID, itemID, cacheKey, err)
+		}
+	}
+	writeJSON(w, resp)
+}
+
+func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID string, generatedAt time.Time) *model.ItemNavigator {
+	if h.detail == nil || h.settingsRepo == nil || h.worker == nil || h.cipher == nil {
+		return nil
+	}
+	settings, err := h.settingsRepo.EnsureDefaults(ctx, userID)
+	if err != nil {
+		log.Printf("item navigator settings user=%s item=%s: %v", userID, itemID, err)
+		return nil
+	}
+	if settings == nil || !settings.NavigatorEnabled {
+		return nil
+	}
+	modelName := resolveBriefingNavigatorModel(settings)
+	if modelName == nil {
+		return nil
+	}
+	item, err := h.detail.Get(ctx, itemID, userID)
+	if err != nil {
+		log.Printf("item navigator detail user=%s item=%s: %v", userID, itemID, err)
+		return nil
+	}
+	if item == nil || item.Status == "deleted" || item.Summary == nil || strings.TrimSpace(item.Summary.Summary) == "" {
+		return nil
+	}
+	facts := []string{}
+	if item.Facts != nil {
+		for _, fact := range item.Facts.Facts {
+			fact = strings.TrimSpace(fact)
+			if fact != "" {
+				facts = append(facts, fact)
+			}
+		}
+	}
+	if len(facts) == 0 {
+		return nil
+	}
+
+	anthropicKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAnthropicAPIKeyEncrypted, h.cipher, userID, "")
+	googleKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetGoogleAPIKeyEncrypted, h.cipher, userID, "")
+	groqKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetGroqAPIKeyEncrypted, h.cipher, userID, "")
+	fireworksKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetFireworksAPIKeyEncrypted, h.cipher, userID, "")
+	deepseekKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
+	alibabaKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
+	mistralKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
+	xaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
+	zaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
+	openRouterKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
+	poeKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
+	openAIKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
+	switch service.LLMProviderForModel(modelName) {
+	case "openrouter":
+		openAIKey = openRouterKey
+	case "poe":
+		openAIKey = poeKey
+	}
+
+	var publishedAt *string
+	if item.PublishedAt != nil {
+		v := item.PublishedAt.Format(time.RFC3339)
+		publishedAt = &v
+	}
+	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
+	workerCtx := service.WithWorkerTraceMetadata(ctx, "item_navigator", &userID, nil, &itemID, nil)
+	resp, err := h.worker.GenerateItemNavigatorWithModel(
+		workerCtx,
+		persona,
+		service.ItemNavigatorArticle{
+			ItemID:          item.ID,
+			Title:           item.Title,
+			TranslatedTitle: item.TranslatedTitle,
+			SourceTitle:     item.SourceTitle,
+			Summary:         strings.TrimSpace(item.Summary.Summary),
+			Facts:           facts,
+			PublishedAt:     publishedAt,
+		},
+		anthropicKey,
+		googleKey,
+		groqKey,
+		deepseekKey,
+		alibabaKey,
+		mistralKey,
+		xaiKey,
+		zaiKey,
+		fireworksKey,
+		openAIKey,
+		modelName,
+	)
+	if err != nil {
+		log.Printf("item navigator worker user=%s item=%s model=%s: %v", userID, itemID, strings.TrimSpace(*modelName), err)
+		return nil
+	}
+	recordAskLLMUsage(ctx, h.llmUsageRepo, h.cache, "item_navigator", resp.LLM, &userID)
+	if strings.TrimSpace(resp.Commentary) == "" {
+		return nil
+	}
+	meta := briefingNavigatorPersonaMeta(persona)
+	return &model.ItemNavigator{
+		Enabled:        true,
+		ItemID:         item.ID,
+		Persona:        persona,
+		CharacterName:  meta.CharacterName,
+		CharacterTitle: meta.CharacterTitle,
+		AvatarStyle:    meta.AvatarStyle,
+		SpeechStyle:    meta.SpeechStyle,
+		Headline:       strings.TrimSpace(resp.Headline),
+		Commentary:     strings.TrimSpace(resp.Commentary),
+		StanceTags:     resp.StanceTags,
+		GeneratedAt:    &generatedAt,
+	}
+}
+
+func (h *ItemHandler) buildItemNavigatorPreview(ctx context.Context, userID, itemID string, generatedAt time.Time) *model.ItemNavigator {
+	if h.settingsRepo == nil {
+		return nil
+	}
+	settings, err := h.settingsRepo.EnsureDefaults(ctx, userID)
+	if err != nil || settings == nil || !settings.NavigatorEnabled {
+		return nil
+	}
+	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
+	meta := briefingNavigatorPersonaMeta(persona)
+	return &model.ItemNavigator{
+		Enabled:        true,
+		ItemID:         itemID,
+		Persona:        persona,
+		CharacterName:  meta.CharacterName,
+		CharacterTitle: meta.CharacterTitle,
+		AvatarStyle:    meta.AvatarStyle,
+		SpeechStyle:    meta.SpeechStyle,
+		Headline:       "見た目確認用の論評プレビュー",
+		Commentary:     "ここでは記事詳細の右下アイコンから開く論評オーバーレイの見た目を確認できます。要点の整理だけでなく、どこを面白がるかや、どこを少し警戒するかまで、キャラごとの調子で4〜7文ほど語る想定です。\n\nクリック起点で生成するので、通常はページを開いただけではコストは発生しません。",
+		StanceTags:     []string{"preview", persona},
+		GeneratedAt:    &generatedAt,
 	}
 }
 

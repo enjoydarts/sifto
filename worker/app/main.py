@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
-from app.routers import ask, briefing_navigator, digest, extract, facts, facts_check, feed_seed_suggestions, feed_suggestions, summarize, summary_faithfulness, translate_title
+from app.routers import ask, briefing_navigator, digest, extract, facts, facts_check, feed_seed_suggestions, feed_suggestions, item_navigator, summarize, summary_faithfulness, translate_title
 from app.services.langfuse_client import flush as langfuse_flush, log_runtime_status as langfuse_log_runtime_status, span as langfuse_span, update_current as langfuse_update_current, update_current_trace as langfuse_update_current_trace
 
 _SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
@@ -127,6 +127,7 @@ app.include_router(digest.router)
 app.include_router(feed_suggestions.router)
 app.include_router(feed_seed_suggestions.router)
 app.include_router(briefing_navigator.router)
+app.include_router(item_navigator.router)
 
 
 @app.get("/health")

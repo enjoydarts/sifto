@@ -54,6 +54,12 @@ export default function BriefingPage() {
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
   });
+  const settingsQuery = useQuery({
+    queryKey: ["settings"] as const,
+    queryFn: () => api.getSettings(),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
   const modelUpdatesQuery = useQuery({
     queryKey: ["provider-model-updates", 7] as const,
     queryFn: () => api.getProviderModelUpdates({ days: 7, limit: 6 }),
@@ -91,6 +97,8 @@ export default function BriefingPage() {
   const modelUpdates = modelUpdatesQuery.data ?? EMPTY_MODEL_UPDATES;
   const navigator = navigatorQuery.data?.navigator ?? null;
   const navigatorTheme = navigator ? navigatorThemeTokens(navigator.persona, navigator.avatar_style) : null;
+  const navigatorLoading = !navigator && (navigatorQuery.isLoading || navigatorQuery.isFetching);
+  const navigatorLoadingPersona = settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor";
   const visibleModelUpdates = useMemo(() => {
     if (!dismissedModelUpdatesAt) return modelUpdates;
     const dismissedMs = Date.parse(dismissedModelUpdatesAt);
@@ -632,6 +640,23 @@ export default function BriefingPage() {
           />
         )}
 
+        {navigatorLoading && !navigatorDismissed && !navigatorPreview ? (
+          <aside className="fixed right-4 z-40 bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-4">
+            <div className="flex items-end gap-3">
+              <div className="flex size-14 shrink-0 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] shadow-[0_16px_36px_rgba(15,23,42,0.2)]">
+                <AINavigatorAvatar persona={navigatorLoadingPersona} className="size-12" />
+              </div>
+              <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3 shadow-[0_16px_36px_rgba(15,23,42,0.14)]">
+                <div className="font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                  {t("briefing.navigator.label", "AI Navigator")}
+                </div>
+                <p className="mt-1 text-sm text-[var(--color-editorial-ink-soft)]">
+                  {t("briefing.navigator.loading", "Generating picks...")}
+                </p>
+              </div>
+            </div>
+          </aside>
+        ) : null}
         {navigator && (!navigatorDismissed || navigatorPreview) && navigator.picks.length > 0 ? (
           <aside className="fixed right-4 z-40 w-[min(420px,calc(100vw-1.5rem))] bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-4">
             <div className={`flex max-h-[min(80vh,720px)] flex-col overflow-hidden rounded-[24px] border shadow-[0_24px_60px_rgba(15,23,42,0.22)] ${navigatorTheme?.shell ?? "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]"}`}>

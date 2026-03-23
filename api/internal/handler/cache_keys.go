@@ -101,6 +101,10 @@ func cacheKeyBriefingNavigator(userID, persona, model string, preview bool) stri
 	return fmt.Sprintf("%s:briefing:navigator:%s:persona=%s:model=%s:preview=%t", cacheKeyVersion, userID, persona, model, preview)
 }
 
+func cacheKeyItemNavigator(userID, itemID, persona, model string, preview bool) string {
+	return fmt.Sprintf("%s:item:navigator:%s:item=%s:persona=%s:model=%s:preview=%t", cacheKeyVersion, userID, itemID, persona, model, preview)
+}
+
 func cacheKeyItemDetailVersioned(userID, itemID string, version int64) string {
 	return fmt.Sprintf("%s:items:detail:%s:item=%s:v=%d", cacheKeyVersion, userID, itemID, version)
 }

@@ -223,6 +223,23 @@ type BriefingNavigatorResponse struct {
 	LLM   *LLMUsage               `json:"llm,omitempty"`
 }
 
+type ItemNavigatorArticle struct {
+	ItemID          string   `json:"item_id"`
+	Title           *string  `json:"title,omitempty"`
+	TranslatedTitle *string  `json:"translated_title,omitempty"`
+	SourceTitle     *string  `json:"source_title,omitempty"`
+	Summary         string   `json:"summary"`
+	Facts           []string `json:"facts,omitempty"`
+	PublishedAt     *string  `json:"published_at,omitempty"`
+}
+
+type ItemNavigatorResponse struct {
+	Headline   string    `json:"headline"`
+	Commentary string    `json:"commentary"`
+	StanceTags []string  `json:"stance_tags,omitempty"`
+	LLM        *LLMUsage `json:"llm,omitempty"`
+}
+
 type AskCandidate struct {
 	ItemID          string   `json:"item_id"`
 	Title           *string  `json:"title,omitempty"`
@@ -579,6 +596,29 @@ func (w *WorkerClient) GenerateBriefingNavigatorWithModel(
 		"candidates":    candidates,
 		"intro_context": introContext,
 		"model":         model,
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, w.internalSecret))
+}
+
+func (w *WorkerClient) GenerateItemNavigatorWithModel(
+	ctx context.Context,
+	persona string,
+	article ItemNavigatorArticle,
+	anthropicAPIKey *string,
+	googleAPIKey *string,
+	groqAPIKey *string,
+	deepseekAPIKey *string,
+	alibabaAPIKey *string,
+	mistralAPIKey *string,
+	xaiAPIKey *string,
+	zaiAPIKey *string,
+	fireworksAPIKey *string,
+	openAIAPIKey *string,
+	model *string,
+) (*ItemNavigatorResponse, error) {
+	return postWithHeaders[ItemNavigatorResponse](ctx, w, "/item-navigator", map[string]any{
+		"persona": persona,
+		"article": article,
+		"model":   model,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, w.internalSecret))
 }
 

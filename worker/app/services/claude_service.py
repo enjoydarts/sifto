@@ -49,10 +49,12 @@ from app.services.digest_task_common import (
 from app.services.feed_task_common import (
     build_ask_task,
     build_briefing_navigator_task,
+    build_item_navigator_task,
     build_rank_feed_task,
     build_seed_sites_task,
     parse_ask_result,
     parse_briefing_navigator_result,
+    parse_item_navigator_result,
     parse_rank_feed_result,
     parse_seed_sites_result,
 )
@@ -1040,6 +1042,64 @@ def generate_briefing_navigator(
         "intro": out["intro"],
         "picks": out["picks"],
         "llm": _llm_meta(message, "briefing_navigator", used_model or _feed_suggest_model),
+    }
+
+
+def generate_item_navigator(
+    persona: str,
+    article: dict,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
+    task = build_item_navigator_task(persona, article)
+    if _client_for_api_key(api_key) is None:
+        out = parse_item_navigator_result("{}", task["article"])
+        return {
+            "headline": out["headline"],
+            "commentary": out["commentary"],
+            "stance_tags": out["stance_tags"],
+            "llm": {
+                "provider": "local-dev",
+                "model": "local-fallback",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+
+    message, used_model, _execution_failures = _call_with_model_fallback(
+        task["prompt"],
+        str(model or _feed_suggest_model),
+        _feed_suggest_model_fallback,
+        max_tokens=2200,
+        api_key=api_key,
+    )
+    if message is None:
+        out = parse_item_navigator_result("{}", task["article"])
+        return {
+            "headline": out["headline"],
+            "commentary": out["commentary"],
+            "stance_tags": out["stance_tags"],
+            "llm": {
+                "provider": "local-fallback",
+                "model": used_model or _feed_suggest_model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+
+    text = message.content[0].text.strip()
+    out = parse_item_navigator_result(text, task["article"])
+    return {
+        "headline": out["headline"],
+        "commentary": out["commentary"],
+        "stance_tags": out["stance_tags"],
+        "llm": _llm_meta(message, "item_navigator", used_model or _feed_suggest_model),
     }
 
 

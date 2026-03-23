@@ -14,6 +14,40 @@ type ReviewQueueRepo struct{ db *pgxpool.Pool }
 
 func NewReviewQueueRepo(db *pgxpool.Pool) *ReviewQueueRepo { return &ReviewQueueRepo{db: db} }
 
+func reviewQueueListDueQuery() string {
+	return `
+		SELECT rq.id, rq.user_id, rq.item_id, rq.source_signal, rq.review_stage, rq.status,
+		       rq.review_due_at, rq.last_surfaced_at, rq.completed_at, rq.snooze_count, rq.created_at, rq.updated_at,
+		       i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status,
+		       fc.final_result AS facts_check_result,
+		       sfc.final_result AS faithfulness_result,
+		       (ir.item_id IS NOT NULL) AS is_read,
+		       COALESCE(fb.is_favorite, false) AS is_favorite,
+		       COALESCE(fb.rating, 0) AS feedback_rating,
+		       sm.score, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
+		       i.published_at, i.fetched_at, i.created_at, i.updated_at,
+		       (n.item_id IS NOT NULL) AS has_note
+		FROM review_queue rq
+		JOIN items i ON i.id = rq.item_id
+		JOIN sources s ON s.id = i.source_id AND s.user_id = rq.user_id::uuid
+		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = rq.user_id::uuid
+		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = rq.user_id::uuid
+		LEFT JOIN item_summaries sm ON sm.item_id = i.id
+		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
+		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
+			LEFT JOIN item_notes n ON n.item_id = i.id AND n.user_id = rq.user_id
+			WHERE rq.user_id = $1::text
+		  AND rq.status = 'pending'
+		  AND rq.review_due_at <= $2
+		  AND i.deleted_at IS NULL
+		ORDER BY
+		  CASE WHEN COALESCE(fb.is_favorite, false) THEN 0 ELSE 1 END,
+		  CASE WHEN n.item_id IS NOT NULL THEN 0 ELSE 1 END,
+		  COALESCE(rq.last_surfaced_at, to_timestamp(0)) ASC,
+		  rq.review_due_at ASC
+		LIMIT $3`
+}
+
 func (r *ReviewQueueRepo) EnqueueDefault(ctx context.Context, userID, itemID, sourceSignal string, base time.Time) error {
 	for _, schedule := range buildReviewSchedules(base) {
 		_, err := r.db.Exec(ctx, `
@@ -46,39 +80,7 @@ func (r *ReviewQueueRepo) ListDue(ctx context.Context, userID string, now time.T
 	if limit <= 0 {
 		limit = 5
 	}
-	rows, err := r.db.Query(ctx, `
-		SELECT rq.id, rq.user_id, rq.item_id, rq.source_signal, rq.review_stage, rq.status,
-		       rq.review_due_at, rq.last_surfaced_at, rq.completed_at, rq.snooze_count, rq.created_at, rq.updated_at,
-		       i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status,
-		       fc.final_result AS facts_check_result,
-		       sfc.final_result AS faithfulness_result,
-		       (ir.item_id IS NOT NULL) AS is_read,
-		       COALESCE(fb.is_favorite, false) AS is_favorite,
-		       COALESCE(fb.rating, 0) AS feedback_rating,
-		       sm.score, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
-		       i.published_at, i.fetched_at, i.created_at, i.updated_at,
-		       (n.item_id IS NOT NULL) AS has_note
-		FROM review_queue rq
-		JOIN items i ON i.id = rq.item_id
-		JOIN sources s ON s.id = i.source_id AND s.user_id = rq.user_id
-		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = rq.user_id
-		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = rq.user_id
-		LEFT JOIN item_summaries sm ON sm.item_id = i.id
-		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
-		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
-		LEFT JOIN item_notes n ON n.item_id = i.id AND n.user_id = rq.user_id
-		WHERE rq.user_id = $1
-		  AND rq.status = 'pending'
-		  AND rq.review_due_at <= $2
-		  AND i.deleted_at IS NULL
-		ORDER BY
-		  CASE WHEN COALESCE(fb.is_favorite, false) THEN 0 ELSE 1 END,
-		  CASE WHEN n.item_id IS NOT NULL THEN 0 ELSE 1 END,
-		  COALESCE(rq.last_surfaced_at, to_timestamp(0)) ASC,
-		  rq.review_due_at ASC
-		LIMIT $3`,
-		userID, now, limit,
-	)
+	rows, err := r.db.Query(ctx, reviewQueueListDueQuery(), userID, now, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +124,7 @@ func (r *ReviewQueueRepo) ListDue(ctx context.Context, userID string, now time.T
 	_, _ = r.db.Exec(ctx, `
 		UPDATE review_queue
 		SET last_surfaced_at = NOW(), updated_at = NOW()
-		WHERE user_id = $1
+			WHERE user_id = $1::text
 		  AND id = ANY($2::uuid[])`,
 		userID, ids,
 	)
@@ -135,7 +137,7 @@ func (r *ReviewQueueRepo) CountDue(ctx context.Context, userID string, now time.
 		SELECT COUNT(*)::int
 		FROM review_queue rq
 		JOIN items i ON i.id = rq.item_id
-		WHERE rq.user_id = $1
+			WHERE rq.user_id = $1::text
 		  AND rq.status = 'pending'
 		  AND rq.review_due_at <= $2
 		  AND i.deleted_at IS NULL`,
@@ -148,7 +150,7 @@ func (r *ReviewQueueRepo) MarkDone(ctx context.Context, userID, queueID string) 
 	cmd, err := r.db.Exec(ctx, `
 		UPDATE review_queue
 		SET status = 'done', completed_at = NOW(), updated_at = NOW()
-		WHERE user_id = $1 AND id = $2`, userID, queueID)
+		WHERE user_id = $1::text AND id = $2`, userID, queueID)
 	if err != nil {
 		return err
 	}
@@ -164,7 +166,7 @@ func (r *ReviewQueueRepo) Snooze(ctx context.Context, userID, queueID string, du
 		SET review_due_at = review_due_at + $3::interval,
 		    snooze_count = snooze_count + 1,
 		    updated_at = NOW()
-		WHERE user_id = $1 AND id = $2 AND status = 'pending'`,
+		WHERE user_id = $1::text AND id = $2 AND status = 'pending'`,
 		userID, queueID, duration.String(),
 	)
 	if err != nil {

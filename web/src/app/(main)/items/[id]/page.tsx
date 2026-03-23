@@ -3,9 +3,10 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Info, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, ItemDetail, ItemLLMExecutionAttempt, RelatedItem } from "@/lib/api";
+import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { formatModelDisplayName } from "@/lib/model-display";
 import { InlineReader } from "@/components/inline-reader";
 import { ItemHighlightList } from "@/components/items/item-highlight-list";
@@ -226,8 +227,19 @@ export default function ItemDetailPage() {
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const [nextItemHref, setNextItemHref] = useState<string | null>(null);
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
+  const [itemNavigator, setItemNavigator] = useState<Awaited<ReturnType<typeof api.getItemNavigator>>["navigator"] | null>(null);
+  const [itemNavigatorLoading, setItemNavigatorLoading] = useState(false);
+  const [itemNavigatorError, setItemNavigatorError] = useState<string | null>(null);
+  const [itemNavigatorOpen, setItemNavigatorOpen] = useState(false);
   const autoMarkedRef = useRef<Record<string, true>>({});
   const readStateOverrideRef = useRef<Record<string, boolean>>({});
+  const settingsQuery = useQuery({
+    queryKey: ["settings"] as const,
+    queryFn: () => api.getSettings(),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+  const itemNavigatorLoadingPersona = settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor";
 
   const applyReadOverride = useCallback((nextItem: ItemDetail): ItemDetail => {
     const override = readStateOverrideRef.current[nextItem.id];
@@ -416,6 +428,13 @@ export default function ItemDetailPage() {
   }, [queryClient]);
 
   useEffect(() => {
+    setItemNavigator(null);
+    setItemNavigatorLoading(false);
+    setItemNavigatorError(null);
+    setItemNavigatorOpen(false);
+  }, [id]);
+
+  useEffect(() => {
     const cachedItem = queryClient.getQueryData<ItemDetail>(["item-detail", id]);
     const cachedRelated = queryClient.getQueryData<{ items?: RelatedItem[]; clusters?: RelatedCluster[] }>([
       "item-related",
@@ -500,6 +519,7 @@ export default function ItemDetailPage() {
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
   const canMarkRead = !!item && item.status !== "deleted";
   const isDeleted = item?.status === "deleted";
+  const canUseItemNavigator = Boolean(item && item.status !== "deleted" && item.summary?.summary && item.facts?.facts?.length);
   const disableMutations = Boolean(isDeleted);
   const backHref = useMemo(() => {
     const from = searchParams.get("from");
@@ -594,6 +614,31 @@ export default function ItemDetailPage() {
     },
     [currentDetailHref, router]
   );
+
+  const openItemNavigator = useCallback(async () => {
+    if (!item || !canUseItemNavigator || itemNavigatorLoading) return;
+    if (itemNavigator) {
+      setItemNavigatorOpen(true);
+      return;
+    }
+    setItemNavigatorLoading(true);
+    setItemNavigatorError(null);
+    try {
+      const preview = searchParams.get("navigator_preview") === "1";
+      const res = await api.getItemNavigator(item.id, preview ? { cache_bust: true, navigator_preview: true } : undefined);
+      setItemNavigator(res.navigator ?? null);
+      if (!res.navigator) {
+        setItemNavigatorError(t("itemDetail.navigatorUnavailable"));
+        return;
+      }
+      setItemNavigatorOpen(true);
+    } catch (error) {
+      setItemNavigatorError(t("itemDetail.navigatorError"));
+      showToast(`${t("briefing.navigator.label")}: ${error instanceof Error ? error.message : String(error)}`, "error");
+    } finally {
+      setItemNavigatorLoading(false);
+    }
+  }, [canUseItemNavigator, item, itemNavigator, itemNavigatorLoading, searchParams, showToast, t]);
 
   const toggleRead = async () => {
     if (!item || item.status === "deleted") return;
@@ -1462,6 +1507,92 @@ export default function ItemDetailPage() {
           </div>
         ) : null}
       </section>
+      {canUseItemNavigator ? (
+        <div className="fixed right-4 z-40 bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-6 md:right-6">
+          {itemNavigatorOpen && itemNavigator ? (
+            <aside className="absolute bottom-0 right-0 w-[min(calc(100vw-1.5rem),36rem)]">
+              <div className="mb-0 mr-0 flex max-h-[min(72vh,38rem)] flex-col overflow-hidden rounded-[26px] border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,252,247,0.98),rgba(246,240,232,0.96))] shadow-[0_24px_80px_rgba(58,42,27,0.18)] backdrop-blur">
+                <div className="flex items-start gap-3 border-b border-[var(--color-editorial-line)] px-4 py-4">
+                  <div className="shrink-0 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-1.5 shadow-sm">
+                    <AINavigatorAvatar persona={itemNavigator.avatar_style || itemNavigator.persona || "editor"} className="size-[42px]" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("briefing.navigator.label")}
+                    </div>
+                    <div className="mt-1 text-sm font-semibold text-[var(--color-editorial-ink)]">
+                      {itemNavigator.character_name}
+                      <span className="ml-2 text-xs font-medium text-[var(--color-editorial-ink-faint)]">{itemNavigator.character_title}</span>
+                    </div>
+                    {itemNavigator.headline ? (
+                      <p className="mt-2 text-sm font-medium leading-6 text-[var(--color-editorial-ink-soft)]">{itemNavigator.headline}</p>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setItemNavigatorOpen(false)}
+                    className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+                    aria-label={t("briefing.navigator.close")}
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="overflow-y-auto px-4 py-4">
+                  <div className="rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-4">
+                    <div className="space-y-2 whitespace-pre-line text-[15px] leading-7 text-[var(--color-editorial-ink-soft)]">
+                      {itemNavigator.commentary}
+                    </div>
+                    {!!itemNavigator.stance_tags?.length && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {itemNavigator.stance_tags.map((tag) => (
+                          <span key={tag} className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-editorial-ink-soft)]">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </aside>
+          ) : null}
+
+          {!itemNavigatorOpen && !itemNavigatorLoading ? (
+            <button
+              type="button"
+              onClick={() => {
+                void openItemNavigator();
+              }}
+              className="rounded-full border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,252,247,0.98),rgba(244,238,229,0.95))] p-2 shadow-[0_18px_40px_rgba(58,42,27,0.16)] transition hover:-translate-y-0.5 hover:bg-[var(--color-editorial-panel)]"
+              aria-label={t("itemDetail.navigatorOpen")}
+            >
+              <AINavigatorAvatar persona={itemNavigator?.avatar_style || itemNavigator?.persona || "editor"} className="size-11" />
+            </button>
+          ) : null}
+
+          {itemNavigatorLoading && !itemNavigatorOpen ? (
+            <div className="flex items-center gap-3 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2 py-2 shadow-[0_18px_40px_rgba(58,42,27,0.16)]">
+              <div className="rounded-full border border-[var(--color-editorial-line)] bg-[linear-gradient(180deg,rgba(255,252,247,0.98),rgba(244,238,229,0.95))] p-1.5">
+                <AINavigatorAvatar persona={itemNavigator?.avatar_style || itemNavigator?.persona || itemNavigatorLoadingPersona} className="size-10" />
+              </div>
+              <div className="pr-2">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                  {t("briefing.navigator.label")}
+                </div>
+                <div className="mt-0.5 text-sm font-medium text-[var(--color-editorial-ink-soft)]">
+                  {t("itemDetail.navigatorLoading")}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {itemNavigatorError && !itemNavigatorOpen ? (
+            <div className="mt-3 max-w-[min(calc(100vw-2rem),24rem)] rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-xs leading-5 text-[var(--color-editorial-ink-soft)] shadow-[0_12px_32px_rgba(58,42,27,0.12)]">
+              {itemNavigatorError}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <InlineReader
         itemId={inlineItemId}
         open={!!inlineItemId}

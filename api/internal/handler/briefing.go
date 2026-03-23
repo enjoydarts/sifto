@@ -171,8 +171,10 @@ func (h *BriefingHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 	if h.cache != nil && !cacheBust {
 		var cached model.BriefingNavigatorEnvelope
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
-			writeJSON(w, cached)
-			return
+			if shouldCacheBriefingNavigatorResponse(&cached) {
+				writeJSON(w, cached)
+				return
+			}
 		}
 	}
 
@@ -184,12 +186,19 @@ func (h *BriefingHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		navigator = h.buildNavigator(r.Context(), userID, generatedAt)
 	}
 	resp := model.BriefingNavigatorEnvelope{Navigator: navigator}
-	if h.cache != nil {
+	if h.cache != nil && shouldCacheBriefingNavigatorResponse(&resp) {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, briefingNavigatorCacheTTL); err != nil {
 			log.Printf("briefing navigator cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
 	}
 	writeJSON(w, resp)
+}
+
+func shouldCacheBriefingNavigatorResponse(resp *model.BriefingNavigatorEnvelope) bool {
+	if resp == nil || resp.Navigator == nil {
+		return false
+	}
+	return len(resp.Navigator.Picks) > 0
 }
 
 func isSnapshotFresh(generatedAt *time.Time, now time.Time) bool {

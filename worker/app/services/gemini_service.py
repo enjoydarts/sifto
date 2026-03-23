@@ -49,10 +49,12 @@ from app.services.digest_task_common import (
 from app.services.feed_task_common import (
     build_ask_task,
     build_briefing_navigator_task,
+    build_item_navigator_task,
     build_rank_feed_task,
     build_seed_sites_task,
     parse_ask_result,
     parse_briefing_navigator_result,
+    parse_item_navigator_result,
     parse_rank_feed_result,
     parse_seed_sites_result,
 )
@@ -365,6 +367,19 @@ def generate_briefing_navigator(persona: str, candidates: list[dict], intro_cont
     )
     out = parse_briefing_navigator_result(text, task["candidates"])
     return {"intro": out["intro"], "picks": out["picks"], "llm": _llm_meta(model, "briefing_navigator", usage)}
+
+
+def generate_item_navigator(persona: str, article: dict, model: str, api_key: str) -> dict:
+    task = build_item_navigator_task(persona, article)
+    text, usage = _generate_content(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=2200,
+        response_schema=task["schema"],
+    )
+    out = parse_item_navigator_result(text, task["article"])
+    return {"headline": out["headline"], "commentary": out["commentary"], "stance_tags": out["stance_tags"], "llm": _llm_meta(model, "item_navigator", usage)}
 
 
 def suggest_feed_seed_sites(

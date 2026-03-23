@@ -741,6 +741,24 @@ type BriefingNavigatorEnvelope struct {
 	Navigator *BriefingNavigator `json:"navigator,omitempty"`
 }
 
+type ItemNavigator struct {
+	Enabled        bool       `json:"enabled"`
+	ItemID         string     `json:"item_id"`
+	Persona        string     `json:"persona"`
+	CharacterName  string     `json:"character_name"`
+	CharacterTitle string     `json:"character_title"`
+	AvatarStyle    string     `json:"avatar_style"`
+	SpeechStyle    string     `json:"speech_style"`
+	Headline       string     `json:"headline"`
+	Commentary     string     `json:"commentary"`
+	StanceTags     []string   `json:"stance_tags,omitempty"`
+	GeneratedAt    *time.Time `json:"generated_at,omitempty"`
+}
+
+type ItemNavigatorEnvelope struct {
+	Navigator *ItemNavigator `json:"navigator,omitempty"`
+}
+
 type Digest struct {
 	ID                     string     `json:"id"`
 	UserID                 string     `json:"user_id"`

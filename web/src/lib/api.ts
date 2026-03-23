@@ -1119,6 +1119,22 @@ export interface BriefingNavigatorResponse {
   navigator?: BriefingTodayResponse["navigator"];
 }
 
+export interface ItemNavigatorResponse {
+  navigator?: {
+    enabled: boolean;
+    item_id: string;
+    persona: string;
+    character_name: string;
+    character_title: string;
+    avatar_style: string;
+    speech_style: string;
+    headline: string;
+    commentary: string;
+    stance_tags?: string[];
+    generated_at?: string | null;
+  } | null;
+}
+
 export interface AskCitation {
   item_id: string;
   title: string;
@@ -1425,6 +1441,13 @@ export const api = {
     if (params?.navigator_preview) q.set("navigator_preview", "1");
     const qs = q.toString();
     return apiFetch<BriefingNavigatorResponse>(`/briefing/navigator${qs ? `?${qs}` : ""}`);
+  },
+  getItemNavigator: (id: string, params?: { cache_bust?: boolean; navigator_preview?: boolean }) => {
+    const q = new URLSearchParams();
+    if (params?.cache_bust) q.set("cache_bust", "1");
+    if (params?.navigator_preview) q.set("navigator_preview", "1");
+    const qs = q.toString();
+    return apiFetch<ItemNavigatorResponse>(`/items/${id}/navigator${qs ? `?${qs}` : ""}`);
   },
   getReviewQueue: (params?: { size?: number }) => {
     const q = new URLSearchParams();

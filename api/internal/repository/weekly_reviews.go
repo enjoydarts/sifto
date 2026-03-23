@@ -13,6 +13,38 @@ type WeeklyReviewRepo struct{ db *pgxpool.Pool }
 
 func NewWeeklyReviewRepo(db *pgxpool.Pool) *WeeklyReviewRepo { return &WeeklyReviewRepo{db: db} }
 
+func weeklyReviewReadCountQuery() string {
+	return `
+		SELECT COUNT(*)::int
+		FROM item_reads ir
+		JOIN items i ON i.id = ir.item_id
+		JOIN sources s ON s.id = i.source_id
+		WHERE ir.user_id = $1
+		  AND s.user_id = $1
+		  AND i.deleted_at IS NULL
+		  AND (ir.read_at AT TIME ZONE 'Asia/Tokyo')::date BETWEEN $2::date AND $3::date`
+}
+
+func weeklyReviewTopicsQuery() string {
+	return `
+		SELECT topic, COUNT(*)::int AS count
+		FROM (
+			SELECT unnest(COALESCE(sm.topics, '{}'::text[])) AS topic
+			FROM item_reads ir
+			JOIN items i ON i.id = ir.item_id
+			JOIN sources s ON s.id = i.source_id
+			LEFT JOIN item_summaries sm ON sm.item_id = i.id
+			WHERE ir.user_id = $1
+			  AND s.user_id = $1
+			  AND i.deleted_at IS NULL
+			  AND (ir.read_at AT TIME ZONE 'Asia/Tokyo')::date BETWEEN $2::date AND $3::date
+		) t
+		WHERE topic <> ''
+		GROUP BY topic
+		ORDER BY count DESC, topic ASC
+		LIMIT 5`
+}
+
 func (r *WeeklyReviewRepo) GetLatest(ctx context.Context, userID string) (*model.WeeklyReviewSnapshot, error) {
 	var (
 		id        string
@@ -71,17 +103,7 @@ func (r *WeeklyReviewRepo) Upsert(ctx context.Context, userID string, snapshot m
 }
 
 func (r *WeeklyReviewRepo) CollectInputs(ctx context.Context, userID, weekStart, weekEnd string) (readCount, noteCount, insightCount, favoriteCount int, topics []model.WeeklyReviewTopic, missed []model.Item, err error) {
-	if err = r.db.QueryRow(ctx, `
-		SELECT COUNT(*)::int
-		FROM item_reads ir
-		JOIN items i ON i.id = ir.item_id
-		JOIN sources s ON s.id = i.source_id
-		WHERE ir.user_id = $1
-		  AND s.user_id = $1
-		  AND i.deleted_at IS NULL
-		  AND (ir.created_at AT TIME ZONE 'Asia/Tokyo')::date BETWEEN $2::date AND $3::date`,
-		userID, weekStart, weekEnd,
-	).Scan(&readCount); err != nil {
+	if err = r.db.QueryRow(ctx, weeklyReviewReadCountQuery(), userID, weekStart, weekEnd).Scan(&readCount); err != nil {
 		return
 	}
 	if err = r.db.QueryRow(ctx, `
@@ -113,23 +135,7 @@ func (r *WeeklyReviewRepo) CollectInputs(ctx context.Context, userID, weekStart,
 		return
 	}
 
-	topicRows, queryErr := r.db.Query(ctx, `
-		SELECT topic, COUNT(*)::int AS count
-		FROM (
-			SELECT unnest(COALESCE(sm.topics, '{}'::text[])) AS topic
-			FROM item_reads ir
-			JOIN items i ON i.id = ir.item_id
-			JOIN sources s ON s.id = i.source_id
-			LEFT JOIN item_summaries sm ON sm.item_id = i.id
-			WHERE ir.user_id = $1
-			  AND s.user_id = $1
-			  AND i.deleted_at IS NULL
-			  AND (ir.created_at AT TIME ZONE 'Asia/Tokyo')::date BETWEEN $2::date AND $3::date
-		) t
-		WHERE topic <> ''
-		GROUP BY topic
-		ORDER BY count DESC, topic ASC
-		LIMIT 5`, userID, weekStart, weekEnd)
+	topicRows, queryErr := r.db.Query(ctx, weeklyReviewTopicsQuery(), userID, weekStart, weekEnd)
 	if queryErr != nil {
 		err = queryErr
 		return

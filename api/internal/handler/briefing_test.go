@@ -3,6 +3,8 @@ package handler
 import (
 	"testing"
 	"time"
+
+	"github.com/enjoydarts/sifto/api/internal/model"
 )
 
 func TestBuildBriefingNavigatorIntroContext(t *testing.T) {
@@ -31,5 +33,24 @@ func TestCacheKeyBriefingNavigatorVariesByPersonaModelAndPreview(t *testing.T) {
 
 	if k1 == k2 || k1 == k3 || k1 == k4 {
 		t.Fatalf("cache key should vary, got k1=%q k2=%q k3=%q k4=%q", k1, k2, k3, k4)
+	}
+}
+
+func TestShouldCacheBriefingNavigatorResponse(t *testing.T) {
+	if shouldCacheBriefingNavigatorResponse(nil) {
+		t.Fatal("nil response should not be cached")
+	}
+	if shouldCacheBriefingNavigatorResponse(&model.BriefingNavigatorEnvelope{}) {
+		t.Fatal("empty response should not be cached")
+	}
+	if !shouldCacheBriefingNavigatorResponse(&model.BriefingNavigatorEnvelope{
+		Navigator: &model.BriefingNavigator{
+			Persona: "editor",
+			Picks: []model.BriefingNavigatorPick{
+				{ItemID: "item-1", Rank: 1, Title: "title", Comment: "comment"},
+			},
+		},
+	}) {
+		t.Fatal("response with picks should be cached")
 	}
 }

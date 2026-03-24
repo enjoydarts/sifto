@@ -1011,6 +1011,27 @@ export default function LLMAnalysisPage() {
                             if (name === "Calls") return [fmtNum(tooltipValueToNumber(value)), tooltipNameToText(name)];
                             return [tooltipValueToText(value), tooltipNameToText(name)];
                           }}
+                          labelFormatter={(_, payload) => {
+                            const row = payload?.[0]?.payload as (typeof scatterRows)[number] | undefined;
+                            if (!row) return "";
+                            return `${providerLabel(row.provider)} / ${formatModelDisplayName(row.model)} (${row.purpose})`;
+                          }}
+                          content={({ active, payload }) => {
+                            const row = payload?.[0]?.payload as (typeof scatterRows)[number] | undefined;
+                            if (!active || !row) return null;
+                            return (
+                              <div className="rounded-[14px] border border-[var(--color-editorial-line)] bg-white px-3 py-2 shadow-[var(--shadow-dropdown)]">
+                                <div className="text-xs font-semibold text-[var(--color-editorial-ink)]">{providerLabel(row.provider)} / {formatModelDisplayName(row.model)}</div>
+                                <div className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">{row.purpose}</div>
+                                <div className="mt-2 grid gap-1 text-xs text-[var(--color-editorial-ink-soft)]">
+                                  <div>{t("llm.totalCalls")}: {fmtNum(row.calls)}</div>
+                                  <div>tokens/call: {fmtNum(row.totalTokensPerCall)}</div>
+                                  <div>avg cost/call: {fmtUSD(row.avgCostPerCall)}</div>
+                                  <div>pricing: {row.pricingLabel}</div>
+                                </div>
+                              </div>
+                            );
+                          }}
                         />
                         <Scatter
                           data={scatterRows}
@@ -1100,6 +1121,29 @@ export default function LLMAnalysisPage() {
                             if (name === "Failure Rate") return [`${tooltipValueToNumber(value).toFixed(1)}%`, tooltipNameToText(name)];
                             if (name === "Calls") return [fmtNum(tooltipValueToNumber(value)), tooltipNameToText(name)];
                             return [tooltipValueToText(value), tooltipNameToText(name)];
+                          }}
+                          labelFormatter={(_, payload) => {
+                            const row = payload?.[0]?.payload as RankedModelRow | undefined;
+                            if (!row) return "";
+                            return `${providerLabel(row.provider)} / ${formatModelDisplayName(row.model)} (${row.purpose})`;
+                          }}
+                          content={({ active, payload }) => {
+                            const row = payload?.[0]?.payload as RankedModelRow | undefined;
+                            if (!active || !row) return null;
+                            return (
+                              <div className="rounded-[14px] border border-[var(--color-editorial-line)] bg-white px-3 py-2 shadow-[var(--shadow-dropdown)]">
+                                <div className="text-xs font-semibold text-[var(--color-editorial-ink)]">{providerLabel(row.provider)} / {formatModelDisplayName(row.model)}</div>
+                                <div className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">{row.purpose}</div>
+                                <div className="mt-2 grid gap-1 text-xs text-[var(--color-editorial-ink-soft)]">
+                                  <div>{t("llm.totalCalls")}: {fmtNum(row.calls)}</div>
+                                  <div>avg/call: {fmtUSD(row.avg_cost_per_call_usd)}</div>
+                                  <div>tokens/call: {fmtNum(Math.round(row.total_tokens_per_call))}</div>
+                                  <div>failure: {row.failure_rate_pct == null ? "—" : `${row.failure_rate_pct.toFixed(1)}%`}</div>
+                                  <div>retry: {row.retry_rate_pct == null ? "—" : `${row.retry_rate_pct.toFixed(1)}%`}</div>
+                                  <div>empty: {row.empty_rate_pct == null ? "—" : `${row.empty_rate_pct.toFixed(1)}%`}</div>
+                                </div>
+                              </div>
+                            );
                           }}
                         />
                         <Scatter

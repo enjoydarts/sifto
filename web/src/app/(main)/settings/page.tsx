@@ -2350,46 +2350,6 @@ export default function SettingsPage() {
           {activeSection === "audio-briefing" ? (
             <>
               <SectionCard>
-                <form onSubmit={submitAudioBriefingModels} className="space-y-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.model.audioBriefingScript")}</div>
-                      <p className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">
-                        {t("settings.audioBriefing.scriptModelHelp")}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
-                      <button
-                        type="submit"
-                        disabled={savingLLMModels}
-                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
-                      >
-                        {savingLLMModels ? t("common.saving") : t("settings.saveModels")}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <ModelSelect
-                      label={t("settings.model.audioBriefingScript")}
-                      value={audioBriefingScriptModel}
-                      onChange={(value) => onChangeLLMModel(setAudioBriefingScriptModel, value)}
-                      options={optionsForPurpose("summary", audioBriefingScriptModel)}
-                      labels={modelSelectLabels}
-                      variant="modal"
-                    />
-                    <ModelSelect
-                      label={t("settings.model.audioBriefingScriptFallback")}
-                      value={audioBriefingScriptFallbackModel}
-                      onChange={(value) => onChangeLLMModel(setAudioBriefingScriptFallbackModel, value)}
-                      options={optionsForPurpose("summary", audioBriefingScriptFallbackModel)}
-                      labels={modelSelectLabels}
-                      variant="modal"
-                    />
-                  </div>
-                </form>
-              </SectionCard>
-
-              <SectionCard>
                 <form onSubmit={submitAudioBriefingSettings} className="space-y-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
@@ -2505,6 +2465,46 @@ export default function SettingsPage() {
                           : t("settings.audioBriefing.defaultPersonaHelp")}
                       </p>
                     </label>
+                  </div>
+                </form>
+              </SectionCard>
+
+              <SectionCard>
+                <form onSubmit={submitAudioBriefingModels} className="space-y-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.model.audioBriefingScript")}</div>
+                      <p className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.audioBriefing.scriptModelHelp")}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
+                      <button
+                        type="submit"
+                        disabled={savingLLMModels}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                      >
+                        {savingLLMModels ? t("common.saving") : t("settings.saveModels")}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <ModelSelect
+                      label={t("settings.model.audioBriefingScript")}
+                      value={audioBriefingScriptModel}
+                      onChange={(value) => onChangeLLMModel(setAudioBriefingScriptModel, value)}
+                      options={optionsForPurpose("summary", audioBriefingScriptModel)}
+                      labels={modelSelectLabels}
+                      variant="modal"
+                    />
+                    <ModelSelect
+                      label={t("settings.model.audioBriefingScriptFallback")}
+                      value={audioBriefingScriptFallbackModel}
+                      onChange={(value) => onChangeLLMModel(setAudioBriefingScriptFallbackModel, value)}
+                      options={optionsForPurpose("summary", audioBriefingScriptFallbackModel)}
+                      labels={modelSelectLabels}
+                      variant="modal"
+                    />
                   </div>
                 </form>
               </SectionCard>

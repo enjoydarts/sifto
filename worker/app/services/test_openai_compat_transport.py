@@ -215,6 +215,28 @@ class RunChatJsonTests(unittest.TestCase):
         self.assertNotIn("thinking", _FakeClient.last_json)
         self.assertEqual(usage.get("requested_model"), "gpt-5-mini")
 
+    @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
+    def test_custom_temperature_and_top_p_override_defaults(self):
+        run_chat_json(
+            "Return JSON",
+            "gpt-4.1-mini",
+            "test-key",
+            url="https://example.com/chat/completions",
+            normalize_model_name=lambda model: model,
+            supports_strict_schema=lambda model: False,
+            timeout_sec=5,
+            attempts=1,
+            base_sleep_sec=0,
+            provider_name="openai",
+            logger=None,
+            response_schema={"type": "object"},
+            temperature=0.7,
+            top_p=0.98,
+        )
+
+        self.assertEqual(_FakeClient.last_json.get("temperature"), 0.7)
+        self.assertEqual(_FakeClient.last_json.get("top_p"), 0.98)
+
     @patch("app.services.openai_compat_transport.httpx.Client", _EmptyChoicesClient)
     def test_empty_choices_error_includes_response_snippet(self):
         with self.assertRaises(RuntimeError) as ctx:

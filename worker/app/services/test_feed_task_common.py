@@ -6,10 +6,12 @@ from app.services.feed_task_common import (
     ASK_NAVIGATOR_SCHEMA,
     BRIEFING_NAVIGATOR_SCHEMA,
     SOURCE_NAVIGATOR_SCHEMA,
+    resolve_navigator_sampling_profile,
     _resolve_persona_file,
     build_audio_briefing_script_task,
     build_ask_navigator_task,
     build_briefing_navigator_task,
+    build_item_navigator_task,
     build_source_navigator_task,
     parse_audio_briefing_script_result,
 )
@@ -140,6 +142,34 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("picks は空配列 [] を返す", prompt)
         self.assertIn("記事推薦は捏造しない", prompt)
         self.assertIn("candidates が空のときは", prompt)
+
+    def test_resolve_navigator_sampling_profile_uses_persona_defaults(self):
+        profile = resolve_navigator_sampling_profile("hype")
+
+        self.assertEqual(profile["temperature_hint"], "medium_high")
+        self.assertEqual(profile["top_p_hint"], "wide")
+        self.assertEqual(profile["verbosity_hint"], "expansive")
+        self.assertEqual(profile["temperature"], 0.7)
+        self.assertEqual(profile["top_p"], 0.98)
+
+    def test_build_item_navigator_task_exposes_sampling_and_verbosity(self):
+        task = build_item_navigator_task(
+            persona="analyst",
+            article={
+                "item_id": "item-1",
+                "title": "Example title",
+                "translated_title": "翻訳タイトル",
+                "summary": "Summary text",
+                "facts": ["Fact 1", "Fact 2"],
+            },
+        )
+
+        self.assertEqual(task["sampling_profile"]["temperature_hint"], "low")
+        self.assertEqual(task["sampling_profile"]["top_p_hint"], "narrow")
+        self.assertEqual(task["sampling_profile"]["verbosity_hint"], "tight")
+        self.assertEqual(task["sampling_profile"]["temperature"], 0.2)
+        self.assertEqual(task["sampling_profile"]["top_p"], 0.75)
+        self.assertIn("簡潔寄り", task["prompt"])
 
     def test_audio_briefing_script_schema_requires_all_fields(self):
         self.assertEqual(

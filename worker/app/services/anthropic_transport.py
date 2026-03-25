@@ -47,6 +47,8 @@ def messages_create(
     system_prompt: str | None = None,
     user_prompt: str | None = None,
     enable_prompt_cache: bool = False,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ):
     client = client_for_api_key(api_key)
     if client is None:
@@ -57,6 +59,10 @@ def messages_create(
         "max_tokens": max_tokens,
         "timeout": req_timeout,
     }
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    if top_p is not None:
+        kwargs["top_p"] = top_p
     if system_prompt is not None:
         system_block: dict = {"type": "text", "text": system_prompt}
         if enable_prompt_cache:
@@ -84,6 +90,8 @@ def call_with_retries(
     system_prompt: str | None = None,
     user_prompt: str | None = None,
     enable_prompt_cache: bool = False,
+    temperature: float | None = None,
+    top_p: float | None = None,
     logger=None,
 ):
     last_err = None
@@ -98,6 +106,8 @@ def call_with_retries(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 enable_prompt_cache=enable_prompt_cache,
+                temperature=temperature,
+                top_p=top_p,
             )
         except Exception as e:
             last_err = e
@@ -128,6 +138,8 @@ def call_with_model_fallback(
     system_prompt: str | None = None,
     user_prompt: str | None = None,
     enable_prompt_cache: bool = False,
+    temperature: float | None = None,
+    top_p: float | None = None,
     logger=None,
 ):
     if client_for_api_key(api_key) is None:
@@ -144,6 +156,8 @@ def call_with_model_fallback(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 enable_prompt_cache=enable_prompt_cache,
+                temperature=temperature,
+                top_p=top_p,
                 logger=logger,
             ),
             primary_model,
@@ -165,6 +179,8 @@ def call_with_model_fallback(
                         system_prompt=system_prompt,
                         user_prompt=user_prompt,
                         enable_prompt_cache=enable_prompt_cache,
+                        temperature=temperature,
+                        top_p=top_p,
                         logger=logger,
                     ),
                     fallback_model,

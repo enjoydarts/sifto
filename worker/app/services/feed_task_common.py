@@ -239,6 +239,31 @@ with _PERSONA_FILE.open("r", encoding="utf-8") as f:
     NAVIGATOR_PERSONA_PROFILES = json.load(f)
 
 
+_DEFAULT_NAVIGATOR_SAMPLING_PROFILE = {
+    "temperature_hint": "low",
+    "top_p_hint": "balanced",
+    "verbosity_hint": "balanced",
+}
+
+_NAVIGATOR_TEMPERATURE_HINT_VALUES = {
+    "low": 0.2,
+    "medium": 0.45,
+    "medium_high": 0.7,
+}
+
+_NAVIGATOR_TOP_P_HINT_VALUES = {
+    "narrow": 0.75,
+    "balanced": 0.9,
+    "wide": 0.98,
+}
+
+_NAVIGATOR_VERBOSITY_INSTRUCTIONS = {
+    "tight": "簡潔寄り。枝葉に広げすぎず、要点を先に置いて文を締める。",
+    "balanced": "標準。説明とニュアンスの釣り合いを取り、冗長にしない。",
+    "expansive": "ややふくらみを持たせてよい。比喩や余韻を少し許しつつ、散らからないようにする。",
+}
+
+
 def resolve_navigator_persona_profile(persona: str, variant: str) -> tuple[str, dict]:
     persona_key = str(persona or "editor").strip() or "editor"
     base = NAVIGATOR_PERSONA_PROFILES.get(persona_key) or NAVIGATOR_PERSONA_PROFILES["editor"]
@@ -249,6 +274,28 @@ def resolve_navigator_persona_profile(persona: str, variant: str) -> tuple[str, 
     else:
         variant_hints = {}
     return persona_key, {**base, **variant_hints}
+
+
+def resolve_navigator_sampling_profile(persona: str) -> dict:
+    persona_key = str(persona or "editor").strip() or "editor"
+    base = NAVIGATOR_PERSONA_PROFILES.get(persona_key) or NAVIGATOR_PERSONA_PROFILES["editor"]
+    raw = dict(_DEFAULT_NAVIGATOR_SAMPLING_PROFILE)
+    raw.update(base.get("sampling_profile") or {})
+    temperature_hint = str(raw.get("temperature_hint") or "low").strip() or "low"
+    top_p_hint = str(raw.get("top_p_hint") or "balanced").strip() or "balanced"
+    verbosity_hint = str(raw.get("verbosity_hint") or "balanced").strip() or "balanced"
+    return {
+        "temperature_hint": temperature_hint,
+        "top_p_hint": top_p_hint,
+        "verbosity_hint": verbosity_hint,
+        "temperature": _NAVIGATOR_TEMPERATURE_HINT_VALUES.get(temperature_hint, _NAVIGATOR_TEMPERATURE_HINT_VALUES["low"]),
+        "top_p": _NAVIGATOR_TOP_P_HINT_VALUES.get(top_p_hint, _NAVIGATOR_TOP_P_HINT_VALUES["balanced"]),
+    }
+
+
+def navigator_verbosity_instruction(sampling_profile: dict) -> str:
+    verbosity_hint = str((sampling_profile or {}).get("verbosity_hint") or "balanced").strip() or "balanced"
+    return _NAVIGATOR_VERBOSITY_INSTRUCTIONS.get(verbosity_hint, _NAVIGATOR_VERBOSITY_INSTRUCTIONS["balanced"])
 
 
 SEED_SITES_SCHEMA = {
@@ -397,6 +444,7 @@ Few-shot（避けたい傾向の既存Feed例）:
 def build_briefing_navigator_task(persona: str, candidates: list[dict], intro_context: dict | None = None) -> dict:
     intro_context = dict(intro_context or {})
     persona_key, profile = resolve_navigator_persona_profile(persona, "briefing")
+    sampling_profile = resolve_navigator_sampling_profile(persona_key)
     trimmed_candidates = candidates[:12]
     pick_rule = "candidates が3件以上あるときは picks は必ず3件。候補が3件未満なら存在する件数だけ返す"
     if len(trimmed_candidates) == 0:
@@ -444,6 +492,7 @@ def build_briefing_navigator_task(persona: str, candidates: list[dict], intro_co
 - 1本ずつ観点を変える。すべて同じ理由にしない
 - summary や title の言い換えをそのまま並べるのではなく、なぜ今読む価値があるかを一言で再構成する
 - コメントでは、第一印象、良いと感じる点、引っかかる点、今読む理由のうち2〜3個が自然ににじむようにする
+- 文量感は {navigator_verbosity_instruction(sampling_profile)}
 - snark でも不快・攻撃的・見下し表現は禁止
 - snark では、記事や状況に対する軽い皮肉、ツッコミ、呆れ気味の言い回しは許可する
 - snark でも読者個人をいじらない。人ではなく話題や状況に対して毒づく
@@ -477,6 +526,7 @@ def build_briefing_navigator_task(persona: str, candidates: list[dict], intro_co
         "candidates": trimmed_candidates,
         "intro_context": intro_context,
         "profile": profile,
+        "sampling_profile": sampling_profile,
     }
 
 
@@ -554,6 +604,7 @@ def parse_briefing_navigator_result(text: str, candidates: list[dict]) -> dict:
 
 def build_item_navigator_task(persona: str, article: dict) -> dict:
     persona_key, profile = resolve_navigator_persona_profile(persona, "item")
+    sampling_profile = resolve_navigator_sampling_profile(persona_key)
     prompt = f"""あなたは記事詳細画面の右下から呼び出されるAIナビゲーターです。
 
 キャラクター:
@@ -598,6 +649,7 @@ def build_item_navigator_task(persona: str, article: dict) -> dict:
 - 断定しすぎず、入力から読めないことは広げすぎない
 - facts を1文ずつ順番に言い換えるだけの文章は禁止
 - 短すぎる箇条書き口調は禁止。自然な段落文にする
+- 文量感は {navigator_verbosity_instruction(sampling_profile)}
 - headline は 16〜36字程度で、論評の切り口がわかる短い見出しにする
 - stance_tags は 0〜3件でよい
 - snark では軽口やツッコミを入れてよい
@@ -620,6 +672,7 @@ def build_item_navigator_task(persona: str, article: dict) -> dict:
         "persona": persona_key,
         "article": article,
         "profile": profile,
+        "sampling_profile": sampling_profile,
     }
 
 
@@ -889,6 +942,7 @@ def _log_audio_briefing_segment_id_mismatch(index: int, expected_item_id: str, r
 
 def build_ask_navigator_task(persona: str, ask_input: dict) -> dict:
     persona_key, profile = resolve_navigator_persona_profile(persona, "item")
+    sampling_profile = resolve_navigator_sampling_profile(persona_key)
     prompt = f"""あなたはAsk画面の回答直後に出るAIナビゲーターです。
 
 キャラクター:
@@ -928,6 +982,7 @@ def build_ask_navigator_task(persona: str, ask_input: dict) -> dict:
 - その後、なぜその前提を少し疑ったほうがよいか、どこに留保があるか、次に何を見ると視界が広がるかを語る
 - citations と related_items にある範囲を土台にする
 - 入力から読めない事実を捏造しない
+- 文量感は {navigator_verbosity_instruction(sampling_profile)}
 - snark でも不快・攻撃的・見下し表現は禁止
 - snark では、問いや状況に対する軽い皮肉、ツッコミ、呆れ気味の言い回しは許可する
 - next_angles は短い日本語フレーズで 2〜4件
@@ -949,6 +1004,7 @@ def build_ask_navigator_task(persona: str, ask_input: dict) -> dict:
         "persona": persona_key,
         "input": ask_input,
         "profile": profile,
+        "sampling_profile": sampling_profile,
     }
 
 
@@ -984,6 +1040,7 @@ def parse_ask_navigator_result(text: str, ask_input: dict) -> dict:
 
 def build_source_navigator_task(persona: str, candidates: list[dict]) -> dict:
     persona_key, profile = resolve_navigator_persona_profile(persona, "briefing")
+    sampling_profile = resolve_navigator_sampling_profile(persona_key)
     prompt = f"""あなたはSources管理画面の右下から呼び出されるAIナビゲーターです。
 
 キャラクター:
@@ -1026,6 +1083,7 @@ def build_source_navigator_task(persona: str, candidates: list[dict]) -> dict:
 - comment でも title や数字の言い換えだけにせず、なぜそう見るかを短く添える
 - 同じ source_id を複数カテゴリに重複させない
 - 不確かなことは断定しない。候補データから読める範囲だけで論評する
+- 文量感は {navigator_verbosity_instruction(sampling_profile)}
 - snark では軽口やツッコミを入れてよい
 - snark でも不快・攻撃的・見下し表現は禁止
 - snark でも読者個人をいじらない。人ではなく状況や構成に対して毒づく
@@ -1053,6 +1111,7 @@ def build_source_navigator_task(persona: str, candidates: list[dict]) -> dict:
         "persona": persona_key,
         "candidates": candidates,
         "profile": profile,
+        "sampling_profile": sampling_profile,
     }
 
 

@@ -159,6 +159,8 @@ def _chat_json_openai_compat(
     response_schema: dict | None = None,
     schema_name: str = "response",
     timeout_sec: float | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> tuple[str, dict]:
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("POE_TIMEOUT_SEC", 90.0)
     attempts = max(1, int(os.getenv("POE_RETRY_ATTEMPTS", "3") or "3"))
@@ -180,6 +182,8 @@ def _chat_json_openai_compat(
         response_schema=response_schema,
         schema_name=schema_name,
         include_temperature=True,
+        temperature=temperature,
+        top_p=top_p,
     )
     return _repair_structured_json_text(text, model, response_schema), usage
 
@@ -204,6 +208,8 @@ def _chat_json_anthropic_compat(
     max_output_tokens: int = 1200,
     response_schema: dict | None = None,
     timeout_sec: float | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> tuple[str, dict]:
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("POE_TIMEOUT_SEC", 90.0)
     attempts = max(1, int(os.getenv("POE_RETRY_ATTEMPTS", "3") or "3"))
@@ -215,6 +221,10 @@ def _chat_json_anthropic_compat(
     }
     if system_instruction:
         body["system"] = system_instruction
+    if temperature is not None:
+        body["temperature"] = temperature
+    if top_p is not None:
+        body["top_p"] = top_p
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -277,6 +287,8 @@ def _chat_json(
     response_schema: dict | None = None,
     schema_name: str = "response",
     timeout_sec: float | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> tuple[str, dict]:
     api_key = (api_key or "").strip()
     if not api_key:
@@ -290,6 +302,8 @@ def _chat_json(
             max_output_tokens=max_output_tokens,
             response_schema=response_schema,
             timeout_sec=timeout_sec,
+            temperature=temperature,
+            top_p=top_p,
         )
     return _chat_json_openai_compat(
         prompt,
@@ -300,6 +314,8 @@ def _chat_json(
         response_schema=response_schema,
         schema_name=schema_name,
         timeout_sec=timeout_sec,
+        temperature=temperature,
+        top_p=top_p,
     )
 
 
@@ -539,14 +555,14 @@ def rank_feed_suggestions(existing_sources: list[dict], preferred_topics: list[s
 
 def generate_briefing_navigator(persona: str, candidates: list[dict], intro_context: dict, model: str, api_key: str) -> dict:
     task = build_briefing_navigator_task(persona, candidates, intro_context)
-    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=1800, response_schema=task["schema"], schema_name="briefing_navigator")
+    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=1800, response_schema=task["schema"], schema_name="briefing_navigator", temperature=task["sampling_profile"]["temperature"], top_p=task["sampling_profile"]["top_p"])
     out = parse_briefing_navigator_result(text, task["candidates"])
     return {"intro": out["intro"], "picks": out["picks"], "llm": _llm_meta(model, "briefing_navigator", usage)}
 
 
 def generate_item_navigator(persona: str, article: dict, model: str, api_key: str) -> dict:
     task = build_item_navigator_task(persona, article)
-    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=2200, response_schema=task["schema"], schema_name="item_navigator")
+    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=2200, response_schema=task["schema"], schema_name="item_navigator", temperature=task["sampling_profile"]["temperature"], top_p=task["sampling_profile"]["top_p"])
     out = parse_item_navigator_result(text, task["article"])
     return {"headline": out["headline"], "commentary": out["commentary"], "stance_tags": out["stance_tags"], "llm": _llm_meta(model, "item_navigator", usage)}
 
@@ -599,14 +615,14 @@ def generate_audio_briefing_script(
 
 def generate_ask_navigator(persona: str, ask_input: dict, model: str, api_key: str) -> dict:
     task = build_ask_navigator_task(persona, ask_input)
-    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=2400, response_schema=task["schema"], schema_name="ask_navigator")
+    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=2400, response_schema=task["schema"], schema_name="ask_navigator", temperature=task["sampling_profile"]["temperature"], top_p=task["sampling_profile"]["top_p"])
     out = parse_ask_navigator_result(text, task["input"])
     return {"headline": out["headline"], "commentary": out["commentary"], "next_angles": out["next_angles"], "llm": _llm_meta(model, "ask_navigator", usage)}
 
 
 def generate_source_navigator(persona: str, candidates: list[dict], model: str, api_key: str) -> dict:
     task = build_source_navigator_task(persona, candidates)
-    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=2600, response_schema=task["schema"], schema_name="source_navigator")
+    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=2600, response_schema=task["schema"], schema_name="source_navigator", temperature=task["sampling_profile"]["temperature"], top_p=task["sampling_profile"]["top_p"])
     out = parse_source_navigator_result(text, task["candidates"])
     return {"overview": out["overview"], "keep": out["keep"], "watch": out["watch"], "standout": out["standout"], "llm": _llm_meta(model, "source_navigator", usage)}
 

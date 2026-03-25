@@ -63,6 +63,8 @@ def run_responses_json(
     response_schema: dict | None = None,
     schema_name: str = "response",
     timeout_sec: float | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> tuple[str, dict]:
     body: dict = {
         "model": normalize_model_name(model),
@@ -71,6 +73,10 @@ def run_responses_json(
     }
     if system_instruction:
         body["instructions"] = system_instruction
+    if temperature is not None:
+        body["temperature"] = temperature
+    if top_p is not None:
+        body["top_p"] = top_p
     reasoning = responses_reasoning(model)
     if reasoning is not None:
         body["reasoning"] = reasoning

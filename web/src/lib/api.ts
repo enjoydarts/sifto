@@ -1103,6 +1103,12 @@ export interface NavigatorPersonaTaskHints {
   style?: string;
 }
 
+export interface NavigatorPersonaSamplingProfile {
+  temperature_hint?: "low" | "medium" | "medium_high" | string;
+  top_p_hint?: "narrow" | "balanced" | "wide" | string;
+  verbosity_hint?: "tight" | "balanced" | "expansive" | string;
+}
+
 export interface NavigatorPersonaDefinition {
   name: string;
   gender: string;
@@ -1116,6 +1122,7 @@ export interface NavigatorPersonaDefinition {
   interests: string;
   dislikes: string;
   voice: string;
+  sampling_profile?: NavigatorPersonaSamplingProfile;
   briefing?: NavigatorPersonaTaskHints;
   item?: NavigatorPersonaTaskHints;
 }

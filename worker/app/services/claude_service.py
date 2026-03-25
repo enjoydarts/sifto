@@ -1026,6 +1026,8 @@ def generate_briefing_navigator(
         _feed_suggest_model_fallback,
         max_tokens=1800,
         api_key=api_key,
+        temperature=task["sampling_profile"]["temperature"],
+        top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
         out = parse_briefing_navigator_result("{}", task["candidates"])
@@ -1082,6 +1084,8 @@ def generate_item_navigator(
         _feed_suggest_model_fallback,
         max_tokens=2200,
         api_key=api_key,
+        temperature=task["sampling_profile"]["temperature"],
+        top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
         out = parse_item_navigator_result("{}", task["article"])
@@ -1194,6 +1198,8 @@ def generate_ask_navigator(
         _feed_suggest_model_fallback,
         max_tokens=2400,
         api_key=api_key,
+        temperature=task["sampling_profile"]["temperature"],
+        top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
         out = parse_ask_navigator_result("{}", task["input"])
@@ -1245,6 +1251,8 @@ def generate_source_navigator(
         _feed_suggest_model_fallback,
         max_tokens=2600,
         api_key=api_key,
+        temperature=task["sampling_profile"]["temperature"],
+        top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
         out = parse_source_navigator_result("{}", task["candidates"])

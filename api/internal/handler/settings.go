@@ -37,21 +37,28 @@ type navigatorPersonaTaskHints struct {
 	Style        string `json:"style,omitempty"`
 }
 
+type navigatorPersonaSamplingProfile struct {
+	TemperatureHint string `json:"temperature_hint,omitempty"`
+	TopPHint        string `json:"top_p_hint,omitempty"`
+	VerbosityHint   string `json:"verbosity_hint,omitempty"`
+}
+
 type navigatorPersonaDefinition struct {
-	Name        string                    `json:"name"`
-	Gender      string                    `json:"gender"`
-	AgeVibe     string                    `json:"age_vibe"`
-	FirstPerson string                    `json:"first_person"`
-	SpeechStyle string                    `json:"speech_style"`
-	Occupation  string                    `json:"occupation"`
-	Experience  string                    `json:"experience"`
-	Personality string                    `json:"personality"`
-	Values      string                    `json:"values"`
-	Interests   string                    `json:"interests"`
-	Dislikes    string                    `json:"dislikes"`
-	Voice       string                    `json:"voice"`
-	Briefing    navigatorPersonaTaskHints `json:"briefing"`
-	Item        navigatorPersonaTaskHints `json:"item"`
+	Name            string                          `json:"name"`
+	Gender          string                          `json:"gender"`
+	AgeVibe         string                          `json:"age_vibe"`
+	FirstPerson     string                          `json:"first_person"`
+	SpeechStyle     string                          `json:"speech_style"`
+	Occupation      string                          `json:"occupation"`
+	Experience      string                          `json:"experience"`
+	Personality     string                          `json:"personality"`
+	Values          string                          `json:"values"`
+	Interests       string                          `json:"interests"`
+	Dislikes        string                          `json:"dislikes"`
+	Voice           string                          `json:"voice"`
+	SamplingProfile navigatorPersonaSamplingProfile `json:"sampling_profile,omitempty"`
+	Briefing        navigatorPersonaTaskHints       `json:"briefing"`
+	Item            navigatorPersonaTaskHints       `json:"item"`
 }
 
 func NewSettingsHandler(repo *repository.UserSettingsRepo, audioBriefingRepo *repository.AudioBriefingRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {

@@ -202,16 +202,20 @@ def generate_content(
     system_instruction: str | None = None,
     context_cache_key: str | None = None,
     response_mime_type: str = "application/json",
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> tuple[str, dict]:
     if not api_key:
         raise RuntimeError("google api key is required")
     model_name = normalize_model_name(model)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
     generation_config: dict = {
-        "temperature": 0.2,
+        "temperature": temperature if temperature is not None else 0.2,
         "maxOutputTokens": max_output_tokens,
         "responseMimeType": response_mime_type,
     }
+    if top_p is not None:
+        generation_config["topP"] = top_p
     if response_schema:
         generation_config["responseSchema"] = normalize_response_schema(response_schema)
 

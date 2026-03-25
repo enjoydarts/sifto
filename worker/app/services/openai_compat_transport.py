@@ -99,6 +99,8 @@ def run_chat_json(
     response_schema: dict | None = None,
     schema_name: str = "response",
     include_temperature: bool = True,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> tuple[str, dict]:
     body: dict = {
         "model": normalize_model_name(model),
@@ -106,7 +108,9 @@ def run_chat_json(
         "max_tokens": max_output_tokens,
     }
     if include_temperature:
-        body["temperature"] = 0.2
+        body["temperature"] = temperature if temperature is not None else 0.2
+    if top_p is not None:
+        body["top_p"] = top_p
     if system_instruction:
         body["messages"].append({"role": "system", "content": system_instruction})
     body["messages"].append({"role": "user", "content": prompt})

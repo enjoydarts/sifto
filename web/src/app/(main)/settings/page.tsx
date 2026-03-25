@@ -1817,8 +1817,12 @@ export default function SettingsPage() {
     }
     setSavingAivisDictionary(true);
     try {
-      await api.setAivisUserDictionary(aivisUserDictionaryUUID);
-      await load();
+      const next = await api.setAivisUserDictionary(aivisUserDictionaryUUID);
+      setAivisUserDictionaryUUID(next.aivis_user_dictionary_uuid ?? "");
+      setSettings((prev) => prev ? {
+        ...prev,
+        aivis_user_dictionary_uuid: next.aivis_user_dictionary_uuid ?? null,
+      } : prev);
       showToast(t("settings.toast.aivisDictionarySaved"), "success");
     } catch (e) {
       showToast(String(e), "error");
@@ -1830,9 +1834,12 @@ export default function SettingsPage() {
   async function clearAivisUserDictionary() {
     setDeletingAivisDictionary(true);
     try {
-      await api.deleteAivisUserDictionary();
+      const next = await api.deleteAivisUserDictionary();
       setAivisUserDictionaryUUID("");
-      await load();
+      setSettings((prev) => prev ? {
+        ...prev,
+        aivis_user_dictionary_uuid: next.aivis_user_dictionary_uuid ?? null,
+      } : prev);
       showToast(t("settings.toast.aivisDictionaryDeleted"), "success");
     } catch (e) {
       showToast(String(e), "error");

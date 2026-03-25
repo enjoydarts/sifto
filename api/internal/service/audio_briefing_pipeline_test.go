@@ -218,4 +218,62 @@ func TestAudioBriefingBuildDraftFailsWhenVoiceIsNotConfigured(t *testing.T) {
 	}
 }
 
+func TestRecoverAudioBriefingStageErrorReturnsFailedJobWhenAlreadyFailed(t *testing.T) {
+	job := &model.AudioBriefingJob{ID: "job-1", Status: "failed"}
+
+	got, err := recoverAudioBriefingStageError(audioBriefingPipelineStageVoice, job, fmt.Errorf("boom"), func(errorCode, errorMessage string) (*model.AudioBriefingJob, error) {
+		t.Fatalf("fail callback should not be called")
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatalf("recoverAudioBriefingStageError(...) error = %v", err)
+	}
+	if got != job {
+		t.Fatalf("recoverAudioBriefingStageError(...) job = %#v, want original job", got)
+	}
+}
+
+func TestRecoverAudioBriefingStageErrorFailsActiveScriptingJob(t *testing.T) {
+	job := &model.AudioBriefingJob{ID: "job-1", Status: "scripting"}
+	var gotCode string
+	var gotMessage string
+
+	got, err := recoverAudioBriefingStageError(audioBriefingPipelineStageScript, job, fmt.Errorf("script boom"), func(errorCode, errorMessage string) (*model.AudioBriefingJob, error) {
+		gotCode = errorCode
+		gotMessage = errorMessage
+		return &model.AudioBriefingJob{ID: "job-1", Status: "failed"}, nil
+	})
+	if err != nil {
+		t.Fatalf("recoverAudioBriefingStageError(...) error = %v", err)
+	}
+	if got == nil || got.Status != "failed" {
+		t.Fatalf("recoverAudioBriefingStageError(...) job = %#v, want failed job", got)
+	}
+	if gotCode != "script_failed" {
+		t.Fatalf("errorCode = %q, want script_failed", gotCode)
+	}
+	if !strings.Contains(gotMessage, "script boom") {
+		t.Fatalf("errorMessage = %q, want script boom", gotMessage)
+	}
+}
+
+func TestRecoverAudioBriefingStageErrorFailsActiveVoicingJob(t *testing.T) {
+	job := &model.AudioBriefingJob{ID: "job-1", Status: "voicing"}
+	var gotCode string
+
+	got, err := recoverAudioBriefingStageError(audioBriefingPipelineStageVoice, job, fmt.Errorf("tts boom"), func(errorCode, errorMessage string) (*model.AudioBriefingJob, error) {
+		gotCode = errorCode
+		return &model.AudioBriefingJob{ID: "job-1", Status: "failed"}, nil
+	})
+	if err != nil {
+		t.Fatalf("recoverAudioBriefingStageError(...) error = %v", err)
+	}
+	if got == nil || got.Status != "failed" {
+		t.Fatalf("recoverAudioBriefingStageError(...) job = %#v, want failed job", got)
+	}
+	if gotCode != "tts_failed" {
+		t.Fatalf("errorCode = %q, want tts_failed", gotCode)
+	}
+}
+
 func stringPtr(v string) *string { return &v }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
@@ -91,13 +92,16 @@ func TestAudioBriefingDeleteServiceDeletesObjectsThenJob(t *testing.T) {
 func TestAudioBriefingDeleteServiceRejectsActiveJob(t *testing.T) {
 	repo := &stubAudioBriefingDeleteRepo{
 		job: &model.AudioBriefingJob{
-			ID:     "job-1",
-			UserID: "user-1",
-			Status: "concatenating",
+			ID:        "job-1",
+			UserID:    "user-1",
+			Status:    "concatenating",
+			UpdatedAt: time.Date(2026, 3, 25, 11, 50, 0, 0, time.UTC),
 		},
 	}
 	deleter := &stubAudioBriefingObjectDeleter{}
 	service := NewAudioBriefingDeleteService(repo, deleter)
+	service.now = func() time.Time { return time.Date(2026, 3, 25, 12, 0, 0, 0, time.UTC) }
+	service.staleAfter = 30 * time.Minute
 
 	err := service.Delete(context.Background(), "user-1", "job-1")
 	if !errors.Is(err, repository.ErrInvalidState) {
@@ -108,5 +112,42 @@ func TestAudioBriefingDeleteServiceRejectsActiveJob(t *testing.T) {
 	}
 	if repo.deleteCalls != 0 {
 		t.Fatalf("DeleteJob call count = %d, want 0", repo.deleteCalls)
+	}
+}
+
+func TestAudioBriefingDeleteServiceAllowsStaleActiveJob(t *testing.T) {
+	repo := &stubAudioBriefingDeleteRepo{
+		job: &model.AudioBriefingJob{
+			ID:        "job-1",
+			UserID:    "user-1",
+			Status:    "voicing",
+			UpdatedAt: time.Date(2026, 3, 25, 10, 0, 0, 0, time.UTC),
+		},
+	}
+	deleter := &stubAudioBriefingObjectDeleter{}
+	service := NewAudioBriefingDeleteService(repo, deleter)
+	service.now = func() time.Time { return time.Date(2026, 3, 25, 12, 0, 0, 0, time.UTC) }
+	service.staleAfter = 30 * time.Minute
+
+	if err := service.Delete(context.Background(), "user-1", "job-1"); err != nil {
+		t.Fatalf("Delete(...) error = %v", err)
+	}
+	if repo.deleteCalls != 1 {
+		t.Fatalf("DeleteJob call count = %d, want 1", repo.deleteCalls)
+	}
+}
+
+func TestAudioBriefingJobCanBeDeletedAt(t *testing.T) {
+	now := time.Date(2026, 3, 25, 12, 0, 0, 0, time.UTC)
+	staleAfter := 30 * time.Minute
+
+	if !audioBriefingJobCanBeDeletedAt(&model.AudioBriefingJob{Status: "failed", UpdatedAt: now}, now, staleAfter) {
+		t.Fatal("failed job should be deletable")
+	}
+	if !audioBriefingJobCanBeDeletedAt(&model.AudioBriefingJob{Status: "scripting", UpdatedAt: now.Add(-31 * time.Minute)}, now, staleAfter) {
+		t.Fatal("stale scripting job should be deletable")
+	}
+	if audioBriefingJobCanBeDeletedAt(&model.AudioBriefingJob{Status: "scripting", UpdatedAt: now.Add(-10 * time.Minute)}, now, staleAfter) {
+		t.Fatal("fresh scripting job should not be deletable")
 	}
 }

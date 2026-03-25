@@ -98,10 +98,7 @@ export default function AudioBriefingDetailPage() {
     if (!detail) return false;
     return ["scripted", "voiced", "failed"].includes(detail.job.status);
   }, [detail]);
-  const canDelete = useMemo(() => {
-    if (!detail) return false;
-    return ["scripted", "voiced", "published", "failed", "cancelled", "skipped", "needs_rerun"].includes(detail.job.status);
-  }, [detail]);
+  const canDelete = useMemo(() => !!detail?.delete_allowed, [detail]);
 
   async function handleResume() {
     if (!detail) return;

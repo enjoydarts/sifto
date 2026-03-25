@@ -1248,6 +1248,7 @@ export interface AudioBriefingDetailResponse {
   items: AudioBriefingJobItem[];
   chunks: AudioBriefingScriptChunk[];
   audio_url?: string | null;
+  delete_allowed?: boolean;
 }
 
 export interface ObsidianExportRunResult {

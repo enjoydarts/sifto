@@ -20,10 +20,18 @@ func NewAudioBriefingVoiceRunner(repo *repository.AudioBriefingRepo, userSetting
 	return &AudioBriefingVoiceRunner{repo: repo, userSettings: userSettings, cipher: cipher, worker: worker}
 }
 
-func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, jobID string) error {
+func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, jobID string) (err error) {
 	if r == nil || r.repo == nil || r.worker == nil {
 		return fmt.Errorf("audio briefing voice runner unavailable")
 	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("audio briefing voice stage panic: %v", recovered)
+		}
+		if err != nil {
+			_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+		}
+	}()
 
 	if _, err := r.repo.GetJobByID(ctx, userID, jobID); err != nil {
 		return err

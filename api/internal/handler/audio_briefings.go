@@ -248,10 +248,11 @@ func (h *AudioBriefingsHandler) loadDetail(ctx context.Context, userID, jobID st
 	}
 	audioURL := resolvePlayableAudioURL(ctx, h.worker, job.R2StorageBucket, job.R2AudioObjectKey)
 	return map[string]any{
-		"job":       job,
-		"items":     items,
-		"chunks":    chunks,
-		"audio_url": audioURL,
+		"job":            job,
+		"items":          items,
+		"chunks":         chunks,
+		"audio_url":      audioURL,
+		"delete_allowed": service.AudioBriefingDeleteAllowed(job),
 	}, nil
 }
 

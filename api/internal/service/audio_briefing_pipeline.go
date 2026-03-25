@@ -164,16 +164,20 @@ func (o *AudioBriefingOrchestrator) continuePipeline(ctx context.Context, userID
 
 	switch stage {
 	case audioBriefingPipelineStageScript:
-		if err := o.runScriptingStage(ctx, job); err != nil {
-			return o.loadJobAfterStageError(ctx, userID, jobID, err)
+		if err := o.runStageWithRecovery(ctx, userID, jobID, audioBriefingPipelineStageScript, func() error {
+			return o.runScriptingStage(ctx, job)
+		}); err != nil {
+			return o.loadJobAfterStageError(ctx, userID, jobID, audioBriefingPipelineStageScript, err)
 		}
 		return o.continuePipeline(ctx, userID, jobID)
 	case audioBriefingPipelineStageVoice:
 		if o.voiceRunner == nil {
 			return nil, fmt.Errorf("audio briefing voice runner unavailable")
 		}
-		if err := o.voiceRunner.Start(ctx, userID, jobID); err != nil {
-			return o.loadJobAfterStageError(ctx, userID, jobID, err)
+		if err := o.runStageWithRecovery(ctx, userID, jobID, audioBriefingPipelineStageVoice, func() error {
+			return o.voiceRunner.Start(ctx, userID, jobID)
+		}); err != nil {
+			return o.loadJobAfterStageError(ctx, userID, jobID, audioBriefingPipelineStageVoice, err)
 		}
 		return o.continuePipeline(ctx, userID, jobID)
 	case audioBriefingPipelineStageConcat:
@@ -181,7 +185,7 @@ func (o *AudioBriefingOrchestrator) continuePipeline(ctx context.Context, userID
 			return nil, fmt.Errorf("audio briefing concat starter unavailable")
 		}
 		if err := o.concatStarter.Start(ctx, userID, jobID); err != nil {
-			return o.loadJobAfterStageError(ctx, userID, jobID, err)
+			return o.loadJobAfterStageError(ctx, userID, jobID, audioBriefingPipelineStageConcat, err)
 		}
 		return o.repo.GetJobByID(ctx, userID, jobID)
 	default:
@@ -189,10 +193,30 @@ func (o *AudioBriefingOrchestrator) continuePipeline(ctx context.Context, userID
 	}
 }
 
-func (o *AudioBriefingOrchestrator) runScriptingStage(ctx context.Context, job *model.AudioBriefingJob) error {
+func (o *AudioBriefingOrchestrator) runStageWithRecovery(ctx context.Context, userID string, jobID string, stage audioBriefingPipelineStage, run func() error) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("audio briefing %s stage panic: %v", stage, recovered)
+		}
+	}()
+	if run == nil {
+		return nil
+	}
+	return run()
+}
+
+func (o *AudioBriefingOrchestrator) runScriptingStage(ctx context.Context, job *model.AudioBriefingJob) (err error) {
 	if job == nil {
 		return repository.ErrNotFound
 	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("audio briefing script stage panic: %v", recovered)
+		}
+		if err != nil {
+			_, _ = o.repo.FailScriptingJob(ctx, job.ID, "script_failed", err.Error())
+		}
+	}()
 	if _, err := o.repo.StartScriptingJob(ctx, job.ID); err != nil {
 		return err
 	}
@@ -238,14 +262,66 @@ func (o *AudioBriefingOrchestrator) runScriptingStage(ctx context.Context, job *
 	return err
 }
 
-func (o *AudioBriefingOrchestrator) loadJobAfterStageError(ctx context.Context, userID string, jobID string, stageErr error) (*model.AudioBriefingJob, error) {
+func (o *AudioBriefingOrchestrator) loadJobAfterStageError(ctx context.Context, userID string, jobID string, stage audioBriefingPipelineStage, stageErr error) (*model.AudioBriefingJob, error) {
 	job, err := o.repo.GetJobByID(ctx, userID, jobID)
 	if err == nil {
-		if strings.TrimSpace(job.Status) == "failed" {
-			return job, nil
+		nextJob, recoverErr := recoverAudioBriefingStageError(stage, job, stageErr, func(errorCode, errorMessage string) (*model.AudioBriefingJob, error) {
+			switch stage {
+			case audioBriefingPipelineStageScript:
+				return o.repo.FailScriptingJob(ctx, jobID, errorCode, errorMessage)
+			case audioBriefingPipelineStageVoice:
+				return o.repo.FailVoicingJob(ctx, jobID, errorCode, errorMessage)
+			default:
+				return job, nil
+			}
+		})
+		if recoverErr == nil && nextJob != nil {
+			return nextJob, nil
 		}
 	}
 	return nil, stageErr
+}
+
+func recoverAudioBriefingStageError(
+	stage audioBriefingPipelineStage,
+	job *model.AudioBriefingJob,
+	stageErr error,
+	fail func(errorCode, errorMessage string) (*model.AudioBriefingJob, error),
+) (*model.AudioBriefingJob, error) {
+	if job == nil {
+		return nil, stageErr
+	}
+	status := strings.TrimSpace(job.Status)
+	if status == "failed" {
+		return job, nil
+	}
+	errorCode, activeStatus := audioBriefingStageFailureFallback(stage)
+	if activeStatus == "" || status != activeStatus || fail == nil {
+		return nil, stageErr
+	}
+	errorMessage := ""
+	if stageErr != nil {
+		errorMessage = stageErr.Error()
+	}
+	failedJob, err := fail(errorCode, errorMessage)
+	if err != nil {
+		return nil, stageErr
+	}
+	if failedJob != nil && strings.TrimSpace(failedJob.Status) == "failed" {
+		return failedJob, nil
+	}
+	return nil, stageErr
+}
+
+func audioBriefingStageFailureFallback(stage audioBriefingPipelineStage) (errorCode string, activeStatus string) {
+	switch stage {
+	case audioBriefingPipelineStageScript:
+		return "script_failed", "scripting"
+	case audioBriefingPipelineStageVoice:
+		return "tts_failed", "voicing"
+	default:
+		return "", ""
+	}
 }
 
 func (o *AudioBriefingOrchestrator) buildDraft(

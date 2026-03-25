@@ -98,6 +98,8 @@ function ItemsPageContent() {
   const [retryingIds, setRetryingIds] = useState<Record<string, boolean>>({});
   const [readUpdatingIds, setReadUpdatingIds] = useState<Record<string, boolean>>({});
   const [bulkMarkingRead, setBulkMarkingRead] = useState(false);
+  const [bulkRetryingFromFacts, setBulkRetryingFromFacts] = useState(false);
+  const [selectedItemIDs, setSelectedItemIDs] = useState<string[]>([]);
   const [toolbarAction, setToolbarAction] = useState<"" | "triage_all" | "bulk_filtered" | "bulk_older">("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchDraft, setSearchDraft] = useState(searchQuery);
@@ -151,12 +153,21 @@ function ItemsPageContent() {
     },
   });
   const cachedItemsLength = listQuery.data?.items?.length ?? 0;
-  const items = listQuery.data?.items ?? [];
+  const items = useMemo(() => listQuery.data?.items ?? [], [listQuery.data?.items]);
   const itemsTotal = listQuery.data?.total ?? 0;
   const searchUnavailable = listQuery.data?.searchUnavailable ?? false;
   const loading = !listQuery.data && (listQuery.isLoading || listQuery.isFetching);
   const queryError = listQuery.error ? String(listQuery.error) : null;
   const visibleError = error ?? queryError;
+
+  useEffect(() => {
+    if (!pendingMode) {
+      setSelectedItemIDs([]);
+      return;
+    }
+    const visibleIDs = new Set(items.map((item) => item.id));
+    setSelectedItemIDs((prev) => prev.filter((itemID) => visibleIDs.has(itemID)));
+  }, [items, pendingMode]);
 
   useEffect(() => {
     if (!searchOpen) {
@@ -450,6 +461,56 @@ function ItemsPageContent() {
     [confirm, favoriteOnly, filter, laterMode, queryClient, readMode, showToast, sourceID, t, topic, unreadMode, unreadOnly]
   );
 
+  const selectedItemIDSet = useMemo(() => new Set(selectedItemIDs), [selectedItemIDs]);
+  const visibleSelectedCount = selectedItemIDs.length;
+
+  const toggleSelectedItem = useCallback((itemID: string) => {
+    setSelectedItemIDs((prev) => (prev.includes(itemID) ? prev.filter((id) => id !== itemID) : [...prev, itemID]));
+  }, []);
+
+  const selectAllVisibleItems = useCallback(() => {
+    setSelectedItemIDs(items.map((item) => item.id));
+  }, [items]);
+
+  const clearSelectedItems = useCallback(() => {
+    setSelectedItemIDs([]);
+  }, []);
+
+  const bulkRetryFromFacts = useCallback(async () => {
+    if (selectedItemIDs.length === 0) return;
+    const ok = await confirm({
+      title: t("items.bulkRetryFromFacts.title").replace("{{count}}", String(selectedItemIDs.length)),
+      message: t("items.bulkRetryFromFacts.message"),
+      confirmLabel: t("items.bulkRetryFromFacts.confirm"),
+      tone: "danger",
+    });
+    if (!ok) return;
+
+    setBulkRetryingFromFacts(true);
+    try {
+      const result = await api.retryItemsFromFactsBulk(selectedItemIDs);
+      if (result.skipped_count > 0) {
+        showToast(
+          t("items.bulkRetryFromFacts.toastQueuedAndSkipped")
+            .replace("{{queued}}", String(result.queued_count))
+            .replace("{{skipped}}", String(result.skipped_count)),
+          "info"
+        );
+      } else {
+        showToast(t("items.bulkRetryFromFacts.toastQueued").replace("{{count}}", String(result.queued_count)), "success");
+      }
+      setSelectedItemIDs([]);
+      await queryClient.invalidateQueries({ queryKey: ["items-feed"] });
+      await queryClient.invalidateQueries({ queryKey: ["focus-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["briefing-today"] });
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setBulkRetryingFromFacts(false);
+    }
+  }, [confirm, queryClient, selectedItemIDs, showToast, t]);
+
   const sortedItems = [...items].sort((a, b) => {
     if (sortMode === "personal_score") {
       const as = a.personal_score ?? a.summary_score ?? -1;
@@ -569,10 +630,13 @@ function ItemsPageContent() {
         featured={featured}
         rank={opts?.rank}
         locale={locale}
+        selectable={pendingMode}
+        selected={selectedItemIDSet.has(item.id)}
         readUpdating={!!readUpdatingIds[item.id]}
         retrying={!!retryingIds[item.id]}
         onOpen={openInlineReader}
         onOpenDetail={openDetail}
+        onToggleSelected={() => toggleSelectedItem(item.id)}
         onToggleRead={() => void toggleRead(item)}
         onRetry={() => void retryItem(item.id)}
         onPrefetch={() => prefetchItemDetail(item.id)}
@@ -580,7 +644,7 @@ function ItemsPageContent() {
         t={t}
       />
     );
-  }, [detailHref, locale, prefetchItemDetail, readUpdatingIds, rememberScroll, retryItem, retryingIds, router, saveReadQueue, sortedItems, t, toggleRead]);
+  }, [detailHref, locale, pendingMode, prefetchItemDetail, readUpdatingIds, rememberScroll, retryItem, retryingIds, router, saveReadQueue, selectedItemIDSet, sortedItems, t, toggleRead, toggleSelectedItem]);
 
   const railFilterTags = [
     topic ? (
@@ -771,39 +835,73 @@ function ItemsPageContent() {
                 />
               )}
               actions={
-                <div
-                  aria-hidden={pendingMode || readMode}
-                  className={`hidden w-full flex-wrap items-center justify-end gap-2 xl:flex xl:w-auto xl:flex-nowrap ${
-                    pendingMode || readMode ? "pointer-events-none invisible" : ""
-                  }`}
-                >
-                    <select
-                      value={toolbarAction}
-                      onChange={(e) => setToolbarAction(e.target.value as typeof toolbarAction)}
-                      className="min-h-10 min-w-0 flex-1 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3.5 py-2 text-sm text-[var(--color-editorial-ink-soft)] focus-ring xl:w-[188px] xl:flex-none"
-                      aria-label={t("items.toolbar.actions")}
-                    >
-                      <option value="">{t("items.actions.placeholder")}</option>
-                      <option value="bulk_filtered">{t("items.bulkRead.filtered")}</option>
-                      <option value="bulk_older">{t("items.bulkRead.olderThan7d")}</option>
-                    </select>
+                pendingMode ? (
+                  <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto xl:flex-nowrap">
                     <button
                       type="button"
-                      disabled={!toolbarAction || bulkMarkingRead}
+                      onClick={selectAllVisibleItems}
+                      disabled={items.length === 0}
+                      className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3.5 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {t("items.bulkRetryFromFacts.selectAll")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearSelectedItems}
+                      disabled={visibleSelectedCount === 0}
+                      className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3.5 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {t("items.bulkRetryFromFacts.clearSelection")}
+                    </button>
+                    <div className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3.5 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)]">
+                      {t("items.bulkRetryFromFacts.selectedCount").replace("{{count}}", String(visibleSelectedCount))}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={visibleSelectedCount === 0 || bulkRetryingFromFacts}
                       onClick={() => {
-                        if (toolbarAction === "bulk_filtered") {
-                          void bulkMarkRead("filtered");
-                          return;
-                        }
-                        if (toolbarAction === "bulk_older") {
-                          void bulkMarkRead("older_than_7d");
-                        }
+                        void bulkRetryFromFacts();
                       }}
                       className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {bulkMarkingRead ? t("common.saving") : t("items.actions.run")}
+                      {bulkRetryingFromFacts ? t("common.saving") : t("items.bulkRetryFromFacts.run")}
                     </button>
                   </div>
+                ) : (
+                  <div
+                    aria-hidden={readMode}
+                    className={`hidden w-full flex-wrap items-center justify-end gap-2 xl:flex xl:w-auto xl:flex-nowrap ${
+                      readMode ? "pointer-events-none invisible" : ""
+                    }`}
+                  >
+                      <select
+                        value={toolbarAction}
+                        onChange={(e) => setToolbarAction(e.target.value as typeof toolbarAction)}
+                        className="min-h-10 min-w-0 flex-1 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3.5 py-2 text-sm text-[var(--color-editorial-ink-soft)] focus-ring xl:w-[188px] xl:flex-none"
+                        aria-label={t("items.toolbar.actions")}
+                      >
+                        <option value="">{t("items.actions.placeholder")}</option>
+                        <option value="bulk_filtered">{t("items.bulkRead.filtered")}</option>
+                        <option value="bulk_older">{t("items.bulkRead.olderThan7d")}</option>
+                      </select>
+                      <button
+                        type="button"
+                        disabled={!toolbarAction || bulkMarkingRead}
+                        onClick={() => {
+                          if (toolbarAction === "bulk_filtered") {
+                            void bulkMarkRead("filtered");
+                            return;
+                          }
+                          if (toolbarAction === "bulk_older") {
+                            void bulkMarkRead("older_than_7d");
+                          }
+                        }}
+                        className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {bulkMarkingRead ? t("common.saving") : t("items.actions.run")}
+                      </button>
+                    </div>
+                )
               }
             >
               {showFilterBadges ? <div className="flex flex-wrap items-center gap-2">{railFilterTags}</div> : null}

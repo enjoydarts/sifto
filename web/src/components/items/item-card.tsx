@@ -43,10 +43,13 @@ export function ItemCard({
   featured = false,
   rank,
   locale,
+  selectable = false,
+  selected = false,
   readUpdating,
   retrying,
   onOpen,
   onOpenDetail,
+  onToggleSelected,
   onToggleRead,
   onRetry,
   onPrefetch,
@@ -57,10 +60,13 @@ export function ItemCard({
   featured?: boolean;
   rank?: number;
   locale: "ja" | "en";
+  selectable?: boolean;
+  selected?: boolean;
   readUpdating: boolean;
   retrying: boolean;
   onOpen: () => void;
   onOpenDetail: () => void;
+  onToggleSelected?: () => void;
   onToggleRead: () => void;
   onRetry: () => void;
   onPrefetch: () => void;
@@ -127,6 +133,21 @@ export function ItemCard({
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex flex-wrap items-center gap-1.5">
+              {selectable && (
+                <label
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-soft)]"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={() => onToggleSelected?.()}
+                    aria-label={selected ? t("items.bulkRetryFromFacts.unselect") : t("items.bulkRetryFromFacts.select")}
+                    className="size-3.5 rounded border-[var(--color-editorial-line-strong)] text-[var(--color-editorial-accent)] focus:ring-[var(--color-editorial-accent-line)]"
+                  />
+                  <span>{selected ? t("items.bulkRetryFromFacts.selectedShort") : t("items.bulkRetryFromFacts.selectShort")}</span>
+                </label>
+              )}
               {featured && rank != null && rank > 0 && (
                 <span className="inline-flex items-center rounded-full bg-[var(--color-editorial-ink)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-panel-strong)]">
                   Pick #{rank}

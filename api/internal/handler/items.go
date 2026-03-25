@@ -46,6 +46,74 @@ const triageAllCacheTTL = 90 * time.Second
 const relatedItemsCacheTTL = 5 * time.Minute
 const itemDetailCacheTTL = 5 * time.Minute
 
+type retryFromFactsBulkRequest struct {
+	ItemIDs []string `json:"item_ids"`
+}
+
+type retryFromFactsBulkCandidate struct {
+	ID       string
+	SourceID string
+	URL      string
+}
+
+type retryFromFactsBulkResult struct {
+	Status        string   `json:"status"`
+	ItemIDs       []string `json:"item_ids"`
+	QueuedCount   int      `json:"queued_count"`
+	SkippedCount  int      `json:"skipped_count"`
+	queuedItemIDs []string
+}
+
+func normalizeBulkItemIDs(itemIDs []string) []string {
+	if len(itemIDs) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(itemIDs))
+	out := make([]string, 0, len(itemIDs))
+	for _, itemID := range itemIDs {
+		itemID = strings.TrimSpace(itemID)
+		if itemID == "" {
+			continue
+		}
+		if _, ok := seen[itemID]; ok {
+			continue
+		}
+		seen[itemID] = struct{}{}
+		out = append(out, itemID)
+	}
+	return out
+}
+
+func runRetryFromFactsBulk(
+	ctx context.Context,
+	itemIDs []string,
+	reset func(context.Context, string) (retryFromFactsBulkCandidate, error),
+	enqueue func(context.Context, retryFromFactsBulkCandidate) error,
+) retryFromFactsBulkResult {
+	result := retryFromFactsBulkResult{
+		Status:  "queued",
+		ItemIDs: append([]string(nil), itemIDs...),
+	}
+	for _, itemID := range itemIDs {
+		item, err := reset(ctx, itemID)
+		if err != nil {
+			if !errors.Is(err, repository.ErrConflict) && !errors.Is(err, repository.ErrNotFound) {
+				log.Printf("retry-from-facts bulk reset failed item_id=%s err=%v", itemID, err)
+			}
+			result.SkippedCount++
+			continue
+		}
+		if err := enqueue(ctx, item); err != nil {
+			log.Printf("retry-from-facts bulk enqueue failed item_id=%s err=%v", item.ID, err)
+			result.SkippedCount++
+			continue
+		}
+		result.QueuedCount++
+		result.queuedItemIDs = append(result.queuedItemIDs, item.ID)
+	}
+	return result
+}
+
 func buildTriageQueueEntries(resp *model.ReadingPlanResponse) []model.TriageQueueEntry {
 	if resp == nil {
 		return nil
@@ -1934,6 +2002,57 @@ func (h *ItemHandler) RetryFromFacts(w http.ResponseWriter, r *http.Request) {
 		"status":  "queued",
 		"item_id": item.ID,
 	})
+}
+
+func (h *ItemHandler) RetryFromFactsBulk(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body retryFromFactsBulkRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	itemIDs := normalizeBulkItemIDs(body.ItemIDs)
+	if len(itemIDs) == 0 {
+		http.Error(w, "item_ids is required", http.StatusBadRequest)
+		return
+	}
+	if h.publisher == nil {
+		http.Error(w, "event publisher unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	result := runRetryFromFactsBulk(
+		r.Context(),
+		itemIDs,
+		func(ctx context.Context, itemID string) (retryFromFactsBulkCandidate, error) {
+			item, err := h.repo.ResetForFactsRetry(ctx, itemID, userID)
+			if err != nil {
+				return retryFromFactsBulkCandidate{}, err
+			}
+			return retryFromFactsBulkCandidate{
+				ID:       item.ID,
+				SourceID: item.SourceID,
+				URL:      item.URL,
+			}, nil
+		},
+		func(ctx context.Context, item retryFromFactsBulkCandidate) error {
+			return h.publisher.SendItemCreatedWithReasonE(ctx, item.ID, item.SourceID, item.URL, nil, "retry_from_facts")
+		},
+	)
+
+	if result.QueuedCount > 0 {
+		if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+			log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+		}
+		for _, itemID := range result.queuedItemIDs {
+			if err := h.bumpItemDetailVersion(r.Context(), itemID); err != nil {
+				log.Printf("item-detail version bump failed item_id=%s err=%v", itemID, err)
+			}
+		}
+	}
+	h.invalidateUserCaches(r.Context(), userID)
+	w.WriteHeader(http.StatusAccepted)
+	writeJSON(w, result)
 }
 
 func (h *ItemHandler) RetryFailed(w http.ResponseWriter, r *http.Request) {

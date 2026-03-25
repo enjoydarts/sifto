@@ -838,6 +838,13 @@ export interface BulkRetryFailedResult {
   failed_count: number;
 }
 
+export interface BulkRetryFromFactsResult {
+  status: "queued";
+  item_ids: string[];
+  queued_count: number;
+  skipped_count: number;
+}
+
 export interface Digest {
   id: string;
   user_id: string;
@@ -1864,6 +1871,11 @@ export const api = {
     apiFetch<ItemRetryResult>(`/items/${id}/retry`, { method: "POST" }),
   retryItemFromFacts: (id: string) =>
     apiFetch<ItemRetryResult>(`/items/${id}/retry-from-facts`, { method: "POST" }),
+  retryItemsFromFactsBulk: (itemIds: string[]) =>
+    apiFetch<BulkRetryFromFactsResult>("/items/retry-from-facts-bulk", {
+      method: "POST",
+      body: JSON.stringify({ item_ids: itemIds }),
+    }),
   retryFailedItems: (params?: { source_id?: string }) => {
     const q = new URLSearchParams();
     if (params?.source_id) q.set("source_id", params.source_id);

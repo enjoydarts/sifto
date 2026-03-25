@@ -54,6 +54,7 @@ type WorkerClient struct {
 	http                 *http.Client
 	composeDigestTimeout time.Duration
 	askTimeout           time.Duration
+	audioBriefingTimeout time.Duration
 	internalSecret       string
 }
 
@@ -72,6 +73,7 @@ func NewWorkerClient() *WorkerClient {
 	}
 	composeTimeout := workerComposeDigestTimeout()
 	askTimeout := workerAskTimeout()
+	audioBriefingTimeout := workerAudioBriefingTimeout()
 	httpTimeout := 60 * time.Second
 	// Keep client timeout longer than compose timeout; otherwise http.Client.Timeout
 	// can fire before context.WithTimeout in compose calls.
@@ -81,11 +83,15 @@ func NewWorkerClient() *WorkerClient {
 	if askTimeout > 0 && askTimeout+15*time.Second > httpTimeout {
 		httpTimeout = askTimeout + 15*time.Second
 	}
+	if audioBriefingTimeout > 0 && audioBriefingTimeout+15*time.Second > httpTimeout {
+		httpTimeout = audioBriefingTimeout + 15*time.Second
+	}
 	return &WorkerClient{
 		baseURL:              url,
 		http:                 &http.Client{Timeout: httpTimeout},
 		composeDigestTimeout: composeTimeout,
 		askTimeout:           askTimeout,
+		audioBriefingTimeout: audioBriefingTimeout,
 		internalSecret:       strings.TrimSpace(os.Getenv("INTERNAL_WORKER_SECRET")),
 	}
 }
@@ -106,6 +112,15 @@ func workerAskTimeout() time.Duration {
 		}
 	}
 	return 120 * time.Second
+}
+
+func workerAudioBriefingTimeout() time.Duration {
+	if v := strings.TrimSpace(os.Getenv("PYTHON_WORKER_AUDIO_BRIEFING_TIMEOUT_SEC")); v != "" {
+		if sec, err := strconv.Atoi(v); err == nil && sec > 0 {
+			return time.Duration(sec) * time.Second
+		}
+	}
+	return 420 * time.Second
 }
 
 type ExtractBodyResponse struct {
@@ -861,6 +876,11 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 	outputObjectKey string,
 	aivisAPIKey *string,
 ) (*AudioBriefingSynthesizeUploadResponse, error) {
+	if _, ok := ctx.Deadline(); !ok && w.audioBriefingTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.audioBriefingTimeout)
+		defer cancel()
+	}
 	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload", map[string]any{
 		"provider":                   provider,
 		"voice_model":                voiceModel,

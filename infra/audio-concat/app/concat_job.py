@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import shlex
 import shutil
@@ -9,6 +10,8 @@ from pathlib import Path
 
 from app.callback_client import post_callback
 from app.r2_client import R2Client
+
+logger = logging.getLogger(__name__)
 
 
 def run_from_env() -> int:
@@ -49,7 +52,7 @@ def run_job(
             concat_audio(segment_files, output_path)
             duration_sec = probe_duration_seconds(output_path)
             r2.upload_file(output_path, output_object_key)
-        post_callback(
+        callback_error = try_post_callback(
             callback_url,
             callback_token,
             {
@@ -60,9 +63,22 @@ def run_job(
                 "audio_duration_sec": duration_sec,
             },
         )
-        return 0
+        if callback_error is None:
+            return 0
+        try_post_callback(
+            callback_url,
+            callback_token,
+            {
+                "request_id": request_id,
+                "provider_job_id": provider_job_id,
+                "status": "failed",
+                "error_code": "concat_callback_failed",
+                "error_message": str(callback_error),
+            },
+        )
+        return 1
     except Exception as exc:
-        post_callback(
+        try_post_callback(
             callback_url,
             callback_token,
             {
@@ -74,6 +90,15 @@ def run_job(
             },
         )
         return 1
+
+
+def try_post_callback(callback_url: str, callback_token: str, payload: dict) -> Exception | None:
+    try:
+        post_callback(callback_url, callback_token, payload)
+        return None
+    except Exception as exc:
+        logger.exception("audio concat callback failed", extra={"callback_url": callback_url, "status": payload.get("status")})
+        return exc
 
 
 def required_env(name: str) -> str:

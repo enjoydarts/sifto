@@ -198,4 +198,24 @@ func TestAudioBriefingGenerateArticleSegmentsBatchTracksRecoveredFailures(t *tes
 	}
 }
 
+func TestAudioBriefingBuildDraftFailsWhenVoiceIsNotConfigured(t *testing.T) {
+	orchestrator := &AudioBriefingOrchestrator{}
+
+	_, err := orchestrator.buildDraft(
+		t.Context(),
+		"user-1",
+		time.Date(2026, 3, 25, 6, 0, 0, 0, timeutil.JST),
+		"editor",
+		[]model.AudioBriefingJobItem{{ItemID: "item-1"}},
+		nil,
+		20,
+	)
+	if err == nil {
+		t.Fatal("expected missing voice configuration error")
+	}
+	if !strings.Contains(err.Error(), "voice is not configured") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func stringPtr(v string) *string { return &v }

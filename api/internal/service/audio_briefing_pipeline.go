@@ -216,6 +216,11 @@ func (o *AudioBriefingOrchestrator) runScriptingStage(ctx context.Context, job *
 		_, _ = o.repo.FailScriptingJob(ctx, job.ID, "script_voice_failed", err.Error())
 		return err
 	}
+	if voice == nil {
+		err := fmt.Errorf("audio briefing voice is not configured")
+		_, _ = o.repo.FailScriptingJob(ctx, job.ID, "script_voice_missing", err.Error())
+		return err
+	}
 	draft, err := o.buildDraft(ctx, job.UserID, job.SlotStartedAtJST, job.Persona, items, voice, settings.TargetDurationMinutes)
 	if err != nil {
 		_, _ = o.repo.FailScriptingJob(ctx, job.ID, "script_failed", err.Error())
@@ -253,6 +258,9 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 	targetDurationMinutes int,
 ) (AudioBriefingDraft, error) {
 	targetChars := AudioBriefingTargetChars(targetDurationMinutes)
+	if voice == nil {
+		return AudioBriefingDraft{}, fmt.Errorf("audio briefing voice is not configured")
+	}
 	if len(items) == 0 {
 		return BuildAudioBriefingDraft(slotStartedAt, persona, items, voice, targetChars), nil
 	}

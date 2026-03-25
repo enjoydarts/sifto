@@ -195,6 +195,15 @@ function joinClassNames(...parts: Array<string | false | null | undefined>) {
 }
 
 type NavigatorPersonaKey = "editor" | "hype" | "analyst" | "concierge" | "snark" | "native";
+type AudioBriefingNumericInputField =
+  | "speech_rate"
+  | "tempo_dynamics"
+  | "emotional_intensity"
+  | "line_break_silence_seconds"
+  | "aivis_volume"
+  | "pitch"
+  | "volume_gain";
+type AudioBriefingVoiceInputDrafts = Record<string, Record<AudioBriefingNumericInputField, string>>;
 const EMPTY_NAVIGATOR_PERSONA: NavigatorPersonaDefinition = {
   name: "",
   gender: "",
@@ -223,6 +232,32 @@ function buildDefaultAudioBriefingVoices(personaKeys: NavigatorPersonaKey[]): Au
     pitch: 0,
     volume_gain: 0,
   }));
+}
+
+function formatAudioBriefingDecimalInput(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  return value.toFixed(4).replace(/\.?0+$/, "");
+}
+
+function buildAudioBriefingVoiceInputDrafts(voices: AudioBriefingPersonaVoice[]): AudioBriefingVoiceInputDrafts {
+  return Object.fromEntries(
+    voices.map((voice) => [
+      voice.persona,
+      {
+        speech_rate: formatAudioBriefingDecimalInput(voice.speech_rate),
+        tempo_dynamics: formatAudioBriefingDecimalInput(voice.tempo_dynamics),
+        emotional_intensity: formatAudioBriefingDecimalInput(voice.emotional_intensity),
+        line_break_silence_seconds: formatAudioBriefingDecimalInput(voice.line_break_silence_seconds),
+        aivis_volume: formatAudioBriefingDecimalInput(voice.volume_gain + 1),
+        pitch: formatAudioBriefingDecimalInput(voice.pitch),
+        volume_gain: formatAudioBriefingDecimalInput(voice.volume_gain),
+      },
+    ])
+  );
+}
+
+function isCompleteDecimalInput(raw: string): boolean {
+  return /^-?(?:\d+\.?\d*|\.\d+)$/.test(raw);
 }
 
 function resolveAivisVoiceSelection(models: AivisModelSnapshot[], voice: AudioBriefingPersonaVoice) {
@@ -373,6 +408,9 @@ export default function SettingsPage() {
   const [audioBriefingTargetDurationMinutes, setAudioBriefingTargetDurationMinutes] = useState("20");
   const [audioBriefingDefaultPersona, setAudioBriefingDefaultPersona] = useState("editor");
   const [audioBriefingVoices, setAudioBriefingVoices] = useState<AudioBriefingPersonaVoice[]>(buildDefaultAudioBriefingVoices(["editor", "hype", "analyst", "concierge", "snark", "native"]));
+  const [audioBriefingVoiceInputDrafts, setAudioBriefingVoiceInputDrafts] = useState<AudioBriefingVoiceInputDrafts>(() =>
+    buildAudioBriefingVoiceInputDrafts(buildDefaultAudioBriefingVoices(["editor", "hype", "analyst", "concierge", "snark", "native"]))
+  );
   const [aivisModelsData, setAivisModelsData] = useState<AivisModelsResponse | null>(null);
   const [aivisModelsLoading, setAivisModelsLoading] = useState(false);
   const [aivisModelsSyncing, setAivisModelsSyncing] = useState(false);
@@ -432,7 +470,9 @@ export default function SettingsPage() {
       setAudioBriefingDefaultPersona(audioBriefing?.default_persona ?? "editor");
       const defaults = buildDefaultAudioBriefingVoices(["editor", "hype", "analyst", "concierge", "snark", "native"]);
       const byPersona = new Map((voices ?? []).map((voice) => [voice.persona, voice]));
-      setAudioBriefingVoices(defaults.map((voice) => byPersona.get(voice.persona) ?? voice));
+      const nextVoices = defaults.map((voice) => byPersona.get(voice.persona) ?? voice);
+      setAudioBriefingVoices(nextVoices);
+      setAudioBriefingVoiceInputDrafts(buildAudioBriefingVoiceInputDrafts(nextVoices));
     },
     []
   );
@@ -1773,7 +1813,52 @@ export default function SettingsPage() {
   }
 
   function updateAudioBriefingVoice(persona: string, patch: Partial<AudioBriefingPersonaVoice>) {
-    setAudioBriefingVoices((prev) => prev.map((voice) => (voice.persona === persona ? { ...voice, ...patch } : voice)));
+    setAudioBriefingVoices((prev) =>
+      prev.map((voice) => {
+        if (voice.persona !== persona) return voice;
+        const nextVoice = { ...voice, ...patch };
+        if ("tts_provider" in patch) {
+          setAudioBriefingVoiceInputDrafts((drafts) => ({
+            ...drafts,
+            [persona]: buildAudioBriefingVoiceInputDrafts([nextVoice])[persona],
+          }));
+        }
+        return nextVoice;
+      })
+    );
+  }
+
+  function updateAudioBriefingVoiceNumberInput(
+    persona: string,
+    field: AudioBriefingNumericInputField,
+    raw: string,
+    applyParsedValue: (value: number) => Partial<AudioBriefingPersonaVoice>
+  ) {
+    setAudioBriefingVoiceInputDrafts((prev) => ({
+      ...prev,
+      [persona]: {
+        ...prev[persona],
+        [field]: raw,
+      },
+    }));
+    if (!raw || !isCompleteDecimalInput(raw)) return;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
+    updateAudioBriefingVoice(persona, applyParsedValue(parsed));
+  }
+
+  function resetAudioBriefingVoiceNumberInput(persona: string, field: AudioBriefingNumericInputField) {
+    setAudioBriefingVoiceInputDrafts((prev) => {
+      const voice = audioBriefingVoices.find((item) => item.persona === persona);
+      if (!voice) return prev;
+      return {
+        ...prev,
+        [persona]: {
+          ...prev[persona],
+          [field]: buildAudioBriefingVoiceInputDrafts([voice])[persona][field],
+        },
+      };
+    });
   }
 
   function toggleAudioBriefingPersona(persona: string) {
@@ -1824,13 +1909,6 @@ export default function SettingsPage() {
       summary: `${configuredProviderCount}/${accessCards.length} ${t("settings.access.configuredProviders")}`,
     },
     {
-      id: "audio-briefing",
-      title: t("settings.section.audioBriefing"),
-      summary: audioBriefingEnabled
-        ? `${audioBriefingIntervalHours}${t("settings.audioBriefing.hoursSuffix")} / ${audioBriefingArticlesPerEpisode}${t("settings.audioBriefing.articlesSuffix")}`
-        : t("settings.off"),
-    },
-    {
       id: "reading-plan",
       title: t("settings.recommendedTitle"),
       summary: `${t(`settings.window.${readingPlanWindow}`)} / ${readingPlanSize} / ${readingPlanDiversifyTopics ? t("settings.on") : t("settings.off")}`,
@@ -1840,6 +1918,13 @@ export default function SettingsPage() {
       title: t("settings.group.navigator"),
       summary: navigatorEnabled
         ? `${t(`settings.navigator.persona.${navigatorPersona}`, navigatorPersona)} / ${navigatorModel || t("settings.default")}`
+        : t("settings.off"),
+    },
+    {
+      id: "audio-briefing",
+      title: t("settings.section.audioBriefing"),
+      summary: audioBriefingEnabled
+        ? `${audioBriefingIntervalHours}${t("settings.audioBriefing.hoursSuffix")} / ${audioBriefingArticlesPerEpisode}${t("settings.audioBriefing.articlesSuffix")}`
         : t("settings.off"),
     },
     {
@@ -2421,8 +2506,9 @@ export default function SettingsPage() {
                                     {t("settings.audioBriefing.speechRate")}
                                   </div>
                                   <input
-                                    value={String(voice.speech_rate)}
-                                    onChange={(e) => updateAudioBriefingVoice(voice.persona, { speech_rate: Number(e.target.value || 1) })}
+                                    value={audioBriefingVoiceInputDrafts[voice.persona]?.speech_rate ?? formatAudioBriefingDecimalInput(voice.speech_rate)}
+                                    onChange={(e) => updateAudioBriefingVoiceNumberInput(voice.persona, "speech_rate", e.target.value, (value) => ({ speech_rate: value }))}
+                                    onBlur={() => resetAudioBriefingVoiceNumberInput(voice.persona, "speech_rate")}
                                     inputMode="decimal"
                                     className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                                   />
@@ -2435,8 +2521,9 @@ export default function SettingsPage() {
                                         {t("settings.audioBriefing.tempoDynamics")}
                                       </div>
                                       <input
-                                        value={String(voice.tempo_dynamics)}
-                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { tempo_dynamics: Number(e.target.value || 1) })}
+                                        value={audioBriefingVoiceInputDrafts[voice.persona]?.tempo_dynamics ?? formatAudioBriefingDecimalInput(voice.tempo_dynamics)}
+                                        onChange={(e) => updateAudioBriefingVoiceNumberInput(voice.persona, "tempo_dynamics", e.target.value, (value) => ({ tempo_dynamics: value }))}
+                                        onBlur={() => resetAudioBriefingVoiceNumberInput(voice.persona, "tempo_dynamics")}
                                         inputMode="decimal"
                                         className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                                       />
@@ -2447,8 +2534,9 @@ export default function SettingsPage() {
                                         {t("settings.audioBriefing.emotionalIntensity")}
                                       </div>
                                       <input
-                                        value={String(voice.emotional_intensity)}
-                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { emotional_intensity: Number(e.target.value || 1) })}
+                                        value={audioBriefingVoiceInputDrafts[voice.persona]?.emotional_intensity ?? formatAudioBriefingDecimalInput(voice.emotional_intensity)}
+                                        onChange={(e) => updateAudioBriefingVoiceNumberInput(voice.persona, "emotional_intensity", e.target.value, (value) => ({ emotional_intensity: value }))}
+                                        onBlur={() => resetAudioBriefingVoiceNumberInput(voice.persona, "emotional_intensity")}
                                         inputMode="decimal"
                                         className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                                       />
@@ -2459,8 +2547,9 @@ export default function SettingsPage() {
                                         {t("settings.audioBriefing.lineBreakSilenceSeconds")}
                                       </div>
                                       <input
-                                        value={String(voice.line_break_silence_seconds)}
-                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { line_break_silence_seconds: Number(e.target.value || 0) })}
+                                        value={audioBriefingVoiceInputDrafts[voice.persona]?.line_break_silence_seconds ?? formatAudioBriefingDecimalInput(voice.line_break_silence_seconds)}
+                                        onChange={(e) => updateAudioBriefingVoiceNumberInput(voice.persona, "line_break_silence_seconds", e.target.value, (value) => ({ line_break_silence_seconds: value }))}
+                                        onBlur={() => resetAudioBriefingVoiceNumberInput(voice.persona, "line_break_silence_seconds")}
                                         inputMode="decimal"
                                         className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                                       />
@@ -2471,8 +2560,9 @@ export default function SettingsPage() {
                                         {t("settings.audioBriefing.aivisVolume")}
                                       </div>
                                       <input
-                                        value={String(voice.volume_gain + 1)}
-                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { volume_gain: Number(e.target.value || 1) - 1 })}
+                                        value={audioBriefingVoiceInputDrafts[voice.persona]?.aivis_volume ?? formatAudioBriefingDecimalInput(voice.volume_gain + 1)}
+                                        onChange={(e) => updateAudioBriefingVoiceNumberInput(voice.persona, "aivis_volume", e.target.value, (value) => ({ volume_gain: value - 1 }))}
+                                        onBlur={() => resetAudioBriefingVoiceNumberInput(voice.persona, "aivis_volume")}
                                         inputMode="decimal"
                                         className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                                       />
@@ -2485,8 +2575,9 @@ export default function SettingsPage() {
                                         {t("settings.audioBriefing.pitchAdjustment")}
                                       </div>
                                       <input
-                                        value={String(voice.pitch)}
-                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { pitch: Number(e.target.value || 0) })}
+                                        value={audioBriefingVoiceInputDrafts[voice.persona]?.pitch ?? formatAudioBriefingDecimalInput(voice.pitch)}
+                                        onChange={(e) => updateAudioBriefingVoiceNumberInput(voice.persona, "pitch", e.target.value, (value) => ({ pitch: value }))}
+                                        onBlur={() => resetAudioBriefingVoiceNumberInput(voice.persona, "pitch")}
                                         inputMode="decimal"
                                         className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                                       />
@@ -2497,8 +2588,9 @@ export default function SettingsPage() {
                                         {t("settings.audioBriefing.volumeAdjustment")}
                                       </div>
                                       <input
-                                        value={String(voice.volume_gain)}
-                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { volume_gain: Number(e.target.value || 0) })}
+                                        value={audioBriefingVoiceInputDrafts[voice.persona]?.volume_gain ?? formatAudioBriefingDecimalInput(voice.volume_gain)}
+                                        onChange={(e) => updateAudioBriefingVoiceNumberInput(voice.persona, "volume_gain", e.target.value, (value) => ({ volume_gain: value }))}
+                                        onBlur={() => resetAudioBriefingVoiceNumberInput(voice.persona, "volume_gain")}
                                         inputMode="decimal"
                                         className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                                       />

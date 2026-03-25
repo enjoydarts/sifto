@@ -199,6 +199,44 @@ func TestAudioBriefingGenerateArticleSegmentsBatchTracksRecoveredFailures(t *tes
 	}
 }
 
+func TestResolveAudioBriefingScriptModelsPrefersPrimaryThenFallback(t *testing.T) {
+	settings := &model.UserSettings{
+		AudioBriefingScriptModel:         stringPtr("openrouter::openai/gpt-oss-120b"),
+		AudioBriefingScriptFallbackModel: stringPtr("gemini-2.5-flash"),
+		HasOpenRouterAPIKey:              true,
+		HasGoogleAPIKey:                  true,
+	}
+
+	got := resolveAudioBriefingScriptModels(settings)
+
+	if len(got) != 2 {
+		t.Fatalf("len(models) = %d, want 2 (%v)", len(got), got)
+	}
+	if got[0] != "openrouter::openai/gpt-oss-120b" {
+		t.Fatalf("models[0] = %q, want primary", got[0])
+	}
+	if got[1] != "gemini-2.5-flash" {
+		t.Fatalf("models[1] = %q, want fallback", got[1])
+	}
+}
+
+func TestIsRetryableAudioBriefingScriptWorkerError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "worker 502", err: fmt.Errorf("worker /audio-briefing-script: status 502"), want: true},
+		{name: "worker 422", err: fmt.Errorf("worker /audio-briefing-script: status 422"), want: false},
+		{name: "timeout", err: fmt.Errorf("Post \"x\": net/http: request canceled (Client.Timeout exceeded while awaiting headers)"), want: true},
+	}
+	for _, tt := range tests {
+		if got := isRetryableAudioBriefingScriptWorkerError(tt.err); got != tt.want {
+			t.Fatalf("%s: got %t want %t", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestAppendAudioBriefingScriptModelPrefersResolvedAndDedupes(t *testing.T) {
 	var got []string
 

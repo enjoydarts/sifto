@@ -378,8 +378,8 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 	if err != nil {
 		return AudioBriefingDraft{}, err
 	}
-	modelName := resolveAudioBriefingScriptModel(settings)
-	if modelName == nil {
+	modelNames := resolveAudioBriefingScriptModels(settings)
+	if len(modelNames) == 0 {
 		return AudioBriefingDraft{}, fmt.Errorf("audio briefing script model is not configured")
 	}
 
@@ -395,12 +395,6 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenRouterAPIKeyEncrypted, o.cipher, userID, "")
 	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetPoeAPIKeyEncrypted, o.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenAIAPIKeyEncrypted, o.cipher, userID, "")
-	switch LLMProviderForModel(modelName) {
-	case "openrouter":
-		openAIKey = openRouterKey
-	case "poe":
-		openAIKey = poeKey
-	}
 
 	normalizedPersona := normalizeAudioBriefingPersona(persona)
 	introContext := buildAudioBriefingIntroContext(slotStartedAt)
@@ -428,35 +422,55 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 	if len(workerArticles) > 0 {
 		workerCtx := WithWorkerTraceMetadata(ctx, "audio_briefing_script", &userID, nil, nil, nil)
 		callScriptWorker := func(batch []AudioBriefingScriptArticle, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error) {
-			resp, err := o.worker.GenerateAudioBriefingScriptWithModel(
-				workerCtx,
-				normalizedPersona,
-				batch,
-				introContext,
-				anthropicKey,
-				googleKey,
-				groqKey,
-				deepseekKey,
-				alibabaKey,
-				mistralKey,
-				xaiKey,
-				zaiKey,
-				fireworksKey,
-				openAIKey,
-				modelName,
-				targetDurationMinutes,
-				batchTargetChars,
-				audioBriefingCharsPerMinute,
-				includeOpening,
-				includeOverallSummary,
-				includeArticleSegments,
-				includeEnding,
-			)
-			if err != nil {
-				return nil, err
+			var errs []string
+			for idx, modelName := range modelNames {
+				modelValue := modelName
+				effectiveOpenAIKey := openAIKey
+				switch LLMProviderForModel(&modelValue) {
+				case "openrouter":
+					effectiveOpenAIKey = openRouterKey
+				case "poe":
+					effectiveOpenAIKey = poeKey
+				}
+				resp, err := generateAudioBriefingScriptWithRetry(workerCtx, func(callCtx context.Context) (*AudioBriefingScriptResponse, error) {
+					return o.worker.GenerateAudioBriefingScriptWithModel(
+						callCtx,
+						normalizedPersona,
+						batch,
+						introContext,
+						anthropicKey,
+						googleKey,
+						groqKey,
+						deepseekKey,
+						alibabaKey,
+						mistralKey,
+						xaiKey,
+						zaiKey,
+						fireworksKey,
+						effectiveOpenAIKey,
+						&modelValue,
+						targetDurationMinutes,
+						batchTargetChars,
+						audioBriefingCharsPerMinute,
+						includeOpening,
+						includeOverallSummary,
+						includeArticleSegments,
+						includeEnding,
+					)
+				})
+				if err == nil {
+					if idx > 0 {
+						log.Printf("audio briefing script fallback succeeded user=%s persona=%s model=%s batch_size=%d", userID, normalizedPersona, modelValue, len(batch))
+					}
+					recordAudioBriefingLLMUsage(ctx, o.llmUsageRepo, o.cache, "audio_briefing_script", resp.LLM, &userID)
+					return resp, nil
+				}
+				errs = append(errs, fmt.Sprintf("%s: %v", modelValue, err))
+				if idx < len(modelNames)-1 {
+					log.Printf("audio briefing script fallback retrying user=%s persona=%s model=%s batch_size=%d err=%v", userID, normalizedPersona, modelValue, len(batch), err)
+				}
 			}
-			recordAudioBriefingLLMUsage(ctx, o.llmUsageRepo, o.cache, "audio_briefing_script", resp.LLM, &userID)
-			return resp, nil
+			return nil, fmt.Errorf("audio briefing script failed across models: %s", strings.Join(errs, " | "))
 		}
 
 		frameResp, err := callScriptWorker(
@@ -493,7 +507,7 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 			}
 			scriptLLMModels = appendAudioBriefingScriptModels(scriptLLMModels, result.ScriptLLMModels)
 			for _, recovered := range result.RecoveredFailures {
-				log.Printf("audio briefing script recovered user=%s persona=%s model=%s batch_size=%d err=%v", userID, normalizedPersona, strings.TrimSpace(*modelName), recovered.BatchSize, recovered.Err)
+				log.Printf("audio briefing script recovered user=%s persona=%s models=%s batch_size=%d err=%v", userID, normalizedPersona, strings.Join(modelNames, ","), recovered.BatchSize, recovered.Err)
 			}
 			for _, segment := range result.Segments {
 				narration.Articles[segment.ItemID] = AudioBriefingNarrationArticle{
@@ -687,15 +701,27 @@ func normalizeAudioBriefingPersona(v string) string {
 	}
 }
 
-func resolveAudioBriefingScriptModel(settings *model.UserSettings) *string {
+func resolveAudioBriefingScriptModels(settings *model.UserSettings) []string {
+	out := make([]string, 0, 2)
+	appendIfValid := func(modelName *string) {
+		v := strings.TrimSpace(derefString(modelName))
+		if v == "" {
+			return
+		}
+		for _, existing := range out {
+			if existing == v {
+				return
+			}
+		}
+		out = append(out, v)
+	}
 	if settings == nil {
-		return nil
+		return out
 	}
-	if modelName := chooseAudioBriefingModelOverride(settings.AudioBriefingScriptModel, settings); modelName != nil {
-		return modelName
-	}
-	if modelName := chooseAudioBriefingModelOverride(settings.AudioBriefingScriptFallbackModel, settings); modelName != nil {
-		return modelName
+	appendIfValid(chooseAudioBriefingModelOverride(settings.AudioBriefingScriptModel, settings))
+	appendIfValid(chooseAudioBriefingModelOverride(settings.AudioBriefingScriptFallbackModel, settings))
+	if len(out) > 0 {
+		return out
 	}
 	for _, provider := range CostEfficientLLMProviders("") {
 		if !hasAudioBriefingProviderKey(settings, provider) {
@@ -705,9 +731,57 @@ func resolveAudioBriefingScriptModel(settings *model.UserSettings) *string {
 		if v == "" {
 			continue
 		}
-		return &v
+		out = append(out, v)
+		break
 	}
-	return nil
+	return out
+}
+
+func generateAudioBriefingScriptWithRetry(
+	ctx context.Context,
+	call func(callCtx context.Context) (*AudioBriefingScriptResponse, error),
+) (*AudioBriefingScriptResponse, error) {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		resp, err := call(ctx)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if !isRetryableAudioBriefingScriptWorkerError(err) || attempt >= 2 {
+			break
+		}
+		delay := time.Duration(attempt+1) * time.Second
+		log.Printf("audio briefing script retrying attempt=%d delay=%s err=%v", attempt+2, delay, err)
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-time.After(delay):
+		}
+	}
+	return nil, lastErr
+}
+
+func isRetryableAudioBriefingScriptWorkerError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "worker /audio-briefing-script: status 429") ||
+		strings.Contains(message, "worker /audio-briefing-script: status 500") ||
+		strings.Contains(message, "worker /audio-briefing-script: status 502") ||
+		strings.Contains(message, "worker /audio-briefing-script: status 503") ||
+		strings.Contains(message, "worker /audio-briefing-script: status 504") {
+		return true
+	}
+	if strings.Contains(message, "client.timeout exceeded") ||
+		strings.Contains(message, "context deadline exceeded") ||
+		strings.Contains(message, "request canceled") ||
+		strings.Contains(message, "connection reset by peer") ||
+		strings.Contains(message, "server disconnected without sending a response") {
+		return true
+	}
+	return false
 }
 
 func chooseAudioBriefingModelOverride(modelName *string, settings *model.UserSettings) *string {

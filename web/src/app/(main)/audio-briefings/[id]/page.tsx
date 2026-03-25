@@ -40,6 +40,7 @@ function formatSlotLabel(slotKey: string, slotStartedAt: string, locale: string,
 }
 
 export default function AudioBriefingDetailPage() {
+  const RESUME_POLL_WINDOW_MS = 60_000;
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
@@ -50,6 +51,7 @@ export default function AudioBriefingDetailPage() {
   const [resuming, setResuming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resumePending, setResumePending] = useState<{ startedAt: number; previousUpdatedAt: string | null } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -76,19 +78,30 @@ export default function AudioBriefingDetailPage() {
 
   useEffect(() => {
     const status = detail?.job.status;
-    if (!status || ["published", "failed", "cancelled"].includes(status)) {
+    const shouldPollAfterResume = resumePending != null && Date.now() - resumePending.startedAt < RESUME_POLL_WINDOW_MS;
+    if ((!status || ["published", "failed", "cancelled"].includes(status)) && !shouldPollAfterResume) {
       return;
     }
     const timer = window.setInterval(() => {
+      if (resumePending && Date.now() - resumePending.startedAt >= RESUME_POLL_WINDOW_MS) {
+        setResumePending(null);
+        return;
+      }
       api
         .getAudioBriefing(id)
         .then((next) => {
           setDetail(next);
+          if (
+            resumePending &&
+            (next.job.status !== "failed" || (next.job.updated_at ?? null) !== resumePending.previousUpdatedAt)
+          ) {
+            setResumePending(null);
+          }
         })
         .catch(() => {});
     }, 8000);
     return () => window.clearInterval(timer);
-  }, [detail?.job.status, id]);
+  }, [detail?.job.status, id, resumePending]);
 
   const totalChars = useMemo(
     () => (detail?.chunks ?? []).reduce((sum, chunk) => sum + (chunk.char_count ?? 0), 0),
@@ -106,11 +119,11 @@ export default function AudioBriefingDetailPage() {
     try {
       const next = await api.resumeAudioBriefing(detail.job.id);
       setDetail(next);
-      if (next.job.status === "failed") {
-        showToast(next.job.error_message || t("audioBriefing.toast.pipelineFailed", "生成に失敗しました"), "error");
-      } else {
-        showToast(t("audioBriefing.toast.resumed", "処理を再開しました"), "success");
-      }
+      setResumePending({
+        startedAt: Date.now(),
+        previousUpdatedAt: next.job.updated_at ?? null,
+      });
+      showToast(t("audioBriefing.toast.resumed", "処理を再開しました"), "success");
     } catch (e) {
       showToast(String(e), "error");
     } finally {

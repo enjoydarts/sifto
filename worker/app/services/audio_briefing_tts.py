@@ -160,6 +160,7 @@ class AudioBriefingTTSService:
         self.aivis_api_key = os.getenv("AIVIS_API_KEY", "").strip()
         self.aivis_retry_attempts = max(_env_int("AIVIS_TTS_RETRY_ATTEMPTS", 2), 1)
         self.aivis_retry_fallback_sec = max(_env_float("AIVIS_TTS_RETRY_FALLBACK_SEC", 9.0), 0.0)
+        self.aivis_timeout_sec = max(_env_float("AIVIS_TTS_TIMEOUT_SEC", 300.0), 1.0)
 
     def synthesize_and_upload(
         self,
@@ -328,7 +329,7 @@ class AudioBriefingTTSService:
             )
         }
         rate_limit_key = api_key or "__default__"
-        with httpx.Client(timeout=120) as client:
+        with httpx.Client(timeout=self.aivis_timeout_sec) as client:
             last_exc: Exception | None = None
             audio_bytes = b""
             for attempt in range(self.aivis_retry_attempts):

@@ -76,6 +76,12 @@ class AivisRateLimiterTests(unittest.TestCase):
 
 
 class AudioBriefingTTSServiceTests(unittest.TestCase):
+    def test_init_reads_aivis_timeout_from_env(self):
+        with patch.dict("os.environ", {"AIVIS_TTS_TIMEOUT_SEC": "420"}, clear=False):
+            service = AudioBriefingTTSService()
+
+        self.assertEqual(service.aivis_timeout_sec, 420.0)
+
     def test_resolve_bucket_prefers_explicit_bucket_override(self):
         service = AudioBriefingTTSService()
         service.r2_bucket = "briefings-standard"

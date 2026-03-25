@@ -2,13 +2,16 @@ import unittest
 from unittest.mock import patch
 
 from app.services.feed_task_common import (
+    AUDIO_BRIEFING_SCRIPT_SCHEMA,
     ASK_NAVIGATOR_SCHEMA,
     BRIEFING_NAVIGATOR_SCHEMA,
     SOURCE_NAVIGATOR_SCHEMA,
     _resolve_persona_file,
+    build_audio_briefing_script_task,
     build_ask_navigator_task,
     build_briefing_navigator_task,
     build_source_navigator_task,
+    parse_audio_briefing_script_result,
 )
 
 
@@ -137,6 +140,207 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("picks は空配列 [] を返す", prompt)
         self.assertIn("記事推薦は捏造しない", prompt)
         self.assertIn("candidates が空のときは", prompt)
+
+    def test_audio_briefing_script_schema_requires_all_fields(self):
+        self.assertEqual(
+            AUDIO_BRIEFING_SCRIPT_SCHEMA["required"],
+            ["opening", "overall_summary", "article_segments", "ending"],
+        )
+
+    def test_build_audio_briefing_script_task_uses_full_persona_and_fixed_article_order(self):
+        task = build_audio_briefing_script_task(
+            persona="analyst",
+            articles=[
+                {
+                    "item_id": "item-1",
+                    "title": "Example title",
+                    "translated_title": "翻訳タイトル",
+                    "source_title": "Example Source",
+                    "summary": "Summary text",
+                    "published_at": "2026-03-23T19:30:00+09:00",
+                }
+            ],
+            intro_context={
+                "now_jst": "2026-03-23T19:30:00+09:00",
+                "date_jst": "2026-03-23",
+                "weekday_jst": "Monday",
+                "time_of_day": "evening",
+                "season_hint": "early_spring",
+            },
+            target_duration_minutes=20,
+            target_chars=14000,
+            chars_per_minute=700,
+        )
+
+        prompt = task["prompt"]
+        self.assertIn("単独話者のAIナビゲーター", prompt)
+        self.assertIn("音声ブリーフィング台本", prompt)
+        self.assertIn("article_segments は入力 articles と同じ順番・同じ件数", prompt)
+        self.assertIn("職業", prompt)
+        self.assertIn("経験", prompt)
+        self.assertIn("性別", prompt)
+        self.assertIn("年代感", prompt)
+        self.assertIn("一人称", prompt)
+        self.assertIn("話し方", prompt)
+        self.assertIn("価値観", prompt)
+        self.assertIn("嫌いなもの", prompt)
+        self.assertIn("intro_style", prompt)
+        self.assertIn("item_style_hint", prompt)
+        self.assertIn("客観的な無味乾燥レビューではなく", prompt)
+        self.assertIn("別ペルソナの名前・肩書き・口調", prompt)
+        self.assertIn("目標尺: 約 20 分", prompt)
+        self.assertIn("今回返すセクションの目標文字数: 約 14000 文字", prompt)
+        self.assertIn("1分あたり 700 文字", prompt)
+        self.assertIn("opening は 4〜7文", prompt)
+        self.assertIn("overall_summary は総括であり、10文以上", prompt)
+        self.assertIn("ending は番組を終わらせる締めの言葉として 4〜6文", prompt)
+        self.assertIn("overall_summary は総括", prompt)
+        self.assertIn("記事の順番紹介", prompt)
+        self.assertIn("見出しの焼き直し", prompt)
+        self.assertIn("ending は番組を終わらせる締めの言葉", prompt)
+        self.assertIn("ending で総括や振り返りをしない", prompt)
+
+    def test_build_audio_briefing_script_task_omits_unrequested_sections(self):
+        task = build_audio_briefing_script_task(
+            persona="editor",
+            articles=[
+                {
+                    "item_id": "item-1",
+                    "title": "Example title",
+                    "translated_title": "翻訳タイトル",
+                    "source_title": "Example Source",
+                    "summary": "Summary text",
+                }
+            ],
+            intro_context={},
+            include_opening=False,
+            include_overall_summary=False,
+            include_article_segments=True,
+            include_ending=False,
+        )
+
+        prompt = task["prompt"]
+        self.assertIn("article_segments は入力 articles と同じ順番・同じ件数", prompt)
+        self.assertNotIn('"opening": "導入"', prompt)
+        self.assertNotIn('"overall_summary": "全体サマリー"', prompt)
+        self.assertNotIn('"ending": "締め"', prompt)
+
+    def test_parse_audio_briefing_script_result_rejects_empty_payload(self):
+        with self.assertRaises(ValueError):
+            parse_audio_briefing_script_result(
+                "{}",
+                [
+                    {
+                        "item_id": "item-1",
+                        "title": "Example title",
+                        "translated_title": "翻訳タイトル",
+                        "summary": "Summary text",
+                    }
+                ],
+                "editor",
+            )
+
+    def test_parse_audio_briefing_script_result_rejects_missing_commentary(self):
+        with self.assertRaises(ValueError):
+            parse_audio_briefing_script_result(
+                """
+                {
+                  "opening": "導入です。",
+                  "overall_summary": "全体まとめです。",
+                  "article_segments": [
+                    {
+                      "item_id": "item-1",
+                      "headline": "見出し"
+                    }
+                  ],
+                  "ending": "締めです。"
+                }
+                """,
+                [
+                    {
+                        "item_id": "item-1",
+                        "title": "Example title",
+                        "translated_title": "翻訳タイトル",
+                        "summary": "Summary text",
+                    }
+                ],
+                "editor",
+            )
+
+    def test_parse_audio_briefing_script_result_allows_article_only_sections(self):
+        result = parse_audio_briefing_script_result(
+            """
+            {
+              "article_segments": [
+                {
+                  "item_id": "item-1",
+                  "headline": "見出し",
+                  "commentary": "コメントです。"
+                }
+              ]
+            }
+            """,
+            [
+                {
+                    "item_id": "item-1",
+                    "title": "Example title",
+                    "translated_title": "翻訳タイトル",
+                    "summary": "Summary text",
+                }
+            ],
+            "editor",
+            include_opening=False,
+            include_overall_summary=False,
+            include_article_segments=True,
+            include_ending=False,
+        )
+        self.assertEqual(result["opening"], "")
+        self.assertEqual(result["overall_summary"], "")
+        self.assertEqual(result["ending"], "")
+        self.assertEqual(len(result["article_segments"]), 1)
+
+    def test_parse_audio_briefing_script_result_uses_article_order_when_item_ids_mismatch(self):
+        result = parse_audio_briefing_script_result(
+            """
+            {
+              "article_segments": [
+                {
+                  "item_id": "wrong-item-id",
+                  "headline": "見出しA",
+                  "commentary": "コメントAです。"
+                },
+                {
+                  "item_id": "another-wrong-id",
+                  "headline": "見出しB",
+                  "commentary": "コメントBです。"
+                }
+              ]
+            }
+            """,
+            [
+                {
+                    "item_id": "item-1",
+                    "title": "Example title 1",
+                    "translated_title": "翻訳タイトル1",
+                    "summary": "Summary text 1",
+                },
+                {
+                    "item_id": "item-2",
+                    "title": "Example title 2",
+                    "translated_title": "翻訳タイトル2",
+                    "summary": "Summary text 2",
+                },
+            ],
+            "editor",
+            include_opening=False,
+            include_overall_summary=False,
+            include_article_segments=True,
+            include_ending=False,
+        )
+        self.assertEqual(result["article_segments"][0]["item_id"], "item-1")
+        self.assertEqual(result["article_segments"][0]["headline"], "見出しA")
+        self.assertEqual(result["article_segments"][1]["item_id"], "item-2")
+        self.assertEqual(result["article_segments"][1]["headline"], "見出しB")
 
     def test_ask_navigator_schema_requires_all_fields(self):
         self.assertEqual(

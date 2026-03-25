@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Bell, BookOpen, Flame, Sparkles, X } from "lucide-react";
 import { api, BriefingCluster, Item, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
@@ -229,11 +229,7 @@ export default function BriefingPage() {
     setDismissedModelUpdatesAt(latest);
   };
 
-  useEffect(() => {
-    if (navigatorPreview) {
-      setNavigatorDismissed(false);
-    }
-  }, [navigatorPreview, navigator?.generated_at]);
+  const navigatorClosed = navigatorPreview ? false : navigatorDismissed;
 
   const refreshBriefingData = async () => {
     const next = await api.getBriefingToday({ size: 18, cache_bust: true });
@@ -641,7 +637,7 @@ export default function BriefingPage() {
           />
         )}
 
-        {navigatorLoading && !navigatorDismissed && !navigatorPreview ? (
+        {navigatorLoading && !navigatorClosed && !navigatorPreview ? (
           <aside className="fixed right-4 z-40 bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-4">
             <div className="flex items-end gap-3">
               <div className="flex size-14 shrink-0 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] shadow-[0_16px_36px_rgba(15,23,42,0.2)]">
@@ -658,7 +654,7 @@ export default function BriefingPage() {
             </div>
           </aside>
         ) : null}
-        {navigator && (!navigatorDismissed || navigatorPreview) ? (
+        {navigator && !navigatorClosed ? (
           <aside className="fixed right-4 z-40 w-[min(420px,calc(100vw-1.5rem))] bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-4">
             <div className={`flex max-h-[min(80vh,720px)] flex-col overflow-hidden rounded-[24px] border shadow-[0_24px_60px_rgba(15,23,42,0.22)] ${navigatorTheme?.shell ?? "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]"}`}>
               <div className={`flex items-start gap-3 px-4 py-4 ${navigatorTheme?.header ?? ""}`}>
@@ -744,7 +740,7 @@ export default function BriefingPage() {
             </div>
           </aside>
         ) : null}
-        {navigator && navigatorDismissed && !navigatorPreview ? (
+        {navigator && navigatorClosed && !navigatorPreview ? (
           <button
             type="button"
             onClick={() => setNavigatorDismissed(false)}

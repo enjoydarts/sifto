@@ -115,6 +115,99 @@ export interface PoeSyncStatusResponse {
   run: PoeSyncRun | null;
 }
 
+export interface AivisSyncRun {
+  id: string;
+  started_at: string;
+  finished_at?: string | null;
+  last_progress_at?: string | null;
+  status: string;
+  trigger_type: string;
+  fetched_count: number;
+  accepted_count: number;
+  error_message?: string | null;
+}
+
+export interface AivisSyncStatusResponse {
+  run: AivisSyncRun | null;
+}
+
+export interface AivisModelVoiceSample {
+  audio_url: string;
+  transcript: string;
+}
+
+export interface AivisModelSpeakerStyle {
+  name: string;
+  icon_url?: string | null;
+  local_id: number;
+  voice_samples: AivisModelVoiceSample[];
+}
+
+export interface AivisModelSpeaker {
+  aivm_speaker_uuid: string;
+  name: string;
+  icon_url: string;
+  supported_languages: string[];
+  local_id: number;
+  styles: AivisModelSpeakerStyle[];
+}
+
+export interface AivisModelTag {
+  name: string;
+}
+
+export interface AivisModelFile {
+  aivm_model_uuid: string;
+  manifest_version: string;
+  name: string;
+  description: string;
+  creators: string[];
+  license_type: string;
+  license_text?: string | null;
+  model_type: string;
+  model_architecture: string;
+  model_format: string;
+  training_epochs?: number | null;
+  training_steps?: number | null;
+  version: string;
+  file_size: number;
+  checksum: string;
+  download_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AivisModelSnapshot {
+  aivm_model_uuid: string;
+  name: string;
+  description: string;
+  detailed_description: string;
+  category: string;
+  voice_timbre: string;
+  visibility: string;
+  is_tag_locked: boolean;
+  total_download_count: number;
+  like_count: number;
+  is_liked: boolean;
+  user_json: Record<string, unknown>;
+  model_files_json: AivisModelFile[];
+  tags_json: AivisModelTag[];
+  speakers_json: AivisModelSpeaker[];
+  model_file_count: number;
+  speaker_count: number;
+  style_count: number;
+  created_at: string;
+  updated_at: string;
+  fetched_at: string;
+}
+
+export interface AivisModelsResponse {
+  latest_run: AivisSyncRun | null;
+  latest_change_summary?: ProviderModelChangeSummary | null;
+  models: AivisModelSnapshot[];
+  removed_models?: AivisModelSnapshot[];
+}
+
 export interface PoeModelSnapshot {
   model_id: string;
   canonical_slug?: string | null;
@@ -1033,6 +1126,8 @@ export interface UserSettings {
   poe_api_key_last4: string | null;
   has_openrouter_api_key: boolean;
   openrouter_api_key_last4: string | null;
+  has_aivis_api_key: boolean;
+  aivis_api_key_last4: string | null;
   has_inoreader_oauth?: boolean;
   inoreader_token_expires_at?: string | null;
   monthly_budget_usd: number | null;
@@ -1056,7 +1151,11 @@ export interface UserSettings {
     navigator_persona?: string | null;
     navigator?: string | null;
     navigator_fallback?: string | null;
+    audio_briefing_script?: string | null;
+    audio_briefing_script_fallback?: string | null;
   };
+  audio_briefing?: AudioBriefingSettings;
+  audio_briefing_persona_voices?: AudioBriefingPersonaVoice[];
   obsidian_export?: {
     enabled: boolean;
     github_app_enabled?: boolean;
@@ -1072,6 +1171,83 @@ export interface UserSettings {
   };
   notification_priority?: NotificationPriorityRule;
   current_month: UserSettingsCurrentMonth;
+}
+
+export interface AudioBriefingSettings {
+  enabled: boolean;
+  interval_hours: number;
+  articles_per_episode: number;
+  target_duration_minutes: number;
+  default_persona: string;
+}
+
+export interface AudioBriefingPersonaVoice {
+  persona: string;
+  tts_provider: string;
+  voice_model: string;
+  voice_style: string;
+  speech_rate: number;
+  emotional_intensity: number;
+  tempo_dynamics: number;
+  line_break_silence_seconds: number;
+  pitch: number;
+  volume_gain: number;
+}
+
+export interface AudioBriefingJob {
+  id: string;
+  user_id: string;
+  slot_started_at_jst: string;
+  slot_key: string;
+  persona: string;
+  status: string;
+  source_item_count: number;
+  reused_item_count: number;
+  script_char_count: number;
+  audio_duration_sec?: number | null;
+  title?: string | null;
+  r2_audio_object_key?: string | null;
+  r2_manifest_object_key?: string | null;
+  provider_job_id?: string | null;
+  idempotency_key?: string | null;
+  error_code?: string | null;
+  error_message?: string | null;
+  published_at?: string | null;
+  failed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AudioBriefingJobItem {
+  item_id: string;
+  rank: number;
+  segment_title?: string | null;
+  summary_snapshot?: string | null;
+  title?: string | null;
+  translated_title?: string | null;
+  source_title?: string | null;
+  published_at?: string | null;
+}
+
+export interface AudioBriefingScriptChunk {
+  seq: number;
+  part_type: string;
+  text: string;
+  char_count: number;
+  tts_status: string;
+  tts_provider?: string | null;
+  voice_model?: string | null;
+  voice_style?: string | null;
+  r2_audio_object_key?: string | null;
+  duration_sec?: number | null;
+  error_message?: string | null;
+}
+
+export interface AudioBriefingDetailResponse {
+  job: AudioBriefingJob;
+  items: AudioBriefingJobItem[];
+  chunks: AudioBriefingScriptChunk[];
+  audio_url?: string | null;
 }
 
 export interface ObsidianExportRunResult {
@@ -1729,10 +1905,43 @@ export const api = {
     const qs = q.toString();
     return apiFetch<ProviderModelChangeEvent[]>(`/provider-model-updates${qs ? `?${qs}` : ""}`);
   },
+  getAudioBriefings: (params?: { limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiFetch<{ items: AudioBriefingJob[] }>(`/audio-briefings${qs ? `?${qs}` : ""}`);
+  },
+  getAudioBriefing: (id: string) => apiFetch<AudioBriefingDetailResponse>(`/audio-briefings/${id}`),
+  generateAudioBriefing: () =>
+    apiFetch<AudioBriefingDetailResponse>("/audio-briefings/generate", {
+      method: "POST",
+    }),
+  resumeAudioBriefing: (id: string) =>
+    apiFetch<AudioBriefingDetailResponse>(`/audio-briefings/${id}/resume`, {
+      method: "POST",
+    }),
+  startAudioBriefingConcat: (id: string) =>
+    apiFetch<AudioBriefingDetailResponse>(`/audio-briefings/${id}/start-concat`, {
+      method: "POST",
+    }),
+  startAudioBriefingVoicing: (id: string) =>
+    apiFetch<AudioBriefingDetailResponse>(`/audio-briefings/${id}/start-voicing`, {
+      method: "POST",
+    }),
 
   // Settings
   getSettings: () => apiFetch<UserSettings>("/settings"),
   getNavigatorPersonas: () => apiFetch<Record<string, NavigatorPersonaDefinition>>("/settings/navigator-personas"),
+  updateAudioBriefingSettings: (body: AudioBriefingSettings) =>
+    apiFetch<{ user_id: string; audio_briefing: AudioBriefingSettings }>("/settings/audio-briefing", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  updateAudioBriefingPersonaVoices: (voices: AudioBriefingPersonaVoice[]) =>
+    apiFetch<{ user_id: string; audio_briefing_persona_voices: AudioBriefingPersonaVoice[] }>("/settings/audio-briefing/persona-voices", {
+      method: "PATCH",
+      body: JSON.stringify({ voices }),
+    }),
   updateNotificationPriority: (body: NotificationPriorityRule) =>
     apiFetch<{ user_id: string; notification_priority: NotificationPriorityRule }>("/settings/notification-priority", {
       method: "PATCH",
@@ -1823,6 +2032,8 @@ export const api = {
     navigator_persona?: string | null;
     navigator?: string | null;
     navigator_fallback?: string | null;
+    audio_briefing_script?: string | null;
+    audio_briefing_script_fallback?: string | null;
   }) =>
     apiFetch<{ user_id: string; llm_models: UserSettings["llm_models"] }>("/settings/llm-models", {
       method: "PATCH",
@@ -1948,6 +2159,16 @@ export const api = {
       "/settings/openrouter-key",
       { method: "DELETE" }
     ),
+  setAivisApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_aivis_api_key: boolean; aivis_api_key_last4: string | null }>(
+      "/settings/aivis-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteAivisApiKey: () =>
+    apiFetch<{ user_id: string; has_aivis_api_key: boolean; aivis_api_key_last4: string | null }>(
+      "/settings/aivis-key",
+      { method: "DELETE" }
+    ),
   getOpenRouterModels: () =>
     apiFetch<OpenRouterModelsResponse>("/openrouter-models"),
   getOpenRouterSyncStatus: () =>
@@ -1969,6 +2190,12 @@ export const api = {
     apiFetch<PoeSyncStatusResponse>("/poe-models/status"),
   syncPoeModels: () =>
     apiFetch<PoeModelsResponse>("/poe-models/sync", { method: "POST" }),
+  getAivisModels: () =>
+    apiFetch<AivisModelsResponse>("/aivis-models"),
+  getAivisSyncStatus: () =>
+    apiFetch<AivisSyncStatusResponse>("/aivis-models/status"),
+  syncAivisModels: () =>
+    apiFetch<AivisModelsResponse>("/aivis-models/sync", { method: "POST" }),
   deleteInoreaderOAuth: () =>
     apiFetch<{ user_id: string; has_inoreader_oauth: boolean; inoreader_token_expires: string | null }>(
       "/settings/inoreader-oauth",

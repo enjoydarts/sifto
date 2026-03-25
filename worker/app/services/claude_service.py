@@ -47,6 +47,7 @@ from app.services.digest_task_common import (
     parse_digest_result,
 )
 from app.services.feed_task_common import (
+    build_audio_briefing_script_task,
     build_ask_task,
     build_ask_navigator_task,
     build_briefing_navigator_task,
@@ -54,6 +55,7 @@ from app.services.feed_task_common import (
     build_source_navigator_task,
     build_rank_feed_task,
     build_seed_sites_task,
+    parse_audio_briefing_script_result,
     parse_ask_result,
     parse_ask_navigator_result,
     parse_briefing_navigator_result,
@@ -1104,6 +1106,64 @@ def generate_item_navigator(
         "commentary": out["commentary"],
         "stance_tags": out["stance_tags"],
         "llm": _llm_meta(message, "item_navigator", used_model or _feed_suggest_model),
+    }
+
+
+def generate_audio_briefing_script(
+    persona: str,
+    articles: list[dict],
+    intro_context: dict,
+    target_duration_minutes: int,
+    target_chars: int,
+    chars_per_minute: int,
+    include_opening: bool,
+    include_overall_summary: bool,
+    include_article_segments: bool,
+    include_ending: bool,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
+    task = build_audio_briefing_script_task(
+        persona,
+        articles,
+        intro_context,
+        target_duration_minutes=target_duration_minutes,
+        target_chars=target_chars,
+        chars_per_minute=chars_per_minute,
+        include_opening=include_opening,
+        include_overall_summary=include_overall_summary,
+        include_article_segments=include_article_segments,
+        include_ending=include_ending,
+    )
+    if _client_for_api_key(api_key) is None:
+        raise RuntimeError("audio briefing script api client is unavailable")
+
+    message, used_model, _execution_failures = _call_with_model_fallback(
+        task["prompt"],
+        str(model or _feed_suggest_model),
+        _feed_suggest_model_fallback,
+        max_tokens=3200,
+        api_key=api_key,
+    )
+    if message is None:
+        raise RuntimeError("audio briefing script returned no message")
+
+    text = message.content[0].text.strip()
+    out = parse_audio_briefing_script_result(
+        text,
+        task["articles"],
+        persona,
+        include_opening=include_opening,
+        include_overall_summary=include_overall_summary,
+        include_article_segments=include_article_segments,
+        include_ending=include_ending,
+    )
+    return {
+        "opening": out["opening"],
+        "overall_summary": out["overall_summary"],
+        "article_segments": out["article_segments"],
+        "ending": out["ending"],
+        "llm": _llm_meta(message, "audio_briefing_script", used_model or _feed_suggest_model),
     }
 
 

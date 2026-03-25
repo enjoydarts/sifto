@@ -59,6 +59,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var fireworksAPIKeyEnc *string
 	var poeAPIKeyEnc *string
 	var openrouterAPIKeyEnc *string
+	var aivisAPIKeyEnc *string
 	var inoreaderAccessTokenEnc *string
 	err := r.db.QueryRow(ctx, `
 		SELECT user_id,
@@ -86,6 +87,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       poe_api_key_last4,
 		       openrouter_api_key_enc,
 		       openrouter_api_key_last4,
+		       aivis_api_key_enc,
+		       aivis_api_key_last4,
 		       monthly_budget_usd,
 		       budget_alert_enabled,
 		       budget_alert_threshold_pct,
@@ -109,6 +112,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	       navigator_persona,
 	       navigator_model,
 	       navigator_fallback_model,
+	       audio_briefing_script_model,
+	       audio_briefing_script_fallback_model,
 	       inoreader_access_token_enc,
 		       inoreader_token_expires_at,
 		       created_at,
@@ -142,6 +147,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.PoeAPIKeyLast4,
 		&openrouterAPIKeyEnc,
 		&v.OpenRouterAPIKeyLast4,
+		&aivisAPIKeyEnc,
+		&v.AivisAPIKeyLast4,
 		&v.MonthlyBudgetUSD,
 		&v.BudgetAlertEnabled,
 		&v.BudgetAlertThresholdPct,
@@ -165,6 +172,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.NavigatorPersona,
 		&v.NavigatorModel,
 		&v.NavigatorFallbackModel,
+		&v.AudioBriefingScriptModel,
+		&v.AudioBriefingScriptFallbackModel,
 		&inoreaderAccessTokenEnc,
 		&v.InoreaderTokenExpiresAt,
 		&v.CreatedAt,
@@ -185,6 +194,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasFireworksAPIKey = fireworksAPIKeyEnc != nil && *fireworksAPIKeyEnc != ""
 	v.HasPoeAPIKey = poeAPIKeyEnc != nil && *poeAPIKeyEnc != ""
 	v.HasOpenRouterAPIKey = openrouterAPIKeyEnc != nil && *openrouterAPIKeyEnc != ""
+	v.HasAivisAPIKey = aivisAPIKeyEnc != nil && *aivisAPIKeyEnc != ""
 	v.HasInoreaderOAuth = inoreaderAccessTokenEnc != nil && *inoreaderAccessTokenEnc != ""
 	return &v, nil
 }
@@ -287,7 +297,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 	ctx context.Context,
 	userID string,
 	factsModel, factsFallbackModel, summaryModel, summaryFallbackModel, digestClusterModel, digestModel, askModel, sourceSuggestionModel, embeddingModel, factsCheckModel, faithfulnessCheckModel *string,
-	navigatorEnabled bool, navigatorPersona string, navigatorModel, navigatorFallbackModel *string,
+	navigatorEnabled bool, navigatorPersona string, navigatorModel, navigatorFallbackModel, audioBriefingScriptModel, audioBriefingScriptFallbackModel *string,
 ) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (
@@ -306,8 +316,10 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 				navigator_enabled,
 				navigator_persona,
 				navigator_model,
-				navigator_fallback_model
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+				navigator_fallback_model,
+				audio_briefing_script_model,
+				audio_briefing_script_fallback_model
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 			ON CONFLICT (user_id) DO UPDATE
 			SET facts_model = EXCLUDED.facts_model,
 			    facts_fallback_model = EXCLUDED.facts_fallback_model,
@@ -324,6 +336,8 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 			    navigator_persona = EXCLUDED.navigator_persona,
 			    navigator_model = EXCLUDED.navigator_model,
 			    navigator_fallback_model = EXCLUDED.navigator_fallback_model,
+			    audio_briefing_script_model = EXCLUDED.audio_briefing_script_model,
+			    audio_briefing_script_fallback_model = EXCLUDED.audio_briefing_script_fallback_model,
 			    updated_at = NOW()`,
 		userID,
 		factsModel,
@@ -341,6 +355,8 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 		navigatorPersona,
 		navigatorModel,
 		navigatorFallbackModel,
+		audioBriefingScriptModel,
+		audioBriefingScriptFallbackModel,
 	)
 	if err != nil {
 		return nil, err
@@ -560,6 +576,25 @@ func (r *UserSettingsRepo) GetPoeAPIKeyEncrypted(ctx context.Context, userID str
 	}
 	if err != nil {
 		return nil, err
+	}
+	return v, nil
+}
+
+func (r *UserSettingsRepo) GetAivisAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT aivis_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1
+	`, userID).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
 	}
 	return v, nil
 }
@@ -806,6 +841,22 @@ func (r *UserSettingsRepo) SetOpenRouterAPIKey(ctx context.Context, userID, encr
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetAivisAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, aivis_api_key_enc, aivis_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET aivis_api_key_enc = EXCLUDED.aivis_api_key_enc,
+		    aivis_api_key_last4 = EXCLUDED.aivis_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) ClearAnthropicAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, anthropic_api_key_enc, anthropic_api_key_last4)
@@ -989,6 +1040,22 @@ func (r *UserSettingsRepo) ClearOpenRouterAPIKey(ctx context.Context, userID str
 		ON CONFLICT (user_id) DO UPDATE
 		SET openrouter_api_key_enc = NULL,
 		    openrouter_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearAivisAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, aivis_api_key_enc, aivis_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET aivis_api_key_enc = NULL,
+		    aivis_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

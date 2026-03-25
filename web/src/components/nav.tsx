@@ -9,6 +9,7 @@ import {
   Brain,
   Bug,
   CheckCheck,
+  ChevronDown,
   RefreshCw,
   Menu,
   X,
@@ -16,6 +17,7 @@ import {
   Link2,
   Mail,
   Newspaper,
+  Radio,
   Rss,
   Search,
   Target,
@@ -43,10 +45,12 @@ const secondaryLinks = [
   { href: "/favorites", labelKey: "nav.favorites", icon: Star },
   { href: "/sources", labelKey: "nav.sources", icon: Rss },
   { href: "/digests", labelKey: "nav.digests", icon: Mail },
+  { href: "/audio-briefings", labelKey: "nav.audioBriefings", icon: Radio },
   { href: "/llm-usage", labelKey: "nav.llmUsage", icon: Brain },
   { href: "/llm-analysis", labelKey: "nav.llmAnalysis", icon: TableProperties },
   { href: "/poe-models", labelKey: "nav.poeModels", icon: Link2 },
   { href: "/openrouter-models", labelKey: "nav.openrouterModels", icon: Link2 },
+  { href: "/aivis-models", labelKey: "nav.aivisModels", icon: Link2 },
   { href: "/settings", labelKey: "nav.settings", icon: SettingsIcon },
   { href: "/debug/digests", labelKey: "nav.debug", icon: Bug },
 ];
@@ -58,15 +62,15 @@ const secondaryLinkGroups = [
   },
   {
     labelKey: "nav.group.content",
-    items: secondaryLinks.slice(4, 6),
+    items: secondaryLinks.slice(4, 7),
   },
   {
     labelKey: "nav.group.llm",
-    items: secondaryLinks.slice(6, 10),
+    items: secondaryLinks.slice(7, 12),
   },
   {
     labelKey: "nav.group.system",
-    items: secondaryLinks.slice(10),
+    items: secondaryLinks.slice(12),
   },
 ];
 
@@ -100,6 +104,9 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   const { locale, setLocale, t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [collapsedMoreGroups, setCollapsedMoreGroups] = useState<Record<string, boolean>>({
+    "nav.group.llm": true,
+  });
   const [refreshing, setRefreshing] = useState(false);
   const [openRouterSyncRun, setOpenRouterSyncRun] = useState<OpenRouterSyncRun | null>(null);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
@@ -107,6 +114,19 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
   const isLinkActive = (href: string, activeHref?: string) => isActive(activeHref ?? href);
   const isMoreActive = secondaryLinks.some((v) => isActive(v.href));
+  const isCollapsibleMoreGroup = (labelKey: string) => labelKey === "nav.group.llm";
+  const isMoreGroupExpanded = (labelKey: string) => {
+    if (!isCollapsibleMoreGroup(labelKey)) return true;
+    return !collapsedMoreGroups[labelKey];
+  };
+
+  const toggleMoreGroup = (labelKey: string) => {
+    if (!isCollapsibleMoreGroup(labelKey)) return;
+    setCollapsedMoreGroups((prev) => ({
+      ...prev,
+      [labelKey]: !prev[labelKey],
+    }));
+  };
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -252,27 +272,43 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                     {secondaryLinkGroups.map((group, groupIdx) => (
                       <div key={group.labelKey}>
                         {groupIdx > 0 && <div className="my-2 h-px bg-[var(--color-editorial-line)]" />}
-                        <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                          {t(group.labelKey)}
-                        </div>
-                        {group.items.map(({ href, labelKey, icon: Icon }) => {
-                          const active = isActive(href);
+                        {(() => {
+                          const expanded = isMoreGroupExpanded(group.labelKey);
                           return (
-                            <Link
-                              key={href}
-                              href={href}
-                              onClick={() => setMoreOpen(false)}
-                              className={`flex items-center gap-2 rounded-[14px] px-4 py-3 text-[14px] transition-colors duration-150 press focus-ring ${
-                                active
-                                  ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
-                                  : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
-                              }`}
-                            >
-                              <NavIcon icon={Icon} active={active} />
-                              <span>{t(labelKey)}</span>
-                            </Link>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => toggleMoreGroup(group.labelKey)}
+                                className={`flex w-full items-center justify-between rounded-[12px] px-2 pb-1 pt-1 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)] ${
+                                  isCollapsibleMoreGroup(group.labelKey) ? "hover:bg-[var(--color-editorial-panel)]" : ""
+                                }`}
+                              >
+                                <span>{t(group.labelKey)}</span>
+                                {isCollapsibleMoreGroup(group.labelKey) ? (
+                                  <ChevronDown className={`size-3 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
+                                ) : null}
+                              </button>
+                              {expanded ? group.items.map(({ href, labelKey, icon: Icon }) => {
+                                const active = isActive(href);
+                                return (
+                                  <Link
+                                    key={href}
+                                    href={href}
+                                    onClick={() => setMoreOpen(false)}
+                                    className={`flex items-center gap-2 rounded-[14px] px-4 py-3 text-[14px] transition-colors duration-150 press focus-ring ${
+                                      active
+                                        ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                                        : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
+                                    }`}
+                                  >
+                                    <NavIcon icon={Icon} active={active} />
+                                    <span>{t(labelKey)}</span>
+                                  </Link>
+                                );
+                              }) : null}
+                            </>
                           );
-                        })}
+                        })()}
                       </div>
                     ))}
                     {hasSignedInUser && (
@@ -341,27 +377,43 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                 {secondaryLinkGroups.map((group, groupIdx) => (
                   <div key={group.labelKey}>
                     {groupIdx > 0 && <div className="my-1 h-px bg-[var(--color-editorial-line)]" />}
-                    <div className="px-4 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                      {t(group.labelKey)}
-                    </div>
-                    {group.items.map(({ href, labelKey, icon: Icon }) => {
-                      const active = isActive(href);
+                    {(() => {
+                      const expanded = isMoreGroupExpanded(group.labelKey);
                       return (
-                        <Link
-                          key={href}
-                          href={href}
-                          onClick={() => setMenuOpen(false)}
-                          className={`inline-flex items-center gap-2 rounded-[14px] px-4 py-3 text-sm font-medium transition-colors duration-150 press focus-ring ${
-                            active
-                              ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
-                              : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
-                          }`}
-                        >
-                          <NavIcon icon={Icon} active={active} />
-                          <span>{t(labelKey)}</span>
-                        </Link>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => toggleMoreGroup(group.labelKey)}
+                            className={`flex w-full items-center justify-between rounded-[12px] px-4 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)] ${
+                              isCollapsibleMoreGroup(group.labelKey) ? "hover:bg-[var(--color-editorial-panel)]" : ""
+                            }`}
+                          >
+                            <span>{t(group.labelKey)}</span>
+                            {isCollapsibleMoreGroup(group.labelKey) ? (
+                              <ChevronDown className={`size-3 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
+                            ) : null}
+                          </button>
+                          {expanded ? group.items.map(({ href, labelKey, icon: Icon }) => {
+                            const active = isActive(href);
+                            return (
+                              <Link
+                                key={href}
+                                href={href}
+                                onClick={() => setMenuOpen(false)}
+                                className={`inline-flex items-center gap-2 rounded-[14px] px-4 py-3 text-sm font-medium transition-colors duration-150 press focus-ring ${
+                                  active
+                                    ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                                    : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
+                                }`}
+                              >
+                                <NavIcon icon={Icon} active={active} />
+                                <span>{t(labelKey)}</span>
+                              </Link>
+                            );
+                          }) : null}
+                        </>
                       );
-                    })}
+                    })()}
                   </div>
                 ))}
               </nav>

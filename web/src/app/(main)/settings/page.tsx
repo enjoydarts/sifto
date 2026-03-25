@@ -1,13 +1,15 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Brain, ChevronDown, KeyRound, Settings as SettingsIcon } from "lucide-react";
-import { api, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, PreferenceProfile, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
+import { AivisModelSnapshot, AivisModelsResponse, api, AudioBriefingPersonaVoice, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, PreferenceProfile, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import OneSignalSettings from "@/components/onesignal-settings";
 import ApiKeyCard from "@/components/settings/api-key-card";
+import AivisVoicePickerModal from "@/components/settings/aivis-voice-picker-modal";
 import ModelGuideModal from "@/components/settings/model-guide-modal";
 import ModelSelect, { type ModelOption } from "@/components/settings/model-select";
 import { PreferenceProfilePanel } from "@/components/settings/preference-profile-panel";
@@ -135,6 +137,10 @@ function localizeLLMSettingKey(settingKey: string, t: (key: string, fallback?: s
       return t("settings.model.navigator");
     case "navigator_fallback":
       return t("settings.model.navigatorFallback");
+    case "audio_briefing_script":
+      return t("settings.model.audioBriefingScript");
+    case "audio_briefing_script_fallback":
+      return t("settings.model.audioBriefingScriptFallback");
     case "embedding":
       return t("settings.model.embeddings");
     default:
@@ -173,6 +179,7 @@ function isUnavailableOpenRouterModel(item: LLMCatalogModel): boolean {
 }
 
 type SettingsSectionID =
+  | "audio-briefing"
   | "reading-plan"
   | "personalization"
   | "digest"
@@ -203,11 +210,95 @@ const EMPTY_NAVIGATOR_PERSONA: NavigatorPersonaDefinition = {
   voice: "",
 };
 
+function buildDefaultAudioBriefingVoices(personaKeys: NavigatorPersonaKey[]): AudioBriefingPersonaVoice[] {
+  return personaKeys.map((persona) => ({
+    persona,
+    tts_provider: "aivis",
+    voice_model: "",
+    voice_style: "",
+    speech_rate: 1,
+    emotional_intensity: 1,
+    tempo_dynamics: 1,
+    line_break_silence_seconds: 0.4,
+    pitch: 0,
+    volume_gain: 0,
+  }));
+}
+
+function resolveAivisVoiceSelection(models: AivisModelSnapshot[], voice: AudioBriefingPersonaVoice) {
+  const model = models.find((item) => item.aivm_model_uuid === voice.voice_model);
+  if (!model) {
+    return { model: null, speaker: null, style: null };
+  }
+  const [speakerUUID, styleIDRaw] = voice.voice_style.split(":");
+  const styleID = Number(styleIDRaw);
+  const speaker = (model.speakers_json ?? []).find((item) => item.aivm_speaker_uuid === speakerUUID) ?? null;
+  const style = speaker?.styles.find((item) => item.local_id === styleID) ?? null;
+  return { model, speaker, style };
+}
+
+function getAudioBriefingVoiceStatus(
+  voice: AudioBriefingPersonaVoice,
+  models: AivisModelSnapshot[],
+  hasAivisAPIKey: boolean,
+  t: (key: string, fallback?: string) => string
+) {
+  if (!voice.voice_model.trim() || !voice.voice_style.trim()) {
+    return {
+      tone: "warn" as const,
+      label: t("settings.audioBriefing.status.unconfigured"),
+      detail: t("settings.audioBriefing.status.unconfiguredDetail"),
+      configured: false,
+    };
+  }
+  if (voice.tts_provider !== "aivis") {
+    return {
+      tone: "muted" as const,
+      label: t("settings.audioBriefing.status.customProvider"),
+      detail: t("settings.audioBriefing.status.customProviderDetail").replace("{{provider}}", voice.tts_provider),
+      configured: true,
+    };
+  }
+  const resolved = resolveAivisVoiceSelection(models, voice);
+  if (!resolved.model) {
+    return {
+      tone: "warn" as const,
+      label: t("settings.audioBriefing.status.modelMissing"),
+      detail: t("settings.audioBriefing.status.modelMissingDetail"),
+      configured: true,
+    };
+  }
+  if (!resolved.speaker || !resolved.style) {
+    return {
+      tone: "warn" as const,
+      label: t("settings.audioBriefing.status.styleMissing"),
+      detail: t("settings.audioBriefing.status.styleMissingDetail"),
+      configured: true,
+    };
+  }
+  if (!hasAivisAPIKey) {
+    return {
+      tone: "warn" as const,
+      label: t("settings.audioBriefing.status.apiKeyMissing"),
+      detail: t("settings.audioBriefing.status.apiKeyMissingDetail"),
+      configured: true,
+    };
+  }
+  return {
+    tone: "ok" as const,
+    label: t("settings.audioBriefing.status.ready"),
+    detail: t("settings.audioBriefing.status.readyDetail"),
+    configured: true,
+  };
+}
+
 export default function SettingsPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
   const [loading, setLoading] = useState(true);
+  const [savingAudioBriefing, setSavingAudioBriefing] = useState(false);
+  const [savingAudioBriefingVoices, setSavingAudioBriefingVoices] = useState(false);
   const [savingBudget, setSavingBudget] = useState(false);
   const [savingDigestDelivery, setSavingDigestDelivery] = useState(false);
   const [savingReadingPlan, setSavingReadingPlan] = useState(false);
@@ -238,6 +329,8 @@ export default function SettingsPage() {
   const [deletingPoeKey, setDeletingPoeKey] = useState(false);
   const [savingOpenRouterKey, setSavingOpenRouterKey] = useState(false);
   const [deletingOpenRouterKey, setDeletingOpenRouterKey] = useState(false);
+  const [savingAivisKey, setSavingAivisKey] = useState(false);
+  const [deletingAivisKey, setDeletingAivisKey] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
   const [resettingPreferenceProfile, setResettingPreferenceProfile] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -266,6 +359,7 @@ export default function SettingsPage() {
   const [fireworksApiKeyInput, setFireworksApiKeyInput] = useState("");
   const [poeApiKeyInput, setPoeApiKeyInput] = useState("");
   const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
+  const [aivisApiKeyInput, setAivisApiKeyInput] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
   const [activeSection, setActiveSection] = useState<SettingsSectionID>("models");
   const [llmExtrasOpen, setLLMExtrasOpen] = useState(false);
@@ -273,6 +367,18 @@ export default function SettingsPage() {
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
   const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
   const [readingPlanDiversifyTopics, setReadingPlanDiversifyTopics] = useState(true);
+  const [audioBriefingEnabled, setAudioBriefingEnabled] = useState(false);
+  const [audioBriefingIntervalHours, setAudioBriefingIntervalHours] = useState<3 | 6>(6);
+  const [audioBriefingArticlesPerEpisode, setAudioBriefingArticlesPerEpisode] = useState("5");
+  const [audioBriefingTargetDurationMinutes, setAudioBriefingTargetDurationMinutes] = useState("20");
+  const [audioBriefingDefaultPersona, setAudioBriefingDefaultPersona] = useState("editor");
+  const [audioBriefingVoices, setAudioBriefingVoices] = useState<AudioBriefingPersonaVoice[]>(buildDefaultAudioBriefingVoices(["editor", "hype", "analyst", "concierge", "snark", "native"]));
+  const [aivisModelsData, setAivisModelsData] = useState<AivisModelsResponse | null>(null);
+  const [aivisModelsLoading, setAivisModelsLoading] = useState(false);
+  const [aivisModelsSyncing, setAivisModelsSyncing] = useState(false);
+  const [aivisModelsError, setAivisModelsError] = useState<string | null>(null);
+  const [aivisPickerPersona, setAivisPickerPersona] = useState<string | null>(null);
+  const [expandedAudioBriefingPersonas, setExpandedAudioBriefingPersonas] = useState<string[]>(["editor"]);
   const [obsidianEnabled, setObsidianEnabled] = useState(false);
   const [notificationPriority, setNotificationPriority] = useState<NotificationPriorityRule>({
     sensitivity: "medium",
@@ -302,6 +408,8 @@ export default function SettingsPage() {
   const [navigatorPersona, setNavigatorPersona] = useState("editor");
   const [navigatorModel, setNavigatorModel] = useState("");
   const [navigatorFallbackModel, setNavigatorFallbackModel] = useState("");
+  const [audioBriefingScriptModel, setAudioBriefingScriptModel] = useState("");
+  const [audioBriefingScriptFallbackModel, setAudioBriefingScriptFallbackModel] = useState("");
   const [navigatorPersonaDefinitions, setNavigatorPersonaDefinitions] = useState<Record<string, NavigatorPersonaDefinition>>({});
   const loadSeqRef = useRef(0);
   const llmModelsDirtyRef = useRef(false);
@@ -314,6 +422,19 @@ export default function SettingsPage() {
         ...(navigatorPersonaDefinitions[key] as NavigatorPersonaDefinition | undefined),
       })),
     [navigatorPersonaDefinitions]
+  );
+  const syncAudioBriefingForm = useCallback(
+    (audioBriefing?: UserSettings["audio_briefing"] | null, voices?: UserSettings["audio_briefing_persona_voices"] | null) => {
+      setAudioBriefingEnabled(Boolean(audioBriefing?.enabled));
+      setAudioBriefingIntervalHours(audioBriefing?.interval_hours === 3 ? 3 : 6);
+      setAudioBriefingArticlesPerEpisode(String(audioBriefing?.articles_per_episode ?? 5));
+      setAudioBriefingTargetDurationMinutes(String(audioBriefing?.target_duration_minutes ?? 20));
+      setAudioBriefingDefaultPersona(audioBriefing?.default_persona ?? "editor");
+      const defaults = buildDefaultAudioBriefingVoices(["editor", "hype", "analyst", "concierge", "snark", "native"]);
+      const byPersona = new Map((voices ?? []).map((voice) => [voice.persona, voice]));
+      setAudioBriefingVoices(defaults.map((voice) => byPersona.get(voice.persona) ?? voice));
+    },
+    []
   );
 
   const syncLLMModelForm = useCallback((llmModels?: UserSettings["llm_models"] | null) => {
@@ -332,6 +453,8 @@ export default function SettingsPage() {
     setNavigatorPersona(llmModels?.navigator_persona ?? "editor");
     setNavigatorModel(llmModels?.navigator ?? "");
     setNavigatorFallbackModel(llmModels?.navigator_fallback ?? "");
+    setAudioBriefingScriptModel(llmModels?.audio_briefing_script ?? "");
+    setAudioBriefingScriptFallbackModel(llmModels?.audio_briefing_script_fallback ?? "");
   }, []);
 
   const onChangeLLMModel = useCallback((setter: (value: string) => void, value: string) => {
@@ -356,6 +479,8 @@ export default function SettingsPage() {
       navigator_persona: string | null;
       navigator: string | null;
       navigator_fallback: string | null;
+      audio_briefing_script: string | null;
+      audio_briefing_script_fallback: string | null;
     }>) => {
       const emptyToNull = (v: string) => {
         const s = v.trim();
@@ -377,6 +502,8 @@ export default function SettingsPage() {
         navigator_persona: navigatorPersona,
         navigator: emptyToNull(navigatorModel),
         navigator_fallback: emptyToNull(navigatorFallbackModel),
+        audio_briefing_script: emptyToNull(audioBriefingScriptModel),
+        audio_briefing_script_fallback: emptyToNull(audioBriefingScriptFallbackModel),
         ...overrides,
       };
     },
@@ -395,6 +522,8 @@ export default function SettingsPage() {
       navigatorFallbackModel,
       navigatorModel,
       navigatorPersona,
+      audioBriefingScriptFallbackModel,
+      audioBriefingScriptModel,
       openAIEmbeddingModel,
     ]
   );
@@ -422,8 +551,42 @@ export default function SettingsPage() {
       }
       return resp;
     },
-    [buildLLMModelPayload, showToast, syncLLMModelForm]
+    [showToast, syncLLMModelForm]
   );
+
+  const loadAivisModels = useCallback(async () => {
+    setAivisModelsLoading(true);
+    try {
+      const next = await api.getAivisModels();
+      setAivisModelsData(next);
+      setAivisModelsError(null);
+      return next;
+    } catch (e) {
+      const message = String(e);
+      setAivisModelsError(message);
+      throw e;
+    } finally {
+      setAivisModelsLoading(false);
+    }
+  }, []);
+
+  const syncAivisModels = useCallback(async () => {
+    setAivisModelsSyncing(true);
+    try {
+      const next = await api.syncAivisModels();
+      setAivisModelsData(next);
+      setAivisModelsError(null);
+      showToast(t("aivisModels.syncCompleted"), "success");
+      return next;
+    } catch (e) {
+      const message = String(e);
+      setAivisModelsError(message);
+      showToast(message, "error");
+      throw e;
+    } finally {
+      setAivisModelsSyncing(false);
+    }
+  }, [showToast, t]);
 
   const load = useCallback(async () => {
     const seq = ++loadSeqRef.current;
@@ -447,6 +610,7 @@ export default function SettingsPage() {
       setAlertEnabled(Boolean(data.budget_alert_enabled));
       setThresholdPct(data.budget_alert_threshold_pct ?? 20);
       setDigestEmailEnabled(Boolean(data.digest_email_enabled ?? true));
+      syncAudioBriefingForm(data.audio_briefing, data.audio_briefing_persona_voices);
       setReadingPlanWindow((data.reading_plan?.window as "24h" | "today_jst" | "7d") ?? "24h");
       const rpSize = data.reading_plan?.size;
       setReadingPlanSize(String(rpSize === 7 || rpSize === 15 || rpSize === 25 ? rpSize : 15));
@@ -469,11 +633,26 @@ export default function SettingsPage() {
         setLoading(false);
       }
     }
-  }, [syncLLMModelForm, t]);
+  }, [syncAudioBriefingForm, syncLLMModelForm, t]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (activeSection !== "audio-briefing" || aivisModelsData != null || aivisModelsLoading) return;
+    void loadAivisModels().catch(() => undefined);
+  }, [activeSection, aivisModelsData, aivisModelsLoading, loadAivisModels]);
+
+  useEffect(() => {
+    setExpandedAudioBriefingPersonas((prev) => {
+      if (prev.length === 0) return [audioBriefingDefaultPersona];
+      if (prev.length === 1 && prev[0] === "editor" && audioBriefingDefaultPersona !== "editor") {
+        return [audioBriefingDefaultPersona];
+      }
+      return prev;
+    });
+  }, [audioBriefingDefaultPersona]);
 
   useEffect(() => {
     let cancelled = false;
@@ -815,6 +994,21 @@ export default function SettingsPage() {
           deleting: deletingOpenRouterKey,
           notSet: t("settings.openrouterNotSet"),
         },
+        {
+          id: "aivis",
+          title: t("settings.aivisTitle"),
+          description: t("settings.aivisDescription"),
+          configured: settings.has_aivis_api_key,
+          last4: settings.aivis_api_key_last4,
+          value: aivisApiKeyInput,
+          onChange: setAivisApiKeyInput,
+          onSubmit: submitAivisApiKey,
+          onDelete: handleDeleteAivisApiKey,
+          placeholder: "sk-...",
+          saving: savingAivisKey,
+          deleting: deletingAivisKey,
+          notSet: t("settings.aivisNotSet"),
+        },
       ]
     : [];
 
@@ -877,6 +1071,24 @@ export default function SettingsPage() {
     setSavingLLMModels(true);
     try {
       await persistLLMModels(buildLLMModelPayload(), t("settings.toast.modelsSaved"));
+    } catch (e) {
+      showToast(localizeSettingsErrorMessage(e, t), "error");
+    } finally {
+      setSavingLLMModels(false);
+    }
+  }
+
+  async function submitAudioBriefingModels(e: FormEvent) {
+    e.preventDefault();
+    setSavingLLMModels(true);
+    try {
+      await persistLLMModels(
+        buildLLMModelPayload({
+          audio_briefing_script: audioBriefingScriptModel || null,
+          audio_briefing_script_fallback: audioBriefingScriptFallbackModel || null,
+        }),
+        t("settings.toast.modelsSaved")
+      );
     } catch (e) {
       showToast(localizeSettingsErrorMessage(e, t), "error");
     } finally {
@@ -1434,6 +1646,45 @@ export default function SettingsPage() {
     }
   }
 
+  async function submitAivisApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingAivisKey(true);
+    try {
+      if (!aivisApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setAivisApiKey(aivisApiKeyInput.trim());
+      setAivisApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.aivisSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingAivisKey(false);
+    }
+  }
+
+  async function handleDeleteAivisApiKey() {
+    if (!(await confirm({
+      title: t("settings.aivisDeleteTitle"),
+      message: t("settings.aivisDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingAivisKey(true);
+    try {
+      await api.deleteAivisApiKey();
+      await load();
+      showToast(t("settings.toast.aivisDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingAivisKey(false);
+    }
+  }
+
   async function handleDeleteInoreaderOAuth() {
     if (!(await confirm({
       title: t("settings.inoreaderDeleteTitle"),
@@ -1476,9 +1727,91 @@ export default function SettingsPage() {
     }
   }
 
+  async function persistAudioBriefingSettings() {
+    setSavingAudioBriefing(true);
+    try {
+      const payload = {
+        enabled: audioBriefingEnabled,
+        interval_hours: audioBriefingIntervalHours,
+        articles_per_episode: Number(audioBriefingArticlesPerEpisode),
+        target_duration_minutes: Number(audioBriefingTargetDurationMinutes),
+        default_persona: audioBriefingDefaultPersona,
+      };
+      const resp = await api.updateAudioBriefingSettings(payload);
+      setSettings((prev) => (prev ? { ...prev, audio_briefing: resp.audio_briefing } : prev));
+      syncAudioBriefingForm(resp.audio_briefing, settings?.audio_briefing_persona_voices);
+      showToast(t("settings.toast.audioBriefingSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingAudioBriefing(false);
+    }
+  }
+
+  async function submitAudioBriefingSettings(e: FormEvent) {
+    e.preventDefault();
+    await persistAudioBriefingSettings();
+  }
+
+  async function persistAudioBriefingVoices() {
+    setSavingAudioBriefingVoices(true);
+    try {
+      const resp = await api.updateAudioBriefingPersonaVoices(audioBriefingVoices);
+      setSettings((prev) => (prev ? { ...prev, audio_briefing_persona_voices: resp.audio_briefing_persona_voices } : prev));
+      syncAudioBriefingForm(settings?.audio_briefing, resp.audio_briefing_persona_voices);
+      showToast(t("settings.toast.audioBriefingVoicesSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingAudioBriefingVoices(false);
+    }
+  }
+
+  async function submitAudioBriefingVoices(e: FormEvent) {
+    e.preventDefault();
+    await persistAudioBriefingVoices();
+  }
+
+  function updateAudioBriefingVoice(persona: string, patch: Partial<AudioBriefingPersonaVoice>) {
+    setAudioBriefingVoices((prev) => prev.map((voice) => (voice.persona === persona ? { ...voice, ...patch } : voice)));
+  }
+
+  function toggleAudioBriefingPersona(persona: string) {
+    setExpandedAudioBriefingPersonas((prev) =>
+      prev.includes(persona) ? prev.filter((item) => item !== persona) : [...prev, persona]
+    );
+  }
+
+  async function openAivisPicker(persona: string) {
+    setAivisPickerPersona(persona);
+    if (aivisModelsData == null) {
+      try {
+        await loadAivisModels();
+      } catch {
+        return;
+      }
+    }
+  }
+
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!settings) return null;
+
+  const activeAivisVoice = aivisPickerPersona
+    ? audioBriefingVoices.find((voice) => voice.persona === aivisPickerPersona) ?? null
+    : null;
+  const audioBriefingAivisModels = aivisModelsData?.models ?? [];
+  const hasUserAivisAPIKey = Boolean(settings?.has_aivis_api_key);
+  const audioBriefingVoiceSummaries = audioBriefingVoices.map((voice) => ({
+    voice,
+    resolved: voice.tts_provider === "aivis" ? resolveAivisVoiceSelection(audioBriefingAivisModels, voice) : null,
+    status: getAudioBriefingVoiceStatus(voice, audioBriefingAivisModels, hasUserAivisAPIKey, t),
+  }));
+  const configuredAudioBriefingVoiceCount = audioBriefingVoiceSummaries.filter((entry) => entry.status.configured).length;
+  const audioBriefingVoiceAttentionCount = audioBriefingVoiceSummaries.filter((entry) => entry.status.tone === "warn").length;
+  const audioBriefingVoiceReadyCount = audioBriefingVoiceSummaries.filter((entry) => entry.status.tone === "ok").length;
+  const audioBriefingUsesAivisCloud = audioBriefingVoices.some((voice) => voice.tts_provider === "aivis");
+  const audioBriefingNeedsAivisAPIKey = audioBriefingUsesAivisCloud && !hasUserAivisAPIKey;
 
   const sectionNavItems: Array<{
     id: SettingsSectionID;
@@ -1489,6 +1822,13 @@ export default function SettingsPage() {
       id: "models",
       title: t("settings.section.llm"),
       summary: `${configuredProviderCount}/${accessCards.length} ${t("settings.access.configuredProviders")}`,
+    },
+    {
+      id: "audio-briefing",
+      title: t("settings.section.audioBriefing"),
+      summary: audioBriefingEnabled
+        ? `${audioBriefingIntervalHours}${t("settings.audioBriefing.hoursSuffix")} / ${audioBriefingArticlesPerEpisode}${t("settings.audioBriefing.articlesSuffix")}`
+        : t("settings.off"),
     },
     {
       id: "reading-plan",
@@ -1563,6 +1903,11 @@ export default function SettingsPage() {
   ];
 
   const selectedSectionMeta = {
+    "audio-briefing": {
+      kicker: t("settings.section.audioBriefing"),
+      title: t("settings.controlRoom.audioBriefingTitle"),
+      description: t("settings.controlRoom.audioBriefingDescription"),
+    },
     "reading-plan": {
       kicker: t("settings.recommendedTitle"),
       title: t("settings.controlRoom.readingPlanTitle"),
@@ -1713,6 +2058,494 @@ export default function SettingsPage() {
               ) : null}
             </div>
           </SectionCard>
+
+          {activeSection === "audio-briefing" ? (
+            <>
+              <SectionCard>
+                <form onSubmit={submitAudioBriefingSettings} className="space-y-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.audioBriefing.summaryTitle")}</div>
+                      <p className="mt-1 max-w-3xl text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.audioBriefing.summaryHelp")}</p>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
+                      <button
+                        type="submit"
+                        disabled={savingAudioBriefing}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {savingAudioBriefing ? t("common.saving") : t("settings.audioBriefing.saveSettings")}
+                      </button>
+                      <Link
+                        href="/audio-briefings"
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                      >
+                        {t("settings.audioBriefing.openEpisodes")}
+                      </Link>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-stretch gap-3">
+                    <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.enableTitle")}
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-[var(--color-editorial-ink)] whitespace-nowrap">
+                          {audioBriefingEnabled ? t("settings.on") : t("settings.off")}
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={audioBriefingEnabled}
+                          onChange={(e) => setAudioBriefingEnabled(e.target.checked)}
+                          className="size-4 rounded border-[var(--color-editorial-line-strong)]"
+                        />
+                      </div>
+                    </label>
+
+                    <label className="flex min-w-[180px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.interval")}
+                      </div>
+                      <select
+                        value={audioBriefingIntervalHours}
+                        onChange={(e) => setAudioBriefingIntervalHours(Number(e.target.value) === 3 ? 3 : 6)}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      >
+                        <option value={3}>{t("settings.audioBriefing.interval3h")}</option>
+                        <option value={6}>{t("settings.audioBriefing.interval6h")}</option>
+                      </select>
+                    </label>
+
+                    <label className="flex min-w-[180px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.articlesPerEpisode")}
+                      </div>
+                      <input
+                        value={audioBriefingArticlesPerEpisode}
+                        onChange={(e) => setAudioBriefingArticlesPerEpisode(e.target.value)}
+                        inputMode="numeric"
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                    </label>
+
+                    <label className="flex min-w-[180px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.targetDuration")}
+                      </div>
+                      <input
+                        value={audioBriefingTargetDurationMinutes}
+                        onChange={(e) => setAudioBriefingTargetDurationMinutes(e.target.value)}
+                        inputMode="numeric"
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                    </label>
+
+                    <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.defaultPersona")}
+                      </div>
+                      <select
+                        value={audioBriefingDefaultPersona}
+                        onChange={(e) => setAudioBriefingDefaultPersona(e.target.value)}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      >
+                        {navigatorPersonaCards.map((persona) => (
+                          <option key={persona.key} value={persona.key}>
+                            {t(`settings.navigator.persona.${persona.key}`, persona.key)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </form>
+              </SectionCard>
+
+              <SectionCard>
+                <form onSubmit={submitAudioBriefingModels} className="space-y-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.model.audioBriefingScript")}</div>
+                      <p className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.audioBriefing.scriptModelHelp")}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
+                      <button
+                        type="submit"
+                        disabled={savingLLMModels}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                      >
+                        {savingLLMModels ? t("common.saving") : t("settings.saveModels")}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <ModelSelect
+                      label={t("settings.model.audioBriefingScript")}
+                      value={audioBriefingScriptModel}
+                      onChange={(value) => onChangeLLMModel(setAudioBriefingScriptModel, value)}
+                      options={optionsForPurpose("summary", audioBriefingScriptModel)}
+                      labels={modelSelectLabels}
+                      variant="modal"
+                    />
+                    <ModelSelect
+                      label={t("settings.model.audioBriefingScriptFallback")}
+                      value={audioBriefingScriptFallbackModel}
+                      onChange={(value) => onChangeLLMModel(setAudioBriefingScriptFallbackModel, value)}
+                      options={optionsForPurpose("summary", audioBriefingScriptFallbackModel)}
+                      labels={modelSelectLabels}
+                      variant="modal"
+                    />
+                  </div>
+                </form>
+              </SectionCard>
+
+              <SectionCard>
+                <form onSubmit={submitAudioBriefingVoices} className="space-y-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.audioBriefing.voiceMatrixTitle")}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                        <p>{t("settings.audioBriefing.voiceMatrixHelp")}</p>
+                        <Link href="/aivis-models" className="font-medium text-[var(--color-editorial-accent)] underline-offset-4 hover:underline">
+                          {t("settings.audioBriefing.openAivisModels")}
+                        </Link>
+                        {aivisModelsData?.latest_run?.finished_at ? (
+                          <span>{`${t("aivisModels.lastSynced")}: ${new Date(aivisModelsData.latest_run.finished_at).toLocaleString()}`}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void syncAivisModels();
+                        }}
+                        disabled={aivisModelsSyncing}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                      >
+                        {aivisModelsSyncing ? t("aivisModels.syncing") : t("aivisModels.sync")}
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={savingAudioBriefingVoices}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {savingAudioBriefingVoices ? t("common.saving") : t("settings.audioBriefing.saveVoices")}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <div className="min-w-[180px] flex-1 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.summary.ready")}
+                      </div>
+                      <div className="mt-2 text-2xl font-semibold text-[var(--color-editorial-ink)]">{audioBriefingVoiceReadyCount}</div>
+                    </div>
+                    <div className="min-w-[180px] flex-1 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.summary.needsAttention")}
+                      </div>
+                      <div className="mt-2 text-2xl font-semibold text-[var(--color-editorial-ink)]">{audioBriefingVoiceAttentionCount}</div>
+                    </div>
+                    <div className="min-w-[180px] flex-1 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.summary.configured")}
+                      </div>
+                      <div className="mt-2 text-2xl font-semibold text-[var(--color-editorial-ink)]">{configuredAudioBriefingVoiceCount}/{audioBriefingVoiceSummaries.length}</div>
+                    </div>
+                  </div>
+
+                  {aivisModelsError ? (
+                    <div className="rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-3 text-sm text-[#b45309]">
+                      {aivisModelsError}
+                    </div>
+                  ) : null}
+
+                  {audioBriefingNeedsAivisAPIKey ? (
+                    <div className="flex flex-col gap-3 rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-4 text-sm text-[#b45309] lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <div className="font-semibold">{t("settings.audioBriefing.aivisApiKeyWarningTitle")}</div>
+                        <div className="mt-1 leading-6">{t("settings.audioBriefing.aivisApiKeyWarningDetail")}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSection("system")}
+                        className="inline-flex min-h-10 items-center justify-center rounded-full border border-[rgba(180,83,9,0.22)] bg-white px-4 py-2 text-sm font-medium text-[#92400e] hover:bg-[rgba(255,255,255,0.72)]"
+                      >
+                        {t("settings.audioBriefing.openApiKeys")}
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <div className="space-y-3">
+                    {audioBriefingVoiceSummaries.map(({ voice, resolved, status }) => {
+                      const expanded = expandedAudioBriefingPersonas.includes(voice.persona);
+                      const isDefaultPersona = voice.persona === audioBriefingDefaultPersona;
+                      const toneClasses = status.tone === "ok"
+                        ? "border-[rgba(34,197,94,0.28)] bg-[rgba(240,253,244,0.72)]"
+                        : status.tone === "warn"
+                          ? "border-[rgba(245,158,11,0.35)] bg-[rgba(255,251,235,0.82)]"
+                          : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]";
+                      const badgeClasses = status.tone === "ok"
+                        ? "border-[rgba(34,197,94,0.24)] bg-[rgba(220,252,231,0.85)] text-[#166534]"
+                        : status.tone === "warn"
+                          ? "border-[rgba(245,158,11,0.24)] bg-[rgba(254,243,199,0.88)] text-[#b45309]"
+                          : "border-[var(--color-editorial-line)] bg-white text-[var(--color-editorial-ink-soft)]";
+
+                      return (
+                        <div key={voice.persona} className={`overflow-hidden rounded-[20px] border ${toneClasses}`}>
+                          <button
+                            type="button"
+                            onClick={() => toggleAudioBriefingPersona(voice.persona)}
+                            className="flex w-full flex-wrap items-center gap-3 px-4 py-4 text-left"
+                            aria-expanded={expanded}
+                          >
+                            <div className="flex min-w-[220px] flex-1 items-center gap-3">
+                              <div className="rounded-full border border-[var(--color-editorial-line)] bg-white p-1.5">
+                                <AINavigatorAvatar persona={voice.persona} className="size-10" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">
+                                    {t(`settings.navigator.persona.${voice.persona}`, voice.persona)}
+                                  </div>
+                                  {isDefaultPersona ? (
+                                    <span className="rounded-full border border-[var(--color-editorial-line)] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-editorial-ink-soft)]">
+                                      {t("settings.audioBriefing.defaultPersonaBadge")}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="mt-1 text-[12px] text-[var(--color-editorial-ink-soft)]">{voice.persona}</div>
+                              </div>
+                            </div>
+
+                            <div className="flex min-w-[180px] flex-1 flex-wrap items-center gap-2 text-[12px] text-[var(--color-editorial-ink-soft)]">
+                              <span className="rounded-full border border-[var(--color-editorial-line)] bg-white px-2.5 py-1">
+                                {voice.tts_provider}
+                              </span>
+                              <span className="rounded-full border border-[var(--color-editorial-line)] bg-white px-2.5 py-1">
+                                {resolved?.model?.name || voice.voice_model || t("settings.audioBriefing.unsetShort")}
+                              </span>
+                              <span className="rounded-full border border-[var(--color-editorial-line)] bg-white px-2.5 py-1">
+                                {resolved?.speaker && resolved?.style
+                                  ? `${resolved.speaker.name} / ${resolved.style.name}`
+                                  : voice.voice_style || t("settings.audioBriefing.unsetShort")}
+                              </span>
+                            </div>
+
+                            <div className="ml-auto flex items-center gap-3">
+                              <div className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${badgeClasses}`}>
+                                {status.label}
+                              </div>
+                              <ChevronDown className={`size-4 text-[var(--color-editorial-ink-soft)] transition-transform ${expanded ? "rotate-180" : ""}`} />
+                            </div>
+                          </button>
+
+                          {expanded ? (
+                            <div className="border-t border-[var(--color-editorial-line)] bg-white/70 px-4 py-4">
+                              <div className="flex flex-wrap gap-3">
+                                <div className="min-w-[220px] flex-[1.4] rounded-[16px] border border-[var(--color-editorial-line)] bg-white p-4">
+                                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                                    {t("settings.audioBriefing.ttsProvider")}
+                                  </div>
+                                  <select
+                                    value={voice.tts_provider}
+                                    onChange={(e) => updateAudioBriefingVoice(voice.persona, { tts_provider: e.target.value })}
+                                    className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                                  >
+                                    {Array.from(new Set([voice.tts_provider, "aivis", "mock"])).map((provider) => (
+                                      <option key={`${voice.persona}-${provider}`} value={provider}>
+                                        {provider}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <p className="mt-3 text-[12px] leading-5 text-[var(--color-editorial-ink-soft)]">{status.detail}</p>
+                                </div>
+
+                                <div className="min-w-[260px] flex-[2] rounded-[16px] border border-[var(--color-editorial-line)] bg-white p-4">
+                                  <div className="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                                        {t("settings.audioBriefing.voiceModel")}
+                                      </div>
+                                      <div className="mt-3 text-sm font-semibold text-[var(--color-editorial-ink)]">
+                                        {resolved?.model?.name ?? t("settings.audioBriefing.aivisVoiceEmpty")}
+                                      </div>
+                                      <div className="mt-1 text-[12px] text-[var(--color-editorial-ink-soft)]">
+                                        {resolved?.speaker && resolved?.style
+                                          ? `${resolved.speaker.name} / ${resolved.style.name}`
+                                          : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort")}
+                                      </div>
+                                    </div>
+                                    {voice.tts_provider === "aivis" ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => void openAivisPicker(voice.persona)}
+                                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink)] hover:bg-[var(--color-editorial-panel-strong)]"
+                                      >
+                                        {t("settings.audioBriefing.pickAivisVoice")}
+                                      </button>
+                                    ) : null}
+                                  </div>
+
+                                  {voice.tts_provider === "aivis" ? (
+                                    <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-[var(--color-editorial-ink-faint)]">
+                                      <span>{`${t("settings.audioBriefing.voiceModel")}: ${voice.voice_model || "—"}`}</span>
+                                      <span>{`${t("settings.audioBriefing.voiceStyle")}: ${voice.voice_style || "—"}`}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="mt-4 flex flex-wrap gap-3">
+                                      <input
+                                        value={voice.voice_model}
+                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { voice_model: e.target.value })}
+                                        placeholder={t("settings.audioBriefing.voiceModel")}
+                                        className="min-w-[180px] flex-1 rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                                      />
+                                      <input
+                                        value={voice.voice_style}
+                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { voice_style: e.target.value })}
+                                        placeholder={t("settings.audioBriefing.voiceStyle")}
+                                        className="min-w-[180px] flex-1 rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap gap-3">
+                                <label className="min-w-[160px] flex-1 rounded-[16px] border border-[var(--color-editorial-line)] bg-white p-4">
+                                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                                    {t("settings.audioBriefing.speechRate")}
+                                  </div>
+                                  <input
+                                    value={String(voice.speech_rate)}
+                                    onChange={(e) => updateAudioBriefingVoice(voice.persona, { speech_rate: Number(e.target.value || 1) })}
+                                    inputMode="decimal"
+                                    className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                                  />
+                                </label>
+
+                                {voice.tts_provider === "aivis" ? (
+                                  <>
+                                    <label className="min-w-[160px] flex-1 rounded-[16px] border border-[var(--color-editorial-line)] bg-white p-4">
+                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                                        {t("settings.audioBriefing.tempoDynamics")}
+                                      </div>
+                                      <input
+                                        value={String(voice.tempo_dynamics)}
+                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { tempo_dynamics: Number(e.target.value || 1) })}
+                                        inputMode="decimal"
+                                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                                      />
+                                    </label>
+
+                                    <label className="min-w-[160px] flex-1 rounded-[16px] border border-[var(--color-editorial-line)] bg-white p-4">
+                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                                        {t("settings.audioBriefing.emotionalIntensity")}
+                                      </div>
+                                      <input
+                                        value={String(voice.emotional_intensity)}
+                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { emotional_intensity: Number(e.target.value || 1) })}
+                                        inputMode="decimal"
+                                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                                      />
+                                    </label>
+
+                                    <label className="min-w-[160px] flex-1 rounded-[16px] border border-[var(--color-editorial-line)] bg-white p-4">
+                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                                        {t("settings.audioBriefing.lineBreakSilenceSeconds")}
+                                      </div>
+                                      <input
+                                        value={String(voice.line_break_silence_seconds)}
+                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { line_break_silence_seconds: Number(e.target.value || 0) })}
+                                        inputMode="decimal"
+                                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                                      />
+                                    </label>
+
+                                    <label className="min-w-[160px] flex-1 rounded-[16px] border border-[var(--color-editorial-line)] bg-white p-4">
+                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                                        {t("settings.audioBriefing.aivisVolume")}
+                                      </div>
+                                      <input
+                                        value={String(voice.volume_gain + 1)}
+                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { volume_gain: Number(e.target.value || 1) - 1 })}
+                                        inputMode="decimal"
+                                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                                      />
+                                    </label>
+                                  </>
+                                ) : (
+                                  <>
+                                    <label className="min-w-[160px] flex-1 rounded-[16px] border border-[var(--color-editorial-line)] bg-white p-4">
+                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                                        {t("settings.audioBriefing.pitchAdjustment")}
+                                      </div>
+                                      <input
+                                        value={String(voice.pitch)}
+                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { pitch: Number(e.target.value || 0) })}
+                                        inputMode="decimal"
+                                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                                      />
+                                    </label>
+
+                                    <label className="min-w-[160px] flex-1 rounded-[16px] border border-[var(--color-editorial-line)] bg-white p-4">
+                                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                                        {t("settings.audioBriefing.volumeAdjustment")}
+                                      </div>
+                                      <input
+                                        value={String(voice.volume_gain)}
+                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { volume_gain: Number(e.target.value || 0) })}
+                                        inputMode="decimal"
+                                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                                      />
+                                    </label>
+                                  </>
+                                )}
+                              </div>
+
+                              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                                <p className="text-[12px] leading-5 text-[var(--color-editorial-ink-soft)]">
+                                  {t("settings.audioBriefing.inlineHelp")}
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                  {voice.tts_provider === "aivis" ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void syncAivisModels();
+                                      }}
+                                      disabled={aivisModelsSyncing}
+                                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                                    >
+                                      {aivisModelsSyncing ? t("aivisModels.syncing") : t("settings.audioBriefing.refreshCatalog")}
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void persistAudioBriefingVoices();
+                                    }}
+                                    disabled={savingAudioBriefingVoices}
+                                    className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {savingAudioBriefingVoices ? t("common.saving") : t("settings.audioBriefing.savePersonaVoice")}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </form>
+              </SectionCard>
+            </>
+          ) : null}
 
           {activeSection === "reading-plan" ? (
             <SectionCard>
@@ -2384,6 +3217,28 @@ export default function SettingsPage() {
           ) : null}
         </div>
       </div>
+
+      <AivisVoicePickerModal
+        open={Boolean(aivisPickerPersona)}
+        loading={aivisModelsLoading}
+        syncing={aivisModelsSyncing}
+        error={aivisModelsError}
+        models={aivisModelsData?.models ?? []}
+        currentVoiceModel={activeAivisVoice?.voice_model ?? ""}
+        currentVoiceStyle={activeAivisVoice?.voice_style ?? ""}
+        onClose={() => setAivisPickerPersona(null)}
+        onSync={() => {
+          void syncAivisModels();
+        }}
+        onSelect={(selection) => {
+          if (!aivisPickerPersona) return;
+          updateAudioBriefingVoice(aivisPickerPersona, {
+            tts_provider: "aivis",
+            voice_model: selection.voice_model,
+            voice_style: selection.voice_style,
+          });
+        }}
+      />
 
       <ModelGuideModal
         open={modelGuideOpen}

@@ -8,8 +8,10 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("not found")
-	ErrConflict = errors.New("conflict")
+	ErrNotFound     = errors.New("not found")
+	ErrConflict     = errors.New("conflict")
+	ErrUnauthorized = errors.New("unauthorized")
+	ErrInvalidState = errors.New("invalid state")
 )
 
 func mapDBError(err error) error {

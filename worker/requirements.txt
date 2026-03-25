@@ -9,3 +9,5 @@ sentry-sdk[fastapi]==2.22.0
 langfuse>=3,<4
 json-repair>=0.39,<1
 PyMuPDF==1.27.2.2
+boto3==1.39.13
+mutagen==1.47.0

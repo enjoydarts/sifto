@@ -18,6 +18,7 @@ from app.services.facts_check_common import (
 from app.services.facts_check_runner import run_facts_check
 from app.services.facts_task_common import build_facts_localization_task, build_facts_task, parse_facts_result
 from app.services.feed_task_common import (
+    build_audio_briefing_script_task,
     build_ask_task,
     build_ask_navigator_task,
     build_briefing_navigator_task,
@@ -27,6 +28,7 @@ from app.services.feed_task_common import (
     build_seed_sites_rescue_prompt,
     build_seed_sites_task,
     merge_llm_usage,
+    parse_audio_briefing_script_result,
     parse_ask_result,
     parse_ask_navigator_result,
     parse_briefing_navigator_result,
@@ -442,6 +444,58 @@ def generate_item_navigator(persona: str, article: dict, model: str, api_key: st
     )
     out = parse_item_navigator_result(text, task["article"])
     return {"headline": out["headline"], "commentary": out["commentary"], "stance_tags": out["stance_tags"], "llm": _llm_meta(model, "item_navigator", usage)}
+
+
+def generate_audio_briefing_script(
+    persona: str,
+    articles: list[dict],
+    intro_context: dict,
+    target_duration_minutes: int,
+    target_chars: int,
+    chars_per_minute: int,
+    include_opening: bool,
+    include_overall_summary: bool,
+    include_article_segments: bool,
+    include_ending: bool,
+    model: str,
+    api_key: str,
+) -> dict:
+    task = build_audio_briefing_script_task(
+        persona,
+        articles,
+        intro_context,
+        target_duration_minutes=target_duration_minutes,
+        target_chars=target_chars,
+        chars_per_minute=chars_per_minute,
+        include_opening=include_opening,
+        include_overall_summary=include_overall_summary,
+        include_article_segments=include_article_segments,
+        include_ending=include_ending,
+    )
+    text, usage = _chat_json(
+        task["prompt"],
+        model,
+        api_key,
+        max_output_tokens=3200,
+        response_schema=task["schema"],
+        schema_name="audio_briefing_script",
+    )
+    out = parse_audio_briefing_script_result(
+        text,
+        task["articles"],
+        persona,
+        include_opening=include_opening,
+        include_overall_summary=include_overall_summary,
+        include_article_segments=include_article_segments,
+        include_ending=include_ending,
+    )
+    return {
+        "opening": out["opening"],
+        "overall_summary": out["overall_summary"],
+        "article_segments": out["article_segments"],
+        "ending": out["ending"],
+        "llm": _llm_meta(model, "audio_briefing_script", usage),
+    }
 
 
 def generate_ask_navigator(persona: str, ask_input: dict, model: str, api_key: str) -> dict:

@@ -189,7 +189,7 @@ func (h *AudioBriefingsHandler) StartVoicing(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
-	if err := h.voiceRunner.Start(r.Context(), userID, jobID); err != nil {
+	if _, err := h.voiceRunner.Start(r.Context(), userID, jobID); err != nil {
 		switch {
 		case errors.Is(err, repository.ErrNotFound):
 			http.Error(w, "not found", http.StatusNotFound)

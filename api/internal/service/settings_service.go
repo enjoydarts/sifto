@@ -84,6 +84,7 @@ type UpdateLLMModelsInput struct {
 	FactsCheck                  *string
 	FaithfulnessCheck           *string
 	NavigatorEnabled            bool
+	NavigatorPersonaMode        *string
 	NavigatorPersona            *string
 	Navigator                   *string
 	NavigatorFallback           *string
@@ -96,6 +97,7 @@ type UpdateAudioBriefingSettingsInput struct {
 	IntervalHours         int
 	ArticlesPerEpisode    int
 	TargetDurationMinutes int
+	DefaultPersonaMode    *string
 	DefaultPersona        *string
 }
 
@@ -202,6 +204,7 @@ func LLMModelSettingsPayload(settings *model.UserSettings) map[string]any {
 		"facts_check":                    settings.FactsCheckModel,
 		"faithfulness_check":             settings.FaithfulnessCheckModel,
 		"navigator_enabled":              settings.NavigatorEnabled,
+		"navigator_persona_mode":         NormalizePersonaMode(&settings.NavigatorPersonaMode),
 		"navigator_persona":              settings.NavigatorPersona,
 		"navigator":                      settings.NavigatorModel,
 		"navigator_fallback":             settings.NavigatorFallbackModel,
@@ -226,6 +229,7 @@ func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) map[str
 			"interval_hours":          6,
 			"articles_per_episode":    5,
 			"target_duration_minutes": 20,
+			"default_persona_mode":    PersonaModeFixed,
 			"default_persona":         "editor",
 		}
 	}
@@ -234,6 +238,7 @@ func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) map[str
 		"interval_hours":          settings.IntervalHours,
 		"articles_per_episode":    settings.ArticlesPerEpisode,
 		"target_duration_minutes": settings.TargetDurationMinutes,
+		"default_persona_mode":    NormalizePersonaMode(&settings.DefaultPersonaMode),
 		"default_persona":         settings.DefaultPersona,
 	}
 }
@@ -444,12 +449,7 @@ func normalizeNavigatorPersona(v *string) string {
 	if v == nil {
 		return "editor"
 	}
-	switch strings.TrimSpace(*v) {
-	case "editor", "hype", "analyst", "concierge", "snark", "native":
-		return strings.TrimSpace(*v)
-	default:
-		return "editor"
-	}
+	return NormalizePersonaValue(*v)
 }
 
 func normalizeAudioBriefingDefaultPersona(v *string) string {
@@ -677,6 +677,7 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		normalized["facts_check"],
 		normalized["faithfulness_check"],
 		in.NavigatorEnabled,
+		NormalizePersonaMode(in.NavigatorPersonaMode),
 		normalizeNavigatorPersona(in.NavigatorPersona),
 		normalized["navigator"],
 		normalized["navigator_fallback"],
@@ -717,6 +718,7 @@ func (s *SettingsService) UpdateAudioBriefingSettings(ctx context.Context, userI
 		in.IntervalHours,
 		in.ArticlesPerEpisode,
 		in.TargetDurationMinutes,
+		NormalizePersonaMode(in.DefaultPersonaMode),
 		normalizeAudioBriefingDefaultPersona(in.DefaultPersona),
 	)
 }

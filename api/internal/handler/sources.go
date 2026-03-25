@@ -221,7 +221,7 @@ func (h *SourceHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, model.SourceNavigatorEnvelope{})
 		return
 	}
-	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
+	persona := selectBriefingNavigatorPersona(settings)
 	modelName := resolveBriefingNavigatorModel(settings)
 	resolvedModel := ""
 	if modelName != nil {
@@ -238,7 +238,7 @@ func (h *SourceHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	navigator := h.buildSourceNavigator(r.Context(), userID, time.Now())
+	navigator := h.buildSourceNavigator(r.Context(), userID, time.Now(), persona)
 	resp := model.SourceNavigatorEnvelope{Navigator: navigator}
 	if h.cache != nil && navigator != nil && strings.TrimSpace(navigator.Overview) != "" {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, briefingNavigatorCacheTTL); err != nil {
@@ -248,7 +248,7 @@ func (h *SourceHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
-func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string, generatedAt time.Time) *model.SourceNavigator {
+func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string, generatedAt time.Time, persona string) *model.SourceNavigator {
 	if h.repo == nil || h.settingsRepo == nil || h.worker == nil || h.cipher == nil {
 		return nil
 	}
@@ -289,7 +289,6 @@ func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string,
 		openAIKey = poeKey
 	}
 
-	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
 	workerCandidates := make([]service.SourceNavigatorCandidate, 0, len(candidates))
 	titleBySourceID := make(map[string]string, len(candidates))
 	for _, candidate := range candidates {

@@ -77,7 +77,7 @@ func (o *AudioBriefingOrchestrator) GenerateManual(ctx context.Context, userID s
 		return nil, err
 	}
 	now := timeutil.NowJST()
-	return o.createPendingJob(ctx, userID, settings, now, AudioBriefingManualSlotKeyAt(now), settings.DefaultPersona)
+	return o.createPendingJob(ctx, userID, settings, now, AudioBriefingManualSlotKeyAt(now), ResolvePersona(settings.DefaultPersonaMode, settings.DefaultPersona))
 }
 
 func (o *AudioBriefingOrchestrator) GenerateScheduled(ctx context.Context, userID string, now time.Time) (*model.AudioBriefingJob, error) {
@@ -101,7 +101,7 @@ func (o *AudioBriefingOrchestrator) GenerateScheduled(ctx context.Context, userI
 		return nil, err
 	}
 
-	job, err := o.createPendingJob(ctx, userID, settings, slotStartedAt, slotKey, settings.DefaultPersona)
+	job, err := o.createPendingJob(ctx, userID, settings, slotStartedAt, slotKey, ResolvePersona(settings.DefaultPersonaMode, settings.DefaultPersona))
 	if err != nil {
 		if errors.Is(err, repository.ErrConflict) {
 			return o.repo.GetJobBySlotKey(ctx, userID, slotKey)

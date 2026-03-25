@@ -79,6 +79,7 @@ type UserSettings struct {
 	FactsCheckModel                  *string    `json:"facts_check_model,omitempty"`
 	FaithfulnessCheckModel           *string    `json:"faithfulness_check_model,omitempty"`
 	NavigatorEnabled                 bool       `json:"navigator_enabled"`
+	NavigatorPersonaMode             string     `json:"navigator_persona_mode"`
 	NavigatorPersona                 string     `json:"navigator_persona"`
 	NavigatorModel                   *string    `json:"navigator_model,omitempty"`
 	NavigatorFallbackModel           *string    `json:"navigator_fallback_model,omitempty"`
@@ -96,6 +97,7 @@ type AudioBriefingSettings struct {
 	IntervalHours         int       `json:"interval_hours"`
 	ArticlesPerEpisode    int       `json:"articles_per_episode"`
 	TargetDurationMinutes int       `json:"target_duration_minutes"`
+	DefaultPersonaMode    string    `json:"default_persona_mode"`
 	DefaultPersona        string    `json:"default_persona"`
 	CreatedAt             time.Time `json:"created_at"`
 	UpdatedAt             time.Time `json:"updated_at"`

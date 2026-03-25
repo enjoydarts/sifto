@@ -36,6 +36,8 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 		FactsFallbackModel:               strptr("google/gemini-2.5-flash"),
 		SummaryModel:                     strptr("gpt-5.4"),
 		SummaryFallbackModel:             strptr("openrouter::openai/gpt-oss-120b"),
+		NavigatorPersonaMode:             PersonaModeRandom,
+		NavigatorPersona:                 "editor",
 		AudioBriefingScriptModel:         strptr("gpt-5.4"),
 		AudioBriefingScriptFallbackModel: strptr("google/gemini-2.5-flash"),
 		HasPoeAPIKey:                     true,
@@ -55,6 +57,9 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 	}
 	if gotAudioBriefingScriptFallback, _ := got["audio_briefing_script_fallback"].(*string); gotAudioBriefingScriptFallback == nil || *gotAudioBriefingScriptFallback != "google/gemini-2.5-flash" {
 		t.Fatalf("audio_briefing_script_fallback = %v, want %q", got["audio_briefing_script_fallback"], "google/gemini-2.5-flash")
+	}
+	if gotNavigatorPersonaMode, _ := got["navigator_persona_mode"].(string); gotNavigatorPersonaMode != PersonaModeRandom {
+		t.Fatalf("navigator_persona_mode = %v, want %q", got["navigator_persona_mode"], PersonaModeRandom)
 	}
 }
 
@@ -182,6 +187,21 @@ func TestNormalizeAudioBriefingDefaultPersona(t *testing.T) {
 	}
 	if got := normalizeAudioBriefingDefaultPersona(strptr("unknown")); got != "editor" {
 		t.Fatalf("normalizeAudioBriefingDefaultPersona(unknown) = %q, want editor", got)
+	}
+}
+
+func TestAudioBriefingSettingsPayloadIncludesPersonaMode(t *testing.T) {
+	got := AudioBriefingSettingsPayload(&model.AudioBriefingSettings{
+		Enabled:               true,
+		IntervalHours:         6,
+		ArticlesPerEpisode:    5,
+		TargetDurationMinutes: 20,
+		DefaultPersonaMode:    PersonaModeRandom,
+		DefaultPersona:        "editor",
+	})
+
+	if gotMode, _ := got["default_persona_mode"].(string); gotMode != PersonaModeRandom {
+		t.Fatalf("default_persona_mode = %v, want %q", got["default_persona_mode"], PersonaModeRandom)
 	}
 }
 

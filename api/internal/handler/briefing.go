@@ -161,7 +161,7 @@ func (h *BriefingHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, model.BriefingNavigatorEnvelope{})
 		return
 	}
-	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
+	persona := selectBriefingNavigatorPersona(settings)
 	modelName := resolveBriefingNavigatorModel(settings)
 	resolvedModel := ""
 	if modelName != nil {
@@ -181,9 +181,9 @@ func (h *BriefingHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 	generatedAt := timeutil.NowJST()
 	var navigator *model.BriefingNavigator
 	if preview {
-		navigator = h.buildNavigatorPreview(r.Context(), userID, generatedAt, nil)
+		navigator = h.buildNavigatorPreview(r.Context(), userID, generatedAt, persona, nil)
 	} else {
-		navigator = h.buildNavigator(r.Context(), userID, generatedAt)
+		navigator = h.buildNavigator(r.Context(), userID, generatedAt, persona)
 	}
 	resp := model.BriefingNavigatorEnvelope{Navigator: navigator}
 	log.Printf(
@@ -244,7 +244,7 @@ func loadBriefingSnapshotMaxAge() time.Duration {
 	return time.Duration(sec) * time.Second
 }
 
-func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, generatedAt time.Time) *model.BriefingNavigator {
+func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, generatedAt time.Time, persona string) *model.BriefingNavigator {
 	if h.itemRepo == nil || h.settingsRepo == nil || h.worker == nil || h.cipher == nil {
 		return nil
 	}
@@ -284,7 +284,6 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 		openAIKey = poeKey
 	}
 
-	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
 	introContext := buildBriefingNavigatorIntroContext(generatedAt)
 	workerCandidates := make([]service.BriefingNavigatorCandidate, 0, len(candidates))
 	candidateByID := make(map[string]model.BriefingNavigatorCandidate, len(candidates))
@@ -384,7 +383,7 @@ func buildBriefingNavigatorIntroContext(now time.Time) briefingNavigatorIntroCon
 	}
 }
 
-func (h *BriefingHandler) buildNavigatorPreview(ctx context.Context, userID string, generatedAt time.Time, items []model.Item) *model.BriefingNavigator {
+func (h *BriefingHandler) buildNavigatorPreview(ctx context.Context, userID string, generatedAt time.Time, persona string, items []model.Item) *model.BriefingNavigator {
 	if h.settingsRepo == nil {
 		return nil
 	}
@@ -392,7 +391,6 @@ func (h *BriefingHandler) buildNavigatorPreview(ctx context.Context, userID stri
 	if err != nil || settings == nil || !settings.NavigatorEnabled {
 		return nil
 	}
-	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
 	meta := briefingNavigatorPersonaMeta(persona)
 	picks := make([]model.BriefingNavigatorPick, 0, 3)
 	for _, item := range items {
@@ -587,12 +585,14 @@ func hasNavigatorProviderKey(settings *model.UserSettings, provider string) bool
 }
 
 func normalizeBriefingNavigatorPersona(v string) string {
-	switch strings.TrimSpace(v) {
-	case "editor", "hype", "analyst", "concierge", "snark", "native":
-		return strings.TrimSpace(v)
-	default:
+	return service.NormalizePersonaValue(v)
+}
+
+func selectBriefingNavigatorPersona(settings *model.UserSettings) string {
+	if settings == nil {
 		return "editor"
 	}
+	return service.ResolvePersona(settings.NavigatorPersonaMode, settings.NavigatorPersona)
 }
 
 func briefingNavigatorCandidateTitle(candidate model.BriefingNavigatorCandidate) string {

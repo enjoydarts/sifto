@@ -327,7 +327,7 @@ func (h *AskHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, model.AskNavigatorEnvelope{})
 		return
 	}
-	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
+	persona := selectBriefingNavigatorPersona(settings)
 	resolvedModel := strings.TrimSpace(*modelName)
 	cacheKey := cacheKeyAskNavigator(userID, body.Query, body.Answer, persona, resolvedModel)
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"

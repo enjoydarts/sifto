@@ -411,6 +411,7 @@ export default function SettingsPage() {
   const [audioBriefingIntervalHours, setAudioBriefingIntervalHours] = useState<3 | 6>(6);
   const [audioBriefingArticlesPerEpisode, setAudioBriefingArticlesPerEpisode] = useState("5");
   const [audioBriefingTargetDurationMinutes, setAudioBriefingTargetDurationMinutes] = useState("20");
+  const [audioBriefingDefaultPersonaMode, setAudioBriefingDefaultPersonaMode] = useState<"fixed" | "random">("fixed");
   const [audioBriefingDefaultPersona, setAudioBriefingDefaultPersona] = useState("editor");
   const [podcastEnabled, setPodcastEnabled] = useState(false);
   const [podcastFeedSlug, setPodcastFeedSlug] = useState("");
@@ -461,6 +462,7 @@ export default function SettingsPage() {
   const [factsCheckModel, setFactsCheckModel] = useState("");
   const [faithfulnessCheckModel, setFaithfulnessCheckModel] = useState("");
   const [navigatorEnabled, setNavigatorEnabled] = useState(false);
+  const [navigatorPersonaMode, setNavigatorPersonaMode] = useState<"fixed" | "random">("fixed");
   const [navigatorPersona, setNavigatorPersona] = useState("editor");
   const [navigatorModel, setNavigatorModel] = useState("");
   const [navigatorFallbackModel, setNavigatorFallbackModel] = useState("");
@@ -485,6 +487,7 @@ export default function SettingsPage() {
       setAudioBriefingIntervalHours(audioBriefing?.interval_hours === 3 ? 3 : 6);
       setAudioBriefingArticlesPerEpisode(String(audioBriefing?.articles_per_episode ?? 5));
       setAudioBriefingTargetDurationMinutes(String(audioBriefing?.target_duration_minutes ?? 20));
+      setAudioBriefingDefaultPersonaMode(audioBriefing?.default_persona_mode === "random" ? "random" : "fixed");
       setAudioBriefingDefaultPersona(audioBriefing?.default_persona ?? "editor");
       const defaults = buildDefaultAudioBriefingVoices(["editor", "hype", "analyst", "concierge", "snark", "native"]);
       const byPersona = new Map((voices ?? []).map((voice) => [voice.persona, voice]));
@@ -520,6 +523,7 @@ export default function SettingsPage() {
     setFactsCheckModel(llmModels?.facts_check ?? "");
     setFaithfulnessCheckModel(llmModels?.faithfulness_check ?? "");
     setNavigatorEnabled(Boolean(llmModels?.navigator_enabled ?? false));
+    setNavigatorPersonaMode(llmModels?.navigator_persona_mode === "random" ? "random" : "fixed");
     setNavigatorPersona(llmModels?.navigator_persona ?? "editor");
     setNavigatorModel(llmModels?.navigator ?? "");
     setNavigatorFallbackModel(llmModels?.navigator_fallback ?? "");
@@ -546,6 +550,7 @@ export default function SettingsPage() {
       facts_check: string | null;
       faithfulness_check: string | null;
       navigator_enabled: boolean;
+      navigator_persona_mode: string | null;
       navigator_persona: string | null;
       navigator: string | null;
       navigator_fallback: string | null;
@@ -569,6 +574,7 @@ export default function SettingsPage() {
         facts_check: emptyToNull(factsCheckModel),
         faithfulness_check: emptyToNull(faithfulnessCheckModel),
         navigator_enabled: navigatorEnabled,
+        navigator_persona_mode: navigatorPersonaMode,
         navigator_persona: navigatorPersona,
         navigator: emptyToNull(navigatorModel),
         navigator_fallback: emptyToNull(navigatorFallbackModel),
@@ -591,6 +597,7 @@ export default function SettingsPage() {
       navigatorEnabled,
       navigatorFallbackModel,
       navigatorModel,
+      navigatorPersonaMode,
       navigatorPersona,
       audioBriefingScriptFallbackModel,
       audioBriefingScriptModel,
@@ -1884,6 +1891,7 @@ export default function SettingsPage() {
         interval_hours: audioBriefingIntervalHours,
         articles_per_episode: Number(audioBriefingArticlesPerEpisode),
         target_duration_minutes: Number(audioBriefingTargetDurationMinutes),
+        default_persona_mode: audioBriefingDefaultPersonaMode,
         default_persona: audioBriefingDefaultPersona,
       };
       const resp = await api.updateAudioBriefingSettings(payload);
@@ -2112,7 +2120,7 @@ export default function SettingsPage() {
       id: "navigator",
       title: t("settings.group.navigator"),
       summary: navigatorEnabled
-        ? `${t(`settings.navigator.persona.${navigatorPersona}`, navigatorPersona)} / ${navigatorModel || t("settings.default")}`
+        ? `${navigatorPersonaMode === "random" ? t("settings.personaMode.random") : t(`settings.navigator.persona.${navigatorPersona}`, navigatorPersona)} / ${navigatorModel || t("settings.default")}`
         : t("settings.off"),
     },
     {
@@ -2342,6 +2350,46 @@ export default function SettingsPage() {
           {activeSection === "audio-briefing" ? (
             <>
               <SectionCard>
+                <form onSubmit={submitAudioBriefingModels} className="space-y-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.model.audioBriefingScript")}</div>
+                      <p className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.audioBriefing.scriptModelHelp")}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
+                      <button
+                        type="submit"
+                        disabled={savingLLMModels}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                      >
+                        {savingLLMModels ? t("common.saving") : t("settings.saveModels")}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <ModelSelect
+                      label={t("settings.model.audioBriefingScript")}
+                      value={audioBriefingScriptModel}
+                      onChange={(value) => onChangeLLMModel(setAudioBriefingScriptModel, value)}
+                      options={optionsForPurpose("summary", audioBriefingScriptModel)}
+                      labels={modelSelectLabels}
+                      variant="modal"
+                    />
+                    <ModelSelect
+                      label={t("settings.model.audioBriefingScriptFallback")}
+                      value={audioBriefingScriptFallbackModel}
+                      onChange={(value) => onChangeLLMModel(setAudioBriefingScriptFallbackModel, value)}
+                      options={optionsForPurpose("summary", audioBriefingScriptFallbackModel)}
+                      labels={modelSelectLabels}
+                      variant="modal"
+                    />
+                  </div>
+                </form>
+              </SectionCard>
+
+              <SectionCard>
                 <form onSubmit={submitAudioBriefingSettings} className="space-y-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div>
@@ -2423,11 +2471,26 @@ export default function SettingsPage() {
 
                     <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.personaMode.label")}
+                      </div>
+                      <select
+                        value={audioBriefingDefaultPersonaMode}
+                        onChange={(e) => setAudioBriefingDefaultPersonaMode(e.target.value === "random" ? "random" : "fixed")}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      >
+                        <option value="fixed">{t("settings.personaMode.fixed")}</option>
+                        <option value="random">{t("settings.personaMode.random")}</option>
+                      </select>
+                    </label>
+
+                    <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
                         {t("settings.audioBriefing.defaultPersona")}
                       </div>
                       <select
                         value={audioBriefingDefaultPersona}
                         onChange={(e) => setAudioBriefingDefaultPersona(e.target.value)}
+                        disabled={audioBriefingDefaultPersonaMode === "random"}
                         className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                       >
                         {navigatorPersonaCards.map((persona) => (
@@ -2436,215 +2499,13 @@ export default function SettingsPage() {
                           </option>
                         ))}
                       </select>
-                    </label>
-                  </div>
-                </form>
-              </SectionCard>
-
-              <SectionCard>
-                <form onSubmit={submitAudioBriefingModels} className="space-y-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.model.audioBriefingScript")}</div>
-                      <p className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">
-                        {t("settings.audioBriefing.scriptModelHelp")}
+                      <p className="mt-2 text-[11px] leading-5 text-[var(--color-editorial-ink-soft)]">
+                        {audioBriefingDefaultPersonaMode === "random"
+                          ? t("settings.audioBriefing.randomPersonaHelp")
+                          : t("settings.audioBriefing.defaultPersonaHelp")}
                       </p>
-                    </div>
-                    <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
-                      <button
-                        type="submit"
-                        disabled={savingLLMModels}
-                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
-                      >
-                        {savingLLMModels ? t("common.saving") : t("settings.saveModels")}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <ModelSelect
-                      label={t("settings.model.audioBriefingScript")}
-                      value={audioBriefingScriptModel}
-                      onChange={(value) => onChangeLLMModel(setAudioBriefingScriptModel, value)}
-                      options={optionsForPurpose("summary", audioBriefingScriptModel)}
-                      labels={modelSelectLabels}
-                      variant="modal"
-                    />
-                    <ModelSelect
-                      label={t("settings.model.audioBriefingScriptFallback")}
-                      value={audioBriefingScriptFallbackModel}
-                      onChange={(value) => onChangeLLMModel(setAudioBriefingScriptFallbackModel, value)}
-                      options={optionsForPurpose("summary", audioBriefingScriptFallbackModel)}
-                      labels={modelSelectLabels}
-                      variant="modal"
-                    />
-                  </div>
-                </form>
-              </SectionCard>
-
-              <SectionCard>
-                <form onSubmit={submitPodcastSettings} className="space-y-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.podcast.title")}</div>
-                      <p className="mt-1 max-w-3xl text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.podcast.description")}</p>
-                    </div>
-                    <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
-                      <button
-                        type="submit"
-                        disabled={savingPodcast}
-                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
-                      >
-                        {savingPodcast ? t("common.saving") : t("settings.podcast.save")}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!podcastRSSURL}
-                        onClick={copyPodcastRSSURL}
-                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] disabled:opacity-60"
-                      >
-                        {t("settings.podcast.copyRSS")}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                            {t("settings.podcast.enabled")}
-                          </div>
-                          <p className="mt-2 text-sm text-[var(--color-editorial-ink)]">{podcastEnabled ? t("settings.on") : t("settings.off")}</p>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={podcastEnabled}
-                          onChange={(e) => setPodcastEnabled(e.target.checked)}
-                          className="size-4 rounded border-[var(--color-editorial-line-strong)]"
-                        />
-                      </div>
-                    </label>
-
-                    <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                        {t("settings.podcast.rssUrl")}
-                      </div>
-                      <div className="mt-3 break-all rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]">
-                        {podcastRSSURL || t("settings.podcast.rssUrlPending")}
-                      </div>
-                    </div>
-
-                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                        {t("settings.podcast.feedSlug")}
-                      </div>
-                      <input
-                        value={podcastFeedSlug}
-                        readOnly
-                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
-                      />
-                    </label>
-
-                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                        {t("settings.podcast.language")}
-                      </div>
-                      <select
-                        value={podcastLanguage}
-                        onChange={(e) => setPodcastLanguage(e.target.value)}
-                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
-                      >
-                        <option value="ja">ja</option>
-                        <option value="en">en</option>
-                      </select>
                     </label>
                   </div>
-
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                        {t("settings.podcast.showTitle")}
-                      </div>
-                      <input
-                        value={podcastTitle}
-                        onChange={(e) => setPodcastTitle(e.target.value)}
-                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
-                      />
-                    </label>
-
-                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                        {t("settings.podcast.author")}
-                      </div>
-                      <input
-                        value={podcastAuthor}
-                        onChange={(e) => setPodcastAuthor(e.target.value)}
-                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
-                      />
-                    </label>
-                  </div>
-
-                  <label className="block rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                      {t("settings.podcast.summary")}
-                    </div>
-                    <textarea
-                      value={podcastDescription}
-                      onChange={(e) => setPodcastDescription(e.target.value)}
-                      rows={5}
-                      className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
-                    />
-                  </label>
-
-                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-                    <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                        {t("settings.podcast.artworkUrl")}
-                      </div>
-                      <input
-                        value={podcastArtworkURL}
-                        onChange={(e) => setPodcastArtworkURL(e.target.value)}
-                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
-                      />
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <label className="inline-flex min-h-10 cursor-pointer items-center rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)]">
-                          <input
-                            type="file"
-                            accept="image/png,image/jpeg,image/webp"
-                            className="hidden"
-                            onChange={(e) => void handlePodcastArtworkFileChange(e.target.files?.[0] ?? null)}
-                          />
-                          {uploadingPodcastArtwork ? t("common.saving") : t("settings.podcast.uploadArtwork")}
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setPodcastArtworkURL("")}
-                          className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)]"
-                        >
-                          {t("settings.podcast.useDefaultArtwork")}
-                        </button>
-                      </div>
-                    </div>
-
-                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                        {t("settings.podcast.explicit")}
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-3">
-                        <div className="text-sm text-[var(--color-editorial-ink)]">{podcastExplicit ? t("settings.podcast.explicitYes") : t("settings.podcast.explicitNo")}</div>
-                        <input
-                          type="checkbox"
-                          checked={podcastExplicit}
-                          onChange={(e) => setPodcastExplicit(e.target.checked)}
-                          className="size-4 rounded border-[var(--color-editorial-line-strong)]"
-                        />
-                      </div>
-                    </label>
-                  </div>
-
-                  <p className="text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">
-                    {t("settings.podcast.help")}
-                  </p>
                 </form>
               </SectionCard>
 
@@ -3092,6 +2953,173 @@ export default function SettingsPage() {
                   </div>
                 </form>
               </SectionCard>
+
+              <SectionCard>
+                <form onSubmit={submitPodcastSettings} className="space-y-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.podcast.title")}</div>
+                      <p className="mt-1 max-w-3xl text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.podcast.description")}</p>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
+                      <button
+                        type="submit"
+                        disabled={savingPodcast}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                      >
+                        {savingPodcast ? t("common.saving") : t("settings.podcast.save")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!podcastRSSURL}
+                        onClick={copyPodcastRSSURL}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] disabled:opacity-60"
+                      >
+                        {t("settings.podcast.copyRSS")}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                            {t("settings.podcast.enabled")}
+                          </div>
+                          <p className="mt-2 text-sm text-[var(--color-editorial-ink)]">{podcastEnabled ? t("settings.on") : t("settings.off")}</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={podcastEnabled}
+                          onChange={(e) => setPodcastEnabled(e.target.checked)}
+                          className="size-4 rounded border-[var(--color-editorial-line-strong)]"
+                        />
+                      </div>
+                    </label>
+
+                    <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.rssUrl")}
+                      </div>
+                      <div className="mt-3 break-all rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]">
+                        {podcastRSSURL || t("settings.podcast.rssUrlPending")}
+                      </div>
+                    </div>
+
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.feedSlug")}
+                      </div>
+                      <input
+                        value={podcastFeedSlug}
+                        readOnly
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                    </label>
+
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.language")}
+                      </div>
+                      <select
+                        value={podcastLanguage}
+                        onChange={(e) => setPodcastLanguage(e.target.value)}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      >
+                        <option value="ja">ja</option>
+                        <option value="en">en</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.showTitle")}
+                      </div>
+                      <input
+                        value={podcastTitle}
+                        onChange={(e) => setPodcastTitle(e.target.value)}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                    </label>
+
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.author")}
+                      </div>
+                      <input
+                        value={podcastAuthor}
+                        onChange={(e) => setPodcastAuthor(e.target.value)}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.podcast.summary")}
+                    </div>
+                    <textarea
+                      value={podcastDescription}
+                      onChange={(e) => setPodcastDescription(e.target.value)}
+                      rows={5}
+                      className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                    />
+                  </label>
+
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+                    <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.artworkUrl")}
+                      </div>
+                      <input
+                        value={podcastArtworkURL}
+                        onChange={(e) => setPodcastArtworkURL(e.target.value)}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <label className="inline-flex min-h-10 cursor-pointer items-center rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)]">
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(e) => void handlePodcastArtworkFileChange(e.target.files?.[0] ?? null)}
+                          />
+                          {uploadingPodcastArtwork ? t("common.saving") : t("settings.podcast.uploadArtwork")}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setPodcastArtworkURL("")}
+                          className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)]"
+                        >
+                          {t("settings.podcast.useDefaultArtwork")}
+                        </button>
+                      </div>
+                    </div>
+
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.explicit")}
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <div className="text-sm text-[var(--color-editorial-ink)]">{podcastExplicit ? t("settings.podcast.explicitYes") : t("settings.podcast.explicitNo")}</div>
+                        <input
+                          type="checkbox"
+                          checked={podcastExplicit}
+                          onChange={(e) => setPodcastExplicit(e.target.checked)}
+                          className="size-4 rounded border-[var(--color-editorial-line-strong)]"
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <p className="text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                    {t("settings.podcast.help")}
+                  </p>
+                </form>
+              </SectionCard>
             </>
           ) : null}
 
@@ -3505,9 +3533,32 @@ export default function SettingsPage() {
 
                 <section className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
                   <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.persona")}</h4>
+                  <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <label className="flex min-w-[220px] flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.personaMode.label")}
+                      </div>
+                      <select
+                        value={navigatorPersonaMode}
+                        onChange={(e) => {
+                          llmModelsDirtyRef.current = true;
+                          setNavigatorPersonaMode(e.target.value === "random" ? "random" : "fixed");
+                        }}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      >
+                        <option value="fixed">{t("settings.personaMode.fixed")}</option>
+                        <option value="random">{t("settings.personaMode.random")}</option>
+                      </select>
+                    </label>
+                    <p className="max-w-[560px] text-xs leading-6 text-[var(--color-editorial-ink-soft)]">
+                      {navigatorPersonaMode === "random"
+                        ? t("settings.navigator.randomPersonaHelp")
+                        : t("settings.navigator.fixedPersonaHelp")}
+                    </p>
+                  </div>
                   <div className="mt-4 grid gap-3 lg:grid-cols-2">
                     {navigatorPersonaCards.map((persona) => {
-                      const selected = persona.key === navigatorPersona;
+                      const selected = navigatorPersonaMode === "fixed" && persona.key === navigatorPersona;
                       const briefingHints = persona.briefing ?? {};
                       const itemHints = persona.item ?? {};
                       return (
@@ -3515,7 +3566,7 @@ export default function SettingsPage() {
                           key={persona.key}
                           type="button"
                           onClick={async () => {
-                            if (persona.key === navigatorPersona || savingLLMModels) return;
+                            if (navigatorPersonaMode !== "fixed" || persona.key === navigatorPersona || savingLLMModels) return;
                             const previousPersona = settings?.llm_models?.navigator_persona ?? "editor";
                             llmModelsDirtyRef.current = true;
                             setNavigatorPersona(persona.key);
@@ -3534,11 +3585,13 @@ export default function SettingsPage() {
                           }}
                           className={joinClassNames(
                             "rounded-[18px] border bg-[var(--color-editorial-panel)] p-4 text-left transition hover:bg-[var(--color-editorial-panel-strong)]",
+                            navigatorPersonaMode !== "fixed" ? "cursor-default opacity-70" : "",
                             selected
                               ? "border-[var(--color-editorial-ink)] shadow-[0_12px_32px_rgba(58,42,27,0.08)]"
                               : "border-[var(--color-editorial-line)]"
                           )}
                           aria-pressed={selected}
+                          disabled={navigatorPersonaMode !== "fixed" || savingLLMModels}
                         >
                           <div className="flex items-start gap-3">
                             <div className="shrink-0 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-1.5">

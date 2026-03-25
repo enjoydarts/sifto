@@ -30,7 +30,7 @@ func (r *AudioBriefingRepo) EnsureSettingsDefaults(ctx context.Context, userID s
 func (r *AudioBriefingRepo) GetSettings(ctx context.Context, userID string) (*model.AudioBriefingSettings, error) {
 	var v model.AudioBriefingSettings
 	err := r.db.QueryRow(ctx, `
-		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, default_persona, created_at, updated_at
+		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, default_persona_mode, default_persona, created_at, updated_at
 		FROM audio_briefing_settings
 		WHERE user_id = $1
 	`, userID).Scan(
@@ -39,6 +39,7 @@ func (r *AudioBriefingRepo) GetSettings(ctx context.Context, userID string) (*mo
 		&v.IntervalHours,
 		&v.ArticlesPerEpisode,
 		&v.TargetDurationMinutes,
+		&v.DefaultPersonaMode,
 		&v.DefaultPersona,
 		&v.CreatedAt,
 		&v.UpdatedAt,
@@ -51,7 +52,7 @@ func (r *AudioBriefingRepo) GetSettings(ctx context.Context, userID string) (*mo
 
 func (r *AudioBriefingRepo) ListEnabledSettings(ctx context.Context) ([]model.AudioBriefingSettings, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, default_persona, created_at, updated_at
+		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, default_persona_mode, default_persona, created_at, updated_at
 		FROM audio_briefing_settings
 		WHERE enabled = TRUE
 		ORDER BY updated_at ASC, user_id ASC
@@ -70,6 +71,7 @@ func (r *AudioBriefingRepo) ListEnabledSettings(ctx context.Context) ([]model.Au
 			&row.IntervalHours,
 			&row.ArticlesPerEpisode,
 			&row.TargetDurationMinutes,
+			&row.DefaultPersonaMode,
 			&row.DefaultPersona,
 			&row.CreatedAt,
 			&row.UpdatedAt,
@@ -81,22 +83,26 @@ func (r *AudioBriefingRepo) ListEnabledSettings(ctx context.Context) ([]model.Au
 	return out, rows.Err()
 }
 
-func (r *AudioBriefingRepo) UpsertSettings(ctx context.Context, userID string, enabled bool, intervalHours, articlesPerEpisode, targetDurationMinutes int, defaultPersona string) (*model.AudioBriefingSettings, error) {
+func (r *AudioBriefingRepo) UpsertSettings(ctx context.Context, userID string, enabled bool, intervalHours, articlesPerEpisode, targetDurationMinutes int, defaultPersonaMode string, defaultPersona string) (*model.AudioBriefingSettings, error) {
 	if strings.TrimSpace(defaultPersona) == "" {
 		defaultPersona = "editor"
 	}
+	if strings.TrimSpace(defaultPersonaMode) == "" {
+		defaultPersonaMode = "fixed"
+	}
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO audio_briefing_settings (
-			user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, default_persona
-		) VALUES ($1, $2, $3, $4, $5, $6)
+			user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, default_persona_mode, default_persona
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (user_id) DO UPDATE
 		SET enabled = EXCLUDED.enabled,
 		    interval_hours = EXCLUDED.interval_hours,
 		    articles_per_episode = EXCLUDED.articles_per_episode,
 		    target_duration_minutes = EXCLUDED.target_duration_minutes,
+		    default_persona_mode = EXCLUDED.default_persona_mode,
 		    default_persona = EXCLUDED.default_persona,
 		    updated_at = NOW()
-	`, userID, enabled, intervalHours, articlesPerEpisode, targetDurationMinutes, defaultPersona)
+	`, userID, enabled, intervalHours, articlesPerEpisode, targetDurationMinutes, defaultPersonaMode, defaultPersona)
 	if err != nil {
 		return nil, err
 	}

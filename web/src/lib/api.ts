@@ -1177,6 +1177,7 @@ export interface UserSettings {
     facts_check?: string | null;
     faithfulness_check?: string | null;
     navigator_enabled?: boolean;
+    navigator_persona_mode?: string | null;
     navigator_persona?: string | null;
     navigator?: string | null;
     navigator_fallback?: string | null;
@@ -1207,6 +1208,7 @@ export interface AudioBriefingSettings {
   interval_hours: number;
   articles_per_episode: number;
   target_duration_minutes: number;
+  default_persona_mode: string;
   default_persona: string;
 }
 
@@ -2091,6 +2093,7 @@ export const api = {
     facts_check?: string | null;
     faithfulness_check?: string | null;
     navigator_enabled?: boolean;
+    navigator_persona_mode?: string | null;
     navigator_persona?: string | null;
     navigator?: string | null;
     navigator_fallback?: string | null;

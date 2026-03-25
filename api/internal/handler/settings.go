@@ -290,6 +290,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		FactsCheck                  *string `json:"facts_check"`
 		FaithfulnessCheck           *string `json:"faithfulness_check"`
 		NavigatorEnabled            bool    `json:"navigator_enabled"`
+		NavigatorPersonaMode        *string `json:"navigator_persona_mode"`
 		NavigatorPersona            *string `json:"navigator_persona"`
 		Navigator                   *string `json:"navigator"`
 		NavigatorFallback           *string `json:"navigator_fallback"`
@@ -313,6 +314,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		FactsCheck:                  body.FactsCheck,
 		FaithfulnessCheck:           body.FaithfulnessCheck,
 		NavigatorEnabled:            body.NavigatorEnabled,
+		NavigatorPersonaMode:        body.NavigatorPersonaMode,
 		NavigatorPersona:            body.NavigatorPersona,
 		Navigator:                   body.Navigator,
 		NavigatorFallback:           body.NavigatorFallback,
@@ -343,6 +345,7 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 		IntervalHours         int     `json:"interval_hours"`
 		ArticlesPerEpisode    int     `json:"articles_per_episode"`
 		TargetDurationMinutes int     `json:"target_duration_minutes"`
+		DefaultPersonaMode    *string `json:"default_persona_mode"`
 		DefaultPersona        *string `json:"default_persona"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -354,6 +357,7 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 		IntervalHours:         body.IntervalHours,
 		ArticlesPerEpisode:    body.ArticlesPerEpisode,
 		TargetDurationMinutes: body.TargetDurationMinutes,
+		DefaultPersonaMode:    body.DefaultPersonaMode,
 		DefaultPersona:        body.DefaultPersona,
 	})
 	if err != nil {

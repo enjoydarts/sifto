@@ -282,7 +282,7 @@ func (h *ItemHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, model.ItemNavigatorEnvelope{})
 		return
 	}
-	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
+	persona := selectBriefingNavigatorPersona(settings)
 	modelName := resolveBriefingNavigatorModel(settings)
 	resolvedModel := ""
 	if modelName != nil {
@@ -302,9 +302,9 @@ func (h *ItemHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 	generatedAt := timeutil.NowJST()
 	var navigator *model.ItemNavigator
 	if preview {
-		navigator = h.buildItemNavigatorPreview(r.Context(), userID, itemID, generatedAt)
+		navigator = h.buildItemNavigatorPreview(r.Context(), userID, itemID, generatedAt, persona)
 	} else {
-		navigator = h.buildItemNavigator(r.Context(), userID, itemID, generatedAt)
+		navigator = h.buildItemNavigator(r.Context(), userID, itemID, generatedAt, persona)
 	}
 	resp := model.ItemNavigatorEnvelope{Navigator: navigator}
 	if h.cache != nil && navigator != nil && strings.TrimSpace(navigator.Commentary) != "" {
@@ -315,7 +315,7 @@ func (h *ItemHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp)
 }
 
-func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID string, generatedAt time.Time) *model.ItemNavigator {
+func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID string, generatedAt time.Time, persona string) *model.ItemNavigator {
 	if h.detail == nil || h.settingsRepo == nil || h.worker == nil || h.cipher == nil {
 		return nil
 	}
@@ -376,7 +376,6 @@ func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID str
 		v := item.PublishedAt.Format(time.RFC3339)
 		publishedAt = &v
 	}
-	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
 	workerCtx := service.WithWorkerTraceMetadata(ctx, "item_navigator", &userID, nil, &itemID, nil)
 	resp, err := h.worker.GenerateItemNavigatorWithModel(
 		workerCtx,
@@ -426,7 +425,7 @@ func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID str
 	}
 }
 
-func (h *ItemHandler) buildItemNavigatorPreview(ctx context.Context, userID, itemID string, generatedAt time.Time) *model.ItemNavigator {
+func (h *ItemHandler) buildItemNavigatorPreview(ctx context.Context, userID, itemID string, generatedAt time.Time, persona string) *model.ItemNavigator {
 	if h.settingsRepo == nil {
 		return nil
 	}
@@ -434,7 +433,6 @@ func (h *ItemHandler) buildItemNavigatorPreview(ctx context.Context, userID, ite
 	if err != nil || settings == nil || !settings.NavigatorEnabled {
 		return nil
 	}
-	persona := normalizeBriefingNavigatorPersona(settings.NavigatorPersona)
 	meta := briefingNavigatorPersonaMeta(persona)
 	return &model.ItemNavigator{
 		Enabled:        true,

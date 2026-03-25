@@ -1139,6 +1139,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(syncPoeUsageHistoryFn(client, db, secretCipher))
 	register(generateAudioBriefingsFn(client, db, worker, cache))
 	register(runAudioBriefingPipelineFn(client, db, worker, cache))
+	register(failStaleAudioBriefingVoicingFn(client, db))
 	register(moveAudioBriefingsToIAFn(client, db, worker))
 	register(generateDigestFn(client, db))
 	register(composeDigestCopyFn(client, db, worker, secretCipher))
@@ -1280,6 +1281,30 @@ func moveAudioBriefingsToIAFn(client inngestgo.Client, db *pgxpool.Pool, worker 
 			return map[string]any{
 				"processed": result.Processed,
 				"moved":     result.Moved,
+				"failed":    result.Failed,
+			}, nil
+		},
+	)
+}
+
+func failStaleAudioBriefingVoicingFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFunction, error) {
+	audioBriefingRepo := repository.NewAudioBriefingRepo(db)
+	staleVoicingSvc := service.NewAudioBriefingStaleVoicingService(audioBriefingRepo)
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "fail-stale-audio-briefing-voicing", Name: "Fail Stale Audio Briefing Voicing"},
+		inngestgo.CronTrigger("*/5 * * * *"),
+		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
+			result, err := staleVoicingSvc.FailStaleJobs(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if result == nil {
+				result = &service.AudioBriefingStaleVoicingResult{}
+			}
+			return map[string]any{
+				"processed": result.Processed,
 				"failed":    result.Failed,
 			}, nil
 		},

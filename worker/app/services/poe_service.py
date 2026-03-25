@@ -43,6 +43,7 @@ from app.services.feed_task_common import (
 )
 from app.services.llm_catalog import model_pricing, model_supports, resolve_model_id
 from app.services.llm_text_utils import (
+    audio_briefing_script_max_tokens as _audio_briefing_script_max_tokens,
     extract_first_json_object as _extract_first_json_object,
     facts_need_japanese_localization as _facts_need_japanese_localization,
     summary_max_tokens as _summary_max_tokens,
@@ -576,11 +577,12 @@ def generate_audio_briefing_script(
         include_article_segments=include_article_segments,
         include_ending=include_ending,
     )
-    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=3200, response_schema=task["schema"], schema_name="audio_briefing_script")
+    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=_audio_briefing_script_max_tokens(task["target_chars"]), response_schema=task["schema"], schema_name="audio_briefing_script")
     out = parse_audio_briefing_script_result(
         text,
         task["articles"],
         persona,
+        target_chars=target_chars,
         include_opening=include_opening,
         include_overall_summary=include_overall_summary,
         include_article_segments=include_article_segments,

@@ -32,6 +32,10 @@ def summary_max_tokens(target_chars: int) -> int:
     return clamp_int(round(target_chars * 1.2), 700, 2600)
 
 
+def audio_briefing_script_max_tokens(target_chars: int) -> int:
+    return clamp_int(round(target_chars * 0.9), 1800, 8000)
+
+
 def summary_composite_score(breakdown: dict) -> float:
     weights = {
         "importance": 0.38,

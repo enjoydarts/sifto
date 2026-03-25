@@ -10,6 +10,7 @@ from app.services.anthropic_transport import (
     message_usage as _message_usage,
 )
 from app.services.llm_text_utils import (
+    audio_briefing_script_max_tokens as _audio_briefing_script_max_tokens,
     clamp01 as _clamp01,
     clamp_int as _clamp_int,
     decode_json_string_fragment as _decode_json_string_fragment,
@@ -1139,11 +1140,14 @@ def generate_audio_briefing_script(
         raise RuntimeError("audio briefing script api client is unavailable")
 
     message, used_model, _execution_failures = _call_with_model_fallback(
-        task["prompt"],
+        task["user_prompt"],
         str(model or _feed_suggest_model),
         _feed_suggest_model_fallback,
-        max_tokens=3200,
+        max_tokens=_audio_briefing_script_max_tokens(task["target_chars"]),
         api_key=api_key,
+        system_prompt=task["system_instruction"],
+        user_prompt=task["user_prompt"],
+        enable_prompt_cache=os.getenv("ANTHROPIC_AUDIO_BRIEFING_SCRIPT_PROMPT_CACHE", "1").strip() not in ("0", "false", "False"),
     )
     if message is None:
         raise RuntimeError("audio briefing script returned no message")
@@ -1153,6 +1157,7 @@ def generate_audio_briefing_script(
         text,
         task["articles"],
         persona,
+        target_chars=target_chars,
         include_opening=include_opening,
         include_overall_summary=include_overall_summary,
         include_article_segments=include_article_segments,

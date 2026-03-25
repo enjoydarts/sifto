@@ -1,16 +1,20 @@
 import json
+import hashlib
 import logging
 import os
 import re
 from urllib.parse import urlparse
 from app.services.llm_catalog import model_pricing
 from app.services.gemini_transport import (
+    audio_briefing_script_context_cache_enabled as _audio_briefing_script_context_cache_enabled,
     cache_key_hash as _cache_key_hash,
     env_int as _env_int,
     env_timeout_seconds as _env_timeout_seconds,
     generate_content as _gemini_generate_content,
+    summary_context_cache_enabled as _summary_context_cache_enabled,
 )
 from app.services.llm_text_utils import (
+    audio_briefing_script_max_tokens as _audio_briefing_script_max_tokens,
     clamp01 as _clamp01,
     clamp_int as _clamp_int,
     decode_json_string_fragment as _decode_json_string_fragment,
@@ -414,17 +418,31 @@ def generate_audio_briefing_script(
         include_article_segments=include_article_segments,
         include_ending=include_ending,
     )
+    api_key_hash = hashlib.sha256((api_key or "").encode("utf-8")).hexdigest()[:16]
+    cache_key = None
+    if _audio_briefing_script_context_cache_enabled():
+        cache_key = _cache_key_hash(
+            [
+                _normalize_model_name(model),
+                "audio-briefing-script-v1",
+                api_key_hash,
+                task["system_instruction"],
+            ]
+        )
     text, usage = _generate_content(
-        task["prompt"],
+        task["user_prompt"],
         model=model,
         api_key=api_key,
-        max_output_tokens=3200,
+        max_output_tokens=_audio_briefing_script_max_tokens(task["target_chars"]),
+        system_instruction=task["system_instruction"],
+        context_cache_key=cache_key,
         response_schema=task["schema"],
     )
     out = parse_audio_briefing_script_result(
         text,
         task["articles"],
         persona,
+        target_chars=target_chars,
         include_opening=include_opening,
         include_overall_summary=include_overall_summary,
         include_article_segments=include_article_segments,
@@ -541,7 +559,9 @@ def summarize(
     task = build_summary_task(title, facts, source_text_chars)
     max_tokens = _summary_max_tokens(task["target_chars"])
     api_key_hash = hashlib.sha256((api_key or "").encode("utf-8")).hexdigest()[:16]
-    cache_key = _cache_key_hash([_normalize_model_name(model), "summary-v2", api_key_hash, task["system_instruction"]])
+    cache_key = None
+    if _summary_context_cache_enabled():
+        cache_key = _cache_key_hash([_normalize_model_name(model), "summary-v2", api_key_hash, task["system_instruction"]])
     text, usage = _generate_content(
         task["prompt"],
         model=model,

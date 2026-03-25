@@ -199,6 +199,8 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("見出しの焼き直し", prompt)
         self.assertIn("ending は番組を終わらせる締めの言葉", prompt)
         self.assertIn("ending で総括や振り返りをしない", prompt)
+        self.assertIn("全セクションで1文ごとに改行", prompt)
+        self.assertIn("article commentary でも1文ごとに改行", prompt)
 
     def test_build_audio_briefing_script_task_omits_unrequested_sections(self):
         task = build_audio_briefing_script_task(
@@ -341,6 +343,67 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertEqual(result["article_segments"][0]["headline"], "見出しA")
         self.assertEqual(result["article_segments"][1]["item_id"], "item-2")
         self.assertEqual(result["article_segments"][1]["headline"], "見出しB")
+
+    def test_parse_audio_briefing_script_result_scales_caps_for_long_targets(self):
+        long_summary = "総括です。" * 800
+        long_commentary = "コメントです。" * 400
+        result = parse_audio_briefing_script_result(
+            f"""
+            {{
+              "opening": "導入です。",
+              "overall_summary": "{long_summary}",
+              "article_segments": [
+                {{
+                  "item_id": "item-1",
+                  "headline": "見出しA",
+                  "commentary": "{long_commentary}"
+                }}
+              ],
+              "ending": "締めです。"
+            }}
+            """,
+            [
+                {
+                    "item_id": "item-1",
+                    "title": "Example title 1",
+                    "translated_title": "翻訳タイトル1",
+                    "summary": "Summary text 1",
+                }
+            ],
+            "editor",
+            target_chars=14000,
+        )
+        self.assertGreater(len(result["overall_summary"]), 2400)
+        self.assertGreater(len(result["article_segments"][0]["commentary"]), 1200)
+
+    def test_parse_audio_briefing_script_result_preserves_commentary_line_breaks(self):
+        result = parse_audio_briefing_script_result(
+            """
+            {
+              "article_segments": [
+                {
+                  "item_id": "item-1",
+                  "headline": "見出し",
+                  "commentary": "一文目です。\\n二文目です。\\n三文目です。"
+                }
+              ]
+            }
+            """,
+            [
+                {
+                    "item_id": "item-1",
+                    "title": "Example title",
+                    "translated_title": "翻訳タイトル",
+                    "summary": "Summary text",
+                }
+            ],
+            "editor",
+            include_opening=False,
+            include_overall_summary=False,
+            include_article_segments=True,
+            include_ending=False,
+        )
+        self.assertEqual(result["article_segments"][0]["commentary"], "一文目です。\n二文目です。\n三文目です。")
 
     def test_ask_navigator_schema_requires_all_fields(self):
         self.assertEqual(

@@ -54,7 +54,14 @@ def summary_context_cache_enabled() -> bool:
     return os.getenv("GEMINI_SUMMARY_CONTEXT_CACHE", "1").strip() not in ("0", "false", "False")
 
 
-def summary_context_cache_ttl_sec() -> int:
+def audio_briefing_script_context_cache_enabled() -> bool:
+    return os.getenv("GEMINI_AUDIO_BRIEFING_SCRIPT_CONTEXT_CACHE", "1").strip() not in ("0", "false", "False")
+
+
+def context_cache_ttl_sec() -> int:
+    raw = os.getenv("GEMINI_CONTEXT_CACHE_TTL_SEC")
+    if raw is not None and raw != "":
+        return env_int("GEMINI_CONTEXT_CACHE_TTL_SEC", 3600)
     return env_int("GEMINI_SUMMARY_CONTEXT_CACHE_TTL_SEC", 3600)
 
 
@@ -143,7 +150,7 @@ def get_or_create_cached_content(model: str, api_key: str, cache_key: str, syste
             _GEMINI_CONTEXT_CACHE[cache_key] = (name, exp)
             return name
 
-    ttl_sec = max(60, summary_context_cache_ttl_sec())
+    ttl_sec = max(60, context_cache_ttl_sec())
     url = "https://generativelanguage.googleapis.com/v1beta/cachedContents"
     body = {
         "model": f"models/{normalize_model_name(model)}",
@@ -212,7 +219,7 @@ def generate_content(
     cached_content_name = ""
     if system_instruction:
         body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
-        if context_cache_key and summary_context_cache_enabled():
+        if context_cache_key:
             try:
                 cached_name = get_or_create_cached_content(
                     model_name,

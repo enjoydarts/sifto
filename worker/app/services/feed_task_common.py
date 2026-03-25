@@ -642,10 +642,9 @@ def build_audio_briefing_script_task(
     chars_per_minute = max(int(chars_per_minute or 700), 1)
     target_duration_minutes = max(int(target_duration_minutes or 20), 1)
     target_chars = max(int(target_chars or 0), chars_per_minute)
-    opening_budget = max(min(target_chars // 10, 640), 240)
-    summary_budget = max(min(target_chars // 5, 1800), 900)
-    ending_budget = max(min(target_chars // 12, 520), 180)
-    article_budget = max((target_chars - opening_budget - summary_budget - ending_budget - 200) // max(len(trimmed_articles), 1), 180)
+    opening_budget, summary_budget, ending_budget, article_budget = _audio_briefing_script_budgets(
+        target_chars, len(trimmed_articles)
+    )
     section_rules: list[str] = []
     target_lines: list[str] = []
     response_properties: list[str] = []
@@ -680,7 +679,8 @@ def build_audio_briefing_script_task(
 
     response_example = "{\n" + ",\n".join(response_properties) + "\n}"
 
-    prompt = f"""あなたは Sifto の音声ブリーフィング番組を担当する、単独話者のAIナビゲーターです。
+    system_instruction = f"""# Role
+あなたは Sifto の音声ブリーフィング番組を担当する、単独話者のAIナビゲーターです。
 
 キャラクター:
 - persona: {persona_key}
@@ -700,18 +700,9 @@ def build_audio_briefing_script_task(
 - briefing_comment_range: {briefing_profile["comment_range"]}
 - item_style_hint: {item_profile["style"]}
 
-タスク:
-- 与えられた記事だけを根拠に、日本語の音声ブリーフィング台本を作る
-- 今回返すべきセクションだけを返す
-
-文字量の目安:
-- 目標尺: 約 {target_duration_minutes} 分
-- 換算レート: 1分あたり {chars_per_minute} 文字
-- 今回返すセクションの目標文字数: 約 {target_chars} 文字
-{chr(10).join(target_lines)}
-- 全体は目標文字数の前後10%程度に収める意識で書く
-
-ルール:
+# Rules
+- 出力は必ず有効なJSONオブジェクト1つのみにしてください。
+- 前置き・後置き・コードフェンスは不要です。
 - articles にない item_id を作らない
 - 冗長な前置きや言い換えを避け、文字数目標を強く意識する
 - 各記事では、summary の言い換えだけで終わらせず、このペルソナなら何に反応するかを話す
@@ -723,9 +714,26 @@ def build_audio_briefing_script_task(
 - 話し方は {briefing_profile["speech_style"]} と {briefing_profile["voice"]} に寄せる
 - 事実を捏造しない。articles から読めることだけを使う
 - 記事ごとに観点を少しずつ変える。同じテンプレを繰り返さない
+- 全セクションで1文ごとに改行する
+- article commentary でも1文ごとに改行する
+- 段落間に空行は入れない
 - snark でも不快・攻撃的・見下し表現は禁止
 - snark では軽い皮肉、ツッコミ、呆れ気味の言い回しは許可する
 - snark でも読者個人をいじらない。人ではなく話題や状況に対して毒づく
+"""
+
+    user_prompt = f"""タスク:
+- 与えられた記事だけを根拠に、日本語の音声ブリーフィング台本を作る
+- 今回返すべきセクションだけを返す
+
+文字量の目安:
+- 目標尺: 約 {target_duration_minutes} 分
+- 換算レート: 1分あたり {chars_per_minute} 文字
+- 今回返すセクションの目標文字数: 約 {target_chars} 文字
+{chr(10).join(target_lines)}
+- 全体は目標文字数の前後10%程度に収める意識で書く
+
+追加ルール:
 - JSONのみを返す
 {chr(10).join(section_rules)}
 
@@ -743,7 +751,10 @@ articles:
 {json.dumps(trimmed_articles, ensure_ascii=False)}
 """
     return {
-        "prompt": prompt,
+        "target_chars": target_chars,
+        "system_instruction": system_instruction,
+        "user_prompt": user_prompt,
+        "prompt": f"{system_instruction}\n\n{user_prompt}",
         "schema": build_audio_briefing_script_schema(
             include_opening=include_opening,
             include_overall_summary=include_overall_summary,
@@ -786,15 +797,16 @@ def parse_audio_briefing_script_result(
     articles: list[dict],
     persona: str,
     *,
+    target_chars: int = 12000,
     include_opening: bool = True,
     include_overall_summary: bool = True,
     include_article_segments: bool = True,
     include_ending: bool = True,
 ) -> dict:
     data = extract_first_json_object(text) or {}
-    opening = str(data.get("opening") or "").strip()
-    overall_summary = str(data.get("overall_summary") or "").strip()
-    ending = str(data.get("ending") or "").strip()
+    opening = _normalize_audio_briefing_generated_text(str(data.get("opening") or "").strip())
+    overall_summary = _normalize_audio_briefing_generated_text(str(data.get("overall_summary") or "").strip())
+    ending = _normalize_audio_briefing_generated_text(str(data.get("ending") or "").strip())
 
     if include_opening and not opening:
         raise ValueError("audio briefing script missing opening")
@@ -806,6 +818,8 @@ def parse_audio_briefing_script_result(
     raw_segments = data.get("article_segments") if isinstance(data.get("article_segments"), list) else []
     if include_article_segments and len(raw_segments) != len(articles):
         raise ValueError("audio briefing script article_segments count mismatch")
+
+    opening_cap, summary_cap, ending_cap, article_cap = _audio_briefing_script_budgets(target_chars, len(articles))
 
     segments: list[dict] = []
     if include_article_segments:
@@ -822,23 +836,41 @@ def parse_audio_briefing_script_result(
             headline = str(raw.get("headline") or "").strip()
             if not headline:
                 raise ValueError(f"audio briefing script missing headline for item_id: {item_id}")
-            commentary = re.sub(r"\s+", " ", str(raw.get("commentary") or "").strip())
+            commentary = _normalize_audio_briefing_generated_text(str(raw.get("commentary") or "").strip())
             if not commentary:
                 raise ValueError(f"audio briefing script missing commentary for item_id: {item_id}")
             segments.append(
                 {
                     "item_id": item_id,
                     "headline": headline[:160],
-                    "commentary": commentary[:1200],
+                    "commentary": commentary[:article_cap],
                 }
             )
 
     return {
-        "opening": opening[:900] if include_opening else "",
-        "overall_summary": overall_summary[:2400] if include_overall_summary else "",
+        "opening": opening[:opening_cap] if include_opening else "",
+        "overall_summary": overall_summary[:summary_cap] if include_overall_summary else "",
         "article_segments": segments,
-        "ending": ending[:900] if include_ending else "",
+        "ending": ending[:ending_cap] if include_ending else "",
     }
+
+
+def _audio_briefing_script_budgets(target_chars: int, article_count: int) -> tuple[int, int, int, int]:
+    target_chars = max(int(target_chars or 0), 700)
+    opening_budget = max(min(target_chars // 8, 1200), 320)
+    summary_budget = max(min(target_chars // 4, 3200), 1200)
+    ending_budget = max(min(target_chars // 8, 1000), 260)
+    article_budget = max(
+        (target_chars - opening_budget - summary_budget - ending_budget - 200) // max(int(article_count or 0), 1),
+        260,
+    )
+    return opening_budget, summary_budget, ending_budget, article_budget
+
+
+def _normalize_audio_briefing_generated_text(text: str) -> str:
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in str(text or "").splitlines()]
+    lines = [line for line in lines if line]
+    return "\n".join(lines).strip()
 
 
 def _log_audio_briefing_segment_id_mismatch(index: int, expected_item_id: str, returned_item_id: str) -> None:

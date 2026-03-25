@@ -100,20 +100,53 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 	if len(draft.Chunks) != 4 {
 		t.Fatalf("len(draft.Chunks) = %d, want 4", len(draft.Chunks))
 	}
-	if got := draft.Chunks[0].Text; got != "編集長 水城です。今朝の流れを素早く見ていきましょう。" {
+	if got := draft.Chunks[0].Text; got != "編集長 水城です。今朝の流れを素早く見ていきましょう。\n\n" {
 		t.Fatalf("opening = %q", got)
 	}
 	if got := draft.Chunks[1].PartType; got != "summary" {
 		t.Fatalf("summary part type = %q", got)
 	}
-	if got := draft.Chunks[1].Text; got != "まず全体として、AIとプロダクトの境目がまた一段近づいています。" {
+	if got := draft.Chunks[1].Text; got != "まず全体として、AIとプロダクトの境目がまた一段近づいています。\n\n" {
 		t.Fatalf("summary = %q", got)
 	}
-	if got := draft.Chunks[2].Text; got != "LLMで見た翻訳題です。ここは背景と含意を押さえておく価値があります。" {
+	if got := draft.Chunks[2].Text; got != "LLMで見た翻訳題です。ここは背景と含意を押さえておく価値があります。\n\n" {
 		t.Fatalf("article = %q", got)
 	}
 	if got := draft.Chunks[3].Text; got != "続きはSiftoで確認してください。" {
 		t.Fatalf("ending = %q", got)
+	}
+}
+
+func TestBuildAudioBriefingDraftAddsBlankLineBetweenSections(t *testing.T) {
+	title := "原題"
+	translated := "翻訳題"
+	summary := "要約本文です。"
+
+	draft := BuildAudioBriefingDraft(
+		time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST),
+		"editor",
+		[]model.AudioBriefingJobItem{{
+			ItemID:          "item-1",
+			Rank:            1,
+			Title:           &title,
+			TranslatedTitle: &translated,
+			SummarySnapshot: &summary,
+		}},
+		nil,
+		0,
+	)
+
+	if !strings.HasSuffix(draft.Chunks[0].Text, "\n\n") {
+		t.Fatalf("opening should end with section break: %q", draft.Chunks[0].Text)
+	}
+	if !strings.HasSuffix(draft.Chunks[1].Text, "\n\n") {
+		t.Fatalf("summary should end with section break: %q", draft.Chunks[1].Text)
+	}
+	if !strings.HasSuffix(draft.Chunks[2].Text, "\n\n") {
+		t.Fatalf("article should end with section break: %q", draft.Chunks[2].Text)
+	}
+	if strings.HasSuffix(draft.Chunks[3].Text, "\n\n") {
+		t.Fatalf("ending should not end with section break: %q", draft.Chunks[3].Text)
 	}
 }
 
@@ -152,14 +185,17 @@ func TestAudioBriefingTargetCharsUsesSevenHundredCharsPerMinute(t *testing.T) {
 }
 
 func TestAudioBriefingSectionBudgetsFavorLongerFrameSections(t *testing.T) {
-	if got := audioBriefingOpeningBudget(14000); got < 480 {
-		t.Fatalf("opening budget = %d, want >= 480", got)
+	if got := audioBriefingOpeningBudget(14000); got < 1000 {
+		t.Fatalf("opening budget = %d, want >= 1000", got)
 	}
-	if got := audioBriefingSummaryBudget(14000); got < 1200 {
-		t.Fatalf("summary budget = %d, want >= 1200", got)
+	if got := audioBriefingSummaryBudget(14000); got < 3000 {
+		t.Fatalf("summary budget = %d, want >= 3000", got)
 	}
-	if got := audioBriefingEndingBudget(14000); got < 360 {
-		t.Fatalf("ending budget = %d, want >= 360", got)
+	if got := audioBriefingEndingBudget(14000); got < 900 {
+		t.Fatalf("ending budget = %d, want >= 900", got)
+	}
+	if got := audioBriefingCommentaryBudget(14000, 5); got < 1600 {
+		t.Fatalf("commentary budget = %d, want >= 1600", got)
 	}
 }
 
@@ -201,7 +237,7 @@ func TestBuildAudioBriefingDraftFromNarrationTrimsToTargetBudgets(t *testing.T) 
 	if got := draft.Chunks[1].CharCount; got > audioBriefingSummaryBudget(1200) {
 		t.Fatalf("summary char count = %d, want <= %d", got, audioBriefingSummaryBudget(1200))
 	}
-	if got := draft.Chunks[2].CharCount; got > charCount("見出しです。")+audioBriefingCommentaryBudget(1200, 1) {
+	if got := draft.Chunks[2].CharCount; got > charCount("見出しです。")+audioBriefingCommentaryBudget(1200, 1)+charCount("\n\n") {
 		t.Fatalf("article char count = %d, want commentary to be trimmed", got)
 	}
 	if got := draft.Chunks[3].CharCount; got > audioBriefingEndingBudget(1200) {

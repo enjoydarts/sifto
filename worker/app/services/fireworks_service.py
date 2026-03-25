@@ -39,6 +39,7 @@ from app.services.feed_task_common import (
 )
 from app.services.llm_catalog import model_pricing, model_supports
 from app.services.llm_text_utils import (
+    audio_briefing_script_max_tokens as _audio_briefing_script_max_tokens,
     extract_first_json_object as _extract_first_json_object,
 )
 from app.services.openai_compat_transport import run_chat_json
@@ -476,7 +477,7 @@ def generate_audio_briefing_script(
         task["prompt"],
         model,
         api_key,
-        max_output_tokens=3200,
+        max_output_tokens=_audio_briefing_script_max_tokens(task["target_chars"]),
         response_schema=task["schema"],
         schema_name="audio_briefing_script",
     )
@@ -484,6 +485,7 @@ def generate_audio_briefing_script(
         text,
         task["articles"],
         persona,
+        target_chars=target_chars,
         include_opening=include_opening,
         include_overall_summary=include_overall_summary,
         include_article_segments=include_article_segments,

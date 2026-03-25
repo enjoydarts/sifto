@@ -1,6 +1,9 @@
 import unittest
 
-from app.services.llm_text_utils import facts_need_japanese_localization
+from app.services.llm_text_utils import (
+    audio_briefing_script_max_tokens,
+    facts_need_japanese_localization,
+)
 
 
 class FactsLocalizationDetectionTests(unittest.TestCase):
@@ -19,6 +22,9 @@ class FactsLocalizationDetectionTests(unittest.TestCase):
         ]
 
         self.assertFalse(facts_need_japanese_localization(facts))
+
+    def test_audio_briefing_script_max_tokens_scales_past_previous_fixed_cap(self):
+        self.assertGreater(audio_briefing_script_max_tokens(9000), 3200)
 
 
 if __name__ == "__main__":

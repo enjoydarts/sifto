@@ -909,6 +909,24 @@ def parse_audio_briefing_script_result(
     }
 
 
+_AUDIO_BRIEFING_SCRIPT_RETRYABLE_ERROR_MARKERS = (
+    "audio briefing script missing opening",
+    "audio briefing script missing overall_summary",
+    "audio briefing script missing ending",
+    "audio briefing script article_segments count mismatch",
+    "audio briefing script segment must be an object",
+    "audio briefing script missing headline for item_id:",
+    "audio briefing script missing commentary for item_id:",
+)
+
+
+def is_audio_briefing_script_retryable_validation_error(exc: Exception) -> bool:
+    message = str(exc or "").strip()
+    if not message:
+        return False
+    return any(message.startswith(marker) for marker in _AUDIO_BRIEFING_SCRIPT_RETRYABLE_ERROR_MARKERS)
+
+
 def _audio_briefing_script_budgets(target_chars: int, article_count: int) -> tuple[int, int, int, int]:
     target_chars = max(int(target_chars or 0), 700)
     opening_budget = max(min(round(target_chars * 0.15), 2200), 420)

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from app.services.alibaba_service import generate_audio_briefing_script as generate_audio_briefing_script_alibaba
@@ -7,6 +7,7 @@ from app.services.deepseek_service import generate_audio_briefing_script as gene
 from app.services.fireworks_service import generate_audio_briefing_script as generate_audio_briefing_script_fireworks
 from app.services.gemini_service import generate_audio_briefing_script as generate_audio_briefing_script_gemini
 from app.services.groq_service import generate_audio_briefing_script as generate_audio_briefing_script_groq
+from app.services.feed_task_common import is_audio_briefing_script_retryable_validation_error
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import generate_audio_briefing_script as generate_audio_briefing_script_mistral
 from app.services.openai_service import generate_audio_briefing_script as generate_audio_briefing_script_openai
@@ -69,14 +70,15 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
         }
         for article in req.articles
     ]
-    result = run_observed_request(
-        request,
-        metadata={"model": req.model or "", "persona": req.persona, "articles_count": len(articles)},
-        input_payload={"persona": req.persona, "articles_count": len(articles), "model": req.model, "target_chars": req.target_chars},
-        call=lambda: dispatch_by_model(
+    try:
+        result = run_observed_request(
             request,
-            req.model,
-            handlers={
+            metadata={"model": req.model or "", "persona": req.persona, "articles_count": len(articles)},
+            input_payload={"persona": req.persona, "articles_count": len(articles), "model": req.model, "target_chars": req.target_chars},
+            call=lambda: dispatch_by_model(
+                request,
+                req.model,
+                handlers={
                 "anthropic": lambda api_key: generate_audio_briefing_script(
                     persona=req.persona,
                     articles=articles,
@@ -245,8 +247,12 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                     model=str(req.model),
                     api_key=api_key or "",
                 ),
-            },
-        ),
-        output_builder=lambda result: {"items_count": len(result.get("article_segments") or []), **llm_usage_summary(result)},
-    )
+                },
+            ),
+            output_builder=lambda result: {"items_count": len(result.get("article_segments") or []), **llm_usage_summary(result)},
+        )
+    except ValueError as exc:
+        if is_audio_briefing_script_retryable_validation_error(exc):
+            raise HTTPException(status_code=422, detail=str(exc))
+        raise
     return AudioBriefingScriptResponse(**result)

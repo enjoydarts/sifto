@@ -6,6 +6,7 @@ from app.services.feed_task_common import (
     ASK_NAVIGATOR_SCHEMA,
     BRIEFING_NAVIGATOR_SCHEMA,
     SOURCE_NAVIGATOR_SCHEMA,
+    is_audio_briefing_script_retryable_validation_error,
     resolve_navigator_sampling_profile,
     _resolve_persona_file,
     build_audio_briefing_script_task,
@@ -299,6 +300,20 @@ class FeedTaskCommonTests(unittest.TestCase):
                 ],
                 "editor",
             )
+
+    def test_audio_briefing_script_retryable_validation_error_detects_count_mismatch(self):
+        self.assertTrue(
+            is_audio_briefing_script_retryable_validation_error(
+                ValueError("audio briefing script article_segments count mismatch")
+            )
+        )
+
+    def test_audio_briefing_script_retryable_validation_error_excludes_input_errors(self):
+        self.assertFalse(
+            is_audio_briefing_script_retryable_validation_error(
+                ValueError("audio briefing input article missing item_id at index 1")
+            )
+        )
 
     def test_parse_audio_briefing_script_result_allows_article_only_sections(self):
         result = parse_audio_briefing_script_result(

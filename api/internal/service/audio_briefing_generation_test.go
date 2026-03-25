@@ -100,16 +100,16 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 	if len(draft.Chunks) != 4 {
 		t.Fatalf("len(draft.Chunks) = %d, want 4", len(draft.Chunks))
 	}
-	if got := draft.Chunks[0].Text; got != "編集長 水城です。今朝の流れを素早く見ていきましょう。\n\n" {
+	if got := draft.Chunks[0].Text; got != "編集長 水城です。今朝の流れを素早く見ていきましょう。" {
 		t.Fatalf("opening = %q", got)
 	}
 	if got := draft.Chunks[1].PartType; got != "summary" {
 		t.Fatalf("summary part type = %q", got)
 	}
-	if got := draft.Chunks[1].Text; got != "まず全体として、AIとプロダクトの境目がまた一段近づいています。\n\n" {
+	if got := draft.Chunks[1].Text; got != "まず全体として、AIとプロダクトの境目がまた一段近づいています。" {
 		t.Fatalf("summary = %q", got)
 	}
-	if got := draft.Chunks[2].Text; got != "LLMで見た翻訳題です。ここは背景と含意を押さえておく価値があります。\n\n" {
+	if got := draft.Chunks[2].Text; got != "LLMで見た翻訳題です。ここは背景と含意を押さえておく価値があります。" {
 		t.Fatalf("article = %q", got)
 	}
 	if got := draft.Chunks[3].Text; got != "続きはSiftoで確認してください。" {
@@ -117,7 +117,7 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 	}
 }
 
-func TestBuildAudioBriefingDraftAddsBlankLineBetweenSections(t *testing.T) {
+func TestBuildAudioBriefingDraftDoesNotAddBlankLineBetweenSections(t *testing.T) {
 	title := "原題"
 	translated := "翻訳題"
 	summary := "要約本文です。"
@@ -136,17 +136,14 @@ func TestBuildAudioBriefingDraftAddsBlankLineBetweenSections(t *testing.T) {
 		0,
 	)
 
-	if !strings.HasSuffix(draft.Chunks[0].Text, "\n\n") {
-		t.Fatalf("opening should end with section break: %q", draft.Chunks[0].Text)
+	if strings.Contains(draft.Chunks[0].Text, "\n\n") {
+		t.Fatalf("opening should not include section break: %q", draft.Chunks[0].Text)
 	}
-	if !strings.HasSuffix(draft.Chunks[1].Text, "\n\n") {
-		t.Fatalf("summary should end with section break: %q", draft.Chunks[1].Text)
+	if strings.Contains(draft.Chunks[1].Text, "\n\n") {
+		t.Fatalf("summary should not include section break: %q", draft.Chunks[1].Text)
 	}
-	if !strings.HasSuffix(draft.Chunks[2].Text, "\n\n") {
-		t.Fatalf("article should end with section break: %q", draft.Chunks[2].Text)
-	}
-	if strings.HasSuffix(draft.Chunks[3].Text, "\n\n") {
-		t.Fatalf("ending should not end with section break: %q", draft.Chunks[3].Text)
+	if strings.Contains(draft.Chunks[2].Text, "\n\n") {
+		t.Fatalf("article should not include section break: %q", draft.Chunks[2].Text)
 	}
 }
 

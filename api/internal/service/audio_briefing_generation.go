@@ -220,11 +220,6 @@ func splitAudioBriefingText(text string, maxChars int) []string {
 
 func audioBriefingSectionParts(text string, maxChars int, addTrailingBreak bool) []string {
 	parts := splitAudioBriefingText(text, maxChars)
-	if !addTrailingBreak || len(parts) == 0 {
-		return parts
-	}
-	last := len(parts) - 1
-	parts[last] = strings.TrimRight(parts[last], "\n") + "\n\n"
 	return parts
 }
 

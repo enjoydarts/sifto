@@ -1,6 +1,7 @@
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import tempfile
 import urllib.request
@@ -100,7 +101,8 @@ def download_segments(tmp_path: Path, r2: R2Client, audio_object_keys: list[str]
 def download_direct(url: str, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with urllib.request.urlopen(url, timeout=60) as response:
-        destination.write_bytes(response.read())
+        with destination.open("wb") as stream:
+            shutil.copyfileobj(response, stream)
 
 
 def concat_audio(segment_files: list[Path], output_path: Path) -> None:

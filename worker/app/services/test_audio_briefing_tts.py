@@ -48,6 +48,32 @@ class AivisRateLimiterTests(unittest.TestCase):
         slept = sleep_mock.call_args.args[0]
         self.assertAlmostEqual(slept, 5.6, places=1)
 
+    def test_redis_acquire_falls_back_after_max_wait(self):
+        class FakeRedis:
+            def set(self, key, value, nx=False, px=None):
+                return False
+
+            def pttl(self, key):
+                return 200000
+
+        fallback = AivisRateLimiter(min_interval_sec=8.6)
+        limiter = AivisRedisRateLimiter(
+            redis_client=FakeRedis(),
+            min_interval_sec=8.6,
+            fallback=fallback,
+            max_wait_sec=5.0,
+        )
+
+        with (
+            patch("app.services.audio_briefing_tts.time.monotonic", side_effect=[100.0, 100.0, 106.0]),
+            patch("app.services.audio_briefing_tts.time.sleep") as sleep_mock,
+            patch.object(fallback, "acquire") as fallback_acquire_mock,
+        ):
+            limiter.acquire("shared-key")
+
+        self.assertGreaterEqual(sleep_mock.call_count, 1)
+        fallback_acquire_mock.assert_called_once_with("shared-key")
+
 
 class AudioBriefingTTSServiceTests(unittest.TestCase):
     def test_presign_audio_url_uses_r2_client(self):

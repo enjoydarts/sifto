@@ -2,16 +2,26 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"strings"
 	"time"
 
+	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
 )
 
+type audioBriefingConcatRepo interface {
+	GetJobByID(ctx context.Context, userID, jobID string) (*model.AudioBriefingJob, error)
+	ListJobChunks(ctx context.Context, userID, jobID string) ([]model.AudioBriefingScriptChunk, error)
+	BeginConcatCallback(ctx context.Context, jobID, requestID, tokenHash string, providerJobID, audioObjectKey *string, expiresAt time.Time) (*model.AudioBriefingJob, *model.AudioBriefingCallbackToken, error)
+	UpdateConcatProviderJobID(ctx context.Context, jobID string, providerJobID string) (*model.AudioBriefingJob, error)
+	FailConcatLaunch(ctx context.Context, jobID string, errorCode string, errorMessage string) (*model.AudioBriefingJob, error)
+}
+
 type AudioBriefingConcatStarter struct {
-	repo   *repository.AudioBriefingRepo
+	repo   audioBriefingConcatRepo
 	runner AudioConcatRunner
 	mode   string
 }
@@ -79,6 +89,9 @@ func (s *AudioBriefingConcatStarter) Start(ctx context.Context, userID string, j
 		return err
 	}
 	if _, err := s.repo.UpdateConcatProviderJobID(ctx, job.ID, runResp.ExecutionName); err != nil {
+		if _, failErr := s.repo.FailConcatLaunch(ctx, job.ID, "concat_launch_failed", err.Error()); failErr != nil {
+			return errors.Join(err, failErr)
+		}
 		return err
 	}
 	return nil

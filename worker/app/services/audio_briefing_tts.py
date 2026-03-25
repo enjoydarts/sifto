@@ -37,10 +37,17 @@ class AivisRateLimiter:
 
 
 class AivisRedisRateLimiter:
-    def __init__(self, redis_client, min_interval_sec: float = 8.6, fallback: AivisRateLimiter | None = None) -> None:
+    def __init__(
+        self,
+        redis_client,
+        min_interval_sec: float = 8.6,
+        fallback: AivisRateLimiter | None = None,
+        max_wait_sec: float = 120.0,
+    ) -> None:
         self.redis_client = redis_client
         self.min_interval_sec = max(float(min_interval_sec or 0), 0.0)
         self.fallback = fallback or AivisRateLimiter(min_interval_sec=min_interval_sec)
+        self.max_wait_sec = max(float(max_wait_sec or 0), 0.0)
 
     def acquire(self, key: str) -> None:
         if self.redis_client is None or self.min_interval_sec <= 0:
@@ -48,6 +55,7 @@ class AivisRedisRateLimiter:
             return
         ttl_ms = max(int(math.ceil(self.min_interval_sec * 1000)), 1)
         redis_key = self._redis_key(key)
+        started_at = time.monotonic()
         while True:
             try:
                 if self.redis_client.set(redis_key, "1", nx=True, px=ttl_ms):
@@ -56,7 +64,17 @@ class AivisRedisRateLimiter:
             except Exception:
                 self.fallback.acquire(key)
                 return
+            if self.max_wait_sec > 0:
+                elapsed_sec = time.monotonic() - started_at
+                remaining_budget_sec = self.max_wait_sec - elapsed_sec
+                if remaining_budget_sec <= 0:
+                    self.fallback.acquire(key)
+                    return
+            else:
+                remaining_budget_sec = 0.0
             wait_sec = self.min_interval_sec if remaining_ms is None or remaining_ms < 0 else max(float(remaining_ms) / 1000.0, 0.05)
+            if self.max_wait_sec > 0:
+                wait_sec = min(wait_sec, max(remaining_budget_sec, 0.05))
             time.sleep(wait_sec)
 
     def _redis_key(self, key: str) -> str:
@@ -116,11 +134,13 @@ def redis_client():
 
 
 _AIVIS_MIN_INTERVAL_SEC = 60.0 / max(_env_float("AIVIS_TTS_REQUESTS_PER_MINUTE", 7.0), 1.0)
+_AIVIS_REDIS_MAX_WAIT_SEC = max(_env_float("AIVIS_TTS_REDIS_MAX_WAIT_SEC", 120.0), 0.0)
 _AIVIS_FALLBACK_RATE_LIMITER = AivisRateLimiter(min_interval_sec=_AIVIS_MIN_INTERVAL_SEC)
 AIVIS_RATE_LIMITER = AivisRedisRateLimiter(
     redis_client=redis_client(),
     min_interval_sec=_AIVIS_MIN_INTERVAL_SEC,
     fallback=_AIVIS_FALLBACK_RATE_LIMITER,
+    max_wait_sec=_AIVIS_REDIS_MAX_WAIT_SEC,
 )
 
 

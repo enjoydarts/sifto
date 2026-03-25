@@ -125,8 +125,13 @@ func (o *AudioBriefingOrchestrator) Resume(ctx context.Context, userID string, j
 }
 
 func (o *AudioBriefingOrchestrator) RunPipeline(ctx context.Context, userID string, jobID string) (*model.AudioBriefingJob, error) {
+	job, _, err := o.RunPipelineStep(ctx, userID, jobID)
+	return job, err
+}
+
+func (o *AudioBriefingOrchestrator) RunPipelineStep(ctx context.Context, userID string, jobID string) (*model.AudioBriefingJob, bool, error) {
 	if o == nil || o.repo == nil {
-		return nil, fmt.Errorf("audio briefing orchestrator unavailable")
+		return nil, false, fmt.Errorf("audio briefing orchestrator unavailable")
 	}
 	return o.continuePipeline(ctx, userID, jobID)
 }
@@ -145,21 +150,21 @@ func (o *AudioBriefingOrchestrator) createPendingJob(
 	return o.repo.CreatePendingJob(ctx, userID, slotStartedAt, slotKey, persona)
 }
 
-func (o *AudioBriefingOrchestrator) continuePipeline(ctx context.Context, userID string, jobID string) (*model.AudioBriefingJob, error) {
+func (o *AudioBriefingOrchestrator) continuePipeline(ctx context.Context, userID string, jobID string) (*model.AudioBriefingJob, bool, error) {
 	job, err := o.repo.GetJobByID(ctx, userID, jobID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	chunks, err := o.repo.ListJobChunks(ctx, userID, jobID)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	stage, err := audioBriefingNextPipelineStage(job, chunks)
 	if err != nil {
 		if audioBriefingShouldContinue(job.Status) {
-			return nil, err
+			return nil, false, err
 		}
-		return job, nil
+		return job, false, nil
 	}
 
 	switch stage {
@@ -167,29 +172,46 @@ func (o *AudioBriefingOrchestrator) continuePipeline(ctx context.Context, userID
 		if err := o.runStageWithRecovery(ctx, userID, jobID, audioBriefingPipelineStageScript, func() error {
 			return o.runScriptingStage(ctx, job)
 		}); err != nil {
-			return o.loadJobAfterStageError(ctx, userID, jobID, audioBriefingPipelineStageScript, err)
+			nextJob, nextErr := o.loadJobAfterStageError(ctx, userID, jobID, audioBriefingPipelineStageScript, err)
+			return nextJob, false, nextErr
 		}
 		return o.continuePipeline(ctx, userID, jobID)
 	case audioBriefingPipelineStageVoice:
 		if o.voiceRunner == nil {
-			return nil, fmt.Errorf("audio briefing voice runner unavailable")
+			return nil, false, fmt.Errorf("audio briefing voice runner unavailable")
 		}
+		var voiceResult *AudioBriefingVoiceRunResult
 		if err := o.runStageWithRecovery(ctx, userID, jobID, audioBriefingPipelineStageVoice, func() error {
-			return o.voiceRunner.Start(ctx, userID, jobID)
+			var stageErr error
+			voiceResult, stageErr = o.voiceRunner.Start(ctx, userID, jobID)
+			return stageErr
 		}); err != nil {
-			return o.loadJobAfterStageError(ctx, userID, jobID, audioBriefingPipelineStageVoice, err)
+			nextJob, nextErr := o.loadJobAfterStageError(ctx, userID, jobID, audioBriefingPipelineStageVoice, err)
+			return nextJob, false, nextErr
 		}
-		return o.continuePipeline(ctx, userID, jobID)
+		if voiceResult != nil && voiceResult.Completed {
+			return o.continuePipeline(ctx, userID, jobID)
+		}
+		nextJob, err := o.repo.GetJobByID(ctx, userID, jobID)
+		if err != nil {
+			return nil, false, err
+		}
+		if voiceResult != nil && voiceResult.ProcessedChunk {
+			return nextJob, true, nil
+		}
+		return nextJob, false, nil
 	case audioBriefingPipelineStageConcat:
 		if o.concatStarter == nil {
-			return nil, fmt.Errorf("audio briefing concat starter unavailable")
+			return nil, false, fmt.Errorf("audio briefing concat starter unavailable")
 		}
 		if err := o.concatStarter.Start(ctx, userID, jobID); err != nil {
-			return o.loadJobAfterStageError(ctx, userID, jobID, audioBriefingPipelineStageConcat, err)
+			nextJob, nextErr := o.loadJobAfterStageError(ctx, userID, jobID, audioBriefingPipelineStageConcat, err)
+			return nextJob, false, nextErr
 		}
-		return o.repo.GetJobByID(ctx, userID, jobID)
+		nextJob, err := o.repo.GetJobByID(ctx, userID, jobID)
+		return nextJob, false, err
 	default:
-		return job, nil
+		return job, false, nil
 	}
 }
 

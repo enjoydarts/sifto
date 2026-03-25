@@ -1238,18 +1238,24 @@ func runAudioBriefingPipelineFn(client inngestgo.Client, db *pgxpool.Pool, worke
 			if strings.TrimSpace(data.UserID) == "" || strings.TrimSpace(data.JobID) == "" {
 				return nil, fmt.Errorf("audio briefing run requires user_id and job_id")
 			}
-			job, err := orchestrator.RunPipeline(ctx, strings.TrimSpace(data.UserID), strings.TrimSpace(data.JobID))
+			job, shouldRequeue, err := orchestrator.RunPipelineStep(ctx, strings.TrimSpace(data.UserID), strings.TrimSpace(data.JobID))
 			if err != nil {
 				return nil, err
 			}
 			if job == nil {
 				return map[string]any{"status": "missing"}, nil
 			}
+			if shouldRequeue && strings.TrimSpace(job.Status) == "voicing" {
+				if _, err := client.Send(ctx, service.NewAudioBriefingRunEvent(job.UserID, job.ID, "continue-voicing")); err != nil {
+					return nil, err
+				}
+			}
 			return map[string]any{
-				"job_id":  job.ID,
-				"user_id": job.UserID,
-				"status":  job.Status,
-				"trigger": strings.TrimSpace(data.Trigger),
+				"job_id":         job.ID,
+				"user_id":        job.UserID,
+				"status":         job.Status,
+				"trigger":        strings.TrimSpace(data.Trigger),
+				"should_requeue": shouldRequeue,
 			}, nil
 		},
 	)

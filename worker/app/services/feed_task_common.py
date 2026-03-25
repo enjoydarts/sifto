@@ -114,6 +114,59 @@ ITEM_NAVIGATOR_SCHEMA = {
     "additionalProperties": False,
 }
 
+AUDIO_BRIEFING_SCRIPT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "opening": {"type": "string"},
+        "overall_summary": {"type": "string"},
+        "article_segments": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "item_id": {"type": "string"},
+                    "headline": {"type": "string"},
+                    "commentary": {"type": "string"},
+                },
+                "required": ["item_id", "headline", "commentary"],
+                "additionalProperties": False,
+            },
+        },
+        "ending": {"type": "string"},
+    },
+    "required": ["opening", "overall_summary", "article_segments", "ending"],
+    "additionalProperties": False,
+}
+
+
+def build_audio_briefing_script_schema(
+    *,
+    include_opening: bool,
+    include_overall_summary: bool,
+    include_article_segments: bool,
+    include_ending: bool,
+) -> dict:
+    properties: dict[str, object] = {}
+    required: list[str] = []
+    if include_opening:
+        properties["opening"] = {"type": "string"}
+        required.append("opening")
+    if include_overall_summary:
+        properties["overall_summary"] = {"type": "string"}
+        required.append("overall_summary")
+    if include_article_segments:
+        properties["article_segments"] = AUDIO_BRIEFING_SCRIPT_SCHEMA["properties"]["article_segments"]
+        required.append("article_segments")
+    if include_ending:
+        properties["ending"] = {"type": "string"}
+        required.append("ending")
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
+
 ASK_NAVIGATOR_SCHEMA = {
     "type": "object",
     "properties": {
@@ -570,6 +623,141 @@ def build_item_navigator_task(persona: str, article: dict) -> dict:
     }
 
 
+def build_audio_briefing_script_task(
+    persona: str,
+    articles: list[dict],
+    intro_context: dict | None = None,
+    target_duration_minutes: int = 20,
+    target_chars: int = 12000,
+    chars_per_minute: int = 700,
+    include_opening: bool = True,
+    include_overall_summary: bool = True,
+    include_article_segments: bool = True,
+    include_ending: bool = True,
+) -> dict:
+    intro_context = dict(intro_context or {})
+    persona_key, briefing_profile = resolve_navigator_persona_profile(persona, "briefing")
+    _, item_profile = resolve_navigator_persona_profile(persona, "item")
+    trimmed_articles = articles[:30]
+    chars_per_minute = max(int(chars_per_minute or 700), 1)
+    target_duration_minutes = max(int(target_duration_minutes or 20), 1)
+    target_chars = max(int(target_chars or 0), chars_per_minute)
+    opening_budget = max(min(target_chars // 10, 640), 240)
+    summary_budget = max(min(target_chars // 5, 1800), 900)
+    ending_budget = max(min(target_chars // 12, 520), 180)
+    article_budget = max((target_chars - opening_budget - summary_budget - ending_budget - 200) // max(len(trimmed_articles), 1), 180)
+    section_rules: list[str] = []
+    target_lines: list[str] = []
+    response_properties: list[str] = []
+    if include_opening:
+        section_rules.append(f"- opening は 4〜7文で、時間帯に合う自然な導入にする。目安は約 {opening_budget} 文字以内")
+        target_lines.append(f"- opening の目安: 約 {opening_budget} 文字以内")
+        response_properties.append('  "opening": "導入"')
+    if include_overall_summary:
+        section_rules.append(f"- overall_summary は総括であり、10文以上で、その回の全体像、流れ、聞きどころ、記事群のつながりまでしっかり話す。目安は約 {summary_budget} 文字以内")
+        section_rules.append("- overall_summary で記事の順番紹介をしない。各記事の1行要約を並べない")
+        section_rules.append("- overall_summary で見出しの焼き直しや、記事ごとの固有名詞の機械的な列挙をしない")
+        section_rules.append("- overall_summary では、回全体を俯瞰して共通テーマ、対立軸、温度感、いま追う意味を語る")
+        target_lines.append(f"- overall_summary の目安: 約 {summary_budget} 文字以内")
+        response_properties.append('  "overall_summary": "全体サマリー"')
+    if include_article_segments:
+        section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
+        section_rules.append(f"- article_segments の各 commentary は 3〜6文で、音声で聞きやすい自然な話し言葉にする。目安は約 {article_budget} 文字以内")
+        target_lines.append(f"- 各 commentary の目安: 約 {article_budget} 文字以内")
+        response_properties.extend([
+            '  "article_segments": [',
+            '    {"item_id": "uuid", "headline": "記事見出し", "commentary": "記事ごとの話し言葉コメント"}',
+            "  ]",
+        ])
+    else:
+        section_rules.append("- article_segments は返さない")
+    if include_ending:
+        section_rules.append(f"- ending は番組を終わらせる締めの言葉として 4〜6文で書く。目安は約 {ending_budget} 文字以内")
+        section_rules.append("- ending で総括や振り返りをしない。記事内容の再整理や論点のまとめ直しをしない")
+        section_rules.append("- ending では、聞いてくれたことへの一言、次回へつながる余韻、静かな締めを優先する")
+        target_lines.append(f"- ending の目安: 約 {ending_budget} 文字以内")
+        response_properties.append('  "ending": "締め"')
+
+    response_example = "{\n" + ",\n".join(response_properties) + "\n}"
+
+    prompt = f"""あなたは Sifto の音声ブリーフィング番組を担当する、単独話者のAIナビゲーターです。
+
+キャラクター:
+- persona: {persona_key}
+- display_name: {briefing_profile["name"]}
+- 性別: {briefing_profile["gender"]}
+- 年代感: {briefing_profile["age_vibe"]}
+- 一人称: {briefing_profile["first_person"]}
+- 話し方: {briefing_profile["speech_style"]}
+- 職業: {briefing_profile["occupation"]}
+- 経験: {briefing_profile["experience"]}
+- 性格: {briefing_profile["personality"]}
+- 価値観: {briefing_profile["values"]}
+- 関心: {briefing_profile["interests"]}
+- 嫌いなもの: {briefing_profile["dislikes"]}
+- tone: {briefing_profile["voice"]}
+- intro_style: {briefing_profile["intro_style"]}
+- briefing_comment_range: {briefing_profile["comment_range"]}
+- item_style_hint: {item_profile["style"]}
+
+タスク:
+- 与えられた記事だけを根拠に、日本語の音声ブリーフィング台本を作る
+- 今回返すべきセクションだけを返す
+
+文字量の目安:
+- 目標尺: 約 {target_duration_minutes} 分
+- 換算レート: 1分あたり {chars_per_minute} 文字
+- 今回返すセクションの目標文字数: 約 {target_chars} 文字
+{chr(10).join(target_lines)}
+- 全体は目標文字数の前後10%程度に収める意識で書く
+
+ルール:
+- articles にない item_id を作らない
+- 冗長な前置きや言い換えを避け、文字数目標を強く意識する
+- 各記事では、summary の言い換えだけで終わらせず、このペルソナなら何に反応するかを話す
+- 第一印象、良いと感じる点、引っかかる点、今読む理由のうち2〜3個が自然ににじむようにする
+- 客観的な無味乾燥レビューではなく、このペルソナの主観で語る
+- 他のキャラクター名を名乗らない。別ペルソナの名前・肩書き・口調を混ぜない
+- 自分を名乗るなら、必ず {briefing_profile["name"]} とだけ名乗る
+- 一人称は {briefing_profile["first_person"]} を基本にし、別の一人称へぶれない
+- 話し方は {briefing_profile["speech_style"]} と {briefing_profile["voice"]} に寄せる
+- 事実を捏造しない。articles から読めることだけを使う
+- 記事ごとに観点を少しずつ変える。同じテンプレを繰り返さない
+- snark でも不快・攻撃的・見下し表現は禁止
+- snark では軽い皮肉、ツッコミ、呆れ気味の言い回しは許可する
+- snark でも読者個人をいじらない。人ではなく話題や状況に対して毒づく
+- JSONのみを返す
+{chr(10).join(section_rules)}
+
+導入トークの文脈:
+- now_jst: {intro_context.get("now_jst", "")}
+- date_jst: {intro_context.get("date_jst", "")}
+- weekday_jst: {intro_context.get("weekday_jst", "")}
+- time_of_day: {intro_context.get("time_of_day", "")}
+- season_hint: {intro_context.get("season_hint", "")}
+
+返却形式:
+{response_example}
+
+articles:
+{json.dumps(trimmed_articles, ensure_ascii=False)}
+"""
+    return {
+        "prompt": prompt,
+        "schema": build_audio_briefing_script_schema(
+            include_opening=include_opening,
+            include_overall_summary=include_overall_summary,
+            include_article_segments=include_article_segments,
+            include_ending=include_ending,
+        ),
+        "persona": persona_key,
+        "articles": trimmed_articles,
+        "intro_context": intro_context,
+        "briefing_profile": briefing_profile,
+        "item_profile": item_profile,
+    }
+
+
 def parse_item_navigator_result(text: str, article: dict) -> dict:
     data = extract_first_json_object(text) or {}
     headline = str(data.get("headline") or "").strip()
@@ -591,6 +779,80 @@ def parse_item_navigator_result(text: str, article: dict) -> dict:
             pieces.append(f"一方で、{facts[1][:80]}という留保もあり、額面どおりには受け取りにくいところがあります。")
         commentary = " ".join(pieces).strip() or "この話題は単なる要点整理より、どこに意味がありどこを留保して読むべきかを見る価値があります。"
     return {"headline": headline[:60], "commentary": commentary[:900], "stance_tags": stance_tags}
+
+
+def parse_audio_briefing_script_result(
+    text: str,
+    articles: list[dict],
+    persona: str,
+    *,
+    include_opening: bool = True,
+    include_overall_summary: bool = True,
+    include_article_segments: bool = True,
+    include_ending: bool = True,
+) -> dict:
+    data = extract_first_json_object(text) or {}
+    opening = str(data.get("opening") or "").strip()
+    overall_summary = str(data.get("overall_summary") or "").strip()
+    ending = str(data.get("ending") or "").strip()
+
+    if include_opening and not opening:
+        raise ValueError("audio briefing script missing opening")
+    if include_overall_summary and not overall_summary:
+        raise ValueError("audio briefing script missing overall_summary")
+    if include_ending and not ending:
+        raise ValueError("audio briefing script missing ending")
+
+    raw_segments = data.get("article_segments") if isinstance(data.get("article_segments"), list) else []
+    if include_article_segments and len(raw_segments) != len(articles):
+        raise ValueError("audio briefing script article_segments count mismatch")
+
+    segments: list[dict] = []
+    if include_article_segments:
+        for index, article in enumerate(articles, start=1):
+            item_id = str(article.get("item_id") or "").strip()
+            if not item_id:
+                raise ValueError(f"audio briefing input article missing item_id at index {index}")
+            raw = raw_segments[index-1]
+            if not isinstance(raw, dict):
+                raise ValueError("audio briefing script segment must be an object")
+            returned_item_id = str(raw.get("item_id") or "").strip()
+            if returned_item_id != "" and returned_item_id != item_id:
+                _log_audio_briefing_segment_id_mismatch(index, item_id, returned_item_id)
+            headline = str(raw.get("headline") or "").strip()
+            if not headline:
+                raise ValueError(f"audio briefing script missing headline for item_id: {item_id}")
+            commentary = re.sub(r"\s+", " ", str(raw.get("commentary") or "").strip())
+            if not commentary:
+                raise ValueError(f"audio briefing script missing commentary for item_id: {item_id}")
+            segments.append(
+                {
+                    "item_id": item_id,
+                    "headline": headline[:160],
+                    "commentary": commentary[:1200],
+                }
+            )
+
+    return {
+        "opening": opening[:900] if include_opening else "",
+        "overall_summary": overall_summary[:2400] if include_overall_summary else "",
+        "article_segments": segments,
+        "ending": ending[:900] if include_ending else "",
+    }
+
+
+def _log_audio_briefing_segment_id_mismatch(index: int, expected_item_id: str, returned_item_id: str) -> None:
+    try:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "audio briefing script segment item_id mismatch at index %s: expected=%s returned=%s",
+            index,
+            expected_item_id,
+            returned_item_id,
+        )
+    except Exception:
+        return
 
 
 def build_ask_navigator_task(persona: str, ask_input: dict) -> dict:

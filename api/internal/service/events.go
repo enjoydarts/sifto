@@ -75,6 +75,29 @@ func (p *EventPublisher) SendDigestCreatedE(ctx context.Context, digestID, userI
 	return nil
 }
 
+func NewAudioBriefingRunEvent(userID, jobID, trigger string) inngestgo.Event {
+	return inngestgo.Event{
+		Name: "audio-briefing/run",
+		Data: map[string]any{
+			"user_id":    strings.TrimSpace(userID),
+			"job_id":     strings.TrimSpace(jobID),
+			"trigger":    strings.TrimSpace(trigger),
+			"trigger_id": uuid.NewString(),
+		},
+	}
+}
+
+func (p *EventPublisher) SendAudioBriefingRunE(ctx context.Context, userID, jobID, trigger string) error {
+	if p == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(jobID) == "" {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, NewAudioBriefingRunEvent(userID, jobID, trigger)); err != nil {
+		log.Printf("send audio-briefing/run: %v", err)
+		return err
+	}
+	return nil
+}
+
 func (p *EventPublisher) SendItemEmbedE(ctx context.Context, itemID, sourceID string) error {
 	if p == nil {
 		return nil

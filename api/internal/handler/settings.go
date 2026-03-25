@@ -53,9 +53,9 @@ type navigatorPersonaDefinition struct {
 	Item        navigatorPersonaTaskHints `json:"item"`
 }
 
-func NewSettingsHandler(repo *repository.UserSettingsRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {
+func NewSettingsHandler(repo *repository.UserSettingsRepo, audioBriefingRepo *repository.AudioBriefingRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {
 	return &SettingsHandler{
-		settings:         service.NewSettingsService(repo, obsidianRepo, llmUsageRepo, openRouterOverrideRepo, cipher, github),
+		settings:         service.NewSettingsService(repo, audioBriefingRepo, aivisModelRepo, obsidianRepo, llmUsageRepo, openRouterOverrideRepo, cipher, github),
 		obsidianRepo:     obsidianRepo,
 		notificationRepo: notificationRepo,
 		prefProfileRepo:  prefProfileRepo,
@@ -267,42 +267,46 @@ func (h *SettingsHandler) ObsidianGitHubCallback(w http.ResponseWriter, r *http.
 func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	var body struct {
-		Facts             *string `json:"facts"`
-		FactsFallback     *string `json:"facts_fallback"`
-		Summary           *string `json:"summary"`
-		SummaryFallback   *string `json:"summary_fallback"`
-		DigestCluster     *string `json:"digest_cluster"`
-		Digest            *string `json:"digest"`
-		Ask               *string `json:"ask"`
-		SourceSuggestion  *string `json:"source_suggestion"`
-		Embedding         *string `json:"embedding"`
-		FactsCheck        *string `json:"facts_check"`
-		FaithfulnessCheck *string `json:"faithfulness_check"`
-		NavigatorEnabled  bool    `json:"navigator_enabled"`
-		NavigatorPersona  *string `json:"navigator_persona"`
-		Navigator         *string `json:"navigator"`
-		NavigatorFallback *string `json:"navigator_fallback"`
+		Facts                       *string `json:"facts"`
+		FactsFallback               *string `json:"facts_fallback"`
+		Summary                     *string `json:"summary"`
+		SummaryFallback             *string `json:"summary_fallback"`
+		DigestCluster               *string `json:"digest_cluster"`
+		Digest                      *string `json:"digest"`
+		Ask                         *string `json:"ask"`
+		SourceSuggestion            *string `json:"source_suggestion"`
+		Embedding                   *string `json:"embedding"`
+		FactsCheck                  *string `json:"facts_check"`
+		FaithfulnessCheck           *string `json:"faithfulness_check"`
+		NavigatorEnabled            bool    `json:"navigator_enabled"`
+		NavigatorPersona            *string `json:"navigator_persona"`
+		Navigator                   *string `json:"navigator"`
+		NavigatorFallback           *string `json:"navigator_fallback"`
+		AudioBriefingScript         *string `json:"audio_briefing_script"`
+		AudioBriefingScriptFallback *string `json:"audio_briefing_script_fallback"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 	settings, err := h.settings.UpdateLLMModels(r.Context(), userID, service.UpdateLLMModelsInput{
-		Facts:             body.Facts,
-		FactsFallback:     body.FactsFallback,
-		Summary:           body.Summary,
-		SummaryFallback:   body.SummaryFallback,
-		DigestCluster:     body.DigestCluster,
-		Digest:            body.Digest,
-		Ask:               body.Ask,
-		SourceSuggestion:  body.SourceSuggestion,
-		Embedding:         body.Embedding,
-		FactsCheck:        body.FactsCheck,
-		FaithfulnessCheck: body.FaithfulnessCheck,
-		NavigatorEnabled:  body.NavigatorEnabled,
-		NavigatorPersona:  body.NavigatorPersona,
-		Navigator:         body.Navigator,
-		NavigatorFallback: body.NavigatorFallback,
+		Facts:                       body.Facts,
+		FactsFallback:               body.FactsFallback,
+		Summary:                     body.Summary,
+		SummaryFallback:             body.SummaryFallback,
+		DigestCluster:               body.DigestCluster,
+		Digest:                      body.Digest,
+		Ask:                         body.Ask,
+		SourceSuggestion:            body.SourceSuggestion,
+		Embedding:                   body.Embedding,
+		FactsCheck:                  body.FactsCheck,
+		FaithfulnessCheck:           body.FaithfulnessCheck,
+		NavigatorEnabled:            body.NavigatorEnabled,
+		NavigatorPersona:            body.NavigatorPersona,
+		Navigator:                   body.Navigator,
+		NavigatorFallback:           body.NavigatorFallback,
+		AudioBriefingScript:         body.AudioBriefingScript,
+		AudioBriefingScriptFallback: body.AudioBriefingScriptFallback,
 	})
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "invalid model for ") || strings.HasPrefix(err.Error(), "model missing required capability for ") || err.Error() == "invalid embedding model" {
@@ -318,6 +322,97 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 	writeJSON(w, map[string]any{
 		"user_id":    settings.UserID,
 		"llm_models": service.LLMModelSettingsPayload(settings),
+	})
+}
+
+func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		Enabled               bool    `json:"enabled"`
+		IntervalHours         int     `json:"interval_hours"`
+		ArticlesPerEpisode    int     `json:"articles_per_episode"`
+		TargetDurationMinutes int     `json:"target_duration_minutes"`
+		DefaultPersona        *string `json:"default_persona"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	settings, err := h.settings.UpdateAudioBriefingSettings(r.Context(), userID, service.UpdateAudioBriefingSettingsInput{
+		Enabled:               body.Enabled,
+		IntervalHours:         body.IntervalHours,
+		ArticlesPerEpisode:    body.ArticlesPerEpisode,
+		TargetDurationMinutes: body.TargetDurationMinutes,
+		DefaultPersona:        body.DefaultPersona,
+	})
+	if err != nil {
+		switch err.Error() {
+		case "invalid interval_hours", "invalid articles_per_episode", "invalid target_duration_minutes":
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeRepoError(w, err)
+		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
+	writeJSON(w, map[string]any{
+		"user_id":        settings.UserID,
+		"audio_briefing": service.AudioBriefingSettingsPayload(settings),
+	})
+}
+
+func (h *SettingsHandler) UpdateAudioBriefingPersonaVoices(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		Voices []struct {
+			Persona                 string  `json:"persona"`
+			TTSProvider             string  `json:"tts_provider"`
+			VoiceModel              string  `json:"voice_model"`
+			VoiceStyle              string  `json:"voice_style"`
+			SpeechRate              float64 `json:"speech_rate"`
+			EmotionalIntensity      float64 `json:"emotional_intensity"`
+			TempoDynamics           float64 `json:"tempo_dynamics"`
+			LineBreakSilenceSeconds float64 `json:"line_break_silence_seconds"`
+			Pitch                   float64 `json:"pitch"`
+			VolumeGain              float64 `json:"volume_gain"`
+		} `json:"voices"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	inputs := make([]service.UpdateAudioBriefingPersonaVoiceInput, 0, len(body.Voices))
+	for _, voice := range body.Voices {
+		inputs = append(inputs, service.UpdateAudioBriefingPersonaVoiceInput{
+			Persona:                 voice.Persona,
+			TTSProvider:             voice.TTSProvider,
+			VoiceModel:              voice.VoiceModel,
+			VoiceStyle:              voice.VoiceStyle,
+			SpeechRate:              voice.SpeechRate,
+			EmotionalIntensity:      voice.EmotionalIntensity,
+			TempoDynamics:           voice.TempoDynamics,
+			LineBreakSilenceSeconds: voice.LineBreakSilenceSeconds,
+			Pitch:                   voice.Pitch,
+			VolumeGain:              voice.VolumeGain,
+		})
+	}
+	rows, err := h.settings.UpdateAudioBriefingPersonaVoices(r.Context(), userID, inputs)
+	if err != nil {
+		if strings.HasPrefix(err.Error(), "invalid ") || strings.HasPrefix(err.Error(), "duplicate persona voice:") || strings.HasPrefix(err.Error(), "aivis models are not synced") {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeRepoError(w, err)
+		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
+	writeJSON(w, map[string]any{
+		"user_id":                       userID,
+		"audio_briefing_persona_voices": service.AudioBriefingPersonaVoicesPayload(rows),
 	})
 }
 
@@ -760,5 +855,19 @@ func (h *SettingsHandler) DeleteOpenRouterAPIKey(w http.ResponseWriter, r *http.
 	h.deleteAPIKey(w, r, "openrouter", map[string]func(*model.UserSettings) any{
 		"has_openrouter_api_key":   func(s *model.UserSettings) any { return s.HasOpenRouterAPIKey },
 		"openrouter_api_key_last4": func(s *model.UserSettings) any { return s.OpenRouterAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) SetAivisAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "aivis", map[string]func(*model.UserSettings) any{
+		"has_aivis_api_key":   func(s *model.UserSettings) any { return s.HasAivisAPIKey },
+		"aivis_api_key_last4": func(s *model.UserSettings) any { return s.AivisAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteAivisAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "aivis", map[string]func(*model.UserSettings) any{
+		"has_aivis_api_key":   func(s *model.UserSettings) any { return s.HasAivisAPIKey },
+		"aivis_api_key_last4": func(s *model.UserSettings) any { return s.AivisAPIKeyLast4 },
 	})
 }

@@ -80,6 +80,18 @@ services:
       - ./worker:/app
       - ./shared:/shared:ro
 
+  audio-concat-local:
+    build:
+      context: .
+      dockerfile: infra/audio-concat/Dockerfile
+    command: ["python", "-m", "app.local_server"]
+    environment:
+      PORT: 8080
+    env_file:
+      - .env
+    depends_on:
+      - api
+
   redis:
     image: redis:7-alpine
     ports:

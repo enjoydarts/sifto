@@ -1137,6 +1137,8 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(trackProviderModelUpdatesFn(client, db, oneSignal))
 	register(syncOpenRouterModelsFn(client, db, resend, oneSignal))
 	register(syncPoeUsageHistoryFn(client, db, secretCipher))
+	register(generateAudioBriefingsFn(client, db, worker, cache))
+	register(runAudioBriefingPipelineFn(client, db, worker, cache))
 	register(generateDigestFn(client, db))
 	register(composeDigestCopyFn(client, db, worker, secretCipher))
 	register(sendDigestFn(client, db, worker, resend, oneSignal, secretCipher))
@@ -1145,6 +1147,123 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(computeTopicPulseDailyFn(client, db))
 
 	return client.Serve()
+}
+
+func generateAudioBriefingsFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, cache service.JSONCache) (inngestgo.ServableFunction, error) {
+	audioBriefingRepo := repository.NewAudioBriefingRepo(db)
+	userSettingsRepo := repository.NewUserSettingsRepo(db)
+	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	secretCipher := service.NewSecretCipher()
+	audioConcatRunner := service.NewAudioConcatRunnerFromEnv()
+	audioBriefingVoiceRunner := service.NewAudioBriefingVoiceRunner(audioBriefingRepo, userSettingsRepo, secretCipher, worker)
+	audioBriefingConcatStarter := service.NewAudioBriefingConcatStarter(audioBriefingRepo, audioConcatRunner)
+	orchestrator := service.NewAudioBriefingOrchestrator(audioBriefingRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, cache, audioBriefingVoiceRunner, audioBriefingConcatStarter)
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "generate-audio-briefings", Name: "Generate Audio Briefings"},
+		inngestgo.CronTrigger("0 * * * *"),
+		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
+			settings, err := audioBriefingRepo.ListEnabledSettings(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			now := timeutil.NowJST()
+			processed := 0
+			started := 0
+			skipped := 0
+			failed := 0
+
+			for _, row := range settings {
+				processed++
+				job, err := orchestrator.GenerateScheduled(ctx, row.UserID, now)
+				if err != nil {
+					failed++
+					log.Printf("generate audio briefing user=%s: %v", row.UserID, err)
+					continue
+				}
+				if job == nil {
+					skipped++
+					continue
+				}
+				switch {
+				case audioBriefingShouldDispatch(job):
+					if _, err := client.Send(ctx, service.NewAudioBriefingRunEvent(row.UserID, job.ID, "scheduled")); err != nil {
+						failed++
+						log.Printf("enqueue audio briefing run user=%s job=%s: %v", row.UserID, job.ID, err)
+						continue
+					}
+					started++
+				case strings.TrimSpace(job.Status) == "skipped":
+					skipped++
+				default:
+					skipped++
+				}
+			}
+
+			return map[string]any{
+				"processed": processed,
+				"started":   started,
+				"skipped":   skipped,
+				"failed":    failed,
+			}, nil
+		},
+	)
+}
+
+type audioBriefingRunEventData struct {
+	UserID  string `json:"user_id"`
+	JobID   string `json:"job_id"`
+	Trigger string `json:"trigger"`
+}
+
+func runAudioBriefingPipelineFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, cache service.JSONCache) (inngestgo.ServableFunction, error) {
+	audioBriefingRepo := repository.NewAudioBriefingRepo(db)
+	userSettingsRepo := repository.NewUserSettingsRepo(db)
+	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	secretCipher := service.NewSecretCipher()
+	audioConcatRunner := service.NewAudioConcatRunnerFromEnv()
+	audioBriefingVoiceRunner := service.NewAudioBriefingVoiceRunner(audioBriefingRepo, userSettingsRepo, secretCipher, worker)
+	audioBriefingConcatStarter := service.NewAudioBriefingConcatStarter(audioBriefingRepo, audioConcatRunner)
+	orchestrator := service.NewAudioBriefingOrchestrator(audioBriefingRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, cache, audioBriefingVoiceRunner, audioBriefingConcatStarter)
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "run-audio-briefing-pipeline", Name: "Run Audio Briefing Pipeline"},
+		inngestgo.EventTrigger("audio-briefing/run", nil),
+		func(ctx context.Context, input inngestgo.Input[audioBriefingRunEventData]) (any, error) {
+			data := input.Event.Data
+			if strings.TrimSpace(data.UserID) == "" || strings.TrimSpace(data.JobID) == "" {
+				return nil, fmt.Errorf("audio briefing run requires user_id and job_id")
+			}
+			job, err := orchestrator.RunPipeline(ctx, strings.TrimSpace(data.UserID), strings.TrimSpace(data.JobID))
+			if err != nil {
+				return nil, err
+			}
+			if job == nil {
+				return map[string]any{"status": "missing"}, nil
+			}
+			return map[string]any{
+				"job_id":  job.ID,
+				"user_id": job.UserID,
+				"status":  job.Status,
+				"trigger": strings.TrimSpace(data.Trigger),
+			}, nil
+		},
+	)
+}
+
+func audioBriefingShouldDispatch(job *model.AudioBriefingJob) bool {
+	if job == nil {
+		return false
+	}
+	switch strings.TrimSpace(job.Status) {
+	case "pending", "scripted", "voiced", "failed":
+		return true
+	default:
+		return false
+	}
 }
 
 func envFloat64OrDefault(key string, fallback float64) float64 {

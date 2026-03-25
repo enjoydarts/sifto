@@ -5,7 +5,7 @@ LOCAL_MIGRATE_DB ?= postgres://sifto:sifto@localhost:5432/sifto?sslmode=disable
 GOFMT_FILES := $(shell find api -type f -name '*.go')
 
 .PHONY: help
-.PHONY: build build-api build-web build-worker up up-core down restart ps logs logs-api logs-worker logs-web logs-db
+.PHONY: build build-api build-web build-worker build-audio-concat-local up up-core down restart ps logs logs-api logs-worker logs-web logs-db logs-audio-concat-local
 .PHONY: web-build web-lint api-shell web-shell worker-shell psql
 .PHONY: migrate-up migrate-down migrate-version
 .PHONY: fmt-go fmt-go-check check-worker check check-fast check-web
@@ -16,6 +16,7 @@ help:
 	  '  make up            # Start core services (postgres, api, worker, inngest, web)' \
 	  '  make down          # Stop all services' \
 	  '  make build         # Build api/web/worker images' \
+	  '  make build-audio-concat-local # Build local audio concat image' \
 	  '  make ps            # Show compose status' \
 	  '  make logs-api      # Tail API logs' \
 	  '  make web-lint      # Run ESLint in web container' \
@@ -29,7 +30,7 @@ help:
 	  '  make fmt-go-check  # Check gofmt formatting'
 
 build:
-	$(COMPOSE) build api worker web
+	$(COMPOSE) build api worker web audio-concat-local
 
 build-api:
 	$(COMPOSE) build api
@@ -37,20 +38,23 @@ build-api:
 build-worker:
 	$(COMPOSE) build worker
 
+build-audio-concat-local:
+	$(COMPOSE) build audio-concat-local
+
 build-web:
 	$(COMPOSE) build web
 
 up:
-	$(COMPOSE) up -d postgres api worker inngest web
+	$(COMPOSE) up -d postgres api worker inngest web audio-concat-local
 
 up-core:
-	$(COMPOSE) up -d postgres api worker inngest
+	$(COMPOSE) up -d postgres api worker inngest audio-concat-local
 
 down:
 	$(COMPOSE) down
 
 restart:
-	$(COMPOSE) up -d --force-recreate api worker web
+	$(COMPOSE) up -d --force-recreate api worker web audio-concat-local
 
 ps:
 	$(COMPOSE) ps
@@ -66,6 +70,9 @@ logs-worker:
 
 logs-web:
 	$(COMPOSE) logs -f --tail=100 web
+
+logs-audio-concat-local:
+	$(COMPOSE) logs -f --tail=100 audio-concat-local
 
 logs-db:
 	$(COMPOSE) logs -f --tail=100 postgres

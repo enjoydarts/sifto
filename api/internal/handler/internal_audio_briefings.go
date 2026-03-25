@@ -1,0 +1,137 @@
+package handler
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+
+	"github.com/enjoydarts/sifto/api/internal/repository"
+	"github.com/enjoydarts/sifto/api/internal/service"
+	"github.com/go-chi/chi/v5"
+)
+
+type InternalAudioBriefingsHandler struct {
+	repo *repository.AudioBriefingRepo
+}
+
+func NewInternalAudioBriefingsHandler(repo *repository.AudioBriefingRepo) *InternalAudioBriefingsHandler {
+	return &InternalAudioBriefingsHandler{repo: repo}
+}
+
+type concatCompleteRequest struct {
+	RequestID         string  `json:"request_id"`
+	ProviderJobID     *string `json:"provider_job_id"`
+	Status            string  `json:"status"`
+	AudioObjectKey    *string `json:"audio_object_key"`
+	ManifestObjectKey *string `json:"manifest_object_key"`
+	AudioDurationSec  *int    `json:"audio_duration_sec"`
+	ErrorCode         *string `json:"error_code"`
+	ErrorMessage      *string `json:"error_message"`
+}
+
+func (h *InternalAudioBriefingsHandler) ConcatComplete(w http.ResponseWriter, r *http.Request) {
+	if h.repo == nil {
+		http.Error(w, "audio briefing unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	rawToken := extractBearerToken(r)
+	if rawToken == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	jobID := strings.TrimSpace(chi.URLParam(r, "id"))
+	if jobID == "" {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	var body concatCompleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	body.RequestID = strings.TrimSpace(body.RequestID)
+	body.Status = strings.TrimSpace(body.Status)
+	if body.RequestID == "" {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if body.Status == "" {
+		body.Status = "published"
+	}
+	if body.Status != "published" && body.Status != "failed" {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	providerJobID := trimOptionalString(body.ProviderJobID)
+	audioObjectKey := trimOptionalString(body.AudioObjectKey)
+	manifestObjectKey := trimOptionalString(body.ManifestObjectKey)
+	errorCode := trimOptionalString(body.ErrorCode)
+	errorMessage := trimOptionalString(body.ErrorMessage)
+
+	if body.Status == "published" && audioObjectKey == nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if body.Status == "failed" && errorCode == nil {
+		defaultCode := "concat_failed"
+		errorCode = &defaultCode
+	}
+	if body.AudioDurationSec != nil && *body.AudioDurationSec < 0 {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	job, err := h.repo.FinalizeConcatJob(
+		r.Context(),
+		jobID,
+		body.RequestID,
+		service.HashAudioBriefingCallbackToken(rawToken),
+		providerJobID,
+		body.Status,
+		audioObjectKey,
+		manifestObjectKey,
+		body.AudioDurationSec,
+		errorCode,
+		errorMessage,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, repository.ErrUnauthorized):
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		case errors.Is(err, repository.ErrInvalidState), errors.Is(err, repository.ErrConflict):
+			http.Error(w, err.Error(), http.StatusConflict)
+		default:
+			writeRepoError(w, err)
+		}
+		return
+	}
+
+	writeJSON(w, map[string]any{
+		"status": "ok",
+		"job":    job,
+	})
+}
+
+func trimOptionalString(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*v)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func extractBearerToken(r *http.Request) string {
+	header := strings.TrimSpace(r.Header.Get("Authorization"))
+	if !strings.HasPrefix(header, "Bearer ") {
+		return ""
+	}
+	return strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
+}

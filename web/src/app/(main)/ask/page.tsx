@@ -102,7 +102,7 @@ export default function AskPage() {
         related_items: next.related_items ?? [],
       });
       setAskNavigator(resp.navigator ?? null);
-    } catch (_err) {
+    } catch {
       setAskNavigatorError(t("ask.navigator.error"));
     } finally {
       setAskNavigatorLoading(false);

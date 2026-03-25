@@ -246,7 +246,7 @@ func (h *AudioBriefingsHandler) loadDetail(ctx context.Context, userID, jobID st
 	if err != nil {
 		return nil, err
 	}
-	audioURL := resolvePlayableAudioURL(ctx, h.worker, job.R2AudioObjectKey)
+	audioURL := resolvePlayableAudioURL(ctx, h.worker, job.R2StorageBucket, job.R2AudioObjectKey)
 	return map[string]any{
 		"job":       job,
 		"items":     items,
@@ -255,7 +255,7 @@ func (h *AudioBriefingsHandler) loadDetail(ctx context.Context, userID, jobID st
 	}, nil
 }
 
-func resolvePlayableAudioURL(ctx context.Context, worker *service.WorkerClient, objectKey *string) *string {
+func resolvePlayableAudioURL(ctx context.Context, worker *service.WorkerClient, bucket string, objectKey *string) *string {
 	if objectKey == nil {
 		return nil
 	}
@@ -266,7 +266,7 @@ func resolvePlayableAudioURL(ctx context.Context, worker *service.WorkerClient, 
 	if worker == nil || value == "" {
 		return nil
 	}
-	resp, err := worker.PresignAudioBriefingObject(ctx, value, 3600)
+	resp, err := worker.PresignAudioBriefingObjectInBucket(ctx, value, service.NormalizeAudioBriefingStorageBucket(bucket), 3600)
 	if err != nil || resp == nil {
 		return nil
 	}

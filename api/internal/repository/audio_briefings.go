@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"os"
 	"strings"
 	"time"
 
@@ -204,7 +205,7 @@ func (r *AudioBriefingRepo) ListJobsByUser(ctx context.Context, userID string, l
 	rows, err := r.db.Query(ctx, `
 		SELECT id, user_id, slot_started_at_jst, slot_key, persona, status,
 		       source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		       title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		       title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		       error_code, error_message, published_at, failed_at, created_at, updated_at
 		FROM audio_briefing_jobs
 		WHERE user_id = $1
@@ -231,7 +232,7 @@ func (r *AudioBriefingRepo) GetJobByID(ctx context.Context, userID, jobID string
 	row := r.db.QueryRow(ctx, `
 		SELECT id, user_id, slot_started_at_jst, slot_key, persona, status,
 		       source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		       title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		       title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		       error_code, error_message, published_at, failed_at, created_at, updated_at
 		FROM audio_briefing_jobs
 		WHERE user_id = $1 AND id = $2
@@ -247,7 +248,7 @@ func (r *AudioBriefingRepo) GetJobBySlotKey(ctx context.Context, userID, slotKey
 	row := r.db.QueryRow(ctx, `
 		SELECT id, user_id, slot_started_at_jst, slot_key, persona, status,
 		       source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		       title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		       title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		       error_code, error_message, published_at, failed_at, created_at, updated_at
 		FROM audio_briefing_jobs
 		WHERE user_id = $1 AND slot_key = $2
@@ -303,7 +304,7 @@ func (r *AudioBriefingRepo) ListJobChunks(ctx context.Context, userID, jobID str
 	rows, err := r.db.Query(ctx, `
 		SELECT c.id, c.job_id, c.seq, c.part_type, c.text, c.char_count, c.tts_status,
 		       c.tts_provider, c.voice_model, c.voice_style, c.r2_audio_object_key,
-		       c.duration_sec, c.error_message, c.created_at, c.updated_at
+		       c.r2_storage_bucket, c.duration_sec, c.error_message, c.created_at, c.updated_at
 		FROM audio_briefing_script_chunks c
 		JOIN audio_briefing_jobs j ON j.id = c.job_id
 		WHERE j.user_id = $1 AND c.job_id = $2
@@ -316,24 +317,8 @@ func (r *AudioBriefingRepo) ListJobChunks(ctx context.Context, userID, jobID str
 
 	out := make([]model.AudioBriefingScriptChunk, 0)
 	for rows.Next() {
-		var row model.AudioBriefingScriptChunk
-		if err := rows.Scan(
-			&row.ID,
-			&row.JobID,
-			&row.Seq,
-			&row.PartType,
-			&row.Text,
-			&row.CharCount,
-			&row.TTSStatus,
-			&row.TTSProvider,
-			&row.VoiceModel,
-			&row.VoiceStyle,
-			&row.R2AudioObjectKey,
-			&row.DurationSec,
-			&row.ErrorMessage,
-			&row.CreatedAt,
-			&row.UpdatedAt,
-		); err != nil {
+		row, err := scanAudioBriefingScriptChunk(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, row)
@@ -353,6 +338,71 @@ func (r *AudioBriefingRepo) DeleteJob(ctx context.Context, userID, jobID string)
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (r *AudioBriefingRepo) ListIAMoveCandidates(ctx context.Context, cutoff time.Time, limit int) ([]model.AudioBriefingJob, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT id, user_id, slot_started_at_jst, slot_key, persona, status,
+		       source_item_count, reused_item_count, script_char_count, audio_duration_sec,
+		       title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
+		       error_code, error_message, published_at, failed_at, created_at, updated_at
+		FROM audio_briefing_jobs
+		WHERE status = 'published'
+		  AND published_at IS NOT NULL
+		  AND published_at <= $1
+		  AND r2_audio_object_key IS NOT NULL
+		ORDER BY published_at ASC, id ASC
+		LIMIT $2
+	`, cutoff, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]model.AudioBriefingJob, 0, limit)
+	for rows.Next() {
+		row, err := scanAudioBriefingJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+func (r *AudioBriefingRepo) UpdateStorageBucketForJobAndChunks(ctx context.Context, jobID string, bucket string) error {
+	bucket = strings.TrimSpace(bucket)
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE audio_briefing_script_chunks
+		SET r2_storage_bucket = $2,
+		    updated_at = NOW()
+		WHERE job_id = $1
+		  AND r2_audio_object_key IS NOT NULL
+	`, jobID, bucket); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `
+		UPDATE audio_briefing_jobs
+		SET r2_storage_bucket = $2,
+		    updated_at = NOW()
+		WHERE id = $1
+	`, jobID, bucket)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *AudioBriefingRepo) ListCandidateItems(ctx context.Context, userID string, limit int) ([]model.AudioBriefingJobItem, error) {
@@ -424,13 +474,14 @@ func (r *AudioBriefingRepo) CreateJobWithContent(
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var jobID string
+	standardBucket := audioBriefingStandardBucket()
 	err = tx.QueryRow(ctx, `
 		INSERT INTO audio_briefing_jobs (
 			user_id, slot_started_at_jst, slot_key, persona, status,
-			source_item_count, reused_item_count, script_char_count, title
-		) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8)
+			source_item_count, reused_item_count, script_char_count, title, r2_storage_bucket
+		) VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9)
 		RETURNING id
-	`, userID, slotStartedAtJST, slotKey, persona, status, len(items), scriptCharCount, title).Scan(&jobID)
+	`, userID, slotStartedAtJST, slotKey, persona, status, len(items), scriptCharCount, title, standardBucket).Scan(&jobID)
 	if err != nil {
 		return nil, mapDBError(err)
 	}
@@ -448,9 +499,9 @@ func (r *AudioBriefingRepo) CreateJobWithContent(
 	for _, chunk := range chunks {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO audio_briefing_script_chunks (
-				job_id, seq, part_type, text, char_count, tts_status, tts_provider, voice_model, voice_style
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		`, jobID, chunk.Seq, chunk.PartType, chunk.Text, chunk.CharCount, chunk.TTSStatus, chunk.TTSProvider, chunk.VoiceModel, chunk.VoiceStyle); err != nil {
+				job_id, seq, part_type, text, char_count, tts_status, tts_provider, voice_model, voice_style, r2_storage_bucket
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		`, jobID, chunk.Seq, chunk.PartType, chunk.Text, chunk.CharCount, chunk.TTSStatus, chunk.TTSProvider, chunk.VoiceModel, chunk.VoiceStyle, firstNonEmpty(chunk.R2StorageBucket, standardBucket)); err != nil {
 			return nil, err
 		}
 	}
@@ -469,12 +520,13 @@ func (r *AudioBriefingRepo) CreatePendingJob(
 	persona string,
 ) (*model.AudioBriefingJob, error) {
 	var jobID string
+	standardBucket := audioBriefingStandardBucket()
 	err := r.db.QueryRow(ctx, `
 		INSERT INTO audio_briefing_jobs (
-			user_id, slot_started_at_jst, slot_key, persona, status
-		) VALUES ($1, $2, $3, $4, 'pending')
+			user_id, slot_started_at_jst, slot_key, persona, status, r2_storage_bucket
+		) VALUES ($1, $2, $3, $4, 'pending', $5)
 		RETURNING id
-	`, userID, slotStartedAtJST, slotKey, persona).Scan(&jobID)
+	`, userID, slotStartedAtJST, slotKey, persona, standardBucket).Scan(&jobID)
 	if err != nil {
 		return nil, mapDBError(err)
 	}
@@ -503,7 +555,7 @@ func (r *AudioBriefingRepo) StartScriptingJob(ctx context.Context, jobID string)
 		  )
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, status,
 		          source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		          title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		          title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID))
 	if err != nil {
@@ -545,7 +597,7 @@ func (r *AudioBriefingRepo) CompleteScriptingJob(
 		  AND status = 'scripting'
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, status,
 		          source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		          title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		          title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, strings.TrimSpace(status), len(items), scriptCharCount, title))
 	if err != nil {
@@ -575,9 +627,9 @@ func (r *AudioBriefingRepo) CompleteScriptingJob(
 	for _, chunk := range chunks {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO audio_briefing_script_chunks (
-				job_id, seq, part_type, text, char_count, tts_status, tts_provider, voice_model, voice_style
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-		`, jobID, chunk.Seq, chunk.PartType, chunk.Text, chunk.CharCount, chunk.TTSStatus, chunk.TTSProvider, chunk.VoiceModel, chunk.VoiceStyle); err != nil {
+				job_id, seq, part_type, text, char_count, tts_status, tts_provider, voice_model, voice_style, r2_storage_bucket
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		`, jobID, chunk.Seq, chunk.PartType, chunk.Text, chunk.CharCount, chunk.TTSStatus, chunk.TTSProvider, chunk.VoiceModel, chunk.VoiceStyle, firstNonEmpty(chunk.R2StorageBucket, audioBriefingStandardBucket())); err != nil {
 			return nil, err
 		}
 	}
@@ -604,7 +656,7 @@ func (r *AudioBriefingRepo) FailScriptingJob(ctx context.Context, jobID string, 
 		  AND status IN ('pending', 'scripting')
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, status,
 		          source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		          title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		          title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, errorCode, strings.TrimSpace(errorMessage)))
 	if err != nil {
@@ -655,7 +707,7 @@ func (r *AudioBriefingRepo) BeginConcatCallback(
 		  )
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, status,
 		          source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		          title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		          title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, providerJobID, manifestObjectKey))
 	if err != nil {
@@ -793,7 +845,7 @@ func (r *AudioBriefingRepo) UpdateConcatProviderJobID(ctx context.Context, jobID
 		  AND status = 'concatenating'
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, status,
 		          source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		          title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		          title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, providerJobID))
 	if err != nil {
@@ -822,7 +874,7 @@ func (r *AudioBriefingRepo) FailConcatLaunch(ctx context.Context, jobID string, 
 		  AND status = 'concatenating'
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, status,
 		          source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		          title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		          title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, errorCode, errorMessage))
 	if err != nil {
@@ -857,7 +909,7 @@ func (r *AudioBriefingRepo) StartVoicingJob(ctx context.Context, jobID string) (
 		  )
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, status,
 		          source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		          title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		          title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID))
 	if err != nil {
@@ -900,15 +952,17 @@ func (r *AudioBriefingRepo) MarkChunkGenerating(ctx context.Context, chunkID str
 }
 
 func (r *AudioBriefingRepo) MarkChunkGenerated(ctx context.Context, chunkID string, audioObjectKey string, durationSec int) error {
+	standardBucket := audioBriefingStandardBucket()
 	tag, err := r.db.Exec(ctx, `
 		UPDATE audio_briefing_script_chunks
 		SET tts_status = 'generated',
 		    r2_audio_object_key = $2,
 		    duration_sec = $3,
+		    r2_storage_bucket = COALESCE(NULLIF($4, ''), r2_storage_bucket),
 		    error_message = NULL,
 		    updated_at = NOW()
 		WHERE id = $1
-	`, chunkID, strings.TrimSpace(audioObjectKey), durationSec)
+	`, chunkID, strings.TrimSpace(audioObjectKey), durationSec, standardBucket)
 	if err != nil {
 		return err
 	}
@@ -953,7 +1007,7 @@ func (r *AudioBriefingRepo) CompleteVoicingJob(ctx context.Context, jobID string
 		  )
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, status,
 		          source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		          title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		          title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID))
 	if err != nil {
@@ -981,7 +1035,7 @@ func (r *AudioBriefingRepo) FailVoicingJob(ctx context.Context, jobID string, er
 		  AND status IN ('scripted', 'voicing')
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, status,
 		          source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		          title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		          title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, errorCode, strings.TrimSpace(errorMessage)))
 	if err != nil {
@@ -1013,6 +1067,7 @@ func scanAudioBriefingJob(row audioBriefingJobScanner) (model.AudioBriefingJob, 
 		&job.Title,
 		&job.R2AudioObjectKey,
 		&job.R2ManifestObjectKey,
+		&job.R2StorageBucket,
 		&job.ProviderJobID,
 		&job.IdempotencyKey,
 		&job.ErrorCode,
@@ -1025,11 +1080,34 @@ func scanAudioBriefingJob(row audioBriefingJobScanner) (model.AudioBriefingJob, 
 	return job, err
 }
 
+func scanAudioBriefingScriptChunk(row audioBriefingJobScanner) (model.AudioBriefingScriptChunk, error) {
+	var chunk model.AudioBriefingScriptChunk
+	err := row.Scan(
+		&chunk.ID,
+		&chunk.JobID,
+		&chunk.Seq,
+		&chunk.PartType,
+		&chunk.Text,
+		&chunk.CharCount,
+		&chunk.TTSStatus,
+		&chunk.TTSProvider,
+		&chunk.VoiceModel,
+		&chunk.VoiceStyle,
+		&chunk.R2AudioObjectKey,
+		&chunk.R2StorageBucket,
+		&chunk.DurationSec,
+		&chunk.ErrorMessage,
+		&chunk.CreatedAt,
+		&chunk.UpdatedAt,
+	)
+	return chunk, err
+}
+
 func getAudioBriefingJobByIDTx(ctx context.Context, tx pgx.Tx, jobID string) (*model.AudioBriefingJob, error) {
 	job, err := scanAudioBriefingJob(tx.QueryRow(ctx, `
 		SELECT id, user_id, slot_started_at_jst, slot_key, persona, status,
 		       source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		       title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		       title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		       error_code, error_message, published_at, failed_at, created_at, updated_at
 		FROM audio_briefing_jobs
 		WHERE id = $1
@@ -1041,6 +1119,7 @@ func getAudioBriefingJobByIDTx(ctx context.Context, tx pgx.Tx, jobID string) (*m
 }
 
 func updateAudioBriefingJobPublishedTx(ctx context.Context, tx pgx.Tx, jobID string, providerJobID, audioObjectKey, manifestObjectKey *string, audioDurationSec *int) (*model.AudioBriefingJob, error) {
+	standardBucket := audioBriefingStandardBucket()
 	job, err := scanAudioBriefingJob(tx.QueryRow(ctx, `
 		UPDATE audio_briefing_jobs
 		SET status = 'published',
@@ -1048,6 +1127,7 @@ func updateAudioBriefingJobPublishedTx(ctx context.Context, tx pgx.Tx, jobID str
 		    r2_audio_object_key = COALESCE($3, r2_audio_object_key),
 		    r2_manifest_object_key = COALESCE($4, r2_manifest_object_key),
 		    audio_duration_sec = COALESCE($5, audio_duration_sec),
+		    r2_storage_bucket = COALESCE(NULLIF($6, ''), r2_storage_bucket),
 		    error_code = NULL,
 		    error_message = NULL,
 		    failed_at = NULL,
@@ -1057,9 +1137,9 @@ func updateAudioBriefingJobPublishedTx(ctx context.Context, tx pgx.Tx, jobID str
 		  AND status IN ('scripted', 'voiced', 'concatenating')
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, status,
 		          source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		          title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		          title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
-	`, jobID, providerJobID, audioObjectKey, manifestObjectKey, audioDurationSec))
+	`, jobID, providerJobID, audioObjectKey, manifestObjectKey, audioDurationSec, standardBucket))
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrInvalidState
@@ -1082,7 +1162,7 @@ func updateAudioBriefingJobFailedTx(ctx context.Context, tx pgx.Tx, jobID string
 		  AND status IN ('scripted', 'voiced', 'concatenating')
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, status,
 		          source_item_count, reused_item_count, script_char_count, audio_duration_sec,
-		          title, r2_audio_object_key, r2_manifest_object_key, provider_job_id, idempotency_key,
+		          title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, providerJobID, errorCode, errorMessage))
 	if err != nil {
@@ -1108,4 +1188,20 @@ func valueOrEmpty(v *string) string {
 		return ""
 	}
 	return *v
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func audioBriefingStandardBucket() string {
+	return firstNonEmpty(
+		os.Getenv("AUDIO_BRIEFING_R2_STANDARD_BUCKET"),
+		os.Getenv("AUDIO_BRIEFING_R2_BUCKET"),
+	)
 }

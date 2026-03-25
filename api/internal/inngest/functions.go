@@ -1139,6 +1139,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(syncPoeUsageHistoryFn(client, db, secretCipher))
 	register(generateAudioBriefingsFn(client, db, worker, cache))
 	register(runAudioBriefingPipelineFn(client, db, worker, cache))
+	register(moveAudioBriefingsToIAFn(client, db, worker))
 	register(generateDigestFn(client, db))
 	register(composeDigestCopyFn(client, db, worker, secretCipher))
 	register(sendDigestFn(client, db, worker, resend, oneSignal, secretCipher))
@@ -1249,6 +1250,31 @@ func runAudioBriefingPipelineFn(client inngestgo.Client, db *pgxpool.Pool, worke
 				"user_id": job.UserID,
 				"status":  job.Status,
 				"trigger": strings.TrimSpace(data.Trigger),
+			}, nil
+		},
+	)
+}
+
+func moveAudioBriefingsToIAFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient) (inngestgo.ServableFunction, error) {
+	audioBriefingRepo := repository.NewAudioBriefingRepo(db)
+	archiveSvc := service.NewAudioBriefingArchiveService(audioBriefingRepo, worker)
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "move-audio-briefings-to-ia", Name: "Move Audio Briefings To IA"},
+		inngestgo.CronTrigger("17 3 * * *"),
+		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
+			result, err := archiveSvc.MovePublishedToIA(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if result == nil {
+				result = &service.AudioBriefingArchiveResult{}
+			}
+			return map[string]any{
+				"processed": result.Processed,
+				"moved":     result.Moved,
+				"failed":    result.Failed,
 			}, nil
 		},
 	)

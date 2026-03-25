@@ -15,7 +15,7 @@ type audioBriefingDeleteRepo interface {
 }
 
 type audioBriefingObjectDeleter interface {
-	DeleteAudioBriefingObjects(ctx context.Context, objectKeys []string) error
+	DeleteAudioBriefingObjects(ctx context.Context, objectRefs []AudioBriefingObjectRef) error
 }
 
 type AudioBriefingDeleteService struct {
@@ -42,9 +42,9 @@ func (s *AudioBriefingDeleteService) Delete(ctx context.Context, userID, jobID s
 	if err != nil {
 		return err
 	}
-	objectKeys := collectAudioBriefingObjectKeys(job, chunks)
-	if len(objectKeys) > 0 && s.deleter != nil {
-		if err := s.deleter.DeleteAudioBriefingObjects(ctx, objectKeys); err != nil {
+	objectRefs := CollectAudioBriefingObjectRefs(job, chunks)
+	if len(objectRefs) > 0 && s.deleter != nil {
+		if err := s.deleter.DeleteAudioBriefingObjects(ctx, objectRefs); err != nil {
 			return err
 		}
 	}
@@ -61,28 +61,4 @@ func audioBriefingJobCanBeDeleted(job *model.AudioBriefingJob) bool {
 	default:
 		return false
 	}
-}
-
-func collectAudioBriefingObjectKeys(job *model.AudioBriefingJob, chunks []model.AudioBriefingScriptChunk) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(chunks)+2)
-	appendKey := func(raw string) {
-		key := strings.TrimSpace(raw)
-		if key == "" {
-			return
-		}
-		if _, ok := seen[key]; ok {
-			return
-		}
-		seen[key] = struct{}{}
-		out = append(out, key)
-	}
-	if job != nil {
-		appendKey(ptrString(job.R2AudioObjectKey))
-		appendKey(ptrString(job.R2ManifestObjectKey))
-	}
-	for _, chunk := range chunks {
-		appendKey(ptrString(chunk.R2AudioObjectKey))
-	}
-	return out
 }

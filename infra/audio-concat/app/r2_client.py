@@ -6,7 +6,10 @@ import boto3
 
 class R2Client:
     def __init__(self) -> None:
-        self.bucket = os.environ["AUDIO_BRIEFING_R2_BUCKET"].strip()
+        self.bucket = (
+            os.getenv("AUDIO_BRIEFING_R2_STANDARD_BUCKET", "").strip()
+            or os.environ["AUDIO_BRIEFING_R2_BUCKET"].strip()
+        )
         endpoint = os.environ["AUDIO_BRIEFING_R2_ENDPOINT"].strip()
         access_key = os.environ["AUDIO_BRIEFING_R2_ACCESS_KEY_ID"].strip()
         secret_key = os.environ["AUDIO_BRIEFING_R2_SECRET_ACCESS_KEY"].strip()

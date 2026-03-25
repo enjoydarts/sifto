@@ -76,6 +76,51 @@ class AivisRateLimiterTests(unittest.TestCase):
 
 
 class AudioBriefingTTSServiceTests(unittest.TestCase):
+    def test_resolve_bucket_prefers_explicit_bucket_override(self):
+        service = AudioBriefingTTSService()
+        service.r2_bucket = "briefings-standard"
+
+        self.assertEqual(service.resolve_bucket("briefings-ia"), "briefings-ia")
+
+    def test_presign_audio_url_uses_bucket_override(self):
+        service = AudioBriefingTTSService()
+        service.r2_bucket = "briefings-standard"
+
+        class FakeClient:
+            def generate_presigned_url(self, method, Params, ExpiresIn):
+                assert method == "get_object"
+                assert Params == {"Bucket": "briefings-ia", "Key": "audio-briefings/job/episode.mp3"}
+                assert ExpiresIn == 900
+                return "https://signed.example.com/audio.mp3"
+
+        with patch.object(service, "r2_client", return_value=FakeClient()):
+            got = service.presign_audio_url("audio-briefings/job/episode.mp3", expires_sec=900, bucket_override="briefings-ia")
+
+        self.assertEqual(got, "https://signed.example.com/audio.mp3")
+
+    def test_delete_objects_uses_bucket_override(self):
+        service = AudioBriefingTTSService()
+        service.r2_bucket = "briefings-standard"
+
+        class FakeClient:
+            def __init__(self):
+                self.calls = []
+
+            def delete_objects(self, Bucket, Delete):
+                self.calls.append((Bucket, Delete))
+                return {"Deleted": Delete["Objects"]}
+
+        fake_client = FakeClient()
+
+        with patch.object(service, "r2_client", return_value=fake_client):
+            deleted = service.delete_objects(["one.mp3", "two.mp3"], bucket_override="briefings-ia")
+
+        self.assertEqual(deleted, 2)
+        self.assertEqual(
+            fake_client.calls,
+            [("briefings-ia", {"Objects": [{"Key": "one.mp3"}, {"Key": "two.mp3"}], "Quiet": True})],
+        )
+
     def test_delete_objects_batches_non_empty_keys(self):
         service = AudioBriefingTTSService()
         service.r2_bucket = "briefings"
@@ -114,6 +159,34 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
             got = service.presign_audio_url("audio-briefings/job/episode.mp3", expires_sec=900)
 
         self.assertEqual(got, "https://signed.example.com/audio.mp3")
+
+    def test_copy_objects_copies_each_key_between_buckets(self):
+        service = AudioBriefingTTSService()
+
+        class FakeClient:
+            def __init__(self):
+                self.calls = []
+
+            def copy_object(self, Bucket, Key, CopySource):
+                self.calls.append((Bucket, Key, CopySource))
+
+        fake_client = FakeClient()
+
+        with patch.object(service, "r2_client", return_value=fake_client):
+            copied = service.copy_objects(
+                source_bucket="briefings-standard",
+                target_bucket="briefings-ia",
+                object_keys=["one.mp3", "", "two.mp3", "one.mp3"],
+            )
+
+        self.assertEqual(copied, 2)
+        self.assertEqual(
+            fake_client.calls,
+            [
+                ("briefings-ia", "one.mp3", {"Bucket": "briefings-standard", "Key": "one.mp3"}),
+                ("briefings-ia", "two.mp3", {"Bucket": "briefings-standard", "Key": "two.mp3"}),
+            ],
+        )
 
     def test_synthesize_aivis_audio_uses_exponential_backoff_after_429(self):
         service = AudioBriefingTTSService()

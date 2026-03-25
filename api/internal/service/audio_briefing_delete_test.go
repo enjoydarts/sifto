@@ -32,14 +32,14 @@ func (s *stubAudioBriefingDeleteRepo) DeleteJob(_ context.Context, _, _ string) 
 }
 
 type stubAudioBriefingObjectDeleter struct {
-	keys  []string
+	refs  []AudioBriefingObjectRef
 	calls int
 	err   error
 }
 
-func (s *stubAudioBriefingObjectDeleter) DeleteAudioBriefingObjects(_ context.Context, objectKeys []string) error {
+func (s *stubAudioBriefingObjectDeleter) DeleteAudioBriefingObjects(_ context.Context, objectRefs []AudioBriefingObjectRef) error {
 	s.calls++
-	s.keys = append([]string(nil), objectKeys...)
+	s.refs = append([]AudioBriefingObjectRef(nil), objectRefs...)
 	return s.err
 }
 
@@ -54,10 +54,11 @@ func TestAudioBriefingDeleteServiceDeletesObjectsThenJob(t *testing.T) {
 			Status:              "published",
 			R2AudioObjectKey:    &audioKey,
 			R2ManifestObjectKey: &manifestKey,
+			R2StorageBucket:     "briefings-ia",
 		},
 		chunks: []model.AudioBriefingScriptChunk{
-			{R2AudioObjectKey: &chunkKey},
-			{R2AudioObjectKey: &chunkKey},
+			{R2AudioObjectKey: &chunkKey, R2StorageBucket: "briefings-standard"},
+			{R2AudioObjectKey: &chunkKey, R2StorageBucket: "briefings-standard"},
 		},
 	}
 	deleter := &stubAudioBriefingObjectDeleter{}
@@ -69,13 +70,17 @@ func TestAudioBriefingDeleteServiceDeletesObjectsThenJob(t *testing.T) {
 	if deleter.calls != 1 {
 		t.Fatalf("DeleteAudioBriefingObjects call count = %d, want 1", deleter.calls)
 	}
-	wantKeys := []string{audioKey, manifestKey, chunkKey}
-	if len(deleter.keys) != len(wantKeys) {
-		t.Fatalf("deleted keys len = %d, want %d (%v)", len(deleter.keys), len(wantKeys), deleter.keys)
+	wantRefs := []AudioBriefingObjectRef{
+		{Bucket: "briefings-ia", ObjectKey: audioKey},
+		{Bucket: "briefings-ia", ObjectKey: manifestKey},
+		{Bucket: "briefings-standard", ObjectKey: chunkKey},
 	}
-	for i, want := range wantKeys {
-		if deleter.keys[i] != want {
-			t.Fatalf("deleted key[%d] = %q, want %q", i, deleter.keys[i], want)
+	if len(deleter.refs) != len(wantRefs) {
+		t.Fatalf("deleted refs len = %d, want %d (%v)", len(deleter.refs), len(wantRefs), deleter.refs)
+	}
+	for i, want := range wantRefs {
+		if deleter.refs[i] != want {
+			t.Fatalf("deleted ref[%d] = %+v, want %+v", i, deleter.refs[i], want)
 		}
 	}
 	if repo.deleteCalls != 1 {

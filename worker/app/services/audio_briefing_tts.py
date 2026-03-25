@@ -147,7 +147,12 @@ AIVIS_RATE_LIMITER = AivisRedisRateLimiter(
 class AudioBriefingTTSService:
     def __init__(self) -> None:
         self.r2_endpoint = os.getenv("AUDIO_BRIEFING_R2_ENDPOINT", "").strip()
-        self.r2_bucket = os.getenv("AUDIO_BRIEFING_R2_BUCKET", "").strip()
+        self.r2_standard_bucket = (
+            os.getenv("AUDIO_BRIEFING_R2_STANDARD_BUCKET", "").strip()
+            or os.getenv("AUDIO_BRIEFING_R2_BUCKET", "").strip()
+        )
+        self.r2_bucket = self.r2_standard_bucket
+        self.r2_ia_bucket = os.getenv("AUDIO_BRIEFING_R2_IA_BUCKET", "").strip()
         self.r2_region = os.getenv("AUDIO_BRIEFING_R2_REGION", "auto").strip() or "auto"
         self.r2_access_key_id = os.getenv("AUDIO_BRIEFING_R2_ACCESS_KEY_ID", "").strip()
         self.r2_secret_access_key = os.getenv("AUDIO_BRIEFING_R2_SECRET_ACCESS_KEY", "").strip()
@@ -195,27 +200,39 @@ class AudioBriefingTTSService:
         self.upload_bytes(output_object_key, payload, content_type)
         return output_object_key, duration_sec
 
-    def upload_bytes(self, object_key: str, payload: bytes, content_type: str) -> None:
+    def standard_bucket(self) -> str:
+        return (self.r2_bucket or self.r2_standard_bucket or "").strip()
+
+    def ia_bucket(self) -> str:
+        return (self.r2_ia_bucket or "").strip()
+
+    def resolve_bucket(self, bucket_override: str | None = None) -> str:
+        bucket = (bucket_override or "").strip() or self.standard_bucket()
+        if not bucket:
+            raise RuntimeError("audio briefing R2 bucket is not configured")
+        return bucket
+
+    def upload_bytes(self, object_key: str, payload: bytes, content_type: str, bucket_override: str | None = None) -> None:
         client = self.r2_client()
         client.put_object(
-            Bucket=self.r2_bucket,
+            Bucket=self.resolve_bucket(bucket_override),
             Key=object_key,
             Body=payload,
             ContentType=content_type,
         )
 
-    def presign_audio_url(self, object_key: str, expires_sec: int = 3600) -> str:
+    def presign_audio_url(self, object_key: str, expires_sec: int = 3600, bucket_override: str | None = None) -> str:
         client = self.r2_client()
         return client.generate_presigned_url(
             "get_object",
             Params={
-                "Bucket": self.r2_bucket,
+                "Bucket": self.resolve_bucket(bucket_override),
                 "Key": object_key,
             },
             ExpiresIn=max(int(expires_sec), 60),
         )
 
-    def delete_objects(self, object_keys: list[str]) -> int:
+    def delete_objects(self, object_keys: list[str], bucket_override: str | None = None) -> int:
         keys: list[str] = []
         seen: set[str] = set()
         for raw in object_keys or []:
@@ -227,11 +244,12 @@ class AudioBriefingTTSService:
         if not keys:
             return 0
         client = self.r2_client()
+        bucket = self.resolve_bucket(bucket_override)
         deleted_count = 0
         for start in range(0, len(keys), 1000):
             batch = keys[start : start + 1000]
             result = client.delete_objects(
-                Bucket=self.r2_bucket,
+                Bucket=bucket,
                 Delete={
                     "Objects": [{"Key": key} for key in batch],
                     "Quiet": True,
@@ -243,8 +261,30 @@ class AudioBriefingTTSService:
             deleted_count += len(result.get("Deleted") or [])
         return deleted_count
 
+    def copy_objects(self, source_bucket: str, target_bucket: str, object_keys: list[str]) -> int:
+        source = self.resolve_bucket(source_bucket)
+        target = self.resolve_bucket(target_bucket)
+        keys: list[str] = []
+        seen: set[str] = set()
+        for raw in object_keys or []:
+            key = (raw or "").strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            keys.append(key)
+        if not keys:
+            return 0
+        client = self.r2_client()
+        for key in keys:
+            client.copy_object(
+                Bucket=target,
+                Key=key,
+                CopySource={"Bucket": source, "Key": key},
+            )
+        return len(keys)
+
     def r2_client(self):
-        if not self.r2_endpoint or not self.r2_bucket or not self.r2_access_key_id or not self.r2_secret_access_key:
+        if not self.r2_endpoint or not (self.standard_bucket() or self.ia_bucket()) or not self.r2_access_key_id or not self.r2_secret_access_key:
             raise RuntimeError("R2 settings are not configured")
         return boto3.client(
             "s3",

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,7 +15,7 @@ func TestResolvePlayableAudioURLKeepsAbsoluteURL(t *testing.T) {
 	t.Parallel()
 
 	raw := "https://example.com/audio.mp3"
-	got := resolvePlayableAudioURL(context.Background(), nil, &raw)
+	got := resolvePlayableAudioURL(context.Background(), nil, "", &raw)
 	if got == nil {
 		t.Fatalf("expected url, got nil")
 	}
@@ -34,6 +35,13 @@ func TestResolvePlayableAudioURLPresignsObjectKey(t *testing.T) {
 		if got := strings.TrimSpace(r.Header.Get("X-Internal-Worker-Secret")); got != "test-secret" {
 			t.Fatalf("unexpected worker secret: %q", got)
 		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if !strings.Contains(string(body), `"bucket":"briefings-ia"`) {
+			t.Fatalf("expected bucket in body, got %s", string(body))
+		}
 		_, _ = w.Write([]byte(`{"audio_url":"https://signed.example.com/audio.mp3"}`))
 	}))
 	defer server.Close()
@@ -43,7 +51,7 @@ func TestResolvePlayableAudioURLPresignsObjectKey(t *testing.T) {
 	worker := service.NewWorkerClient()
 	objectKey := "audio-briefings/user/job/episode.mp3"
 
-	got := resolvePlayableAudioURL(context.Background(), worker, &objectKey)
+	got := resolvePlayableAudioURL(context.Background(), worker, "briefings-ia", &objectKey)
 	if got == nil {
 		t.Fatalf("expected signed url, got nil")
 	}

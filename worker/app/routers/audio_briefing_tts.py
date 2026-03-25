@@ -28,6 +28,7 @@ class AudioBriefingSynthesizeResponse(BaseModel):
 class AudioBriefingPresignRequest(BaseModel):
     object_key: str
     expires_sec: int = 3600
+    bucket: str | None = None
 
 
 class AudioBriefingPresignResponse(BaseModel):
@@ -36,10 +37,21 @@ class AudioBriefingPresignResponse(BaseModel):
 
 class AudioBriefingDeleteObjectsRequest(BaseModel):
     object_keys: list[str]
+    bucket: str | None = None
 
 
 class AudioBriefingDeleteObjectsResponse(BaseModel):
     deleted_count: int
+
+
+class AudioBriefingCopyObjectsRequest(BaseModel):
+    source_bucket: str
+    target_bucket: str
+    object_keys: list[str]
+
+
+class AudioBriefingCopyObjectsResponse(BaseModel):
+    copied_count: int
 
 
 @router.post("/audio-briefing/synthesize-upload", response_model=AudioBriefingSynthesizeResponse)
@@ -76,6 +88,7 @@ def presign_audio_briefing(req: AudioBriefingPresignRequest):
         audio_url = service.presign_audio_url(
             object_key=req.object_key,
             expires_sec=req.expires_sec,
+            bucket_override=req.bucket,
         )
         return AudioBriefingPresignResponse(audio_url=audio_url)
     except Exception as exc:
@@ -86,7 +99,21 @@ def presign_audio_briefing(req: AudioBriefingPresignRequest):
 def delete_audio_briefing_objects(req: AudioBriefingDeleteObjectsRequest):
     try:
         service = AudioBriefingTTSService()
-        deleted_count = service.delete_objects(req.object_keys)
+        deleted_count = service.delete_objects(req.object_keys, bucket_override=req.bucket)
         return AudioBriefingDeleteObjectsResponse(deleted_count=deleted_count)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"audio briefing delete failed: {exc}")
+
+
+@router.post("/audio-briefing/copy-objects", response_model=AudioBriefingCopyObjectsResponse)
+def copy_audio_briefing_objects(req: AudioBriefingCopyObjectsRequest):
+    try:
+        service = AudioBriefingTTSService()
+        copied_count = service.copy_objects(
+            source_bucket=req.source_bucket,
+            target_bucket=req.target_bucket,
+            object_keys=req.object_keys,
+        )
+        return AudioBriefingCopyObjectsResponse(copied_count=copied_count)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"audio briefing copy failed: {exc}")

@@ -61,6 +61,10 @@ type AudioBriefingDeleteObjectsResponse struct {
 	DeletedCount int `json:"deleted_count"`
 }
 
+type AudioBriefingCopyObjectsResponse struct {
+	CopiedCount int `json:"copied_count"`
+}
+
 func NewWorkerClient() *WorkerClient {
 	url := os.Getenv("PYTHON_WORKER_URL")
 	if url == "" {
@@ -873,18 +877,46 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 }
 
 func (w *WorkerClient) PresignAudioBriefingObject(ctx context.Context, objectKey string, expiresSec int) (*AudioBriefingPresignResponse, error) {
+	return w.PresignAudioBriefingObjectInBucket(ctx, objectKey, "", expiresSec)
+}
+
+func (w *WorkerClient) PresignAudioBriefingObjectInBucket(ctx context.Context, objectKey string, bucket string, expiresSec int) (*AudioBriefingPresignResponse, error) {
 	return postWithHeaders[AudioBriefingPresignResponse](ctx, w, "/audio-briefing/presign", map[string]any{
 		"object_key":  objectKey,
+		"bucket":      bucket,
 		"expires_sec": expiresSec,
 	}, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret))
 }
 
-func (w *WorkerClient) DeleteAudioBriefingObjects(ctx context.Context, objectKeys []string) error {
+func (w *WorkerClient) DeleteAudioBriefingObjects(ctx context.Context, objectRefs []AudioBriefingObjectRef) error {
+	grouped := groupAudioBriefingObjectRefsByBucket(objectRefs)
+	for bucket, objectKeys := range grouped {
+		if err := w.DeleteAudioBriefingObjectsInBucket(ctx, bucket, objectKeys); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *WorkerClient) DeleteAudioBriefingObjectsInBucket(ctx context.Context, bucket string, objectKeys []string) error {
 	if len(objectKeys) == 0 {
 		return nil
 	}
 	_, err := postWithHeaders[AudioBriefingDeleteObjectsResponse](ctx, w, "/audio-briefing/delete-objects", map[string]any{
 		"object_keys": objectKeys,
+		"bucket":      bucket,
+	}, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret))
+	return err
+}
+
+func (w *WorkerClient) CopyAudioBriefingObjects(ctx context.Context, sourceBucket string, targetBucket string, objectKeys []string) error {
+	if len(objectKeys) == 0 {
+		return nil
+	}
+	_, err := postWithHeaders[AudioBriefingCopyObjectsResponse](ctx, w, "/audio-briefing/copy-objects", map[string]any{
+		"source_bucket": sourceBucket,
+		"target_bucket": targetBucket,
+		"object_keys":   objectKeys,
 	}, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret))
 	return err
 }

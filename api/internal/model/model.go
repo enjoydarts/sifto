@@ -122,6 +122,7 @@ type AudioBriefingJob struct {
 	Title               *string    `json:"title,omitempty"`
 	R2AudioObjectKey    *string    `json:"r2_audio_object_key,omitempty"`
 	R2ManifestObjectKey *string    `json:"r2_manifest_object_key,omitempty"`
+	R2StorageBucket     string     `json:"r2_storage_bucket"`
 	ProviderJobID       *string    `json:"provider_job_id,omitempty"`
 	IdempotencyKey      *string    `json:"idempotency_key,omitempty"`
 	ErrorCode           *string    `json:"error_code,omitempty"`
@@ -158,6 +159,7 @@ type AudioBriefingScriptChunk struct {
 	VoiceModel       *string   `json:"voice_model,omitempty"`
 	VoiceStyle       *string   `json:"voice_style,omitempty"`
 	R2AudioObjectKey *string   `json:"r2_audio_object_key,omitempty"`
+	R2StorageBucket  string    `json:"r2_storage_bucket"`
 	DurationSec      *int      `json:"duration_sec,omitempty"`
 	ErrorMessage     *string   `json:"error_message,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`

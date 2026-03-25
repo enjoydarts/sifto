@@ -344,6 +344,34 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertEqual(result["article_segments"][1]["item_id"], "item-2")
         self.assertEqual(result["article_segments"][1]["headline"], "見出しB")
 
+    def test_parse_audio_briefing_script_result_falls_back_to_article_title_when_headline_missing(self):
+        result = parse_audio_briefing_script_result(
+            """
+            {
+              "article_segments": [
+                {
+                  "item_id": "item-1",
+                  "commentary": "コメントAです。"
+                }
+              ]
+            }
+            """,
+            [
+                {
+                    "item_id": "item-1",
+                    "title": "Example title 1",
+                    "translated_title": "翻訳タイトル1",
+                    "summary": "Summary text 1",
+                }
+            ],
+            "editor",
+            include_opening=False,
+            include_overall_summary=False,
+            include_article_segments=True,
+            include_ending=False,
+        )
+        self.assertEqual(result["article_segments"][0]["headline"], "翻訳タイトル1")
+
     def test_parse_audio_briefing_script_result_scales_caps_for_long_targets(self):
         long_summary = "総括です。" * 800
         long_commentary = "コメントです。" * 400

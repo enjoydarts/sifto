@@ -835,7 +835,9 @@ def parse_audio_briefing_script_result(
                 _log_audio_briefing_segment_id_mismatch(index, item_id, returned_item_id)
             headline = str(raw.get("headline") or "").strip()
             if not headline:
-                raise ValueError(f"audio briefing script missing headline for item_id: {item_id}")
+                headline = str(article.get("translated_title") or article.get("title") or "").strip()
+                if not headline:
+                    headline = "この話題の見どころ"
             commentary = _normalize_audio_briefing_generated_text(str(raw.get("commentary") or "").strip())
             if not commentary:
                 raise ValueError(f"audio briefing script missing commentary for item_id: {item_id}")

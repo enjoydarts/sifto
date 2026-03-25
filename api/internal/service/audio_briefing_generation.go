@@ -291,12 +291,16 @@ func charCount(v string) int {
 }
 
 func audioBriefingArticleText(headline, commentary string) string {
-	commentary = strings.TrimSpace(commentary)
-	if commentary != "" {
-		return commentary
-	}
 	headline = strings.TrimSpace(headline)
-	return headline
+	commentary = strings.TrimSpace(commentary)
+	switch {
+	case headline == "":
+		return commentary
+	case commentary == "":
+		return headline
+	default:
+		return fmt.Sprintf("%sです。%s", headline, commentary)
+	}
 }
 
 func AudioBriefingTargetChars(targetDurationMinutes int) int {

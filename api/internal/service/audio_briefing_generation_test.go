@@ -109,7 +109,7 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 	if got := draft.Chunks[1].Text; got != "まず全体として、AIとプロダクトの境目がまた一段近づいています。\n\n" {
 		t.Fatalf("summary = %q", got)
 	}
-	if got := draft.Chunks[2].Text; got != "ここは背景と含意を押さえておく価値があります。\n\n" {
+	if got := draft.Chunks[2].Text; got != "LLMで見た翻訳題です。ここは背景と含意を押さえておく価値があります。\n\n" {
 		t.Fatalf("article = %q", got)
 	}
 	if got := draft.Chunks[3].Text; got != "続きはSiftoで確認してください。" {
@@ -147,33 +147,6 @@ func TestBuildAudioBriefingDraftAddsBlankLineBetweenSections(t *testing.T) {
 	}
 	if strings.HasSuffix(draft.Chunks[3].Text, "\n\n") {
 		t.Fatalf("ending should not end with section break: %q", draft.Chunks[3].Text)
-	}
-}
-
-func TestBuildAudioBriefingDraftArticleOmitsHeadlinePrefix(t *testing.T) {
-	title := "原題"
-	translated := "翻訳題"
-	summary := "要約本文です。"
-
-	draft := BuildAudioBriefingDraft(
-		time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST),
-		"editor",
-		[]model.AudioBriefingJobItem{{
-			ItemID:          "item-1",
-			Rank:            1,
-			Title:           &title,
-			TranslatedTitle: &translated,
-			SummarySnapshot: &summary,
-		}},
-		nil,
-		0,
-	)
-
-	if strings.Contains(draft.Chunks[2].Text, "翻訳題です。") {
-		t.Fatalf("article should not force headline prefix: %q", draft.Chunks[2].Text)
-	}
-	if !strings.HasPrefix(draft.Chunks[2].Text, "要約本文です。") {
-		t.Fatalf("article should start with commentary: %q", draft.Chunks[2].Text)
 	}
 }
 
@@ -264,7 +237,7 @@ func TestBuildAudioBriefingDraftFromNarrationTrimsToTargetBudgets(t *testing.T) 
 	if got := draft.Chunks[1].CharCount; got > audioBriefingSummaryBudget(1200) {
 		t.Fatalf("summary char count = %d, want <= %d", got, audioBriefingSummaryBudget(1200))
 	}
-	if got := draft.Chunks[2].CharCount; got > audioBriefingCommentaryBudget(1200, 1)+charCount("\n\n") {
+	if got := draft.Chunks[2].CharCount; got > charCount("見出しです。")+audioBriefingCommentaryBudget(1200, 1)+charCount("\n\n") {
 		t.Fatalf("article char count = %d, want commentary to be trimmed", got)
 	}
 	if got := draft.Chunks[3].CharCount; got > audioBriefingEndingBudget(1200) {

@@ -199,6 +199,33 @@ func TestAudioBriefingGenerateArticleSegmentsBatchTracksRecoveredFailures(t *tes
 	}
 }
 
+func TestAppendAudioBriefingScriptModelPrefersResolvedAndDedupes(t *testing.T) {
+	var got []string
+
+	got = appendAudioBriefingScriptModel(got, &LLMUsage{
+		Model:          "claude-3-7-sonnet",
+		ResolvedModel:  "claude-sonnet-4-20250514",
+		RequestedModel: "claude-sonnet-4",
+	})
+	got = appendAudioBriefingScriptModel(got, &LLMUsage{
+		Model:         "claude-3-7-sonnet",
+		ResolvedModel: "claude-sonnet-4-20250514",
+	})
+	got = appendAudioBriefingScriptModel(got, &LLMUsage{
+		Model: "gemini-2.5-pro",
+	})
+
+	if len(got) != 2 {
+		t.Fatalf("len(models) = %d, want 2 (%v)", len(got), got)
+	}
+	if got[0] != "claude-sonnet-4-20250514" {
+		t.Fatalf("models[0] = %q, want resolved model", got[0])
+	}
+	if got[1] != "gemini-2.5-pro" {
+		t.Fatalf("models[1] = %q, want model", got[1])
+	}
+}
+
 func TestAudioBriefingBuildDraftFailsWhenVoiceIsNotConfigured(t *testing.T) {
 	orchestrator := &AudioBriefingOrchestrator{}
 

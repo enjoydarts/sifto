@@ -1245,6 +1245,7 @@ export interface AudioBriefingJob {
   source_item_count: number;
   reused_item_count: number;
   script_char_count: number;
+  script_llm_models?: string | null;
   audio_duration_sec?: number | null;
   title?: string | null;
   r2_audio_object_key?: string | null;

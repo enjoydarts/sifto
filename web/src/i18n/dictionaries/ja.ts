@@ -1322,6 +1322,7 @@ export const jaDict: Dict = {
   "audioBriefing.updatedAt": "更新",
   "audioBriefing.characters": "文字数",
   "audioBriefing.duration": "再生時間",
+  "audioBriefing.scriptModel": "台本モデル",
   "audioBriefing.failureReason": "失敗理由",
   "audioBriefing.player": "Player",
   "audioBriefing.playerPending": "音声ファイルはまだ準備中です。台本と採用記事は先に確認できます。",

@@ -43,6 +43,7 @@ type audioBriefingRecoveredFailure struct {
 type audioBriefingArticleBatchResult struct {
 	Segments          []AudioBriefingScriptSegment
 	RecoveredFailures []audioBriefingRecoveredFailure
+	ScriptLLMModels   []string
 }
 
 func NewAudioBriefingOrchestrator(
@@ -278,6 +279,7 @@ func (o *AudioBriefingOrchestrator) runScriptingStage(ctx context.Context, job *
 		draft.Status,
 		&draft.Title,
 		draft.ScriptCharCount,
+		audioBriefingScriptModelsValue(draft.ScriptLLMModels),
 		draft.Items,
 		draft.Chunks,
 	)
@@ -422,6 +424,7 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 	narration := AudioBriefingNarration{
 		Articles: make(map[string]AudioBriefingNarrationArticle, len(items)),
 	}
+	scriptLLMModels := make([]string, 0, 2)
 	if len(workerArticles) > 0 {
 		workerCtx := WithWorkerTraceMetadata(ctx, "audio_briefing_script", &userID, nil, nil, nil)
 		callScriptWorker := func(batch []AudioBriefingScriptArticle, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error) {
@@ -467,6 +470,7 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 		if err != nil {
 			return AudioBriefingDraft{}, err
 		}
+		scriptLLMModels = appendAudioBriefingScriptModel(scriptLLMModels, frameResp.LLM)
 		narration.Opening = strings.TrimSpace(frameResp.Opening)
 		narration.OverallSummary = strings.TrimSpace(frameResp.OverallSummary)
 		narration.Ending = strings.TrimSpace(frameResp.Ending)
@@ -487,6 +491,7 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 			if err != nil {
 				return AudioBriefingDraft{}, err
 			}
+			scriptLLMModels = appendAudioBriefingScriptModels(scriptLLMModels, result.ScriptLLMModels)
 			for _, recovered := range result.RecoveredFailures {
 				log.Printf("audio briefing script recovered user=%s persona=%s model=%s batch_size=%d err=%v", userID, normalizedPersona, strings.TrimSpace(*modelName), recovered.BatchSize, recovered.Err)
 			}
@@ -499,7 +504,9 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 		}
 	}
 
-	return BuildAudioBriefingDraftFromNarration(slotStartedAt, normalizedPersona, items, voice, narration, targetChars), nil
+	draft := BuildAudioBriefingDraftFromNarration(slotStartedAt, normalizedPersona, items, voice, narration, targetChars)
+	draft.ScriptLLMModels = scriptLLMModels
+	return draft, nil
 }
 
 func audioBriefingFrameTargetChars(targetChars int) int {
@@ -544,7 +551,10 @@ func audioBriefingGenerateArticleSegmentsBatch(
 		false,
 	)
 	if err == nil {
-		return audioBriefingArticleBatchResult{Segments: resp.ArticleSegments}, nil
+		return audioBriefingArticleBatchResult{
+			Segments:        resp.ArticleSegments,
+			ScriptLLMModels: appendAudioBriefingScriptModel(nil, resp.LLM),
+		}, nil
 	}
 	if len(batch) <= 1 {
 		return audioBriefingArticleBatchResult{}, err
@@ -566,7 +576,61 @@ func audioBriefingGenerateArticleSegmentsBatch(
 	return audioBriefingArticleBatchResult{
 		Segments:          append(left.Segments, right.Segments...),
 		RecoveredFailures: recovered,
+		ScriptLLMModels:   appendAudioBriefingScriptModels(left.ScriptLLMModels, right.ScriptLLMModels),
 	}, nil
+}
+
+func appendAudioBriefingScriptModel(models []string, llm *LLMUsage) []string {
+	if llm == nil {
+		return models
+	}
+	name := strings.TrimSpace(llm.ResolvedModel)
+	if name == "" {
+		name = strings.TrimSpace(llm.Model)
+	}
+	if name == "" {
+		name = strings.TrimSpace(llm.RequestedModel)
+	}
+	if name == "" {
+		return models
+	}
+	for _, existing := range models {
+		if existing == name {
+			return models
+		}
+	}
+	return append(models, name)
+}
+
+func appendAudioBriefingScriptModels(dst []string, src []string) []string {
+	for _, modelName := range src {
+		name := strings.TrimSpace(modelName)
+		if name == "" {
+			continue
+		}
+		found := false
+		for _, existing := range dst {
+			if existing == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			dst = append(dst, name)
+		}
+	}
+	return dst
+}
+
+func audioBriefingScriptModelsValue(models []string) *string {
+	if len(models) == 0 {
+		return nil
+	}
+	value := strings.TrimSpace(strings.Join(models, ", "))
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func audioBriefingNextPipelineStage(job *model.AudioBriefingJob, chunks []model.AudioBriefingScriptChunk) (audioBriefingPipelineStage, error) {

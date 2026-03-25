@@ -55,6 +55,7 @@ func TestAudioBriefingJobScanReadsStorageBucket(t *testing.T) {
 		6,
 		0,
 		12000,
+		"claude-sonnet-4-20250514",
 		1800,
 		"夕方の音声ブリーフィング",
 		audioKey,

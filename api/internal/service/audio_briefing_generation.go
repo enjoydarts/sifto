@@ -15,6 +15,7 @@ type AudioBriefingDraft struct {
 	Title           string
 	Status          string
 	ScriptCharCount int
+	ScriptLLMModels []string
 	Items           []model.AudioBriefingJobItem
 	Chunks          []model.AudioBriefingScriptChunk
 }

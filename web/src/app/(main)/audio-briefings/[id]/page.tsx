@@ -10,6 +10,7 @@ import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { PageHeader } from "@/components/ui/page-header";
 import { api, AudioBriefingDetailResponse } from "@/lib/api";
+import { formatModelDisplayName } from "@/lib/model-display";
 
 function formatDateTime(value: string | null | undefined, locale: string) {
   if (!value) return "—";
@@ -37,6 +38,15 @@ function formatSlotLabel(slotKey: string, slotStartedAt: string, locale: string,
     return `${manualLabel} · ${formatDateTime(slotStartedAt, locale)}`;
   }
   return slotKey;
+}
+
+function formatScriptModels(value: string | null | undefined) {
+  const models = (value ?? "")
+    .split(",")
+    .map((part) => formatModelDisplayName(part.trim()))
+    .filter((part) => part.length > 0);
+  if (models.length === 0) return "—";
+  return models.join(", ");
 }
 
 export default function AudioBriefingDetailPage() {
@@ -232,6 +242,11 @@ export default function AudioBriefingDetailPage() {
             <span>{t("audioBriefing.updatedAt", "Updated")}: {formatDateTime(detail.job.updated_at, locale)}</span>
             <span>{t("audioBriefing.itemsCount", "Items")}: {detail.job.source_item_count}</span>
           </div>
+          {detail.job.script_llm_models ? (
+            <div className="mt-3 text-[13px] text-[var(--color-editorial-ink-soft)]">
+              {t("audioBriefing.scriptModel", "Script model")}: {formatScriptModels(detail.job.script_llm_models)}
+            </div>
+          ) : null}
           {detail.job.error_message ? (
             <div className="mt-4 rounded-[18px] border border-[#e8cfc7] bg-[#fff4f0] px-4 py-4 text-sm leading-6 text-[#7a4337]">
               {t("audioBriefing.failureReason", "Failure")}: {detail.job.error_message}

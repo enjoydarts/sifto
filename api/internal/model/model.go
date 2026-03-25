@@ -128,6 +128,7 @@ type AudioBriefingJob struct {
 	SourceItemCount        int        `json:"source_item_count"`
 	ReusedItemCount        int        `json:"reused_item_count"`
 	ScriptCharCount        int        `json:"script_char_count"`
+	ScriptLLMModels        *string    `json:"script_llm_models,omitempty"`
 	AudioDurationSec       *int       `json:"audio_duration_sec,omitempty"`
 	Title                  *string    `json:"title,omitempty"`
 	R2AudioObjectKey       *string    `json:"r2_audio_object_key,omitempty"`

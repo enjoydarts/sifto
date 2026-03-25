@@ -119,7 +119,7 @@ func (o *AudioBriefingOrchestrator) Resume(ctx context.Context, userID string, j
 	if err != nil {
 		return nil, err
 	}
-	if !audioBriefingShouldContinue(job.Status) {
+	if !AudioBriefingResumeAllowed(job) {
 		return nil, repository.ErrInvalidState
 	}
 	return job, nil
@@ -690,6 +690,28 @@ func audioBriefingShouldContinue(status string) bool {
 	default:
 		return false
 	}
+}
+
+func audioBriefingJobCanBeResumedAt(job *model.AudioBriefingJob, now time.Time, staleAfter time.Duration) bool {
+	if job == nil {
+		return false
+	}
+	if audioBriefingShouldContinue(job.Status) {
+		return true
+	}
+	switch strings.TrimSpace(job.Status) {
+	case "scripting", "voicing", "concatenating":
+		if staleAfter <= 0 {
+			return false
+		}
+		return !job.UpdatedAt.IsZero() && now.Sub(job.UpdatedAt) >= staleAfter
+	default:
+		return false
+	}
+}
+
+func AudioBriefingResumeAllowed(job *model.AudioBriefingJob) bool {
+	return audioBriefingJobCanBeResumedAt(job, time.Now(), audioBriefingStaleDeleteAfter())
 }
 
 func normalizeAudioBriefingPersona(v string) string {

@@ -253,6 +253,7 @@ func (h *AudioBriefingsHandler) loadDetail(ctx context.Context, userID, jobID st
 		"chunks":         chunks,
 		"audio_url":      audioURL,
 		"delete_allowed": service.AudioBriefingDeleteAllowed(job),
+		"resume_allowed": service.AudioBriefingResumeAllowed(job),
 	}, nil
 }
 

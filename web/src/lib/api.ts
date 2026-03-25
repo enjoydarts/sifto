@@ -1293,6 +1293,7 @@ export interface AudioBriefingDetailResponse {
   chunks: AudioBriefingScriptChunk[];
   audio_url?: string | null;
   delete_allowed?: boolean;
+  resume_allowed?: boolean;
 }
 
 export interface ObsidianExportRunResult {

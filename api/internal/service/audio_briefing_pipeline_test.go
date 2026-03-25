@@ -111,6 +111,27 @@ func TestAudioBriefingShouldContinue(t *testing.T) {
 	}
 }
 
+func TestAudioBriefingJobCanBeResumedAt(t *testing.T) {
+	now := time.Date(2026, 3, 25, 12, 0, 0, 0, time.UTC)
+	staleAfter := 30 * time.Minute
+
+	if !audioBriefingJobCanBeResumedAt(&model.AudioBriefingJob{Status: "pending", UpdatedAt: now}, now, staleAfter) {
+		t.Fatal("pending job should be resumable")
+	}
+	if !audioBriefingJobCanBeResumedAt(&model.AudioBriefingJob{Status: "failed", UpdatedAt: now}, now, staleAfter) {
+		t.Fatal("failed job should be resumable")
+	}
+	if !audioBriefingJobCanBeResumedAt(&model.AudioBriefingJob{Status: "voicing", UpdatedAt: now.Add(-31 * time.Minute)}, now, staleAfter) {
+		t.Fatal("stale voicing job should be resumable")
+	}
+	if audioBriefingJobCanBeResumedAt(&model.AudioBriefingJob{Status: "voicing", UpdatedAt: now.Add(-10 * time.Minute)}, now, staleAfter) {
+		t.Fatal("fresh voicing job should not be resumable")
+	}
+	if audioBriefingJobCanBeResumedAt(&model.AudioBriefingJob{Status: "published", UpdatedAt: now}, now, staleAfter) {
+		t.Fatal("published job should not be resumable")
+	}
+}
+
 func TestAudioBriefingArticleBatchSize(t *testing.T) {
 	tests := []struct {
 		itemCount int

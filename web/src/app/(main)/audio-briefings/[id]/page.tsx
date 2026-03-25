@@ -119,7 +119,7 @@ export default function AudioBriefingDetailPage() {
   );
   const canResume = useMemo(() => {
     if (!detail) return false;
-    return ["scripted", "voiced", "failed"].includes(detail.job.status);
+    return !!detail.resume_allowed;
   }, [detail]);
   const canDelete = useMemo(() => !!detail?.delete_allowed, [detail]);
 

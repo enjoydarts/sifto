@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -273,6 +274,21 @@ func TestRecoverAudioBriefingStageErrorFailsActiveVoicingJob(t *testing.T) {
 	}
 	if gotCode != "tts_failed" {
 		t.Fatalf("errorCode = %q, want tts_failed", gotCode)
+	}
+}
+
+func TestAudioBriefingFailureContextDetachesFromCanceledParent(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	ctx, release := audioBriefingFailureContext(parent)
+	defer release()
+
+	if err := ctx.Err(); err != nil {
+		t.Fatalf("failure context should not inherit cancellation: %v", err)
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		t.Fatal("failure context should have a deadline")
 	}
 }
 

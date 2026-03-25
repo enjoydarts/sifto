@@ -29,7 +29,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			err = fmt.Errorf("audio briefing voice stage panic: %v", recovered)
 		}
 		if err != nil {
-			_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+			r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 		}
 	}()
 
@@ -41,21 +41,21 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		return err
 	}
 	if err := r.repo.ResetChunksForVoicing(ctx, jobID); err != nil {
-		_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 		return err
 	}
 	chunks, err := r.repo.ListJobChunks(ctx, userID, jobID)
 	if err != nil {
-		_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 		return err
 	}
 	if len(chunks) == 0 {
-		_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", "no script chunks")
+		r.bestEffortFailVoicing(jobID, "tts_failed", "no script chunks")
 		return repository.ErrInvalidState
 	}
 	voice, err := r.repo.GetPersonaVoice(ctx, userID, job.Persona)
 	if err != nil {
-		_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 		return err
 	}
 	speechRate := 1.0
@@ -78,7 +78,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			continue
 		}
 		if err := r.repo.MarkChunkGenerating(ctx, chunk.ID); err != nil {
-			_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+			r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 			return err
 		}
 		provider := strings.TrimSpace(derefString(chunk.TTSProvider))
@@ -86,8 +86,8 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		voiceStyle := strings.TrimSpace(derefString(chunk.VoiceStyle))
 		if provider == "" || voiceModel == "" || voiceStyle == "" {
 			err := fmt.Errorf("chunk tts config is incomplete")
-			_ = r.repo.MarkChunkFailed(ctx, chunk.ID, err.Error())
-			_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+			r.bestEffortMarkChunkFailed(chunk.ID, err.Error())
+			r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 			return err
 		}
 		var aivisAPIKey *string
@@ -95,14 +95,14 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		if provider == "aivis" {
 			aivisAPIKey, err = r.loadAivisAPIKey(ctx, userID)
 			if err != nil {
-				_ = r.repo.MarkChunkFailed(ctx, chunk.ID, err.Error())
-				_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+				r.bestEffortMarkChunkFailed(chunk.ID, err.Error())
+				r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 				return err
 			}
 			aivisUserDictionaryUUID, err = r.userSettings.GetAivisUserDictionaryUUID(ctx, userID)
 			if err != nil {
-				_ = r.repo.MarkChunkFailed(ctx, chunk.ID, err.Error())
-				_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+				r.bestEffortMarkChunkFailed(chunk.ID, err.Error())
+				r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 				return err
 			}
 		}
@@ -123,20 +123,38 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			aivisAPIKey,
 		)
 		if err != nil {
-			_ = r.repo.MarkChunkFailed(ctx, chunk.ID, err.Error())
-			_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+			r.bestEffortMarkChunkFailed(chunk.ID, err.Error())
+			r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 			return err
 		}
 		if err := r.repo.MarkChunkGenerated(ctx, chunk.ID, resp.AudioObjectKey, resp.DurationSec); err != nil {
-			_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+			r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 			return err
 		}
 	}
 	if _, err := r.repo.CompleteVoicingJob(ctx, jobID); err != nil {
-		_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 		return err
 	}
 	return nil
+}
+
+func (r *AudioBriefingVoiceRunner) bestEffortFailVoicing(jobID string, errorCode string, errorMessage string) {
+	if r == nil || r.repo == nil || strings.TrimSpace(jobID) == "" {
+		return
+	}
+	ctx, cancel := audioBriefingFailureContext(context.Background())
+	defer cancel()
+	_, _ = r.repo.FailVoicingJob(ctx, jobID, errorCode, errorMessage)
+}
+
+func (r *AudioBriefingVoiceRunner) bestEffortMarkChunkFailed(chunkID string, errorMessage string) {
+	if r == nil || r.repo == nil || strings.TrimSpace(chunkID) == "" {
+		return
+	}
+	ctx, cancel := audioBriefingFailureContext(context.Background())
+	defer cancel()
+	_ = r.repo.MarkChunkFailed(ctx, chunkID, errorMessage)
 }
 
 func (r *AudioBriefingVoiceRunner) loadAivisAPIKey(ctx context.Context, userID string) (*string, error) {

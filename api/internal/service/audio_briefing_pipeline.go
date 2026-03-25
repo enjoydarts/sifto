@@ -263,14 +263,16 @@ func (o *AudioBriefingOrchestrator) runScriptingStage(ctx context.Context, job *
 }
 
 func (o *AudioBriefingOrchestrator) loadJobAfterStageError(ctx context.Context, userID string, jobID string, stage audioBriefingPipelineStage, stageErr error) (*model.AudioBriefingJob, error) {
-	job, err := o.repo.GetJobByID(ctx, userID, jobID)
+	recoveryCtx, cancel := audioBriefingFailureContext(ctx)
+	defer cancel()
+	job, err := o.repo.GetJobByID(recoveryCtx, userID, jobID)
 	if err == nil {
 		nextJob, recoverErr := recoverAudioBriefingStageError(stage, job, stageErr, func(errorCode, errorMessage string) (*model.AudioBriefingJob, error) {
 			switch stage {
 			case audioBriefingPipelineStageScript:
-				return o.repo.FailScriptingJob(ctx, jobID, errorCode, errorMessage)
+				return o.repo.FailScriptingJob(recoveryCtx, jobID, errorCode, errorMessage)
 			case audioBriefingPipelineStageVoice:
-				return o.repo.FailVoicingJob(ctx, jobID, errorCode, errorMessage)
+				return o.repo.FailVoicingJob(recoveryCtx, jobID, errorCode, errorMessage)
 			default:
 				return job, nil
 			}
@@ -322,6 +324,10 @@ func audioBriefingStageFailureFallback(stage audioBriefingPipelineStage) (errorC
 	default:
 		return "", ""
 	}
+}
+
+func audioBriefingFailureContext(_ context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 5*time.Second)
 }
 
 func (o *AudioBriefingOrchestrator) buildDraft(

@@ -77,6 +77,50 @@ function parseItemsQueryState(searchParams: URLSearchParams) {
   };
 }
 
+function buildItemsQueryString(
+  current: ReturnType<typeof parseItemsQueryState>,
+  patch: Partial<{
+    feed: FeedMode;
+    sort: SortMode;
+    status: string;
+    topic: string;
+    sourceId: string;
+    q: string;
+    searchMode: "natural" | "and" | "or";
+    unread: boolean;
+    favorite: boolean;
+    page: number;
+  }>
+) {
+  const q = new URLSearchParams();
+  const nextFeed = patch.feed ?? current.feedMode;
+  const nextSort = patch.sort ?? current.sortMode;
+  const implicitStatus = nextFeed === "pending" ? "pending" : "";
+  const nextStatus = patch.status ?? (patch.feed ? implicitStatus : current.filter);
+  const nextTopic = patch.topic ?? current.topic;
+  const nextSourceID = patch.sourceId ?? current.sourceID;
+  const nextSearch = patch.q ?? current.searchQuery;
+  const nextSearchMode = patch.searchMode ?? current.searchMode;
+  const isDeletedFeed = nextFeed === "deleted";
+  const nextUnread =
+    nextFeed === "pending" || isDeletedFeed ? false : nextFeed === "later" ? true : patch.unread ?? current.unreadOnly;
+  const nextFavorite = nextFeed === "pending" || isDeletedFeed ? false : patch.favorite ?? current.favoriteOnly;
+  const nextPage = patch.page ?? current.page;
+
+  q.set("feed", nextFeed);
+  if (nextStatus) q.set("status", nextStatus);
+  if (nextSourceID) q.set("source_id", nextSourceID);
+  if (nextTopic) q.set("topic", nextTopic);
+  if (nextSearch) q.set("q", nextSearch);
+  if (nextSearch) q.set("search_mode", nextSearchMode);
+  q.set("sort", nextFeed === "pending" ? "newest" : nextSort);
+  if (nextUnread) q.set("unread", "1");
+  if (nextFavorite) q.set("favorite", "1");
+  if (nextPage > 1) q.set("page", String(nextPage));
+
+  return q.toString();
+}
+
 function ItemsPageContent() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
@@ -214,51 +258,13 @@ function ItemsPageContent() {
           page: number;
       }>
     ) => {
-      const baseSearch =
-        typeof window !== "undefined" ? window.location.search : searchParams.toString() ? `?${searchParams.toString()}` : "";
-      const q = new URLSearchParams(baseSearch);
-      const current = parseItemsQueryState(q);
-
-      const nextFeed = patch.feed ?? current.feedMode;
-      q.set("feed", nextFeed);
-
-      const nextSort = patch.sort ?? current.sortMode;
-      const implicitStatus = nextFeed === "pending" ? "pending" : "";
-      const nextStatus = patch.status ?? (patch.feed ? implicitStatus : current.filter);
-      const nextTopic = patch.topic ?? current.topic;
-      const nextSourceID = patch.sourceId ?? current.sourceID;
-      const nextSearch = patch.q ?? current.searchQuery;
-      const nextSearchMode = patch.searchMode ?? current.searchMode;
-      const isDeletedFeed = nextFeed === "deleted";
-      const nextUnread = nextFeed === "pending" || isDeletedFeed ? false : nextFeed === "later" ? true : patch.unread ?? current.unreadOnly;
-      const nextFavorite = nextFeed === "pending" || isDeletedFeed ? false : patch.favorite ?? current.favoriteOnly;
-      const nextPage = patch.page ?? current.page;
-
-      if (nextStatus) q.set("status", nextStatus);
-      else q.delete("status");
-      if (nextSourceID) q.set("source_id", nextSourceID);
-      else q.delete("source_id");
-      if (nextTopic) q.set("topic", nextTopic);
-      else q.delete("topic");
-      if (nextSearch) q.set("q", nextSearch);
-      else q.delete("q");
-      if (nextSearch) q.set("search_mode", nextSearchMode);
-      else q.delete("search_mode");
-      q.set("sort", nextFeed === "pending" ? "newest" : nextSort);
-      if (nextUnread) q.set("unread", "1");
-      else q.delete("unread");
-      if (nextFavorite) q.set("favorite", "1");
-      else q.delete("favorite");
-      if (nextPage > 1) q.set("page", String(nextPage));
-      else q.delete("page");
-
-      const nextQuery = q.toString();
+      const nextQuery = buildItemsQueryString(queryState, patch);
       const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
       startTransition(() => {
         router.replace(nextUrl, { scroll: false });
       });
     },
-    [pathname, router, searchParams]
+    [pathname, queryState, router]
   );
 
   const itemsQueryString = useMemo(() => {
@@ -804,13 +810,15 @@ function ItemsPageContent() {
             <FilterBar
               compact
               leading={(
-                <FeedTabs
-                  feedMode={feedMode}
-                  onSelect={(feed) => {
-                    replaceItemsQuery({ feed, page: 1, unread: false });
-                  }}
-                  t={t}
-                />
+                <div className="xl:w-[550px] xl:max-w-full xl:flex-none">
+                  <FeedTabs
+                    feedMode={feedMode}
+                    onSelect={(feed) => {
+                      replaceItemsQuery({ feed, page: 1, unread: false });
+                    }}
+                    t={t}
+                  />
+                </div>
               )}
               filters={(
                 <FiltersBar
@@ -836,12 +844,12 @@ function ItemsPageContent() {
               )}
               actions={
                 pendingMode ? (
-                  <div className="flex w-full flex-wrap items-center justify-end gap-2 xl:w-auto xl:flex-nowrap">
+                  <div className="flex w-full flex-wrap items-center justify-end gap-1.5 xl:w-[372px] xl:flex-none xl:flex-nowrap xl:gap-1">
                     <button
                       type="button"
                       onClick={selectAllVisibleItems}
                       disabled={items.length === 0}
-                      className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3.5 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] disabled:cursor-not-allowed disabled:opacity-50 xl:px-2.5"
                     >
                       {t("items.bulkRetryFromFacts.selectAll")}
                     </button>
@@ -849,12 +857,18 @@ function ItemsPageContent() {
                       type="button"
                       onClick={clearSelectedItems}
                       disabled={visibleSelectedCount === 0}
-                      className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3.5 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] disabled:cursor-not-allowed disabled:opacity-50 xl:px-2.5"
                     >
-                      {t("items.bulkRetryFromFacts.clearSelection")}
+                      <span className="xl:hidden">{t("items.bulkRetryFromFacts.clearSelection")}</span>
+                      <span className="hidden xl:inline">{t("items.bulkRetryFromFacts.clearSelectionShort")}</span>
                     </button>
-                    <div className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3.5 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)]">
-                      {t("items.bulkRetryFromFacts.selectedCount").replace("{{count}}", String(visibleSelectedCount))}
+                    <div className="inline-flex min-h-10 items-center whitespace-nowrap rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] xl:px-2.5">
+                      <span className="xl:hidden">
+                        {t("items.bulkRetryFromFacts.selectedCount").replace("{{count}}", String(visibleSelectedCount))}
+                      </span>
+                      <span className="hidden xl:inline">
+                        {t("items.bulkRetryFromFacts.selectedCountShort").replace("{{count}}", String(visibleSelectedCount))}
+                      </span>
                     </div>
                     <button
                       type="button"
@@ -862,9 +876,14 @@ function ItemsPageContent() {
                       onClick={() => {
                         void bulkRetryFromFacts();
                       }}
-                      className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50 xl:px-2.5"
                     >
-                      {bulkRetryingFromFacts ? t("common.saving") : t("items.bulkRetryFromFacts.run")}
+                      {bulkRetryingFromFacts ? t("common.saving") : (
+                        <>
+                          <span className="xl:hidden">{t("items.bulkRetryFromFacts.run")}</span>
+                          <span className="hidden xl:inline">{t("items.bulkRetryFromFacts.runShort")}</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 ) : (

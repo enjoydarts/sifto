@@ -32,14 +32,15 @@ export function FiltersBar({
     personal_score: Sparkles,
   };
 
+  if (pendingMode) {
+    return null;
+  }
+
   return (
     <div className="flex flex-col gap-2">
       {!focusMode && (
         <div
-          className={`flex min-w-0 max-w-full flex-wrap gap-2 sm:pb-0 ${
-            pendingMode ? "max-xl:hidden xl:pointer-events-none xl:invisible" : ""
-          }`}
-          aria-hidden={pendingMode}
+          className="flex min-w-0 max-w-full flex-wrap gap-2 sm:pb-0"
         >
           <div className="flex min-w-0 items-center gap-1 rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-1">
             {(["newest", "score", "personal_score"] as SortMode[]).map((s) => (

@@ -175,6 +175,7 @@ class AudioBriefingTTSService:
         pitch: float,
         volume_gain: float,
         output_object_key: str,
+        user_dictionary_uuid: str | None = None,
         aivis_api_key: str | None = None,
     ) -> tuple[str, int]:
         provider = (provider or "").strip().lower()
@@ -191,6 +192,7 @@ class AudioBriefingTTSService:
                 line_break_silence_seconds=line_break_silence_seconds,
                 pitch=pitch,
                 volume_gain=volume_gain,
+                user_dictionary_uuid=user_dictionary_uuid,
                 api_key_override=aivis_api_key,
             )
         else:
@@ -307,6 +309,7 @@ class AudioBriefingTTSService:
         line_break_silence_seconds: float,
         pitch: float,
         volume_gain: float,
+        user_dictionary_uuid: str | None,
         api_key_override: str | None,
     ) -> tuple[bytes, str, str, int]:
         if not self.aivis_tts_endpoint:
@@ -326,6 +329,7 @@ class AudioBriefingTTSService:
                 line_break_silence_seconds=line_break_silence_seconds,
                 pitch=pitch,
                 volume_gain=volume_gain,
+                user_dictionary_uuid=user_dictionary_uuid,
             )
         }
         rate_limit_key = api_key or "__default__"
@@ -366,12 +370,13 @@ def build_aivis_payload(
     line_break_silence_seconds: float,
     pitch: float,
     volume_gain: float,
+    user_dictionary_uuid: str | None = None,
 ) -> dict:
     model_uuid = (voice_model or "").strip()
     speaker_uuid, style_id = parse_aivis_voice_style(voice_style)
     if not model_uuid:
         raise RuntimeError("Aivis model_uuid is empty")
-    return {
+    payload = {
         "model_uuid": model_uuid,
         "speaker_uuid": speaker_uuid,
         "style_id": style_id,
@@ -387,6 +392,10 @@ def build_aivis_payload(
         "line_break_silence_seconds": max(0.0, line_break_silence_seconds),
         "output_format": "mp3",
     }
+    user_dictionary_uuid = (user_dictionary_uuid or "").strip()
+    if user_dictionary_uuid:
+        payload["user_dictionary_uuid"] = user_dictionary_uuid
+    return payload
 
 
 def parse_aivis_voice_style(voice_style: str) -> tuple[str, int]:

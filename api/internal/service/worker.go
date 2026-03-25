@@ -874,6 +874,7 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 	pitch float64,
 	volumeGain float64,
 	outputObjectKey string,
+	aivisUserDictionaryUUID *string,
 	aivisAPIKey *string,
 ) (*AudioBriefingSynthesizeUploadResponse, error) {
 	if _, ok := ctx.Deadline(); !ok && w.audioBriefingTimeout > 0 {
@@ -881,7 +882,7 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 		ctx, cancel = context.WithTimeout(ctx, w.audioBriefingTimeout)
 		defer cancel()
 	}
-	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload", map[string]any{
+	requestBody := map[string]any{
 		"provider":                   provider,
 		"voice_model":                voiceModel,
 		"voice_style":                voiceStyle,
@@ -893,7 +894,11 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 		"pitch":                      pitch,
 		"volume_gain":                volumeGain,
 		"output_object_key":          outputObjectKey,
-	}, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, aivisAPIKey, w.internalSecret))
+	}
+	if uuid := strings.TrimSpace(derefString(aivisUserDictionaryUUID)); uuid != "" {
+		requestBody["user_dictionary_uuid"] = uuid
+	}
+	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload", requestBody, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, aivisAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) PresignAudioBriefingObject(ctx context.Context, objectKey string, expiresSec int) (*AudioBriefingPresignResponse, error) {

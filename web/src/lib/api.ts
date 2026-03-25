@@ -208,6 +208,19 @@ export interface AivisModelsResponse {
   removed_models?: AivisModelSnapshot[];
 }
 
+export interface AivisUserDictionary {
+  uuid: string;
+  name: string;
+  description?: string | null;
+  word_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AivisUserDictionariesResponse {
+  user_dictionaries: AivisUserDictionary[];
+}
+
 export interface PoeModelSnapshot {
   model_id: string;
   canonical_slug?: string | null;
@@ -1128,6 +1141,7 @@ export interface UserSettings {
   openrouter_api_key_last4: string | null;
   has_aivis_api_key: boolean;
   aivis_api_key_last4: string | null;
+  aivis_user_dictionary_uuid?: string | null;
   has_inoreader_oauth?: boolean;
   inoreader_token_expires_at?: string | null;
   monthly_budget_usd: number | null;
@@ -2172,6 +2186,18 @@ export const api = {
   deleteAivisApiKey: () =>
     apiFetch<{ user_id: string; has_aivis_api_key: boolean; aivis_api_key_last4: string | null }>(
       "/settings/aivis-key",
+      { method: "DELETE" }
+    ),
+  getAivisUserDictionaries: () =>
+    apiFetch<AivisUserDictionariesResponse>("/settings/aivis-user-dictionaries"),
+  setAivisUserDictionary: (uuid: string) =>
+    apiFetch<{ user_id: string; aivis_user_dictionary_uuid: string | null }>(
+      "/settings/aivis-user-dictionary",
+      { method: "POST", body: JSON.stringify({ aivis_user_dictionary_uuid: uuid }) }
+    ),
+  deleteAivisUserDictionary: () =>
+    apiFetch<{ user_id: string; aivis_user_dictionary_uuid: string | null }>(
+      "/settings/aivis-user-dictionary",
       { method: "DELETE" }
     ),
   getOpenRouterModels: () =>

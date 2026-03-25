@@ -17,14 +17,15 @@ import (
 )
 
 type SettingsHandler struct {
-	settings         *service.SettingsService
-	obsidianRepo     *repository.ObsidianExportRepo
-	notificationRepo *repository.NotificationPriorityRepo
-	prefProfileRepo  *repository.PreferenceProfileRepo
-	oauth            *service.InoreaderOAuthService
-	github           *service.GitHubAppClient
-	obsidianExport   *service.ObsidianExportService
-	cache            service.JSONCache
+	settings          *service.SettingsService
+	aivisDictionaries *service.AivisUserDictionaryService
+	obsidianRepo      *repository.ObsidianExportRepo
+	notificationRepo  *repository.NotificationPriorityRepo
+	prefProfileRepo   *repository.PreferenceProfileRepo
+	oauth             *service.InoreaderOAuthService
+	github            *service.GitHubAppClient
+	obsidianExport    *service.ObsidianExportService
+	cache             service.JSONCache
 }
 
 const settingsCacheTTL = 2 * time.Minute
@@ -55,14 +56,15 @@ type navigatorPersonaDefinition struct {
 
 func NewSettingsHandler(repo *repository.UserSettingsRepo, audioBriefingRepo *repository.AudioBriefingRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {
 	return &SettingsHandler{
-		settings:         service.NewSettingsService(repo, audioBriefingRepo, aivisModelRepo, obsidianRepo, llmUsageRepo, openRouterOverrideRepo, cipher, github),
-		obsidianRepo:     obsidianRepo,
-		notificationRepo: notificationRepo,
-		prefProfileRepo:  prefProfileRepo,
-		oauth:            service.NewInoreaderOAuthService(repo, cipher),
-		github:           github,
-		obsidianExport:   obsidianExport,
-		cache:            cache,
+		settings:          service.NewSettingsService(repo, audioBriefingRepo, aivisModelRepo, obsidianRepo, llmUsageRepo, openRouterOverrideRepo, cipher, github),
+		aivisDictionaries: service.NewAivisUserDictionaryService(repo, cipher),
+		obsidianRepo:      obsidianRepo,
+		notificationRepo:  notificationRepo,
+		prefProfileRepo:   prefProfileRepo,
+		oauth:             service.NewInoreaderOAuthService(repo, cipher),
+		github:            github,
+		obsidianExport:    obsidianExport,
+		cache:             cache,
 	}
 }
 
@@ -869,5 +871,67 @@ func (h *SettingsHandler) DeleteAivisAPIKey(w http.ResponseWriter, r *http.Reque
 	h.deleteAPIKey(w, r, "aivis", map[string]func(*model.UserSettings) any{
 		"has_aivis_api_key":   func(s *model.UserSettings) any { return s.HasAivisAPIKey },
 		"aivis_api_key_last4": func(s *model.UserSettings) any { return s.AivisAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) GetAivisUserDictionaries(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	items, err := h.aivisDictionaries.List(r.Context(), userID)
+	if err != nil {
+		switch err.Error() {
+		case "aivis api key is not configured":
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		case "user secret encryption is not configured":
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		default:
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+	}
+	writeJSON(w, map[string]any{"user_dictionaries": items})
+}
+
+func (h *SettingsHandler) SetAivisUserDictionary(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		AivisUserDictionaryUUID string `json:"aivis_user_dictionary_uuid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	settings, err := h.settings.SetAivisUserDictionaryUUID(r.Context(), userID, body.AivisUserDictionaryUUID)
+	if err != nil {
+		if err.Error() == "aivis_user_dictionary_uuid is required" {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
+	writeJSON(w, map[string]any{
+		"user_id":                    settings.UserID,
+		"aivis_user_dictionary_uuid": settings.AivisUserDictionaryUUID,
+	})
+}
+
+func (h *SettingsHandler) DeleteAivisUserDictionary(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	settings, err := h.settings.ClearAivisUserDictionaryUUID(r.Context(), userID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
+	writeJSON(w, map[string]any{
+		"user_id":                    settings.UserID,
+		"aivis_user_dictionary_uuid": settings.AivisUserDictionaryUUID,
 	})
 }

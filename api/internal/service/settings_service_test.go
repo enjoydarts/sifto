@@ -74,8 +74,9 @@ func TestSettingsGetPayloadSupportsPoeFields(t *testing.T) {
 
 func TestSettingsGetPayloadSupportsAivisFields(t *testing.T) {
 	payload := &SettingsGetPayload{
-		HasAivisAPIKey:   true,
-		AivisAPIKeyLast4: strptr("wxyz"),
+		HasAivisAPIKey:          true,
+		AivisAPIKeyLast4:        strptr("wxyz"),
+		AivisUserDictionaryUUID: strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),
 	}
 
 	if !payload.HasAivisAPIKey {
@@ -83,6 +84,9 @@ func TestSettingsGetPayloadSupportsAivisFields(t *testing.T) {
 	}
 	if payload.AivisAPIKeyLast4 == nil || *payload.AivisAPIKeyLast4 != "wxyz" {
 		t.Fatalf("AivisAPIKeyLast4 = %v, want %q", payload.AivisAPIKeyLast4, "wxyz")
+	}
+	if payload.AivisUserDictionaryUUID == nil || *payload.AivisUserDictionaryUUID != "5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861" {
+		t.Fatalf("AivisUserDictionaryUUID = %v, want expected uuid", payload.AivisUserDictionaryUUID)
 	}
 }
 

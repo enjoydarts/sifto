@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Brain, ChevronDown, KeyRound, Settings as SettingsIcon } from "lucide-react";
-import { AivisModelSnapshot, AivisModelsResponse, api, AudioBriefingPersonaVoice, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, PreferenceProfile, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
+import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, PreferenceProfile, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -366,6 +366,8 @@ export default function SettingsPage() {
   const [deletingOpenRouterKey, setDeletingOpenRouterKey] = useState(false);
   const [savingAivisKey, setSavingAivisKey] = useState(false);
   const [deletingAivisKey, setDeletingAivisKey] = useState(false);
+  const [savingAivisDictionary, setSavingAivisDictionary] = useState(false);
+  const [deletingAivisDictionary, setDeletingAivisDictionary] = useState(false);
   const [deletingInoreaderOAuth, setDeletingInoreaderOAuth] = useState(false);
   const [resettingPreferenceProfile, setResettingPreferenceProfile] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -395,6 +397,7 @@ export default function SettingsPage() {
   const [poeApiKeyInput, setPoeApiKeyInput] = useState("");
   const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
   const [aivisApiKeyInput, setAivisApiKeyInput] = useState("");
+  const [aivisUserDictionaryUUID, setAivisUserDictionaryUUID] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
   const [activeSection, setActiveSection] = useState<SettingsSectionID>("models");
   const [llmExtrasOpen, setLLMExtrasOpen] = useState(false);
@@ -415,6 +418,10 @@ export default function SettingsPage() {
   const [aivisModelsLoading, setAivisModelsLoading] = useState(false);
   const [aivisModelsSyncing, setAivisModelsSyncing] = useState(false);
   const [aivisModelsError, setAivisModelsError] = useState<string | null>(null);
+  const [aivisUserDictionaries, setAivisUserDictionaries] = useState<AivisUserDictionary[]>([]);
+  const [aivisUserDictionariesLoading, setAivisUserDictionariesLoading] = useState(false);
+  const [aivisUserDictionariesLoaded, setAivisUserDictionariesLoaded] = useState(false);
+  const [aivisUserDictionariesError, setAivisUserDictionariesError] = useState<string | null>(null);
   const [aivisPickerPersona, setAivisPickerPersona] = useState<string | null>(null);
   const [expandedAudioBriefingPersonas, setExpandedAudioBriefingPersonas] = useState<string[]>(["editor"]);
   const [obsidianEnabled, setObsidianEnabled] = useState(false);
@@ -628,6 +635,29 @@ export default function SettingsPage() {
     }
   }, [showToast, t]);
 
+  const loadAivisUserDictionaries = useCallback(async (force = false) => {
+    if (!force && aivisUserDictionariesLoaded) {
+      return aivisUserDictionaries;
+    }
+    setAivisUserDictionariesLoading(true);
+    try {
+      const next = await api.getAivisUserDictionaries();
+      setAivisUserDictionaries(next.user_dictionaries ?? []);
+      setAivisUserDictionariesLoaded(true);
+      setAivisUserDictionariesError(null);
+      return next.user_dictionaries ?? [];
+    } catch (e) {
+      const message = String(e);
+      setAivisUserDictionariesError(message);
+      if (force) {
+        showToast(message, "error");
+      }
+      throw e;
+    } finally {
+      setAivisUserDictionariesLoading(false);
+    }
+  }, [aivisUserDictionaries, aivisUserDictionariesLoaded, showToast]);
+
   const load = useCallback(async () => {
     const seq = ++loadSeqRef.current;
     setLoading(true);
@@ -646,6 +676,12 @@ export default function SettingsPage() {
       setNavigatorPersonaDefinitions(navigatorPersonas ?? {});
       setPreferenceProfile(preferenceProfileResult.profile);
       setPreferenceProfileError(preferenceProfileResult.error);
+      setAivisUserDictionaryUUID(data.aivis_user_dictionary_uuid ?? "");
+      if (!data.has_aivis_api_key) {
+        setAivisUserDictionaries([]);
+        setAivisUserDictionariesLoaded(false);
+        setAivisUserDictionariesError(null);
+      }
       setBudgetUSD(data.monthly_budget_usd == null ? "" : String(data.monthly_budget_usd));
       setAlertEnabled(Boolean(data.budget_alert_enabled));
       setThresholdPct(data.budget_alert_threshold_pct ?? 20);
@@ -683,6 +719,19 @@ export default function SettingsPage() {
     if (activeSection !== "audio-briefing" || aivisModelsData != null || aivisModelsLoading) return;
     void loadAivisModels().catch(() => undefined);
   }, [activeSection, aivisModelsData, aivisModelsLoading, loadAivisModels]);
+
+  useEffect(() => {
+    if (activeSection !== "audio-briefing" || !settings?.has_aivis_api_key || aivisUserDictionariesLoading || aivisUserDictionariesLoaded) {
+      return;
+    }
+    void loadAivisUserDictionaries().catch(() => undefined);
+  }, [
+    activeSection,
+    aivisUserDictionariesLoaded,
+    aivisUserDictionariesLoading,
+    loadAivisUserDictionaries,
+    settings?.has_aivis_api_key,
+  ]);
 
   useEffect(() => {
     setExpandedAudioBriefingPersonas((prev) => {
@@ -1695,6 +1744,7 @@ export default function SettingsPage() {
       }
       await api.setAivisApiKey(aivisApiKeyInput.trim());
       setAivisApiKeyInput("");
+      setAivisUserDictionariesLoaded(false);
       await load();
       showToast(t("settings.toast.aivisSaved"), "success");
     } catch (e) {
@@ -1716,12 +1766,47 @@ export default function SettingsPage() {
     setDeletingAivisKey(true);
     try {
       await api.deleteAivisApiKey();
+      setAivisUserDictionaryUUID("");
+      setAivisUserDictionaries([]);
+      setAivisUserDictionariesLoaded(false);
+      setAivisUserDictionariesError(null);
       await load();
       showToast(t("settings.toast.aivisDeleted"), "success");
     } catch (e) {
       showToast(String(e), "error");
     } finally {
       setDeletingAivisKey(false);
+    }
+  }
+
+  async function saveAivisUserDictionary() {
+    if (!aivisUserDictionaryUUID) {
+      showToast(t("settings.aivisDictionarySelectRequired"), "error");
+      return;
+    }
+    setSavingAivisDictionary(true);
+    try {
+      await api.setAivisUserDictionary(aivisUserDictionaryUUID);
+      await load();
+      showToast(t("settings.toast.aivisDictionarySaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingAivisDictionary(false);
+    }
+  }
+
+  async function clearAivisUserDictionary() {
+    setDeletingAivisDictionary(true);
+    try {
+      await api.deleteAivisUserDictionary();
+      setAivisUserDictionaryUUID("");
+      await load();
+      showToast(t("settings.toast.aivisDictionaryDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingAivisDictionary(false);
     }
   }
 
@@ -2284,6 +2369,100 @@ export default function SettingsPage() {
                     />
                   </div>
                 </form>
+              </SectionCard>
+
+              <SectionCard>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.aivisDictionaryTitle")}</div>
+                    <p className="mt-1 text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.aivisDictionaryDescription")}</p>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void loadAivisUserDictionaries(true).catch(() => undefined);
+                      }}
+                      disabled={!settings?.has_aivis_api_key || aivisUserDictionariesLoading}
+                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                    >
+                      {aivisUserDictionariesLoading ? t("common.loading") : t("common.refresh")}
+                    </button>
+                  </div>
+                </div>
+
+                {!settings?.has_aivis_api_key ? (
+                  <div className="mt-4 flex flex-col gap-3 rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-4 text-sm text-[#b45309] lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <div className="font-semibold">{t("settings.audioBriefing.aivisApiKeyWarningTitle")}</div>
+                      <div className="mt-1 leading-6">{t("settings.aivisDictionaryRequiresApiKey")}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveSection("system");
+                        setActiveAccessProvider("aivis");
+                      }}
+                      className="inline-flex min-h-10 items-center justify-center rounded-full border border-[rgba(180,83,9,0.22)] bg-white px-4 py-2 text-sm font-medium text-[#92400e] hover:bg-[rgba(255,255,255,0.72)]"
+                    >
+                      {t("settings.audioBriefing.openApiKeys")}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.aivisDictionarySelectLabel")}
+                      </label>
+                      <select
+                        value={aivisUserDictionaryUUID}
+                        onChange={(e) => setAivisUserDictionaryUUID(e.target.value)}
+                        disabled={aivisUserDictionariesLoading || aivisUserDictionaries.length === 0}
+                        className="w-full rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3 text-sm text-[var(--color-editorial-ink)] disabled:opacity-60"
+                      >
+                        <option value="">{t("settings.aivisDictionaryUnset")}</option>
+                        {aivisUserDictionaries.map((item) => (
+                          <option key={item.uuid} value={item.uuid}>
+                            {`${item.name} (${item.word_count})`}
+                          </option>
+                        ))}
+                      </select>
+                      {aivisUserDictionariesError ? (
+                        <p className="text-xs text-[var(--color-editorial-danger)]">{aivisUserDictionariesError}</p>
+                      ) : null}
+                      {!aivisUserDictionariesLoading && aivisUserDictionaries.length === 0 ? (
+                        <p className="text-xs text-[var(--color-editorial-ink-faint)]">{t("settings.aivisDictionaryEmpty")}</p>
+                      ) : null}
+                      {aivisUserDictionaryUUID ? (
+                        <p className="text-xs text-[var(--color-editorial-ink-faint)]">
+                          {aivisUserDictionaries.find((item) => item.uuid === aivisUserDictionaryUUID)?.description || t("settings.aivisDictionarySelected")}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void saveAivisUserDictionary();
+                        }}
+                        disabled={!aivisUserDictionaryUUID || savingAivisDictionary}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                      >
+                        {savingAivisDictionary ? t("common.saving") : t("common.save")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void clearAivisUserDictionary();
+                        }}
+                        disabled={!settings?.aivis_user_dictionary_uuid || deletingAivisDictionary}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink)] disabled:opacity-60"
+                      >
+                        {deletingAivisDictionary ? t("common.loading") : t("settings.delete")}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </SectionCard>
 
               <SectionCard>

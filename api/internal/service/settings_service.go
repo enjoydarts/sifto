@@ -52,6 +52,7 @@ type SettingsGetPayload struct {
 	OpenRouterAPIKeyLast4   *string          `json:"openrouter_api_key_last4,omitempty"`
 	HasAivisAPIKey          bool             `json:"has_aivis_api_key"`
 	AivisAPIKeyLast4        *string          `json:"aivis_api_key_last4,omitempty"`
+	AivisUserDictionaryUUID *string          `json:"aivis_user_dictionary_uuid,omitempty"`
 	HasInoreaderOAuth       bool             `json:"has_inoreader_oauth"`
 	InoreaderTokenExpiresAt *time.Time       `json:"inoreader_token_expires_at,omitempty"`
 	MonthlyBudgetUSD        *float64         `json:"monthly_budget_usd,omitempty"`
@@ -307,6 +308,7 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		OpenRouterAPIKeyLast4:   settings.OpenRouterAPIKeyLast4,
 		HasAivisAPIKey:          settings.HasAivisAPIKey,
 		AivisAPIKeyLast4:        settings.AivisAPIKeyLast4,
+		AivisUserDictionaryUUID: settings.AivisUserDictionaryUUID,
 		HasInoreaderOAuth:       settings.HasInoreaderOAuth,
 		InoreaderTokenExpiresAt: settings.InoreaderTokenExpiresAt,
 		MonthlyBudgetUSD:        settings.MonthlyBudgetUSD,
@@ -327,6 +329,18 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 			"remaining_budget_pct": remainingPct,
 		},
 	}, nil
+}
+
+func (s *SettingsService) SetAivisUserDictionaryUUID(ctx context.Context, userID, uuid string) (*model.UserSettings, error) {
+	uuid = strings.TrimSpace(uuid)
+	if uuid == "" {
+		return nil, fmt.Errorf("aivis_user_dictionary_uuid is required")
+	}
+	return s.repo.SetAivisUserDictionaryUUID(ctx, userID, uuid)
+}
+
+func (s *SettingsService) ClearAivisUserDictionaryUUID(ctx context.Context, userID string) (*model.UserSettings, error) {
+	return s.repo.ClearAivisUserDictionaryUUID(ctx, userID)
 }
 
 type UpdateObsidianExportInput struct {

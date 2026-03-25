@@ -89,6 +89,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       openrouter_api_key_last4,
 		       aivis_api_key_enc,
 		       aivis_api_key_last4,
+		       aivis_user_dictionary_uuid,
 		       monthly_budget_usd,
 		       budget_alert_enabled,
 		       budget_alert_threshold_pct,
@@ -149,6 +150,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.OpenRouterAPIKeyLast4,
 		&aivisAPIKeyEnc,
 		&v.AivisAPIKeyLast4,
+		&v.AivisUserDictionaryUUID,
 		&v.MonthlyBudgetUSD,
 		&v.BudgetAlertEnabled,
 		&v.BudgetAlertThresholdPct,
@@ -599,6 +601,25 @@ func (r *UserSettingsRepo) GetAivisAPIKeyEncrypted(ctx context.Context, userID s
 	return v, nil
 }
 
+func (r *UserSettingsRepo) GetAivisUserDictionaryUUID(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT aivis_user_dictionary_uuid
+		FROM user_settings
+		WHERE user_id = $1
+	`, userID).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
 func (r *UserSettingsRepo) GetInoreaderTokensEncrypted(ctx context.Context, userID string) (accessTokenEnc, refreshTokenEnc *string, expiresAt *time.Time, err error) {
 	err = r.db.QueryRow(ctx, `
 		SELECT inoreader_access_token_enc, inoreader_refresh_token_enc, inoreader_token_expires_at
@@ -857,6 +878,21 @@ func (r *UserSettingsRepo) SetAivisAPIKey(ctx context.Context, userID, encrypted
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetAivisUserDictionaryUUID(ctx context.Context, userID, uuid string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, aivis_user_dictionary_uuid)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id) DO UPDATE
+		SET aivis_user_dictionary_uuid = EXCLUDED.aivis_user_dictionary_uuid,
+		    updated_at = NOW()`,
+		userID, uuid,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) ClearAnthropicAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, anthropic_api_key_enc, anthropic_api_key_last4)
@@ -1056,6 +1092,21 @@ func (r *UserSettingsRepo) ClearAivisAPIKey(ctx context.Context, userID string) 
 		ON CONFLICT (user_id) DO UPDATE
 		SET aivis_api_key_enc = NULL,
 		    aivis_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearAivisUserDictionaryUUID(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, aivis_user_dictionary_uuid)
+		VALUES ($1, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET aivis_user_dictionary_uuid = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

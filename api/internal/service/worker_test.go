@@ -64,6 +64,50 @@ func TestSynthesizeAudioBriefingUploadAppliesAudioBriefingTimeout(t *testing.T) 
 		0,
 		"foo",
 		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)
+	}
+}
+
+func TestSynthesizeAudioBriefingUploadIncludesUserDictionaryUUID(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if got := body["user_dictionary_uuid"]; got != "5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861" {
+			t.Fatalf("user_dictionary_uuid = %v, want expected uuid", got)
+		}
+		respBody, _ := json.Marshal(map[string]any{
+			"audio_object_key": "foo.mp3",
+			"duration_sec":     12,
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	})
+
+	_, err := client.SynthesizeAudioBriefingUpload(
+		context.Background(),
+		"aivis",
+		"model",
+		"speaker:1",
+		"text",
+		1.0,
+		1.0,
+		1.0,
+		0.4,
+		0,
+		0,
+		"foo",
+		strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)

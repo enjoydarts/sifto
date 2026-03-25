@@ -359,6 +359,9 @@ func main() {
 			r.Delete("/openrouter-key", settingsH.DeleteOpenRouterAPIKey)
 			r.Post("/aivis-key", settingsH.SetAivisAPIKey)
 			r.Delete("/aivis-key", settingsH.DeleteAivisAPIKey)
+			r.Get("/aivis-user-dictionaries", settingsH.GetAivisUserDictionaries)
+			r.Post("/aivis-user-dictionary", settingsH.SetAivisUserDictionary)
+			r.Delete("/aivis-user-dictionary", settingsH.DeleteAivisUserDictionary)
 		})
 	})
 

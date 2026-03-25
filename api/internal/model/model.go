@@ -49,6 +49,7 @@ type UserSettings struct {
 	HasOpenRouterAPIKey              bool       `json:"has_openrouter_api_key"`
 	AivisAPIKeyLast4                 *string    `json:"aivis_api_key_last4,omitempty"`
 	HasAivisAPIKey                   bool       `json:"has_aivis_api_key"`
+	AivisUserDictionaryUUID          *string    `json:"aivis_user_dictionary_uuid,omitempty"`
 	MonthlyBudgetUSD                 *float64   `json:"monthly_budget_usd,omitempty"`
 	BudgetAlertEnabled               bool       `json:"budget_alert_enabled"`
 	BudgetAlertThresholdPct          int        `json:"budget_alert_threshold_pct"`

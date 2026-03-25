@@ -18,6 +18,7 @@ class AudioBriefingSynthesizeRequest(BaseModel):
     pitch: float = 0.0
     volume_gain: float = 0.0
     output_object_key: str
+    user_dictionary_uuid: str | None = None
 
 
 class AudioBriefingSynthesizeResponse(BaseModel):
@@ -71,6 +72,7 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
             pitch=req.pitch,
             volume_gain=req.volume_gain,
             output_object_key=req.output_object_key,
+            user_dictionary_uuid=req.user_dictionary_uuid,
             aivis_api_key=aivis_api_key,
         )
         return AudioBriefingSynthesizeResponse(

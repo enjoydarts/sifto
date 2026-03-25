@@ -91,8 +91,15 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			return err
 		}
 		var aivisAPIKey *string
+		var aivisUserDictionaryUUID *string
 		if provider == "aivis" {
 			aivisAPIKey, err = r.loadAivisAPIKey(ctx, userID)
+			if err != nil {
+				_ = r.repo.MarkChunkFailed(ctx, chunk.ID, err.Error())
+				_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
+				return err
+			}
+			aivisUserDictionaryUUID, err = r.userSettings.GetAivisUserDictionaryUUID(ctx, userID)
 			if err != nil {
 				_ = r.repo.MarkChunkFailed(ctx, chunk.ID, err.Error())
 				_, _ = r.repo.FailVoicingJob(ctx, jobID, "tts_failed", err.Error())
@@ -112,6 +119,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			pitch,
 			volumeGain,
 			audioBriefingChunkObjectKey(userID, jobID, chunk.Seq),
+			aivisUserDictionaryUUID,
 			aivisAPIKey,
 		)
 		if err != nil {

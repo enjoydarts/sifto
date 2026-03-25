@@ -34,6 +34,14 @@ class AudioBriefingPresignResponse(BaseModel):
     audio_url: str
 
 
+class AudioBriefingDeleteObjectsRequest(BaseModel):
+    object_keys: list[str]
+
+
+class AudioBriefingDeleteObjectsResponse(BaseModel):
+    deleted_count: int
+
+
 @router.post("/audio-briefing/synthesize-upload", response_model=AudioBriefingSynthesizeResponse)
 def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Request):
     try:
@@ -72,3 +80,13 @@ def presign_audio_briefing(req: AudioBriefingPresignRequest):
         return AudioBriefingPresignResponse(audio_url=audio_url)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"audio briefing presign failed: {exc}")
+
+
+@router.post("/audio-briefing/delete-objects", response_model=AudioBriefingDeleteObjectsResponse)
+def delete_audio_briefing_objects(req: AudioBriefingDeleteObjectsRequest):
+    try:
+        service = AudioBriefingTTSService()
+        deleted_count = service.delete_objects(req.object_keys)
+        return AudioBriefingDeleteObjectsResponse(deleted_count=deleted_count)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"audio briefing delete failed: {exc}")

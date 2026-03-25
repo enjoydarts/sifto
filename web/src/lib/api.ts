@@ -1920,6 +1920,10 @@ export const api = {
     apiFetch<AudioBriefingDetailResponse>(`/audio-briefings/${id}/resume`, {
       method: "POST",
     }),
+  deleteAudioBriefing: (id: string) =>
+    apiFetch<void>(`/audio-briefings/${id}`, {
+      method: "DELETE",
+    }),
   startAudioBriefingConcat: (id: string) =>
     apiFetch<AudioBriefingDetailResponse>(`/audio-briefings/${id}/start-concat`, {
       method: "POST",

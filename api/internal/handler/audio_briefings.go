@@ -19,6 +19,7 @@ type AudioBriefingsHandler struct {
 	orchestrator   *service.AudioBriefingOrchestrator
 	voiceRunner    *service.AudioBriefingVoiceRunner
 	concatStarter  *service.AudioBriefingConcatStarter
+	deleteService  *service.AudioBriefingDeleteService
 	eventPublisher *service.EventPublisher
 	worker         *service.WorkerClient
 }
@@ -28,6 +29,7 @@ func NewAudioBriefingsHandler(
 	orchestrator *service.AudioBriefingOrchestrator,
 	voiceRunner *service.AudioBriefingVoiceRunner,
 	concatStarter *service.AudioBriefingConcatStarter,
+	deleteService *service.AudioBriefingDeleteService,
 	eventPublisher *service.EventPublisher,
 	worker *service.WorkerClient,
 ) *AudioBriefingsHandler {
@@ -36,6 +38,7 @@ func NewAudioBriefingsHandler(
 		orchestrator:   orchestrator,
 		voiceRunner:    voiceRunner,
 		concatStarter:  concatStarter,
+		deleteService:  deleteService,
 		eventPublisher: eventPublisher,
 		worker:         worker,
 	}
@@ -203,6 +206,31 @@ func (h *AudioBriefingsHandler) StartVoicing(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, payload)
+}
+
+func (h *AudioBriefingsHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	if h.repo == nil || h.deleteService == nil {
+		http.Error(w, "audio briefing unavailable", http.StatusInternalServerError)
+		return
+	}
+	userID := middleware.GetUserID(r)
+	jobID := strings.TrimSpace(chi.URLParam(r, "id"))
+	if jobID == "" {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if err := h.deleteService.Delete(r.Context(), userID, jobID); err != nil {
+		switch {
+		case errors.Is(err, repository.ErrNotFound):
+			http.Error(w, "not found", http.StatusNotFound)
+		case errors.Is(err, repository.ErrInvalidState), errors.Is(err, repository.ErrConflict):
+			http.Error(w, err.Error(), http.StatusConflict)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *AudioBriefingsHandler) loadDetail(ctx context.Context, userID, jobID string) (map[string]any, error) {

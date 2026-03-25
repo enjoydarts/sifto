@@ -215,6 +215,34 @@ class AudioBriefingTTSService:
             ExpiresIn=max(int(expires_sec), 60),
         )
 
+    def delete_objects(self, object_keys: list[str]) -> int:
+        keys: list[str] = []
+        seen: set[str] = set()
+        for raw in object_keys or []:
+            key = (raw or "").strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            keys.append(key)
+        if not keys:
+            return 0
+        client = self.r2_client()
+        deleted_count = 0
+        for start in range(0, len(keys), 1000):
+            batch = keys[start : start + 1000]
+            result = client.delete_objects(
+                Bucket=self.r2_bucket,
+                Delete={
+                    "Objects": [{"Key": key} for key in batch],
+                    "Quiet": True,
+                },
+            )
+            errors = result.get("Errors") or []
+            if errors:
+                raise RuntimeError(f"R2 delete failed: {errors}")
+            deleted_count += len(result.get("Deleted") or [])
+        return deleted_count
+
     def r2_client(self):
         if not self.r2_endpoint or not self.r2_bucket or not self.r2_access_key_id or not self.r2_secret_access_key:
             raise RuntimeError("R2 settings are not configured")

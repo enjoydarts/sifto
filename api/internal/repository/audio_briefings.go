@@ -341,6 +341,20 @@ func (r *AudioBriefingRepo) ListJobChunks(ctx context.Context, userID, jobID str
 	return out, rows.Err()
 }
 
+func (r *AudioBriefingRepo) DeleteJob(ctx context.Context, userID, jobID string) error {
+	tag, err := r.db.Exec(ctx, `
+		DELETE FROM audio_briefing_jobs
+		WHERE user_id = $1 AND id = $2
+	`, userID, jobID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *AudioBriefingRepo) ListCandidateItems(ctx context.Context, userID string, limit int) ([]model.AudioBriefingJobItem, error) {
 	if limit <= 0 {
 		limit = 6

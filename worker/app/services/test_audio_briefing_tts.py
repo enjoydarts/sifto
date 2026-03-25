@@ -76,6 +76,29 @@ class AivisRateLimiterTests(unittest.TestCase):
 
 
 class AudioBriefingTTSServiceTests(unittest.TestCase):
+    def test_delete_objects_batches_non_empty_keys(self):
+        service = AudioBriefingTTSService()
+        service.r2_bucket = "briefings"
+
+        class FakeClient:
+            def __init__(self):
+                self.calls = []
+
+            def delete_objects(self, Bucket, Delete):
+                self.calls.append((Bucket, Delete))
+                return {"Deleted": Delete["Objects"]}
+
+        fake_client = FakeClient()
+
+        with patch.object(service, "r2_client", return_value=fake_client):
+            deleted = service.delete_objects(["one.mp3", "", "two.mp3", "one.mp3"])
+
+        self.assertEqual(deleted, 2)
+        self.assertEqual(
+            fake_client.calls,
+            [("briefings", {"Objects": [{"Key": "one.mp3"}, {"Key": "two.mp3"}], "Quiet": True})],
+        )
+
     def test_presign_audio_url_uses_r2_client(self):
         service = AudioBriefingTTSService()
         service.r2_bucket = "briefings"

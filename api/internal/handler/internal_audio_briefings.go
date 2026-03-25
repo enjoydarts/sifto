@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -12,11 +13,12 @@ import (
 )
 
 type InternalAudioBriefingsHandler struct {
-	repo *repository.AudioBriefingRepo
+	repo     *repository.AudioBriefingRepo
+	notifier *service.AudioBriefingPublishedNotifier
 }
 
-func NewInternalAudioBriefingsHandler(repo *repository.AudioBriefingRepo) *InternalAudioBriefingsHandler {
-	return &InternalAudioBriefingsHandler{repo: repo}
+func NewInternalAudioBriefingsHandler(repo *repository.AudioBriefingRepo, notifier *service.AudioBriefingPublishedNotifier) *InternalAudioBriefingsHandler {
+	return &InternalAudioBriefingsHandler{repo: repo, notifier: notifier}
 }
 
 type concatCompleteRequest struct {
@@ -109,6 +111,11 @@ func (h *InternalAudioBriefingsHandler) ConcatComplete(w http.ResponseWriter, r 
 			writeRepoError(w, err)
 		}
 		return
+	}
+	if job != nil && job.Status == "published" && h.notifier != nil {
+		if notifyErr := h.notifier.NotifyPublished(r.Context(), job); notifyErr != nil {
+			log.Printf("audio briefing published notification failed job_id=%s user_id=%s err=%v", job.ID, job.UserID, notifyErr)
+		}
 	}
 
 	writeJSON(w, map[string]any{

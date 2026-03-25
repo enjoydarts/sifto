@@ -57,6 +57,10 @@ type WorkerClient struct {
 	internalSecret       string
 }
 
+type AudioBriefingDeleteObjectsResponse struct {
+	DeletedCount int `json:"deleted_count"`
+}
+
 func NewWorkerClient() *WorkerClient {
 	url := os.Getenv("PYTHON_WORKER_URL")
 	if url == "" {
@@ -873,6 +877,16 @@ func (w *WorkerClient) PresignAudioBriefingObject(ctx context.Context, objectKey
 		"object_key":  objectKey,
 		"expires_sec": expiresSec,
 	}, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret))
+}
+
+func (w *WorkerClient) DeleteAudioBriefingObjects(ctx context.Context, objectKeys []string) error {
+	if len(objectKeys) == 0 {
+		return nil
+	}
+	_, err := postWithHeaders[AudioBriefingDeleteObjectsResponse](ctx, w, "/audio-briefing/delete-objects", map[string]any{
+		"object_keys": objectKeys,
+	}, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret))
+	return err
 }
 
 func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, aivisAPIKey *string, internalSecret string) map[string]string {

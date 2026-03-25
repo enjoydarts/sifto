@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Radio } from "lucide-react";
+import { useConfirm } from "@/components/confirm-provider";
 import { PageTransition } from "@/components/page-transition";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -41,10 +42,13 @@ function formatSlotLabel(slotKey: string, slotStartedAt: string, locale: string,
 export default function AudioBriefingDetailPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
+  const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = useState<AudioBriefingDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [resuming, setResuming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -94,6 +98,10 @@ export default function AudioBriefingDetailPage() {
     if (!detail) return false;
     return ["scripted", "voiced", "failed"].includes(detail.job.status);
   }, [detail]);
+  const canDelete = useMemo(() => {
+    if (!detail) return false;
+    return ["scripted", "voiced", "published", "failed", "cancelled", "skipped", "needs_rerun"].includes(detail.job.status);
+  }, [detail]);
 
   async function handleResume() {
     if (!detail) return;
@@ -110,6 +118,28 @@ export default function AudioBriefingDetailPage() {
       showToast(String(e), "error");
     } finally {
       setResuming(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!detail) return;
+    const ok = await confirm({
+      title: t("audioBriefing.deleteConfirmTitle", "この音声ブリーフィングを削除しますか？"),
+      message: t("audioBriefing.deleteConfirmMessage", "台本・メタデータ・生成済み音声ファイルを削除します。この操作は元に戻せません。"),
+      tone: "danger",
+      confirmLabel: t("audioBriefing.deleteConfirmAction", "削除する"),
+      cancelLabel: t("common.cancel", "キャンセル"),
+    });
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      await api.deleteAudioBriefing(detail.job.id);
+      showToast(t("audioBriefing.toast.deleted", "音声ブリーフィングを削除しました"), "success");
+      router.push("/audio-briefings");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -139,6 +169,16 @@ export default function AudioBriefingDetailPage() {
                   className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {resuming ? t("common.saving") : t("audioBriefing.resume", "処理を再開")}
+                </button>
+              ) : null}
+              {canDelete ? (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="inline-flex min-h-10 items-center rounded-full border border-[#d5bdb7] bg-[#fff4f0] px-4 py-2 text-sm font-medium text-[#7a4337] hover:bg-[#fdebe5] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {deleting ? t("common.saving") : t("audioBriefing.delete", "削除")}
                 </button>
               ) : null}
             </div>

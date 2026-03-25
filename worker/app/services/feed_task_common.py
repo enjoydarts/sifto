@@ -702,11 +702,11 @@ def build_audio_briefing_script_task(
     target_lines: list[str] = []
     response_properties: list[str] = []
     if include_opening:
-        section_rules.append(f"- opening は 4〜7文で、時間帯に合う自然な導入にする。目安は約 {opening_budget} 文字以内")
+        section_rules.append(f"- opening は 7〜11文で、時間帯に合う自然な導入にする。短く済ませず、長尺回ではしっかり厚みを出す。目安は約 {opening_budget} 文字以内")
         target_lines.append(f"- opening の目安: 約 {opening_budget} 文字以内")
         response_properties.append('  "opening": "導入"')
     if include_overall_summary:
-        section_rules.append(f"- overall_summary は総括であり、10文以上で、その回の全体像、流れ、聞きどころ、記事群のつながりまでしっかり話す。目安は約 {summary_budget} 文字以内")
+        section_rules.append(f"- overall_summary は総括であり、12文以上で、その回の全体像、流れ、聞きどころ、記事群のつながりまでしっかり話す。長尺回では恐れず十分に伸ばし、短くまとめすぎない。目安は約 {summary_budget} 文字以内")
         section_rules.append("- overall_summary で記事の順番紹介をしない。各記事の1行要約を並べない")
         section_rules.append("- overall_summary で見出しの焼き直しや、記事ごとの固有名詞の機械的な列挙をしない")
         section_rules.append("- overall_summary では、回全体を俯瞰して共通テーマ、対立軸、温度感、いま追う意味を語る")
@@ -714,7 +714,7 @@ def build_audio_briefing_script_task(
         response_properties.append('  "overall_summary": "全体サマリー"')
     if include_article_segments:
         section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
-        section_rules.append(f"- article_segments の各 commentary は 3〜6文で、音声で聞きやすい自然な話し言葉にする。目安は約 {article_budget} 文字以内")
+        section_rules.append(f"- article_segments の各 commentary は 4〜7文で、音声で聞きやすい自然な話し言葉にする。要点だけで切り上げず、必要な背景や含意まで入れる。目安は約 {article_budget} 文字以内")
         target_lines.append(f"- 各 commentary の目安: 約 {article_budget} 文字以内")
         response_properties.extend([
             '  "article_segments": [',
@@ -724,7 +724,7 @@ def build_audio_briefing_script_task(
     else:
         section_rules.append("- article_segments は返さない")
     if include_ending:
-        section_rules.append(f"- ending は番組を終わらせる締めの言葉として 4〜6文で書く。目安は約 {ending_budget} 文字以内")
+        section_rules.append(f"- ending は番組を終わらせる締めの言葉として 7〜10文で書く。短く閉じすぎず、長尺回では余韻を持たせてやや長めに締める。目安は約 {ending_budget} 文字以内")
         section_rules.append("- ending で総括や振り返りをしない。記事内容の再整理や論点のまとめ直しをしない")
         section_rules.append("- ending では、聞いてくれたことへの一言、次回へつながる余韻、静かな締めを優先する")
         target_lines.append(f"- ending の目安: 約 {ending_budget} 文字以内")
@@ -785,6 +785,7 @@ def build_audio_briefing_script_task(
 - 今回返すセクションの目標文字数: 約 {target_chars} 文字
 {chr(10).join(target_lines)}
 - 全体は目標文字数の前後10%程度に収める意識で書く
+- 目標文字数を大きく下回らない。特に長尺回では 85% 未満まで縮めない意識で書く
 
 追加ルール:
 - JSONのみを返す
@@ -910,12 +911,12 @@ def parse_audio_briefing_script_result(
 
 def _audio_briefing_script_budgets(target_chars: int, article_count: int) -> tuple[int, int, int, int]:
     target_chars = max(int(target_chars or 0), 700)
-    opening_budget = max(min(target_chars // 8, 1200), 320)
-    summary_budget = max(min(target_chars // 4, 3200), 1200)
-    ending_budget = max(min(target_chars // 8, 1000), 260)
+    opening_budget = max(min(round(target_chars * 0.15), 2200), 420)
+    summary_budget = max(min(round(target_chars * 0.28), 4600), 1500)
+    ending_budget = max(min(round(target_chars * 0.13), 1800), 380)
     article_budget = max(
-        (target_chars - opening_budget - summary_budget - ending_budget - 200) // max(int(article_count or 0), 1),
-        260,
+        (target_chars - opening_budget - summary_budget - ending_budget - 100) // max(int(article_count or 0), 1),
+        360,
     )
     return opening_budget, summary_budget, ending_budget, article_budget
 

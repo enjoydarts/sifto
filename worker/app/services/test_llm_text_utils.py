@@ -24,7 +24,7 @@ class FactsLocalizationDetectionTests(unittest.TestCase):
         self.assertFalse(facts_need_japanese_localization(facts))
 
     def test_audio_briefing_script_max_tokens_scales_past_previous_fixed_cap(self):
-        self.assertGreater(audio_briefing_script_max_tokens(9000), 3200)
+        self.assertEqual(audio_briefing_script_max_tokens(14000), 14000)
 
 
 if __name__ == "__main__":

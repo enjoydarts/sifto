@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -314,8 +315,8 @@ func audioBriefingCommentaryBudget(targetChars, itemCount int) int {
 	if targetChars <= 0 || itemCount <= 0 {
 		return 0
 	}
-	usable := targetChars - audioBriefingOpeningBudget(targetChars) - audioBriefingSummaryBudget(targetChars) - audioBriefingEndingBudget(targetChars) - 200
-	minimum := 180
+	usable := targetChars - audioBriefingOpeningBudget(targetChars) - audioBriefingSummaryBudget(targetChars) - audioBriefingEndingBudget(targetChars) - 100
+	minimum := 360
 	if usable <= 0 {
 		return minimum
 	}
@@ -328,42 +329,42 @@ func audioBriefingCommentaryBudget(targetChars, itemCount int) int {
 
 func audioBriefingOpeningBudget(targetChars int) int {
 	if targetChars <= 0 {
-		return 480
+		return 840
 	}
-	budget := targetChars / 8
-	if budget < 320 {
-		return 320
+	budget := int(math.Round(float64(targetChars) * 0.15))
+	if budget < 420 {
+		return 420
 	}
-	if budget > 1200 {
-		return 1200
+	if budget > 2200 {
+		return 2200
 	}
 	return budget
 }
 
 func audioBriefingSummaryBudget(targetChars int) int {
 	if targetChars <= 0 {
-		return 1600
+		return 2400
 	}
-	budget := targetChars / 4
-	if budget < 1200 {
-		return 1200
+	budget := int(math.Round(float64(targetChars) * 0.28))
+	if budget < 1500 {
+		return 1500
 	}
-	if budget > 3200 {
-		return 3200
+	if budget > 4600 {
+		return 4600
 	}
 	return budget
 }
 
 func audioBriefingEndingBudget(targetChars int) int {
 	if targetChars <= 0 {
-		return 420
+		return 840
 	}
-	budget := targetChars / 8
-	if budget < 260 {
-		return 260
+	budget := int(math.Round(float64(targetChars) * 0.13))
+	if budget < 380 {
+		return 380
 	}
-	if budget > 1000 {
-		return 1000
+	if budget > 1800 {
+		return 1800
 	}
 	return budget
 }

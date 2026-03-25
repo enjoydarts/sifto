@@ -4,7 +4,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Info, Star, ThumbsDown, ThumbsUp } from "lucide-react";
+import { ArrowRight, Info, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { api, ItemDetail, ItemLLMExecutionAttempt, RelatedItem } from "@/lib/api";
 import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { formatModelDisplayName } from "@/lib/model-display";
@@ -1532,10 +1532,10 @@ export default function ItemDetailPage() {
                   <button
                     type="button"
                     onClick={() => setItemNavigatorOpen(false)}
-                    className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+                    className="inline-flex size-9 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-white/70 text-[var(--color-editorial-ink-soft)] hover:bg-white"
                     aria-label={t("briefing.navigator.close")}
                   >
-                    ×
+                    <X className="size-4" aria-hidden="true" />
                   </button>
                 </div>
                 <div className="overflow-y-auto px-4 py-4">

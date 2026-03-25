@@ -90,6 +90,39 @@ func TestSettingsGetPayloadSupportsAivisFields(t *testing.T) {
 	}
 }
 
+func TestPodcastSettingsPayloadSupportsPodcastFields(t *testing.T) {
+	slug := "p_123"
+	payload := PodcastSettingsPayload(&model.UserSettings{
+		PodcastEnabled:     true,
+		PodcastFeedSlug:    &slug,
+		PodcastTitle:       strptr("Sifto Daily"),
+		PodcastDescription: strptr("opening\n\noverall summary"),
+		PodcastAuthor:      strptr("Sifto"),
+		PodcastLanguage:    "ja",
+		PodcastExplicit:    false,
+		PodcastArtworkURL:  strptr("https://audio.example.com/podcasts/artwork/u1/current.jpg"),
+	})
+
+	if enabled, _ := payload["enabled"].(bool); !enabled {
+		t.Fatalf("enabled = %v, want true", payload["enabled"])
+	}
+	if gotSlug, _ := payload["feed_slug"].(*string); gotSlug == nil || *gotSlug != "p_123" {
+		t.Fatalf("feed_slug = %v, want p_123", payload["feed_slug"])
+	}
+	if gotLanguage, _ := payload["language"].(string); gotLanguage != "ja" {
+		t.Fatalf("language = %v, want ja", payload["language"])
+	}
+}
+
+func TestNormalizePodcastLanguage(t *testing.T) {
+	if got := normalizePodcastLanguage(nil); got != "ja" {
+		t.Fatalf("normalizePodcastLanguage(nil) = %q, want ja", got)
+	}
+	if got := normalizePodcastLanguage(strptr(" en ")); got != "en" {
+		t.Fatalf("normalizePodcastLanguage(en) = %q, want en", got)
+	}
+}
+
 func TestAudioBriefingSettingsPayload(t *testing.T) {
 	settings := &model.AudioBriefingSettings{
 		UserID:                "u1",

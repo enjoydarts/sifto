@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
@@ -90,6 +91,14 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       aivis_api_key_enc,
 		       aivis_api_key_last4,
 		       aivis_user_dictionary_uuid,
+		       podcast_enabled,
+		       podcast_feed_slug,
+		       podcast_title,
+		       podcast_description,
+		       podcast_author,
+		       podcast_language,
+		       podcast_explicit,
+		       podcast_artwork_url,
 		       monthly_budget_usd,
 		       budget_alert_enabled,
 		       budget_alert_threshold_pct,
@@ -151,6 +160,14 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&aivisAPIKeyEnc,
 		&v.AivisAPIKeyLast4,
 		&v.AivisUserDictionaryUUID,
+		&v.PodcastEnabled,
+		&v.PodcastFeedSlug,
+		&v.PodcastTitle,
+		&v.PodcastDescription,
+		&v.PodcastAuthor,
+		&v.PodcastLanguage,
+		&v.PodcastExplicit,
+		&v.PodcastArtworkURL,
 		&v.MonthlyBudgetUSD,
 		&v.BudgetAlertEnabled,
 		&v.BudgetAlertThresholdPct,
@@ -198,6 +215,48 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasOpenRouterAPIKey = openrouterAPIKeyEnc != nil && *openrouterAPIKeyEnc != ""
 	v.HasAivisAPIKey = aivisAPIKeyEnc != nil && *aivisAPIKeyEnc != ""
 	v.HasInoreaderOAuth = inoreaderAccessTokenEnc != nil && *inoreaderAccessTokenEnc != ""
+	return &v, nil
+}
+
+func (r *UserSettingsRepo) GetByPodcastFeedSlug(ctx context.Context, slug string) (*model.UserSettings, error) {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		return nil, nil
+	}
+	var v model.UserSettings
+	err := r.db.QueryRow(ctx, `
+		SELECT user_id,
+		       podcast_enabled,
+		       podcast_feed_slug,
+		       podcast_title,
+		       podcast_description,
+		       podcast_author,
+		       podcast_language,
+		       podcast_explicit,
+		       podcast_artwork_url,
+		       created_at,
+		       updated_at
+		FROM user_settings
+		WHERE podcast_feed_slug = $1
+	`, slug).Scan(
+		&v.UserID,
+		&v.PodcastEnabled,
+		&v.PodcastFeedSlug,
+		&v.PodcastTitle,
+		&v.PodcastDescription,
+		&v.PodcastAuthor,
+		&v.PodcastLanguage,
+		&v.PodcastExplicit,
+		&v.PodcastArtworkURL,
+		&v.CreatedAt,
+		&v.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
 	return &v, nil
 }
 
@@ -251,6 +310,50 @@ func (r *UserSettingsRepo) UpsertBudgetConfig(ctx context.Context, userID string
 		    updated_at = NOW()`,
 		userID, monthlyBudgetUSD, enabled, thresholdPct, digestEmailEnabled,
 	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) UpsertPodcastConfig(ctx context.Context, userID string, enabled bool, feedSlug string, title, description, author *string, language string, explicit bool, artworkURL *string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (
+			user_id,
+			podcast_enabled,
+			podcast_feed_slug,
+			podcast_title,
+			podcast_description,
+			podcast_author,
+			podcast_language,
+			podcast_explicit,
+			podcast_artwork_url
+		) VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (user_id) DO UPDATE
+		SET podcast_enabled = EXCLUDED.podcast_enabled,
+		    podcast_feed_slug = EXCLUDED.podcast_feed_slug,
+		    podcast_title = EXCLUDED.podcast_title,
+		    podcast_description = EXCLUDED.podcast_description,
+		    podcast_author = EXCLUDED.podcast_author,
+		    podcast_language = EXCLUDED.podcast_language,
+		    podcast_explicit = EXCLUDED.podcast_explicit,
+		    podcast_artwork_url = EXCLUDED.podcast_artwork_url,
+		    updated_at = NOW()
+	`, userID, enabled, feedSlug, title, description, author, language, explicit, artworkURL)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) SetPodcastArtworkURL(ctx context.Context, userID string, artworkURL *string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, podcast_artwork_url)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id) DO UPDATE
+		SET podcast_artwork_url = $2,
+		    updated_at = NOW()
+	`, userID, artworkURL)
 	if err != nil {
 		return nil, err
 	}

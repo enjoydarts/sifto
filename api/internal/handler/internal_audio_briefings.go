@@ -13,12 +13,13 @@ import (
 )
 
 type InternalAudioBriefingsHandler struct {
-	repo     *repository.AudioBriefingRepo
-	notifier *service.AudioBriefingPublishedNotifier
+	repo         *repository.AudioBriefingRepo
+	notifier     *service.AudioBriefingPublishedNotifier
+	publications *service.PodcastPublicationService
 }
 
-func NewInternalAudioBriefingsHandler(repo *repository.AudioBriefingRepo, notifier *service.AudioBriefingPublishedNotifier) *InternalAudioBriefingsHandler {
-	return &InternalAudioBriefingsHandler{repo: repo, notifier: notifier}
+func NewInternalAudioBriefingsHandler(repo *repository.AudioBriefingRepo, notifier *service.AudioBriefingPublishedNotifier, publications *service.PodcastPublicationService) *InternalAudioBriefingsHandler {
+	return &InternalAudioBriefingsHandler{repo: repo, notifier: notifier, publications: publications}
 }
 
 type concatCompleteRequest struct {
@@ -111,6 +112,14 @@ func (h *InternalAudioBriefingsHandler) ConcatComplete(w http.ResponseWriter, r 
 			writeRepoError(w, err)
 		}
 		return
+	}
+	if job != nil && job.Status == "published" && h.publications != nil {
+		updatedJob, publicationErr := h.publications.EnsurePublicCopy(r.Context(), job)
+		if publicationErr != nil {
+			log.Printf("audio briefing podcast public copy failed job_id=%s user_id=%s err=%v", job.ID, job.UserID, publicationErr)
+		} else if updatedJob != nil {
+			job = updatedJob
+		}
 	}
 	if job != nil && job.Status == "published" && h.notifier != nil {
 		if notifyErr := h.notifier.NotifyPublished(r.Context(), job); notifyErr != nil {

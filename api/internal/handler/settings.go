@@ -18,6 +18,7 @@ import (
 
 type SettingsHandler struct {
 	settings          *service.SettingsService
+	podcastArtwork    *service.PodcastArtworkService
 	aivisDictionaries *service.AivisUserDictionaryService
 	obsidianRepo      *repository.ObsidianExportRepo
 	notificationRepo  *repository.NotificationPriorityRepo
@@ -61,9 +62,10 @@ type navigatorPersonaDefinition struct {
 	Item            navigatorPersonaTaskHints       `json:"item"`
 }
 
-func NewSettingsHandler(repo *repository.UserSettingsRepo, audioBriefingRepo *repository.AudioBriefingRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, cache service.JSONCache) *SettingsHandler {
+func NewSettingsHandler(repo *repository.UserSettingsRepo, audioBriefingRepo *repository.AudioBriefingRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, worker *service.WorkerClient, cache service.JSONCache) *SettingsHandler {
 	return &SettingsHandler{
 		settings:          service.NewSettingsService(repo, audioBriefingRepo, aivisModelRepo, obsidianRepo, llmUsageRepo, openRouterOverrideRepo, cipher, github),
+		podcastArtwork:    service.NewPodcastArtworkService(repo, worker),
 		aivisDictionaries: service.NewAivisUserDictionaryService(repo, cipher),
 		obsidianRepo:      obsidianRepo,
 		notificationRepo:  notificationRepo,
@@ -369,6 +371,75 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 	writeJSON(w, map[string]any{
 		"user_id":        settings.UserID,
 		"audio_briefing": service.AudioBriefingSettingsPayload(settings),
+	})
+}
+
+func (h *SettingsHandler) UpdatePodcast(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		Enabled     bool    `json:"enabled"`
+		Title       *string `json:"title"`
+		Description *string `json:"description"`
+		Author      *string `json:"author"`
+		Language    *string `json:"language"`
+		Explicit    bool    `json:"explicit"`
+		ArtworkURL  *string `json:"artwork_url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	settings, err := h.settings.UpdatePodcastSettings(r.Context(), userID, service.UpdatePodcastSettingsInput{
+		Enabled:     body.Enabled,
+		Title:       body.Title,
+		Description: body.Description,
+		Author:      body.Author,
+		Language:    body.Language,
+		Explicit:    body.Explicit,
+		ArtworkURL:  body.ArtworkURL,
+	})
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
+	writeJSON(w, map[string]any{
+		"user_id": settings.UserID,
+		"podcast": service.PodcastSettingsPayload(settings),
+	})
+}
+
+func (h *SettingsHandler) UploadPodcastArtwork(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	if h.podcastArtwork == nil {
+		http.Error(w, "podcast artwork unavailable", http.StatusInternalServerError)
+		return
+	}
+	var body struct {
+		ContentType   string `json:"content_type"`
+		ContentBase64 string `json:"content_base64"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	artworkURL, err := h.podcastArtwork.Upload(r.Context(), userID, body.ContentType, body.ContentBase64)
+	if err != nil {
+		if strings.Contains(err.Error(), "unsupported podcast artwork content_type") || strings.Contains(err.Error(), "AUDIO_BRIEFING_PUBLIC_BASE_URL is not configured") || strings.Contains(err.Error(), "AUDIO_BRIEFING_PUBLIC_BUCKET is not configured") {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
+	writeJSON(w, map[string]any{
+		"user_id":     userID,
+		"artwork_url": artworkURL,
 	})
 }
 

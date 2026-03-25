@@ -4,6 +4,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 )
@@ -24,6 +25,14 @@ func AudioBriefingIABucketFromEnv() string {
 	return strings.TrimSpace(os.Getenv("AUDIO_BRIEFING_R2_IA_BUCKET"))
 }
 
+func AudioBriefingPublicBucketFromEnv() string {
+	return strings.TrimSpace(os.Getenv("AUDIO_BRIEFING_PUBLIC_BUCKET"))
+}
+
+func AudioBriefingPublicBaseURLFromEnv() string {
+	return strings.TrimRight(strings.TrimSpace(os.Getenv("AUDIO_BRIEFING_PUBLIC_BASE_URL")), "/")
+}
+
 func AudioBriefingIAMoveAfterDaysFromEnv() int {
 	return envIntOrDefault("AUDIO_BRIEFING_IA_MOVE_AFTER_DAYS", 30)
 }
@@ -34,6 +43,48 @@ func AudioBriefingIAMoveBatchLimitFromEnv() int {
 
 func NormalizeAudioBriefingStorageBucket(bucket string) string {
 	return firstNonEmptyTrimmed(bucket, AudioBriefingStandardBucketFromEnv())
+}
+
+func AudioBriefingPublicObjectURL(objectKey string) *string {
+	key := strings.TrimLeft(strings.TrimSpace(objectKey), "/")
+	base := AudioBriefingPublicBaseURLFromEnv()
+	if key == "" || base == "" {
+		return nil
+	}
+	v := base + "/" + key
+	return &v
+}
+
+func AudioBriefingPodcastPublicObjectURL(bucket string, objectKey string) *string {
+	if NormalizeAudioBriefingStorageBucket(bucket) == AudioBriefingPublicBucketFromEnv() || strings.TrimSpace(bucket) == AudioBriefingPublicBucketFromEnv() {
+		return AudioBriefingPublicObjectURL(objectKey)
+	}
+	return nil
+}
+
+func AudioBriefingPodcastExpiresAt(publishedAt *time.Time) *time.Time {
+	if publishedAt == nil {
+		return nil
+	}
+	v := publishedAt.AddDate(0, 0, AudioBriefingIAMoveAfterDaysFromEnv())
+	return &v
+}
+
+func AudioBriefingJobIsPodcastEligible(job *model.AudioBriefingJob, now time.Time) bool {
+	if job == nil || job.PublishedAt == nil {
+		return false
+	}
+	if strings.TrimSpace(ptrString(job.PodcastPublicObjectKey)) == "" {
+		return false
+	}
+	if strings.TrimSpace(job.PodcastPublicBucket) != AudioBriefingPublicBucketFromEnv() {
+		return false
+	}
+	if job.PodcastPublicDeletedAt != nil {
+		return false
+	}
+	expiresAt := AudioBriefingPodcastExpiresAt(job.PublishedAt)
+	return expiresAt != nil && now.Before(*expiresAt)
 }
 
 func CollectAudioBriefingObjectRefs(job *model.AudioBriefingJob, chunks []model.AudioBriefingScriptChunk) []AudioBriefingObjectRef {

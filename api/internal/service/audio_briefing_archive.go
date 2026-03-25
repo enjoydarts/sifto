@@ -14,6 +14,7 @@ type audioBriefingArchiveRepo interface {
 	ListIAMoveCandidates(ctx context.Context, cutoff time.Time, limit int) ([]model.AudioBriefingJob, error)
 	ListJobChunks(ctx context.Context, userID, jobID string) ([]model.AudioBriefingScriptChunk, error)
 	UpdateStorageBucketForJobAndChunks(ctx context.Context, jobID string, bucket string) error
+	MarkPodcastPublicObjectDeleted(ctx context.Context, jobID string) (*model.AudioBriefingJob, error)
 }
 
 type audioBriefingArchiveStorage interface {
@@ -32,6 +33,7 @@ type AudioBriefingArchiveService struct {
 	storage        audioBriefingArchiveStorage
 	standardBucket string
 	iaBucket       string
+	publicBucket   string
 	moveAfterDays  int
 	batchLimit     int
 	now            func() time.Time
@@ -43,6 +45,7 @@ func NewAudioBriefingArchiveService(repo audioBriefingArchiveRepo, storage audio
 		storage:        storage,
 		standardBucket: AudioBriefingStandardBucketFromEnv(),
 		iaBucket:       AudioBriefingIABucketFromEnv(),
+		publicBucket:   AudioBriefingPublicBucketFromEnv(),
 		moveAfterDays:  AudioBriefingIAMoveAfterDaysFromEnv(),
 		batchLimit:     AudioBriefingIAMoveBatchLimitFromEnv(),
 		now:            time.Now,
@@ -56,8 +59,12 @@ func (s *AudioBriefingArchiveService) MovePublishedToIA(ctx context.Context) (*A
 	}
 	standardBucket := strings.TrimSpace(s.standardBucket)
 	iaBucket := strings.TrimSpace(s.iaBucket)
+	publicBucket := strings.TrimSpace(s.publicBucket)
 	if standardBucket == "" || iaBucket == "" || standardBucket == iaBucket {
 		return result, nil
+	}
+	if publicBucket == standardBucket || publicBucket == iaBucket {
+		publicBucket = strings.TrimSpace(publicBucket)
 	}
 	nowFn := s.now
 	if nowFn == nil {
@@ -85,7 +92,7 @@ func (s *AudioBriefingArchiveService) MovePublishedToIA(ctx context.Context) (*A
 			continue
 		}
 		result.Processed++
-		if err := s.moveJobToBucket(ctx, &job, sourceBucket, iaBucket); err != nil {
+		if err := s.moveJobToBucket(ctx, &job, sourceBucket, iaBucket, publicBucket); err != nil {
 			result.Failed++
 			return result, err
 		}
@@ -94,7 +101,7 @@ func (s *AudioBriefingArchiveService) MovePublishedToIA(ctx context.Context) (*A
 	return result, nil
 }
 
-func (s *AudioBriefingArchiveService) moveJobToBucket(ctx context.Context, job *model.AudioBriefingJob, sourceBucket string, targetBucket string) error {
+func (s *AudioBriefingArchiveService) moveJobToBucket(ctx context.Context, job *model.AudioBriefingJob, sourceBucket string, targetBucket string, publicBucket string) error {
 	if job == nil {
 		return nil
 	}
@@ -114,6 +121,14 @@ func (s *AudioBriefingArchiveService) moveJobToBucket(ctx context.Context, job *
 	}
 	if err := s.repo.UpdateStorageBucketForJobAndChunks(ctx, job.ID, targetBucket); err != nil {
 		return err
+	}
+	if publicKey := strings.TrimSpace(ptrString(job.PodcastPublicObjectKey)); publicBucket != "" && publicKey != "" {
+		if err := s.storage.DeleteAudioBriefingObjectsInBucket(ctx, publicBucket, []string{publicKey}); err != nil {
+			return fmt.Errorf("delete podcast public object: %w", err)
+		}
+		if _, err := s.repo.MarkPodcastPublicObjectDeleted(ctx, job.ID); err != nil {
+			return fmt.Errorf("mark podcast public object deleted: %w", err)
+		}
 	}
 	for bucket, objectKeys := range grouped {
 		if bucket == "" || len(objectKeys) == 0 {

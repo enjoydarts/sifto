@@ -333,6 +333,8 @@ export default function SettingsPage() {
   const { confirm } = useConfirm();
   const [loading, setLoading] = useState(true);
   const [savingAudioBriefing, setSavingAudioBriefing] = useState(false);
+  const [savingPodcast, setSavingPodcast] = useState(false);
+  const [uploadingPodcastArtwork, setUploadingPodcastArtwork] = useState(false);
   const [savingAudioBriefingVoices, setSavingAudioBriefingVoices] = useState(false);
   const [savingBudget, setSavingBudget] = useState(false);
   const [savingDigestDelivery, setSavingDigestDelivery] = useState(false);
@@ -410,6 +412,15 @@ export default function SettingsPage() {
   const [audioBriefingArticlesPerEpisode, setAudioBriefingArticlesPerEpisode] = useState("5");
   const [audioBriefingTargetDurationMinutes, setAudioBriefingTargetDurationMinutes] = useState("20");
   const [audioBriefingDefaultPersona, setAudioBriefingDefaultPersona] = useState("editor");
+  const [podcastEnabled, setPodcastEnabled] = useState(false);
+  const [podcastFeedSlug, setPodcastFeedSlug] = useState("");
+  const [podcastRSSURL, setPodcastRSSURL] = useState("");
+  const [podcastTitle, setPodcastTitle] = useState("");
+  const [podcastDescription, setPodcastDescription] = useState("");
+  const [podcastAuthor, setPodcastAuthor] = useState("");
+  const [podcastLanguage, setPodcastLanguage] = useState("ja");
+  const [podcastExplicit, setPodcastExplicit] = useState(false);
+  const [podcastArtworkURL, setPodcastArtworkURL] = useState("");
   const [audioBriefingVoices, setAudioBriefingVoices] = useState<AudioBriefingPersonaVoice[]>(buildDefaultAudioBriefingVoices(["editor", "hype", "analyst", "concierge", "snark", "native"]));
   const [audioBriefingVoiceInputDrafts, setAudioBriefingVoiceInputDrafts] = useState<AudioBriefingVoiceInputDrafts>(() =>
     buildAudioBriefingVoiceInputDrafts(buildDefaultAudioBriefingVoices(["editor", "hype", "analyst", "concierge", "snark", "native"]))
@@ -483,6 +494,18 @@ export default function SettingsPage() {
     },
     []
   );
+
+  const syncPodcastForm = useCallback((podcast?: UserSettings["podcast"] | null) => {
+    setPodcastEnabled(Boolean(podcast?.enabled));
+    setPodcastFeedSlug(podcast?.feed_slug ?? "");
+    setPodcastRSSURL(podcast?.rss_url ?? "");
+    setPodcastTitle(podcast?.title ?? "");
+    setPodcastDescription(podcast?.description ?? "");
+    setPodcastAuthor(podcast?.author ?? "");
+    setPodcastLanguage(podcast?.language ?? "ja");
+    setPodcastExplicit(Boolean(podcast?.explicit));
+    setPodcastArtworkURL(podcast?.artwork_url ?? "");
+  }, []);
 
   const syncLLMModelForm = useCallback((llmModels?: UserSettings["llm_models"] | null) => {
     setAnthropicFactsModel(llmModels?.facts ?? "");
@@ -687,6 +710,7 @@ export default function SettingsPage() {
       setThresholdPct(data.budget_alert_threshold_pct ?? 20);
       setDigestEmailEnabled(Boolean(data.digest_email_enabled ?? true));
       syncAudioBriefingForm(data.audio_briefing, data.audio_briefing_persona_voices);
+      syncPodcastForm(data.podcast);
       setReadingPlanWindow((data.reading_plan?.window as "24h" | "today_jst" | "7d") ?? "24h");
       const rpSize = data.reading_plan?.size;
       setReadingPlanSize(String(rpSize === 7 || rpSize === 15 || rpSize === 25 ? rpSize : 15));
@@ -709,7 +733,7 @@ export default function SettingsPage() {
         setLoading(false);
       }
     }
-  }, [syncAudioBriefingForm, syncLLMModelForm, t]);
+  }, [syncAudioBriefingForm, syncLLMModelForm, syncPodcastForm, t]);
 
   useEffect(() => {
     load();
@@ -1878,6 +1902,92 @@ export default function SettingsPage() {
     await persistAudioBriefingSettings();
   }
 
+  async function persistPodcastSettings() {
+    setSavingPodcast(true);
+    try {
+      const resp = await api.updatePodcastSettings({
+        enabled: podcastEnabled,
+        feed_slug: podcastFeedSlug || null,
+        rss_url: podcastRSSURL || null,
+        title: podcastTitle || null,
+        description: podcastDescription || null,
+        author: podcastAuthor || null,
+        language: podcastLanguage || "ja",
+        explicit: podcastExplicit,
+        artwork_url: podcastArtworkURL || null,
+      });
+      setSettings((prev) => (prev ? { ...prev, podcast: resp.podcast } : prev));
+      syncPodcastForm(resp.podcast);
+      showToast(t("settings.toast.podcastSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingPodcast(false);
+    }
+  }
+
+  async function submitPodcastSettings(e: FormEvent) {
+    e.preventDefault();
+    await persistPodcastSettings();
+  }
+
+  async function copyPodcastRSSURL() {
+    if (!podcastRSSURL) return;
+    try {
+      await navigator.clipboard.writeText(podcastRSSURL);
+      showToast(t("settings.toast.podcastRSSCopied"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    }
+  }
+
+  async function handlePodcastArtworkFileChange(file: File | null) {
+    if (!file) return;
+    setUploadingPodcastArtwork(true);
+    try {
+      const dataURL = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(new Error("failed to read artwork file"));
+        reader.readAsDataURL(file);
+      });
+      const marker = "base64,";
+      const index = dataURL.indexOf(marker);
+      if (index < 0) {
+        throw new Error("invalid artwork file");
+      }
+      const contentBase64 = dataURL.slice(index + marker.length);
+      const resp = await api.uploadPodcastArtwork({
+        content_type: file.type || "image/jpeg",
+        content_base64: contentBase64,
+      });
+      setPodcastArtworkURL(resp.artwork_url ?? "");
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              podcast: {
+                enabled: prev.podcast?.enabled ?? podcastEnabled,
+                feed_slug: prev.podcast?.feed_slug ?? (podcastFeedSlug || null),
+                rss_url: prev.podcast?.rss_url ?? (podcastRSSURL || null),
+                title: prev.podcast?.title ?? (podcastTitle || null),
+                description: prev.podcast?.description ?? (podcastDescription || null),
+                author: prev.podcast?.author ?? (podcastAuthor || null),
+                language: prev.podcast?.language ?? podcastLanguage,
+                explicit: prev.podcast?.explicit ?? podcastExplicit,
+                artwork_url: resp.artwork_url ?? null,
+              },
+            }
+          : prev
+      );
+      showToast(t("settings.toast.podcastArtworkUploaded"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setUploadingPodcastArtwork(false);
+    }
+  }
+
   async function persistAudioBriefingVoices() {
     setSavingAudioBriefingVoices(true);
     try {
@@ -2368,6 +2478,173 @@ export default function SettingsPage() {
                       variant="modal"
                     />
                   </div>
+                </form>
+              </SectionCard>
+
+              <SectionCard>
+                <form onSubmit={submitPodcastSettings} className="space-y-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.podcast.title")}</div>
+                      <p className="mt-1 max-w-3xl text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.podcast.description")}</p>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
+                      <button
+                        type="submit"
+                        disabled={savingPodcast}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                      >
+                        {savingPodcast ? t("common.saving") : t("settings.podcast.save")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!podcastRSSURL}
+                        onClick={copyPodcastRSSURL}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] disabled:opacity-60"
+                      >
+                        {t("settings.podcast.copyRSS")}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                            {t("settings.podcast.enabled")}
+                          </div>
+                          <p className="mt-2 text-sm text-[var(--color-editorial-ink)]">{podcastEnabled ? t("settings.on") : t("settings.off")}</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={podcastEnabled}
+                          onChange={(e) => setPodcastEnabled(e.target.checked)}
+                          className="size-4 rounded border-[var(--color-editorial-line-strong)]"
+                        />
+                      </div>
+                    </label>
+
+                    <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.rssUrl")}
+                      </div>
+                      <div className="mt-3 break-all rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]">
+                        {podcastRSSURL || t("settings.podcast.rssUrlPending")}
+                      </div>
+                    </div>
+
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.feedSlug")}
+                      </div>
+                      <input
+                        value={podcastFeedSlug}
+                        readOnly
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                    </label>
+
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.language")}
+                      </div>
+                      <select
+                        value={podcastLanguage}
+                        onChange={(e) => setPodcastLanguage(e.target.value)}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      >
+                        <option value="ja">ja</option>
+                        <option value="en">en</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.showTitle")}
+                      </div>
+                      <input
+                        value={podcastTitle}
+                        onChange={(e) => setPodcastTitle(e.target.value)}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                    </label>
+
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.author")}
+                      </div>
+                      <input
+                        value={podcastAuthor}
+                        onChange={(e) => setPodcastAuthor(e.target.value)}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.podcast.summary")}
+                    </div>
+                    <textarea
+                      value={podcastDescription}
+                      onChange={(e) => setPodcastDescription(e.target.value)}
+                      rows={5}
+                      className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                    />
+                  </label>
+
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+                    <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.artworkUrl")}
+                      </div>
+                      <input
+                        value={podcastArtworkURL}
+                        onChange={(e) => setPodcastArtworkURL(e.target.value)}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <label className="inline-flex min-h-10 cursor-pointer items-center rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)]">
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(e) => void handlePodcastArtworkFileChange(e.target.files?.[0] ?? null)}
+                          />
+                          {uploadingPodcastArtwork ? t("common.saving") : t("settings.podcast.uploadArtwork")}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setPodcastArtworkURL("")}
+                          className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)]"
+                        >
+                          {t("settings.podcast.useDefaultArtwork")}
+                        </button>
+                      </div>
+                    </div>
+
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.explicit")}
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <div className="text-sm text-[var(--color-editorial-ink)]">{podcastExplicit ? t("settings.podcast.explicitYes") : t("settings.podcast.explicitNo")}</div>
+                        <input
+                          type="checkbox"
+                          checked={podcastExplicit}
+                          onChange={(e) => setPodcastExplicit(e.target.checked)}
+                          className="size-4 rounded border-[var(--color-editorial-line-strong)]"
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  <p className="text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">
+                    {t("settings.podcast.help")}
+                  </p>
                 </form>
               </SectionCard>
 

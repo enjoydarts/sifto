@@ -55,6 +55,26 @@ class AudioBriefingCopyObjectsResponse(BaseModel):
     copied_count: int
 
 
+class AudioBriefingStatObjectRequest(BaseModel):
+    object_key: str
+    bucket: str | None = None
+
+
+class AudioBriefingStatObjectResponse(BaseModel):
+    size_bytes: int
+
+
+class AudioBriefingUploadObjectRequest(BaseModel):
+    object_key: str
+    content_base64: str
+    content_type: str
+    bucket: str | None = None
+
+
+class AudioBriefingUploadObjectResponse(BaseModel):
+    object_key: str
+
+
 @router.post("/audio-briefing/synthesize-upload", response_model=AudioBriefingSynthesizeResponse)
 def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Request):
     try:
@@ -119,3 +139,28 @@ def copy_audio_briefing_objects(req: AudioBriefingCopyObjectsRequest):
         return AudioBriefingCopyObjectsResponse(copied_count=copied_count)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"audio briefing copy failed: {exc}")
+
+
+@router.post("/audio-briefing/stat-object", response_model=AudioBriefingStatObjectResponse)
+def stat_audio_briefing_object(req: AudioBriefingStatObjectRequest):
+    try:
+        service = AudioBriefingTTSService()
+        size_bytes = service.stat_object(req.object_key, bucket_override=req.bucket)
+        return AudioBriefingStatObjectResponse(size_bytes=size_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"audio briefing stat failed: {exc}")
+
+
+@router.post("/audio-briefing/upload-object", response_model=AudioBriefingUploadObjectResponse)
+def upload_audio_briefing_object(req: AudioBriefingUploadObjectRequest):
+    try:
+        service = AudioBriefingTTSService()
+        object_key = service.upload_base64_object(
+            object_key=req.object_key,
+            content_base64=req.content_base64,
+            content_type=req.content_type,
+            bucket_override=req.bucket,
+        )
+        return AudioBriefingUploadObjectResponse(object_key=object_key)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"audio briefing upload failed: {exc}")

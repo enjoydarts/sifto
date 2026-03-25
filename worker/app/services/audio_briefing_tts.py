@@ -1,3 +1,4 @@
+import base64
 import io
 import hashlib
 import json
@@ -285,6 +286,22 @@ class AudioBriefingTTSService:
                 CopySource={"Bucket": source, "Key": key},
             )
         return len(keys)
+
+    def stat_object(self, object_key: str, bucket_override: str | None = None) -> int:
+        client = self.r2_client()
+        result = client.head_object(
+            Bucket=self.resolve_bucket(bucket_override),
+            Key=object_key,
+        )
+        size = int(result.get("ContentLength") or 0)
+        if size < 0:
+            size = 0
+        return size
+
+    def upload_base64_object(self, object_key: str, content_base64: str, content_type: str, bucket_override: str | None = None) -> str:
+        payload = base64.b64decode((content_base64 or "").encode("utf-8"), validate=True)
+        self.upload_bytes(object_key, payload, content_type, bucket_override=bucket_override)
+        return object_key
 
     def r2_client(self):
         if not self.r2_endpoint or not (self.standard_bucket() or self.ia_bucket()) or not self.r2_access_key_id or not self.r2_secret_access_key:

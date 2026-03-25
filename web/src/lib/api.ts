@@ -1156,6 +1156,7 @@ export interface UserSettings {
   has_aivis_api_key: boolean;
   aivis_api_key_last4: string | null;
   aivis_user_dictionary_uuid?: string | null;
+  podcast?: PodcastSettings;
   has_inoreader_oauth?: boolean;
   inoreader_token_expires_at?: string | null;
   monthly_budget_usd: number | null;
@@ -1207,6 +1208,18 @@ export interface AudioBriefingSettings {
   articles_per_episode: number;
   target_duration_minutes: number;
   default_persona: string;
+}
+
+export interface PodcastSettings {
+  enabled: boolean;
+  feed_slug?: string | null;
+  rss_url?: string | null;
+  title?: string | null;
+  description?: string | null;
+  author?: string | null;
+  language: string;
+  explicit: boolean;
+  artwork_url?: string | null;
 }
 
 export interface AudioBriefingPersonaVoice {
@@ -1973,6 +1986,16 @@ export const api = {
   updateAudioBriefingSettings: (body: AudioBriefingSettings) =>
     apiFetch<{ user_id: string; audio_briefing: AudioBriefingSettings }>("/settings/audio-briefing", {
       method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  updatePodcastSettings: (body: PodcastSettings) =>
+    apiFetch<{ user_id: string; podcast: PodcastSettings }>("/settings/podcast", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  uploadPodcastArtwork: (body: { content_type: string; content_base64: string }) =>
+    apiFetch<{ user_id: string; artwork_url: string | null }>("/settings/podcast-artwork", {
+      method: "POST",
       body: JSON.stringify(body),
     }),
   updateAudioBriefingPersonaVoices: (voices: AudioBriefingPersonaVoice[]) =>

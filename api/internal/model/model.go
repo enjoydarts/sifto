@@ -50,6 +50,14 @@ type UserSettings struct {
 	AivisAPIKeyLast4                 *string    `json:"aivis_api_key_last4,omitempty"`
 	HasAivisAPIKey                   bool       `json:"has_aivis_api_key"`
 	AivisUserDictionaryUUID          *string    `json:"aivis_user_dictionary_uuid,omitempty"`
+	PodcastEnabled                   bool       `json:"podcast_enabled"`
+	PodcastFeedSlug                  *string    `json:"podcast_feed_slug,omitempty"`
+	PodcastTitle                     *string    `json:"podcast_title,omitempty"`
+	PodcastDescription               *string    `json:"podcast_description,omitempty"`
+	PodcastAuthor                    *string    `json:"podcast_author,omitempty"`
+	PodcastLanguage                  string     `json:"podcast_language"`
+	PodcastExplicit                  bool       `json:"podcast_explicit"`
+	PodcastArtworkURL                *string    `json:"podcast_artwork_url,omitempty"`
 	MonthlyBudgetUSD                 *float64   `json:"monthly_budget_usd,omitempty"`
 	BudgetAlertEnabled               bool       `json:"budget_alert_enabled"`
 	BudgetAlertThresholdPct          int        `json:"budget_alert_threshold_pct"`
@@ -110,28 +118,31 @@ type AudioBriefingPersonaVoice struct {
 }
 
 type AudioBriefingJob struct {
-	ID                  string     `json:"id"`
-	UserID              string     `json:"user_id"`
-	SlotStartedAtJST    time.Time  `json:"slot_started_at_jst"`
-	SlotKey             string     `json:"slot_key"`
-	Persona             string     `json:"persona"`
-	Status              string     `json:"status"`
-	SourceItemCount     int        `json:"source_item_count"`
-	ReusedItemCount     int        `json:"reused_item_count"`
-	ScriptCharCount     int        `json:"script_char_count"`
-	AudioDurationSec    *int       `json:"audio_duration_sec,omitempty"`
-	Title               *string    `json:"title,omitempty"`
-	R2AudioObjectKey    *string    `json:"r2_audio_object_key,omitempty"`
-	R2ManifestObjectKey *string    `json:"r2_manifest_object_key,omitempty"`
-	R2StorageBucket     string     `json:"r2_storage_bucket"`
-	ProviderJobID       *string    `json:"provider_job_id,omitempty"`
-	IdempotencyKey      *string    `json:"idempotency_key,omitempty"`
-	ErrorCode           *string    `json:"error_code,omitempty"`
-	ErrorMessage        *string    `json:"error_message,omitempty"`
-	PublishedAt         *time.Time `json:"published_at,omitempty"`
-	FailedAt            *time.Time `json:"failed_at,omitempty"`
-	CreatedAt           time.Time  `json:"created_at"`
-	UpdatedAt           time.Time  `json:"updated_at"`
+	ID                     string     `json:"id"`
+	UserID                 string     `json:"user_id"`
+	SlotStartedAtJST       time.Time  `json:"slot_started_at_jst"`
+	SlotKey                string     `json:"slot_key"`
+	Persona                string     `json:"persona"`
+	Status                 string     `json:"status"`
+	SourceItemCount        int        `json:"source_item_count"`
+	ReusedItemCount        int        `json:"reused_item_count"`
+	ScriptCharCount        int        `json:"script_char_count"`
+	AudioDurationSec       *int       `json:"audio_duration_sec,omitempty"`
+	Title                  *string    `json:"title,omitempty"`
+	R2AudioObjectKey       *string    `json:"r2_audio_object_key,omitempty"`
+	R2ManifestObjectKey    *string    `json:"r2_manifest_object_key,omitempty"`
+	R2StorageBucket        string     `json:"r2_storage_bucket"`
+	PodcastPublicObjectKey *string    `json:"podcast_public_object_key,omitempty"`
+	PodcastPublicBucket    string     `json:"podcast_public_bucket"`
+	PodcastPublicDeletedAt *time.Time `json:"podcast_public_deleted_at,omitempty"`
+	ProviderJobID          *string    `json:"provider_job_id,omitempty"`
+	IdempotencyKey         *string    `json:"idempotency_key,omitempty"`
+	ErrorCode              *string    `json:"error_code,omitempty"`
+	ErrorMessage           *string    `json:"error_message,omitempty"`
+	PublishedAt            *time.Time `json:"published_at,omitempty"`
+	FailedAt               *time.Time `json:"failed_at,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
 }
 
 type AudioBriefingJobItem struct {

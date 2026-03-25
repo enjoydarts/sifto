@@ -53,6 +53,12 @@ func (s *AudioBriefingDeleteService) Delete(ctx context.Context, userID, jobID s
 		return err
 	}
 	objectRefs := CollectAudioBriefingObjectRefs(job, chunks)
+	if publicBucket := strings.TrimSpace(job.PodcastPublicBucket); publicBucket != "" && strings.TrimSpace(ptrString(job.PodcastPublicObjectKey)) != "" {
+		objectRefs = append(objectRefs, AudioBriefingObjectRef{
+			Bucket:    publicBucket,
+			ObjectKey: strings.TrimSpace(ptrString(job.PodcastPublicObjectKey)),
+		})
+	}
 	if len(objectRefs) > 0 && s.deleter != nil {
 		if err := s.deleter.DeleteAudioBriefingObjects(ctx, objectRefs); err != nil {
 			return err

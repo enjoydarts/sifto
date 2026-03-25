@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -53,6 +55,7 @@ type SettingsGetPayload struct {
 	HasAivisAPIKey          bool             `json:"has_aivis_api_key"`
 	AivisAPIKeyLast4        *string          `json:"aivis_api_key_last4,omitempty"`
 	AivisUserDictionaryUUID *string          `json:"aivis_user_dictionary_uuid,omitempty"`
+	Podcast                 map[string]any   `json:"podcast"`
 	HasInoreaderOAuth       bool             `json:"has_inoreader_oauth"`
 	InoreaderTokenExpiresAt *time.Time       `json:"inoreader_token_expires_at,omitempty"`
 	MonthlyBudgetUSD        *float64         `json:"monthly_budget_usd,omitempty"`
@@ -94,6 +97,16 @@ type UpdateAudioBriefingSettingsInput struct {
 	ArticlesPerEpisode    int
 	TargetDurationMinutes int
 	DefaultPersona        *string
+}
+
+type UpdatePodcastSettingsInput struct {
+	Enabled     bool
+	Title       *string
+	Description *string
+	Author      *string
+	Language    *string
+	Explicit    bool
+	ArtworkURL  *string
 }
 
 type UpdateAudioBriefingPersonaVoiceInput struct {
@@ -244,6 +257,69 @@ func AudioBriefingPersonaVoicesPayload(rows []model.AudioBriefingPersonaVoice) [
 	return out
 }
 
+func podcastFeedBaseURL() string {
+	if v := strings.TrimSpace(os.Getenv("PODCAST_FEED_BASE_URL")); v != "" {
+		return strings.TrimRight(v, "/")
+	}
+	if v := strings.TrimSpace(os.Getenv("APP_BASE_URL")); v != "" {
+		return strings.TrimRight(v, "/") + "/podcasts"
+	}
+	return ""
+}
+
+func podcastDefaultArtworkURL() *string {
+	if v := strings.TrimSpace(os.Getenv("PODCAST_DEFAULT_ARTWORK_URL")); v != "" {
+		return &v
+	}
+	return nil
+}
+
+func podcastRSSURL(slug *string) *string {
+	if slug == nil || strings.TrimSpace(*slug) == "" {
+		return nil
+	}
+	base := podcastFeedBaseURL()
+	if base == "" {
+		return nil
+	}
+	v := base + "/" + strings.TrimSpace(*slug) + "/feed.xml"
+	return &v
+}
+
+func PodcastSettingsPayload(settings *model.UserSettings) map[string]any {
+	var artworkURL *string
+	if settings != nil {
+		artworkURL = settings.PodcastArtworkURL
+	}
+	if artworkURL == nil {
+		artworkURL = podcastDefaultArtworkURL()
+	}
+	if settings == nil {
+		return map[string]any{
+			"enabled":     false,
+			"feed_slug":   nil,
+			"rss_url":     nil,
+			"title":       nil,
+			"description": nil,
+			"author":      nil,
+			"language":    "ja",
+			"explicit":    false,
+			"artwork_url": artworkURL,
+		}
+	}
+	return map[string]any{
+		"enabled":     settings.PodcastEnabled,
+		"feed_slug":   settings.PodcastFeedSlug,
+		"rss_url":     podcastRSSURL(settings.PodcastFeedSlug),
+		"title":       settings.PodcastTitle,
+		"description": settings.PodcastDescription,
+		"author":      settings.PodcastAuthor,
+		"language":    settings.PodcastLanguage,
+		"explicit":    settings.PodcastExplicit,
+		"artwork_url": artworkURL,
+	}
+}
+
 func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetPayload, error) {
 	settings, err := s.repo.EnsureDefaults(ctx, userID)
 	if err != nil {
@@ -309,6 +385,7 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		HasAivisAPIKey:          settings.HasAivisAPIKey,
 		AivisAPIKeyLast4:        settings.AivisAPIKeyLast4,
 		AivisUserDictionaryUUID: settings.AivisUserDictionaryUUID,
+		Podcast:                 PodcastSettingsPayload(settings),
 		HasInoreaderOAuth:       settings.HasInoreaderOAuth,
 		InoreaderTokenExpiresAt: settings.InoreaderTokenExpiresAt,
 		MonthlyBudgetUSD:        settings.MonthlyBudgetUSD,
@@ -692,6 +769,68 @@ func normalizeOptionalString(v *string) *string {
 		return nil
 	}
 	return &s
+}
+
+func normalizePodcastLanguage(v *string) string {
+	if v == nil {
+		return "ja"
+	}
+	s := strings.TrimSpace(*v)
+	if s == "" {
+		return "ja"
+	}
+	return s
+}
+
+func generatePodcastFeedSlug() (string, error) {
+	var buf [10]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	return "p_" + fmt.Sprintf("%x", buf[:]), nil
+}
+
+func (s *SettingsService) ensurePodcastFeedSlug(ctx context.Context, existing *string) (string, error) {
+	if existing != nil && strings.TrimSpace(*existing) != "" {
+		return strings.TrimSpace(*existing), nil
+	}
+	for i := 0; i < 8; i++ {
+		slug, err := generatePodcastFeedSlug()
+		if err != nil {
+			return "", err
+		}
+		row, err := s.repo.GetByPodcastFeedSlug(ctx, slug)
+		if err != nil {
+			return "", err
+		}
+		if row == nil {
+			return slug, nil
+		}
+	}
+	return "", fmt.Errorf("failed to generate unique podcast_feed_slug")
+}
+
+func (s *SettingsService) UpdatePodcastSettings(ctx context.Context, userID string, in UpdatePodcastSettingsInput) (*model.UserSettings, error) {
+	settings, err := s.repo.EnsureDefaults(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	slug, err := s.ensurePodcastFeedSlug(ctx, settings.PodcastFeedSlug)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.UpsertPodcastConfig(
+		ctx,
+		userID,
+		in.Enabled,
+		slug,
+		normalizeOptionalString(in.Title),
+		normalizeOptionalString(in.Description),
+		normalizeOptionalString(in.Author),
+		normalizePodcastLanguage(in.Language),
+		in.Explicit,
+		normalizeOptionalString(in.ArtworkURL),
+	)
 }
 
 func (s *SettingsService) UpdateObsidianExport(ctx context.Context, userID string, in UpdateObsidianExportInput) (*model.ObsidianExportSettings, error) {

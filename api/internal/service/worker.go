@@ -66,6 +66,14 @@ type AudioBriefingCopyObjectsResponse struct {
 	CopiedCount int `json:"copied_count"`
 }
 
+type AudioBriefingStatObjectResponse struct {
+	SizeBytes int64 `json:"size_bytes"`
+}
+
+type AudioBriefingUploadObjectResponse struct {
+	ObjectKey string `json:"object_key"`
+}
+
 func NewWorkerClient() *WorkerClient {
 	url := os.Getenv("PYTHON_WORKER_URL")
 	if url == "" {
@@ -944,6 +952,22 @@ func (w *WorkerClient) CopyAudioBriefingObjects(ctx context.Context, sourceBucke
 		"object_keys":   objectKeys,
 	}, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret))
 	return err
+}
+
+func (w *WorkerClient) StatAudioBriefingObject(ctx context.Context, bucket string, objectKey string) (*AudioBriefingStatObjectResponse, error) {
+	return postWithHeaders[AudioBriefingStatObjectResponse](ctx, w, "/audio-briefing/stat-object", map[string]any{
+		"bucket":     bucket,
+		"object_key": objectKey,
+	}, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret))
+}
+
+func (w *WorkerClient) UploadAudioBriefingObject(ctx context.Context, bucket string, objectKey string, contentBase64 string, contentType string) (*AudioBriefingUploadObjectResponse, error) {
+	return postWithHeaders[AudioBriefingUploadObjectResponse](ctx, w, "/audio-briefing/upload-object", map[string]any{
+		"bucket":         bucket,
+		"object_key":     objectKey,
+		"content_base64": contentBase64,
+		"content_type":   contentType,
+	}, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret))
 }
 
 func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, aivisAPIKey *string, internalSecret string) map[string]string {

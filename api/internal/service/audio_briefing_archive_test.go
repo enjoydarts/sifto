@@ -10,15 +10,17 @@ import (
 )
 
 type stubAudioBriefingArchiveRepo struct {
-	candidates       []model.AudioBriefingJob
-	listCandidatesAt time.Time
-	listCandidatesN  int
-	listErr          error
-	chunksByJobID    map[string][]model.AudioBriefingScriptChunk
-	chunkErr         error
-	updatedJobID     string
-	updatedBucket    string
-	updateErr        error
+	candidates         []model.AudioBriefingJob
+	listCandidatesAt   time.Time
+	listCandidatesN    int
+	listErr            error
+	chunksByJobID      map[string][]model.AudioBriefingScriptChunk
+	chunkErr           error
+	updatedJobID       string
+	updatedBucket      string
+	updateErr          error
+	markedDeletedJobID string
+	markDeletedErr     error
 }
 
 func (s *stubAudioBriefingArchiveRepo) ListIAMoveCandidates(_ context.Context, cutoff time.Time, limit int) ([]model.AudioBriefingJob, error) {
@@ -38,6 +40,14 @@ func (s *stubAudioBriefingArchiveRepo) UpdateStorageBucketForJobAndChunks(_ cont
 	s.updatedJobID = jobID
 	s.updatedBucket = bucket
 	return s.updateErr
+}
+
+func (s *stubAudioBriefingArchiveRepo) MarkPodcastPublicObjectDeleted(_ context.Context, jobID string) (*model.AudioBriefingJob, error) {
+	s.markedDeletedJobID = jobID
+	if s.markDeletedErr != nil {
+		return nil, s.markDeletedErr
+	}
+	return &model.AudioBriefingJob{ID: jobID}, nil
 }
 
 type audioBriefingCopyCall struct {
@@ -84,13 +94,15 @@ func TestAudioBriefingArchiveServiceMovesPublishedFilesToIABucket(t *testing.T) 
 	repo := &stubAudioBriefingArchiveRepo{
 		candidates: []model.AudioBriefingJob{
 			{
-				ID:                  "job-1",
-				UserID:              "user-1",
-				Status:              "published",
-				PublishedAt:         &publishedAt,
-				R2StorageBucket:     "briefings-standard",
-				R2AudioObjectKey:    &audioKey,
-				R2ManifestObjectKey: &manifestKey,
+				ID:                     "job-1",
+				UserID:                 "user-1",
+				Status:                 "published",
+				PublishedAt:            &publishedAt,
+				R2StorageBucket:        "briefings-standard",
+				R2AudioObjectKey:       &audioKey,
+				R2ManifestObjectKey:    &manifestKey,
+				PodcastPublicBucket:    "briefings-public",
+				PodcastPublicObjectKey: &audioKey,
 			},
 		},
 		chunksByJobID: map[string][]model.AudioBriefingScriptChunk{
@@ -106,6 +118,7 @@ func TestAudioBriefingArchiveServiceMovesPublishedFilesToIABucket(t *testing.T) 
 		storage:        storage,
 		standardBucket: "briefings-standard",
 		iaBucket:       "briefings-ia",
+		publicBucket:   "briefings-public",
 		moveAfterDays:  30,
 		batchLimit:     20,
 		now: func() time.Time {
@@ -129,11 +142,17 @@ func TestAudioBriefingArchiveServiceMovesPublishedFilesToIABucket(t *testing.T) 
 	if repo.updatedJobID != "job-1" || repo.updatedBucket != "briefings-ia" {
 		t.Fatalf("updated job = %q bucket = %q, want job-1 / briefings-ia", repo.updatedJobID, repo.updatedBucket)
 	}
-	if len(storage.deleteCalls) != 1 {
-		t.Fatalf("delete call count = %d, want 1", len(storage.deleteCalls))
+	if len(storage.deleteCalls) != 2 {
+		t.Fatalf("delete call count = %d, want 2", len(storage.deleteCalls))
 	}
-	if got := storage.deleteCalls[0]; got.bucket != "briefings-standard" {
-		t.Fatalf("delete bucket = %q, want briefings-standard", got.bucket)
+	if got := storage.deleteCalls[0]; got.bucket != "briefings-public" {
+		t.Fatalf("first delete bucket = %q, want briefings-public", got.bucket)
+	}
+	if got := storage.deleteCalls[1]; got.bucket != "briefings-standard" {
+		t.Fatalf("second delete bucket = %q, want briefings-standard", got.bucket)
+	}
+	if repo.markedDeletedJobID != "job-1" {
+		t.Fatalf("markedDeletedJobID = %q, want job-1", repo.markedDeletedJobID)
 	}
 }
 
@@ -143,12 +162,14 @@ func TestAudioBriefingArchiveServiceSkipsSourceDeleteWhenBucketUpdateFails(t *te
 	repo := &stubAudioBriefingArchiveRepo{
 		candidates: []model.AudioBriefingJob{
 			{
-				ID:               "job-1",
-				UserID:           "user-1",
-				Status:           "published",
-				PublishedAt:      &publishedAt,
-				R2StorageBucket:  "briefings-standard",
-				R2AudioObjectKey: &audioKey,
+				ID:                     "job-1",
+				UserID:                 "user-1",
+				Status:                 "published",
+				PublishedAt:            &publishedAt,
+				R2StorageBucket:        "briefings-standard",
+				R2AudioObjectKey:       &audioKey,
+				PodcastPublicBucket:    "briefings-public",
+				PodcastPublicObjectKey: &audioKey,
 			},
 		},
 		chunksByJobID: map[string][]model.AudioBriefingScriptChunk{"job-1": {}},
@@ -160,6 +181,7 @@ func TestAudioBriefingArchiveServiceSkipsSourceDeleteWhenBucketUpdateFails(t *te
 		storage:        storage,
 		standardBucket: "briefings-standard",
 		iaBucket:       "briefings-ia",
+		publicBucket:   "briefings-public",
 		moveAfterDays:  30,
 		batchLimit:     20,
 		now: func() time.Time {

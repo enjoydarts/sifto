@@ -225,19 +225,21 @@ func (r *UserSettingsRepo) GetByPodcastFeedSlug(ctx context.Context, slug string
 	}
 	var v model.UserSettings
 	err := r.db.QueryRow(ctx, `
-		SELECT user_id,
+		SELECT us.user_id,
 		       podcast_enabled,
 		       podcast_feed_slug,
 		       podcast_title,
 		       podcast_description,
 		       podcast_author,
+		       u.email,
 		       podcast_language,
 		       podcast_explicit,
 		       podcast_artwork_url,
-		       created_at,
-		       updated_at
-		FROM user_settings
-		WHERE podcast_feed_slug = $1
+		       us.created_at,
+		       us.updated_at
+		FROM user_settings us
+		JOIN users u ON u.id = us.user_id
+		WHERE us.podcast_feed_slug = $1
 	`, slug).Scan(
 		&v.UserID,
 		&v.PodcastEnabled,
@@ -245,6 +247,7 @@ func (r *UserSettingsRepo) GetByPodcastFeedSlug(ctx context.Context, slug string
 		&v.PodcastTitle,
 		&v.PodcastDescription,
 		&v.PodcastAuthor,
+		&v.PodcastOwnerEmail,
 		&v.PodcastLanguage,
 		&v.PodcastExplicit,
 		&v.PodcastArtworkURL,

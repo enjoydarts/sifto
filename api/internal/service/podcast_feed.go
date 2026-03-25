@@ -39,10 +39,16 @@ type podcastRSSChannel struct {
 	Description    string           `xml:"description"`
 	Language       string           `xml:"language"`
 	ItunesAuthor   string           `xml:"itunes:author"`
+	ItunesOwner    *podcastRSSOwner `xml:"itunes:owner,omitempty"`
 	ItunesSummary  string           `xml:"itunes:summary"`
 	ItunesExplicit string           `xml:"itunes:explicit"`
 	ItunesImage    *podcastRSSImage `xml:"itunes:image,omitempty"`
 	Items          []podcastRSSItem `xml:"item"`
+}
+
+type podcastRSSOwner struct {
+	ItunesName  string `xml:"itunes:name"`
+	ItunesEmail string `xml:"itunes:email"`
 }
 
 type podcastRSSImage struct {
@@ -107,6 +113,12 @@ func (s *PodcastFeedService) BuildXML(ctx context.Context, slug string) ([]byte,
 		ItunesSummary:  firstNonEmptyTrimmed(stringValue(settings.PodcastDescription), "Siftoで生成した公開音声ブリーフィングです。"),
 		ItunesExplicit: podcastExplicitLabel(settings.PodcastExplicit),
 		Items:          items,
+	}
+	if ownerEmail := strings.TrimSpace(settings.PodcastOwnerEmail); ownerEmail != "" {
+		channel.ItunesOwner = &podcastRSSOwner{
+			ItunesName:  firstNonEmptyTrimmed(stringValue(settings.PodcastAuthor), "Sifto"),
+			ItunesEmail: ownerEmail,
+		}
 	}
 	if artworkURL := firstNonEmptyTrimmed(stringValue(settings.PodcastArtworkURL), stringValue(podcastDefaultArtworkURL())); artworkURL != "" {
 		channel.ItunesImage = &podcastRSSImage{Href: artworkURL}

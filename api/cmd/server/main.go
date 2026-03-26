@@ -298,6 +298,8 @@ func main() {
 			r.Get("/", audioBriefingsH.List)
 			r.Post("/generate", audioBriefingsH.Generate)
 			r.Post("/{id}/resume", audioBriefingsH.Resume)
+			r.Post("/{id}/archive", audioBriefingsH.Archive)
+			r.Post("/{id}/unarchive", audioBriefingsH.Unarchive)
 			r.Post("/{id}/start-voicing", audioBriefingsH.StartVoicing)
 			r.Post("/{id}/start-concat", audioBriefingsH.StartConcat)
 			r.Delete("/{id}", audioBriefingsH.Delete)

@@ -127,6 +127,7 @@ type AudioBriefingJob struct {
 	SlotKey                string     `json:"slot_key"`
 	Persona                string     `json:"persona"`
 	Status                 string     `json:"status"`
+	ArchiveStatus          string     `json:"archive_status"`
 	SourceItemCount        int        `json:"source_item_count"`
 	ReusedItemCount        int        `json:"reused_item_count"`
 	ScriptCharCount        int        `json:"script_char_count"`
@@ -198,6 +199,11 @@ type AudioBriefingCallbackToken struct {
 	UsedAt        *time.Time `json:"used_at,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 }
+
+const (
+	AudioBriefingArchiveStatusActive   = "active"
+	AudioBriefingArchiveStatusArchived = "archived"
+)
 
 type ObsidianExportSettings struct {
 	UserID               string     `json:"user_id"`

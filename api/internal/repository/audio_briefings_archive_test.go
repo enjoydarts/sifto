@@ -64,6 +64,7 @@ func TestAudioBriefingJobScanReadsStorageBucket(t *testing.T) {
 		"2026-03-25-18",
 		"editor",
 		"published",
+		"active",
 		6,
 		0,
 		12000,

@@ -59,6 +59,8 @@ export default function AudioBriefingDetailPage() {
   const [detail, setDetail] = useState<AudioBriefingDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [resuming, setResuming] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [unarchiving, setUnarchiving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resumePending, setResumePending] = useState<{ startedAt: number; previousUpdatedAt: string | null } | null>(null);
@@ -122,6 +124,8 @@ export default function AudioBriefingDetailPage() {
     return !!detail.resume_allowed;
   }, [detail]);
   const canDelete = useMemo(() => !!detail?.delete_allowed, [detail]);
+  const canArchive = useMemo(() => !!detail?.archive_allowed, [detail]);
+  const canUnarchive = useMemo(() => !!detail?.unarchive_allowed, [detail]);
 
   async function handleResume() {
     if (!detail) return;
@@ -163,6 +167,34 @@ export default function AudioBriefingDetailPage() {
     }
   }
 
+  async function handleArchive() {
+    if (!detail) return;
+    setArchiving(true);
+    try {
+      const next = await api.archiveAudioBriefing(detail.job.id);
+      setDetail(next);
+      showToast(t("audioBriefing.toast.archived", "アーカイブしました"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setArchiving(false);
+    }
+  }
+
+  async function handleUnarchive() {
+    if (!detail) return;
+    setUnarchiving(true);
+    try {
+      const next = await api.unarchiveAudioBriefing(detail.job.id);
+      setDetail(next);
+      showToast(t("audioBriefing.toast.unarchived", "公開中に戻しました"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setUnarchiving(false);
+    }
+  }
+
   if (loading) return <p className="text-sm text-[var(--color-editorial-ink-soft)]">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!detail) return null;
@@ -181,6 +213,26 @@ export default function AudioBriefingDetailPage() {
           description={t("audioBriefing.detailDescription", "台本生成から音声化、連結までの進行状況を確認します。")}
           actions={
             <div className="flex flex-wrap gap-2">
+              {canArchive ? (
+                <button
+                  type="button"
+                  onClick={handleArchive}
+                  disabled={archiving}
+                  className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {archiving ? t("common.saving") : t("audioBriefing.archive", "アーカイブ")}
+                </button>
+              ) : null}
+              {canUnarchive ? (
+                <button
+                  type="button"
+                  onClick={handleUnarchive}
+                  disabled={unarchiving}
+                  className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {unarchiving ? t("common.saving") : t("audioBriefing.unarchive", "公開中に戻す")}
+                </button>
+              ) : null}
               {canResume ? (
                 <button
                   type="button"

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/middleware"
+	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -51,17 +52,35 @@ func (h *AudioBriefingsHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := middleware.GetUserID(r)
 	limit := 24
+	tab := normalizeAudioBriefingListTabParam(r.URL.Query().Get("tab"))
 	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil {
 			limit = parsed
 		}
 	}
-	rows, err := h.repo.ListJobsByUser(r.Context(), userID, limit)
+	fetchLimit := limit * 4
+	if fetchLimit < 60 {
+		fetchLimit = 60
+	}
+	if fetchLimit > 200 {
+		fetchLimit = 200
+	}
+	rows, err := h.repo.ListJobsByUser(r.Context(), userID, fetchLimit)
 	if err != nil {
 		writeRepoError(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{"items": rows})
+	filtered := make([]model.AudioBriefingJob, 0, limit)
+	for _, row := range rows {
+		if !service.AudioBriefingListTabMatches(&row, tab) {
+			continue
+		}
+		filtered = append(filtered, row)
+		if len(filtered) >= limit {
+			break
+		}
+	}
+	writeJSON(w, map[string]any{"items": filtered})
 }
 
 func (h *AudioBriefingsHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -169,6 +188,14 @@ func (h *AudioBriefingsHandler) Resume(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, payload)
 }
 
+func (h *AudioBriefingsHandler) Archive(w http.ResponseWriter, r *http.Request) {
+	h.updateArchiveStatus(w, r, "archived")
+}
+
+func (h *AudioBriefingsHandler) Unarchive(w http.ResponseWriter, r *http.Request) {
+	h.updateArchiveStatus(w, r, "active")
+}
+
 func (h *AudioBriefingsHandler) enqueueRun(userID, jobID, trigger string) error {
 	if h.eventPublisher == nil {
 		return nil
@@ -248,13 +275,78 @@ func (h *AudioBriefingsHandler) loadDetail(ctx context.Context, userID, jobID st
 	}
 	audioURL := resolvePlayableAudioURL(ctx, h.worker, job.R2StorageBucket, job.R2AudioObjectKey)
 	return map[string]any{
-		"job":            job,
-		"items":          items,
-		"chunks":         chunks,
-		"audio_url":      audioURL,
-		"delete_allowed": service.AudioBriefingDeleteAllowed(job),
-		"resume_allowed": service.AudioBriefingResumeAllowed(job),
+		"job":               job,
+		"items":             items,
+		"chunks":            chunks,
+		"audio_url":         audioURL,
+		"delete_allowed":    service.AudioBriefingDeleteAllowed(job),
+		"resume_allowed":    service.AudioBriefingResumeAllowed(job),
+		"archive_allowed":   service.AudioBriefingArchiveAllowed(job),
+		"unarchive_allowed": service.AudioBriefingUnarchiveAllowed(job),
 	}, nil
+}
+
+func (h *AudioBriefingsHandler) updateArchiveStatus(w http.ResponseWriter, r *http.Request, archiveStatus string) {
+	if h.repo == nil {
+		http.Error(w, "audio briefing unavailable", http.StatusInternalServerError)
+		return
+	}
+	userID := middleware.GetUserID(r)
+	jobID := strings.TrimSpace(chi.URLParam(r, "id"))
+	if jobID == "" {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	job, err := h.repo.GetJobByID(r.Context(), userID, jobID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	switch archiveStatus {
+	case "archived":
+		if !service.AudioBriefingArchiveAllowed(job) {
+			http.Error(w, repository.ErrInvalidState.Error(), http.StatusConflict)
+			return
+		}
+	case "active":
+		if !service.AudioBriefingUnarchiveAllowed(job) {
+			http.Error(w, repository.ErrInvalidState.Error(), http.StatusConflict)
+			return
+		}
+	default:
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if _, err := h.repo.UpdateArchiveStatus(r.Context(), userID, jobID, archiveStatus); err != nil {
+		switch {
+		case errors.Is(err, repository.ErrNotFound):
+			http.Error(w, "not found", http.StatusNotFound)
+		case errors.Is(err, repository.ErrInvalidState), errors.Is(err, repository.ErrConflict):
+			http.Error(w, err.Error(), http.StatusConflict)
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	payload, err := h.loadDetail(r.Context(), userID, jobID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, payload)
+}
+
+func normalizeAudioBriefingListTabParam(value string) string {
+	switch strings.TrimSpace(value) {
+	case "archived":
+		return "archived"
+	case "pending":
+		return "pending"
+	case "storage":
+		return "storage"
+	default:
+		return "published"
+	}
 }
 
 func resolvePlayableAudioURL(ctx context.Context, worker *service.WorkerClient, bucket string, objectKey *string) *string {

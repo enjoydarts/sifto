@@ -74,6 +74,9 @@ func AudioBriefingJobIsPodcastEligible(job *model.AudioBriefingJob, now time.Tim
 	if job == nil || job.PublishedAt == nil {
 		return false
 	}
+	if NormalizeAudioBriefingArchiveStatus(job.ArchiveStatus) != model.AudioBriefingArchiveStatusActive {
+		return false
+	}
 	if strings.TrimSpace(ptrString(job.PodcastPublicObjectKey)) == "" {
 		return false
 	}

@@ -1244,6 +1244,7 @@ export interface AudioBriefingJob {
   slot_key: string;
   persona: string;
   status: string;
+  archive_status: "active" | "archived" | string;
   source_item_count: number;
   reused_item_count: number;
   script_char_count: number;
@@ -1294,6 +1295,8 @@ export interface AudioBriefingDetailResponse {
   audio_url?: string | null;
   delete_allowed?: boolean;
   resume_allowed?: boolean;
+  archive_allowed?: boolean;
+  unarchive_allowed?: boolean;
 }
 
 export interface ObsidianExportRunResult {
@@ -1956,9 +1959,10 @@ export const api = {
     const qs = q.toString();
     return apiFetch<ProviderModelChangeEvent[]>(`/provider-model-updates${qs ? `?${qs}` : ""}`);
   },
-  getAudioBriefings: (params?: { limit?: number }) => {
+  getAudioBriefings: (params?: { limit?: number; tab?: "published" | "archived" | "pending" | "storage" }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.tab) q.set("tab", params.tab);
     const qs = q.toString();
     return apiFetch<{ items: AudioBriefingJob[] }>(`/audio-briefings${qs ? `?${qs}` : ""}`);
   },
@@ -1969,6 +1973,14 @@ export const api = {
     }),
   resumeAudioBriefing: (id: string) =>
     apiFetch<AudioBriefingDetailResponse>(`/audio-briefings/${id}/resume`, {
+      method: "POST",
+    }),
+  archiveAudioBriefing: (id: string) =>
+    apiFetch<AudioBriefingDetailResponse>(`/audio-briefings/${id}/archive`, {
+      method: "POST",
+    }),
+  unarchiveAudioBriefing: (id: string) =>
+    apiFetch<AudioBriefingDetailResponse>(`/audio-briefings/${id}/unarchive`, {
       method: "POST",
     }),
   deleteAudioBriefing: (id: string) =>

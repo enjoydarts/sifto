@@ -9,6 +9,12 @@ import { useToast } from "@/components/toast-provider";
 import { PageHeader } from "@/components/ui/page-header";
 import { api, AudioBriefingJob } from "@/lib/api";
 
+type AudioBriefingTab = "published" | "archived" | "pending" | "storage";
+
+async function fetchAudioBriefings(tab: AudioBriefingTab) {
+  return api.getAudioBriefings({ limit: 30, tab });
+}
+
 function formatDateTime(value: string | null | undefined, locale: string) {
   if (!value) return "—";
   const date = new Date(value);
@@ -60,14 +66,17 @@ function statusTone(status: string) {
 export default function AudioBriefingsPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
+  const [currentTab, setCurrentTab] = useState<AudioBriefingTab>("published");
   const [items, setItems] = useState<AudioBriefingJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [actioningId, setActioningId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
+    setLoading(true);
     try {
-      const resp = await api.getAudioBriefings({ limit: 30 });
+      const resp = await fetchAudioBriefings(currentTab);
       setItems(resp.items ?? []);
       setError(null);
     } catch (e) {
@@ -78,8 +87,21 @@ export default function AudioBriefingsPage() {
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    async function loadForTab() {
+      setLoading(true);
+      try {
+        const resp = await fetchAudioBriefings(currentTab);
+        setItems(resp.items ?? []);
+        setError(null);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void loadForTab();
+  }, [currentTab]);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -90,16 +112,46 @@ export default function AudioBriefingsPage() {
       } else {
         showToast(t("audioBriefing.toast.generated", "エピソード生成を開始しました"), "success");
       }
-      setItems((prev) => {
-        const next = [resp.job, ...prev.filter((item) => item.id !== resp.job.id)];
-        return next;
-      });
+      await load();
     } catch (e) {
       showToast(String(e), "error");
     } finally {
       setGenerating(false);
     }
   }
+
+  async function handleArchive(id: string) {
+    setActioningId(id);
+    try {
+      await api.archiveAudioBriefing(id);
+      showToast(t("audioBriefing.toast.archived", "アーカイブしました"), "success");
+      await load();
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setActioningId(null);
+    }
+  }
+
+  async function handleUnarchive(id: string) {
+    setActioningId(id);
+    try {
+      await api.unarchiveAudioBriefing(id);
+      showToast(t("audioBriefing.toast.unarchived", "公開中に戻しました"), "success");
+      await load();
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setActioningId(null);
+    }
+  }
+
+  const tabs: Array<{ key: AudioBriefingTab; label: string }> = [
+    { key: "published", label: t("audioBriefing.tabs.published", "公開中") },
+    { key: "archived", label: t("audioBriefing.tabs.archived", "アーカイブ") },
+    { key: "pending", label: t("audioBriefing.tabs.pending", "未処理") },
+    { key: "storage", label: t("audioBriefing.tabs.storage", "長期保管") },
+  ];
 
   return (
     <PageTransition>
@@ -113,7 +165,7 @@ export default function AudioBriefingsPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={handleGenerate}
+                onClick={() => void handleGenerate()}
                 disabled={generating}
                 className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -129,23 +181,42 @@ export default function AudioBriefingsPage() {
           }
         />
 
+        <div className="flex flex-wrap gap-2">
+          {tabs.map((tab) => {
+            const active = tab.key === currentTab;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setCurrentTab(tab.key)}
+                className={`inline-flex min-h-10 items-center rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+                  active
+                    ? "border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                    : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
         {loading ? <p className="text-sm text-[var(--color-editorial-ink-soft)]">{t("common.loading")}</p> : null}
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         {!loading && !error && items.length === 0 ? (
           <section className="surface-editorial rounded-[28px] px-5 py-5 text-sm text-[var(--color-editorial-ink-soft)]">
-            {t("audioBriefing.empty", "まだエピソードがありません。")}
+            {t("audioBriefing.emptyTab", "このタブにはまだエピソードがありません。")}
           </section>
         ) : null}
 
         <div className="grid gap-4">
           {items.map((item) => (
-            <Link
+            <article
               key={item.id}
-              href={`/audio-briefings/${item.id}`}
               className="rounded-[28px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.78)] p-5 shadow-[var(--shadow-card)] transition-colors hover:bg-[rgba(255,253,249,0.96)]"
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div className="min-w-0 flex-1">
+                <Link href={`/audio-briefings/${item.id}`} className="min-w-0 flex-1">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
                     {formatSlotLabel(item, locale, t("audioBriefing.manualRun", "手動実行"))}
                   </div>
@@ -163,12 +234,35 @@ export default function AudioBriefingsPage() {
                       {t("audioBriefing.failureReason", "Failure")}: {item.error_message}
                     </p>
                   ) : null}
+                </Link>
+
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <span className={`rounded-full px-3 py-2 text-xs font-semibold ${statusTone(item.status)}`}>
+                    {t(`audioBriefing.status.${item.status}`, item.status)}
+                  </span>
+                  {currentTab === "published" ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleArchive(item.id)}
+                      disabled={actioningId === item.id}
+                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {actioningId === item.id ? t("common.saving") : t("audioBriefing.archive", "アーカイブ")}
+                    </button>
+                  ) : null}
+                  {currentTab === "archived" ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleUnarchive(item.id)}
+                      disabled={actioningId === item.id}
+                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {actioningId === item.id ? t("common.saving") : t("audioBriefing.unarchive", "公開中に戻す")}
+                    </button>
+                  ) : null}
                 </div>
-                <span className={`shrink-0 rounded-full px-3 py-2 text-xs font-semibold ${statusTone(item.status)}`}>
-                  {t(`audioBriefing.status.${item.status}`, item.status)}
-                </span>
               </div>
-            </Link>
+            </article>
           ))}
         </div>
       </div>

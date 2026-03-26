@@ -263,6 +263,8 @@ _NAVIGATOR_VERBOSITY_INSTRUCTIONS = {
     "expansive": "ややふくらみを持たせてよい。比喩や余韻を少し許しつつ、散らからないようにする。",
 }
 
+AUDIO_BRIEFING_CHARS_PER_MINUTE = 650
+
 
 def resolve_navigator_persona_profile(persona: str, variant: str) -> tuple[str, dict]:
     persona_key = str(persona or "editor").strip() or "editor"
@@ -682,7 +684,7 @@ def build_audio_briefing_script_task(
     intro_context: dict | None = None,
     target_duration_minutes: int = 20,
     target_chars: int = 12000,
-    chars_per_minute: int = 700,
+    chars_per_minute: int = AUDIO_BRIEFING_CHARS_PER_MINUTE,
     include_opening: bool = True,
     include_overall_summary: bool = True,
     include_article_segments: bool = True,
@@ -692,7 +694,7 @@ def build_audio_briefing_script_task(
     persona_key, briefing_profile = resolve_navigator_persona_profile(persona, "briefing")
     _, item_profile = resolve_navigator_persona_profile(persona, "item")
     trimmed_articles = articles[:30]
-    chars_per_minute = max(int(chars_per_minute or 700), 1)
+    chars_per_minute = max(int(chars_per_minute or AUDIO_BRIEFING_CHARS_PER_MINUTE), 1)
     target_duration_minutes = max(int(target_duration_minutes or 20), 1)
     target_chars = max(int(target_chars or 0), chars_per_minute)
     opening_budget, summary_budget, ending_budget, article_budget = _audio_briefing_script_budgets(
@@ -935,7 +937,7 @@ def is_audio_briefing_script_retryable_validation_error(exc: Exception) -> bool:
 
 
 def _audio_briefing_script_budgets(target_chars: int, article_count: int) -> tuple[int, int, int, int]:
-    target_chars = max(int(target_chars or 0), 700)
+    target_chars = max(int(target_chars or 0), AUDIO_BRIEFING_CHARS_PER_MINUTE)
     opening_budget = max(min(round(target_chars * 0.15), 2200), 420)
     summary_budget = max(min(round(target_chars * 0.28), 4600), 1500)
     ending_budget = max(min(round(target_chars * 0.13), 1800), 380)

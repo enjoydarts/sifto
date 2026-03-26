@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from app.services.feed_task_common import (
     AUDIO_BRIEFING_SCRIPT_SCHEMA,
+    AUDIO_BRIEFING_CHARS_PER_MINUTE,
     ASK_NAVIGATOR_SCHEMA,
     BRIEFING_NAVIGATOR_SCHEMA,
     SOURCE_NAVIGATOR_SCHEMA,
@@ -200,7 +201,7 @@ class FeedTaskCommonTests(unittest.TestCase):
             },
             target_duration_minutes=20,
             target_chars=14000,
-            chars_per_minute=700,
+            chars_per_minute=AUDIO_BRIEFING_CHARS_PER_MINUTE,
         )
 
         prompt = task["prompt"]
@@ -221,7 +222,7 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("別ペルソナの名前・肩書き・口調", prompt)
         self.assertIn("目標尺: 約 20 分", prompt)
         self.assertIn("今回返すセクションの目標文字数: 約 14000 文字", prompt)
-        self.assertIn("1分あたり 700 文字", prompt)
+        self.assertIn(f"1分あたり {AUDIO_BRIEFING_CHARS_PER_MINUTE} 文字", prompt)
         self.assertIn("opening は 7〜11文", prompt)
         self.assertIn("opening は番組のオープニングトークとして書く", prompt)
         self.assertIn("挨拶、時間帯や季節感、軽い日常雑談", prompt)

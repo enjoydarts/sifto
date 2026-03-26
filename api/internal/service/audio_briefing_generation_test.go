@@ -175,9 +175,10 @@ func TestBuildAudioBriefingDraftUsesClosingEndingFallback(t *testing.T) {
 	}
 }
 
-func TestAudioBriefingTargetCharsUsesSevenHundredCharsPerMinute(t *testing.T) {
-	if got := AudioBriefingTargetChars(20); got != 14000 {
-		t.Fatalf("AudioBriefingTargetChars(20) = %d, want 14000", got)
+func TestAudioBriefingTargetCharsUsesSixHundredFiftyCharsPerMinute(t *testing.T) {
+	want := 20 * audioBriefingCharsPerMinute
+	if got := AudioBriefingTargetChars(20); got != want {
+		t.Fatalf("AudioBriefingTargetChars(20) = %d, want %d", got, want)
 	}
 }
 

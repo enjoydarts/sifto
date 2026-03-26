@@ -2,6 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
+from app.services.feed_task_common import AUDIO_BRIEFING_CHARS_PER_MINUTE
 from app.services.gemini_service import generate_audio_briefing_script
 
 
@@ -26,7 +27,7 @@ class GeminiAudioBriefingContextCacheTests(unittest.TestCase):
                 intro_context={},
                 target_duration_minutes=20,
                 target_chars=14000,
-                chars_per_minute=700,
+                chars_per_minute=AUDIO_BRIEFING_CHARS_PER_MINUTE,
                 include_opening=True,
                 include_overall_summary=True,
                 include_article_segments=False,

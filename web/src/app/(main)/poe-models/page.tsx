@@ -127,8 +127,8 @@ export default function PoeModelsPage() {
   const models = useMemo(() => (Array.isArray(data?.models) ? data?.models : []), [data?.models]);
   const removedModels = useMemo(() => (Array.isArray(data?.removed_models) ? data?.removed_models : []), [data?.removed_models]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     try {
       const next = await api.getPoeModels();
       setData(next);
@@ -136,7 +136,7 @@ export default function PoeModelsPage() {
     } catch (e) {
       setError(String(e));
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, []);
 
@@ -146,7 +146,18 @@ export default function PoeModelsPage() {
 
   useEffect(() => {
     if (data?.latest_run?.status !== "running" || data.latest_run.trigger_type !== "manual") return;
-    const timer = window.setInterval(load, 3000);
+    const timer = window.setInterval(async () => {
+      try {
+        const status = await api.getPoeSyncStatus();
+        if (status.run) {
+          setData((current) => (current ? { ...current, latest_run: status.run } : current));
+          return;
+        }
+        await load({ silent: true });
+      } catch (e) {
+        setError(String(e));
+      }
+    }, 3000);
     return () => window.clearInterval(timer);
   }, [data?.latest_run, load]);
 

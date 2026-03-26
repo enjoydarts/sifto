@@ -241,21 +241,7 @@ func (r *AudioBriefingRepo) ListPodcastPublishedJobsByUser(ctx context.Context, 
 	if limit > 100 {
 		limit = 100
 	}
-	rows, err := r.db.Query(ctx, `
-		SELECT id, user_id, slot_started_at_jst, slot_key, persona, status, archive_status,
-		       source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
-		       title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
-		       error_code, error_message, published_at, failed_at, created_at, updated_at
-		FROM audio_briefing_jobs
-		WHERE user_id = $1
-		  AND status = 'published'
-		  AND archive_status = 'active'
-		  AND published_at IS NOT NULL
-		  AND published_at >= $2
-		  AND podcast_public_object_key IS NOT NULL
-		ORDER BY published_at DESC, created_at DESC
-		LIMIT $3
-	`, userID, publishedAfter, limit)
+	rows, err := r.db.Query(ctx, listPodcastPublishedJobsByUserQuery(), userID, publishedAfter, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -270,6 +256,24 @@ func (r *AudioBriefingRepo) ListPodcastPublishedJobsByUser(ctx context.Context, 
 		out = append(out, row)
 	}
 	return out, rows.Err()
+}
+
+func listPodcastPublishedJobsByUserQuery() string {
+	return `
+		SELECT id, user_id, slot_started_at_jst, slot_key, persona, status, archive_status,
+		       source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		       title, r2_audio_object_key, r2_manifest_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
+		       error_code, error_message, published_at, failed_at, created_at, updated_at
+		FROM audio_briefing_jobs
+		WHERE user_id = $1
+		  AND status = 'published'
+		  AND archive_status = 'active'
+		  AND published_at IS NOT NULL
+		  AND published_at >= $2
+		  AND podcast_public_object_key IS NOT NULL
+		ORDER BY created_at DESC, id DESC
+		LIMIT $3
+	`
 }
 
 func (r *AudioBriefingRepo) GetJobByID(ctx context.Context, userID, jobID string) (*model.AudioBriefingJob, error) {

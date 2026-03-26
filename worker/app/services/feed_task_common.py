@@ -703,6 +703,10 @@ def build_audio_briefing_script_task(
     response_properties: list[str] = []
     if include_opening:
         section_rules.append(f"- opening は 7〜11文で、時間帯に合う自然な導入にする。短く済ませず、長尺回ではしっかり厚みを出す。目安は約 {opening_budget} 文字以内")
+        section_rules.append("- opening は番組のオープニングトークとして書く。挨拶、時間帯や季節感、軽い日常雑談、これから番組が始まる雰囲気づくりを中心にする")
+        section_rules.append("- opening では個別記事の紹介を始めない。記事内容の解説、要約、論点整理、最初の1本への導入を書かない")
+        section_rules.append("- opening では articles 内の固有名詞、企業名、製品名、出来事、具体的ニュース内容に触れない")
+        section_rules.append("- opening の軽い雑談は、天気感、気温、季節の空気、曜日感、通勤や休憩などの生活導線にとどめ、ニュースの話題へ滑らせない")
         target_lines.append(f"- opening の目安: 約 {opening_budget} 文字以内")
         response_properties.append('  "opening": "導入"')
     if include_overall_summary:
@@ -761,6 +765,9 @@ def build_audio_briefing_script_task(
 - 各記事では、summary の言い換えだけで終わらせず、このペルソナなら何に反応するかを話す
 - 第一印象、良いと感じる点、引っかかる点、今読む理由のうち2〜3個が自然ににじむようにする
 - 客観的な無味乾燥レビューではなく、このペルソナの主観で語る
+- opening は番組の導入トークとして扱い、記事本編とは役割を分ける
+- opening では挨拶、時候や時間帯の話、軽い日常雑談、聞き方のガイドを優先する
+- opening では個別記事の内容、固有名詞、具体的な出来事、記事の解説や要約を書かない
 - 他のキャラクター名を名乗らない。別ペルソナの名前・肩書き・口調を混ぜない
 - 自分を名乗るなら、必ず {briefing_profile["name"]} とだけ名乗る
 - 一人称は {briefing_profile["first_person"]} を基本にし、別の一人称へぶれない

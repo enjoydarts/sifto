@@ -166,9 +166,13 @@ func (s *PodcastFeedService) buildItem(ctx context.Context, userID string, job m
 			IsPermaLink: "false",
 			Value:       job.ID,
 		},
-		PubDate:   job.PublishedAt.In(timeutil.JST).Format(time.RFC1123Z),
+		PubDate:   podcastItemPubTime(job).In(timeutil.JST).Format(time.RFC1123Z),
 		Enclosure: podcastRSSEnclosure{URL: *audioURL, Length: sizeBytes, Type: "audio/mpeg"},
 	}, nil
+}
+
+func podcastItemPubTime(job model.AudioBriefingJob) time.Time {
+	return job.CreatedAt
 }
 
 func (s *PodcastFeedService) buildDescription(ctx context.Context, userID, jobID string) (string, error) {

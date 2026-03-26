@@ -4,6 +4,9 @@ import (
 	"encoding/xml"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/enjoydarts/sifto/api/internal/model"
 )
 
 func TestPodcastRSSMarshalsItunesOwnerEmail(t *testing.T) {
@@ -33,5 +36,20 @@ func TestPodcastRSSMarshalsItunesOwnerEmail(t *testing.T) {
 	}
 	if !strings.Contains(got, "<itunes:email>owner@example.com</itunes:email>") {
 		t.Fatalf("rss missing itunes:email: %s", got)
+	}
+}
+
+func TestPodcastItemPubTimeUsesCreatedAt(t *testing.T) {
+	publishedAt := time.Date(2026, 3, 26, 10, 0, 0, 0, time.UTC)
+	createdAt := time.Date(2026, 3, 20, 9, 0, 0, 0, time.UTC)
+	job := model.AudioBriefingJob{
+		PublishedAt: &publishedAt,
+		CreatedAt:   createdAt,
+	}
+
+	got := podcastItemPubTime(job)
+
+	if !got.Equal(createdAt) {
+		t.Fatalf("podcastItemPubTime() = %s, want %s", got, createdAt)
 	}
 }

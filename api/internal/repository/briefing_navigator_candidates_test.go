@@ -44,6 +44,9 @@ func TestBriefingNavigatorCandidatesWindowQueryUsesRandomOrderAndWindowBounds(t 
 	if !strings.Contains(query, "ORDER BY RANDOM()") {
 		t.Fatalf("query must randomize candidate order: %s", query)
 	}
+	if !strings.Contains(query, "COALESCE(i.fetched_at, i.created_at, i.published_at, i.created_at)") {
+		t.Fatalf("query must use fetched_at-first briefing time: %s", query)
+	}
 	if !strings.Contains(query, "make_interval(secs => $2::int)") {
 		t.Fatalf("query must filter by max age: %s", query)
 	}

@@ -108,6 +108,8 @@ var briefingNavigatorCandidateWindows = []briefingNavigatorCandidateWindow{
 	{minAge: 12 * time.Hour, maxAge: 24 * time.Hour},
 }
 
+const briefingEffectiveTimeSQL = "COALESCE(i.fetched_at, i.created_at, i.published_at, i.created_at)"
+
 func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *string, limit int) ([]model.Item, error) {
 	if limit <= 0 {
 		limit = 500
@@ -546,7 +548,7 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 		filterSQL = ` AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '7 days'`
 	default:
 		p.Window = "24h"
-		filterSQL = ` AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '24 hours'`
+		filterSQL = ` AND ` + briefingEffectiveTimeSQL + ` >= NOW() - INTERVAL '24 hours'`
 	}
 	if p.ExcludeRead {
 		filterSQL += ` AND ir.item_id IS NULL`
@@ -710,14 +712,14 @@ func (r *ItemRepo) BriefingClusters24h(ctx context.Context, userID string, limit
 		WHERE s.user_id = $1
 		  AND i.deleted_at IS NULL
 		  AND i.status = 'summarized'
-		  AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '24 hours'
+		  AND `+briefingEffectiveTimeSQL+` >= NOW() - INTERVAL '24 hours'
 		  AND ir.item_id IS NULL
 		  AND NOT EXISTS (
 			SELECT 1 FROM item_laters il
 			WHERE il.user_id = $1
 			  AND il.item_id = i.id
 		  )
-		ORDER BY sm.score DESC NULLS LAST, COALESCE(i.published_at, i.created_at) DESC
+		ORDER BY sm.score DESC NULLS LAST, `+briefingEffectiveTimeSQL+` DESC
 		LIMIT $2`,
 		userID, candidateLimit,
 	)
@@ -748,7 +750,7 @@ func (r *ItemRepo) readingPlanTopics(ctx context.Context, userID string, p Readi
 	case "7d":
 		filterSQL = ` AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '7 days'`
 	default:
-		filterSQL = ` AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '24 hours'`
+		filterSQL = ` AND ` + briefingEffectiveTimeSQL + ` >= NOW() - INTERVAL '24 hours'`
 	}
 	if p.ExcludeRead {
 		filterSQL += ` AND ir.item_id IS NULL`
@@ -852,7 +854,7 @@ func (r *ItemRepo) HighlightItems24h(ctx context.Context, userID string, minScor
 		WHERE s.user_id = $1
 		  AND i.deleted_at IS NULL
 		  AND i.status = 'summarized'
-		  AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '24 hours'
+		  AND `+briefingEffectiveTimeSQL+` >= NOW() - INTERVAL '24 hours'
 		  AND COALESCE(sm.score, 0) >= $2
 		ORDER BY sm.score DESC NULLS LAST, i.created_at DESC
 		LIMIT $3`,
@@ -1000,7 +1002,7 @@ func briefingNavigatorCandidatesWindowQuery(
 		       sm.summary,
 		       COALESCE(sm.topics, '{}'::text[]) AS topics,
 		       sm.score,
-		       COALESCE(i.published_at, i.created_at) AS published_at
+		       ` + briefingEffectiveTimeSQL + ` AS published_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		JOIN item_summaries sm ON sm.item_id = i.id
@@ -1015,12 +1017,12 @@ func briefingNavigatorCandidatesWindowQuery(
 			  AND il.item_id = i.id
 		  )
 		  AND NULLIF(BTRIM(sm.summary), '') IS NOT NULL
-		  AND COALESCE(i.published_at, i.created_at) >= NOW() - make_interval(secs => $2::int)`
+		  AND ` + briefingEffectiveTimeSQL + ` >= NOW() - make_interval(secs => $2::int)`
 	args := []any{userID, int(window.maxAge.Seconds())}
 	if window.minAge > 0 {
 		args = append(args, int(window.minAge.Seconds()))
 		query += `
-		  AND COALESCE(i.published_at, i.created_at) < NOW() - make_interval(secs => $3::int)`
+		  AND ` + briefingEffectiveTimeSQL + ` < NOW() - make_interval(secs => $3::int)`
 	}
 	args = append(args, limit)
 	query += `

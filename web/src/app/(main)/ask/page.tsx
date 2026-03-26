@@ -16,10 +16,18 @@ import { useToast } from "@/components/toast-provider";
 const EMPTY: AskResponse | null = null;
 const EMPTY_GOALS: ReadingGoal[] = [];
 const PRESET_KEYS = [
-  "ask.preset.topics",
-  "ask.preset.unread",
+  "ask.preset.topNews",
+  "ask.preset.trending",
+  "ask.preset.bigMoves",
+  "ask.preset.weeklyFlow",
+  "ask.preset.missed",
+  "ask.preset.disagreements",
+  "ask.preset.companies",
   "ask.preset.ai",
-  "ask.preset.followups",
+  "ask.preset.economy",
+  "ask.preset.overseas",
+  "ask.preset.impact",
+  "ask.preset.nextTheme",
 ] as const;
 const ASK_LIMIT = 12;
 const ASK_CITATION_MARKER = /(\[\d+\])/g;

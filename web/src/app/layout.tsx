@@ -1,7 +1,22 @@
 import type { Metadata, Viewport } from "next";
+import { Sawarabi_Gothic, Sawarabi_Mincho } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+
+const sawarabiGothic = Sawarabi_Gothic({
+  weight: "400",
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-sans-jp",
+});
+
+const sawarabiMincho = Sawarabi_Mincho({
+  weight: "400",
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-serif-jp",
+});
 
 export const metadata: Metadata = {
   title: "Sifto",
@@ -30,15 +45,9 @@ export default function RootLayout({
 
   return (
     <html lang="ja">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Sawarabi+Gothic:wght@400&family=Sawarabi+Mincho:wght@400&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="min-h-screen bg-[var(--background)] font-sans text-[var(--foreground)] antialiased">
+      <body
+        className={`${sawarabiGothic.variable} ${sawarabiMincho.variable} min-h-screen bg-[var(--background)] font-sans text-[var(--foreground)] antialiased`}
+      >
         <Script
           id="onesignal-sdk"
           src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"

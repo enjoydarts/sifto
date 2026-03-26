@@ -66,8 +66,8 @@ func (c *OneSignalClient) SendToSubscriptionID(ctx context.Context, subscription
 	if targetURL = strings.TrimSpace(targetURL); targetURL != "" {
 		payload["url"] = targetURL
 	}
-	if len(data) > 0 {
-		payload["data"] = data
+	if payloadData := oneSignalPayloadData(data, targetURL); len(payloadData) > 0 {
+		payload["data"] = payloadData
 	}
 	reqBody, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/notifications", bytes.NewReader(reqBody))
@@ -122,8 +122,8 @@ func (c *OneSignalClient) SendToExternalID(ctx context.Context, externalID, titl
 	if targetURL = strings.TrimSpace(targetURL); targetURL != "" {
 		payload["url"] = targetURL
 	}
-	if len(data) > 0 {
-		payload["data"] = data
+	if payloadData := oneSignalPayloadData(data, targetURL); len(payloadData) > 0 {
+		payload["data"] = payloadData
 	}
 	reqBody, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/notifications", bytes.NewReader(reqBody))
@@ -147,4 +147,20 @@ func (c *OneSignalClient) SendToExternalID(ctx context.Context, externalID, titl
 		return nil, fmt.Errorf("onesignal: status=%d id=%s errors=%v", resp.StatusCode, res.ID, res.Errors)
 	}
 	return &OneSignalSendResult{ID: res.ID, Recipients: res.Recipients}, nil
+}
+
+func oneSignalPayloadData(data map[string]any, targetURL string) map[string]any {
+	if len(data) == 0 && targetURL == "" {
+		return nil
+	}
+	out := make(map[string]any, len(data)+1)
+	for k, v := range data {
+		out[k] = v
+	}
+	if targetURL != "" {
+		if _, exists := out["target_url"]; !exists {
+			out["target_url"] = targetURL
+		}
+	}
+	return out
 }

@@ -227,6 +227,7 @@ AIVIS_SYNTHESIS_GATE = AivisRedisExecutionGate(
     lease_sec=_AIVIS_EXECUTION_LEASE_SEC,
     fallback=AIVIS_PROCESS_EXECUTION_GATE,
 )
+AIVIS_TRAILING_SILENCE_SECONDS = 1.5
 
 _AIVIS_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
@@ -282,7 +283,7 @@ def build_aivis_payload(
         "tempo_dynamics": max(0.0, tempo_dynamics),
         "volume": max(0.0, 1.0 + volume_gain),
         "leading_silence_seconds": 0,
-        "trailing_silence_seconds": 0.1,
+        "trailing_silence_seconds": AIVIS_TRAILING_SILENCE_SECONDS,
         "line_break_silence_seconds": max(0.0, line_break_silence_seconds),
         "output_format": "mp3",
     }

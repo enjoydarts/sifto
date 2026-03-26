@@ -12,12 +12,12 @@ function siftoResolveNotificationTargetURL(notification) {
     try {
       const url = new URL(candidate, self.location.origin);
       if (url.origin !== self.location.origin) continue;
-      return `${url.pathname}${url.search}${url.hash}`;
+      return url.toString();
     } catch {
       // ignore malformed urls
     }
   }
-  return "";
+  return self.location.origin + "/";
 }
 
 async function siftoOpenNotificationTarget(targetURL) {
@@ -27,7 +27,8 @@ async function siftoOpenNotificationTarget(targetURL) {
     try {
       const currentURL = new URL(client.url);
       if (currentURL.origin !== self.location.origin) continue;
-      if ("navigate" in client) {
+      await client.focus();
+      if (client.url !== targetURL && "navigate" in client) {
         await client.navigate(targetURL);
       }
       await client.focus();
@@ -41,7 +42,6 @@ async function siftoOpenNotificationTarget(targetURL) {
 
 self.addEventListener("notificationclick", (event) => {
   const targetURL = siftoResolveNotificationTargetURL(event.notification);
-  if (!targetURL) return;
   event.stopImmediatePropagation();
   event.notification.close();
   event.waitUntil(siftoOpenNotificationTarget(targetURL));

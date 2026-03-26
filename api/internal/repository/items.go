@@ -116,7 +116,7 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 		limit = 5000
 	}
 	query := `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, COALESCE(sm.summary, i.content_text) AS content_text, i.status, i.processing_error,
+		SELECT i.id, i.source_id, s.title AS source_title, i.url, i.title, i.thumbnail_url, COALESCE(sm.summary, i.content_text) AS content_text, i.status, i.processing_error,
 		       fc.final_result AS facts_check_result,
 		       sfc.final_result AS faithfulness_result,
 		       (ir.item_id IS NOT NULL) AS is_read,
@@ -158,7 +158,7 @@ func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *st
 	var items []model.Item
 	for rows.Next() {
 		var it model.Item
-		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
+		if err := rows.Scan(&it.ID, &it.SourceID, &it.SourceTitle, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
 			&it.Status, &it.ProcessingError, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -257,7 +257,7 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, COALESCE(sm.summary, i.content_text) AS content_text, i.status, i.processing_error,
+		SELECT i.id, i.source_id, s.title AS source_title, i.url, i.title, i.thumbnail_url, COALESCE(sm.summary, i.content_text) AS content_text, i.status, i.processing_error,
 		       fc.final_result AS facts_check_result,
 		       sfc.final_result AS faithfulness_result,
 		       (ir.item_id IS NOT NULL) AS is_read,
@@ -571,7 +571,7 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 	}
 
 	rows, err := r.db.Query(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status, i.processing_error,
+		SELECT i.id, i.source_id, s.title AS source_title, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status, i.processing_error,
 		       fc.final_result AS facts_check_result,
 		       sfc.final_result AS faithfulness_result,
 		       (ir.item_id IS NOT NULL) AS is_read,
@@ -692,7 +692,7 @@ func (r *ItemRepo) BriefingClusters24h(ctx context.Context, userID string, limit
 	}
 	const candidateLimit = 800
 	rows, err := r.db.Query(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status, i.processing_error,
+		SELECT i.id, i.source_id, s.title AS source_title, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status, i.processing_error,
 		       fc.final_result AS facts_check_result,
 		       sfc.final_result AS faithfulness_result,
 		       (ir.item_id IS NOT NULL) AS is_read,
@@ -834,7 +834,7 @@ func (r *ItemRepo) HighlightItems24h(ctx context.Context, userID string, minScor
 		limit = 30
 	}
 	rows, err := r.db.Query(ctx, `
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status, i.processing_error,
+		SELECT i.id, i.source_id, s.title AS source_title, i.url, i.title, i.thumbnail_url, NULL::text AS content_text, i.status, i.processing_error,
 		       fc.final_result AS facts_check_result,
 		       sfc.final_result AS faithfulness_result,
 		       (ir.item_id IS NOT NULL) AS is_read,
@@ -1470,7 +1470,7 @@ func scanItems(rows itemRowScanner) ([]model.Item, error) {
 	var items []model.Item
 	for rows.Next() {
 		var it model.Item
-		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
+		if err := rows.Scan(&it.ID, &it.SourceID, &it.SourceTitle, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
 			&it.Status, &it.ProcessingError, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
@@ -1485,7 +1485,7 @@ func scanItemsWithBreakdown(rows itemRowScanner) ([]model.Item, error) {
 	var items []model.Item
 	for rows.Next() {
 		var it model.Item
-		if err := rows.Scan(&it.ID, &it.SourceID, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
+		if err := rows.Scan(&it.ID, &it.SourceID, &it.SourceTitle, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
 			&it.Status, &it.ProcessingError, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryScoreBreakdown, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}

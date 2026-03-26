@@ -573,6 +573,7 @@ export default function SummaryAudioPlayerPage() {
                 <div className="space-y-2">
                   {playbackQueue.slice(0, PLAYBACK_QUEUE_VISIBLE_COUNT).map((item, index) => {
                     const isActive = activeItemID === item.id;
+                    const queueSourceTitle = item.source_title || t("summaryAudio.sourceUnknown");
                     return (
                       <button
                         key={item.id}
@@ -596,7 +597,7 @@ export default function SummaryAudioPlayerPage() {
                           <span className="mt-1 text-sm font-semibold text-editorial-strong">
                             {item.translated_title || item.title || t("summaryAudio.untitled")}
                           </span>
-                          <span className="mt-1 text-xs text-editorial-muted">{item.source_title || t("summaryAudio.sourceUnknown")}</span>
+                          <span className="mt-1 text-xs text-editorial-muted">{queueSourceTitle}</span>
                         </div>
                         <span
                           className={`inline-flex size-9 shrink-0 items-center justify-center rounded-full border transition ${

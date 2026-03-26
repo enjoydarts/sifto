@@ -751,7 +751,7 @@ def compose_digest_cluster_draft(
         task["prompt"],
         model=model,
         api_key=api_key,
-        max_output_tokens=900,
+        max_output_tokens=1500,
         system_instruction=task["system_instruction"],
         response_schema=task["schema"],
     )

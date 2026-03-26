@@ -889,7 +889,7 @@ def compose_digest_cluster_draft(
         task["prompt"],
         str(model or _digest_model),
         _digest_model_fallback,
-        max_tokens=1200,
+        max_tokens=1500,
         api_key=api_key,
         system_prompt=task["system_instruction"],
         user_prompt=task["prompt"],

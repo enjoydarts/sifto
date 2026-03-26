@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -52,6 +52,9 @@ export default function SummaryAudioPlayerPage() {
   const pendingPrefetchRef = useRef<PendingPrefetch | null>(null);
   const markedReadIDsRef = useRef<Set<string>>(new Set());
   const prefetchingItemIDRef = useRef<string | null>(null);
+  const readProgressSecRef = useRef<Map<string, number>>(new Map());
+  const readProgressLastStartedAtRef = useRef<number | null>(null);
+  const readProgressActiveItemIDRef = useRef<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [activeItemID, setActiveItemID] = useState<string | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
@@ -118,6 +121,9 @@ export default function SummaryAudioPlayerPage() {
       prefetchedAudioRef.current = null;
     }
     pendingPrefetchRef.current = null;
+    readProgressSecRef.current = new Map();
+    readProgressLastStartedAtRef.current = null;
+    readProgressActiveItemIDRef.current = null;
   }, [queueKind]);
 
   useEffect(() => {
@@ -131,7 +137,7 @@ export default function SummaryAudioPlayerPage() {
     };
   }, []);
 
-  async function markCurrentItemRead(itemID: string) {
+  const markCurrentItemRead = useCallback(async (itemID: string) => {
     if (!itemID || markedReadIDsRef.current.has(itemID)) {
       return;
     }
@@ -143,7 +149,34 @@ export default function SummaryAudioPlayerPage() {
     } catch {
       return;
     }
+  }, [queryClient]);
+
+  function resetReadProgressForItem(itemID: string | null) {
+    if (!itemID) {
+      return;
+    }
+    readProgressSecRef.current.delete(itemID);
+    if (readProgressActiveItemIDRef.current === itemID) {
+      readProgressActiveItemIDRef.current = null;
+      readProgressLastStartedAtRef.current = null;
+    }
   }
+
+  const flushReadProgress = useCallback(async (itemID: string | null) => {
+    if (!itemID || markedReadIDsRef.current.has(itemID)) {
+      return;
+    }
+    if (readProgressActiveItemIDRef.current !== itemID || readProgressLastStartedAtRef.current == null) {
+      return;
+    }
+    const elapsedSec = Math.max(0, (Date.now() - readProgressLastStartedAtRef.current) / 1000);
+    const nextTotalSec = (readProgressSecRef.current.get(itemID) ?? 0) + elapsedSec;
+    readProgressSecRef.current.set(itemID, nextTotalSec);
+    readProgressLastStartedAtRef.current = null;
+    if (nextTotalSec >= 30) {
+      await markCurrentItemRead(itemID);
+    }
+  }, [markCurrentItemRead]);
 
   async function synthesizeItem(itemID: string): Promise<PreparedAudio> {
     const response = await api.synthesizeSummaryAudio(itemID);
@@ -271,6 +304,7 @@ export default function SummaryAudioPlayerPage() {
     if (!audio) {
       return;
     }
+    void flushReadProgress(activeItemID);
     audio.pause();
     audio.currentTime = 0;
     setPositionSec(0);
@@ -278,6 +312,7 @@ export default function SummaryAudioPlayerPage() {
   }
 
   function handleFinish() {
+    void flushReadProgress(activeItemID);
     handleStop();
     setIsFinished(true);
     if (currentAudioRef.current) {
@@ -289,6 +324,8 @@ export default function SummaryAudioPlayerPage() {
       prefetchedAudioRef.current = null;
     }
     pendingPrefetchRef.current = null;
+    readProgressActiveItemIDRef.current = null;
+    readProgressLastStartedAtRef.current = null;
     if (audioRef.current) {
       audioRef.current.removeAttribute("src");
       audioRef.current.load();
@@ -316,14 +353,20 @@ export default function SummaryAudioPlayerPage() {
     }
     const onPlay = () => {
       setIsPlaying(true);
-      if (activeItemID) {
-        void markReadHandlerRef.current?.(activeItemID);
+      if (activeItemID && !markedReadIDsRef.current.has(activeItemID)) {
+        readProgressActiveItemIDRef.current = activeItemID;
+        readProgressLastStartedAtRef.current = Date.now();
       }
     };
-    const onPause = () => setIsPlaying(false);
+    const onPause = () => {
+      setIsPlaying(false);
+      void flushReadProgress(activeItemID);
+    };
     const onTimeUpdate = () => setPositionSec(audio.currentTime || 0);
     const onEnded = () => {
+      void flushReadProgress(activeItemID);
       setIsPlaying(false);
+      resetReadProgressForItem(activeItemID);
       void skipHandlerRef.current?.();
     };
     audio.addEventListener("play", onPlay);
@@ -331,12 +374,13 @@ export default function SummaryAudioPlayerPage() {
     audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("ended", onEnded);
     return () => {
+      void flushReadProgress(activeItemID);
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [activeItemID, playbackIndex, nextItem?.id]);
+  }, [activeItemID, flushReadProgress, playbackIndex, nextItem?.id, queueItems.length]);
 
   const currentDetail = currentItemDetailQuery.data ?? null;
   const summaryText = currentDetail?.summary?.summary ?? "";

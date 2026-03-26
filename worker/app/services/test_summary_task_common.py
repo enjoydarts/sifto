@@ -29,6 +29,17 @@ class SummaryTaskCommonTests(unittest.TestCase):
         self.assertIn("短文を切って並べるのではなく", prompt)
         self.assertIn("必要に応じて主語や関係を補い", prompt)
 
+    def test_build_summary_task_fallback_uses_safe_translated_title_example(self):
+        task = build_summary_task(
+            "OpenAI updates model lineup",
+            ["OpenAI announced a new lineup."],
+            source_text_chars=1200,
+        )
+
+        prompt = task["prompt"]
+        self.assertIn('"translated_title": ""', prompt)
+        self.assertNotIn("英語タイトルの場合のみ日本語訳（日本語記事は空文字）", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

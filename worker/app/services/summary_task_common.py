@@ -69,7 +69,7 @@ def build_summary_task(title: str | None, facts: list[str], source_text_chars: i
 {{
   "summary": "要約",
   "topics": ["トピック1", "トピック2"],
-  "translated_title": "英語タイトルの場合のみ日本語訳（日本語記事は空文字）",
+  "translated_title": "",
   "score_breakdown": {{
     "importance": 0.78,
     "novelty": 0.54,

@@ -649,6 +649,8 @@ export const enDict: Dict = {
   "llmAnalysis.tokenIntensityChart": "Token Intensity per Call",
   "llmAnalysis.efficiencyScatter": "Token Intensity vs Cost Scatter",
   "llmAnalysis.efficiencyScatterHelp": "Rows toward the upper-right are heavier per call. Larger bubbles mean more calls. Click a point to drill down.",
+  "llmAnalysis.costCallsScatter": "Cost per Call vs Call Volume Scatter",
+  "llmAnalysis.costCallsScatterHelp": "Rows toward the upper-right cost more per call and run more often. Larger bubbles mean heavier token intensity per call. Click a point to drill down.",
   "llmAnalysis.rankingTitle": "Purpose Cost-Efficiency Ranking",
   "llmAnalysis.rankingHelp": "Compare cost per call, token intensity, and current-month failure/retry quality for the selected purpose.",
   "llmAnalysis.rankingThreshold": "Showing models with at least 3 calls",

@@ -137,6 +137,15 @@ type RankedModelRow = {
   vs_median_pct: number;
 };
 
+type UsageScatterRow = AnalysisRow & {
+  totalTokensPerCall: number;
+  avgCostPerCall: number;
+  bubbleSize: number;
+  costCallBubbleSize: number;
+  label: string;
+  pricingLabel: string;
+};
+
 type LLMAnalysisSectionID =
   | "overview"
   | "charts"
@@ -144,6 +153,99 @@ type LLMAnalysisSectionID =
   | "quality"
   | "recommend"
   | "details";
+
+function UsageScatterChart({
+  rows,
+  variant,
+  t,
+  onPointClick,
+}: {
+  rows: UsageScatterRow[];
+  variant: "efficiency" | "costCalls";
+  t: (key: string) => string;
+  onPointClick: (row: UsageScatterRow) => void;
+}) {
+  const isEfficiency = variant === "efficiency";
+  return (
+    <div className="h-[24rem] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <ScatterChart margin={{ top: 12, right: 20, left: 8, bottom: 12 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#d9d1c4" />
+          <XAxis
+            type="number"
+            dataKey={isEfficiency ? "totalTokensPerCall" : "calls"}
+            name={isEfficiency ? "Tokens / call" : "Calls"}
+            tick={{ fontSize: 12, fill: "#8f877f" }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v) => fmtNum(Number(v))}
+          />
+          <YAxis
+            type="number"
+            dataKey="avgCostPerCall"
+            name="Cost / call"
+            tick={{ fontSize: 12, fill: "#8f877f" }}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(v) => fmtUSD(Number(v))}
+          />
+          <ZAxis type="number" dataKey={isEfficiency ? "bubbleSize" : "costCallBubbleSize"} range={[80, 460]} />
+          <Tooltip
+            cursor={{ strokeDasharray: "4 4" }}
+            formatter={(value: ChartTooltipValue | undefined, name?: ChartTooltipName) => {
+              if (name === "Cost / call") return [fmtUSD(tooltipValueToNumber(value)), tooltipNameToText(name)];
+              if (name === "Tokens / call" || name === "Calls") return [fmtNum(tooltipValueToNumber(value)), tooltipNameToText(name)];
+              return [tooltipValueToText(value), tooltipNameToText(name)];
+            }}
+            labelFormatter={(_, payload) => {
+              const row = payload?.[0]?.payload as UsageScatterRow | undefined;
+              if (!row) return "";
+              return `${providerLabel(row.provider)} / ${formatModelDisplayName(row.model)} (${row.purpose})`;
+            }}
+            content={({ active, payload }) => {
+              const row = payload?.[0]?.payload as UsageScatterRow | undefined;
+              if (!active || !row) return null;
+              return (
+                <div className="rounded-[14px] border border-[var(--color-editorial-line)] bg-white px-3 py-2 shadow-[var(--shadow-dropdown)]">
+                  <div className="text-xs font-semibold text-[var(--color-editorial-ink)]">{providerLabel(row.provider)} / {formatModelDisplayName(row.model)}</div>
+                  <div className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">{row.purpose}</div>
+                  <div className="mt-2 grid gap-1 text-xs text-[var(--color-editorial-ink-soft)]">
+                    <div>{t("llm.totalCalls")}: {fmtNum(row.calls)}</div>
+                    <div>tokens/call: {fmtNum(row.totalTokensPerCall)}</div>
+                    <div>avg cost/call: {fmtUSD(row.avgCostPerCall)}</div>
+                    <div>total cost: {fmtUSD(row.estimated_cost_usd)}</div>
+                    <div>pricing: {row.pricingLabel}</div>
+                  </div>
+                </div>
+              );
+            }}
+          />
+          <Scatter
+            data={rows}
+            name={isEfficiency ? "Calls" : "Tokens / call"}
+            shape={(props: { cx?: number; cy?: number; payload?: UsageScatterRow }) => {
+              const row = props.payload;
+              if (props.cx == null || props.cy == null || !row) return null;
+              return (
+                <circle
+                  cx={props.cx}
+                  cy={props.cy}
+                  r={isEfficiency ? row.bubbleSize : row.costCallBubbleSize}
+                  fill={providerColor(row.provider)}
+                  fillOpacity={0.72}
+                  stroke="#ffffff"
+                  strokeWidth={2}
+                  className="cursor-pointer transition-opacity hover:opacity-100"
+                  onClick={() => onPointClick(row)}
+                />
+              );
+            }}
+          />
+        </ScatterChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 export default function LLMAnalysisPage() {
   const { t } = useI18n();
@@ -264,7 +366,7 @@ export default function LLMAnalysisPage() {
     );
   }, [sortedRows]);
 
-  const scatterRows = useMemo(() => {
+  const scatterRows = useMemo<UsageScatterRow[]>(() => {
     const grouped = new Map<
       string,
       AnalysisRow & {
@@ -304,6 +406,7 @@ export default function LLMAnalysisPage() {
         totalTokensPerCall: Math.round(row.avg_input_tokens_per_call + row.avg_output_tokens_per_call),
         avgCostPerCall: row.avg_cost_per_call_usd,
         bubbleSize: Math.max(6, Math.min(22, 6 + Math.sqrt(row.calls))),
+        costCallBubbleSize: Math.max(6, Math.min(22, 6 + Math.sqrt(Math.max(1, Math.round(row.avg_input_tokens_per_call + row.avg_output_tokens_per_call))) / 6)),
         label: `${providerLabel(row.provider)} / ${formatModelDisplayName(row.model)}`,
         pricingLabel: row.pricingSources.length === 1 ? row.pricingSources[0] : t("llmAnalysis.mixedPricingSources"),
       }))
@@ -996,66 +1099,15 @@ export default function LLMAnalysisPage() {
                 {scatterRows.length === 0 ? (
                   <p className="text-sm text-[var(--color-editorial-ink-faint)]">{t("llm.noSummary")}</p>
                 ) : (
-                  <div className="h-[24rem] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ScatterChart margin={{ top: 12, right: 20, left: 8, bottom: 12 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#d9d1c4" />
-                        <XAxis type="number" dataKey="totalTokensPerCall" name="Tokens / call" tick={{ fontSize: 12, fill: "#8f877f" }} tickLine={false} axisLine={false} tickFormatter={(v) => fmtNum(Number(v))} />
-                        <YAxis type="number" dataKey="avgCostPerCall" name="Cost / call" tick={{ fontSize: 12, fill: "#8f877f" }} tickLine={false} axisLine={false} tickFormatter={(v) => fmtUSD(Number(v))} />
-                        <ZAxis type="number" dataKey="bubbleSize" range={[80, 460]} />
-                        <Tooltip
-                          cursor={{ strokeDasharray: "4 4" }}
-                          formatter={(value: ChartTooltipValue | undefined, name?: ChartTooltipName) => {
-                            if (name === "Cost / call") return [fmtUSD(tooltipValueToNumber(value)), tooltipNameToText(name)];
-                            if (name === "Tokens / call") return [fmtNum(tooltipValueToNumber(value)), tooltipNameToText(name)];
-                            if (name === "Calls") return [fmtNum(tooltipValueToNumber(value)), tooltipNameToText(name)];
-                            return [tooltipValueToText(value), tooltipNameToText(name)];
-                          }}
-                          labelFormatter={(_, payload) => {
-                            const row = payload?.[0]?.payload as (typeof scatterRows)[number] | undefined;
-                            if (!row) return "";
-                            return `${providerLabel(row.provider)} / ${formatModelDisplayName(row.model)} (${row.purpose})`;
-                          }}
-                          content={({ active, payload }) => {
-                            const row = payload?.[0]?.payload as (typeof scatterRows)[number] | undefined;
-                            if (!active || !row) return null;
-                            return (
-                              <div className="rounded-[14px] border border-[var(--color-editorial-line)] bg-white px-3 py-2 shadow-[var(--shadow-dropdown)]">
-                                <div className="text-xs font-semibold text-[var(--color-editorial-ink)]">{providerLabel(row.provider)} / {formatModelDisplayName(row.model)}</div>
-                                <div className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">{row.purpose}</div>
-                                <div className="mt-2 grid gap-1 text-xs text-[var(--color-editorial-ink-soft)]">
-                                  <div>{t("llm.totalCalls")}: {fmtNum(row.calls)}</div>
-                                  <div>tokens/call: {fmtNum(row.totalTokensPerCall)}</div>
-                                  <div>avg cost/call: {fmtUSD(row.avgCostPerCall)}</div>
-                                  <div>pricing: {row.pricingLabel}</div>
-                                </div>
-                              </div>
-                            );
-                          }}
-                        />
-                        <Scatter
-                          data={scatterRows}
-                          name="Calls"
-                          shape={(props: { cx?: number; cy?: number; payload?: (typeof scatterRows)[number] }) => {
-                            const row = props.payload;
-                            if (props.cx == null || props.cy == null || !row) return null;
-                            return (
-                              <circle
-                                cx={props.cx}
-                                cy={props.cy}
-                                r={row.bubbleSize}
-                                fill={providerColor(row.provider)}
-                                fillOpacity={0.72}
-                                stroke="#ffffff"
-                                strokeWidth={2}
-                                className="cursor-pointer transition-opacity hover:opacity-100"
-                                onClick={() => applyRowFilter(row)}
-                              />
-                            );
-                          }}
-                        />
-                      </ScatterChart>
-                    </ResponsiveContainer>
+                  <div className="space-y-4">
+                    <UsageScatterChart rows={scatterRows} variant="efficiency" t={t} onPointClick={applyRowFilter} />
+                    <div>
+                      <h3 className="font-serif text-[1.2rem] leading-[1.15] tracking-[-0.03em] text-[var(--color-editorial-ink)]">{t("llmAnalysis.costCallsScatter")}</h3>
+                      <p className="mt-2 text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("llmAnalysis.costCallsScatterHelp")}</p>
+                      <div className="mt-4">
+                        <UsageScatterChart rows={scatterRows} variant="costCalls" t={t} onPointClick={applyRowFilter} />
+                      </div>
+                    </div>
                   </div>
                 )}
               </section>

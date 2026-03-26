@@ -649,6 +649,8 @@ export const jaDict: Dict = {
   "llmAnalysis.tokenIntensityChart": "1 call あたり token 強度",
   "llmAnalysis.efficiencyScatter": "token強度とコスト効率の散布図",
   "llmAnalysis.efficiencyScatterHelp": "右上ほど1回あたりの負荷が重く、点が大きいほど呼び出し回数が多い組み合わせです。点を押すとその条件へ絞り込めます。",
+  "llmAnalysis.costCallsScatter": "1 call あたりコストとコール数の散布図",
+  "llmAnalysis.costCallsScatterHelp": "右上ほど1 call あたりのコストが高く、呼び出し回数も多い組み合わせです。点が大きいほど token 強度が高く、点を押すとその条件へ絞り込めます。",
   "llmAnalysis.rankingTitle": "種別ごとのコスパランキング",
   "llmAnalysis.rankingHelp": "選んだ種別の中で、1 call あたりのコストと token 強度、当月の失敗率・再試行率を並べて比較します。",
   "llmAnalysis.rankingThreshold": "calls 3件以上のみ表示",

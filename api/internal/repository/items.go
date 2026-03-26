@@ -97,6 +97,17 @@ const (
 	askCandidateLimitMax         = 1200
 )
 
+type briefingNavigatorCandidateWindow struct {
+	minAge time.Duration
+	maxAge time.Duration
+}
+
+var briefingNavigatorCandidateWindows = []briefingNavigatorCandidateWindow{
+	{minAge: 0, maxAge: 1 * time.Hour},
+	{minAge: 1 * time.Hour, maxAge: 12 * time.Hour},
+	{minAge: 12 * time.Hour, maxAge: 24 * time.Hour},
+}
+
 func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *string, limit int) ([]model.Item, error) {
 	if limit <= 0 {
 		limit = 500
@@ -928,34 +939,29 @@ func (r *ItemRepo) BriefingNavigatorCandidates24h(ctx context.Context, userID st
 	if limit > 24 {
 		limit = 24
 	}
-	rows, err := r.db.Query(ctx, `
-		SELECT i.id,
-		       i.title,
-		       sm.translated_title,
-		       s.title AS source_title,
-		       sm.summary,
-		       COALESCE(sm.topics, '{}'::text[]) AS topics,
-		       sm.score,
-		       COALESCE(i.published_at, i.created_at) AS published_at
-		FROM items i
-		JOIN sources s ON s.id = i.source_id
-		JOIN item_summaries sm ON sm.item_id = i.id
-		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
-		WHERE s.user_id = $1
-		  AND i.deleted_at IS NULL
-		  AND i.status = 'summarized'
-		  AND ir.item_id IS NULL
-		  AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '24 hours'
-		  AND NOT EXISTS (
-			SELECT 1 FROM item_laters il
-			WHERE il.user_id = $1
-			  AND il.item_id = i.id
-		  )
-		  AND NULLIF(BTRIM(sm.summary), '') IS NOT NULL
-		ORDER BY COALESCE(i.published_at, i.created_at) DESC, sm.score DESC NULLS LAST
-		LIMIT $2`,
-		userID, limit,
-	)
+	out := make([]model.BriefingNavigatorCandidate, 0, limit)
+	for _, window := range briefingNavigatorCandidateWindows {
+		remaining := limit - len(out)
+		if remaining <= 0 {
+			break
+		}
+		batch, err := r.briefingNavigatorCandidatesByWindow(ctx, userID, remaining, window)
+		if err != nil {
+			return nil, err
+		}
+		out = mergeBriefingNavigatorCandidates(limit, out, batch)
+	}
+	return out, nil
+}
+
+func (r *ItemRepo) briefingNavigatorCandidatesByWindow(
+	ctx context.Context,
+	userID string,
+	limit int,
+	window briefingNavigatorCandidateWindow,
+) ([]model.BriefingNavigatorCandidate, error) {
+	query, args := briefingNavigatorCandidatesWindowQuery(userID, limit, window)
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -979,6 +985,76 @@ func (r *ItemRepo) BriefingNavigatorCandidates24h(ctx context.Context, userID st
 		out = append(out, row)
 	}
 	return out, rows.Err()
+}
+
+func briefingNavigatorCandidatesWindowQuery(
+	userID string,
+	limit int,
+	window briefingNavigatorCandidateWindow,
+) (string, []any) {
+	query := `
+		SELECT i.id,
+		       i.title,
+		       sm.translated_title,
+		       s.title AS source_title,
+		       sm.summary,
+		       COALESCE(sm.topics, '{}'::text[]) AS topics,
+		       sm.score,
+		       COALESCE(i.published_at, i.created_at) AS published_at
+		FROM items i
+		JOIN sources s ON s.id = i.source_id
+		JOIN item_summaries sm ON sm.item_id = i.id
+		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+		WHERE s.user_id = $1
+		  AND i.deleted_at IS NULL
+		  AND i.status = 'summarized'
+		  AND ir.item_id IS NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM item_laters il
+			WHERE il.user_id = $1
+			  AND il.item_id = i.id
+		  )
+		  AND NULLIF(BTRIM(sm.summary), '') IS NOT NULL
+		  AND COALESCE(i.published_at, i.created_at) >= NOW() - make_interval(secs => $2::int)`
+	args := []any{userID, int(window.maxAge.Seconds())}
+	if window.minAge > 0 {
+		args = append(args, int(window.minAge.Seconds()))
+		query += `
+		  AND COALESCE(i.published_at, i.created_at) < NOW() - make_interval(secs => $3::int)`
+	}
+	args = append(args, limit)
+	query += `
+		ORDER BY RANDOM()
+		LIMIT $` + itoa(len(args))
+	return query, args
+}
+
+func mergeBriefingNavigatorCandidates(
+	limit int,
+	groups ...[]model.BriefingNavigatorCandidate,
+) []model.BriefingNavigatorCandidate {
+	if limit <= 0 {
+		return nil
+	}
+	out := make([]model.BriefingNavigatorCandidate, 0, limit)
+	seen := make(map[string]struct{}, limit)
+	for _, group := range groups {
+		for _, candidate := range group {
+			itemID := strings.TrimSpace(candidate.ItemID)
+			if itemID == "" {
+				continue
+			}
+			if _, ok := seen[itemID]; ok {
+				continue
+			}
+			seen[itemID] = struct{}{}
+			out = append(out, candidate)
+			if len(out) >= limit {
+				return out
+			}
+		}
+	}
+	return out
 }
 
 func (r *ItemRepo) CountNewOnDateJST(ctx context.Context, userID, date string) (int, error) {

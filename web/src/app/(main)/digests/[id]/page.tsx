@@ -160,61 +160,6 @@ export default function DigestDetailPage() {
           </section>
         ) : null}
 
-        <section className="surface-editorial rounded-[28px] px-5 py-5 sm:px-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-              {t("digestDetail.items")}
-            </div>
-            <div className="text-xs text-[var(--color-editorial-ink-soft)]">
-              {digest.items.length} {t("common.rows")}
-            </div>
-          </div>
-
-          {digest.items.length === 0 ? (
-            <p className="mt-4 text-sm text-[var(--color-editorial-ink-faint)]">{t("digestDetail.noItems")}</p>
-          ) : (
-            <div className="mt-4 grid gap-3">
-              {digest.items.map((di) => (
-                <article key={di.item.id} className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] p-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-xs text-[var(--color-editorial-ink-soft)]">
-                      #{di.rank}
-                    </span>
-                    {typeof di.summary.score === "number" ? (
-                      <span className="text-xs text-[var(--color-editorial-ink-soft)]">score {di.summary.score.toFixed(2)}</span>
-                    ) : null}
-                  </div>
-                  <Link href={`/items/${di.item.id}`} className="mt-3 block text-[18px] font-semibold leading-7 text-[var(--color-editorial-ink)] hover:underline">
-                    {di.item.title ?? di.item.url}
-                  </Link>
-                  <a
-                    href={di.item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-1 block break-all text-xs text-[var(--color-editorial-ink-faint)] hover:text-[var(--color-editorial-ink-soft)]"
-                  >
-                    {di.item.url}
-                  </a>
-                  <p className="mt-3 whitespace-pre-wrap font-serif text-[17px] leading-[1.95] text-[var(--color-editorial-ink)]">
-                    {di.summary.summary}
-                  </p>
-                  {di.summary.topics.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {di.summary.topics.map((topic) => (
-                        <span
-                          key={topic}
-                          className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-[11px] text-[var(--color-editorial-ink-soft)]"
-                        >
-                          {topic}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
       </div>
     </PageTransition>
   );

@@ -205,4 +205,4 @@ def needs_title_translation(title: str | None, translated_title: str) -> bool:
         return False
     if contains_japanese(src):
         return False
-    return re.search(r"[A-Za-z]", src) is not None
+    return True

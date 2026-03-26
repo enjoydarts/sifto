@@ -654,9 +654,15 @@ func audioBriefingNextPipelineStage(job *model.AudioBriefingJob, chunks []model.
 	switch strings.TrimSpace(job.Status) {
 	case "pending":
 		return audioBriefingPipelineStageScript, nil
+	case "scripting":
+		return audioBriefingPipelineStageScript, nil
 	case "scripted":
 		return audioBriefingPipelineStageVoice, nil
+	case "voicing":
+		return audioBriefingPipelineStageVoice, nil
 	case "voiced":
+		return audioBriefingPipelineStageConcat, nil
+	case "concatenating":
 		return audioBriefingPipelineStageConcat, nil
 	case "failed":
 		if len(chunks) == 0 {
@@ -685,7 +691,7 @@ func audioBriefingHasIncompleteChunks(chunks []model.AudioBriefingScriptChunk) b
 
 func audioBriefingShouldContinue(status string) bool {
 	switch strings.TrimSpace(status) {
-	case "pending", "scripted", "voiced", "failed":
+	case "pending", "scripting", "scripted", "voicing", "voiced", "concatenating", "failed":
 		return true
 	default:
 		return false
@@ -696,7 +702,8 @@ func audioBriefingJobCanBeResumedAt(job *model.AudioBriefingJob, now time.Time, 
 	if job == nil {
 		return false
 	}
-	if audioBriefingShouldContinue(job.Status) {
+	switch strings.TrimSpace(job.Status) {
+	case "pending", "scripted", "voiced", "failed":
 		return true
 	}
 	switch strings.TrimSpace(job.Status) {

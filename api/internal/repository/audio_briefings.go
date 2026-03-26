@@ -667,6 +667,7 @@ func (r *AudioBriefingRepo) StartScriptingJob(ctx context.Context, jobID string)
 		WHERE id = $1
 		  AND (
 		    status = 'pending'
+		    OR status = 'scripting'
 		    OR (
 		      status = 'failed'
 		      AND NOT EXISTS (
@@ -819,7 +820,7 @@ func (r *AudioBriefingRepo) BeginConcatCallback(
 		    updated_at = NOW()
 		WHERE id = $1
 		  AND (
-		    status IN ('scripted', 'voiced')
+		    status IN ('scripted', 'voiced', 'concatenating')
 		    OR (
 		      status = 'failed'
 		      AND NOT EXISTS (

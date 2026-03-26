@@ -40,8 +40,23 @@ func TestAudioBriefingNextPipelineStage(t *testing.T) {
 			want: audioBriefingPipelineStageVoice,
 		},
 		{
+			name: "scripting resumes scripting stage",
+			job:  model.AudioBriefingJob{Status: "scripting"},
+			want: audioBriefingPipelineStageScript,
+		},
+		{
+			name: "voicing resumes voice stage",
+			job:  model.AudioBriefingJob{Status: "voicing"},
+			want: audioBriefingPipelineStageVoice,
+		},
+		{
 			name: "voiced goes to concat",
 			job:  model.AudioBriefingJob{Status: "voiced"},
+			want: audioBriefingPipelineStageConcat,
+		},
+		{
+			name: "concatenating resumes concat stage",
+			job:  model.AudioBriefingJob{Status: "concatenating"},
 			want: audioBriefingPipelineStageConcat,
 		},
 		{
@@ -97,10 +112,12 @@ func TestAudioBriefingShouldContinue(t *testing.T) {
 		want   bool
 	}{
 		{status: "pending", want: true},
+		{status: "scripting", want: true},
 		{status: "scripted", want: true},
+		{status: "voicing", want: true},
 		{status: "voiced", want: true},
+		{status: "concatenating", want: true},
 		{status: "failed", want: true},
-		{status: "voicing", want: false},
 		{status: "published", want: false},
 	}
 

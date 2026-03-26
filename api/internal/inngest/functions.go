@@ -19,6 +19,7 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
 	"github.com/enjoydarts/sifto/api/internal/timeutil"
+	"github.com/inngest/inngest/pkg/enums"
 	"github.com/inngest/inngestgo"
 	"github.com/inngest/inngestgo/step"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -1232,7 +1233,17 @@ func runAudioBriefingPipelineFn(client inngestgo.Client, db *pgxpool.Pool, worke
 
 	return inngestgo.CreateFunction(
 		client,
-		inngestgo.FunctionOpts{ID: "run-audio-briefing-pipeline", Name: "Run Audio Briefing Pipeline"},
+		inngestgo.FunctionOpts{
+			ID:   "run-audio-briefing-pipeline",
+			Name: "Run Audio Briefing Pipeline",
+			Concurrency: []inngestgo.ConfigStepConcurrency{
+				{
+					Limit: 1,
+					Key:   inngestgo.StrPtr("event.data.job_id"),
+					Scope: enums.ConcurrencyScopeFn,
+				},
+			},
+		},
 		inngestgo.EventTrigger("audio-briefing/run", nil),
 		func(ctx context.Context, input inngestgo.Input[audioBriefingRunEventData]) (any, error) {
 			data := input.Event.Data

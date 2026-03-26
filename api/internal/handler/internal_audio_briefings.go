@@ -133,6 +133,39 @@ func (h *InternalAudioBriefingsHandler) ConcatComplete(w http.ResponseWriter, r 
 	})
 }
 
+func (h *InternalAudioBriefingsHandler) ChunkHeartbeat(w http.ResponseWriter, r *http.Request) {
+	if h.repo == nil {
+		http.Error(w, "audio briefing unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	rawToken := extractBearerToken(r)
+	if rawToken == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	chunkID := strings.TrimSpace(chi.URLParam(r, "chunkID"))
+	if chunkID == "" {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.repo.TouchChunkHeartbeat(r.Context(), chunkID, service.HashAudioBriefingCallbackToken(rawToken)); err != nil {
+		switch {
+		case errors.Is(err, repository.ErrUnauthorized):
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		case errors.Is(err, repository.ErrInvalidState), errors.Is(err, repository.ErrConflict):
+			http.Error(w, err.Error(), http.StatusConflict)
+		default:
+			writeRepoError(w, err)
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func trimOptionalString(v *string) *string {
 	if v == nil {
 		return nil

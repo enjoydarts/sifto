@@ -145,6 +145,48 @@ AIVIS_RATE_LIMITER = AivisRedisRateLimiter(
 )
 
 
+class AudioBriefingHeartbeatLoop:
+    def __init__(self, heartbeat_url: str | None, heartbeat_token: str | None, interval_sec: float, timeout_sec: float) -> None:
+        self.heartbeat_url = (heartbeat_url or "").strip()
+        self.heartbeat_token = (heartbeat_token or "").strip()
+        self.interval_sec = max(float(interval_sec or 0), 1.0)
+        self.timeout_sec = max(float(timeout_sec or 0), 1.0)
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        if not self.enabled():
+            return
+        self._send_once()
+        self._thread = threading.Thread(target=self._run, name="audio-briefing-heartbeat", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=max(self.timeout_sec, 1.0))
+
+    def enabled(self) -> bool:
+        return bool(self.heartbeat_url and self.heartbeat_token)
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval_sec):
+            self._send_once()
+
+    def _send_once(self) -> None:
+        if not self.enabled():
+            return
+        try:
+            with httpx.Client(timeout=self.timeout_sec) as client:
+                response = client.post(
+                    self.heartbeat_url,
+                    headers={"Authorization": f"Bearer {self.heartbeat_token}"},
+                )
+                response.raise_for_status()
+        except Exception:
+            return
+
+
 class AudioBriefingTTSService:
     def __init__(self) -> None:
         self.r2_endpoint = os.getenv("AUDIO_BRIEFING_R2_ENDPOINT", "").strip()
@@ -162,6 +204,8 @@ class AudioBriefingTTSService:
         self.aivis_retry_attempts = max(_env_int("AIVIS_TTS_RETRY_ATTEMPTS", 2), 1)
         self.aivis_retry_fallback_sec = max(_env_float("AIVIS_TTS_RETRY_FALLBACK_SEC", 9.0), 0.0)
         self.aivis_timeout_sec = max(_env_float("AIVIS_TTS_TIMEOUT_SEC", 300.0), 1.0)
+        self.heartbeat_interval_sec = max(_env_float("AUDIO_BRIEFING_HEARTBEAT_INTERVAL_SEC", 20.0), 1.0)
+        self.heartbeat_timeout_sec = max(_env_float("AUDIO_BRIEFING_HEARTBEAT_TIMEOUT_SEC", 10.0), 1.0)
 
     def synthesize_and_upload(
         self,
@@ -176,33 +220,47 @@ class AudioBriefingTTSService:
         pitch: float,
         volume_gain: float,
         output_object_key: str,
+        chunk_id: str | None = None,
+        heartbeat_url: str | None = None,
+        heartbeat_token: str | None = None,
         user_dictionary_uuid: str | None = None,
         aivis_api_key: str | None = None,
     ) -> tuple[str, int]:
-        provider = (provider or "").strip().lower()
-        if provider == "mock":
-            payload, content_type, suffix, duration_sec = synthesize_mock_audio(text, speech_rate)
-        elif provider == "aivis":
-            payload, content_type, suffix, duration_sec = self.synthesize_aivis_audio(
-                voice_model=voice_model,
-                voice_style=voice_style,
-                text=text,
-                speech_rate=speech_rate,
-                emotional_intensity=emotional_intensity,
-                tempo_dynamics=tempo_dynamics,
-                line_break_silence_seconds=line_break_silence_seconds,
-                pitch=pitch,
-                volume_gain=volume_gain,
-                user_dictionary_uuid=user_dictionary_uuid,
-                api_key_override=aivis_api_key,
-            )
-        else:
-            raise RuntimeError(f"unsupported tts provider: {provider}")
+        _ = (chunk_id or "").strip()
+        heartbeat = AudioBriefingHeartbeatLoop(
+            heartbeat_url=heartbeat_url,
+            heartbeat_token=heartbeat_token,
+            interval_sec=self.heartbeat_interval_sec,
+            timeout_sec=self.heartbeat_timeout_sec,
+        )
+        heartbeat.start()
+        try:
+            provider = (provider or "").strip().lower()
+            if provider == "mock":
+                payload, content_type, suffix, duration_sec = synthesize_mock_audio(text, speech_rate)
+            elif provider == "aivis":
+                payload, content_type, suffix, duration_sec = self.synthesize_aivis_audio(
+                    voice_model=voice_model,
+                    voice_style=voice_style,
+                    text=text,
+                    speech_rate=speech_rate,
+                    emotional_intensity=emotional_intensity,
+                    tempo_dynamics=tempo_dynamics,
+                    line_break_silence_seconds=line_break_silence_seconds,
+                    pitch=pitch,
+                    volume_gain=volume_gain,
+                    user_dictionary_uuid=user_dictionary_uuid,
+                    api_key_override=aivis_api_key,
+                )
+            else:
+                raise RuntimeError(f"unsupported tts provider: {provider}")
 
-        if not output_object_key.endswith(suffix):
-            output_object_key = output_object_key + suffix
-        self.upload_bytes(output_object_key, payload, content_type)
-        return output_object_key, duration_sec
+            if not output_object_key.endswith(suffix):
+                output_object_key = output_object_key + suffix
+            self.upload_bytes(output_object_key, payload, content_type)
+            return output_object_key, duration_sec
+        finally:
+            heartbeat.stop()
 
     def standard_bucket(self) -> str:
         return (self.r2_bucket or self.r2_standard_bucket or "").strip()

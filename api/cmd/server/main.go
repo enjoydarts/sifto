@@ -175,6 +175,7 @@ func main() {
 	r.Post("/api/internal/debug/push/test", internalH.DebugSendPushTest)
 	r.Get("/api/internal/debug/system-status", internalH.DebugSystemStatus)
 	r.Post("/api/internal/audio-briefings/{id}/concat-complete", internalAudioBriefingsH.ConcatComplete)
+	r.Post("/api/internal/audio-briefings/chunks/{chunkID}/heartbeat", internalAudioBriefingsH.ChunkHeartbeat)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Use(middleware.Auth(userIdentityRepo, clerkVerifier))

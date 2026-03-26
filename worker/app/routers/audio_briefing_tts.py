@@ -18,6 +18,9 @@ class AudioBriefingSynthesizeRequest(BaseModel):
     pitch: float = 0.0
     volume_gain: float = 0.0
     output_object_key: str
+    chunk_id: str | None = None
+    heartbeat_url: str | None = None
+    heartbeat_token: str | None = None
     user_dictionary_uuid: str | None = None
 
 
@@ -92,6 +95,9 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
             pitch=req.pitch,
             volume_gain=req.volume_gain,
             output_object_key=req.output_object_key,
+            chunk_id=req.chunk_id,
+            heartbeat_url=req.heartbeat_url,
+            heartbeat_token=req.heartbeat_token,
             user_dictionary_uuid=req.user_dictionary_uuid,
             aivis_api_key=aivis_api_key,
         )

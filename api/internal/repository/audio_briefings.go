@@ -345,9 +345,9 @@ func (r *AudioBriefingRepo) ListJobItems(ctx context.Context, userID, jobID stri
 
 func (r *AudioBriefingRepo) ListJobChunks(ctx context.Context, userID, jobID string) ([]model.AudioBriefingScriptChunk, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT c.id, c.job_id, c.seq, c.part_type, c.text, c.char_count, c.tts_status,
+		SELECT c.id, c.job_id, c.seq, c.part_type, c.text, c.char_count, c.tts_status, c.attempt_count, c.last_error_code,
 		       c.tts_provider, c.voice_model, c.voice_style, c.r2_audio_object_key,
-		       c.r2_storage_bucket, c.duration_sec, c.error_message, c.created_at, c.updated_at
+		       c.r2_storage_bucket, c.duration_sec, c.error_message, c.heartbeat_token, c.last_heartbeat_at, c.started_at, c.completed_at, c.created_at, c.updated_at
 		FROM audio_briefing_script_chunks c
 		JOIN audio_briefing_jobs j ON j.id = c.job_id
 		WHERE j.user_id = $1 AND c.job_id = $2
@@ -432,7 +432,7 @@ func (r *AudioBriefingRepo) ListStaleVoicingJobs(ctx context.Context, cutoff tim
 		    FROM audio_briefing_script_chunks c
 		    WHERE c.job_id = j.id
 		      AND c.tts_status = 'generating'
-		      AND c.updated_at <= $1
+		      AND COALESCE(c.last_heartbeat_at, c.updated_at) <= $1
 		  )
 		ORDER BY j.updated_at ASC, j.id ASC
 		LIMIT $2
@@ -1050,7 +1050,12 @@ func (r *AudioBriefingRepo) ResetChunksForVoicing(ctx context.Context, jobID str
 	_, err := r.db.Exec(ctx, `
 		UPDATE audio_briefing_script_chunks
 		SET tts_status = 'pending',
+		    last_error_code = NULL,
 		    error_message = NULL,
+		    heartbeat_token = NULL,
+		    last_heartbeat_at = NULL,
+		    started_at = NULL,
+		    completed_at = NULL,
 		    updated_at = NOW()
 		WHERE job_id = $1
 		  AND tts_status <> 'generated'
@@ -1058,15 +1063,21 @@ func (r *AudioBriefingRepo) ResetChunksForVoicing(ctx context.Context, jobID str
 	return err
 }
 
-func (r *AudioBriefingRepo) MarkChunkGenerating(ctx context.Context, chunkID string) error {
+func (r *AudioBriefingRepo) StartChunkGenerating(ctx context.Context, chunkID string, heartbeatTokenHash string) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE audio_briefing_script_chunks
 		SET tts_status = 'generating',
+		    attempt_count = attempt_count + 1,
+		    last_error_code = NULL,
 		    error_message = NULL,
+		    heartbeat_token = NULLIF($2, ''),
+		    last_heartbeat_at = NOW(),
+		    started_at = NOW(),
+		    completed_at = NULL,
 		    updated_at = NOW()
 		WHERE id = $1
-		  AND tts_status IN ('pending', 'failed')
-	`, chunkID)
+		  AND tts_status IN ('pending', 'retry_wait', 'failed')
+	`, chunkID, strings.TrimSpace(heartbeatTokenHash))
 	if err != nil {
 		return err
 	}
@@ -1084,7 +1095,11 @@ func (r *AudioBriefingRepo) MarkChunkGenerated(ctx context.Context, chunkID stri
 		    r2_audio_object_key = $2,
 		    duration_sec = $3,
 		    r2_storage_bucket = COALESCE(NULLIF($4, ''), r2_storage_bucket),
+		    last_error_code = NULL,
 		    error_message = NULL,
+		    heartbeat_token = NULL,
+		    last_heartbeat_at = NULL,
+		    completed_at = NOW(),
 		    updated_at = NOW()
 		WHERE id = $1
 	`, chunkID, strings.TrimSpace(audioObjectKey), durationSec, standardBucket)
@@ -1097,11 +1112,56 @@ func (r *AudioBriefingRepo) MarkChunkGenerated(ctx context.Context, chunkID stri
 	return nil
 }
 
+func (r *AudioBriefingRepo) MarkChunkRetryWait(ctx context.Context, chunkID string, errorCode string, errorMessage string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE audio_briefing_script_chunks
+		SET tts_status = 'retry_wait',
+		    last_error_code = NULLIF($2, ''),
+		    error_message = NULLIF($3, ''),
+		    heartbeat_token = NULL,
+		    last_heartbeat_at = NULL,
+		    updated_at = NOW()
+		WHERE id = $1
+		  AND tts_status = 'generating'
+	`, chunkID, strings.TrimSpace(errorCode), strings.TrimSpace(errorMessage))
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrInvalidState
+	}
+	return nil
+}
+
+func (r *AudioBriefingRepo) MarkChunkExhausted(ctx context.Context, chunkID string, errorCode string, errorMessage string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE audio_briefing_script_chunks
+		SET tts_status = 'exhausted',
+		    last_error_code = NULLIF($2, ''),
+		    error_message = NULLIF($3, ''),
+		    heartbeat_token = NULL,
+		    last_heartbeat_at = NULL,
+		    updated_at = NOW()
+		WHERE id = $1
+		  AND tts_status = 'generating'
+	`, chunkID, strings.TrimSpace(errorCode), strings.TrimSpace(errorMessage))
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrInvalidState
+	}
+	return nil
+}
+
 func (r *AudioBriefingRepo) MarkChunkFailed(ctx context.Context, chunkID string, errorMessage string) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE audio_briefing_script_chunks
 		SET tts_status = 'failed',
+		    last_error_code = NULL,
 		    error_message = NULLIF($2, ''),
+		    heartbeat_token = NULL,
+		    last_heartbeat_at = NULL,
 		    updated_at = NOW()
 		WHERE id = $1
 	`, chunkID, strings.TrimSpace(errorMessage))
@@ -1110,6 +1170,24 @@ func (r *AudioBriefingRepo) MarkChunkFailed(ctx context.Context, chunkID string,
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *AudioBriefingRepo) TouchChunkHeartbeat(ctx context.Context, chunkID string, heartbeatTokenHash string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE audio_briefing_script_chunks
+		SET last_heartbeat_at = NOW(),
+		    updated_at = NOW()
+		WHERE id = $1
+		  AND tts_status = 'generating'
+		  AND heartbeat_token = NULLIF($2, '')
+	`, chunkID, strings.TrimSpace(heartbeatTokenHash))
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUnauthorized
 	}
 	return nil
 }
@@ -1219,6 +1297,8 @@ func scanAudioBriefingScriptChunk(row audioBriefingJobScanner) (model.AudioBrief
 		&chunk.Text,
 		&chunk.CharCount,
 		&chunk.TTSStatus,
+		&chunk.AttemptCount,
+		&chunk.LastErrorCode,
 		&chunk.TTSProvider,
 		&chunk.VoiceModel,
 		&chunk.VoiceStyle,
@@ -1226,6 +1306,10 @@ func scanAudioBriefingScriptChunk(row audioBriefingJobScanner) (model.AudioBrief
 		&chunk.R2StorageBucket,
 		&chunk.DurationSec,
 		&chunk.ErrorMessage,
+		&chunk.HeartbeatToken,
+		&chunk.LastHeartbeatAt,
+		&chunk.StartedAt,
+		&chunk.CompletedAt,
 		&chunk.CreatedAt,
 		&chunk.UpdatedAt,
 	)

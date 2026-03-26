@@ -164,22 +164,28 @@ type AudioBriefingJobItem struct {
 }
 
 type AudioBriefingScriptChunk struct {
-	ID               string    `json:"id"`
-	JobID            string    `json:"job_id"`
-	Seq              int       `json:"seq"`
-	PartType         string    `json:"part_type"`
-	Text             string    `json:"text"`
-	CharCount        int       `json:"char_count"`
-	TTSStatus        string    `json:"tts_status"`
-	TTSProvider      *string   `json:"tts_provider,omitempty"`
-	VoiceModel       *string   `json:"voice_model,omitempty"`
-	VoiceStyle       *string   `json:"voice_style,omitempty"`
-	R2AudioObjectKey *string   `json:"r2_audio_object_key,omitempty"`
-	R2StorageBucket  string    `json:"r2_storage_bucket"`
-	DurationSec      *int      `json:"duration_sec,omitempty"`
-	ErrorMessage     *string   `json:"error_message,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID               string     `json:"id"`
+	JobID            string     `json:"job_id"`
+	Seq              int        `json:"seq"`
+	PartType         string     `json:"part_type"`
+	Text             string     `json:"text"`
+	CharCount        int        `json:"char_count"`
+	TTSStatus        string     `json:"tts_status"`
+	AttemptCount     int        `json:"attempt_count"`
+	LastErrorCode    *string    `json:"last_error_code,omitempty"`
+	TTSProvider      *string    `json:"tts_provider,omitempty"`
+	VoiceModel       *string    `json:"voice_model,omitempty"`
+	VoiceStyle       *string    `json:"voice_style,omitempty"`
+	R2AudioObjectKey *string    `json:"r2_audio_object_key,omitempty"`
+	R2StorageBucket  string     `json:"r2_storage_bucket"`
+	DurationSec      *int       `json:"duration_sec,omitempty"`
+	ErrorMessage     *string    `json:"error_message,omitempty"`
+	HeartbeatToken   *string    `json:"-"`
+	LastHeartbeatAt  *time.Time `json:"last_heartbeat_at,omitempty"`
+	StartedAt        *time.Time `json:"started_at,omitempty"`
+	CompletedAt      *time.Time `json:"completed_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 type AudioBriefingCallbackToken struct {

@@ -19,16 +19,28 @@ func (s stubAudioBriefingScanner) Scan(dest ...any) error {
 		case *string:
 			*d = s.values[i].(string)
 		case **string:
+			if s.values[i] == nil {
+				*d = nil
+				continue
+			}
 			value := s.values[i].(string)
 			*d = &value
 		case *int:
 			*d = s.values[i].(int)
 		case **int:
+			if s.values[i] == nil {
+				*d = nil
+				continue
+			}
 			value := s.values[i].(int)
 			*d = &value
 		case *time.Time:
 			*d = s.values[i].(time.Time)
 		case **time.Time:
+			if s.values[i] == nil {
+				*d = nil
+				continue
+			}
 			value := s.values[i].(time.Time)
 			*d = &value
 		default:
@@ -96,6 +108,8 @@ func TestAudioBriefingScriptChunkScanReadsStorageBucket(t *testing.T) {
 		"本文です。",
 		12,
 		"generated",
+		1,
+		"",
 		ttsProvider,
 		voiceModel,
 		voiceStyle,
@@ -103,6 +117,10 @@ func TestAudioBriefingScriptChunkScanReadsStorageBucket(t *testing.T) {
 		"briefings-standard",
 		120,
 		"",
+		"",
+		nil,
+		nil,
+		nil,
 		now,
 		now,
 	}})

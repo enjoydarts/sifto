@@ -1300,7 +1300,11 @@ func moveAudioBriefingsToIAFn(client inngestgo.Client, db *pgxpool.Pool, worker 
 
 func failStaleAudioBriefingVoicingFn(client inngestgo.Client, db *pgxpool.Pool) (inngestgo.ServableFunction, error) {
 	audioBriefingRepo := repository.NewAudioBriefingRepo(db)
-	staleVoicingSvc := service.NewAudioBriefingStaleVoicingService(audioBriefingRepo)
+	eventPublisher, err := service.NewEventPublisher()
+	if err != nil {
+		return nil, err
+	}
+	staleVoicingSvc := service.NewAudioBriefingStaleVoicingService(audioBriefingRepo).WithPublisher(eventPublisher)
 
 	return inngestgo.CreateFunction(
 		client,

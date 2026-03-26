@@ -4,7 +4,12 @@ from unittest.mock import patch
 import httpx
 
 import app.services.audio_briefing_tts as audio_briefing_tts
-from app.services.audio_briefing_tts import AivisRateLimiter, AivisRedisRateLimiter, AudioBriefingTTSService
+from app.services.audio_briefing_tts import (
+    AivisRateLimiter,
+    AivisRedisRateLimiter,
+    AudioBriefingHeartbeatLoop,
+    AudioBriefingTTSService,
+)
 
 
 class AivisRateLimiterTests(unittest.TestCase):
@@ -76,6 +81,46 @@ class AivisRateLimiterTests(unittest.TestCase):
 
 
 class AudioBriefingTTSServiceTests(unittest.TestCase):
+    def test_heartbeat_loop_posts_bearer_token(self):
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            def __init__(self):
+                self.calls = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def post(self, url, headers):
+                self.calls.append((url, headers))
+                return FakeResponse()
+
+        fake_client = FakeClient()
+        loop = AudioBriefingHeartbeatLoop(
+            heartbeat_url="https://api.example.com/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
+            heartbeat_token="heartbeat-token",
+            interval_sec=20.0,
+            timeout_sec=10.0,
+        )
+
+        with patch("app.services.audio_briefing_tts.httpx.Client", return_value=fake_client):
+            loop._send_once()
+
+        self.assertEqual(
+            fake_client.calls,
+            [
+                (
+                    "https://api.example.com/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
+                    {"Authorization": "Bearer heartbeat-token"},
+                )
+            ],
+        )
+
     def test_build_aivis_payload_includes_user_dictionary_uuid(self):
         payload = audio_briefing_tts.build_aivis_payload(
             voice_model="model-uuid",
@@ -263,6 +308,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
                 line_break_silence_seconds=0.4,
                 pitch=0.0,
                 volume_gain=0.0,
+                user_dictionary_uuid=None,
                 api_key_override="key",
             )
 

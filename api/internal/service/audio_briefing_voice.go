@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -25,6 +26,8 @@ type AudioBriefingVoiceRunner struct {
 	cipher       *SecretCipher
 	worker       *WorkerClient
 }
+
+const audioBriefingChunkMaxAttempts = 3
 
 func NewAudioBriefingVoiceRunner(repo *repository.AudioBriefingRepo, userSettings *repository.UserSettingsRepo, cipher *SecretCipher, worker *WorkerClient) *AudioBriefingVoiceRunner {
 	return &AudioBriefingVoiceRunner{repo: repo, userSettings: userSettings, cipher: cipher, worker: worker}
@@ -103,41 +106,50 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		return &AudioBriefingVoiceRunResult{Waiting: true}, nil
 	}
 	if resetGenerating {
-		if err := r.repo.MarkChunkFailed(ctx, chunk.ID, "stale generating chunk reset for retry"); err != nil {
+		if chunk.AttemptCount >= audioBriefingChunkMaxAttempts {
+			message := "stale generating chunk exceeded retry limit"
+			if err := r.repo.MarkChunkExhausted(ctx, chunk.ID, "tts_stalled", message); err != nil {
+				r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
+				return nil, err
+			}
+			r.bestEffortFailVoicing(jobID, "tts_stalled", message)
+			return nil, errors.New(message)
+		}
+		if err := r.repo.MarkChunkRetryWait(ctx, chunk.ID, "tts_stalled", "stale generating chunk reset for retry"); err != nil {
 			r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 			return nil, err
 		}
 	}
-	if err := r.repo.MarkChunkGenerating(ctx, chunk.ID); err != nil {
+	rawHeartbeatToken, err := randomAudioBriefingToken(32)
+	if err != nil {
+		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
+		return nil, err
+	}
+	if err := r.repo.StartChunkGenerating(ctx, chunk.ID, HashAudioBriefingCallbackToken(rawHeartbeatToken)); err != nil {
 		if err == repository.ErrInvalidState {
 			return &AudioBriefingVoiceRunResult{Waiting: true}, nil
 		}
 		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 		return nil, err
 	}
+	chunk.AttemptCount++
 	provider := strings.TrimSpace(derefString(chunk.TTSProvider))
 	voiceModel := strings.TrimSpace(derefString(chunk.VoiceModel))
 	voiceStyle := strings.TrimSpace(derefString(chunk.VoiceStyle))
 	if provider == "" || voiceModel == "" || voiceStyle == "" {
 		err := fmt.Errorf("chunk tts config is incomplete")
-		r.bestEffortMarkChunkFailed(chunk.ID, err.Error())
-		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
-		return nil, err
+		return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
 	}
 	var aivisAPIKey *string
 	var aivisUserDictionaryUUID *string
 	if provider == "aivis" {
 		aivisAPIKey, err = r.loadAivisAPIKey(ctx, userID)
 		if err != nil {
-			r.bestEffortMarkChunkFailed(chunk.ID, err.Error())
-			r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
-			return nil, err
+			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
 		}
 		aivisUserDictionaryUUID, err = r.userSettings.GetAivisUserDictionaryUUID(ctx, userID)
 		if err != nil {
-			r.bestEffortMarkChunkFailed(chunk.ID, err.Error())
-			r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
-			return nil, err
+			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
 		}
 	}
 	resp, err := r.worker.SynthesizeAudioBriefingUpload(
@@ -153,13 +165,14 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		pitch,
 		volumeGain,
 		audioBriefingChunkObjectKey(userID, jobID, chunk.Seq),
+		chunk.ID,
+		audioBriefingChunkHeartbeatURL(chunk.ID),
+		rawHeartbeatToken,
 		aivisUserDictionaryUUID,
 		aivisAPIKey,
 	)
 	if err != nil {
-		r.bestEffortMarkChunkFailed(chunk.ID, err.Error())
-		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
-		return nil, err
+		return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
 	}
 	if err := r.repo.MarkChunkGenerated(ctx, chunk.ID, resp.AudioObjectKey, resp.DurationSec); err != nil {
 		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
@@ -170,6 +183,30 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 	} else if err != repository.ErrInvalidState {
 		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 		return nil, err
+	}
+	return &AudioBriefingVoiceRunResult{ProcessedChunk: true}, nil
+}
+
+func (r *AudioBriefingVoiceRunner) handleChunkGenerationFailure(ctx context.Context, jobID string, chunk *model.AudioBriefingScriptChunk, errorCode string, err error) (*AudioBriefingVoiceRunResult, error) {
+	if r == nil || r.repo == nil {
+		return nil, err
+	}
+	if chunk == nil {
+		r.bestEffortFailVoicing(jobID, errorCode, err.Error())
+		return nil, err
+	}
+	errorMessage := err.Error()
+	if chunk.AttemptCount >= audioBriefingChunkMaxAttempts {
+		if markErr := r.repo.MarkChunkExhausted(ctx, chunk.ID, errorCode, errorMessage); markErr != nil {
+			r.bestEffortFailVoicing(jobID, errorCode, markErr.Error())
+			return nil, markErr
+		}
+		r.bestEffortFailVoicing(jobID, errorCode, errorMessage)
+		return nil, err
+	}
+	if markErr := r.repo.MarkChunkRetryWait(ctx, chunk.ID, errorCode, errorMessage); markErr != nil {
+		r.bestEffortFailVoicing(jobID, errorCode, markErr.Error())
+		return nil, markErr
 	}
 	return &AudioBriefingVoiceRunResult{ProcessedChunk: true}, nil
 }
@@ -218,6 +255,14 @@ func audioBriefingChunkObjectKey(userID string, jobID string, seq int) string {
 	return path.Join("audio-briefings", userID, jobID, fmt.Sprintf("chunk-%03d", seq))
 }
 
+func audioBriefingChunkHeartbeatURL(chunkID string) string {
+	baseURL := audioBriefingCallbackBaseURL(AudioBriefingConcatModeFromEnv())
+	if baseURL == "" {
+		return ""
+	}
+	return strings.TrimRight(baseURL, "/") + "/api/internal/audio-briefings/chunks/" + strings.TrimSpace(chunkID) + "/heartbeat"
+}
+
 type audioBriefingVoicingChunkSelection string
 
 const (
@@ -233,12 +278,25 @@ func nextAudioBriefingVoicingChunk(chunks []model.AudioBriefingScriptChunk, now 
 		if chunk.R2AudioObjectKey != nil && strings.TrimSpace(*chunk.R2AudioObjectKey) != "" && chunk.TTSStatus == "generated" {
 			continue
 		}
-		if strings.TrimSpace(chunk.TTSStatus) == "generating" && now.Sub(chunk.UpdatedAt) < retryAfter {
+		status := strings.TrimSpace(chunk.TTSStatus)
+		if status == "exhausted" {
 			return audioBriefingVoicingChunkSelectionWaiting, nil, false
 		}
-		return audioBriefingVoicingChunkSelectionProcess, chunk, strings.TrimSpace(chunk.TTSStatus) == "generating"
+		if status == "generating" && now.Sub(audioBriefingChunkHeartbeatAt(*chunk)) < retryAfter {
+			return audioBriefingVoicingChunkSelectionWaiting, nil, false
+		}
+		if status == "pending" || status == "retry_wait" || status == "failed" || status == "generating" {
+			return audioBriefingVoicingChunkSelectionProcess, chunk, status == "generating"
+		}
 	}
 	return audioBriefingVoicingChunkSelectionComplete, nil, false
+}
+
+func audioBriefingChunkHeartbeatAt(chunk model.AudioBriefingScriptChunk) time.Time {
+	if chunk.LastHeartbeatAt != nil && !chunk.LastHeartbeatAt.IsZero() {
+		return *chunk.LastHeartbeatAt
+	}
+	return chunk.UpdatedAt
 }
 
 func audioBriefingChunkRetryAfter() time.Duration {

@@ -14,7 +14,8 @@ import (
 type audioBriefingStaleVoicingRepo interface {
 	ListStaleVoicingJobs(ctx context.Context, cutoff time.Time, limit int) ([]model.AudioBriefingJob, error)
 	ListJobChunks(ctx context.Context, userID, jobID string) ([]model.AudioBriefingScriptChunk, error)
-	MarkChunkFailed(ctx context.Context, chunkID string, errorMessage string) error
+	MarkChunkRetryWait(ctx context.Context, chunkID string, errorCode string, errorMessage string) error
+	MarkChunkExhausted(ctx context.Context, chunkID string, errorCode string, errorMessage string) error
 	FailVoicingJob(ctx context.Context, jobID string, errorCode string, errorMessage string) (*model.AudioBriefingJob, error)
 }
 
@@ -25,6 +26,7 @@ type AudioBriefingStaleVoicingResult struct {
 
 type AudioBriefingStaleVoicingService struct {
 	repo       audioBriefingStaleVoicingRepo
+	publisher  *EventPublisher
 	now        func() time.Time
 	staleAfter time.Duration
 	batchLimit int
@@ -37,6 +39,14 @@ func NewAudioBriefingStaleVoicingService(repo audioBriefingStaleVoicingRepo) *Au
 		staleAfter: audioBriefingChunkRetryAfter(),
 		batchLimit: audioBriefingStaleVoicingBatchLimit(),
 	}
+}
+
+func (s *AudioBriefingStaleVoicingService) WithPublisher(publisher *EventPublisher) *AudioBriefingStaleVoicingService {
+	if s == nil {
+		return nil
+	}
+	s.publisher = publisher
+	return s
 }
 
 func (s *AudioBriefingStaleVoicingService) FailStaleJobs(ctx context.Context) (*AudioBriefingStaleVoicingResult, error) {
@@ -55,20 +65,40 @@ func (s *AudioBriefingStaleVoicingService) FailStaleJobs(ctx context.Context) (*
 			result.Failed++
 			continue
 		}
-		staleChunkIDs := staleGeneratingChunkIDs(chunks, cutoff)
-		if len(staleChunkIDs) == 0 {
+		staleChunks := staleGeneratingChunks(chunks, cutoff)
+		if len(staleChunks) == 0 {
 			continue
 		}
 		message := fmt.Sprintf("audio chunk generation stalled for over %s", s.staleAfter.Round(time.Second))
+		shouldFailJob := false
 		failed := false
-		for _, chunkID := range staleChunkIDs {
-			if err := s.repo.MarkChunkFailed(ctx, chunkID, message); err != nil {
+		for _, chunk := range staleChunks {
+			if chunk.AttemptCount >= audioBriefingChunkMaxAttempts {
+				if err := s.repo.MarkChunkExhausted(ctx, chunk.ID, "tts_stalled", message); err != nil {
+					result.Failed++
+					failed = true
+					break
+				}
+				shouldFailJob = true
+				continue
+			}
+			if err := s.repo.MarkChunkRetryWait(ctx, chunk.ID, "tts_stalled", message); err != nil {
 				result.Failed++
 				failed = true
 				break
 			}
 		}
 		if failed {
+			continue
+		}
+		if !shouldFailJob {
+			if s.publisher != nil {
+				if err := s.publisher.SendAudioBriefingRunE(ctx, job.UserID, job.ID, "chunk-heartbeat-timeout-retry"); err != nil {
+					result.Failed++
+					continue
+				}
+			}
+			result.Processed++
 			continue
 		}
 		if _, err := s.repo.FailVoicingJob(ctx, job.ID, "tts_stalled", message); err != nil {
@@ -87,16 +117,20 @@ func (s *AudioBriefingStaleVoicingService) currentTime() time.Time {
 	return s.now()
 }
 
-func staleGeneratingChunkIDs(chunks []model.AudioBriefingScriptChunk, cutoff time.Time) []string {
-	out := make([]string, 0)
+func staleGeneratingChunks(chunks []model.AudioBriefingScriptChunk, cutoff time.Time) []model.AudioBriefingScriptChunk {
+	out := make([]model.AudioBriefingScriptChunk, 0)
 	for _, chunk := range chunks {
 		if strings.TrimSpace(chunk.TTSStatus) != "generating" {
 			continue
 		}
-		if chunk.UpdatedAt.IsZero() || chunk.UpdatedAt.After(cutoff) {
+		lastHeartbeatAt := chunk.UpdatedAt
+		if chunk.LastHeartbeatAt != nil && !chunk.LastHeartbeatAt.IsZero() {
+			lastHeartbeatAt = *chunk.LastHeartbeatAt
+		}
+		if lastHeartbeatAt.IsZero() || lastHeartbeatAt.After(cutoff) {
 			continue
 		}
-		out = append(out, strings.TrimSpace(chunk.ID))
+		out = append(out, chunk)
 	}
 	return out
 }

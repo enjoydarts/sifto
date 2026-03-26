@@ -10,7 +10,7 @@ import (
 func TestNextAudioBriefingVoicingChunkWaitsForFreshGeneratingChunk(t *testing.T) {
 	now := time.Date(2026, 3, 25, 12, 0, 0, 0, time.UTC)
 	chunks := []model.AudioBriefingScriptChunk{
-		{ID: "chunk-1", Seq: 1, TTSStatus: "generating", UpdatedAt: now.Add(-5 * time.Minute)},
+		{ID: "chunk-1", Seq: 1, TTSStatus: "generating", LastHeartbeatAt: ptrTime(now.Add(-5 * time.Minute)), UpdatedAt: now.Add(-5 * time.Minute)},
 		{ID: "chunk-2", Seq: 2, TTSStatus: "pending", UpdatedAt: now},
 	}
 
@@ -29,7 +29,7 @@ func TestNextAudioBriefingVoicingChunkWaitsForFreshGeneratingChunk(t *testing.T)
 func TestNextAudioBriefingVoicingChunkRetriesStaleGeneratingChunk(t *testing.T) {
 	now := time.Date(2026, 3, 25, 12, 0, 0, 0, time.UTC)
 	chunks := []model.AudioBriefingScriptChunk{
-		{ID: "chunk-1", Seq: 1, TTSStatus: "generating", UpdatedAt: now.Add(-20 * time.Minute)},
+		{ID: "chunk-1", Seq: 1, TTSStatus: "generating", AttemptCount: 2, LastHeartbeatAt: ptrTime(now.Add(-20 * time.Minute)), UpdatedAt: now.Add(-20 * time.Minute)},
 	}
 
 	selection, chunk, resetGenerating := nextAudioBriefingVoicingChunk(chunks, now)
@@ -41,6 +41,24 @@ func TestNextAudioBriefingVoicingChunkRetriesStaleGeneratingChunk(t *testing.T) 
 	}
 	if !resetGenerating {
 		t.Fatal("resetGenerating = false, want true")
+	}
+}
+
+func TestNextAudioBriefingVoicingChunkProcessesRetryWaitChunk(t *testing.T) {
+	now := time.Date(2026, 3, 25, 12, 0, 0, 0, time.UTC)
+	chunks := []model.AudioBriefingScriptChunk{
+		{ID: "chunk-1", Seq: 1, TTSStatus: "retry_wait", AttemptCount: 1, UpdatedAt: now.Add(-2 * time.Minute)},
+	}
+
+	selection, chunk, resetGenerating := nextAudioBriefingVoicingChunk(chunks, now)
+	if selection != audioBriefingVoicingChunkSelectionProcess {
+		t.Fatalf("selection = %q, want process", selection)
+	}
+	if chunk == nil || chunk.ID != "chunk-1" {
+		t.Fatalf("chunk = %#v, want chunk-1", chunk)
+	}
+	if resetGenerating {
+		t.Fatal("resetGenerating = true, want false")
 	}
 }
 
@@ -61,4 +79,8 @@ func TestNextAudioBriefingVoicingChunkCompletesWhenAllChunksGenerated(t *testing
 	if resetGenerating {
 		t.Fatal("resetGenerating = true, want false")
 	}
+}
+
+func ptrTime(v time.Time) *time.Time {
+	return &v
 }

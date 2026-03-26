@@ -882,6 +882,9 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 	pitch float64,
 	volumeGain float64,
 	outputObjectKey string,
+	chunkID string,
+	heartbeatURL string,
+	heartbeatToken string,
 	aivisUserDictionaryUUID *string,
 	aivisAPIKey *string,
 ) (*AudioBriefingSynthesizeUploadResponse, error) {
@@ -902,6 +905,9 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 		"pitch":                      pitch,
 		"volume_gain":                volumeGain,
 		"output_object_key":          outputObjectKey,
+		"chunk_id":                   strings.TrimSpace(chunkID),
+		"heartbeat_url":              strings.TrimSpace(heartbeatURL),
+		"heartbeat_token":            strings.TrimSpace(heartbeatToken),
 	}
 	if uuid := strings.TrimSpace(derefString(aivisUserDictionaryUUID)); uuid != "" {
 		requestBody["user_dictionary_uuid"] = uuid

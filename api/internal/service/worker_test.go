@@ -63,6 +63,9 @@ func TestSynthesizeAudioBriefingUploadAppliesAudioBriefingTimeout(t *testing.T) 
 		0,
 		0,
 		"foo",
+		"chunk-1",
+		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
+		"heartbeat-token",
 		nil,
 		nil,
 	)
@@ -106,6 +109,9 @@ func TestSynthesizeAudioBriefingUploadIncludesUserDictionaryUUID(t *testing.T) {
 		0,
 		0,
 		"foo",
+		"chunk-1",
+		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
+		"heartbeat-token",
 		strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),
 		nil,
 	)

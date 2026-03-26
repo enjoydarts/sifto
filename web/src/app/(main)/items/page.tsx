@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef, startTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCheck, Newspaper, Search, X } from "lucide-react";
+import { CheckCheck, Newspaper, Search, Volume2, X } from "lucide-react";
 import { api, Item, ItemSearchSuggestion } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -136,6 +136,7 @@ function ItemsPageContent() {
   const laterMode = feedMode === "later";
   const pendingMode = feedMode === "pending";
   const deletedMode = feedMode === "deleted";
+  const summaryAudioQueueKind = favoriteOnly ? "favorite" : laterMode ? "later" : "unread";
   const pageSize = 20;
   const [error, setError] = useState<string | null>(null);
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
@@ -718,6 +719,16 @@ function ItemsPageContent() {
                 {t("items.rail.actions")}
               </div>
               <div className="mt-3 grid gap-2">
+                {!pendingMode && (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/triage?mode=all")}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 press focus-ring"
+                  >
+                    <CheckCheck className="size-4" aria-hidden="true" />
+                    <span>{t("items.openAllTriage")}</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -734,14 +745,14 @@ function ItemsPageContent() {
                   <Search className="size-4" aria-hidden="true" />
                   <span>{t("items.search.open")}</span>
                 </button>
-                {!pendingMode && (
+                {!pendingMode && !deletedMode && (
                   <button
                     type="button"
-                    onClick={() => router.push("/triage?mode=all")}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 press focus-ring"
+                    onClick={() => router.push(`/audio-player?queue=${summaryAudioQueueKind}`)}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] press focus-ring"
                   >
-                    <CheckCheck className="size-4" aria-hidden="true" />
-                    <span>{t("items.openAllTriage")}</span>
+                    <Volume2 className="size-4" aria-hidden="true" />
+                    <span>{t("items.openAudioPlayer")}</span>
                   </button>
                 )}
               </div>
@@ -797,6 +808,16 @@ function ItemsPageContent() {
                     >
                       <CheckCheck className="size-4" aria-hidden="true" />
                       <span>{t("items.openAllTriage")}</span>
+                    </button>
+                  )}
+                  {!pendingMode && !deletedMode && (
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/audio-player?queue=${summaryAudioQueueKind}`)}
+                      className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] press focus-ring"
+                    >
+                      <Volume2 className="size-4" aria-hidden="true" />
+                      <span>{t("items.openAudioPlayer")}</span>
                     </button>
                   )}
                 </div>

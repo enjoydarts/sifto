@@ -120,6 +120,56 @@ func TestSynthesizeAudioBriefingUploadIncludesUserDictionaryUUID(t *testing.T) {
 	}
 }
 
+func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if got := body["user_dictionary_uuid"]; got != "5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861" {
+			t.Fatalf("user_dictionary_uuid = %v, want expected uuid", got)
+		}
+		if got := body["text"]; got != "邦題タイトル\n\n要約本文" {
+			t.Fatalf("text = %v, want narration body", got)
+		}
+		respBody, _ := json.Marshal(map[string]any{
+			"audio_base64":  "Zm9v",
+			"content_type":  "audio/mpeg",
+			"duration_sec":  12,
+			"resolved_text": "邦題タイトル\n\n要約本文",
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	})
+
+	resp, err := client.SynthesizeSummaryAudio(
+		context.Background(),
+		"aivis",
+		"model",
+		"speaker:1",
+		"邦題タイトル\n\n要約本文",
+		1.0,
+		1.0,
+		1.0,
+		0.4,
+		0,
+		0,
+		strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("SynthesizeSummaryAudio(...) error = %v", err)
+	}
+	if resp == nil || resp.AudioBase64 != "Zm9v" {
+		t.Fatalf("AudioBase64 = %#v, want Zm9v", resp)
+	}
+}
+
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {

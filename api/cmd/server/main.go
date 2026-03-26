@@ -101,6 +101,8 @@ func main() {
 	audioBriefingPublishedNotifier := service.NewAudioBriefingPublishedNotifier(userRepo, notificationPriorityRepo, pushNotificationLogRepo, oneSignal, nil)
 	podcastPublicationSvc := service.NewPodcastPublicationService(audioBriefingRepo, worker)
 	audioBriefingsH := handler.NewAudioBriefingsHandler(audioBriefingRepo, audioBriefingOrchestrator, audioBriefingVoiceRunner, audioBriefingConcatStarter, audioBriefingDeleteSvc, eventPublisher, worker)
+	summaryAudioPlayerSvc := service.NewSummaryAudioPlayerService(itemRepo, audioBriefingRepo, userSettingsRepo, secretCipher, worker)
+	summaryAudioPlayerH := handler.NewSummaryAudioPlayerHandler(summaryAudioPlayerSvc)
 	internalAudioBriefingsH := handler.NewInternalAudioBriefingsHandler(audioBriefingRepo, audioBriefingPublishedNotifier, podcastPublicationSvc)
 	podcastFeedSvc := service.NewPodcastFeedService(userSettingsRepo, audioBriefingRepo, worker)
 	podcastsH := handler.NewPodcastsHandler(podcastFeedSvc)
@@ -305,6 +307,7 @@ func main() {
 			r.Delete("/{id}", audioBriefingsH.Delete)
 			r.Get("/{id}", audioBriefingsH.Get)
 		})
+		r.Post("/summary-audio/items/{id}/synthesize", summaryAudioPlayerH.Synthesize)
 		r.Get("/dashboard", dashboardH.Get)
 		r.Route("/reviews", func(r chi.Router) {
 			r.Get("/due", reviewsH.Due)

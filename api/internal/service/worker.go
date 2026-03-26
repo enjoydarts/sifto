@@ -389,6 +389,13 @@ type AudioBriefingSynthesizeUploadResponse struct {
 	DurationSec    int    `json:"duration_sec"`
 }
 
+type SummaryAudioSynthesizeResponse struct {
+	AudioBase64  string `json:"audio_base64"`
+	ContentType  string `json:"content_type"`
+	DurationSec  int    `json:"duration_sec"`
+	ResolvedText string `json:"resolved_text"`
+}
+
 type AudioBriefingPresignResponse struct {
 	AudioURL string `json:"audio_url"`
 }
@@ -913,6 +920,44 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 		requestBody["user_dictionary_uuid"] = uuid
 	}
 	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload", requestBody, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, aivisAPIKey, w.internalSecret))
+}
+
+func (w *WorkerClient) SynthesizeSummaryAudio(
+	ctx context.Context,
+	provider string,
+	voiceModel string,
+	voiceStyle string,
+	text string,
+	speechRate float64,
+	emotionalIntensity float64,
+	tempoDynamics float64,
+	lineBreakSilenceSeconds float64,
+	pitch float64,
+	volumeGain float64,
+	aivisUserDictionaryUUID *string,
+	aivisAPIKey *string,
+) (*SummaryAudioSynthesizeResponse, error) {
+	if _, ok := ctx.Deadline(); !ok && w.audioBriefingTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.audioBriefingTimeout)
+		defer cancel()
+	}
+	requestBody := map[string]any{
+		"provider":                   provider,
+		"voice_model":                voiceModel,
+		"voice_style":                voiceStyle,
+		"text":                       text,
+		"speech_rate":                speechRate,
+		"emotional_intensity":        emotionalIntensity,
+		"tempo_dynamics":             tempoDynamics,
+		"line_break_silence_seconds": lineBreakSilenceSeconds,
+		"pitch":                      pitch,
+		"volume_gain":                volumeGain,
+	}
+	if uuid := strings.TrimSpace(derefString(aivisUserDictionaryUUID)); uuid != "" {
+		requestBody["user_dictionary_uuid"] = uuid
+	}
+	return postWithHeaders[SummaryAudioSynthesizeResponse](ctx, w, "/summary-audio/synthesize", requestBody, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, aivisAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) PresignAudioBriefingObject(ctx context.Context, objectKey string, expiresSec int) (*AudioBriefingPresignResponse, error) {

@@ -624,6 +624,15 @@ export interface ItemReadResult {
   is_read: boolean;
 }
 
+export interface SummaryAudioSynthesisResponse {
+  item?: ItemDetail | null;
+  persona: string;
+  audio_base64: string;
+  content_type: string;
+  duration_sec: number;
+  resolved_text: string;
+}
+
 export interface BulkMarkReadResult {
   status: "ok";
   updated_count: number;
@@ -1453,10 +1462,11 @@ export interface AskNavigatorResponse {
   navigator?: AskNavigator | null;
 }
 
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+async function clientFetch<T>(path: string, options?: RequestInit, opts?: { apiPrefix?: boolean }): Promise<T> {
   const requestPath = withCacheBust(path, options?.method);
+  const targetPath = `${opts?.apiPrefix === false ? "" : "/api"}${requestPath}`;
   const authHeaders = await getAuthHeaders();
-  let res = await fetch(`/api${requestPath}`, {
+  let res = await fetch(targetPath, {
     cache: "no-store",
     ...options,
     headers: {
@@ -1468,7 +1478,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   if (res.status === 401 && authHeaders.Authorization) {
     await resolveClerkIdentityIfNeeded();
     const retryAuthHeaders = await getAuthHeaders();
-    res = await fetch(`/api${requestPath}`, {
+    res = await fetch(targetPath, {
       cache: "no-store",
       ...options,
       headers: {
@@ -1484,6 +1494,10 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   }
   if (res.status === 204) return undefined as T;
   return res.json();
+}
+
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  return clientFetch<T>(path, options, { apiPrefix: true });
 }
 
 const FORCE_FRESH_UNTIL_KEY = "sifto.forceFreshUntil";
@@ -1830,6 +1844,10 @@ export const api = {
     return apiFetch<{ days: number; limit: number; items: TopicPulseItem[] }>(`/topics/pulse${qs ? `?${qs}` : ""}`);
   },
   getItem: (id: string) => apiFetch<ItemDetail>(`/items/${id}`),
+  synthesizeSummaryAudio: (id: string) =>
+    clientFetch<SummaryAudioSynthesisResponse>(`/summary-audio-proxy/items/${id}/synthesize`, {
+      method: "POST",
+    }, { apiPrefix: false }),
   saveItemNote: (id: string, body: { content: string; tags?: string[] }) =>
     apiFetch<ItemNote>(`/items/${id}/note`, {
       method: "PUT",

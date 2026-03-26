@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, Pause, Play, SkipForward, Square, Volume2, X } from "lucide-react";
-import { api, type SummaryAudioSynthesisResponse } from "@/lib/api";
+import { api, type Item, type SummaryAudioSynthesisResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { PageHeader } from "@/components/ui/page-header";
@@ -26,6 +26,8 @@ type PendingPrefetch = {
 };
 
 const queueKinds: QueueKind[] = ["unread", "later", "favorite"];
+const PLAYBACK_QUEUE_BUFFER_SIZE = 24;
+const PLAYBACK_QUEUE_VISIBLE_COUNT = 12;
 
 function parseQueueKind(raw: string | null): QueueKind {
   return raw === "later" ? "later" : raw === "favorite" ? "favorite" : "unread";
@@ -57,6 +59,7 @@ export default function SummaryAudioPlayerPage() {
   const readProgressActiveItemIDRef = useRef<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [activeItemID, setActiveItemID] = useState<string | null>(null);
+  const [playbackQueue, setPlaybackQueue] = useState<Item[]>([]);
   const [isPreparing, setIsPreparing] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -70,24 +73,17 @@ export default function SummaryAudioPlayerPage() {
     queryFn: async () => {
       const params =
         queueKind === "later"
-          ? { status: "summarized", page_size: 100, sort: "newest", unread_only: true, later_only: true }
+          ? { status: "summarized", page_size: PLAYBACK_QUEUE_BUFFER_SIZE, sort: "newest", unread_only: true, later_only: true }
           : queueKind === "favorite"
-            ? { status: "summarized", page_size: 100, sort: "newest", favorite_only: true }
-            : { status: "summarized", page_size: 100, sort: "newest", unread_only: true };
+            ? { status: "summarized", page_size: PLAYBACK_QUEUE_BUFFER_SIZE, sort: "newest", favorite_only: true }
+            : { status: "summarized", page_size: PLAYBACK_QUEUE_BUFFER_SIZE, sort: "newest", unread_only: true };
       return api.getItems(params);
     },
   });
 
   const queueItems = useMemo(() => queueQuery.data?.items ?? [], [queueQuery.data?.items]);
-  const activeIndex = activeItemID
-    ? queueItems.findIndex((item) => item.id === activeItemID)
-    : -1;
-  const playbackIndex = activeIndex >= 0 ? activeIndex : currentIndex;
-  const currentItem =
-    (activeItemID ? queueItems.find((item) => item.id === activeItemID) : null) ??
-    queueItems[currentIndex] ??
-    null;
-  const nextItem = playbackIndex + 1 < queueItems.length ? queueItems[playbackIndex + 1] : null;
+  const currentItem = playbackQueue[0] ?? null;
+  const nextItem = playbackQueue[1] ?? null;
 
   const currentItemDetailQuery = useQuery({
     queryKey: ["summary-audio-item", currentItem?.id],
@@ -103,6 +99,7 @@ export default function SummaryAudioPlayerPage() {
   useEffect(() => {
     setCurrentIndex(0);
     setActiveItemID(null);
+    setPlaybackQueue([]);
     setIsFinished(false);
     setPlaybackError(null);
     setPositionSec(0);
@@ -127,6 +124,24 @@ export default function SummaryAudioPlayerPage() {
   }, [queueKind]);
 
   useEffect(() => {
+    setPlaybackQueue((prev) => {
+      const incoming = queueItems.slice(0, PLAYBACK_QUEUE_BUFFER_SIZE);
+      if (incoming.length === 0) {
+        return prev;
+      }
+      if (prev.length === 0) {
+        return incoming;
+      }
+      const existing = new Set(prev.map((item) => item.id));
+      const appended = incoming.filter((item) => !existing.has(item.id));
+      if (appended.length === 0) {
+        return prev;
+      }
+      return [...prev, ...appended].slice(0, PLAYBACK_QUEUE_BUFFER_SIZE);
+    });
+  }, [queueItems]);
+
+  useEffect(() => {
     return () => {
       if (currentAudioRef.current) {
         URL.revokeObjectURL(currentAudioRef.current.objectURL);
@@ -146,10 +161,11 @@ export default function SummaryAudioPlayerPage() {
       await api.markItemRead(itemID);
       void queryClient.invalidateQueries({ queryKey: ["items-feed"] });
       void queryClient.invalidateQueries({ queryKey: ["summary-audio-item", itemID] });
+      void queryClient.invalidateQueries({ queryKey: ["summary-audio-queue", queueKind] });
     } catch {
       return;
     }
-  }, [queryClient]);
+  }, [queryClient, queueKind]);
 
   function resetReadProgressForItem(itemID: string | null) {
     if (!itemID) {
@@ -188,8 +204,8 @@ export default function SummaryAudioPlayerPage() {
     };
   }
 
-  async function ensurePrefetch(index: number) {
-    const item = queueItems[index];
+  async function ensurePrefetch(queue: Item[], index: number) {
+    const item = queue[index];
     if (!item) {
       return;
     }
@@ -222,8 +238,8 @@ export default function SummaryAudioPlayerPage() {
     }
   }
 
-  async function playIndex(index: number, autoplay: boolean) {
-    const item = queueItems[index];
+  async function playQueue(queue: Item[], autoplay: boolean) {
+    const item = queue[0];
     const audio = audioRef.current;
     if (!item || !audio) {
       return;
@@ -250,9 +266,8 @@ export default function SummaryAudioPlayerPage() {
           prepared = await synthesizeItem(item.id);
         }
       } else {
-        const nextIndex = index + 1;
-        if (nextIndex < queueItems.length) {
-          void ensurePrefetch(nextIndex);
+        if (queue[1]) {
+          void ensurePrefetch(queue, 1);
         }
         prepared = await synthesizeItem(item.id);
       }
@@ -260,7 +275,6 @@ export default function SummaryAudioPlayerPage() {
         URL.revokeObjectURL(currentAudioRef.current.objectURL);
       }
       currentAudioRef.current = prepared;
-      setCurrentIndex(index);
       setActiveItemID(prepared.itemID);
       audio.src = prepared.objectURL;
       audio.currentTime = 0;
@@ -269,8 +283,8 @@ export default function SummaryAudioPlayerPage() {
       if (autoplay) {
         await audio.play();
       }
-      if (index + 1 < queueItems.length) {
-        void ensurePrefetch(index + 1);
+      if (queue[1]) {
+        void ensurePrefetch(queue, 1);
       }
     } catch (err) {
       setPlaybackError(err instanceof Error ? err.message : String(err));
@@ -285,7 +299,7 @@ export default function SummaryAudioPlayerPage() {
       return;
     }
     if (currentAudioRef.current?.itemID !== currentItem.id || !audio.src) {
-      await playIndex(playbackIndex, true);
+      await playQueue(playbackQueue, true);
       return;
     }
     try {
@@ -334,11 +348,16 @@ export default function SummaryAudioPlayerPage() {
   }
 
   async function handleSkip() {
-    if (!nextItem) {
+    if (playbackQueue.length <= 1 || !nextItem) {
+      setPlaybackQueue([]);
+      setCurrentIndex((prev) => prev + (playbackQueue.length > 0 ? 1 : 0));
       handleFinish();
       return;
     }
-    await playIndex(playbackIndex + 1, true);
+    const nextQueue = playbackQueue.slice(1);
+    setPlaybackQueue(nextQueue);
+    setCurrentIndex((prev) => prev + 1);
+    await playQueue(nextQueue, true);
   }
 
   useEffect(() => {
@@ -380,17 +399,16 @@ export default function SummaryAudioPlayerPage() {
       audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [activeItemID, flushReadProgress, playbackIndex, nextItem?.id, queueItems.length]);
+  }, [activeItemID, flushReadProgress, nextItem?.id, playbackQueue.length]);
 
   const currentDetail = currentItemDetailQuery.data ?? null;
   const summaryText = currentDetail?.summary?.summary ?? "";
   const translatedTitle = currentDetail?.translated_title || currentDetail?.summary?.translated_title || currentDetail?.title || "";
   const originalTitle = currentDetail?.title || "";
-  const queueCountLabel = `${queueItems.length.toLocaleString(locale)} ${t("summaryAudio.queueCount")}`;
+  const queueCountLabel = `${playbackQueue.length.toLocaleString(locale)} ${t("summaryAudio.queueCount")}`;
   const titleForDisplay = translatedTitle || originalTitle || t("summaryAudio.untitled");
   const sourceTitle = currentDetail?.source_title || t("summaryAudio.sourceUnknown");
-  const progressBaseIndex = playbackIndex;
-  const progressLabel = queueItems.length > 0 ? `${progressBaseIndex + 1}/${queueItems.length}` : "0/0";
+  const progressLabel = playbackQueue.length > 0 ? `${currentIndex + 1}/${currentIndex + playbackQueue.length}` : "0/0";
 
   return (
     <PageTransition>
@@ -549,17 +567,22 @@ export default function SummaryAudioPlayerPage() {
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
                 {t("summaryAudio.queueTitle")}
               </div>
-              {queueItems.length === 0 ? (
+              {playbackQueue.length === 0 ? (
                 <p className="text-sm text-editorial-muted">{t("summaryAudio.empty")}</p>
               ) : (
                 <div className="space-y-2">
-                  {queueItems.slice(0, 12).map((item, index) => {
-                    const isActive = currentItem?.id === item.id;
+                  {playbackQueue.slice(0, PLAYBACK_QUEUE_VISIBLE_COUNT).map((item, index) => {
+                    const isActive = activeItemID === item.id;
                     return (
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => void playIndex(index, true)}
+                        onClick={() => {
+                          const nextQueue = playbackQueue.slice(index);
+                          setPlaybackQueue(nextQueue);
+                          setCurrentIndex((prev) => prev + index);
+                          void playQueue(nextQueue, true);
+                        }}
                         className={`group flex w-full items-start justify-between gap-3 rounded-[var(--radius-card)] border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.08)] focus:outline-none focus:ring-2 focus:ring-[var(--color-editorial-accent)] ${
                           isActive
                             ? "border-[var(--color-editorial-ink)] bg-[var(--color-editorial-accent-soft)]"

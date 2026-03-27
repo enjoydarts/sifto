@@ -61,19 +61,23 @@ const secondaryLinks = [
 const secondaryLinkGroups = [
   {
     labelKey: "nav.group.explore",
-    items: secondaryLinks.slice(0, 4),
+    items: secondaryLinks.filter((link) => ["/clusters", "/pulse", "/goals", "/favorites"].includes(link.href)),
   },
   {
     labelKey: "nav.group.content",
-    items: secondaryLinks.slice(4, 8),
+    items: secondaryLinks.filter((link) =>
+      ["/sources", "/digests", "/audio-briefings", "/ai-navigator-briefs", "/playback-history"].includes(link.href),
+    ),
   },
   {
     labelKey: "nav.group.llm",
-    items: secondaryLinks.slice(8, 13),
+    items: secondaryLinks.filter((link) =>
+      ["/llm-usage", "/llm-analysis", "/poe-models", "/openrouter-models", "/aivis-models"].includes(link.href),
+    ),
   },
   {
     labelKey: "nav.group.system",
-    items: secondaryLinks.slice(13),
+    items: secondaryLinks.filter((link) => ["/settings", "/debug/digests"].includes(link.href)),
   },
 ];
 

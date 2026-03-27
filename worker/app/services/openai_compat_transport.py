@@ -128,9 +128,9 @@ def run_chat_json(
             }
         else:
             body["response_format"] = {"type": "json_object"}
-    if provider_name == "zai":
-        # Z.ai enables deep thinking by default, which can exhaust output tokens
-        # into reasoning_content and leave message.content empty.
+    if provider_name in {"zai", "moonshot"}:
+        # Some OpenAI-compatible providers enable thinking by default, which can
+        # exhaust output tokens into reasoning_content and leave message.content empty.
         body["thinking"] = {"type": "disabled"}
 
     headers = {

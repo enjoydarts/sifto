@@ -101,6 +101,20 @@ def _normalize_model_family(model: str) -> str:
     return _normalize_model_name(model)
 
 
+def _normalize_temperature(model: str, value: float | None) -> float:
+    normalized = _normalize_model_name(model)
+    # kimi-k2.5 currently requires temperature=0.6, while current K2 text models
+    # reject custom values unless temperature=1.
+    if normalized == "kimi-k2.5":
+        return 0.6
+    return 1.0
+
+
+def _normalize_top_p(value: float | None) -> float:
+    # Moonshot chat completion models currently only accept top_p=0.95.
+    return 0.95
+
+
 def _pricing_for_model(model: str, purpose: str) -> dict:
     family = _normalize_model_family(model)
     base = dict(model_pricing(family) or model_pricing(model) or {"input_per_mtok_usd": 0.0, "output_per_mtok_usd": 0.0, "cache_read_per_mtok_usd": 0.0})
@@ -186,8 +200,8 @@ def _chat_json(
         response_schema=response_schema,
         schema_name=schema_name,
         include_temperature=True,
-        temperature=temperature,
-        top_p=top_p,
+        temperature=_normalize_temperature(model, temperature),
+        top_p=_normalize_top_p(top_p),
     )
 
 

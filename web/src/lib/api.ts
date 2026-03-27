@@ -633,6 +633,53 @@ export interface SummaryAudioSynthesisResponse {
   resolved_text: string;
 }
 
+export type PlaybackMode = "summary_queue" | "audio_briefing";
+export type PlaybackSessionStatus = "in_progress" | "completed" | "interrupted";
+
+export interface PlaybackSession {
+  id: string;
+  user_id: string;
+  mode: PlaybackMode;
+  status: PlaybackSessionStatus;
+  title: string;
+  subtitle: string;
+  current_position_sec: number;
+  duration_sec: number;
+  progress_ratio?: number | null;
+  resume_payload: Record<string, unknown>;
+  started_at: string;
+  updated_at: string;
+  completed_at?: string | null;
+}
+
+export interface LatestPlaybackSessionsResponse {
+  summary_queue: PlaybackSession | null;
+  audio_briefing: PlaybackSession | null;
+}
+
+export interface PlaybackSessionsResponse {
+  items: PlaybackSession[];
+}
+
+export interface CreatePlaybackSessionRequest {
+  mode: PlaybackMode;
+  title: string;
+  subtitle: string;
+  current_position_sec: number;
+  duration_sec: number;
+  progress_ratio?: number | null;
+  resume_payload: Record<string, unknown>;
+}
+
+export interface UpdatePlaybackSessionRequest {
+  title: string;
+  subtitle: string;
+  current_position_sec: number;
+  duration_sec: number;
+  progress_ratio?: number | null;
+  resume_payload: Record<string, unknown>;
+}
+
 export interface BulkMarkReadResult {
   status: "ok";
   updated_count: number;
@@ -2020,6 +2067,36 @@ export const api = {
   startAudioBriefingVoicing: (id: string) =>
     apiFetch<AudioBriefingDetailResponse>(`/audio-briefings/${id}/start-voicing`, {
       method: "POST",
+    }),
+  getLatestPlaybackSessions: () =>
+    apiFetch<LatestPlaybackSessionsResponse>("/playback-sessions/latest"),
+  getPlaybackSessions: (params?: { mode?: PlaybackMode; status?: PlaybackSessionStatus; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.mode) q.set("mode", params.mode);
+    if (params?.status) q.set("status", params.status);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiFetch<PlaybackSessionsResponse>(`/playback-sessions${qs ? `?${qs}` : ""}`);
+  },
+  createPlaybackSession: (body: CreatePlaybackSessionRequest) =>
+    apiFetch<PlaybackSession>("/playback-sessions", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updatePlaybackSession: (id: string, body: UpdatePlaybackSessionRequest) =>
+    apiFetch<PlaybackSession>(`/playback-sessions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  completePlaybackSession: (id: string, body: UpdatePlaybackSessionRequest) =>
+    apiFetch<PlaybackSession>(`/playback-sessions/${id}/complete`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  interruptPlaybackSession: (id: string, body: UpdatePlaybackSessionRequest) =>
+    apiFetch<PlaybackSession>(`/playback-sessions/${id}/interrupt`, {
+      method: "POST",
+      body: JSON.stringify(body),
     }),
 
   // Settings

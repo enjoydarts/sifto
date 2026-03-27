@@ -10,6 +10,7 @@ import {
   Bug,
   CheckCheck,
   ChevronDown,
+  History,
   RefreshCw,
   Menu,
   X,
@@ -46,6 +47,7 @@ const secondaryLinks = [
   { href: "/sources", labelKey: "nav.sources", icon: Rss },
   { href: "/digests", labelKey: "nav.digests", icon: Mail },
   { href: "/audio-briefings", labelKey: "nav.audioBriefings", icon: Radio },
+  { href: "/playback-history", labelKey: "nav.playbackHistory", icon: History },
   { href: "/llm-usage", labelKey: "nav.llmUsage", icon: Brain },
   { href: "/llm-analysis", labelKey: "nav.llmAnalysis", icon: TableProperties },
   { href: "/poe-models", labelKey: "nav.poeModels", icon: Link2 },
@@ -62,15 +64,15 @@ const secondaryLinkGroups = [
   },
   {
     labelKey: "nav.group.content",
-    items: secondaryLinks.slice(4, 7),
+    items: secondaryLinks.slice(4, 8),
   },
   {
     labelKey: "nav.group.llm",
-    items: secondaryLinks.slice(7, 12),
+    items: secondaryLinks.slice(8, 13),
   },
   {
     labelKey: "nav.group.system",
-    items: secondaryLinks.slice(12),
+    items: secondaryLinks.slice(13),
   },
 ];
 

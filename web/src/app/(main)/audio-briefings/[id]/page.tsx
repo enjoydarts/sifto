@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Radio } from "lucide-react";
 import { useConfirm } from "@/components/confirm-provider";
 import { PageTransition } from "@/components/page-transition";
@@ -58,6 +59,11 @@ export default function AudioBriefingDetailPage() {
   const player = useSharedAudioPlayer();
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
+  const latestSessionsQuery = useQuery({
+    queryKey: ["latest-playback-sessions"],
+    queryFn: () => api.getLatestPlaybackSessions(),
+  });
+  const latestAudioSession = latestSessionsQuery.data?.audio_briefing ?? null;
   const [detail, setDetail] = useState<AudioBriefingDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [resuming, setResuming] = useState(false);
@@ -211,6 +217,14 @@ export default function AudioBriefingDetailPage() {
     player.expandPlayer();
   }
 
+  async function handleResumeLatestPlayback() {
+    if (!latestAudioSession) {
+      return;
+    }
+    await player.resumePlaybackSession(latestAudioSession);
+    player.expandPlayer();
+  }
+
   if (loading) return <p className="text-sm text-[var(--color-editorial-ink-soft)]">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!detail) return null;
@@ -307,6 +321,21 @@ export default function AudioBriefingDetailPage() {
               >
                 {t("audioBriefing.playInSharedPlayer", "プレイヤーで再生")}
               </button>
+              {latestAudioSession ? (
+                <button
+                  type="button"
+                  onClick={() => void handleResumeLatestPlayback()}
+                  className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                >
+                  {t("playbackHistory.resumeLatest")}
+                </button>
+              ) : null}
+              <Link
+                href="/playback-history"
+                className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+              >
+                {t("nav.playbackHistory")}
+              </Link>
               <button
                 type="button"
                 onClick={player.expandPlayer}

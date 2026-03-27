@@ -1,6 +1,6 @@
 "use client";
 
-import type { Item, ItemDetail, SummaryAudioSynthesisResponse } from "@/lib/api";
+import type { Item, ItemDetail, PlaybackSession, SummaryAudioSynthesisResponse } from "@/lib/api";
 
 export type SharedAudioMode = "summary_queue" | "audio_briefing" | null;
 
@@ -69,6 +69,7 @@ export type SharedAudioPlayerContextValue = {
   audioBriefing: SharedAudioBriefingPayload | null;
   startSummaryQueuePlayback: (queueKind: SummaryAudioQueueKind, initialItems?: Item[]) => Promise<void>;
   startAudioBriefingPlayback: (payload: SharedAudioBriefingPayload) => Promise<void>;
+  resumePlaybackSession: (session: PlaybackSession) => Promise<void>;
   selectSummaryQueueItem: (index: number) => Promise<void>;
   pausePlayback: () => void;
   resumePlayback: () => Promise<void>;

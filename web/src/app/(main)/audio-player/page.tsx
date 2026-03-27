@@ -68,6 +68,12 @@ export default function SummaryAudioPlayerPage() {
           actions={(
             <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <Link
+                href="/playback-history"
+                className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+              >
+                {t("nav.playbackHistory")}
+              </Link>
+              <Link
                 href="/items"
                 className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
               >

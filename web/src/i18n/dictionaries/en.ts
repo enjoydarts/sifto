@@ -1457,6 +1457,7 @@ export const enDict: Dict = {
   "aiNavigatorBriefs.generateNow": "Generate now",
   "aiNavigatorBriefs.playAll": "Play all 10 in summary audio",
   "aiNavigatorBriefs.toast.generated": "AI Navigator Brief generated",
+  "aiNavigatorBriefs.toast.queued": "Started generating the AI Navigator Brief",
   "aiNavigatorBriefs.toast.deleted": "AI Navigator Brief deleted",
   "aiNavigatorBriefs.toast.queueAdded": "Added this AI Navigator brief to the summary audio queue",
   "aiNavigatorBriefs.generatedAt": "Generated at",

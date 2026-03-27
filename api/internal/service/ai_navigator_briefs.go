@@ -21,6 +21,10 @@ type aiNavigatorBriefUserLookup interface {
 	GetByID(ctx context.Context, userID string) (*model.User, error)
 }
 
+type aiNavigatorBriefRunSender interface {
+	SendAINavigatorBriefRunE(ctx context.Context, userID, briefID, trigger string) error
+}
+
 type AINavigatorBriefService struct {
 	briefs   *repository.AINavigatorBriefRepo
 	items    *repository.ItemRepo
@@ -31,6 +35,7 @@ type AINavigatorBriefService struct {
 	worker   *WorkerClient
 	cipher   *SecretCipher
 	sender   audioBriefingPublishedSender
+	runner   aiNavigatorBriefRunSender
 	cache    JSONCache
 	now      func() time.Time
 	pageURL  func(path string) string
@@ -46,6 +51,7 @@ func NewAINavigatorBriefService(
 	worker *WorkerClient,
 	cipher *SecretCipher,
 	sender audioBriefingPublishedSender,
+	runner aiNavigatorBriefRunSender,
 	cache JSONCache,
 	now func() time.Time,
 ) *AINavigatorBriefService {
@@ -62,6 +68,7 @@ func NewAINavigatorBriefService(
 		worker:   worker,
 		cipher:   cipher,
 		sender:   sender,
+		runner:   runner,
 		cache:    cache,
 		now:      now,
 		pageURL:  AudioBriefingPageURLFromEnv,
@@ -129,7 +136,222 @@ func (s *AINavigatorBriefService) GenerateManual(ctx context.Context, userID str
 	if err != nil {
 		return nil, err
 	}
-	return s.GenerateBriefForSlot(ctx, userID, slot)
+	brief, err := s.EnqueueBriefForSlot(ctx, userID, slot)
+	if err != nil {
+		return nil, err
+	}
+	if s.runner == nil {
+		return nil, fmt.Errorf("ai navigator brief runner unavailable")
+	}
+	if err := s.runner.SendAINavigatorBriefRunE(ctx, userID, brief.ID, "manual"); err != nil {
+		_ = s.briefs.MarkBriefFailedAt(ctx, brief.ID, "failed to enqueue generation", s.now())
+		return nil, err
+	}
+	return brief, nil
+}
+
+func (s *AINavigatorBriefService) EnqueueBriefForSlot(ctx context.Context, userID, slot string) (*model.AINavigatorBrief, error) {
+	if s.briefs == nil || s.settings == nil {
+		return nil, fmt.Errorf("ai navigator brief service unavailable")
+	}
+	settings, err := s.settings.EnsureDefaults(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if settings == nil || !settings.AINavigatorBriefEnabled || !settings.NavigatorEnabled {
+		return nil, fmt.Errorf("ai navigator brief disabled")
+	}
+	modelName := resolveAINavigatorBriefModel(settings)
+	if modelName == nil {
+		return nil, fmt.Errorf("navigator model not configured")
+	}
+	persona := ResolvePersona(settings.NavigatorPersonaMode, settings.NavigatorPersona)
+	now := s.now().In(timeutil.JST)
+	windowStart, windowEnd, err := ResolveAINavigatorBriefSlotWindow(now, slot)
+	if err != nil {
+		return nil, err
+	}
+	brief := &model.AINavigatorBrief{
+		UserID:            userID,
+		Slot:              slot,
+		Status:            model.AINavigatorBriefStatusQueued,
+		Persona:           persona,
+		Model:             strings.TrimSpace(*modelName),
+		SourceWindowStart: &windowStart,
+		SourceWindowEnd:   &windowEnd,
+	}
+	if err := s.briefs.CreateBrief(ctx, brief); err != nil {
+		return nil, err
+	}
+	return brief, nil
+}
+
+func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, briefID string) (*model.AINavigatorBrief, error) {
+	if s.briefs == nil || s.items == nil || s.settings == nil || s.worker == nil || s.cipher == nil {
+		return nil, fmt.Errorf("ai navigator brief service unavailable")
+	}
+	brief, err := s.briefs.GetBriefDetail(ctx, userID, briefID)
+	if err != nil {
+		return nil, err
+	}
+	if brief == nil {
+		return nil, repository.ErrNotFound
+	}
+	if brief.Status == model.AINavigatorBriefStatusGenerated || brief.Status == model.AINavigatorBriefStatusNotified {
+		return brief, nil
+	}
+	if brief.Status != model.AINavigatorBriefStatusQueued {
+		return brief, nil
+	}
+
+	now := s.now().In(timeutil.JST)
+	windowStart := brief.SourceWindowStart
+	windowEnd := brief.SourceWindowEnd
+	if windowStart == nil || windowEnd == nil {
+		start, end, err := ResolveAINavigatorBriefSlotWindow(now, brief.Slot)
+		if err != nil {
+			return nil, err
+		}
+		windowStart = &start
+		windowEnd = &end
+	}
+	candidates, err := s.items.AINavigatorBriefCandidatesInWindow(ctx, userID, *windowStart, *windowEnd, 24)
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) < 10 {
+		if err := s.briefs.MarkBriefFailedAt(ctx, brief.ID, "not enough candidates", now); err != nil {
+			return nil, err
+		}
+		brief.Status = model.AINavigatorBriefStatusFailed
+		brief.ErrorMessage = "not enough candidates"
+		brief.GeneratedAt = &now
+		return brief, fmt.Errorf("not enough candidates")
+	}
+
+	anthropicKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetAnthropicAPIKeyEncrypted, s.cipher, userID, "")
+	googleKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetGoogleAPIKeyEncrypted, s.cipher, userID, "")
+	groqKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetGroqAPIKeyEncrypted, s.cipher, userID, "")
+	fireworksKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetFireworksAPIKeyEncrypted, s.cipher, userID, "")
+	deepseekKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetDeepSeekAPIKeyEncrypted, s.cipher, userID, "")
+	alibabaKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetAlibabaAPIKeyEncrypted, s.cipher, userID, "")
+	mistralKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetMistralAPIKeyEncrypted, s.cipher, userID, "")
+	moonshotKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetMoonshotAPIKeyEncrypted, s.cipher, userID, "")
+	xaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetXAIAPIKeyEncrypted, s.cipher, userID, "")
+	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetZAIAPIKeyEncrypted, s.cipher, userID, "")
+	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenRouterAPIKeyEncrypted, s.cipher, userID, "")
+	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetPoeAPIKeyEncrypted, s.cipher, userID, "")
+	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenAIAPIKeyEncrypted, s.cipher, userID, "")
+	modelName := &brief.Model
+	switch LLMProviderForModel(modelName) {
+	case "openrouter":
+		openAIKey = openRouterKey
+	case "moonshot":
+		openAIKey = moonshotKey
+	case "poe":
+		openAIKey = poeKey
+	}
+	workerCandidates := make([]BriefingNavigatorCandidate, 0, len(candidates))
+	candidateByID := make(map[string]model.BriefingNavigatorCandidate, len(candidates))
+	for _, candidate := range candidates {
+		candidateByID[candidate.ItemID] = candidate
+		var publishedAt *string
+		if candidate.PublishedAt != nil {
+			v := candidate.PublishedAt.Format(time.RFC3339)
+			publishedAt = &v
+		}
+		workerCandidates = append(workerCandidates, BriefingNavigatorCandidate{
+			ItemID:          candidate.ItemID,
+			Title:           candidate.Title,
+			TranslatedTitle: candidate.TranslatedTitle,
+			SourceTitle:     candidate.SourceTitle,
+			Summary:         candidate.Summary,
+			Topics:          candidate.Topics,
+			PublishedAt:     publishedAt,
+			Score:           candidate.Score,
+		})
+	}
+	workerCtx := WithWorkerTraceMetadata(ctx, "ai_navigator_brief", &userID, nil, nil, nil)
+	resp, err := s.worker.ComposeAINavigatorBriefWithModel(
+		workerCtx,
+		brief.Persona,
+		workerCandidates,
+		buildAINavigatorBriefIntroContext(windowEnd.In(timeutil.JST), brief.Slot),
+		anthropicKey,
+		googleKey,
+		groqKey,
+		deepseekKey,
+		alibabaKey,
+		mistralKey,
+		xaiKey,
+		zaiKey,
+		fireworksKey,
+		openAIKey,
+		modelName,
+	)
+	if err != nil {
+		recordAINavigatorBriefLLMExecutionFailure(ctx, "ai_navigator_brief", strings.TrimSpace(*modelName), userID, err)
+		if markErr := s.briefs.MarkBriefFailedAt(ctx, brief.ID, err.Error(), now); markErr != nil {
+			return nil, markErr
+		}
+		brief.Status = model.AINavigatorBriefStatusFailed
+		brief.ErrorMessage = err.Error()
+		brief.GeneratedAt = &now
+		return brief, err
+	}
+	brief.Status = model.AINavigatorBriefStatusGenerated
+	brief.Title = strings.TrimSpace(resp.Title)
+	brief.Intro = strings.TrimSpace(resp.Intro)
+	brief.Summary = strings.TrimSpace(resp.Summary)
+	brief.Ending = strings.TrimSpace(resp.Ending)
+	brief.GeneratedAt = &now
+	brief.ErrorMessage = ""
+	brief.SourceWindowStart = windowStart
+	brief.SourceWindowEnd = windowEnd
+
+	items := make([]model.AINavigatorBriefItem, 0, 10)
+	seen := map[string]struct{}{}
+	for idx, row := range resp.Items {
+		itemID := strings.TrimSpace(row.ItemID)
+		comment := strings.TrimSpace(row.Comment)
+		if itemID == "" || comment == "" {
+			continue
+		}
+		candidate, ok := candidateByID[itemID]
+		if !ok {
+			continue
+		}
+		if _, ok := seen[itemID]; ok {
+			continue
+		}
+		seen[itemID] = struct{}{}
+		items = append(items, model.AINavigatorBriefItem{
+			BriefID:                 brief.ID,
+			Rank:                    len(items) + 1,
+			ItemID:                  itemID,
+			TitleSnapshot:           strings.TrimSpace(ptrString(candidate.Title)),
+			TranslatedTitleSnapshot: strings.TrimSpace(ptrString(candidate.TranslatedTitle)),
+			SourceTitleSnapshot:     strings.TrimSpace(ptrString(candidate.SourceTitle)),
+			Comment:                 comment,
+		})
+		if idx >= 9 || len(items) >= 10 {
+			break
+		}
+	}
+	if len(items) < 10 {
+		if err := s.briefs.MarkBriefFailedAt(ctx, brief.ID, "llm returned fewer than 10 valid items", now); err != nil {
+			return nil, err
+		}
+		brief.Status = model.AINavigatorBriefStatusFailed
+		brief.ErrorMessage = "llm returned fewer than 10 valid items"
+		return brief, fmt.Errorf("llm returned fewer than 10 valid items")
+	}
+	if err := s.briefs.UpdateGeneratedBrief(ctx, brief, items); err != nil {
+		return nil, err
+	}
+	recordAINavigatorBriefLLMUsage(ctx, s.llmUsage, s.cache, "ai_navigator_brief", resp.LLM, &userID)
+	brief.Items = items
+	return brief, nil
 }
 
 func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, userID, slot string) (*model.AINavigatorBrief, error) {

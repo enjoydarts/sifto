@@ -1178,6 +1178,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(computePreferenceProfilesFn(client, db))
 	register(computeTopicPulseDailyFn(client, db))
 	register(generateAINavigatorBriefsFn(client, db, worker, oneSignal))
+	register(runAINavigatorBriefPipelineFn(client, db, worker, oneSignal, llmUsageCache))
 
 	return client.Serve()
 }
@@ -1253,7 +1254,7 @@ func generateAINavigatorBriefsFn(client inngestgo.Client, db *pgxpool.Pool, work
 	pushLogRepo := repository.NewPushNotificationLogRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
 	secretCipher := service.NewSecretCipher()
-	briefService := service.NewAINavigatorBriefService(briefRepo, itemRepo, settingsRepo, userRepo, pushLogRepo, llmUsageRepo, worker, secretCipher, oneSignal, llmUsageCache, nil)
+	briefService := service.NewAINavigatorBriefService(briefRepo, itemRepo, settingsRepo, userRepo, pushLogRepo, llmUsageRepo, worker, secretCipher, oneSignal, nil, llmUsageCache, nil)
 
 	return inngestgo.CreateFunction(
 		client,
@@ -1287,8 +1288,7 @@ func generateAINavigatorBriefsFn(client inngestgo.Client, db *pgxpool.Pool, work
 			}
 
 			processed := 0
-			generated := 0
-			notified := 0
+			enqueued := 0
 			skipped := 0
 			failed := 0
 
@@ -1297,7 +1297,7 @@ func generateAINavigatorBriefsFn(client inngestgo.Client, db *pgxpool.Pool, work
 				latest, err := briefRepo.LatestBriefByUserSlot(ctx, userID, slot)
 				switch {
 				case err == nil && latest != nil:
-					if latest.GeneratedAt != nil && !latest.GeneratedAt.Before(windowStart) {
+					if !latest.CreatedAt.Before(windowStart) {
 						skipped++
 						continue
 					}
@@ -1307,33 +1307,84 @@ func generateAINavigatorBriefsFn(client inngestgo.Client, db *pgxpool.Pool, work
 					continue
 				}
 
-				brief, err := briefService.GenerateBriefForSlot(ctx, userID, slot)
+				brief, err := briefService.EnqueueBriefForSlot(ctx, userID, slot)
 				if err != nil {
 					failed++
-					log.Printf("ai navigator brief generate user=%s slot=%s: %v", userID, slot, err)
+					log.Printf("ai navigator brief enqueue user=%s slot=%s: %v", userID, slot, err)
 					continue
 				}
 				if brief == nil {
 					skipped++
 					continue
 				}
-				generated++
-
-				if err := briefService.NotifyBrief(ctx, brief); err != nil {
+				if _, err := client.Send(ctx, service.NewAINavigatorBriefRunEvent(userID, brief.ID, "scheduled")); err != nil {
 					failed++
-					log.Printf("ai navigator brief notify user=%s brief=%s: %v", userID, brief.ID, err)
+					_ = briefRepo.MarkBriefFailedAt(ctx, brief.ID, "failed to enqueue generation", timeutil.NowJST())
+					log.Printf("ai navigator brief send run event user=%s brief=%s: %v", userID, brief.ID, err)
 					continue
 				}
-				notified++
+				enqueued++
 			}
 
 			return map[string]any{
 				"slot":      slot,
 				"processed": processed,
-				"generated": generated,
-				"notified":  notified,
+				"enqueued":  enqueued,
 				"skipped":   skipped,
 				"failed":    failed,
+			}, nil
+		},
+	)
+}
+
+type aiNavigatorBriefRunEventData struct {
+	UserID  string `json:"user_id"`
+	BriefID string `json:"brief_id"`
+	Trigger string `json:"trigger"`
+}
+
+func runAINavigatorBriefPipelineFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, oneSignal *service.OneSignalClient, cache service.JSONCache) (inngestgo.ServableFunction, error) {
+	briefRepo := repository.NewAINavigatorBriefRepo(db)
+	itemRepo := repository.NewItemRepo(db)
+	settingsRepo := repository.NewUserSettingsRepo(db)
+	userRepo := repository.NewUserRepo(db)
+	pushLogRepo := repository.NewPushNotificationLogRepo(db)
+	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	secretCipher := service.NewSecretCipher()
+	briefService := service.NewAINavigatorBriefService(briefRepo, itemRepo, settingsRepo, userRepo, pushLogRepo, llmUsageRepo, worker, secretCipher, oneSignal, nil, cache, nil)
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{
+			ID:   "run-ai-navigator-brief-pipeline",
+			Name: "Run AI Navigator Brief Pipeline",
+			Concurrency: []inngestgo.ConfigStepConcurrency{
+				{
+					Limit: 1,
+					Key:   inngestgo.StrPtr("event.data.brief_id"),
+					Scope: enums.ConcurrencyScopeFn,
+				},
+			},
+		},
+		inngestgo.EventTrigger("ai-navigator-brief/run", nil),
+		func(ctx context.Context, input inngestgo.Input[aiNavigatorBriefRunEventData]) (any, error) {
+			data := input.Event.Data
+			brief, err := briefService.RunQueuedBrief(ctx, data.UserID, data.BriefID)
+			if err != nil {
+				return nil, err
+			}
+			if brief == nil {
+				return map[string]any{"status": "missing"}, nil
+			}
+			if brief.Status == model.AINavigatorBriefStatusGenerated {
+				if err := briefService.NotifyBrief(ctx, brief); err != nil {
+					return nil, err
+				}
+			}
+			return map[string]any{
+				"brief_id": data.BriefID,
+				"status":   brief.Status,
+				"trigger":  data.Trigger,
 			}, nil
 		},
 	)

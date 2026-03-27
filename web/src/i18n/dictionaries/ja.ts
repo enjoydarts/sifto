@@ -1457,6 +1457,7 @@ export const jaDict: Dict = {
   "aiNavigatorBriefs.generateNow": "今すぐ生成",
   "aiNavigatorBriefs.playAll": "10本を要約読み上げで再生",
   "aiNavigatorBriefs.toast.generated": "AIナビブリーフを生成しました",
+  "aiNavigatorBriefs.toast.queued": "AIナビブリーフの生成を開始しました",
   "aiNavigatorBriefs.toast.deleted": "AIナビブリーフを削除しました",
   "aiNavigatorBriefs.toast.queueAdded": "AIナビブリーフを要約読み上げキューに追加しました",
   "aiNavigatorBriefs.generatedAt": "生成時刻",

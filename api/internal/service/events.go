@@ -98,6 +98,29 @@ func (p *EventPublisher) SendAudioBriefingRunE(ctx context.Context, userID, jobI
 	return nil
 }
 
+func NewAINavigatorBriefRunEvent(userID, briefID, trigger string) inngestgo.Event {
+	return inngestgo.Event{
+		Name: "ai-navigator-brief/run",
+		Data: map[string]any{
+			"user_id":    strings.TrimSpace(userID),
+			"brief_id":   strings.TrimSpace(briefID),
+			"trigger":    strings.TrimSpace(trigger),
+			"trigger_id": uuid.NewString(),
+		},
+	}
+}
+
+func (p *EventPublisher) SendAINavigatorBriefRunE(ctx context.Context, userID, briefID, trigger string) error {
+	if p == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(briefID) == "" {
+		return nil
+	}
+	if _, err := p.client.Send(ctx, NewAINavigatorBriefRunEvent(userID, briefID, trigger)); err != nil {
+		log.Printf("send ai-navigator-brief/run: %v", err)
+		return err
+	}
+	return nil
+}
+
 func (p *EventPublisher) SendItemEmbedE(ctx context.Context, itemID, sourceID string) error {
 	if p == nil {
 		return nil

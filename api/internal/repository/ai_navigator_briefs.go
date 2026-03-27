@@ -84,6 +84,24 @@ func (r *AINavigatorBriefRepo) MarkBriefFailed(ctx context.Context, briefID, err
 	return err
 }
 
+func (r *AINavigatorBriefRepo) MarkBriefFailedAt(ctx context.Context, briefID, errorMessage string, generatedAt any) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE ai_navigator_briefs
+		SET status = $2,
+		    error_message = $3,
+		    generated_at = $4,
+		    updated_at = NOW()
+		WHERE id = $1
+	`, briefID, model.AINavigatorBriefStatusFailed, errorMessage, generatedAt)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *AINavigatorBriefRepo) MarkBriefNotified(ctx context.Context, briefID string, sentAt any) error {
 	_, err := r.db.Exec(ctx, `
 		UPDATE ai_navigator_briefs
@@ -226,6 +244,81 @@ func (r *AINavigatorBriefRepo) DeleteBrief(ctx context.Context, userID, briefID 
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+func (r *AINavigatorBriefRepo) UpdateGeneratedBrief(ctx context.Context, brief *model.AINavigatorBrief, items []model.AINavigatorBriefItem) error {
+	if brief == nil {
+		return ErrNotFound
+	}
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	tag, err := tx.Exec(ctx, `
+		UPDATE ai_navigator_briefs
+		SET status = $2,
+		    title = $3,
+		    intro = $4,
+		    summary = $5,
+		    ending = $6,
+		    persona = $7,
+		    model = $8,
+		    source_window_start = $9,
+		    source_window_end = $10,
+		    generated_at = $11,
+		    error_message = '',
+		    updated_at = NOW()
+		WHERE id = $1
+	`,
+		brief.ID,
+		brief.Status,
+		brief.Title,
+		brief.Intro,
+		brief.Summary,
+		brief.Ending,
+		brief.Persona,
+		brief.Model,
+		brief.SourceWindowStart,
+		brief.SourceWindowEnd,
+		brief.GeneratedAt,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM ai_navigator_brief_items WHERE brief_id = $1`, brief.ID); err != nil {
+		return err
+	}
+	for i := range items {
+		if items[i].ID == "" {
+			items[i].ID = uuid.NewString()
+		}
+		if err := tx.QueryRow(ctx, `
+			INSERT INTO ai_navigator_brief_items (
+				id, brief_id, rank, item_id, title_snapshot, translated_title_snapshot, source_title_snapshot, comment
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			RETURNING created_at
+		`,
+			items[i].ID,
+			brief.ID,
+			items[i].Rank,
+			items[i].ItemID,
+			items[i].TitleSnapshot,
+			items[i].TranslatedTitleSnapshot,
+			items[i].SourceTitleSnapshot,
+			items[i].Comment,
+		).Scan(&items[i].CreatedAt); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
 	}
 	return nil
 }

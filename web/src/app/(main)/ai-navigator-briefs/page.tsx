@@ -35,6 +35,10 @@ export default function AINavigatorBriefsPage() {
   const briefsQuery = useQuery({
     queryKey: ["ai-navigator-briefs"],
     queryFn: () => api.getAINavigatorBriefs({ limit: 30 }),
+    refetchInterval: (query) => {
+      const items = query.state.data?.items ?? [];
+      return items.some((item) => item.status === "queued") ? 3000 : false;
+    },
   });
 
   async function handleGenerate() {
@@ -42,7 +46,11 @@ export default function AINavigatorBriefsPage() {
     try {
       const resp = await api.generateAINavigatorBrief();
       await briefsQuery.refetch();
-      showToast(resp.brief?.title || t("aiNavigatorBriefs.toast.generated"), "success");
+      if (resp.brief?.status === "queued") {
+        showToast(t("aiNavigatorBriefs.toast.queued"), "success");
+      } else {
+        showToast(resp.brief?.title || t("aiNavigatorBriefs.toast.generated"), "success");
+      }
     } catch (e) {
       showToast(String(e), "error");
     } finally {

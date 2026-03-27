@@ -107,7 +107,7 @@ func main() {
 	summaryAudioPlayerH := handler.NewSummaryAudioPlayerHandler(summaryAudioPlayerSvc)
 	playbackSessionsSvc := service.NewPlaybackSessionsService(playbackSessionRepo)
 	playbackSessionsH := handler.NewPlaybackSessionsHandler(playbackSessionsSvc)
-	aiNavigatorBriefSvc := service.NewAINavigatorBriefService(aiNavigatorBriefRepo, itemRepo, userSettingsRepo, userRepo, pushNotificationLogRepo, llmUsageRepo, worker, secretCipher, oneSignal, cache, nil)
+	aiNavigatorBriefSvc := service.NewAINavigatorBriefService(aiNavigatorBriefRepo, itemRepo, userSettingsRepo, userRepo, pushNotificationLogRepo, llmUsageRepo, worker, secretCipher, oneSignal, eventPublisher, cache, nil)
 	aiNavigatorBriefH := handler.NewAINavigatorBriefHandler(aiNavigatorBriefSvc)
 	internalAudioBriefingsH := handler.NewInternalAudioBriefingsHandler(audioBriefingRepo, audioBriefingPublishedNotifier, podcastPublicationSvc)
 	podcastFeedSvc := service.NewPodcastFeedService(userSettingsRepo, audioBriefingRepo, worker)

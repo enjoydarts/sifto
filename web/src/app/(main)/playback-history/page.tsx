@@ -145,35 +145,14 @@ export default function PlaybackHistoryPage() {
               const href = detailHref(session);
               return (
                 <SectionCard key={session.id}>
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Tag tone="default">{t(`playbackHistory.mode.${session.mode === "summary_queue" ? "summaryQueue" : "audioBriefing"}`)}</Tag>
-                          <Tag tone="default">{t(`playbackHistory.status.${session.status}`)}</Tag>
-                        </div>
-                        <h2 className="font-serif text-xl text-editorial-strong">{session.title || "—"}</h2>
-                        {session.subtitle ? <p className="text-sm text-editorial-muted">{session.subtitle}</p> : null}
-                      </div>
-
+                  <div className="flex h-full flex-col gap-4">
+                    <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void handleResume(session)}
-                          className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90"
-                        >
-                          <Play className="size-4" aria-hidden="true" />
-                          {t("playbackHistory.continue")}
-                        </button>
-                        {href ? (
-                          <Link
-                            href={href}
-                            className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
-                          >
-                            {t("playbackHistory.openDetail")}
-                          </Link>
-                        ) : null}
+                        <Tag tone="default">{t(`playbackHistory.mode.${session.mode === "summary_queue" ? "summaryQueue" : "audioBriefing"}`)}</Tag>
+                        <Tag tone="default">{t(`playbackHistory.status.${session.status}`)}</Tag>
                       </div>
+                      <h2 className="font-serif text-xl text-editorial-strong">{session.title || "—"}</h2>
+                      {session.subtitle ? <p className="text-sm text-editorial-muted">{session.subtitle}</p> : null}
                     </div>
 
                     <div className="space-y-2">
@@ -191,18 +170,41 @@ export default function PlaybackHistoryPage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-editorial-muted">
-                      <span>{formatDuration(session.current_position_sec)} / {formatDuration(session.duration_sec)}</span>
-                      {session.mode === "summary_queue" ? (
-                        <>
-                          <span>{t("playbackHistory.remainingItems").replace("{{count}}", String(summaryRemaining))}</span>
-                          {summaryCurrent ? (
-                            <span>
-                              {t("playbackHistory.currentItem").replace("{{title}}", summaryCurrent.translated_title || summaryCurrent.title || "—")}
-                            </span>
+                    <div className="mt-auto flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                      <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-editorial-muted">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span>{formatDuration(session.current_position_sec)} / {formatDuration(session.duration_sec)}</span>
+                          {session.mode === "summary_queue" ? (
+                            <>
+                              <span>{t("playbackHistory.remainingItems").replace("{{count}}", String(summaryRemaining))}</span>
+                              {summaryCurrent ? (
+                                <span>
+                                  {t("playbackHistory.currentItem").replace("{{title}}", summaryCurrent.translated_title || summaryCurrent.title || "—")}
+                                </span>
+                              ) : null}
+                            </>
                           ) : null}
-                        </>
-                      ) : null}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                        <button
+                          type="button"
+                          onClick={() => void handleResume(session)}
+                          className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90"
+                        >
+                          <Play className="size-4" aria-hidden="true" />
+                          {t("playbackHistory.continue")}
+                        </button>
+                        {href ? (
+                          <Link
+                            href={href}
+                            className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                          >
+                            {t("playbackHistory.openDetail")}
+                          </Link>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </SectionCard>

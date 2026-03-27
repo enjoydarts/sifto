@@ -188,7 +188,19 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   }, [mode, summaryQueueQuery.data]);
 
   const requestSummaryAutoPlay = useEffectEvent(() => {
-    void playSummaryQueue(summaryQueue.queue, true);
+    void (async () => {
+      const started = await playSummaryQueue(summaryQueue.queue, true);
+      if (!started || !summaryQueue.queueKind) {
+        return;
+      }
+      await createSummaryPlaybackSession(
+        summaryQueue.queueKind,
+        summaryQueue.queue,
+        summaryQueue.currentIndex,
+        summaryQueue.excludedItemIDs,
+        0,
+      );
+    })();
   });
 
   useEffect(() => {

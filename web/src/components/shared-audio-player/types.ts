@@ -50,6 +50,8 @@ export type SharedAudioDisplayMeta = {
   modeLabelKey: string | null;
   queueCount: number;
   queueProgressLabel: string | null;
+  personaKey: string | null;
+  personaName: string | null;
 };
 
 export type SharedAudioPlayerContextValue = {

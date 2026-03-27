@@ -1425,6 +1425,7 @@ export const jaDict: Dict = {
   "sharedAudio.prefetching": "次を先読み中",
   "sharedAudio.emptyTitle": "再生中の音声はありません",
   "sharedAudio.nowPlaying": "再生中",
+  "sharedAudio.persona": "話者",
   "sharedAudio.audioBriefingDetail": "音声ブリーフィング",
   "sharedAudio.openBriefingDetail": "詳細ページを開く",
   "sharedAudio.status": "状態",

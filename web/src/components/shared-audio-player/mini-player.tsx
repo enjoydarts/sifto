@@ -1,6 +1,7 @@
 "use client";
 
 import { LoaderCircle, Maximize2, Pause, Play, SkipForward, Square, Volume2 } from "lucide-react";
+import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { useI18n } from "@/components/i18n-provider";
 import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
 
@@ -12,7 +13,7 @@ function formatTime(seconds: number): string {
 }
 
 export function SharedAudioMiniPlayer() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const player = useSharedAudioPlayer();
 
   if (!player.mode) {
@@ -36,6 +37,13 @@ export function SharedAudioMiniPlayer() {
               <div className="truncate text-sm font-semibold text-[var(--color-editorial-ink)]">
                 {player.display.title || t("sharedAudio.emptyTitle")}
               </div>
+              {player.display.personaKey ? (
+                <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-[var(--color-editorial-line)] bg-white/70 px-2 py-1 text-[11px] font-medium text-[var(--color-editorial-ink-soft)]">
+                  <AINavigatorAvatar persona={player.display.personaKey} className="size-4" />
+                  <span>{t("sharedAudio.persona", locale === "ja" ? "話者" : "Voice")}</span>
+                  <span>{player.display.personaName || t(`settings.navigator.persona.${player.display.personaKey}`, player.display.personaKey)}</span>
+                </div>
+              ) : null}
               <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-editorial-ink-soft)]">
                 {player.display.subtitle ? <span className="truncate">{player.display.subtitle}</span> : null}
                 {player.display.queueProgressLabel ? <span>{player.display.queueProgressLabel}</span> : null}

@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoaderCircle, Play, Volume2 } from "lucide-react";
+import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
@@ -112,6 +113,13 @@ export default function SummaryAudioPlayerPage() {
                 <p className="text-sm text-editorial-muted">{originalTitle}</p>
                 <div className="flex flex-wrap items-center gap-2 text-sm text-editorial-muted">
                   <span>{sourceTitle}</span>
+                  {player.display.personaKey ? (
+                    <span className="inline-flex items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-1 text-xs font-medium text-[var(--color-editorial-ink-soft)]">
+                      <AINavigatorAvatar persona={player.display.personaKey} className="size-5" />
+                      <span>{t("sharedAudio.persona", locale === "ja" ? "話者" : "Voice")}</span>
+                      <span>{player.display.personaName || t(`settings.navigator.persona.${player.display.personaKey}`, player.display.personaKey)}</span>
+                    </span>
+                  ) : null}
                   {detail?.url ? (
                     <a
                       href={detail.url}

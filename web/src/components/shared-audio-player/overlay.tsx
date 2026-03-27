@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ExternalLink, Minimize2, Pause, Play, SkipForward, Square, Volume2, X } from "lucide-react";
+import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { useI18n } from "@/components/i18n-provider";
 import { PLAYBACK_QUEUE_VISIBLE_COUNT, useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
 
@@ -13,7 +14,7 @@ function formatTime(seconds: number): string {
 }
 
 export function SharedAudioOverlay() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const player = useSharedAudioPlayer();
 
   if (!player.mode || !player.expanded) {
@@ -42,6 +43,13 @@ export function SharedAudioOverlay() {
               </h2>
               {player.display.subtitle ? (
                 <p className="mt-1 text-sm text-[var(--color-editorial-ink-soft)]">{player.display.subtitle}</p>
+              ) : null}
+              {player.display.personaKey ? (
+                <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-white/70 px-3 py-1.5 text-xs font-medium text-[var(--color-editorial-ink-soft)]">
+                  <AINavigatorAvatar persona={player.display.personaKey} className="size-5" />
+                  <span>{t("sharedAudio.persona", locale === "ja" ? "話者" : "Voice")}</span>
+                  <span>{player.display.personaName || t(`settings.navigator.persona.${player.display.personaKey}`, player.display.personaKey)}</span>
+                </div>
               ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">

@@ -82,6 +82,16 @@ function progressRatio(positionSec: number, durationSec: number): number | null 
   return Math.max(0, Math.min(1, positionSec / durationSec));
 }
 
+function isPlaybackPermissionError(err: unknown): boolean {
+  if (!(err instanceof Error)) {
+    return false;
+  }
+  const message = `${err.name} ${err.message}`.toLowerCase();
+  return message.includes("notallowederror")
+    || message.includes("the play method is not allowed")
+    || message.includes("user denied permission");
+}
+
 async function waitForLoadedMetadata(audio: HTMLAudioElement): Promise<void> {
   if (audio.readyState >= 1) {
     return;
@@ -110,6 +120,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [currentTimeSec, setCurrentTimeSec] = useState(0);
   const [durationSec, setDurationSec] = useState(0);
+  const [summaryPersonaKey, setSummaryPersonaKey] = useState<string | null>(null);
   const [summaryQueue, setSummaryQueue] = useState<SharedSummaryQueueState>(() => createEmptySummaryQueue());
   const [audioBriefing, setAudioBriefing] = useState<SharedAudioBriefingPayload | null>(null);
 
@@ -122,6 +133,11 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       return fetchSummaryQueue(summaryQueue.queueKind);
     },
     enabled: Boolean(summaryQueue.queueKind),
+  });
+
+  const navigatorPersonasQuery = useQuery({
+    queryKey: ["navigator-personas"],
+    queryFn: () => api.getNavigatorPersonas(),
   });
 
   const currentSummaryItem = useMemo(() => {
@@ -514,6 +530,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         URL.revokeObjectURL(currentAudioRef.current.objectURL);
       }
       currentAudioRef.current = prepared;
+      setSummaryPersonaKey(prepared.response.persona || null);
       setSummaryQueue((prev) => ({
         ...prev,
         currentItemID: prepared.itemID,
@@ -527,7 +544,15 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       setCurrentTimeSec(offsetSec);
       setDurationSec(0);
       if (autoplay) {
-        await audio.play();
+        try {
+          await audio.play();
+        } catch (err) {
+          if (isPlaybackPermissionError(err)) {
+            setPlaybackState("paused");
+            return true;
+          }
+          throw err;
+        }
       }
       if (queue[1]) {
         void ensureSummaryPrefetch(queue, 1);
@@ -567,6 +592,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     setDurationSec(0);
     setErrorMessage(null);
     setPlaybackState("idle");
+    setSummaryPersonaKey(null);
   }
 
   async function startSummaryQueuePlaybackInternal(
@@ -633,6 +659,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     setMode("audio_briefing");
     setExpanded(false);
     setSummaryQueue(createEmptySummaryQueue());
+    setSummaryPersonaKey(null);
     setAudioBriefing(payload);
     setPlaybackState("preparing");
     setErrorMessage(null);
@@ -644,7 +671,16 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       audio.currentTime = offsetSec;
       setCurrentTimeSec(offsetSec);
       setDurationSec(0);
-      await audio.play();
+      try {
+        await audio.play();
+      } catch (err) {
+        if (isPlaybackPermissionError(err)) {
+          setPlaybackState("paused");
+          await createAudioBriefingPlaybackSession(payload, offsetSec);
+          return;
+        }
+        throw err;
+      }
       await createAudioBriefingPlaybackSession(payload, offsetSec);
     } catch (err) {
       setPlaybackState("error");
@@ -924,12 +960,18 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         summaryQueue.queue.length > 0
           ? `${summaryQueue.currentIndex + 1}/${summaryQueue.currentIndex + summaryQueue.queue.length}`
           : null;
+      const personaName =
+        summaryPersonaKey && navigatorPersonasQuery.data?.[summaryPersonaKey]?.name
+          ? navigatorPersonasQuery.data[summaryPersonaKey].name
+          : null;
       return {
         title,
         subtitle,
         modeLabelKey: "sharedAudio.mode.summaryQueue",
         queueCount: summaryQueue.queue.length,
         queueProgressLabel,
+        personaKey: summaryPersonaKey,
+        personaName,
       };
     }
     if (mode === "audio_briefing" && audioBriefing) {
@@ -939,6 +981,8 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         modeLabelKey: "sharedAudio.mode.audioBriefing",
         queueCount: 0,
         queueProgressLabel: null,
+        personaKey: null,
+        personaName: null,
       };
     }
     return {
@@ -947,8 +991,10 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       modeLabelKey: null,
       queueCount: 0,
       queueProgressLabel: null,
+      personaKey: null,
+      personaName: null,
     };
-  }, [audioBriefing, mode, summaryQueue]);
+  }, [audioBriefing, mode, navigatorPersonasQuery.data, summaryPersonaKey, summaryQueue]);
 
   const value: SharedAudioPlayerContextValue = {
     mode,

@@ -1425,6 +1425,7 @@ export const enDict: Dict = {
   "sharedAudio.prefetching": "Prefetching next",
   "sharedAudio.emptyTitle": "Nothing is playing",
   "sharedAudio.nowPlaying": "Now playing",
+  "sharedAudio.persona": "Voice",
   "sharedAudio.audioBriefingDetail": "Audio briefing",
   "sharedAudio.openBriefingDetail": "Open detail page",
   "sharedAudio.status": "Status",

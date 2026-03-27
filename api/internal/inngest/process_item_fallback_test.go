@@ -69,6 +69,73 @@ func TestCanUseLLMFallbackForAttempt(t *testing.T) {
 	}
 }
 
+func TestShouldFallbackFactsAttempt(t *testing.T) {
+	tests := []struct {
+		name             string
+		primaryModel     *string
+		fallbackModel    *string
+		err              error
+		sameModelRetried bool
+		want             bool
+	}{
+		{
+			name:             "transient first failure retries same model first",
+			primaryModel:     strptr("openrouter::google/gemini-2.5-flash"),
+			fallbackModel:    strptr("openrouter::openai/gpt-oss-120b"),
+			err:              assertErr("worker /extract-facts: status 500 detail=extract_facts failed status=429"),
+			sameModelRetried: false,
+			want:             false,
+		},
+		{
+			name:             "transient after same model retry falls back",
+			primaryModel:     strptr("openrouter::google/gemini-2.5-flash"),
+			fallbackModel:    strptr("openrouter::openai/gpt-oss-120b"),
+			err:              assertErr("worker /extract-facts: status 500 detail=extract_facts failed status=429"),
+			sameModelRetried: true,
+			want:             true,
+		},
+		{
+			name:             "structural parse failure falls back immediately",
+			primaryModel:     strptr("openrouter::google/gemini-2.5-flash"),
+			fallbackModel:    strptr("openrouter::openai/gpt-oss-120b"),
+			err:              assertErr("worker /extract-facts: status 500 detail=openrouter extract_facts parse failed"),
+			sameModelRetried: false,
+			want:             true,
+		},
+		{
+			name:             "same fallback model does not fall back",
+			primaryModel:     strptr("openrouter::openai/gpt-oss-120b"),
+			fallbackModel:    strptr("openrouter::openai/gpt-oss-120b"),
+			err:              assertErr("worker /extract-facts: status 500 detail=openrouter extract_facts parse failed"),
+			sameModelRetried: true,
+			want:             false,
+		},
+	}
+	for _, tt := range tests {
+		if got := shouldFallbackFactsAttempt(tt.primaryModel, tt.fallbackModel, tt.err, tt.sameModelRetried); got != tt.want {
+			t.Fatalf("%s: shouldFallbackFactsAttempt(%v, %v, %v, %t) = %v, want %v", tt.name, tt.primaryModel, tt.fallbackModel, tt.err, tt.sameModelRetried, got, tt.want)
+		}
+	}
+}
+
+func TestShouldRetryFactsCheckSameModel(t *testing.T) {
+	tests := []struct {
+		name             string
+		verdict          string
+		sameModelRetried bool
+		want             bool
+	}{
+		{name: "first fail retries", verdict: "fail", sameModelRetried: false, want: true},
+		{name: "second fail stops", verdict: "fail", sameModelRetried: true, want: false},
+		{name: "warn does not retry", verdict: "warn", sameModelRetried: false, want: false},
+	}
+	for _, tt := range tests {
+		if got := shouldRetryFactsCheckSameModel(tt.verdict, tt.sameModelRetried); got != tt.want {
+			t.Fatalf("%s: shouldRetryFactsCheckSameModel(%q, %t) = %v, want %v", tt.name, tt.verdict, tt.sameModelRetried, got, tt.want)
+		}
+	}
+}
+
 func TestExecutionFailedModel(t *testing.T) {
 	resolved := "openrouter::google/gemini-2.5-flash"
 	runtimeModel := "openrouter::openai/gpt-oss-120b"

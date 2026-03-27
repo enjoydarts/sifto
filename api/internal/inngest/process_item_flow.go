@@ -139,6 +139,34 @@ func canUseLLMFallbackForAttempt(primaryResolvedModel, fallbackModel *string, er
 	return true
 }
 
+func hasDistinctLLMFallback(primaryResolvedModel, fallbackModel *string) bool {
+	if fallbackModel == nil {
+		return false
+	}
+	fallback := strings.TrimSpace(*fallbackModel)
+	if fallback == "" {
+		return false
+	}
+	if primaryResolvedModel != nil && strings.EqualFold(strings.TrimSpace(*primaryResolvedModel), fallback) {
+		return false
+	}
+	return true
+}
+
+func shouldFallbackFactsAttempt(primaryResolvedModel, fallbackModel *string, err error, sameModelRetried bool) bool {
+	if !hasDistinctLLMFallback(primaryResolvedModel, fallbackModel) || err == nil {
+		return false
+	}
+	if isTransientLLMWorkerError(err) {
+		return sameModelRetried
+	}
+	return true
+}
+
+func shouldRetryFactsCheckSameModel(verdict string, sameModelRetried bool) bool {
+	return !sameModelRetried && strings.EqualFold(strings.TrimSpace(verdict), "fail")
+}
+
 func fallbackFactsCheckWarning(err error) *service.FactsCheckResponse {
 	comment := "事実抽出チェックの判定取得に失敗したため要確認です。"
 	if err != nil {
@@ -211,31 +239,34 @@ func extractAndPersistFacts(
 	titleForLLM *string,
 	content string,
 ) (*processFactsStageResult, error) {
-	const maxFactsCheckRetries = 2
+	const maxFactsAttempts = 4
 
 	var factsResp *service.ExtractFactsResponse
 	var finalFactsCheck *service.FactsCheckResponse
 	var factsRetryCount int
+	var primaryModelOverride *string
+	var fallbackModelOverride *string
+	if userModelSettings != nil {
+		primaryModelOverride = ptrStringOrNil(userModelSettings.FactsModel)
+		fallbackModelOverride = ptrStringOrNil(userModelSettings.FactsFallbackModel)
+	}
+	currentModelOverride := primaryModelOverride
+	usingFallback := false
+	sameModelRetried := false
 
-	for attempt := 0; attempt <= maxFactsCheckRetries; attempt++ {
+	for attempt := 0; attempt < maxFactsAttempts; attempt++ {
 		stepLabel := "extract-facts"
 		if attempt > 0 {
 			stepLabel = fmt.Sprintf("extract-facts-%d", attempt+1)
 		}
-		var primaryModelOverride *string
-		var fallbackModelOverride *string
-		if userModelSettings != nil {
-			primaryModelOverride = ptrStringOrNil(userModelSettings.FactsModel)
-			fallbackModelOverride = ptrStringOrNil(userModelSettings.FactsFallbackModel)
-		}
-		var primaryRuntime *llmRuntime
+		var currentRuntime *llmRuntime
 		factsAttempt, err := step.Run(ctx, stepLabel, func(ctx context.Context) (*processFactsAttemptResult, error) {
 			log.Printf("process-item extract-facts start item_id=%s attempt=%d", itemID, attempt+1)
-			runtime, err := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, primaryModelOverride, "facts")
+			runtime, err := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, currentModelOverride, "facts")
 			if err != nil {
 				return nil, err
 			}
-			primaryRuntime = runtime
+			currentRuntime = runtime
 			workerCtx := service.WithWorkerTraceMetadata(ctx, "facts", userIDPtr, &data.SourceID, &itemID, nil)
 			resp, err := deps.worker.ExtractFactsWithModel(
 				workerCtx,
@@ -262,56 +293,24 @@ func extractAndPersistFacts(
 			}, nil
 		})
 		if err != nil {
-			failedModel := executionFailedModel(primaryRuntime, primaryModelOverride)
+			failedModel := executionFailedModel(currentRuntime, currentModelOverride)
 			if factsAttempt != nil {
 				failedModel = executionFailedModel(factsAttempt.Runtime, failedModel)
 			}
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", failedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
-			if canUseLLMFallbackForAttempt(failedModel, fallbackModelOverride, err) {
-				fallbackStepLabel := stepLabel + "-fallback"
+			if shouldFallbackFactsAttempt(failedModel, fallbackModelOverride, err, sameModelRetried) {
 				log.Printf("process-item extract-facts fallback item_id=%s attempt=%d primary_model=%s fallback_model=%s", itemID, attempt+1, ptrStringValue(failedModel), ptrStringValue(fallbackModelOverride))
-				var fallbackRuntime *llmRuntime
-				fallbackAttempt, fallbackErr := step.Run(ctx, fallbackStepLabel, func(ctx context.Context) (*processFactsAttemptResult, error) {
-					log.Printf("process-item extract-facts fallback start item_id=%s attempt=%d", itemID, attempt+1)
-					runtime, runtimeErr := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, fallbackModelOverride, "facts")
-					if runtimeErr != nil {
-						return nil, runtimeErr
-					}
-					fallbackRuntime = runtime
-					workerCtx := service.WithWorkerTraceMetadata(ctx, "facts", userIDPtr, &data.SourceID, &itemID, nil)
-					resp, workerErr := deps.worker.ExtractFactsWithModel(
-						workerCtx,
-						titleForLLM,
-						content,
-						runtime.AnthropicKey,
-						runtime.GoogleKey,
-						runtime.GroqKey,
-						runtime.DeepSeekKey,
-						runtime.AlibabaKey,
-						runtime.MistralKey,
-						runtime.XAIKey,
-						runtime.ZAIKey,
-						runtime.FireworksKey,
-						runtime.OpenAIKey,
-						runtime.Model,
-					)
-					if workerErr != nil {
-						return nil, workerErr
-					}
-					return &processFactsAttemptResult{Facts: resp, Runtime: runtime}, nil
-				})
-				if fallbackErr != nil {
-					fallbackFailedModel := executionFailedModel(fallbackRuntime, fallbackModelOverride)
-					if fallbackAttempt != nil {
-						fallbackFailedModel = executionFailedModel(fallbackAttempt.Runtime, fallbackFailedModel)
-					}
-					recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", fallbackFailedModel, attempt, userIDPtr, &data.SourceID, &itemID, nil, fallbackErr)
-					return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract facts", fallbackErr)
-				}
-				factsAttempt = fallbackAttempt
-			} else {
-				return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract facts", err)
+				currentModelOverride = fallbackModelOverride
+				usingFallback = true
+				sameModelRetried = false
+				continue
 			}
+			if !sameModelRetried && isTransientLLMWorkerError(err) {
+				log.Printf("process-item extract-facts retry-same-model item_id=%s attempt=%d model=%s", itemID, attempt+1, ptrStringValue(failedModel))
+				sameModelRetried = true
+				continue
+			}
+			return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract facts", err)
 		}
 
 		factsResp = factsAttempt.Facts
@@ -322,6 +321,13 @@ func extractAndPersistFacts(
 		if len(factsResp.Facts) == 0 {
 			err := fmt.Errorf("empty facts returned from worker")
 			recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, "facts", factsAttempt.Runtime.Model, attempt, userIDPtr, &data.SourceID, &itemID, nil, err)
+			if shouldFallbackFactsAttempt(factsAttempt.Runtime.Model, fallbackModelOverride, err, sameModelRetried) {
+				log.Printf("process-item extract-facts fallback-empty item_id=%s attempt=%d primary_model=%s fallback_model=%s", itemID, attempt+1, ptrStringValue(factsAttempt.Runtime.Model), ptrStringValue(fallbackModelOverride))
+				currentModelOverride = fallbackModelOverride
+				usingFallback = true
+				sameModelRetried = false
+				continue
+			}
 			return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract facts", err)
 		}
 		recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, "facts", factsResp.LLM, attempt, userIDPtr, &data.SourceID, &itemID, nil)
@@ -373,11 +379,24 @@ func extractAndPersistFacts(
 		}
 
 		finalFactsCheck = factsCheck
-		if !shouldRetry || attempt >= maxFactsCheckRetries {
+		if !shouldRetry {
 			factsRetryCount = attempt
 			break
 		}
-		log.Printf("process-item facts_check retry item_id=%s attempt=%d verdict=%s comment=%s", itemID, attempt+1, factsCheck.Verdict, factsCheck.ShortComment)
+		if shouldRetryFactsCheckSameModel(factsCheck.Verdict, sameModelRetried) {
+			log.Printf("process-item facts_check retry-same-model item_id=%s attempt=%d verdict=%s comment=%s", itemID, attempt+1, factsCheck.Verdict, factsCheck.ShortComment)
+			sameModelRetried = true
+			continue
+		}
+		if !usingFallback && hasDistinctLLMFallback(factsAttempt.Runtime.Model, fallbackModelOverride) {
+			log.Printf("process-item facts_check fallback-model item_id=%s attempt=%d primary_model=%s fallback_model=%s verdict=%s", itemID, attempt+1, ptrStringValue(factsAttempt.Runtime.Model), ptrStringValue(fallbackModelOverride), factsCheck.Verdict)
+			currentModelOverride = fallbackModelOverride
+			usingFallback = true
+			sameModelRetried = false
+			continue
+		}
+		factsRetryCount = attempt
+		break
 	}
 
 	if factsResp == nil {

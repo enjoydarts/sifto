@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Radio } from "lucide-react";
 import { useConfirm } from "@/components/confirm-provider";
 import { PageTransition } from "@/components/page-transition";
+import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { PageHeader } from "@/components/ui/page-header";
@@ -54,6 +55,7 @@ export default function AudioBriefingDetailPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
+  const player = useSharedAudioPlayer();
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const [detail, setDetail] = useState<AudioBriefingDetailResponse | null>(null);
@@ -195,6 +197,20 @@ export default function AudioBriefingDetailPage() {
     }
   }
 
+  async function handlePlayInSharedPlayer() {
+    if (!detail?.audio_url) {
+      return;
+    }
+    await player.startAudioBriefingPlayback({
+      jobID: detail.job.id,
+      title: detail.job.title || t("audioBriefing.untitled", "無題のエピソード"),
+      summary: t("audioBriefing.detailDescription", "台本生成から音声化、連結までの進行状況を確認します。"),
+      audioURL: detail.audio_url,
+      detailHref: `/audio-briefings/${detail.job.id}`,
+    });
+    player.expandPlayer();
+  }
+
   if (loading) return <p className="text-sm text-[var(--color-editorial-ink-soft)]">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!detail) return null;
@@ -283,7 +299,23 @@ export default function AudioBriefingDetailPage() {
             {t("audioBriefing.player", "Player")}
           </div>
           {detail.audio_url ? (
-            <audio className="mt-4 w-full" controls src={detail.audio_url} />
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void handlePlayInSharedPlayer()}
+                className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90"
+              >
+                {t("audioBriefing.playInSharedPlayer", "共通プレイヤーで再生")}
+              </button>
+              <button
+                type="button"
+                onClick={player.expandPlayer}
+                disabled={player.mode !== "audio_briefing" || player.audioBriefing?.jobID !== detail.job.id}
+                className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {t("audioBriefing.openPlayerOverlay", "プレイヤーを開く")}
+              </button>
+            </div>
           ) : (
             <div className="mt-4 rounded-[18px] border border-dashed border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-5 text-sm text-[var(--color-editorial-ink-soft)]">
               {t("audioBriefing.playerPending", "音声ファイルはまだ準備中です。台本と採用記事は先に確認できます。")}

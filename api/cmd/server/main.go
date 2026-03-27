@@ -381,6 +381,8 @@ func main() {
 			r.Delete("/alibaba-key", settingsH.DeleteAlibabaAPIKey)
 			r.Post("/mistral-key", settingsH.SetMistralAPIKey)
 			r.Delete("/mistral-key", settingsH.DeleteMistralAPIKey)
+			r.Post("/moonshot-key", settingsH.SetMoonshotAPIKey)
+			r.Delete("/moonshot-key", settingsH.DeleteMoonshotAPIKey)
 			r.Post("/xai-key", settingsH.SetXAIAPIKey)
 			r.Delete("/xai-key", settingsH.DeleteXAIAPIKey)
 			r.Post("/zai-key", settingsH.SetZAIAPIKey)

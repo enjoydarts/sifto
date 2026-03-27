@@ -8,6 +8,7 @@ from app.services.gemini_service import summarize as summarize_gemini
 from app.services.groq_service import summarize as summarize_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import summarize as summarize_mistral
+from app.services.moonshot_service import summarize as summarize_moonshot
 from app.services.openai_service import summarize as summarize_openai
 from app.services.openrouter_service import summarize as summarize_openrouter
 from app.services.poe_service import summarize as summarize_poe
@@ -90,6 +91,13 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
                         api_key=api_key or "",
                     ),
                     "mistral": lambda api_key: summarize_mistral(
+                        req.title,
+                        req.facts,
+                        source_text_chars=req.source_text_chars,
+                        model=str(req.model),
+                        api_key=api_key or "",
+                    ),
+                    "moonshot": lambda api_key: summarize_moonshot(
                         req.title,
                         req.facts,
                         source_text_chars=req.source_text_chars,

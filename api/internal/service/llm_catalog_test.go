@@ -19,6 +19,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("deepseek-chat"); got == nil {
 		t.Fatal("deepseek-chat not found in catalog")
 	}
+	if got := findModelCatalog("kimi-k2.5"); got == nil {
+		t.Fatal("kimi-k2.5 not found in catalog")
+	}
 	if got := findModelCatalog("text-embedding-3-small"); got == nil {
 		t.Fatal("text-embedding-3-small not found in catalog")
 	}
@@ -38,6 +41,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "grok-4-fast-non-reasoning", provider: "xai"},
 		{model: "glm-4.7-flash", provider: "zai"},
 		{model: "fireworks/gpt-oss-20b", provider: "fireworks"},
+		{model: "kimi-k2.5", provider: "moonshot"},
 		{model: "gpt-5.4-mini", provider: "openai"},
 		{model: "openrouter::openai/gpt-oss-120b", provider: "openrouter"},
 		{model: "poe::Claude-Sonnet-4.5", provider: "poe"},
@@ -63,6 +67,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{provider: "xai", purpose: "facts", want: "grok-4-fast-non-reasoning"},
 		{provider: "zai", purpose: "ask", want: "glm-5-turbo"},
 		{provider: "fireworks", purpose: "ask", want: "fireworks/kimi-k2-instruct-0905"},
+		{provider: "moonshot", purpose: "ask", want: "kimi-k2.5"},
 	}
 	for _, tt := range defaults {
 		if got := DefaultLLMModelForPurpose(tt.provider, tt.purpose); got != tt.want {

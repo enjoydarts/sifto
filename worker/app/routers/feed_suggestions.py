@@ -9,6 +9,7 @@ from app.services.gemini_service import rank_feed_suggestions as rank_feed_sugge
 from app.services.groq_service import rank_feed_suggestions as rank_feed_suggestions_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import rank_feed_suggestions as rank_feed_suggestions_mistral
+from app.services.moonshot_service import rank_feed_suggestions as rank_feed_suggestions_moonshot
 from app.services.openai_service import rank_feed_suggestions as rank_feed_suggestions_openai
 from app.services.openrouter_service import rank_feed_suggestions as rank_feed_suggestions_openrouter
 from app.services.poe_service import rank_feed_suggestions as rank_feed_suggestions_poe
@@ -137,6 +138,15 @@ def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Requ
                     api_key=api_key or "",
                 ),
                 "mistral": lambda api_key: rank_feed_suggestions_mistral(
+                    existing_sources=existing_sources,
+                    preferred_topics=req.preferred_topics,
+                    candidates=candidates,
+                    positive_examples=positive_examples,
+                    negative_examples=negative_examples,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "moonshot": lambda api_key: rank_feed_suggestions_moonshot(
                     existing_sources=existing_sources,
                     preferred_topics=req.preferred_topics,
                     candidates=candidates,

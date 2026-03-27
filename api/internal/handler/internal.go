@@ -759,6 +759,8 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				alibabaKey, err = h.loadAlibabaAPIKey(r.Context(), t.UserID)
 			case "mistral":
 				mistralKey, err = h.loadMistralAPIKey(r.Context(), t.UserID)
+			case "moonshot":
+				openAIKey, err = h.loadMoonshotAPIKey(r.Context(), t.UserID)
 			case "xai":
 				xaiKey, err = h.loadXAIAPIKey(r.Context(), t.UserID)
 			case "zai":
@@ -955,6 +957,24 @@ func (h *InternalHandler) loadXAIAPIKey(ctx context.Context, userID string) (*st
 	}
 	if enc == nil || *enc == "" {
 		return nil, fmt.Errorf("xai api key is not set")
+	}
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+func (h *InternalHandler) loadMoonshotAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetMoonshotAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("moonshot api key is not set")
 	}
 	if !h.cipher.Enabled() {
 		return nil, fmt.Errorf("secret cipher is not configured")

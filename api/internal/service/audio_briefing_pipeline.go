@@ -390,6 +390,7 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 	deepseekKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetDeepSeekAPIKeyEncrypted, o.cipher, userID, "")
 	alibabaKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetAlibabaAPIKeyEncrypted, o.cipher, userID, "")
 	mistralKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMistralAPIKeyEncrypted, o.cipher, userID, "")
+	moonshotKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMoonshotAPIKeyEncrypted, o.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetXAIAPIKeyEncrypted, o.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetZAIAPIKeyEncrypted, o.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenRouterAPIKeyEncrypted, o.cipher, userID, "")
@@ -429,6 +430,8 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 				switch LLMProviderForModel(&modelValue) {
 				case "openrouter":
 					effectiveOpenAIKey = openRouterKey
+				case "moonshot":
+					effectiveOpenAIKey = moonshotKey
 				case "poe":
 					effectiveOpenAIKey = poeKey
 				}
@@ -842,6 +845,8 @@ func hasAudioBriefingProviderKey(settings *model.UserSettings, provider string) 
 		return settings.HasAlibabaAPIKey
 	case "mistral":
 		return settings.HasMistralAPIKey
+	case "moonshot":
+		return settings.HasMoonshotAPIKey
 	case "xai":
 		return settings.HasXAIAPIKey
 	case "zai":

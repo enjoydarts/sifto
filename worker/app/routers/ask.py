@@ -9,6 +9,7 @@ from app.services.gemini_service import ask_question as ask_question_gemini
 from app.services.groq_service import ask_question as ask_question_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import ask_question as ask_question_mistral
+from app.services.moonshot_service import ask_question as ask_question_moonshot
 from app.services.openai_service import ask_question as ask_question_openai
 from app.services.openrouter_service import ask_question as ask_question_openrouter
 from app.services.poe_service import ask_question as ask_question_poe
@@ -68,6 +69,7 @@ def ask_endpoint(req: AskRequest, request: Request):
                     "deepseek": lambda api_key: ask_question_deepseek(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                     "alibaba": lambda api_key: ask_question_alibaba(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                     "mistral": lambda api_key: ask_question_mistral(req.query, candidates, model=str(req.model), api_key=api_key or ""),
+                    "moonshot": lambda api_key: ask_question_moonshot(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                     "xai": lambda api_key: ask_question_xai(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                     "zai": lambda api_key: ask_question_zai(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                     "openrouter": lambda api_key: ask_question_openrouter(req.query, candidates, model=str(req.model), api_key=api_key or ""),

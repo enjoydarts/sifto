@@ -9,6 +9,7 @@ from app.services.gemini_service import generate_item_navigator as generate_item
 from app.services.groq_service import generate_item_navigator as generate_item_navigator_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import generate_item_navigator as generate_item_navigator_mistral
+from app.services.moonshot_service import generate_item_navigator as generate_item_navigator_moonshot
 from app.services.openai_service import generate_item_navigator as generate_item_navigator_openai
 from app.services.openrouter_service import generate_item_navigator as generate_item_navigator_openrouter
 from app.services.poe_service import generate_item_navigator as generate_item_navigator_poe
@@ -68,6 +69,7 @@ def generate_item_navigator_endpoint(req: ItemNavigatorRequest, request: Request
                 "deepseek": lambda api_key: generate_item_navigator_deepseek(persona=req.persona, article=article, model=str(req.model), api_key=api_key or ""),
                 "alibaba": lambda api_key: generate_item_navigator_alibaba(persona=req.persona, article=article, model=str(req.model), api_key=api_key or ""),
                 "mistral": lambda api_key: generate_item_navigator_mistral(persona=req.persona, article=article, model=str(req.model), api_key=api_key or ""),
+                "moonshot": lambda api_key: generate_item_navigator_moonshot(persona=req.persona, article=article, model=str(req.model), api_key=api_key or ""),
                 "xai": lambda api_key: generate_item_navigator_xai(persona=req.persona, article=article, model=str(req.model), api_key=api_key or ""),
                 "zai": lambda api_key: generate_item_navigator_zai(persona=req.persona, article=article, model=str(req.model), api_key=api_key or ""),
                 "openrouter": lambda api_key: generate_item_navigator_openrouter(persona=req.persona, article=article, model=str(req.model), api_key=api_key or ""),

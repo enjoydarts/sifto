@@ -37,6 +37,8 @@ type UserSettings struct {
 	HasAlibabaAPIKey                 bool       `json:"has_alibaba_api_key"`
 	MistralAPIKeyLast4               *string    `json:"mistral_api_key_last4,omitempty"`
 	HasMistralAPIKey                 bool       `json:"has_mistral_api_key"`
+	MoonshotAPIKeyLast4              *string    `json:"moonshot_api_key_last4,omitempty"`
+	HasMoonshotAPIKey                bool       `json:"has_moonshot_api_key"`
 	XAIAPIKeyLast4                   *string    `json:"xai_api_key_last4,omitempty"`
 	HasXAIAPIKey                     bool       `json:"has_xai_api_key"`
 	ZAIAPIKeyLast4                   *string    `json:"zai_api_key_last4,omitempty"`

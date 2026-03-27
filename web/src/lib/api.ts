@@ -1246,6 +1246,8 @@ export interface UserSettings {
   alibaba_api_key_last4: string | null;
   has_mistral_api_key: boolean;
   mistral_api_key_last4: string | null;
+  has_moonshot_api_key: boolean;
+  moonshot_api_key_last4: string | null;
   has_xai_api_key: boolean;
   xai_api_key_last4: string | null;
   has_zai_api_key: boolean;
@@ -2353,6 +2355,16 @@ export const api = {
   deleteMistralApiKey: () =>
     apiFetch<{ user_id: string; has_mistral_api_key: boolean; mistral_api_key_last4: string | null }>(
       "/settings/mistral-key",
+      { method: "DELETE" }
+    ),
+  setMoonshotApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_moonshot_api_key: boolean; moonshot_api_key_last4: string | null }>(
+      "/settings/moonshot-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteMoonshotApiKey: () =>
+    apiFetch<{ user_id: string; has_moonshot_api_key: boolean; moonshot_api_key_last4: string | null }>(
+      "/settings/moonshot-key",
       { method: "DELETE" }
     ),
   setXAIApiKey: (apiKey: string) =>

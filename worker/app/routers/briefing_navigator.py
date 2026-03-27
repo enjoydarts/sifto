@@ -9,6 +9,7 @@ from app.services.gemini_service import generate_briefing_navigator as generate_
 from app.services.groq_service import generate_briefing_navigator as generate_briefing_navigator_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import generate_briefing_navigator as generate_briefing_navigator_mistral
+from app.services.moonshot_service import generate_briefing_navigator as generate_briefing_navigator_moonshot
 from app.services.openai_service import generate_briefing_navigator as generate_briefing_navigator_openai
 from app.services.openrouter_service import generate_briefing_navigator as generate_briefing_navigator_openrouter
 from app.services.poe_service import generate_briefing_navigator as generate_briefing_navigator_poe
@@ -115,6 +116,13 @@ def generate_briefing_navigator_endpoint(req: BriefingNavigatorRequest, request:
                     api_key=api_key or "",
                 ),
                 "mistral": lambda api_key: generate_briefing_navigator_mistral(
+                    persona=req.persona,
+                    candidates=candidates,
+                    intro_context=req.intro_context,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "moonshot": lambda api_key: generate_briefing_navigator_moonshot(
                     persona=req.persona,
                     candidates=candidates,
                     intro_context=req.intro_context,

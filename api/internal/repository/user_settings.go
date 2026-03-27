@@ -77,6 +77,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var deepseekAPIKeyEnc *string
 	var alibabaAPIKeyEnc *string
 	var mistralAPIKeyEnc *string
+	var moonshotAPIKeyEnc *string
 	var xaiAPIKeyEnc *string
 	var zaiAPIKeyEnc *string
 	var fireworksAPIKeyEnc *string
@@ -100,6 +101,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       alibaba_api_key_last4,
 		       mistral_api_key_enc,
 		       mistral_api_key_last4,
+		       moonshot_api_key_enc,
+		       moonshot_api_key_last4,
 		       xai_api_key_enc,
 		       xai_api_key_last4,
 		       zai_api_key_enc,
@@ -173,6 +176,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.AlibabaAPIKeyLast4,
 		&mistralAPIKeyEnc,
 		&v.MistralAPIKeyLast4,
+		&moonshotAPIKeyEnc,
+		&v.MoonshotAPIKeyLast4,
 		&xaiAPIKeyEnc,
 		&v.XAIAPIKeyLast4,
 		&zaiAPIKeyEnc,
@@ -238,6 +243,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasDeepSeekAPIKey = deepseekAPIKeyEnc != nil && *deepseekAPIKeyEnc != ""
 	v.HasAlibabaAPIKey = alibabaAPIKeyEnc != nil && *alibabaAPIKeyEnc != ""
 	v.HasMistralAPIKey = mistralAPIKeyEnc != nil && *mistralAPIKeyEnc != ""
+	v.HasMoonshotAPIKey = moonshotAPIKeyEnc != nil && *moonshotAPIKeyEnc != ""
 	v.HasXAIAPIKey = xaiAPIKeyEnc != nil && *xaiAPIKeyEnc != ""
 	v.HasZAIAPIKey = zaiAPIKeyEnc != nil && *zaiAPIKeyEnc != ""
 	v.HasFireworksAPIKey = fireworksAPIKeyEnc != nil && *fireworksAPIKeyEnc != ""
@@ -636,6 +642,25 @@ func (r *UserSettingsRepo) GetMistralAPIKeyEncrypted(ctx context.Context, userID
 	return v, nil
 }
 
+func (r *UserSettingsRepo) GetMoonshotAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT moonshot_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1
+	`, userID).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
 func (r *UserSettingsRepo) GetXAIAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
 	var v *string
 	err := r.db.QueryRow(ctx, `
@@ -932,6 +957,22 @@ func (r *UserSettingsRepo) SetMistralAPIKey(ctx context.Context, userID, encrypt
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetMoonshotAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, moonshot_api_key_enc, moonshot_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET moonshot_api_key_enc = EXCLUDED.moonshot_api_key_enc,
+		    moonshot_api_key_last4 = EXCLUDED.moonshot_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) SetXAIAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, xai_api_key_enc, xai_api_key_last4)
@@ -1146,6 +1187,22 @@ func (r *UserSettingsRepo) ClearMistralAPIKey(ctx context.Context, userID string
 		ON CONFLICT (user_id) DO UPDATE
 		SET mistral_api_key_enc = NULL,
 		    mistral_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearMoonshotAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, moonshot_api_key_enc, moonshot_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET moonshot_api_key_enc = NULL,
+		    moonshot_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

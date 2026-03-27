@@ -95,6 +95,25 @@
       }
     },
     {
+      "id": "moonshot",
+      "api_key_header": "x-openai-api-key",
+      "match_exact": [
+        "kimi-k2.5",
+        "kimi-k2-turbo-preview",
+        "kimi-k2-thinking",
+        "kimi-k2-thinking-turbo"
+      ],
+      "match_prefixes": ["kimi-k2-"],
+      "default_models": {
+        "facts": "kimi-k2.5",
+        "summary": "kimi-k2.5",
+        "digest_cluster_draft": "kimi-k2.5",
+        "digest": "kimi-k2.5",
+        "ask": "kimi-k2.5",
+        "source_suggestion": "kimi-k2-turbo-preview"
+      }
+    },
+    {
       "id": "xai",
       "api_key_header": "x-xai-api-key",
       "match_exact": [
@@ -849,6 +868,78 @@
         "pricing_source": "mistral_static_2026_03",
         "input_per_mtok_usd": 0.5,
         "output_per_mtok_usd": 1.5
+      }
+    },
+    {
+      "id": "kimi-k2.5",
+      "provider": "moonshot",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": ["jsonStable", "longContext"],
+      "comment": "Moonshot AI の主力 Kimi。長めの要約や Ask を OpenAI 互換でまとめて試したい時の標準候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "moonshot_billed_usage_or_zero_2026_03",
+        "input_per_mtok_usd": 0.0,
+        "output_per_mtok_usd": 0.0,
+        "cache_write_per_mtok_usd": 0.0,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "kimi-k2-turbo-preview",
+      "provider": "moonshot",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["longContext"],
+      "comment": "Moonshot の軽量寄り Kimi。候補絞りや短めの整形を安く回したい時の比較枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "moonshot_billed_usage_or_zero_2026_03",
+        "input_per_mtok_usd": 0.0,
+        "output_per_mtok_usd": 0.0,
+        "cache_write_per_mtok_usd": 0.0,
+        "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "kimi-k2-thinking",
+      "provider": "moonshot",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "reasoning",
+      "highlights": ["reasoning", "longContext"],
+      "comment": "Moonshot の thinking 枠。複雑な整理や reasoning の比較用に試す上位モデル。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "moonshot_billed_usage_or_zero_2026_03",
+        "input_per_mtok_usd": 0.0,
+        "output_per_mtok_usd": 0.0,
+        "cache_write_per_mtok_usd": 0.0,
+        "cache_read_per_mtok_usd": 0.0
       }
     },
     {

@@ -272,6 +272,7 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 	deepseekKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
 	alibabaKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
 	mistralKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
+	moonshotKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMoonshotAPIKeyEncrypted, h.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
@@ -280,6 +281,8 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 	switch service.LLMProviderForModel(modelName) {
 	case "openrouter":
 		openAIKey = openRouterKey
+	case "moonshot":
+		openAIKey = moonshotKey
 	case "poe":
 		openAIKey = poeKey
 	}
@@ -567,6 +570,8 @@ func hasNavigatorProviderKey(settings *model.UserSettings, provider string) bool
 		return settings.HasAlibabaAPIKey
 	case "mistral":
 		return settings.HasMistralAPIKey
+	case "moonshot":
+		return settings.HasMoonshotAPIKey
 	case "xai":
 		return settings.HasXAIAPIKey
 	case "zai":

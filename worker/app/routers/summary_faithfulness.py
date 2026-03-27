@@ -11,6 +11,7 @@ from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import check_summary_faithfulness as check_summary_faithfulness_mistral
 from app.services.openai_service import check_summary_faithfulness as check_summary_faithfulness_openai
 from app.services.openrouter_service import check_summary_faithfulness as check_summary_faithfulness_openrouter
+from app.services.moonshot_service import check_summary_faithfulness as check_summary_faithfulness_moonshot
 from app.services.poe_service import check_summary_faithfulness as check_summary_faithfulness_poe
 from app.services.xai_service import check_summary_faithfulness as check_summary_faithfulness_xai
 from app.services.zai_service import check_summary_faithfulness as check_summary_faithfulness_zai
@@ -50,6 +51,7 @@ def check_summary_faithfulness_endpoint(req: SummaryFaithfulnessRequest, request
                     "deepseek": lambda api_key: check_summary_faithfulness_deepseek(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "alibaba": lambda api_key: check_summary_faithfulness_alibaba(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "mistral": lambda api_key: check_summary_faithfulness_mistral(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
+                    "moonshot": lambda api_key: check_summary_faithfulness_moonshot(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "xai": lambda api_key: check_summary_faithfulness_xai(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "zai": lambda api_key: check_summary_faithfulness_zai(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "openrouter": lambda api_key: check_summary_faithfulness_openrouter(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),

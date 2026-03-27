@@ -10,6 +10,7 @@ from app.services.groq_service import generate_audio_briefing_script as generate
 from app.services.feed_task_common import is_audio_briefing_script_retryable_validation_error
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import generate_audio_briefing_script as generate_audio_briefing_script_mistral
+from app.services.moonshot_service import generate_audio_briefing_script as generate_audio_briefing_script_moonshot
 from app.services.openai_service import generate_audio_briefing_script as generate_audio_briefing_script_openai
 from app.services.openrouter_service import generate_audio_briefing_script as generate_audio_briefing_script_openrouter
 from app.services.poe_service import generate_audio_briefing_script as generate_audio_briefing_script_poe
@@ -164,6 +165,20 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                     api_key=api_key or "",
                 ),
                 "mistral": lambda api_key: generate_audio_briefing_script_mistral(
+                    persona=req.persona,
+                    articles=articles,
+                    intro_context=req.intro_context,
+                    target_duration_minutes=req.target_duration_minutes,
+                    target_chars=req.target_chars,
+                    chars_per_minute=req.chars_per_minute,
+                    include_opening=req.include_opening,
+                    include_overall_summary=req.include_overall_summary,
+                    include_article_segments=req.include_article_segments,
+                    include_ending=req.include_ending,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "moonshot": lambda api_key: generate_audio_briefing_script_moonshot(
                     persona=req.persona,
                     articles=articles,
                     intro_context=req.intro_context,

@@ -77,6 +77,20 @@ func TestSettingsGetPayloadSupportsPoeFields(t *testing.T) {
 	}
 }
 
+func TestSettingsGetPayloadSupportsMoonshotFields(t *testing.T) {
+	payload := &SettingsGetPayload{
+		HasMoonshotAPIKey:   true,
+		MoonshotAPIKeyLast4: strptr("k25x"),
+	}
+
+	if !payload.HasMoonshotAPIKey {
+		t.Fatal("HasMoonshotAPIKey should be true")
+	}
+	if payload.MoonshotAPIKeyLast4 == nil || *payload.MoonshotAPIKeyLast4 != "k25x" {
+		t.Fatalf("MoonshotAPIKeyLast4 = %v, want %q", payload.MoonshotAPIKeyLast4, "k25x")
+	}
+}
+
 func TestSettingsGetPayloadSupportsAivisFields(t *testing.T) {
 	payload := &SettingsGetPayload{
 		HasAivisAPIKey:          true,

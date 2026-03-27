@@ -9,6 +9,7 @@ from app.services.gemini_service import compose_ai_navigator_brief as compose_ai
 from app.services.groq_service import compose_ai_navigator_brief as compose_ai_navigator_brief_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import compose_ai_navigator_brief as compose_ai_navigator_brief_mistral
+from app.services.moonshot_service import compose_ai_navigator_brief as compose_ai_navigator_brief_moonshot
 from app.services.openai_service import compose_ai_navigator_brief as compose_ai_navigator_brief_openai
 from app.services.openrouter_service import compose_ai_navigator_brief as compose_ai_navigator_brief_openrouter
 from app.services.poe_service import compose_ai_navigator_brief as compose_ai_navigator_brief_poe
@@ -118,6 +119,13 @@ def compose_ai_navigator_brief_endpoint(req: AINavigatorBriefRequest, request: R
                     api_key=api_key or "",
                 ),
                 "mistral": lambda api_key: compose_ai_navigator_brief_mistral(
+                    persona=req.persona,
+                    candidates=candidates,
+                    intro_context=req.intro_context,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "moonshot": lambda api_key: compose_ai_navigator_brief_moonshot(
                     persona=req.persona,
                     candidates=candidates,
                     intro_context=req.intro_context,

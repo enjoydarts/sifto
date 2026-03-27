@@ -356,6 +356,8 @@ export default function SettingsPage() {
   const [deletingAlibabaKey, setDeletingAlibabaKey] = useState(false);
   const [savingMistralKey, setSavingMistralKey] = useState(false);
   const [deletingMistralKey, setDeletingMistralKey] = useState(false);
+  const [savingMoonshotKey, setSavingMoonshotKey] = useState(false);
+  const [deletingMoonshotKey, setDeletingMoonshotKey] = useState(false);
   const [savingXAIKey, setSavingXAIKey] = useState(false);
   const [deletingXAIKey, setDeletingXAIKey] = useState(false);
   const [savingZAIKey, setSavingZAIKey] = useState(false);
@@ -393,6 +395,7 @@ export default function SettingsPage() {
   const [deepseekApiKeyInput, setDeepseekApiKeyInput] = useState("");
   const [alibabaApiKeyInput, setAlibabaApiKeyInput] = useState("");
   const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
+  const [moonshotApiKeyInput, setMoonshotApiKeyInput] = useState("");
   const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
   const [zaiApiKeyInput, setZaiApiKeyInput] = useState("");
   const [fireworksApiKeyInput, setFireworksApiKeyInput] = useState("");
@@ -1056,6 +1059,21 @@ export default function SettingsPage() {
           notSet: t("settings.mistralNotSet"),
         },
         {
+          id: "moonshot",
+          title: t("settings.moonshotTitle"),
+          description: t("settings.moonshotDescription"),
+          configured: settings.has_moonshot_api_key,
+          last4: settings.moonshot_api_key_last4,
+          value: moonshotApiKeyInput,
+          onChange: setMoonshotApiKeyInput,
+          onSubmit: submitMoonshotApiKey,
+          onDelete: handleDeleteMoonshotApiKey,
+          placeholder: "sk-...",
+          saving: savingMoonshotKey,
+          deleting: deletingMoonshotKey,
+          notSet: t("settings.moonshotNotSet"),
+        },
+        {
           id: "xai",
           title: t("settings.xaiTitle"),
           description: t("settings.xaiDescription"),
@@ -1584,6 +1602,45 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setDeletingMistralKey(false);
+    }
+  }
+
+  async function submitMoonshotApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingMoonshotKey(true);
+    try {
+      if (!moonshotApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setMoonshotApiKey(moonshotApiKeyInput.trim());
+      setMoonshotApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.moonshotSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingMoonshotKey(false);
+    }
+  }
+
+  async function handleDeleteMoonshotApiKey() {
+    if (!(await confirm({
+      title: t("settings.moonshotDeleteTitle"),
+      message: t("settings.moonshotDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingMoonshotKey(true);
+    try {
+      await api.deleteMoonshotApiKey();
+      await load();
+      showToast(t("settings.toast.moonshotDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingMoonshotKey(false);
     }
   }
 

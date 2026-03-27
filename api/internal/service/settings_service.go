@@ -43,6 +43,8 @@ type SettingsGetPayload struct {
 	AlibabaAPIKeyLast4      *string          `json:"alibaba_api_key_last4,omitempty"`
 	HasMistralAPIKey        bool             `json:"has_mistral_api_key"`
 	MistralAPIKeyLast4      *string          `json:"mistral_api_key_last4,omitempty"`
+	HasMoonshotAPIKey       bool             `json:"has_moonshot_api_key"`
+	MoonshotAPIKeyLast4     *string          `json:"moonshot_api_key_last4,omitempty"`
 	HasXAIAPIKey            bool             `json:"has_xai_api_key"`
 	XAIAPIKeyLast4          *string          `json:"xai_api_key_last4,omitempty"`
 	HasZAIAPIKey            bool             `json:"has_zai_api_key"`
@@ -394,6 +396,8 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		AlibabaAPIKeyLast4:      settings.AlibabaAPIKeyLast4,
 		HasMistralAPIKey:        settings.HasMistralAPIKey,
 		MistralAPIKeyLast4:      settings.MistralAPIKeyLast4,
+		HasMoonshotAPIKey:       settings.HasMoonshotAPIKey,
+		MoonshotAPIKeyLast4:     settings.MoonshotAPIKeyLast4,
 		HasXAIAPIKey:            settings.HasXAIAPIKey,
 		XAIAPIKeyLast4:          settings.XAIAPIKeyLast4,
 		HasZAIAPIKey:            settings.HasZAIAPIKey,
@@ -914,6 +918,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetAlibabaAPIKey(ctx, userID, enc, last4)
 	case "mistral":
 		return s.repo.SetMistralAPIKey(ctx, userID, enc, last4)
+	case "moonshot":
+		return s.repo.SetMoonshotAPIKey(ctx, userID, enc, last4)
 	case "xai":
 		return s.repo.SetXAIAPIKey(ctx, userID, enc, last4)
 	case "zai":
@@ -947,6 +953,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearAlibabaAPIKey(ctx, userID)
 	case "mistral":
 		return s.repo.ClearMistralAPIKey(ctx, userID)
+	case "moonshot":
+		return s.repo.ClearMoonshotAPIKey(ctx, userID)
 	case "xai":
 		return s.repo.ClearXAIAPIKey(ctx, userID)
 	case "zai":

@@ -9,6 +9,7 @@ from app.services.gemini_service import translate_title as translate_title_gemin
 from app.services.groq_service import translate_title as translate_title_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import translate_title as translate_title_mistral
+from app.services.moonshot_service import translate_title as translate_title_moonshot
 from app.services.openai_service import translate_title as translate_title_openai
 from app.services.openrouter_service import translate_title as translate_title_openrouter
 from app.services.poe_service import translate_title as translate_title_poe
@@ -46,6 +47,7 @@ def translate_title_endpoint(req: TranslateTitleRequest, request: Request):
                 "deepseek": lambda api_key: translate_title_deepseek(req.title, model=str(req.model), api_key=api_key or ""),
                 "alibaba": lambda api_key: translate_title_alibaba(req.title, model=str(req.model), api_key=api_key or ""),
                 "mistral": lambda api_key: translate_title_mistral(req.title, model=str(req.model), api_key=api_key or ""),
+                "moonshot": lambda api_key: translate_title_moonshot(req.title, model=str(req.model), api_key=api_key or ""),
                 "xai": lambda api_key: translate_title_xai(req.title, model=str(req.model), api_key=api_key or ""),
                 "zai": lambda api_key: translate_title_zai(req.title, model=str(req.model), api_key=api_key or ""),
                 "openrouter": lambda api_key: translate_title_openrouter(req.title, model=str(req.model), api_key=api_key or ""),

@@ -9,6 +9,7 @@ from app.services.gemini_service import suggest_feed_seed_sites as suggest_feed_
 from app.services.groq_service import suggest_feed_seed_sites as suggest_feed_seed_sites_groq
 from app.services.llm_dispatch import dispatch_by_model
 from app.services.mistral_service import suggest_feed_seed_sites as suggest_feed_seed_sites_mistral
+from app.services.moonshot_service import suggest_feed_seed_sites as suggest_feed_seed_sites_moonshot
 from app.services.openai_service import suggest_feed_seed_sites as suggest_feed_seed_sites_openai
 from app.services.openrouter_service import suggest_feed_seed_sites as suggest_feed_seed_sites_openrouter
 from app.services.poe_service import suggest_feed_seed_sites as suggest_feed_seed_sites_poe
@@ -111,6 +112,14 @@ def suggest_feed_seed_sites_endpoint(req: FeedSeedSuggestionRequest, request: Re
                     api_key=api_key or "",
                 ),
                 "mistral": lambda api_key: suggest_feed_seed_sites_mistral(
+                    existing_sources=existing_sources,
+                    preferred_topics=req.preferred_topics,
+                    positive_examples=positive_examples,
+                    negative_examples=negative_examples,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "moonshot": lambda api_key: suggest_feed_seed_sites_moonshot(
                     existing_sources=existing_sources,
                     preferred_topics=req.preferred_topics,
                     positive_examples=positive_examples,

@@ -831,19 +831,19 @@ function navigatorThemeTokens(persona: string, avatarStyle?: string) {
       };
     case "junior":
       return {
-        shell: "border-[#e5b3d3] bg-[linear-gradient(180deg,#fff4fb_0%,#fffdfd_100%)]",
+        shell: "border-[#edb0aa] bg-[linear-gradient(180deg,#fff3f1_0%,#fffdfd_100%)]",
         header: "",
-        avatar: "bg-[#c26aa3] text-white",
-        bubble: "border-[#efd1e4] bg-[#fff7fb]",
-        badge: "bg-[#c26aa3] text-white",
+        avatar: "bg-[#d85a5a] text-white",
+        bubble: "border-[#f1c9c4] bg-[#fff8f7]",
+        badge: "bg-[#d85a5a] text-white",
       };
     case "urban":
       return {
-        shell: "border-[#c1cad6] bg-[linear-gradient(180deg,#f4f7fb_0%,#fffdfd_100%)]",
+        shell: "border-[#b8dcf0] bg-[linear-gradient(180deg,#f1fbff_0%,#fffdfd_100%)]",
         header: "",
-        avatar: "bg-[#59667a] text-white",
-        bubble: "border-[#d6dde6] bg-[#f8fafc]",
-        badge: "bg-[#59667a] text-white",
+        avatar: "bg-[#57a9d8] text-white",
+        bubble: "border-[#cae9f7] bg-[#f6fcff]",
+        badge: "bg-[#57a9d8] text-white",
       };
     default:
       return {

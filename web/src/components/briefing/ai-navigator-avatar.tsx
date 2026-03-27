@@ -87,29 +87,29 @@ export function AINavigatorAvatar({ persona, className }: Props) {
     case "junior":
       return (
         <svg viewBox="0 0 64 64" className={common} aria-hidden="true" fill="none">
-          <circle cx="32" cy="32" r="30" fill="#C26AA3" />
+          <circle cx="32" cy="32" r="30" fill="#D85A5A" />
           <path d="M17 29c3-9 9-14 17-14 8 0 14 4 17 10l-3 3c-4-3-9-5-14-5-5 0-9 2-12 6h-5Z" fill="#FFF3FA" />
-          <path d="M20 23c3-5 7-7 12-7 6 0 10 3 14 8-4-1-8-2-13-2-5 0-9 1-13 1Z" fill="#C26AA3" />
-          <ellipse cx="24" cy="35" rx="3.5" ry="3.1" fill="#FFF3FA" />
-          <ellipse cx="40" cy="35" rx="3.5" ry="3.1" fill="#FFF3FA" />
-          <Blush left="#F5C3DD" right="#F5C3DD" fill="#FFF3FA" />
+          <path d="M20 23c3-5 7-7 12-7 6 0 10 3 14 8-4-1-8-2-13-2-5 0-9 1-13 1Z" fill="#D85A5A" />
+          <ellipse cx="24" cy="35" rx="3.5" ry="3.1" fill="#FFF4F1" />
+          <ellipse cx="40" cy="35" rx="3.5" ry="3.1" fill="#FFF4F1" />
+          <Blush left="#F2B8B3" right="#F2B8B3" fill="#FFF4F1" />
           <path d="M24 44c2 3 5 4 8 4 4 0 7-1 9-4" stroke="#FFF3FA" strokeWidth="3.5" strokeLinecap="round" />
-          <path d="M45 17c2 0 4 2 4 4s-2 4-4 4-4-2-4-4 2-4 4-4Z" fill="#FFF3FA" opacity=".95" />
-          <path d="M45 15v12M39 21h12" stroke="#C26AA3" strokeWidth="2.2" strokeLinecap="round" />
+          <path d="M45 17c2 0 4 2 4 4s-2 4-4 4-4-2-4-4 2-4 4-4Z" fill="#FFF4F1" opacity=".95" />
+          <path d="M45 15v12M39 21h12" stroke="#D85A5A" strokeWidth="2.2" strokeLinecap="round" />
         </svg>
       );
     case "urban":
       return (
         <svg viewBox="0 0 64 64" className={common} aria-hidden="true" fill="none">
-          <circle cx="32" cy="32" r="30" fill="#59667A" />
-          <path d="M16 29c3-10 10-15 18-15 8 0 14 4 18 11l-3 3c-4-4-8-5-14-5-5 0-9 2-12 6h-7Z" fill="#F4F7FB" />
-          <path d="M20 23c3-5 7-8 13-8s11 3 14 8c-4-1-8-2-14-2-5 0-9 1-13 2Z" fill="#59667A" />
-          <path d="M21 35c2-1 5-1 8-1" stroke="#F4F7FB" strokeWidth="3.5" strokeLinecap="round" />
-          <path d="M35 35c3 0 6 0 8 1" stroke="#F4F7FB" strokeWidth="3.5" strokeLinecap="round" />
-          <Blush left="#C6D0DE" right="#C6D0DE" fill="#F4F7FB" />
-          <path d="M24 45c3 2 5 2 8 2 4 0 7-1 9-3" stroke="#F4F7FB" strokeWidth="3.5" strokeLinecap="round" />
-          <path d="M45 15h7v14h-7z" fill="#F4F7FB" opacity=".95" />
-          <path d="M47 18h3M47 22h3M47 26h3" stroke="#59667A" strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx="32" cy="32" r="30" fill="#57A9D8" />
+          <path d="M16 29c3-10 10-15 18-15 8 0 14 4 18 11l-3 3c-4-4-8-5-14-5-5 0-9 2-12 6h-7Z" fill="#F2FBFF" />
+          <path d="M20 23c3-5 7-8 13-8s11 3 14 8c-4-1-8-2-14-2-5 0-9 1-13 2Z" fill="#57A9D8" />
+          <path d="M21 35c2-1 5-1 8-1" stroke="#F2FBFF" strokeWidth="3.5" strokeLinecap="round" />
+          <path d="M35 35c3 0 6 0 8 1" stroke="#F2FBFF" strokeWidth="3.5" strokeLinecap="round" />
+          <Blush left="#BFE5F6" right="#BFE5F6" fill="#F2FBFF" />
+          <path d="M24 45c3 2 5 2 8 2 4 0 7-1 9-3" stroke="#F2FBFF" strokeWidth="3.5" strokeLinecap="round" />
+          <path d="M45 15h7v14h-7z" fill="#F2FBFF" opacity=".95" />
+          <path d="M47 18h3M47 22h3M47 26h3" stroke="#57A9D8" strokeWidth="2.2" strokeLinecap="round" />
         </svg>
       );
     default:

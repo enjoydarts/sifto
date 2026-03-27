@@ -1433,7 +1433,7 @@ export const enDict: Dict = {
   "sharedAudio.openBriefingDetail": "Open detail page",
   "sharedAudio.status": "Status",
   "sharedAudio.audioBriefingReady": "Playing in the shared player",
-  "summaryAudio.queue.brief": "AI Navigator brief",
+  "summaryAudio.queue.brief": "AI Navigator Brief",
   "nav.playbackHistory": "Playback History",
   "aiNavigatorBriefs.eyebrow": "AI Navigator Brief",
   "aiNavigatorBriefs.title": "AI Navigator Briefs",

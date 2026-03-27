@@ -22,6 +22,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("kimi-k2.5"); got == nil {
 		t.Fatal("kimi-k2.5 not found in catalog")
 	}
+	if got := findModelCatalog("kimi-k2-0905-preview"); got == nil {
+		t.Fatal("kimi-k2-0905-preview not found in catalog")
+	}
+	if got := findModelCatalog("kimi-k2-thinking-turbo"); got == nil {
+		t.Fatal("kimi-k2-thinking-turbo not found in catalog")
+	}
 	if got := findModelCatalog("text-embedding-3-small"); got == nil {
 		t.Fatal("text-embedding-3-small not found in catalog")
 	}
@@ -42,6 +48,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "glm-4.7-flash", provider: "zai"},
 		{model: "fireworks/gpt-oss-20b", provider: "fireworks"},
 		{model: "kimi-k2.5", provider: "moonshot"},
+		{model: "kimi-k2-0905-preview", provider: "moonshot"},
+		{model: "kimi-k2-thinking-turbo", provider: "moonshot"},
 		{model: "gpt-5.4-mini", provider: "openai"},
 		{model: "openrouter::openai/gpt-oss-120b", provider: "openrouter"},
 		{model: "poe::Claude-Sonnet-4.5", provider: "poe"},

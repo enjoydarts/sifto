@@ -99,6 +99,8 @@
       "api_key_header": "x-openai-api-key",
       "match_exact": [
         "kimi-k2.5",
+        "kimi-k2-0905-preview",
+        "kimi-k2-0711-preview",
         "kimi-k2-turbo-preview",
         "kimi-k2-thinking",
         "kimi-k2-thinking-turbo"
@@ -883,15 +885,60 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": true,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "moonshot_billed_usage_or_zero_2026_03",
-        "input_per_mtok_usd": 0.0,
-        "output_per_mtok_usd": 0.0,
-        "cache_write_per_mtok_usd": 0.0,
-        "cache_read_per_mtok_usd": 0.0
+        "pricing_source": "moonshot_static_2026_03",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 3.0,
+        "cache_read_per_mtok_usd": 0.1
+      }
+    },
+    {
+      "id": "kimi-k2-0905-preview",
+      "provider": "moonshot",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "ask",
+      "highlights": ["jsonStable", "longContext"],
+      "comment": "Kimi K2 の 0905 preview。agentic coding と文脈理解が強化された snapshot を比較したい時の本命候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "moonshot_static_2026_03",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 2.5,
+        "cache_read_per_mtok_usd": 0.15
+      }
+    },
+    {
+      "id": "kimi-k2-0711-preview",
+      "provider": "moonshot",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "ask",
+      "highlights": [],
+      "comment": "Kimi K2 の旧 preview snapshot。0905 系との回帰比較や互換確認をしたい時の検証用モデル。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "moonshot_static_2026_03",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 2.5,
+        "cache_read_per_mtok_usd": 0.15
       }
     },
     {
@@ -907,15 +954,14 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": false,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "moonshot_billed_usage_or_zero_2026_03",
-        "input_per_mtok_usd": 0.0,
-        "output_per_mtok_usd": 0.0,
-        "cache_write_per_mtok_usd": 0.0,
-        "cache_read_per_mtok_usd": 0.0
+        "pricing_source": "moonshot_static_2026_03",
+        "input_per_mtok_usd": 1.15,
+        "output_per_mtok_usd": 8.0,
+        "cache_read_per_mtok_usd": 0.15
       }
     },
     {
@@ -931,15 +977,37 @@
         "supports_strict_json_schema": false,
         "supports_reasoning": true,
         "supports_tool_calling": true,
-        "supports_cache_read_pricing": false,
+        "supports_cache_read_pricing": true,
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "moonshot_billed_usage_or_zero_2026_03",
-        "input_per_mtok_usd": 0.0,
-        "output_per_mtok_usd": 0.0,
-        "cache_write_per_mtok_usd": 0.0,
-        "cache_read_per_mtok_usd": 0.0
+        "pricing_source": "moonshot_static_2026_03",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 2.5,
+        "cache_read_per_mtok_usd": 0.15
+      }
+    },
+    {
+      "id": "kimi-k2-thinking-turbo",
+      "provider": "moonshot",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "reasoning",
+      "highlights": ["reasoning", "fast", "longContext"],
+      "comment": "Kimi thinking の高速版。深い推論を保ちつつ応答速度も欲しい時の比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "moonshot_static_2026_03",
+        "input_per_mtok_usd": 1.15,
+        "output_per_mtok_usd": 8.0,
+        "cache_read_per_mtok_usd": 0.15
       }
     },
     {

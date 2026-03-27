@@ -69,7 +69,7 @@ from app.services.task_transport_common import with_execution_failures, wrap_jso
 from app.services.openai_compat_transport import run_chat_json
 
 _log = logging.getLogger(__name__)
-_MOONSHOT_PRICING_SOURCE_VERSION = "moonshot_billed_usage_or_zero_2026_03"
+_MOONSHOT_PRICING_SOURCE_VERSION = "moonshot_static_2026_03"
 
 
 def _env_timeout_seconds(name: str, default: float) -> float:

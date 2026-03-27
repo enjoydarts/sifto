@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Brain } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
+import { useToast } from "@/components/toast-provider";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { Tag } from "@/components/ui/tag";
@@ -25,10 +27,25 @@ function formatDateTime(value: string | null | undefined, locale: string) {
 
 export default function AINavigatorBriefsPage() {
   const { t, locale } = useI18n();
+  const { showToast } = useToast();
+  const [generating, setGenerating] = useState(false);
   const briefsQuery = useQuery({
     queryKey: ["ai-navigator-briefs"],
     queryFn: () => api.getAINavigatorBriefs({ limit: 30 }),
   });
+
+  async function handleGenerate() {
+    setGenerating(true);
+    try {
+      const resp = await api.generateAINavigatorBrief();
+      await briefsQuery.refetch();
+      showToast(resp.brief?.title || t("aiNavigatorBriefs.toast.generated"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   return (
     <PageTransition>
@@ -38,6 +55,16 @@ export default function AINavigatorBriefsPage() {
           title={t("aiNavigatorBriefs.title")}
           titleIcon={Brain}
           description={t("aiNavigatorBriefs.description")}
+          actions={(
+            <button
+              type="button"
+              onClick={() => void handleGenerate()}
+              disabled={generating}
+              className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {generating ? t("common.saving") : t("aiNavigatorBriefs.generateNow")}
+            </button>
+          )}
         />
 
         {briefsQuery.isLoading ? (

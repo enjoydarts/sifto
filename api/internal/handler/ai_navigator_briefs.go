@@ -1,21 +1,27 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/enjoydarts/sifto/api/internal/middleware"
 	"github.com/enjoydarts/sifto/api/internal/model"
-	"github.com/enjoydarts/sifto/api/internal/service"
 	"github.com/go-chi/chi/v5"
 )
 
-type AINavigatorBriefHandler struct {
-	service *service.AINavigatorBriefService
+type aiNavigatorBriefService interface {
+	ListBriefsByUser(ctx context.Context, userID, slot string, limit int) ([]model.AINavigatorBrief, error)
+	GetBriefDetail(ctx context.Context, userID, briefID string) (*model.AINavigatorBrief, error)
+	GenerateManual(ctx context.Context, userID string) (*model.AINavigatorBrief, error)
 }
 
-func NewAINavigatorBriefHandler(service *service.AINavigatorBriefService) *AINavigatorBriefHandler {
+type AINavigatorBriefHandler struct {
+	service aiNavigatorBriefService
+}
+
+func NewAINavigatorBriefHandler(service aiNavigatorBriefService) *AINavigatorBriefHandler {
 	return &AINavigatorBriefHandler{service: service}
 }
 
@@ -39,6 +45,16 @@ func (h *AINavigatorBriefHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *AINavigatorBriefHandler) Get(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	brief, err := h.service.GetBriefDetail(r.Context(), userID, chi.URLParam(r, "id"))
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, model.AINavigatorBriefDetailResponse{Brief: brief})
+}
+
+func (h *AINavigatorBriefHandler) Generate(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	brief, err := h.service.GenerateManual(r.Context(), userID)
 	if err != nil {
 		writeRepoError(w, err)
 		return

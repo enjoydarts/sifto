@@ -305,6 +305,7 @@ func main() {
 		r.Get("/briefing/navigator", briefingH.Navigator)
 		r.Route("/ai-navigator-briefs", func(r chi.Router) {
 			r.Get("/", aiNavigatorBriefH.List)
+			r.Post("/generate", aiNavigatorBriefH.Generate)
 			r.Get("/{id}", aiNavigatorBriefH.Get)
 			r.Post("/{id}/summary-audio-queue", aiNavigatorBriefH.AppendToSummaryAudioQueue)
 		})

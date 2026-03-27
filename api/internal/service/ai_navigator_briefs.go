@@ -108,6 +108,14 @@ func (s *AINavigatorBriefService) GetBriefDetail(ctx context.Context, userID, br
 	return s.briefs.GetBriefDetail(ctx, userID, briefID)
 }
 
+func (s *AINavigatorBriefService) GenerateManual(ctx context.Context, userID string) (*model.AINavigatorBrief, error) {
+	slot, err := ResolveAINavigatorBriefSlot(s.now())
+	if err != nil {
+		return nil, err
+	}
+	return s.GenerateBriefForSlot(ctx, userID, slot)
+}
+
 func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, userID, slot string) (*model.AINavigatorBrief, error) {
 	if s.briefs == nil || s.items == nil || s.settings == nil || s.worker == nil || s.cipher == nil {
 		return nil, fmt.Errorf("ai navigator brief service unavailable")

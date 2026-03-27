@@ -2123,6 +2123,10 @@ export const api = {
     return apiFetch<AINavigatorBriefListResponse>(`/ai-navigator-briefs${qs ? `?${qs}` : ""}`);
   },
   getAINavigatorBrief: (id: string) => apiFetch<AINavigatorBriefDetailResponse>(`/ai-navigator-briefs/${id}`),
+  generateAINavigatorBrief: () =>
+    apiFetch<AINavigatorBriefDetailResponse>("/ai-navigator-briefs/generate", {
+      method: "POST",
+    }),
   appendAINavigatorBriefToSummaryAudioQueue: (id: string) =>
     apiFetch<AINavigatorBriefSummaryAudioQueueResponse>(`/ai-navigator-briefs/${id}/summary-audio-queue`, {
       method: "POST",

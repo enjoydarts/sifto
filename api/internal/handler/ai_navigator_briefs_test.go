@@ -9,11 +9,13 @@ import (
 
 	"github.com/enjoydarts/sifto/api/internal/middleware"
 	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/go-chi/chi/v5"
 )
 
 type stubAINavigatorBriefService struct {
 	listFn           func(ctx context.Context, userID, slot string, limit int) ([]model.AINavigatorBrief, error)
 	getFn            func(ctx context.Context, userID, briefID string) (*model.AINavigatorBrief, error)
+	deleteFn         func(ctx context.Context, userID, briefID string) error
 	generateManualFn func(ctx context.Context, userID string) (*model.AINavigatorBrief, error)
 }
 
@@ -23,6 +25,10 @@ func (s *stubAINavigatorBriefService) ListBriefsByUser(ctx context.Context, user
 
 func (s *stubAINavigatorBriefService) GetBriefDetail(ctx context.Context, userID, briefID string) (*model.AINavigatorBrief, error) {
 	return s.getFn(ctx, userID, briefID)
+}
+
+func (s *stubAINavigatorBriefService) DeleteBrief(ctx context.Context, userID, briefID string) error {
+	return s.deleteFn(ctx, userID, briefID)
 }
 
 func (s *stubAINavigatorBriefService) GenerateManual(ctx context.Context, userID string) (*model.AINavigatorBrief, error) {
@@ -39,6 +45,9 @@ func TestAINavigatorBriefHandlerGenerate(t *testing.T) {
 		},
 		getFn: func(ctx context.Context, userID, briefID string) (*model.AINavigatorBrief, error) {
 			return nil, nil
+		},
+		deleteFn: func(ctx context.Context, userID, briefID string) error {
+			return nil
 		},
 		generateManualFn: func(ctx context.Context, userID string) (*model.AINavigatorBrief, error) {
 			called = userID
@@ -70,5 +79,44 @@ func TestAINavigatorBriefHandlerGenerate(t *testing.T) {
 	}
 	if payload.Brief == nil || payload.Brief.ID != "brief-1" {
 		t.Fatalf("unexpected payload: %+v", payload.Brief)
+	}
+}
+
+func TestAINavigatorBriefHandlerDelete(t *testing.T) {
+	t.Parallel()
+
+	var gotUserID string
+	var gotBriefID string
+	h := NewAINavigatorBriefHandler(&stubAINavigatorBriefService{
+		listFn: func(ctx context.Context, userID, slot string, limit int) ([]model.AINavigatorBrief, error) {
+			return nil, nil
+		},
+		getFn: func(ctx context.Context, userID, briefID string) (*model.AINavigatorBrief, error) {
+			return nil, nil
+		},
+		deleteFn: func(ctx context.Context, userID, briefID string) error {
+			gotUserID = userID
+			gotBriefID = briefID
+			return nil
+		},
+		generateManualFn: func(ctx context.Context, userID string) (*model.AINavigatorBrief, error) {
+			return nil, nil
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/ai-navigator-briefs/brief-1", nil)
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, "u1"))
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("id", "brief-1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
+	rec := httptest.NewRecorder()
+
+	h.Delete(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if gotUserID != "u1" || gotBriefID != "brief-1" {
+		t.Fatalf("unexpected args userID=%q briefID=%q", gotUserID, gotBriefID)
 	}
 }

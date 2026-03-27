@@ -14,6 +14,7 @@ import (
 type aiNavigatorBriefService interface {
 	ListBriefsByUser(ctx context.Context, userID, slot string, limit int) ([]model.AINavigatorBrief, error)
 	GetBriefDetail(ctx context.Context, userID, briefID string) (*model.AINavigatorBrief, error)
+	DeleteBrief(ctx context.Context, userID, briefID string) error
 	GenerateManual(ctx context.Context, userID string) (*model.AINavigatorBrief, error)
 }
 
@@ -60,6 +61,15 @@ func (h *AINavigatorBriefHandler) Generate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, model.AINavigatorBriefDetailResponse{Brief: brief})
+}
+
+func (h *AINavigatorBriefHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	if err := h.service.DeleteBrief(r.Context(), userID, chi.URLParam(r, "id")); err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *AINavigatorBriefHandler) AppendToSummaryAudioQueue(w http.ResponseWriter, r *http.Request) {

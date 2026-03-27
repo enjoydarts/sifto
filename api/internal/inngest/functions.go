@@ -1251,8 +1251,9 @@ func generateAINavigatorBriefsFn(client inngestgo.Client, db *pgxpool.Pool, work
 	settingsRepo := repository.NewUserSettingsRepo(db)
 	userRepo := repository.NewUserRepo(db)
 	pushLogRepo := repository.NewPushNotificationLogRepo(db)
+	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
 	secretCipher := service.NewSecretCipher()
-	briefService := service.NewAINavigatorBriefService(briefRepo, itemRepo, settingsRepo, userRepo, pushLogRepo, worker, secretCipher, oneSignal, nil)
+	briefService := service.NewAINavigatorBriefService(briefRepo, itemRepo, settingsRepo, userRepo, pushLogRepo, llmUsageRepo, worker, secretCipher, oneSignal, llmUsageCache, nil)
 
 	return inngestgo.CreateFunction(
 		client,

@@ -107,7 +107,7 @@ func main() {
 	summaryAudioPlayerH := handler.NewSummaryAudioPlayerHandler(summaryAudioPlayerSvc)
 	playbackSessionsSvc := service.NewPlaybackSessionsService(playbackSessionRepo)
 	playbackSessionsH := handler.NewPlaybackSessionsHandler(playbackSessionsSvc)
-	aiNavigatorBriefSvc := service.NewAINavigatorBriefService(aiNavigatorBriefRepo, itemRepo, userSettingsRepo, userRepo, pushNotificationLogRepo, worker, secretCipher, oneSignal, nil)
+	aiNavigatorBriefSvc := service.NewAINavigatorBriefService(aiNavigatorBriefRepo, itemRepo, userSettingsRepo, userRepo, pushNotificationLogRepo, llmUsageRepo, worker, secretCipher, oneSignal, cache, nil)
 	aiNavigatorBriefH := handler.NewAINavigatorBriefHandler(aiNavigatorBriefSvc)
 	internalAudioBriefingsH := handler.NewInternalAudioBriefingsHandler(audioBriefingRepo, audioBriefingPublishedNotifier, podcastPublicationSvc)
 	podcastFeedSvc := service.NewPodcastFeedService(userSettingsRepo, audioBriefingRepo, worker)
@@ -306,6 +306,7 @@ func main() {
 		r.Route("/ai-navigator-briefs", func(r chi.Router) {
 			r.Get("/", aiNavigatorBriefH.List)
 			r.Post("/generate", aiNavigatorBriefH.Generate)
+			r.Delete("/{id}", aiNavigatorBriefH.Delete)
 			r.Get("/{id}", aiNavigatorBriefH.Get)
 			r.Post("/{id}/summary-audio-queue", aiNavigatorBriefH.AppendToSummaryAudioQueue)
 		})

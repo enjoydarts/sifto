@@ -2130,6 +2130,10 @@ export const api = {
     apiFetch<AINavigatorBriefDetailResponse>("/ai-navigator-briefs/generate", {
       method: "POST",
     }),
+  deleteAINavigatorBrief: (id: string) =>
+    apiFetch<void>(`/ai-navigator-briefs/${id}`, {
+      method: "DELETE",
+    }),
   appendAINavigatorBriefToSummaryAudioQueue: (id: string) =>
     apiFetch<AINavigatorBriefSummaryAudioQueueResponse>(`/ai-navigator-briefs/${id}/summary-audio-queue`, {
       method: "POST",

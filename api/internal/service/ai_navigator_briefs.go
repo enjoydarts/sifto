@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -24,9 +27,11 @@ type AINavigatorBriefService struct {
 	settings *repository.UserSettingsRepo
 	users    aiNavigatorBriefUserLookup
 	pushLogs *repository.PushNotificationLogRepo
+	llmUsage *repository.LLMUsageLogRepo
 	worker   *WorkerClient
 	cipher   *SecretCipher
 	sender   audioBriefingPublishedSender
+	cache    JSONCache
 	now      func() time.Time
 	pageURL  func(path string) string
 }
@@ -37,9 +42,11 @@ func NewAINavigatorBriefService(
 	settings *repository.UserSettingsRepo,
 	users aiNavigatorBriefUserLookup,
 	pushLogs *repository.PushNotificationLogRepo,
+	llmUsage *repository.LLMUsageLogRepo,
 	worker *WorkerClient,
 	cipher *SecretCipher,
 	sender audioBriefingPublishedSender,
+	cache JSONCache,
 	now func() time.Time,
 ) *AINavigatorBriefService {
 	if now == nil {
@@ -51,9 +58,11 @@ func NewAINavigatorBriefService(
 		settings: settings,
 		users:    users,
 		pushLogs: pushLogs,
+		llmUsage: llmUsage,
 		worker:   worker,
 		cipher:   cipher,
 		sender:   sender,
+		cache:    cache,
 		now:      now,
 		pageURL:  AudioBriefingPageURLFromEnv,
 	}
@@ -106,6 +115,13 @@ func (s *AINavigatorBriefService) ListBriefsByUser(ctx context.Context, userID, 
 
 func (s *AINavigatorBriefService) GetBriefDetail(ctx context.Context, userID, briefID string) (*model.AINavigatorBrief, error) {
 	return s.briefs.GetBriefDetail(ctx, userID, briefID)
+}
+
+func (s *AINavigatorBriefService) DeleteBrief(ctx context.Context, userID, briefID string) error {
+	if s.briefs == nil {
+		return fmt.Errorf("ai navigator brief service unavailable")
+	}
+	return s.briefs.DeleteBrief(ctx, userID, briefID)
 }
 
 func (s *AINavigatorBriefService) GenerateManual(ctx context.Context, userID string) (*model.AINavigatorBrief, error) {
@@ -219,6 +235,7 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 		modelName,
 	)
 	if err != nil {
+		recordAINavigatorBriefLLMExecutionFailure(ctx, "ai_navigator_brief", strings.TrimSpace(*modelName), userID, err)
 		failed := &model.AINavigatorBrief{
 			UserID:            userID,
 			Slot:              slot,
@@ -252,6 +269,7 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 	if err := s.briefs.CreateBrief(ctx, brief); err != nil {
 		return nil, err
 	}
+	recordAINavigatorBriefLLMUsage(ctx, s.llmUsage, s.cache, "ai_navigator_brief", resp.LLM, &userID)
 	items := make([]model.AINavigatorBriefItem, 0, 10)
 	seen := map[string]struct{}{}
 	for idx, row := range resp.Items {
@@ -294,6 +312,48 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 	}
 	brief.Items = items
 	return brief, nil
+}
+
+func recordAINavigatorBriefLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, cache JSONCache, purpose string, usage *LLMUsage, userID *string) {
+	usage = NormalizeCatalogPricedUsage(purpose, usage)
+	if repo == nil || usage == nil || userID == nil || *userID == "" {
+		return
+	}
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%s|%s|%d|%d|%d|%d", purpose, usage.Provider, usage.Model, *userID, usage.InputTokens, usage.OutputTokens, usage.CacheCreationInputTokens, usage.CacheReadInputTokens)))
+	key := hex.EncodeToString(sum[:])
+	pricingSource := usage.PricingSource
+	if pricingSource == "" {
+		pricingSource = "unknown"
+	}
+	if err := repo.Insert(ctx, repository.LLMUsageLogInput{
+		IdempotencyKey:           &key,
+		UserID:                   userID,
+		Provider:                 usage.Provider,
+		Model:                    usage.Model,
+		RequestedModel:           usage.RequestedModel,
+		ResolvedModel:            usage.ResolvedModel,
+		PricingModelFamily:       usage.PricingModelFamily,
+		PricingSource:            pricingSource,
+		OpenRouterCostUSD:        usage.OpenRouterCostUSD,
+		OpenRouterGenerationID:   strings.TrimSpace(usage.OpenRouterGenerationID),
+		Purpose:                  purpose,
+		InputTokens:              usage.InputTokens,
+		OutputTokens:             usage.OutputTokens,
+		CacheCreationInputTokens: usage.CacheCreationInputTokens,
+		CacheReadInputTokens:     usage.CacheReadInputTokens,
+		EstimatedCostUSD:         usage.EstimatedCostUSD,
+	}); err == nil {
+		_ = BumpUserLLMUsageCacheVersion(ctx, cache, *userID)
+	} else {
+		log.Printf("llm usage insert failed purpose=%s user_id=%s provider=%s model=%s err=%v", purpose, *userID, usage.Provider, usage.Model, err)
+	}
+}
+
+func recordAINavigatorBriefLLMExecutionFailure(ctx context.Context, purpose, modelName, userID string, workerErr error) {
+	if strings.TrimSpace(modelName) == "" || workerErr == nil {
+		return
+	}
+	log.Printf("llm execution failure purpose=%s user_id=%s model=%s err=%v", purpose, userID, strings.TrimSpace(modelName), workerErr)
 }
 
 func (s *AINavigatorBriefService) NotifyBrief(ctx context.Context, brief *model.AINavigatorBrief) error {

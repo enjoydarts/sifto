@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Brain } from "lucide-react";
+import { useConfirm } from "@/components/confirm-provider";
 import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { useToast } from "@/components/toast-provider";
@@ -28,7 +29,9 @@ function formatDateTime(value: string | null | undefined, locale: string) {
 export default function AINavigatorBriefsPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
+  const { confirm } = useConfirm();
   const [generating, setGenerating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const briefsQuery = useQuery({
     queryKey: ["ai-navigator-briefs"],
     queryFn: () => api.getAINavigatorBriefs({ limit: 30 }),
@@ -44,6 +47,27 @@ export default function AINavigatorBriefsPage() {
       showToast(String(e), "error");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    const ok = await confirm({
+      title: t("aiNavigatorBriefs.deleteConfirmTitle"),
+      message: t("aiNavigatorBriefs.deleteConfirmMessage"),
+      tone: "danger",
+      confirmLabel: t("aiNavigatorBriefs.deleteConfirmAction"),
+      cancelLabel: t("common.cancel"),
+    });
+    if (!ok) return;
+    setDeletingId(id);
+    try {
+      await api.deleteAINavigatorBrief(id);
+      await briefsQuery.refetch();
+      showToast(t("aiNavigatorBriefs.toast.deleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -92,6 +116,14 @@ export default function AINavigatorBriefsPage() {
                     >
                       {t("aiNavigatorBriefs.openDetail")}
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(brief.id)}
+                      disabled={deletingId === brief.id}
+                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-danger)] px-4 py-2 text-sm font-medium text-[var(--color-danger)] hover:bg-[color-mix(in_srgb,var(--color-danger)_8%,transparent)] disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deletingId === brief.id ? t("common.saving") : t("aiNavigatorBriefs.delete")}
+                    </button>
                   </div>
                 </div>
               </SectionCard>

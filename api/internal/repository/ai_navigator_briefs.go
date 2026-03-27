@@ -215,3 +215,17 @@ func (r *AINavigatorBriefRepo) LatestBriefByUserSlot(ctx context.Context, userID
 	}
 	return brief, nil
 }
+
+func (r *AINavigatorBriefRepo) DeleteBrief(ctx context.Context, userID, briefID string) error {
+	tag, err := r.db.Exec(ctx, `
+		DELETE FROM ai_navigator_briefs
+		WHERE user_id = $1 AND id = $2
+	`, userID, briefID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

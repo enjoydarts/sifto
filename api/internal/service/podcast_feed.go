@@ -39,16 +39,17 @@ type podcastRSS struct {
 }
 
 type podcastRSSChannel struct {
-	Title          string           `xml:"title"`
-	Link           string           `xml:"link"`
-	Description    string           `xml:"description"`
-	Language       string           `xml:"language"`
-	ItunesAuthor   string           `xml:"itunes:author"`
-	ItunesOwner    *podcastRSSOwner `xml:"itunes:owner,omitempty"`
-	ItunesSummary  string           `xml:"itunes:summary"`
-	ItunesExplicit string           `xml:"itunes:explicit"`
-	ItunesImage    *podcastRSSImage `xml:"itunes:image,omitempty"`
-	Items          []podcastRSSItem `xml:"item"`
+	Title          string              `xml:"title"`
+	Link           string              `xml:"link"`
+	Description    string              `xml:"description"`
+	Language       string              `xml:"language"`
+	ItunesAuthor   string              `xml:"itunes:author"`
+	ItunesOwner    *podcastRSSOwner    `xml:"itunes:owner,omitempty"`
+	ItunesSummary  string              `xml:"itunes:summary"`
+	ItunesExplicit string              `xml:"itunes:explicit"`
+	ItunesImage    *podcastRSSImage    `xml:"itunes:image,omitempty"`
+	ItunesCategory *podcastRSSCategory `xml:"itunes:category,omitempty"`
+	Items          []podcastRSSItem    `xml:"item"`
 }
 
 type podcastRSSOwner struct {
@@ -58,6 +59,11 @@ type podcastRSSOwner struct {
 
 type podcastRSSImage struct {
 	Href string `xml:"href,attr"`
+}
+
+type podcastRSSCategory struct {
+	Text     string              `xml:"text,attr"`
+	Category *podcastRSSCategory `xml:"itunes:category,omitempty"`
 }
 
 type podcastRSSEnclosure struct {
@@ -141,6 +147,9 @@ func (s *PodcastFeedService) Build(ctx context.Context, slug string) (*PodcastFe
 	if artworkURL := firstNonEmptyTrimmed(stringValue(settings.PodcastArtworkURL), stringValue(podcastDefaultArtworkURL())); artworkURL != "" {
 		channel.ItunesImage = &podcastRSSImage{Href: artworkURL}
 	}
+	if category := buildPodcastRSSCategory(settings); category != nil {
+		channel.ItunesCategory = category
+	}
 	body, err := xml.MarshalIndent(podcastRSS{
 		Version:     "2.0",
 		XMLNSItunes: "http://www.itunes.com/dtds/podcast-1.0.dtd",
@@ -153,6 +162,22 @@ func (s *PodcastFeedService) Build(ctx context.Context, slug string) (*PodcastFe
 		Body:         append([]byte(xml.Header), body...),
 		LastModified: lastModified,
 	}, nil
+}
+
+func buildPodcastRSSCategory(settings *model.UserSettings) *podcastRSSCategory {
+	if settings == nil || settings.PodcastCategory == nil {
+		return nil
+	}
+	category := &podcastRSSCategory{Text: strings.TrimSpace(*settings.PodcastCategory)}
+	if category.Text == "" {
+		return nil
+	}
+	if settings.PodcastSubcategory != nil {
+		if child := strings.TrimSpace(*settings.PodcastSubcategory); child != "" {
+			category.Category = &podcastRSSCategory{Text: child}
+		}
+	}
+	return category
 }
 
 func (s *PodcastFeedService) buildItem(ctx context.Context, userID string, job model.AudioBriefingJob) (*podcastRSSItem, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -107,8 +108,16 @@ type UpdatePodcastSettingsInput struct {
 	Description *string
 	Author      *string
 	Language    *string
+	Category    *string
+	Subcategory *string
 	Explicit    bool
 	ArtworkURL  *string
+}
+
+var errInvalidPodcastCategory = errors.New("invalid podcast category")
+
+func ErrInvalidPodcastCategory() error {
+	return errInvalidPodcastCategory
 }
 
 type UpdateAudioBriefingPersonaVoiceInput struct {
@@ -301,27 +310,33 @@ func PodcastSettingsPayload(settings *model.UserSettings) map[string]any {
 	}
 	if settings == nil {
 		return map[string]any{
-			"enabled":     false,
-			"feed_slug":   nil,
-			"rss_url":     nil,
-			"title":       nil,
-			"description": nil,
-			"author":      nil,
-			"language":    "ja",
-			"explicit":    false,
-			"artwork_url": artworkURL,
+			"enabled":              false,
+			"feed_slug":            nil,
+			"rss_url":              nil,
+			"title":                nil,
+			"description":          nil,
+			"author":               nil,
+			"language":             "ja",
+			"category":             nil,
+			"subcategory":          nil,
+			"available_categories": PodcastCategoryDefinitions(),
+			"explicit":             false,
+			"artwork_url":          artworkURL,
 		}
 	}
 	return map[string]any{
-		"enabled":     settings.PodcastEnabled,
-		"feed_slug":   settings.PodcastFeedSlug,
-		"rss_url":     podcastRSSURL(settings.PodcastFeedSlug),
-		"title":       settings.PodcastTitle,
-		"description": settings.PodcastDescription,
-		"author":      settings.PodcastAuthor,
-		"language":    settings.PodcastLanguage,
-		"explicit":    settings.PodcastExplicit,
-		"artwork_url": artworkURL,
+		"enabled":              settings.PodcastEnabled,
+		"feed_slug":            settings.PodcastFeedSlug,
+		"rss_url":              podcastRSSURL(settings.PodcastFeedSlug),
+		"title":                settings.PodcastTitle,
+		"description":          settings.PodcastDescription,
+		"author":               settings.PodcastAuthor,
+		"language":             settings.PodcastLanguage,
+		"category":             settings.PodcastCategory,
+		"subcategory":          settings.PodcastSubcategory,
+		"available_categories": PodcastCategoryDefinitions(),
+		"explicit":             settings.PodcastExplicit,
+		"artwork_url":          artworkURL,
 	}
 }
 
@@ -821,6 +836,10 @@ func (s *SettingsService) UpdatePodcastSettings(ctx context.Context, userID stri
 	if err != nil {
 		return nil, err
 	}
+	category, subcategory, err := normalizePodcastCategorySelection(in.Category, in.Subcategory)
+	if err != nil {
+		return nil, err
+	}
 	return s.repo.UpsertPodcastConfig(
 		ctx,
 		userID,
@@ -830,6 +849,8 @@ func (s *SettingsService) UpdatePodcastSettings(ctx context.Context, userID stri
 		normalizeOptionalString(in.Description),
 		normalizeOptionalString(in.Author),
 		normalizePodcastLanguage(in.Language),
+		category,
+		subcategory,
 		in.Explicit,
 		normalizeOptionalString(in.ArtworkURL),
 	)

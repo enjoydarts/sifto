@@ -97,6 +97,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       podcast_description,
 		       podcast_author,
 		       podcast_language,
+		       podcast_category,
+		       podcast_subcategory,
 		       podcast_explicit,
 		       podcast_artwork_url,
 		       monthly_budget_usd,
@@ -167,6 +169,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.PodcastDescription,
 		&v.PodcastAuthor,
 		&v.PodcastLanguage,
+		&v.PodcastCategory,
+		&v.PodcastSubcategory,
 		&v.PodcastExplicit,
 		&v.PodcastArtworkURL,
 		&v.MonthlyBudgetUSD,
@@ -235,6 +239,8 @@ func (r *UserSettingsRepo) GetByPodcastFeedSlug(ctx context.Context, slug string
 		       podcast_author,
 		       u.email,
 		       podcast_language,
+		       podcast_category,
+		       podcast_subcategory,
 		       podcast_explicit,
 		       podcast_artwork_url,
 		       us.created_at,
@@ -251,6 +257,8 @@ func (r *UserSettingsRepo) GetByPodcastFeedSlug(ctx context.Context, slug string
 		&v.PodcastAuthor,
 		&v.PodcastOwnerEmail,
 		&v.PodcastLanguage,
+		&v.PodcastCategory,
+		&v.PodcastSubcategory,
 		&v.PodcastExplicit,
 		&v.PodcastArtworkURL,
 		&v.CreatedAt,
@@ -321,7 +329,7 @@ func (r *UserSettingsRepo) UpsertBudgetConfig(ctx context.Context, userID string
 	return r.GetByUserID(ctx, userID)
 }
 
-func (r *UserSettingsRepo) UpsertPodcastConfig(ctx context.Context, userID string, enabled bool, feedSlug string, title, description, author *string, language string, explicit bool, artworkURL *string) (*model.UserSettings, error) {
+func (r *UserSettingsRepo) UpsertPodcastConfig(ctx context.Context, userID string, enabled bool, feedSlug string, title, description, author *string, language string, category, subcategory *string, explicit bool, artworkURL *string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (
 			user_id,
@@ -331,9 +339,11 @@ func (r *UserSettingsRepo) UpsertPodcastConfig(ctx context.Context, userID strin
 			podcast_description,
 			podcast_author,
 			podcast_language,
+			podcast_category,
+			podcast_subcategory,
 			podcast_explicit,
 			podcast_artwork_url
-		) VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9)
+		) VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (user_id) DO UPDATE
 		SET podcast_enabled = EXCLUDED.podcast_enabled,
 		    podcast_feed_slug = EXCLUDED.podcast_feed_slug,
@@ -341,10 +351,12 @@ func (r *UserSettingsRepo) UpsertPodcastConfig(ctx context.Context, userID strin
 		    podcast_description = EXCLUDED.podcast_description,
 		    podcast_author = EXCLUDED.podcast_author,
 		    podcast_language = EXCLUDED.podcast_language,
+		    podcast_category = EXCLUDED.podcast_category,
+		    podcast_subcategory = EXCLUDED.podcast_subcategory,
 		    podcast_explicit = EXCLUDED.podcast_explicit,
 		    podcast_artwork_url = EXCLUDED.podcast_artwork_url,
 		    updated_at = NOW()
-	`, userID, enabled, feedSlug, title, description, author, language, explicit, artworkURL)
+	`, userID, enabled, feedSlug, title, description, author, language, category, subcategory, explicit, artworkURL)
 	if err != nil {
 		return nil, err
 	}

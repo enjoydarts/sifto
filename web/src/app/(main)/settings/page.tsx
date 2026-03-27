@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Brain, ChevronDown, KeyRound, Settings as SettingsIcon } from "lucide-react";
-import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, PreferenceProfile, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
+import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -420,6 +420,9 @@ export default function SettingsPage() {
   const [podcastDescription, setPodcastDescription] = useState("");
   const [podcastAuthor, setPodcastAuthor] = useState("");
   const [podcastLanguage, setPodcastLanguage] = useState("ja");
+  const [podcastCategory, setPodcastCategory] = useState("");
+  const [podcastSubcategory, setPodcastSubcategory] = useState("");
+  const [podcastAvailableCategories, setPodcastAvailableCategories] = useState<PodcastCategoryOption[]>([]);
   const [podcastExplicit, setPodcastExplicit] = useState(false);
   const [podcastArtworkURL, setPodcastArtworkURL] = useState("");
   const [audioBriefingVoices, setAudioBriefingVoices] = useState<AudioBriefingPersonaVoice[]>(buildDefaultAudioBriefingVoices(["editor", "hype", "analyst", "concierge", "snark", "native"]));
@@ -506,9 +509,17 @@ export default function SettingsPage() {
     setPodcastDescription(podcast?.description ?? "");
     setPodcastAuthor(podcast?.author ?? "");
     setPodcastLanguage(podcast?.language ?? "ja");
+    setPodcastCategory(podcast?.category ?? "");
+    setPodcastSubcategory(podcast?.subcategory ?? "");
+    setPodcastAvailableCategories(podcast?.available_categories ?? []);
     setPodcastExplicit(Boolean(podcast?.explicit));
     setPodcastArtworkURL(podcast?.artwork_url ?? "");
   }, []);
+
+  const selectedPodcastCategory = useMemo(
+    () => podcastAvailableCategories.find((option) => option.category === podcastCategory) ?? null,
+    [podcastAvailableCategories, podcastCategory]
+  );
 
   const syncLLMModelForm = useCallback((llmModels?: UserSettings["llm_models"] | null) => {
     setAnthropicFactsModel(llmModels?.facts ?? "");
@@ -1928,6 +1939,8 @@ export default function SettingsPage() {
         description: podcastDescription || null,
         author: podcastAuthor || null,
         language: podcastLanguage || "ja",
+        category: podcastCategory || null,
+        subcategory: podcastSubcategory || null,
         explicit: podcastExplicit,
         artwork_url: podcastArtworkURL || null,
       });
@@ -1989,6 +2002,9 @@ export default function SettingsPage() {
                 description: prev.podcast?.description ?? (podcastDescription || null),
                 author: prev.podcast?.author ?? (podcastAuthor || null),
                 language: prev.podcast?.language ?? podcastLanguage,
+                category: prev.podcast?.category ?? (podcastCategory || null),
+                subcategory: prev.podcast?.subcategory ?? (podcastSubcategory || null),
+                available_categories: prev.podcast?.available_categories ?? podcastAvailableCategories,
                 explicit: prev.podcast?.explicit ?? podcastExplicit,
                 artwork_url: resp.artwork_url ?? null,
               },
@@ -3036,6 +3052,47 @@ export default function SettingsPage() {
                       >
                         <option value="ja">ja</option>
                         <option value="en">en</option>
+                      </select>
+                    </label>
+
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.category")}
+                      </div>
+                      <select
+                        value={podcastCategory}
+                        onChange={(e) => {
+                          const nextCategory = e.target.value;
+                          setPodcastCategory(nextCategory);
+                          setPodcastSubcategory("");
+                        }}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      >
+                        <option value="">{t("settings.podcast.categoryUnset")}</option>
+                        {podcastAvailableCategories.map((option) => (
+                          <option key={option.category} value={option.category}>
+                            {option.category}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.podcast.subcategory")}
+                      </div>
+                      <select
+                        value={podcastSubcategory}
+                        onChange={(e) => setPodcastSubcategory(e.target.value)}
+                        disabled={!selectedPodcastCategory || selectedPodcastCategory.subcategories.length === 0}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)] disabled:opacity-60"
+                      >
+                        <option value="">{t("settings.podcast.subcategoryUnset")}</option>
+                        {(selectedPodcastCategory?.subcategories ?? []).map((subcategory) => (
+                          <option key={subcategory} value={subcategory}>
+                            {subcategory}
+                          </option>
+                        ))}
                       </select>
                     </label>
                   </div>

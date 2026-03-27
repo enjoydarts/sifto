@@ -57,6 +57,8 @@ type UserSettings struct {
 	PodcastAuthor                    *string    `json:"podcast_author,omitempty"`
 	PodcastOwnerEmail                string     `json:"-"`
 	PodcastLanguage                  string     `json:"podcast_language"`
+	PodcastCategory                  *string    `json:"podcast_category,omitempty"`
+	PodcastSubcategory               *string    `json:"podcast_subcategory,omitempty"`
 	PodcastExplicit                  bool       `json:"podcast_explicit"`
 	PodcastArtworkURL                *string    `json:"podcast_artwork_url,omitempty"`
 	MonthlyBudgetUSD                 *float64   `json:"monthly_budget_usd,omitempty"`

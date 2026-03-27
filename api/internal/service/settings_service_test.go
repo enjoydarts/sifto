@@ -104,6 +104,7 @@ func TestPodcastSettingsPayloadSupportsPodcastFields(t *testing.T) {
 		PodcastDescription: strptr("opening\n\noverall summary"),
 		PodcastAuthor:      strptr("Sifto"),
 		PodcastLanguage:    "ja",
+		PodcastCategory:    strptr("Technology"),
 		PodcastExplicit:    false,
 		PodcastArtworkURL:  strptr("https://audio.example.com/podcasts/artwork/u1/current.jpg"),
 	})
@@ -117,6 +118,12 @@ func TestPodcastSettingsPayloadSupportsPodcastFields(t *testing.T) {
 	if gotLanguage, _ := payload["language"].(string); gotLanguage != "ja" {
 		t.Fatalf("language = %v, want ja", payload["language"])
 	}
+	if gotCategory, _ := payload["category"].(*string); gotCategory == nil || *gotCategory != "Technology" {
+		t.Fatalf("category = %v, want Technology", payload["category"])
+	}
+	if gotDefs, _ := payload["available_categories"].([]PodcastCategoryDefinition); len(gotDefs) == 0 {
+		t.Fatalf("available_categories = %v, want non-empty", payload["available_categories"])
+	}
 }
 
 func TestNormalizePodcastLanguage(t *testing.T) {
@@ -125,6 +132,22 @@ func TestNormalizePodcastLanguage(t *testing.T) {
 	}
 	if got := normalizePodcastLanguage(strptr(" en ")); got != "en" {
 		t.Fatalf("normalizePodcastLanguage(en) = %q, want en", got)
+	}
+}
+
+func TestNormalizePodcastCategorySelection(t *testing.T) {
+	category, subcategory, err := normalizePodcastCategorySelection(strptr("News"), strptr("Tech News"))
+	if err != nil {
+		t.Fatalf("normalizePodcastCategorySelection(...) error = %v", err)
+	}
+	if category == nil || *category != "News" {
+		t.Fatalf("category = %v, want News", category)
+	}
+	if subcategory == nil || *subcategory != "Tech News" {
+		t.Fatalf("subcategory = %v, want Tech News", subcategory)
+	}
+	if _, _, err := normalizePodcastCategorySelection(strptr("Technology"), strptr("Tech News")); err == nil {
+		t.Fatal("expected invalid category/subcategory combination to fail")
 	}
 }
 

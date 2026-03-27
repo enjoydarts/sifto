@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -386,6 +387,8 @@ func (h *SettingsHandler) UpdatePodcast(w http.ResponseWriter, r *http.Request) 
 		Description *string `json:"description"`
 		Author      *string `json:"author"`
 		Language    *string `json:"language"`
+		Category    *string `json:"category"`
+		Subcategory *string `json:"subcategory"`
 		Explicit    bool    `json:"explicit"`
 		ArtworkURL  *string `json:"artwork_url"`
 	}
@@ -399,10 +402,16 @@ func (h *SettingsHandler) UpdatePodcast(w http.ResponseWriter, r *http.Request) 
 		Description: body.Description,
 		Author:      body.Author,
 		Language:    body.Language,
+		Category:    body.Category,
+		Subcategory: body.Subcategory,
 		Explicit:    body.Explicit,
 		ArtworkURL:  body.ArtworkURL,
 	})
 	if err != nil {
+		if errors.Is(err, service.ErrInvalidPodcastCategory()) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		writeRepoError(w, err)
 		return
 	}

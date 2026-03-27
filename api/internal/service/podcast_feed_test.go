@@ -53,3 +53,22 @@ func TestPodcastItemPubTimeUsesCreatedAt(t *testing.T) {
 		t.Fatalf("podcastItemPubTime() = %s, want %s", got, createdAt)
 	}
 }
+
+func TestBuildPodcastRSSCategory(t *testing.T) {
+	settings := &model.UserSettings{
+		PodcastCategory:    strptr("News"),
+		PodcastSubcategory: strptr("Tech News"),
+	}
+
+	got := buildPodcastRSSCategory(settings)
+
+	if got == nil {
+		t.Fatal("buildPodcastRSSCategory() = nil, want category")
+	}
+	if got.Text != "News" {
+		t.Fatalf("category text = %q, want News", got.Text)
+	}
+	if got.Category == nil || got.Category.Text != "Tech News" {
+		t.Fatalf("subcategory = %+v, want Tech News", got.Category)
+	}
+}

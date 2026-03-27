@@ -1221,6 +1221,11 @@ export interface AudioBriefingSettings {
   default_persona: string;
 }
 
+export interface PodcastCategoryOption {
+  category: string;
+  subcategories: string[];
+}
+
 export interface PodcastSettings {
   enabled: boolean;
   feed_slug?: string | null;
@@ -1229,6 +1234,9 @@ export interface PodcastSettings {
   description?: string | null;
   author?: string | null;
   language: string;
+  category?: string | null;
+  subcategory?: string | null;
+  available_categories?: PodcastCategoryOption[];
   explicit: boolean;
   artwork_url?: string | null;
 }

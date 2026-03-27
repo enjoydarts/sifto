@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/google/uuid"
@@ -15,10 +16,37 @@ func NewAINavigatorBriefRepo(db *pgxpool.Pool) *AINavigatorBriefRepo {
 	return &AINavigatorBriefRepo{db: db}
 }
 
+func normalizeAINavigatorBriefText(v string) string {
+	return strings.ToValidUTF8(v, "�")
+}
+
+func normalizeAINavigatorBriefForStorage(brief *model.AINavigatorBrief) {
+	if brief == nil {
+		return
+	}
+	brief.Title = normalizeAINavigatorBriefText(brief.Title)
+	brief.Intro = normalizeAINavigatorBriefText(brief.Intro)
+	brief.Summary = normalizeAINavigatorBriefText(brief.Summary)
+	brief.Ending = normalizeAINavigatorBriefText(brief.Ending)
+	brief.Persona = normalizeAINavigatorBriefText(brief.Persona)
+	brief.Model = normalizeAINavigatorBriefText(brief.Model)
+	brief.ErrorMessage = normalizeAINavigatorBriefText(brief.ErrorMessage)
+}
+
+func normalizeAINavigatorBriefItemsForStorage(items []model.AINavigatorBriefItem) {
+	for i := range items {
+		items[i].TitleSnapshot = normalizeAINavigatorBriefText(items[i].TitleSnapshot)
+		items[i].TranslatedTitleSnapshot = normalizeAINavigatorBriefText(items[i].TranslatedTitleSnapshot)
+		items[i].SourceTitleSnapshot = normalizeAINavigatorBriefText(items[i].SourceTitleSnapshot)
+		items[i].Comment = normalizeAINavigatorBriefText(items[i].Comment)
+	}
+}
+
 func (r *AINavigatorBriefRepo) CreateBrief(ctx context.Context, brief *model.AINavigatorBrief) error {
 	if brief.ID == "" {
 		brief.ID = uuid.NewString()
 	}
+	normalizeAINavigatorBriefForStorage(brief)
 	return r.db.QueryRow(ctx, `
 		INSERT INTO ai_navigator_briefs (
 			id, user_id, slot, status, title, intro, summary, ending, persona, model,
@@ -48,6 +76,7 @@ func (r *AINavigatorBriefRepo) CreateBrief(ctx context.Context, brief *model.AIN
 }
 
 func (r *AINavigatorBriefRepo) AddBriefItems(ctx context.Context, briefID string, items []model.AINavigatorBriefItem) error {
+	normalizeAINavigatorBriefItemsForStorage(items)
 	for i := range items {
 		if items[i].ID == "" {
 			items[i].ID = uuid.NewString()
@@ -74,6 +103,7 @@ func (r *AINavigatorBriefRepo) AddBriefItems(ctx context.Context, briefID string
 }
 
 func (r *AINavigatorBriefRepo) MarkBriefFailed(ctx context.Context, briefID, errorMessage string) error {
+	errorMessage = normalizeAINavigatorBriefText(errorMessage)
 	_, err := r.db.Exec(ctx, `
 		UPDATE ai_navigator_briefs
 		SET status = $2,
@@ -85,6 +115,7 @@ func (r *AINavigatorBriefRepo) MarkBriefFailed(ctx context.Context, briefID, err
 }
 
 func (r *AINavigatorBriefRepo) MarkBriefFailedAt(ctx context.Context, briefID, errorMessage string, generatedAt any) error {
+	errorMessage = normalizeAINavigatorBriefText(errorMessage)
 	tag, err := r.db.Exec(ctx, `
 		UPDATE ai_navigator_briefs
 		SET status = $2,
@@ -252,6 +283,8 @@ func (r *AINavigatorBriefRepo) UpdateGeneratedBrief(ctx context.Context, brief *
 	if brief == nil {
 		return ErrNotFound
 	}
+	normalizeAINavigatorBriefForStorage(brief)
+	normalizeAINavigatorBriefItemsForStorage(items)
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return err

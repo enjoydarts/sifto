@@ -85,6 +85,7 @@ type UpdateLLMModelsInput struct {
 	FactsCheck                  *string
 	FaithfulnessCheck           *string
 	NavigatorEnabled            bool
+	AINavigatorBriefEnabled     bool
 	NavigatorPersonaMode        *string
 	NavigatorPersona            *string
 	Navigator                   *string
@@ -213,6 +214,7 @@ func LLMModelSettingsPayload(settings *model.UserSettings) map[string]any {
 		"facts_check":                    settings.FactsCheckModel,
 		"faithfulness_check":             settings.FaithfulnessCheckModel,
 		"navigator_enabled":              settings.NavigatorEnabled,
+		"ai_navigator_brief_enabled":     settings.AINavigatorBriefEnabled,
 		"navigator_persona_mode":         NormalizePersonaMode(&settings.NavigatorPersonaMode),
 		"navigator_persona":              settings.NavigatorPersona,
 		"navigator":                      settings.NavigatorModel,
@@ -692,6 +694,7 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		normalized["facts_check"],
 		normalized["faithfulness_check"],
 		in.NavigatorEnabled,
+		in.AINavigatorBriefEnabled,
 		NormalizePersonaMode(in.NavigatorPersonaMode),
 		normalizeNavigatorPersona(in.NavigatorPersona),
 		normalized["navigator"],

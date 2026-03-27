@@ -16,7 +16,10 @@ import { Tag } from "@/components/ui/tag";
 const queueKinds: SummaryAudioQueueKind[] = ["unread", "later", "favorite"];
 
 function parseQueueKind(raw: string | null): SummaryAudioQueueKind {
-  return raw === "later" ? "later" : raw === "favorite" ? "favorite" : "unread";
+  if (raw === "later") return "later";
+  if (raw === "favorite") return "favorite";
+  if (raw === "brief") return "brief";
+  return "unread";
 }
 
 export default function SummaryAudioPlayerPage() {
@@ -27,6 +30,9 @@ export default function SummaryAudioPlayerPage() {
   const queueKind = parseQueueKind(searchParams.get("queue"));
 
   const requestQueueStart = useEffectEvent(async () => {
+    if (queueKind === "brief") {
+      return;
+    }
     if (
       player.mode === "summary_queue" &&
       player.summaryQueue.queueKind === queueKind &&
@@ -51,6 +57,8 @@ export default function SummaryAudioPlayerPage() {
   const originalTitle = detail?.title || t("summaryAudio.originalTitleEmpty");
   const sourceTitle = detail?.source_title || t("summaryAudio.sourceUnknown");
   const queueCountLabel = `${player.display.queueCount.toLocaleString(locale)} ${t("summaryAudio.queueCount")}`;
+  const queueButtons =
+    queueKind === "brief" ? [...queueKinds, "brief" as SummaryAudioQueueKind] : queueKinds;
 
   return (
     <PageTransition>
@@ -144,17 +152,21 @@ export default function SummaryAudioPlayerPage() {
           <SectionCard>
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                {queueKinds.map((kind) => {
+                {queueButtons.map((kind) => {
                   const active = queueKind === kind;
                   return (
                     <button
                       key={kind}
                       type="button"
-                      onClick={() => router.replace(`/audio-player?queue=${kind}`)}
+                      onClick={() => {
+                        if (kind === "brief" && player.summaryQueue.queueKind !== "brief") return;
+                        router.replace(`/audio-player?queue=${kind}`);
+                      }}
+                      disabled={kind === "brief" && player.summaryQueue.queueKind !== "brief"}
                       className={`inline-flex min-h-10 items-center justify-center rounded-full border px-4 py-2 text-sm font-medium ${
                         active
                           ? "border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
-                          : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                          : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-default disabled:opacity-50"
                       }`}
                     >
                       {t(`summaryAudio.queue.${kind}`)}

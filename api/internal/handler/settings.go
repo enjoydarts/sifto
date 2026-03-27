@@ -291,6 +291,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		FactsCheck                  *string `json:"facts_check"`
 		FaithfulnessCheck           *string `json:"faithfulness_check"`
 		NavigatorEnabled            bool    `json:"navigator_enabled"`
+		AINavigatorBriefEnabled     bool    `json:"ai_navigator_brief_enabled"`
 		NavigatorPersonaMode        *string `json:"navigator_persona_mode"`
 		NavigatorPersona            *string `json:"navigator_persona"`
 		Navigator                   *string `json:"navigator"`
@@ -315,6 +316,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		FactsCheck:                  body.FactsCheck,
 		FaithfulnessCheck:           body.FaithfulnessCheck,
 		NavigatorEnabled:            body.NavigatorEnabled,
+		AINavigatorBriefEnabled:     body.AINavigatorBriefEnabled,
 		NavigatorPersonaMode:        body.NavigatorPersonaMode,
 		NavigatorPersona:            body.NavigatorPersona,
 		Navigator:                   body.Navigator,

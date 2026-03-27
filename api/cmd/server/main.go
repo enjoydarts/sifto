@@ -89,6 +89,7 @@ func main() {
 	poeUsageRepo := repository.NewPoeUsageRepo(db)
 	openRouterModelOverrideRepo := repository.NewOpenRouterModelOverrideRepo(db)
 	briefingSnapshotRepo := repository.NewBriefingSnapshotRepo(db)
+	aiNavigatorBriefRepo := repository.NewAINavigatorBriefRepo(db)
 	playbackSessionRepo := repository.NewPlaybackSessionRepo(db)
 	streakRepo := repository.NewReadingStreakRepo(db)
 	prefProfileRepo := repository.NewPreferenceProfileRepo(db)
@@ -106,6 +107,8 @@ func main() {
 	summaryAudioPlayerH := handler.NewSummaryAudioPlayerHandler(summaryAudioPlayerSvc)
 	playbackSessionsSvc := service.NewPlaybackSessionsService(playbackSessionRepo)
 	playbackSessionsH := handler.NewPlaybackSessionsHandler(playbackSessionsSvc)
+	aiNavigatorBriefSvc := service.NewAINavigatorBriefService(aiNavigatorBriefRepo, itemRepo, userSettingsRepo, userRepo, pushNotificationLogRepo, worker, secretCipher, oneSignal, nil)
+	aiNavigatorBriefH := handler.NewAINavigatorBriefHandler(aiNavigatorBriefSvc)
 	internalAudioBriefingsH := handler.NewInternalAudioBriefingsHandler(audioBriefingRepo, audioBriefingPublishedNotifier, podcastPublicationSvc)
 	podcastFeedSvc := service.NewPodcastFeedService(userSettingsRepo, audioBriefingRepo, worker)
 	podcastsH := handler.NewPodcastsHandler(podcastFeedSvc)
@@ -300,6 +303,11 @@ func main() {
 
 		r.Get("/briefing/today", briefingH.Today)
 		r.Get("/briefing/navigator", briefingH.Navigator)
+		r.Route("/ai-navigator-briefs", func(r chi.Router) {
+			r.Get("/", aiNavigatorBriefH.List)
+			r.Get("/{id}", aiNavigatorBriefH.Get)
+			r.Post("/{id}/summary-audio-queue", aiNavigatorBriefH.AppendToSummaryAudioQueue)
+		})
 		r.Route("/audio-briefings", func(r chi.Router) {
 			r.Get("/", audioBriefingsH.List)
 			r.Post("/generate", audioBriefingsH.Generate)

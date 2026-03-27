@@ -12,7 +12,7 @@ export type SharedPlaybackState =
   | "error"
   | "finished";
 
-export type SummaryAudioQueueKind = "unread" | "later" | "favorite";
+export type SummaryAudioQueueKind = "unread" | "later" | "favorite" | "brief";
 
 export type SummaryAudioPrepared = {
   itemID: string;

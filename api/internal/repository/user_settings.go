@@ -46,6 +46,28 @@ func (r *UserSettingsRepo) ListUserIDsWithPoeAPIKey(ctx context.Context) ([]stri
 	return out, rows.Err()
 }
 
+func (r *UserSettingsRepo) ListUserIDsWithAINavigatorBriefEnabled(ctx context.Context) ([]string, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT user_id
+		FROM user_settings
+		WHERE ai_navigator_brief_enabled = TRUE
+		ORDER BY user_id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]string, 0)
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		out = append(out, userID)
+	}
+	return out, rows.Err()
+}
+
 func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*model.UserSettings, error) {
 	var v model.UserSettings
 	var anthropicKeyEnc *string
@@ -121,6 +143,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       facts_check_model,
 		       faithfulness_check_model,
 		       navigator_enabled,
+	       ai_navigator_brief_enabled,
 	       navigator_persona_mode,
 	       navigator_persona,
 	       navigator_model,
@@ -193,6 +216,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.FactsCheckModel,
 		&v.FaithfulnessCheckModel,
 		&v.NavigatorEnabled,
+		&v.AINavigatorBriefEnabled,
 		&v.NavigatorPersonaMode,
 		&v.NavigatorPersona,
 		&v.NavigatorModel,
@@ -419,7 +443,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 	ctx context.Context,
 	userID string,
 	factsModel, factsFallbackModel, summaryModel, summaryFallbackModel, digestClusterModel, digestModel, askModel, sourceSuggestionModel, embeddingModel, factsCheckModel, faithfulnessCheckModel *string,
-	navigatorEnabled bool, navigatorPersonaMode string, navigatorPersona string, navigatorModel, navigatorFallbackModel, audioBriefingScriptModel, audioBriefingScriptFallbackModel *string,
+	navigatorEnabled bool, aiNavigatorBriefEnabled bool, navigatorPersonaMode string, navigatorPersona string, navigatorModel, navigatorFallbackModel, audioBriefingScriptModel, audioBriefingScriptFallbackModel *string,
 ) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (
@@ -436,13 +460,14 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 				facts_check_model,
 				faithfulness_check_model,
 				navigator_enabled,
+				ai_navigator_brief_enabled,
 				navigator_persona_mode,
 				navigator_persona,
 				navigator_model,
 				navigator_fallback_model,
 				audio_briefing_script_model,
 				audio_briefing_script_fallback_model
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
 			ON CONFLICT (user_id) DO UPDATE
 			SET facts_model = EXCLUDED.facts_model,
 			    facts_fallback_model = EXCLUDED.facts_fallback_model,
@@ -456,6 +481,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 			    facts_check_model = EXCLUDED.facts_check_model,
 			    faithfulness_check_model = EXCLUDED.faithfulness_check_model,
 			    navigator_enabled = EXCLUDED.navigator_enabled,
+			    ai_navigator_brief_enabled = EXCLUDED.ai_navigator_brief_enabled,
 			    navigator_persona_mode = EXCLUDED.navigator_persona_mode,
 			    navigator_persona = EXCLUDED.navigator_persona,
 			    navigator_model = EXCLUDED.navigator_model,
@@ -476,6 +502,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 		factsCheckModel,
 		faithfulnessCheckModel,
 		navigatorEnabled,
+		aiNavigatorBriefEnabled,
 		navigatorPersonaMode,
 		navigatorPersona,
 		navigatorModel,

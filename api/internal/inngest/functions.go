@@ -1148,6 +1148,7 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 	register(checkBudgetAlertsFn(client, db, resend, oneSignal))
 	register(computePreferenceProfilesFn(client, db))
 	register(computeTopicPulseDailyFn(client, db))
+	register(generateAINavigatorBriefsFn(client, db, worker, oneSignal))
 
 	return client.Serve()
 }
@@ -1208,6 +1209,99 @@ func generateAudioBriefingsFn(client inngestgo.Client, db *pgxpool.Pool, worker 
 			return map[string]any{
 				"processed": processed,
 				"started":   started,
+				"skipped":   skipped,
+				"failed":    failed,
+			}, nil
+		},
+	)
+}
+
+func generateAINavigatorBriefsFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, oneSignal *service.OneSignalClient) (inngestgo.ServableFunction, error) {
+	briefRepo := repository.NewAINavigatorBriefRepo(db)
+	itemRepo := repository.NewItemRepo(db)
+	settingsRepo := repository.NewUserSettingsRepo(db)
+	userRepo := repository.NewUserRepo(db)
+	pushLogRepo := repository.NewPushNotificationLogRepo(db)
+	secretCipher := service.NewSecretCipher()
+	briefService := service.NewAINavigatorBriefService(briefRepo, itemRepo, settingsRepo, userRepo, pushLogRepo, worker, secretCipher, oneSignal, nil)
+
+	return inngestgo.CreateFunction(
+		client,
+		inngestgo.FunctionOpts{ID: "generate-ai-navigator-briefs", Name: "Generate AI Navigator Briefs"},
+		inngestgo.CronTrigger("0 * * * *"),
+		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
+			now := timeutil.NowJST()
+			var slot string
+			switch now.Hour() {
+			case 8:
+				slot = model.AINavigatorBriefSlotMorning
+			case 12:
+				slot = model.AINavigatorBriefSlotNoon
+			case 18:
+				slot = model.AINavigatorBriefSlotEvening
+			default:
+				return map[string]any{
+					"status": "skipped",
+					"reason": "outside_scheduled_slots",
+					"hour":   now.Hour(),
+				}, nil
+			}
+
+			windowStart, _, err := service.ResolveAINavigatorBriefSlotWindow(now, slot)
+			if err != nil {
+				return nil, err
+			}
+			userIDs, err := settingsRepo.ListUserIDsWithAINavigatorBriefEnabled(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			processed := 0
+			generated := 0
+			notified := 0
+			skipped := 0
+			failed := 0
+
+			for _, userID := range userIDs {
+				processed++
+				latest, err := briefRepo.LatestBriefByUserSlot(ctx, userID, slot)
+				switch {
+				case err == nil && latest != nil:
+					if latest.GeneratedAt != nil && !latest.GeneratedAt.Before(windowStart) {
+						skipped++
+						continue
+					}
+				case err != nil && err != repository.ErrNotFound:
+					failed++
+					log.Printf("ai navigator brief latest user=%s slot=%s: %v", userID, slot, err)
+					continue
+				}
+
+				brief, err := briefService.GenerateBriefForSlot(ctx, userID, slot)
+				if err != nil {
+					failed++
+					log.Printf("ai navigator brief generate user=%s slot=%s: %v", userID, slot, err)
+					continue
+				}
+				if brief == nil {
+					skipped++
+					continue
+				}
+				generated++
+
+				if err := briefService.NotifyBrief(ctx, brief); err != nil {
+					failed++
+					log.Printf("ai navigator brief notify user=%s brief=%s: %v", userID, brief.ID, err)
+					continue
+				}
+				notified++
+			}
+
+			return map[string]any{
+				"slot":      slot,
+				"processed": processed,
+				"generated": generated,
+				"notified":  notified,
 				"skipped":   skipped,
 				"failed":    failed,
 			}, nil

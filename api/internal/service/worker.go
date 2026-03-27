@@ -254,6 +254,20 @@ type BriefingNavigatorResponse struct {
 	LLM   *LLMUsage               `json:"llm,omitempty"`
 }
 
+type AINavigatorBriefItem struct {
+	ItemID     string   `json:"item_id"`
+	Comment    string   `json:"comment"`
+	ReasonTags []string `json:"reason_tags,omitempty"`
+}
+
+type AINavigatorBriefResponse struct {
+	Title   string                 `json:"title"`
+	Intro   string                 `json:"intro"`
+	Summary string                 `json:"summary"`
+	Items   []AINavigatorBriefItem `json:"items"`
+	LLM     *LLMUsage              `json:"llm,omitempty"`
+}
+
 type SourceNavigatorCandidate struct {
 	SourceID               string  `json:"source_id"`
 	Title                  string  `json:"title"`
@@ -756,6 +770,31 @@ func (w *WorkerClient) GenerateBriefingNavigatorWithModel(
 	model *string,
 ) (*BriefingNavigatorResponse, error) {
 	return postWithHeaders[BriefingNavigatorResponse](ctx, w, "/briefing-navigator", map[string]any{
+		"persona":       persona,
+		"candidates":    candidates,
+		"intro_context": introContext,
+		"model":         model,
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, w.internalSecret))
+}
+
+func (w *WorkerClient) ComposeAINavigatorBriefWithModel(
+	ctx context.Context,
+	persona string,
+	candidates []BriefingNavigatorCandidate,
+	introContext BriefingNavigatorIntroContext,
+	anthropicAPIKey *string,
+	googleAPIKey *string,
+	groqAPIKey *string,
+	deepseekAPIKey *string,
+	alibabaAPIKey *string,
+	mistralAPIKey *string,
+	xaiAPIKey *string,
+	zaiAPIKey *string,
+	fireworksAPIKey *string,
+	openAIAPIKey *string,
+	model *string,
+) (*AINavigatorBriefResponse, error) {
+	return postWithHeaders[AINavigatorBriefResponse](ctx, w, "/ai-navigator-brief", map[string]any{
 		"persona":       persona,
 		"candidates":    candidates,
 		"intro_context": introContext,

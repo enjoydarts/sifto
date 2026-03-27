@@ -38,6 +38,9 @@ function base64ToBlob(base64: string, contentType: string): Blob {
 }
 
 async function fetchSummaryQueue(queueKind: SummaryAudioQueueKind): Promise<Item[]> {
+  if (queueKind === "brief") {
+    return [];
+  }
   const params =
     queueKind === "later"
       ? { status: "summarized", page_size: PLAYBACK_QUEUE_BUFFER_SIZE, sort: "newest", unread_only: true, later_only: true }

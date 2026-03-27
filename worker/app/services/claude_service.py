@@ -48,6 +48,7 @@ from app.services.digest_task_common import (
     parse_digest_result,
 )
 from app.services.feed_task_common import (
+    build_ai_navigator_brief_task,
     build_audio_briefing_script_task,
     build_ask_task,
     build_ask_navigator_task,
@@ -56,6 +57,7 @@ from app.services.feed_task_common import (
     build_source_navigator_task,
     build_rank_feed_task,
     build_seed_sites_task,
+    parse_ai_navigator_brief_result,
     parse_audio_briefing_script_result,
     parse_ask_result,
     parse_ask_navigator_result,
@@ -1051,6 +1053,70 @@ def generate_briefing_navigator(
         "intro": out["intro"],
         "picks": out["picks"],
         "llm": _llm_meta(message, "briefing_navigator", used_model or _feed_suggest_model),
+    }
+
+
+def compose_ai_navigator_brief(
+    persona: str,
+    candidates: list[dict],
+    intro_context: dict,
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
+    task = build_ai_navigator_brief_task(persona, candidates, intro_context)
+    if _client_for_api_key(api_key) is None:
+        out = parse_ai_navigator_brief_result("{}", task["candidates"], intro_context)
+        return {
+            "title": out["title"],
+            "intro": out["intro"],
+            "summary": out["summary"],
+            "items": out["items"],
+            "llm": {
+                "provider": "local-dev",
+                "model": "local-fallback",
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+
+    message, used_model, _execution_failures = _call_with_model_fallback(
+        task["prompt"],
+        str(model or _feed_suggest_model),
+        _feed_suggest_model_fallback,
+        max_tokens=3200,
+        api_key=api_key,
+        temperature=task["sampling_profile"]["temperature"],
+        top_p=task["sampling_profile"]["top_p"],
+    )
+    if message is None:
+        out = parse_ai_navigator_brief_result("{}", task["candidates"], intro_context)
+        return {
+            "title": out["title"],
+            "intro": out["intro"],
+            "summary": out["summary"],
+            "items": out["items"],
+            "llm": {
+                "provider": "local-fallback",
+                "model": used_model or _feed_suggest_model,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "estimated_cost_usd": 0.0,
+            },
+        }
+
+    text = message.content[0].text.strip()
+    out = parse_ai_navigator_brief_result(text, task["candidates"], intro_context)
+    return {
+        "title": out["title"],
+        "intro": out["intro"],
+        "summary": out["summary"],
+        "items": out["items"],
+        "llm": _llm_meta(message, "ai_navigator_brief", used_model or _feed_suggest_model),
     }
 
 

@@ -51,6 +51,7 @@ from app.services.digest_task_common import (
     parse_digest_result,
 )
 from app.services.feed_task_common import (
+    build_ai_navigator_brief_task,
     build_audio_briefing_script_task,
     build_ask_task,
     build_ask_navigator_task,
@@ -59,6 +60,7 @@ from app.services.feed_task_common import (
     build_source_navigator_task,
     build_rank_feed_task,
     build_seed_sites_task,
+    parse_ai_navigator_brief_result,
     parse_audio_briefing_script_result,
     parse_ask_result,
     parse_ask_navigator_result,
@@ -379,6 +381,21 @@ def generate_briefing_navigator(persona: str, candidates: list[dict], intro_cont
     )
     out = parse_briefing_navigator_result(text, task["candidates"])
     return {"intro": out["intro"], "picks": out["picks"], "llm": _llm_meta(model, "briefing_navigator", usage)}
+
+
+def compose_ai_navigator_brief(persona: str, candidates: list[dict], intro_context: dict, model: str, api_key: str) -> dict:
+    task = build_ai_navigator_brief_task(persona, candidates, intro_context)
+    text, usage = _generate_content(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=3200,
+        response_schema=task["schema"],
+        temperature=task["sampling_profile"]["temperature"],
+        top_p=task["sampling_profile"]["top_p"],
+    )
+    out = parse_ai_navigator_brief_result(text, task["candidates"], intro_context)
+    return {"title": out["title"], "intro": out["intro"], "summary": out["summary"], "items": out["items"], "llm": _llm_meta(model, "ai_navigator_brief", usage)}
 
 
 def generate_item_navigator(persona: str, article: dict, model: str, api_key: str) -> dict:

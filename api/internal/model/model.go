@@ -81,6 +81,7 @@ type UserSettings struct {
 	FactsCheckModel                  *string    `json:"facts_check_model,omitempty"`
 	FaithfulnessCheckModel           *string    `json:"faithfulness_check_model,omitempty"`
 	NavigatorEnabled                 bool       `json:"navigator_enabled"`
+	AINavigatorBriefEnabled          bool       `json:"ai_navigator_brief_enabled"`
 	NavigatorPersonaMode             string     `json:"navigator_persona_mode"`
 	NavigatorPersona                 string     `json:"navigator_persona"`
 	NavigatorModel                   *string    `json:"navigator_model,omitempty"`

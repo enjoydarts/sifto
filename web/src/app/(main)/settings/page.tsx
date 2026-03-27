@@ -465,6 +465,7 @@ export default function SettingsPage() {
   const [factsCheckModel, setFactsCheckModel] = useState("");
   const [faithfulnessCheckModel, setFaithfulnessCheckModel] = useState("");
   const [navigatorEnabled, setNavigatorEnabled] = useState(false);
+  const [aiNavigatorBriefEnabled, setAINavigatorBriefEnabled] = useState(false);
   const [navigatorPersonaMode, setNavigatorPersonaMode] = useState<"fixed" | "random">("fixed");
   const [navigatorPersona, setNavigatorPersona] = useState("editor");
   const [navigatorModel, setNavigatorModel] = useState("");
@@ -534,6 +535,7 @@ export default function SettingsPage() {
     setFactsCheckModel(llmModels?.facts_check ?? "");
     setFaithfulnessCheckModel(llmModels?.faithfulness_check ?? "");
     setNavigatorEnabled(Boolean(llmModels?.navigator_enabled ?? false));
+    setAINavigatorBriefEnabled(Boolean(llmModels?.ai_navigator_brief_enabled ?? false));
     setNavigatorPersonaMode(llmModels?.navigator_persona_mode === "random" ? "random" : "fixed");
     setNavigatorPersona(llmModels?.navigator_persona ?? "editor");
     setNavigatorModel(llmModels?.navigator ?? "");
@@ -561,6 +563,7 @@ export default function SettingsPage() {
       facts_check: string | null;
       faithfulness_check: string | null;
       navigator_enabled: boolean;
+      ai_navigator_brief_enabled: boolean;
       navigator_persona_mode: string | null;
       navigator_persona: string | null;
       navigator: string | null;
@@ -585,6 +588,7 @@ export default function SettingsPage() {
         facts_check: emptyToNull(factsCheckModel),
         faithfulness_check: emptyToNull(faithfulnessCheckModel),
         navigator_enabled: navigatorEnabled,
+        ai_navigator_brief_enabled: aiNavigatorBriefEnabled,
         navigator_persona_mode: navigatorPersonaMode,
         navigator_persona: navigatorPersona,
         navigator: emptyToNull(navigatorModel),
@@ -605,6 +609,7 @@ export default function SettingsPage() {
       anthropicSummaryModel,
       factsCheckModel,
       faithfulnessCheckModel,
+      aiNavigatorBriefEnabled,
       navigatorEnabled,
       navigatorFallbackModel,
       navigatorModel,
@@ -3591,6 +3596,27 @@ export default function SettingsPage() {
                         className="size-4 rounded border-[var(--color-editorial-line)] text-[var(--color-editorial-ink)] focus:ring-[var(--color-editorial-ink)]"
                       />
                       {navigatorEnabled ? t("settings.on") : t("settings.off")}
+                    </label>
+                  </div>
+                </section>
+
+                <section className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                    <div>
+                      <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.navigator.briefEnabled")}</h4>
+                      <p className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">{t("settings.navigator.briefEnabledHelp")}</p>
+                    </div>
+                    <label className="inline-flex min-h-10 items-center gap-2 self-center text-sm text-[var(--color-editorial-ink)] md:justify-self-end">
+                      <input
+                        type="checkbox"
+                        checked={aiNavigatorBriefEnabled}
+                        onChange={(e) => {
+                          llmModelsDirtyRef.current = true;
+                          setAINavigatorBriefEnabled(e.target.checked);
+                        }}
+                        className="size-4 rounded border-[var(--color-editorial-line)] text-[var(--color-editorial-ink)] focus:ring-[var(--color-editorial-ink)]"
+                      />
+                      {aiNavigatorBriefEnabled ? t("settings.on") : t("settings.off")}
                     </label>
                   </div>
                 </section>

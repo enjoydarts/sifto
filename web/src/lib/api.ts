@@ -633,6 +633,52 @@ export interface SummaryAudioSynthesisResponse {
   resolved_text: string;
 }
 
+export interface AINavigatorBriefItem {
+  id: string;
+  brief_id: string;
+  rank: number;
+  item_id: string;
+  title_snapshot: string;
+  translated_title_snapshot: string;
+  source_title_snapshot: string;
+  comment: string;
+  created_at: string;
+}
+
+export interface AINavigatorBrief {
+  id: string;
+  user_id: string;
+  slot: "morning" | "noon" | "evening" | string;
+  status: "queued" | "generated" | "failed" | "notified" | string;
+  title: string;
+  intro: string;
+  summary: string;
+  persona: string;
+  model: string;
+  source_window_start?: string | null;
+  source_window_end?: string | null;
+  generated_at?: string | null;
+  notification_sent_at?: string | null;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+  items?: AINavigatorBriefItem[];
+}
+
+export interface AINavigatorBriefListResponse {
+  items: AINavigatorBrief[];
+}
+
+export interface AINavigatorBriefDetailResponse {
+  brief?: AINavigatorBrief | null;
+}
+
+export interface AINavigatorBriefSummaryAudioQueueResponse {
+  brief_id: string;
+  count: number;
+  items: Item[];
+}
+
 export type PlaybackMode = "summary_queue" | "audio_briefing";
 export type PlaybackSessionStatus = "in_progress" | "completed" | "interrupted";
 
@@ -1233,6 +1279,7 @@ export interface UserSettings {
     facts_check?: string | null;
     faithfulness_check?: string | null;
     navigator_enabled?: boolean;
+    ai_navigator_brief_enabled?: boolean;
     navigator_persona_mode?: string | null;
     navigator_persona?: string | null;
     navigator?: string | null;
@@ -2068,6 +2115,18 @@ export const api = {
     apiFetch<AudioBriefingDetailResponse>(`/audio-briefings/${id}/start-voicing`, {
       method: "POST",
     }),
+  getAINavigatorBriefs: (params?: { slot?: string; limit?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.slot) q.set("slot", params.slot);
+    if (params?.limit) q.set("limit", String(params.limit));
+    const qs = q.toString();
+    return apiFetch<AINavigatorBriefListResponse>(`/ai-navigator-briefs${qs ? `?${qs}` : ""}`);
+  },
+  getAINavigatorBrief: (id: string) => apiFetch<AINavigatorBriefDetailResponse>(`/ai-navigator-briefs/${id}`),
+  appendAINavigatorBriefToSummaryAudioQueue: (id: string) =>
+    apiFetch<AINavigatorBriefSummaryAudioQueueResponse>(`/ai-navigator-briefs/${id}/summary-audio-queue`, {
+      method: "POST",
+    }),
   getLatestPlaybackSessions: () =>
     apiFetch<LatestPlaybackSessionsResponse>("/playback-sessions/latest"),
   getPlaybackSessions: (params?: { mode?: PlaybackMode; status?: PlaybackSessionStatus; limit?: number }) => {
@@ -2209,6 +2268,7 @@ export const api = {
     facts_check?: string | null;
     faithfulness_check?: string | null;
     navigator_enabled?: boolean;
+    ai_navigator_brief_enabled?: boolean;
     navigator_persona_mode?: string | null;
     navigator_persona?: string | null;
     navigator?: string | null;

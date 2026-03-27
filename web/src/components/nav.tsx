@@ -47,6 +47,7 @@ const secondaryLinks = [
   { href: "/sources", labelKey: "nav.sources", icon: Rss },
   { href: "/digests", labelKey: "nav.digests", icon: Mail },
   { href: "/audio-briefings", labelKey: "nav.audioBriefings", icon: Radio },
+  { href: "/ai-navigator-briefs", labelKey: "nav.aiNavigatorBriefs", icon: Brain },
   { href: "/playback-history", labelKey: "nav.playbackHistory", icon: History },
   { href: "/llm-usage", labelKey: "nav.llmUsage", icon: Brain },
   { href: "/llm-analysis", labelKey: "nav.llmAnalysis", icon: TableProperties },

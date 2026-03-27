@@ -829,6 +829,22 @@ function navigatorThemeTokens(persona: string, avatarStyle?: string) {
         bubble: "border-[#f3c8d7] bg-[#fff5f8]",
         badge: "bg-[#d24f7a] text-white",
       };
+    case "junior":
+      return {
+        shell: "border-[#e5b3d3] bg-[linear-gradient(180deg,#fff4fb_0%,#fffdfd_100%)]",
+        header: "",
+        avatar: "bg-[#c26aa3] text-white",
+        bubble: "border-[#efd1e4] bg-[#fff7fb]",
+        badge: "bg-[#c26aa3] text-white",
+      };
+    case "urban":
+      return {
+        shell: "border-[#c1cad6] bg-[linear-gradient(180deg,#f4f7fb_0%,#fffdfd_100%)]",
+        header: "",
+        avatar: "bg-[#59667a] text-white",
+        bubble: "border-[#d6dde6] bg-[#f8fafc]",
+        badge: "bg-[#59667a] text-white",
+      };
     default:
       return {
         shell: "border-[#c7b79c] bg-[linear-gradient(180deg,#f8f3e7_0%,#fffdf8_100%)]",

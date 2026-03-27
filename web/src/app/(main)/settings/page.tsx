@@ -194,7 +194,8 @@ function joinClassNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-type NavigatorPersonaKey = "editor" | "hype" | "analyst" | "concierge" | "snark" | "native";
+type NavigatorPersonaKey = "editor" | "hype" | "analyst" | "concierge" | "snark" | "native" | "junior" | "urban";
+const NAVIGATOR_PERSONA_KEYS: NavigatorPersonaKey[] = ["editor", "hype", "analyst", "concierge", "snark", "native", "junior", "urban"];
 type AudioBriefingNumericInputField =
   | "speech_rate"
   | "tempo_dynamics"
@@ -428,9 +429,9 @@ export default function SettingsPage() {
   const [podcastAvailableCategories, setPodcastAvailableCategories] = useState<PodcastCategoryOption[]>([]);
   const [podcastExplicit, setPodcastExplicit] = useState(false);
   const [podcastArtworkURL, setPodcastArtworkURL] = useState("");
-  const [audioBriefingVoices, setAudioBriefingVoices] = useState<AudioBriefingPersonaVoice[]>(buildDefaultAudioBriefingVoices(["editor", "hype", "analyst", "concierge", "snark", "native"]));
+  const [audioBriefingVoices, setAudioBriefingVoices] = useState<AudioBriefingPersonaVoice[]>(buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS));
   const [audioBriefingVoiceInputDrafts, setAudioBriefingVoiceInputDrafts] = useState<AudioBriefingVoiceInputDrafts>(() =>
-    buildAudioBriefingVoiceInputDrafts(buildDefaultAudioBriefingVoices(["editor", "hype", "analyst", "concierge", "snark", "native"]))
+    buildAudioBriefingVoiceInputDrafts(buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS))
   );
   const [aivisModelsData, setAivisModelsData] = useState<AivisModelsResponse | null>(null);
   const [aivisModelsLoading, setAivisModelsLoading] = useState(false);
@@ -481,7 +482,7 @@ export default function SettingsPage() {
   const llmExtrasRef = useRef<HTMLDivElement | null>(null);
   const navigatorPersonaCards = useMemo(
     () =>
-      (["editor", "hype", "analyst", "concierge", "snark", "native"] as NavigatorPersonaKey[]).map((key) => ({
+      NAVIGATOR_PERSONA_KEYS.map((key) => ({
         key,
         ...EMPTY_NAVIGATOR_PERSONA,
         ...(navigatorPersonaDefinitions[key] as NavigatorPersonaDefinition | undefined),
@@ -496,7 +497,7 @@ export default function SettingsPage() {
       setAudioBriefingTargetDurationMinutes(String(audioBriefing?.target_duration_minutes ?? 20));
       setAudioBriefingDefaultPersonaMode(audioBriefing?.default_persona_mode === "random" ? "random" : "fixed");
       setAudioBriefingDefaultPersona(audioBriefing?.default_persona ?? "editor");
-      const defaults = buildDefaultAudioBriefingVoices(["editor", "hype", "analyst", "concierge", "snark", "native"]);
+      const defaults = buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS);
       const byPersona = new Map((voices ?? []).map((voice) => [voice.persona, voice]));
       const nextVoices = defaults.map((voice) => byPersona.get(voice.persona) ?? voice);
       setAudioBriefingVoices(nextVoices);

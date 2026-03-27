@@ -18,6 +18,9 @@ func TestNormalizePersonaValue(t *testing.T) {
 	if got := NormalizePersonaValue(" snark "); got != "snark" {
 		t.Fatalf("NormalizePersonaValue(snark) = %q, want snark", got)
 	}
+	if got := NormalizePersonaValue(" urban "); got != "urban" {
+		t.Fatalf("NormalizePersonaValue(urban) = %q, want urban", got)
+	}
 	if got := NormalizePersonaValue("unknown"); got != "editor" {
 		t.Fatalf("NormalizePersonaValue(unknown) = %q, want editor", got)
 	}
@@ -31,10 +34,10 @@ func TestResolvePersonaFixed(t *testing.T) {
 
 func TestNavigatorPersonaKeysIncludesExpectedValues(t *testing.T) {
 	got := NavigatorPersonaKeys()
-	if len(got) != 6 {
-		t.Fatalf("len(NavigatorPersonaKeys()) = %d, want 6", len(got))
+	if len(got) != 8 {
+		t.Fatalf("len(NavigatorPersonaKeys()) = %d, want 8", len(got))
 	}
-	if got[0] != "editor" || got[5] != "native" {
-		t.Fatalf("NavigatorPersonaKeys() = %#v, want editor..native", got)
+	if got[0] != "editor" || got[6] != "junior" || got[7] != "urban" {
+		t.Fatalf("NavigatorPersonaKeys() = %#v, want editor..urban", got)
 	}
 }

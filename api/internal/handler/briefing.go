@@ -508,6 +508,20 @@ func briefingNavigatorPersonaMeta(persona string) briefingNavigatorPersonaPresen
 			AvatarStyle:    "native",
 			SpeechStyle:    "bright",
 		}
+	case "junior":
+		return briefingNavigatorPersonaPresentation{
+			CharacterName:  "みのり",
+			CharacterTitle: "Close Guide",
+			AvatarStyle:    "junior",
+			SpeechStyle:    "sweet",
+		}
+	case "urban":
+		return briefingNavigatorPersonaPresentation{
+			CharacterName:  "紗季",
+			CharacterTitle: "City Curator",
+			AvatarStyle:    "urban",
+			SpeechStyle:    "crisp",
+		}
 	default:
 		return briefingNavigatorPersonaPresentation{
 			CharacterName:  "水城",
@@ -679,6 +693,10 @@ func briefingNavigatorPreviewIntro(persona string) string {
 		return "プレビュー表示です。本番では軽口を混ぜつつ、読む価値のある未読記事を拾います。"
 	case "native":
 		return "プレビュー表示です。本番ではいまの空気感やネット感覚に引きつけて、明るく未読記事を勧めます。"
+	case "junior":
+		return "プレビュー表示です。本番では距離の近い、可愛げのある言い方で未読記事をやわらかく勧めます。"
+	case "urban":
+		return "プレビュー表示です。本番では要点を素早く整え、スマートに未読記事を案内します。"
 	default:
 		return "プレビュー表示です。本番では編集者っぽいトーンで未読記事を3本前後おすすめします。"
 	}
@@ -699,6 +717,10 @@ func briefingNavigatorPreviewComment(persona string, rank int) string {
 		return "ここに少しだけ皮肉を混ぜた推薦コメントが入ります。"
 	case "native":
 		return "ここに『それ、いまの感覚だとこう見える』という距離感の近いコメントが入ります。"
+	case "junior":
+		return "ここに『これ、たぶん気になっちゃうと思います』という親密で可愛いコメントが入ります。"
+	case "urban":
+		return "ここに『ここだけ押さえれば十分です』というスマートな推薦コメントが入ります。"
 	default:
 		return "ここに編集者目線で読みどころを一言にまとめたコメントが入ります。"
 	}

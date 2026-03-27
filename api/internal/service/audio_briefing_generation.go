@@ -248,6 +248,10 @@ func audioBriefingSpeakerName(persona string) string {
 		return "ホスト"
 	case "native":
 		return "ナビゲーター"
+	case "junior":
+		return "ナビゲーター"
+	case "urban":
+		return "ナビゲーター"
 	default:
 		return "エディター"
 	}

@@ -11,7 +11,7 @@ const (
 	PersonaModeRandom = "random"
 )
 
-var supportedPersonaKeys = []string{"editor", "hype", "analyst", "concierge", "snark", "native"}
+var supportedPersonaKeys = []string{"editor", "hype", "analyst", "concierge", "snark", "native", "junior", "urban"}
 
 func NavigatorPersonaKeys() []string {
 	return append([]string(nil), supportedPersonaKeys...)
@@ -31,7 +31,7 @@ func NormalizePersonaMode(v *string) string {
 
 func NormalizePersonaValue(v string) string {
 	switch strings.TrimSpace(v) {
-	case "editor", "hype", "analyst", "concierge", "snark", "native":
+	case "editor", "hype", "analyst", "concierge", "snark", "native", "junior", "urban":
 		return strings.TrimSpace(v)
 	default:
 		return "editor"

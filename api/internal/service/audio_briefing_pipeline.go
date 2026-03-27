@@ -726,7 +726,7 @@ func AudioBriefingResumeAllowed(job *model.AudioBriefingJob) bool {
 
 func normalizeAudioBriefingPersona(v string) string {
 	switch strings.TrimSpace(v) {
-	case "editor", "hype", "analyst", "concierge", "snark", "native":
+	case "editor", "hype", "analyst", "concierge", "snark", "native", "junior", "urban":
 		return strings.TrimSpace(v)
 	default:
 		return "editor"

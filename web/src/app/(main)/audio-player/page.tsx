@@ -3,7 +3,7 @@
 import { useEffect, useEffectEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LoaderCircle, Pause, Play, SkipForward, Square, Volume2 } from "lucide-react";
+import { LoaderCircle, Play, Volume2 } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
@@ -41,6 +41,7 @@ export default function SummaryAudioPlayerPage() {
   }, [queueKind]);
 
   const detail = player.summaryQueue.currentItemDetail;
+  const hasQueuedItem = player.summaryQueue.queue.length > 0 || Boolean(player.summaryQueue.currentItemID);
   const titleForDisplay =
     detail?.translated_title ||
     detail?.summary?.translated_title ||
@@ -76,55 +77,8 @@ export default function SummaryAudioPlayerPage() {
           )}
         />
 
-        <SectionCard>
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (player.summaryQueue.queue.length === 0) {
-                    void player.startSummaryQueuePlayback(queueKind);
-                    return;
-                  }
-                  if (player.isPlaying) {
-                    player.pausePlayback();
-                    return;
-                  }
-                  void player.resumePlayback();
-                }}
-                disabled={player.mode !== "summary_queue" && player.playbackState !== "idle"}
-                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.12)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
-              >
-                {player.isPlaying ? <Pause className="size-4" aria-hidden="true" /> : <Play className="size-4 translate-x-[1px]" aria-hidden="true" />}
-                <span>{player.isPlaying ? t("summaryAudio.pause") : t("summaryAudio.play")}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => void player.skipToNext()}
-                disabled={!player.canSkip}
-                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] transition hover:-translate-y-0.5 hover:border-[var(--color-editorial-ink-faint)] hover:bg-[var(--color-editorial-panel-strong)] hover:shadow-[0_12px_30px_rgba(15,23,42,0.08)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:border-[var(--color-editorial-line)] disabled:hover:bg-[var(--color-editorial-panel)] disabled:hover:shadow-none"
-              >
-                <SkipForward className="size-4" aria-hidden="true" />
-                <span>{t("summaryAudio.skip")}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => void player.stopPlayback()}
-                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] transition hover:-translate-y-0.5 hover:border-[var(--color-editorial-ink-faint)] hover:bg-[var(--color-editorial-panel-strong)] hover:shadow-[0_12px_30px_rgba(15,23,42,0.08)]"
-              >
-                <Square className="size-4" aria-hidden="true" />
-                <span>{t("summaryAudio.finish")}</span>
-              </button>
-              <button
-                type="button"
-                onClick={player.expandPlayer}
-                className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] transition hover:-translate-y-0.5 hover:border-[var(--color-editorial-ink-faint)] hover:bg-[var(--color-editorial-panel-strong)] hover:shadow-[0_12px_30px_rgba(15,23,42,0.08)]"
-              >
-                <Volume2 className="size-4" aria-hidden="true" />
-                <span>{t("sharedAudio.expand")}</span>
-              </button>
-            </div>
-
+        {player.isPreparing || player.isPrefetching || player.playbackState === "finished" || player.errorMessage ? (
+          <SectionCard>
             <div className="flex flex-wrap items-center gap-2 text-sm text-editorial-muted">
               {player.isPreparing ? (
                 <Tag tone="default">
@@ -138,8 +92,8 @@ export default function SummaryAudioPlayerPage() {
               {player.playbackState === "finished" ? <Tag tone="default">{t("summaryAudio.finished")}</Tag> : null}
               {player.errorMessage ? <p className="text-sm text-red-600">{player.errorMessage}</p> : null}
             </div>
-          </div>
-        </SectionCard>
+          </SectionCard>
+        ) : null}
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.8fr)_minmax(320px,0.9fr)]">
           <SectionCard>
@@ -167,7 +121,7 @@ export default function SummaryAudioPlayerPage() {
 
               <div className="rounded-[var(--radius-card)] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
                 <p className="whitespace-pre-wrap text-sm leading-7 text-editorial-strong">
-                  {detail?.summary?.summary || t("summaryAudio.summaryPending")}
+                  {hasQueuedItem ? detail?.summary?.summary || t("summaryAudio.summaryPending") : t("summaryAudio.empty")}
                 </p>
               </div>
             </div>

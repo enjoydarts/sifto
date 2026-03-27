@@ -20,7 +20,7 @@ export function SharedAudioMiniPlayer() {
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] md:px-6">
+    <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] z-40 px-3 md:bottom-0 md:px-6 md:pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
       <div className="mx-auto flex max-w-[1360px] items-center gap-3 rounded-[28px] border border-[color:rgba(190,179,160,0.7)] bg-[color:rgba(252,251,248,0.94)] px-4 py-3 shadow-[0_-12px_32px_rgba(15,23,42,0.16)] backdrop-blur">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="hidden size-11 shrink-0 items-center justify-center rounded-full bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)] sm:inline-flex">

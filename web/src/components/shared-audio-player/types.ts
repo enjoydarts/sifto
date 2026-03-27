@@ -72,6 +72,7 @@ export type SharedAudioPlayerContextValue = {
   selectSummaryQueueItem: (index: number) => Promise<void>;
   pausePlayback: () => void;
   resumePlayback: () => Promise<void>;
+  seekTo: (seconds: number) => void;
   skipToNext: () => Promise<void>;
   stopPlayback: () => Promise<void>;
   expandPlayer: () => void;

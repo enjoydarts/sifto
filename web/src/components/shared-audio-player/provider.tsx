@@ -514,6 +514,16 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     setExpanded(false);
   }
 
+  function seekTo(seconds: number) {
+    const audio = audioRef.current;
+    if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) {
+      return;
+    }
+    const next = Math.min(Math.max(seconds, 0), audio.duration);
+    audio.currentTime = next;
+    setCurrentTimeSec(next);
+  }
+
   const handleAudioPlay = useEffectEvent(() => {
     setPlaybackState("playing");
     if (mode === "summary_queue" && summaryQueue.currentItemID && !markedReadIDsRef.current.has(summaryQueue.currentItemID)) {
@@ -636,6 +646,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     selectSummaryQueueItem,
     pausePlayback,
     resumePlayback,
+    seekTo,
     skipToNext,
     stopPlayback,
     expandPlayer: () => setExpanded(true),

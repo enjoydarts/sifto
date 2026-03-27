@@ -305,7 +305,7 @@ export default function AudioBriefingDetailPage() {
                 onClick={() => void handlePlayInSharedPlayer()}
                 className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90"
               >
-                {t("audioBriefing.playInSharedPlayer", "共通プレイヤーで再生")}
+                {t("audioBriefing.playInSharedPlayer", "プレイヤーで再生")}
               </button>
               <button
                 type="button"

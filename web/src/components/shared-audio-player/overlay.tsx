@@ -107,6 +107,17 @@ export function SharedAudioOverlay() {
                   {player.isPrefetching ? <span>{t("sharedAudio.prefetching")}</span> : null}
                   {player.errorMessage ? <span className="text-[#a23d2a]">{player.errorMessage}</span> : null}
                 </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={player.durationSec || 0}
+                  step={1}
+                  value={Math.min(player.currentTimeSec, player.durationSec || 0)}
+                  onChange={(event) => player.seekTo(Number(event.target.value))}
+                  disabled={player.durationSec <= 0}
+                  aria-label={t("sharedAudio.seek")}
+                  className="mt-4 h-2 w-full cursor-pointer accent-[var(--color-editorial-ink)] disabled:cursor-not-allowed disabled:opacity-45"
+                />
               </section>
 
               {player.mode === "summary_queue" ? (

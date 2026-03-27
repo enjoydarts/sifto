@@ -47,6 +47,7 @@ class AINavigatorBriefResponse(BaseModel):
     title: str
     intro: str
     summary: str
+    ending: str
     items: list[AINavigatorBriefItem]
     llm: dict | None = None
 

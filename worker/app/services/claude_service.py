@@ -1070,6 +1070,7 @@ def compose_ai_navigator_brief(
             "title": out["title"],
             "intro": out["intro"],
             "summary": out["summary"],
+            "ending": out["ending"],
             "items": out["items"],
             "llm": {
                 "provider": "local-dev",
@@ -1097,6 +1098,7 @@ def compose_ai_navigator_brief(
             "title": out["title"],
             "intro": out["intro"],
             "summary": out["summary"],
+            "ending": out["ending"],
             "items": out["items"],
             "llm": {
                 "provider": "local-fallback",
@@ -1115,6 +1117,7 @@ def compose_ai_navigator_brief(
         "title": out["title"],
         "intro": out["intro"],
         "summary": out["summary"],
+        "ending": out["ending"],
         "items": out["items"],
         "llm": _llm_meta(message, "ai_navigator_brief", used_model or _feed_suggest_model),
     }

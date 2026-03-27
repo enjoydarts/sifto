@@ -21,11 +21,11 @@ func (r *AINavigatorBriefRepo) CreateBrief(ctx context.Context, brief *model.AIN
 	}
 	return r.db.QueryRow(ctx, `
 		INSERT INTO ai_navigator_briefs (
-			id, user_id, slot, status, title, intro, summary, persona, model,
+			id, user_id, slot, status, title, intro, summary, ending, persona, model,
 			source_window_start, source_window_end, generated_at, notification_sent_at, error_message
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9,
-			$10, $11, $12, $13, $14
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+			$11, $12, $13, $14, $15
 		)
 		RETURNING created_at, updated_at
 	`,
@@ -36,6 +36,7 @@ func (r *AINavigatorBriefRepo) CreateBrief(ctx context.Context, brief *model.AIN
 		brief.Title,
 		brief.Intro,
 		brief.Summary,
+		brief.Ending,
 		brief.Persona,
 		brief.Model,
 		brief.SourceWindowStart,
@@ -104,6 +105,7 @@ func scanAINavigatorBrief(row interface{ Scan(dest ...any) error }) (*model.AINa
 		&brief.Title,
 		&brief.Intro,
 		&brief.Summary,
+		&brief.Ending,
 		&brief.Persona,
 		&brief.Model,
 		&brief.SourceWindowStart,
@@ -125,7 +127,7 @@ func (r *AINavigatorBriefRepo) ListBriefsByUser(ctx context.Context, userID, slo
 		limit = 20
 	}
 	rows, err := r.db.Query(ctx, `
-		SELECT id, user_id, slot, status, title, intro, summary, persona, model,
+		SELECT id, user_id, slot, status, title, intro, summary, ending, persona, model,
 		       source_window_start, source_window_end, generated_at, notification_sent_at, error_message,
 		       created_at, updated_at
 		FROM ai_navigator_briefs
@@ -151,7 +153,7 @@ func (r *AINavigatorBriefRepo) ListBriefsByUser(ctx context.Context, userID, slo
 
 func (r *AINavigatorBriefRepo) GetBriefDetail(ctx context.Context, userID, briefID string) (*model.AINavigatorBrief, error) {
 	brief, err := scanAINavigatorBrief(r.db.QueryRow(ctx, `
-		SELECT id, user_id, slot, status, title, intro, summary, persona, model,
+		SELECT id, user_id, slot, status, title, intro, summary, ending, persona, model,
 		       source_window_start, source_window_end, generated_at, notification_sent_at, error_message,
 		       created_at, updated_at
 		FROM ai_navigator_briefs
@@ -197,7 +199,7 @@ func (r *AINavigatorBriefRepo) GetBriefDetail(ctx context.Context, userID, brief
 
 func (r *AINavigatorBriefRepo) LatestBriefByUserSlot(ctx context.Context, userID, slot string) (*model.AINavigatorBrief, error) {
 	brief, err := scanAINavigatorBrief(r.db.QueryRow(ctx, `
-		SELECT id, user_id, slot, status, title, intro, summary, persona, model,
+		SELECT id, user_id, slot, status, title, intro, summary, ending, persona, model,
 		       source_window_start, source_window_end, generated_at, notification_sent_at, error_message,
 		       created_at, updated_at
 		FROM ai_navigator_briefs

@@ -1,0 +1,2 @@
+ALTER TABLE ai_navigator_briefs
+  ADD COLUMN IF NOT EXISTS ending TEXT NOT NULL DEFAULT '';

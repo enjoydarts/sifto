@@ -109,6 +109,7 @@ AI_NAVIGATOR_BRIEF_SCHEMA = {
         "title": {"type": "string"},
         "intro": {"type": "string"},
         "summary": {"type": "string"},
+        "ending": {"type": "string"},
         "items": {
             "type": "array",
             "items": {
@@ -123,7 +124,7 @@ AI_NAVIGATOR_BRIEF_SCHEMA = {
             },
         },
     },
-    "required": ["title", "intro", "summary", "items"],
+    "required": ["title", "intro", "summary", "ending", "items"],
     "additionalProperties": False,
 }
 
@@ -561,7 +562,7 @@ def build_ai_navigator_brief_task(persona: str, candidates: list[dict], intro_co
     persona_key, profile = resolve_navigator_persona_profile(persona, "briefing")
     sampling_profile = resolve_navigator_sampling_profile(persona_key)
     trimmed_candidates = candidates[:24]
-    prompt = f"""あなたは朝昼夜に届くAIナビbriefの案内役です。
+    prompt = f"""あなたは朝昼夜に届くAIナビブリーフの案内役です。
 
 キャラクター:
 - persona: {persona_key}
@@ -580,18 +581,20 @@ def build_ai_navigator_brief_task(persona: str, candidates: list[dict], intro_co
 
 タスク:
 - 候補記事の中から、この時間帯に読む価値が高い10本を選ぶ
-- AIナビbrief全体のタイトルを1つ付ける
+- AIナビブリーフ全体のタイトルを1つ付ける
 - 最初に導入文を書く
 - 次に、この時間帯の流れを整理する総括コメントを書く
 - 10本すべてに日本語コメントを付ける
+- 最後に、読み手を送り出す締めの挨拶を書く
 
 ルール:
 - 候補にない item_id を作らない
 - items は必ず10件にする
 - title は自然な日本語にし、見出しとして成立させる
-- intro は 2〜3文で、時間帯の空気に触れつつこの brief へ入る導入にする
-- summary は 3〜5文で、その時間帯の全体像や注目点を整理する
-- comment は {profile["comment_range"]} を目安にする
+- intro は 4〜6文で、時間帯の空気に触れつつこの brief へ入る導入にする
+- summary は 5〜7文で、その時間帯の全体像や注目点、温度差を整理する
+- ending は 2〜4文で、読み終えたあとや聞き始める前の気分を整える締めの挨拶にする
+- comment は {profile["comment_range"]} を目安にしつつ、今より一段厚めに 3〜5文で書く
 - 10本すべて観点を少しずつ変える
 - 客観的な無味乾燥レビューではなく、このペルソナの主観で選び、語る
 - ペルソナの価値観に基づいて選ぶ
@@ -600,9 +603,13 @@ def build_ai_navigator_brief_task(persona: str, candidates: list[dict], intro_co
 - 自分を名乗るなら、必ず {profile["name"]} とだけ名乗る
 - 一人称は {profile["first_person"]} を基本にし、別の一人称へぶれない
 - 話し方は {profile["speech_style"]} と {profile["voice"]} に寄せる
-- title / intro / summary / comment のいずれも事実を捏造しない
+- title / intro / summary / ending / comment のいずれも事実を捏造しない
 - 候補記事から読み取れる範囲だけで薦める
 - summary や title の言い換えをそのまま並べず、今この時間帯に押さえる意味を再構成する
+- intro は読み手を自然にこの時間帯へ連れていく
+- summary は「何が起きているか」に加えて「どう眺めるべきか」まで踏み込む
+- comment は記事の要約をなぞるだけでなく、なぜ気にする価値があるかを必ず足す
+- ending は intro や summary の焼き直しにせず、最後のひと言として余韻を作る
 - 文量感は {navigator_verbosity_instruction(sampling_profile)}
 - snark でも不快・攻撃的・見下し表現は禁止
 - snark では、記事や状況に対する軽い皮肉、ツッコミ、呆れ気味の言い回しは許可する
@@ -622,6 +629,7 @@ def build_ai_navigator_brief_task(persona: str, candidates: list[dict], intro_co
   "title": "briefタイトル",
   "intro": "導入文",
   "summary": "総括コメント",
+  "ending": "締めの挨拶",
   "items": [
     {{"item_id":"uuid", "comment":"記事コメント", "reason_tags":["重要","背景"]}}
   ]
@@ -720,6 +728,7 @@ def parse_ai_navigator_brief_result(text: str, candidates: list[dict], intro_con
     title = str(data.get("title") or "").strip() or _default_ai_navigator_brief_title(intro_context)
     intro = str(data.get("intro") or "").strip() or "いま押さえておくと流れが掴みやすい10本をまとめました。"
     summary = str(data.get("summary") or "").strip() or "この時間帯の動きをざっと掴めるように、温度差のある話題を混ぜて並べています。"
+    ending = str(data.get("ending") or "").strip() or "気になるところからでも大丈夫です。今日の流れを自分のペースで追っていきましょう。"
     rows = data.get("items") if isinstance(data.get("items"), list) else []
     items: list[dict] = []
     seen: set[str] = set()
@@ -734,7 +743,7 @@ def parse_ai_navigator_brief_result(text: str, candidates: list[dict], intro_con
             continue
         raw_tags = row.get("reason_tags") or []
         reason_tags = [str(v).strip() for v in raw_tags if str(v).strip()][:3]
-        items.append({"item_id": item_id, "comment": comment[:180], "reason_tags": reason_tags})
+        items.append({"item_id": item_id, "comment": comment[:360], "reason_tags": reason_tags})
         seen.add(item_id)
         if len(items) >= min(10, len(allowed)):
             break
@@ -745,23 +754,29 @@ def parse_ai_navigator_brief_result(text: str, candidates: list[dict], intro_con
                 continue
             title_hint = str(candidate.get("translated_title") or candidate.get("title") or "この1本").strip()
             summary_hint = re.sub(r"\s+", " ", str(candidate.get("summary") or "").strip())
-            comment = (summary_hint[:90] + "。" if summary_hint else f"{title_hint}は今の流れを押さえる一本です。")
-            items.append({"item_id": item_id, "comment": comment[:180], "reason_tags": []})
+            comment = (summary_hint[:180] + "。" if summary_hint else f"{title_hint}は今の流れを押さえる一本です。")
+            items.append({"item_id": item_id, "comment": comment[:360], "reason_tags": []})
             seen.add(item_id)
             if len(items) >= min(10, len(allowed)):
                 break
-    return {"title": title[:120], "intro": intro[:240], "summary": summary[:400], "items": items}
+    return {
+        "title": title[:120],
+        "intro": intro[:520],
+        "summary": summary[:900],
+        "ending": ending[:320],
+        "items": items,
+    }
 
 
 def _default_ai_navigator_brief_title(intro_context: dict) -> str:
     time_of_day = str(intro_context.get("time_of_day") or "").strip()
     if time_of_day == "morning":
-        return "朝のAIナビ brief"
+        return "朝のAIナビブリーフ"
     if time_of_day == "noon":
-        return "昼のAIナビ brief"
+        return "昼のAIナビブリーフ"
     if time_of_day == "evening":
-        return "夜のAIナビ brief"
-    return "AIナビ brief"
+        return "夜のAIナビブリーフ"
+    return "AIナビブリーフ"
 
 
 def build_item_navigator_task(persona: str, article: dict) -> dict:

@@ -448,7 +448,7 @@ def compose_ai_navigator_brief(persona: str, candidates: list[dict], intro_conte
     task = build_ai_navigator_brief_task(persona, candidates, intro_context)
     text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=3200, response_schema=task["schema"], schema_name="ai_navigator_brief", temperature=task["sampling_profile"]["temperature"], top_p=task["sampling_profile"]["top_p"])
     out = parse_ai_navigator_brief_result(text, task["candidates"], intro_context)
-    return {"title": out["title"], "intro": out["intro"], "summary": out["summary"], "items": out["items"], "llm": _llm_meta(model, "ai_navigator_brief", usage)}
+    return {"title": out["title"], "intro": out["intro"], "summary": out["summary"], "ending": out["ending"], "items": out["items"], "llm": _llm_meta(model, "ai_navigator_brief", usage)}
 
 
 def generate_item_navigator(persona: str, article: dict, model: str, api_key: str) -> dict:

@@ -653,6 +653,7 @@ export interface AINavigatorBrief {
   title: string;
   intro: string;
   summary: string;
+  ending: string;
   persona: string;
   model: string;
   source_window_start?: string | null;

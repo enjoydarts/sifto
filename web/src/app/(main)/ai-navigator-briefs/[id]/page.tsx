@@ -8,8 +8,6 @@ import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
 import { useToast } from "@/components/toast-provider";
-import { PageHeader } from "@/components/ui/page-header";
-import { SectionCard } from "@/components/ui/section-card";
 import { Tag } from "@/components/ui/tag";
 import { api } from "@/lib/api";
 
@@ -24,6 +22,25 @@ function formatDateTime(value: string | null | undefined, locale: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function MetaPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-[var(--color-editorial-ink-soft)]">
+      {children}
+    </span>
+  );
+}
+
+function ReadableBlock({ title, body }: { title: string; body: string | null | undefined }) {
+  return (
+    <section className="surface-editorial rounded-[28px] px-5 py-5 sm:px-6">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">{title}</div>
+      <div className="mt-4 whitespace-pre-wrap break-words font-serif text-[18px] leading-[1.95] text-[var(--color-editorial-ink)]">
+        {body || "—"}
+      </div>
+    </section>
+  );
 }
 
 export default function AINavigatorBriefDetailPage() {
@@ -48,132 +65,127 @@ export default function AINavigatorBriefDetailPage() {
     showToast(t("aiNavigatorBriefs.toast.queueAdded"), "success");
   }
 
+  if (detailQuery.isLoading) {
+    return (
+      <PageTransition>
+        <p className="text-sm text-[var(--color-editorial-ink-soft)]">{t("common.loading")}</p>
+      </PageTransition>
+    );
+  }
+
   return (
     <PageTransition>
-      <div className="space-y-4">
-        <PageHeader
-          eyebrow={t("aiNavigatorBriefs.eyebrow")}
-          title={brief?.title || t("aiNavigatorBriefs.title")}
-          titleIcon={Brain}
-          description={t("aiNavigatorBriefs.detailDescription")}
-          meta={brief ? (
-            <>
-              <Tag tone="default">{t(`aiNavigatorBriefs.slot.${brief.slot}`)}</Tag>
-              <Tag tone="default">{t(`aiNavigatorBriefs.status.${brief.status}`)}</Tag>
-              <Tag tone="default">{formatDateTime(brief.generated_at ?? brief.created_at, locale)}</Tag>
-            </>
-          ) : undefined}
-          actions={brief ? (
-            <button
-              type="button"
-              onClick={() => void handlePlayAll()}
-              className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90"
-            >
-              <Play className="size-4" aria-hidden="true" />
-              {t("aiNavigatorBriefs.playAll")}
-            </button>
-          ) : undefined}
-        />
+      <div className="min-w-0 space-y-5 overflow-x-hidden">
+        <Link
+          href="/ai-navigator-briefs"
+          className="inline-flex items-center gap-2 text-sm text-[var(--color-editorial-ink-soft)] hover:text-[var(--color-editorial-ink)]"
+        >
+          ← {t("aiNavigatorBriefs.backToList")}
+        </Link>
 
-        {detailQuery.isLoading ? (
-          <SectionCard>
-            <p className="text-sm text-editorial-muted">{t("common.loading")}</p>
-          </SectionCard>
-        ) : !brief ? (
-          <SectionCard>
+        {!brief ? (
+          <section className="surface-editorial rounded-[28px] px-5 py-5 sm:px-6">
             <p className="text-sm text-editorial-muted">{t("aiNavigatorBriefs.empty")}</p>
-          </SectionCard>
+          </section>
         ) : (
-          <div className="space-y-4">
-            <SectionCard>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
+          <>
+            <section
+              className="rounded-[30px] border border-[var(--color-editorial-line)] px-5 py-5 shadow-[var(--shadow-card)] sm:px-6"
+              style={{
+                background: "linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,253,249,0.96)), #fbf8f2",
+              }}
+            >
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <Tag tone="default">{t(`aiNavigatorBriefs.slot.${brief.slot}`)}</Tag>
+                <Tag tone="default">{t(`aiNavigatorBriefs.status.${brief.status}`)}</Tag>
+                <Tag tone="default">{formatDateTime(brief.generated_at ?? brief.created_at, locale)}</Tag>
+              </div>
+              <div className="mt-4 flex items-center gap-3">
+                <span className="inline-flex size-12 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink)]">
+                  <Brain className="size-5" aria-hidden="true" />
+                </span>
+                <div className="min-w-0">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-                    {t("aiNavigatorBriefs.generatedAt")}
+                    {t("aiNavigatorBriefs.eyebrow")}
                   </div>
-                  <p className="mt-1 text-sm text-editorial-strong">{formatDateTime(brief.generated_at ?? brief.created_at, locale)}</p>
+                  <h1 className="mt-2 font-serif text-[2.25rem] leading-[1.08] tracking-[-0.04em] text-[var(--color-editorial-ink)] sm:text-[3.2rem]">
+                    {brief.title || t("aiNavigatorBriefs.title")}
+                  </h1>
                 </div>
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-                    {t("aiNavigatorBriefs.persona")}
-                  </div>
-                  <p className="mt-1 text-sm text-editorial-strong">{t(`settings.navigator.persona.${brief.persona}`, brief.persona)}</p>
-                </div>
+              </div>
+              <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                {t("aiNavigatorBriefs.detailDescription")}
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2 text-xs">
+                <MetaPill>{t("aiNavigatorBriefs.generatedAt")} {formatDateTime(brief.generated_at ?? brief.created_at, locale)}</MetaPill>
+                <MetaPill>{t("aiNavigatorBriefs.persona")} {t(`settings.navigator.persona.${brief.persona}`, brief.persona)}</MetaPill>
+                <MetaPill>{t("aiNavigatorBriefs.model")} {brief.model || "—"}</MetaPill>
                 {brief.notification_sent_at ? (
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-                      {t("aiNavigatorBriefs.notificationSentAt")}
-                    </div>
-                    <p className="mt-1 text-sm text-editorial-strong">{formatDateTime(brief.notification_sent_at, locale)}</p>
-                  </div>
+                  <MetaPill>{t("aiNavigatorBriefs.notificationSentAt")} {formatDateTime(brief.notification_sent_at, locale)}</MetaPill>
                 ) : null}
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-                    {t("aiNavigatorBriefs.model")}
-                  </div>
-                  <p className="mt-1 break-all text-sm text-editorial-strong">{brief.model || "—"}</p>
-                </div>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void handlePlayAll()}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90"
+                >
+                  <Play className="size-4" aria-hidden="true" />
+                  {t("aiNavigatorBriefs.playAll")}
+                </button>
               </div>
               {brief.error_message ? (
-                <p className="mt-4 text-sm text-red-600">{brief.error_message}</p>
+                <div className="mt-5 border-t border-[var(--color-editorial-line)] pt-4 text-sm leading-7 text-[#7a4337]">
+                  {brief.error_message}
+                </div>
               ) : null}
-            </SectionCard>
+            </section>
 
-            <SectionCard>
-              <div className="space-y-4">
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-                    {t("aiNavigatorBriefs.introTitle")}
-                  </div>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-editorial-strong">{brief.intro || "—"}</p>
+            <ReadableBlock title={t("aiNavigatorBriefs.introTitle")} body={brief.intro} />
+            <ReadableBlock title={t("aiNavigatorBriefs.summaryTitle")} body={brief.summary} />
+
+            <section className="surface-editorial rounded-[28px] px-5 py-5 sm:px-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
+                  {t("aiNavigatorBriefs.itemsTitle")}
                 </div>
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-                    {t("aiNavigatorBriefs.summaryTitle")}
-                  </div>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-editorial-strong">{brief.summary || "—"}</p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => void handlePlayAll()}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                >
+                  <Play className="size-4" aria-hidden="true" />
+                  {t("aiNavigatorBriefs.playAll")}
+                </button>
               </div>
-            </SectionCard>
-
-            <SectionCard>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-                    {t("aiNavigatorBriefs.itemsTitle")}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void handlePlayAll()}
-                    className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+              <div className="mt-4 grid gap-3">
+                {(brief.items ?? []).map((item) => (
+                  <article
+                    key={item.id}
+                    className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] p-4"
                   >
-                    <Play className="size-4" aria-hidden="true" />
-                    {t("aiNavigatorBriefs.playAll")}
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {(brief.items ?? []).map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded-[var(--radius-card)] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] p-4"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Tag tone="default">{item.rank}</Tag>
-                        <Link
-                          href={`/items/${item.item_id}`}
-                          className="text-sm font-semibold text-editorial-strong hover:underline"
-                        >
-                          {item.translated_title_snapshot || item.title_snapshot || "—"}
-                        </Link>
-                      </div>
-                      <p className="mt-1 text-xs text-editorial-muted">{item.source_title_snapshot || "—"}</p>
-                      <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-editorial-strong">{item.comment}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1 text-xs text-[var(--color-editorial-ink-soft)]">
+                        #{item.rank}
+                      </span>
+                      <Link
+                        href={`/items/${item.item_id}`}
+                        className="text-sm font-semibold text-[var(--color-editorial-ink)] hover:underline"
+                      >
+                        {item.translated_title_snapshot || item.title_snapshot || "—"}
+                      </Link>
                     </div>
-                  ))}
-                </div>
+                    <div className="mt-2 text-xs text-[var(--color-editorial-ink-soft)]">{item.source_title_snapshot || "—"}</div>
+                    <div className="mt-4 whitespace-pre-wrap break-words font-serif text-[17px] leading-[1.95] text-[var(--color-editorial-ink)]">
+                      {item.comment}
+                    </div>
+                  </article>
+                ))}
               </div>
-            </SectionCard>
-          </div>
+            </section>
+
+            <ReadableBlock title={t("aiNavigatorBriefs.endingTitle")} body={brief.ending} />
+          </>
         )}
       </div>
     </PageTransition>

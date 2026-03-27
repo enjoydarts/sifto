@@ -264,6 +264,7 @@ type AINavigatorBriefResponse struct {
 	Title   string                 `json:"title"`
 	Intro   string                 `json:"intro"`
 	Summary string                 `json:"summary"`
+	Ending  string                 `json:"ending"`
 	Items   []AINavigatorBriefItem `json:"items"`
 	LLM     *LLMUsage              `json:"llm,omitempty"`
 }

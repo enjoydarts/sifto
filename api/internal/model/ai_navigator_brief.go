@@ -23,6 +23,7 @@ type AINavigatorBrief struct {
 	Title              string                 `json:"title"`
 	Intro              string                 `json:"intro"`
 	Summary            string                 `json:"summary"`
+	Ending             string                 `json:"ending"`
 	Persona            string                 `json:"persona"`
 	Model              string                 `json:"model"`
 	SourceWindowStart  *time.Time             `json:"source_window_start,omitempty"`

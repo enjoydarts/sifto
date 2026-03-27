@@ -239,6 +239,7 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 		Title:             strings.TrimSpace(resp.Title),
 		Intro:             strings.TrimSpace(resp.Intro),
 		Summary:           strings.TrimSpace(resp.Summary),
+		Ending:            strings.TrimSpace(resp.Ending),
 		Persona:           persona,
 		Model:             strings.TrimSpace(*modelName),
 		SourceWindowStart: &windowStart,
@@ -385,11 +386,11 @@ func seasonHintForMonth(month time.Month) string {
 func defaultAINavigatorBriefTitle(slot string) string {
 	switch slot {
 	case model.AINavigatorBriefSlotMorning:
-		return "朝のAIナビ brief"
+		return "朝のAIナビブリーフ"
 	case model.AINavigatorBriefSlotNoon:
-		return "昼のAIナビ brief"
+		return "昼のAIナビブリーフ"
 	default:
-		return "夜のAIナビ brief"
+		return "夜のAIナビブリーフ"
 	}
 }
 

@@ -18,6 +18,11 @@ type PodcastFeedService struct {
 	worker            *WorkerClient
 }
 
+type PodcastFeedResult struct {
+	Body         []byte
+	LastModified time.Time
+}
+
 func NewPodcastFeedService(settingsRepo *repository.UserSettingsRepo, audioBriefingRepo *repository.AudioBriefingRepo, worker *WorkerClient) *PodcastFeedService {
 	return &PodcastFeedService{
 		settingsRepo:      settingsRepo,
@@ -76,6 +81,14 @@ type podcastRSSItem struct {
 }
 
 func (s *PodcastFeedService) BuildXML(ctx context.Context, slug string) ([]byte, error) {
+	result, err := s.Build(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	return result.Body, nil
+}
+
+func (s *PodcastFeedService) Build(ctx context.Context, slug string) (*PodcastFeedResult, error) {
 	settings, err := s.settingsRepo.GetByPodcastFeedSlug(ctx, slug)
 	if err != nil {
 		return nil, err
@@ -90,6 +103,7 @@ func (s *PodcastFeedService) BuildXML(ctx context.Context, slug string) ([]byte,
 	if err != nil {
 		return nil, err
 	}
+	lastModified := settings.UpdatedAt
 	items := make([]podcastRSSItem, 0, len(jobs))
 	for _, job := range jobs {
 		if !AudioBriefingJobIsPodcastEligible(&job, now) {
@@ -101,6 +115,10 @@ func (s *PodcastFeedService) BuildXML(ctx context.Context, slug string) ([]byte,
 		}
 		if item != nil {
 			items = append(items, *item)
+			itemTime := podcastItemPubTime(job)
+			if itemTime.After(lastModified) {
+				lastModified = itemTime
+			}
 		}
 	}
 
@@ -131,7 +149,10 @@ func (s *PodcastFeedService) BuildXML(ctx context.Context, slug string) ([]byte,
 	if err != nil {
 		return nil, err
 	}
-	return append([]byte(xml.Header), body...), nil
+	return &PodcastFeedResult{
+		Body:         append([]byte(xml.Header), body...),
+		LastModified: lastModified,
+	}, nil
 }
 
 func (s *PodcastFeedService) buildItem(ctx context.Context, userID string, job model.AudioBriefingJob) (*podcastRSSItem, error) {

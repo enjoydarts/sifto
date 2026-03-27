@@ -158,6 +158,7 @@ func main() {
 		})
 	})
 	r.Get("/podcasts/{slug}/feed.xml", podcastsH.Feed)
+	r.Head("/podcasts/{slug}/feed.xml", podcastsH.Feed)
 
 	// Inngest serve endpoint（認証不要）
 	r.Mount("/api/inngest", ensureInngestPutNoContent(inngestHandler))

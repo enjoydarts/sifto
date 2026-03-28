@@ -20,6 +20,7 @@ _BGM_FADE_OUT_SEC = 4
 _LOUDNORM_TARGET_I = "-16"
 _LOUDNORM_TARGET_TP = "-1.5"
 _BGM_VOLUME_FILTER = "volume=0.10"
+_OUTPUT_CHANNELS = "2"
 
 
 def run_from_env() -> int:
@@ -227,13 +228,17 @@ def mix_bgm_with_normalize(main_audio_path: Path, tmp_path: Path, r2: R2Client, 
         str(bgm_path),
         "-filter_complex",
         (
-            f"[1:a]atrim=duration={duration_sec},afade=t=in:st=0:d={_BGM_FADE_IN_SEC},"
+            f"[0:a]aformat=channel_layouts=stereo[voice];"
+            f"[1:a]atrim=duration={duration_sec},aformat=channel_layouts=stereo,"
+            f"afade=t=in:st=0:d={_BGM_FADE_IN_SEC},"
             f"afade=t=out:st={fade_out_start}:d={_BGM_FADE_OUT_SEC},{_BGM_VOLUME_FILTER}[bgm];"
-            f"[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=0,"
+            f"[voice][bgm]amix=inputs=2:duration=first:dropout_transition=0,"
             f"loudnorm=I={_LOUDNORM_TARGET_I}:TP={_LOUDNORM_TARGET_TP}:LRA=11[out]"
         ),
         "-map",
         "[out]",
+        "-ac",
+        _OUTPUT_CHANNELS,
         "-c:a",
         "libmp3lame",
         "-q:a",
@@ -253,6 +258,8 @@ def normalize_audio(input_path: Path, output_path: Path) -> Path:
         str(input_path),
         "-af",
         f"loudnorm=I={_LOUDNORM_TARGET_I}:TP={_LOUDNORM_TARGET_TP}:LRA=11",
+        "-ac",
+        _OUTPUT_CHANNELS,
         "-c:a",
         "libmp3lame",
         "-q:a",

@@ -55,7 +55,8 @@ function formatBGMName(value: string | null | undefined) {
   const raw = (value ?? "").trim();
   if (!raw) return "—";
   const parts = raw.split("/");
-  return parts[parts.length - 1] || raw;
+  const filename = parts[parts.length - 1] || raw;
+  return filename.replace(/\.[^.]+$/, "");
 }
 
 export default function AudioBriefingDetailPage() {

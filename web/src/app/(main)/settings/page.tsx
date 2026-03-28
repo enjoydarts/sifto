@@ -198,6 +198,17 @@ function joinClassNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+function buildPodcastRSSURL(feedSlug: string | null | undefined, fallbackURL?: string | null): string {
+  const slug = (feedSlug ?? "").trim();
+  if (!slug) {
+    return fallbackURL ?? "";
+  }
+  if (typeof window === "undefined") {
+    return fallbackURL ?? "";
+  }
+  return `${window.location.origin}/podcasts/${encodeURIComponent(slug)}/feed.xml`;
+}
+
 type NavigatorPersonaKey = "editor" | "hype" | "analyst" | "concierge" | "snark" | "native" | "junior" | "urban";
 const NAVIGATOR_PERSONA_KEYS: NavigatorPersonaKey[] = ["editor", "hype", "analyst", "concierge", "snark", "native", "junior", "urban"];
 type AudioBriefingNumericInputField =
@@ -519,7 +530,7 @@ export default function SettingsPage() {
   const syncPodcastForm = useCallback((podcast?: UserSettings["podcast"] | null) => {
     setPodcastEnabled(Boolean(podcast?.enabled));
     setPodcastFeedSlug(podcast?.feed_slug ?? "");
-    setPodcastRSSURL(podcast?.rss_url ?? "");
+    setPodcastRSSURL(buildPodcastRSSURL(podcast?.feed_slug, podcast?.rss_url));
     setPodcastTitle(podcast?.title ?? "");
     setPodcastDescription(podcast?.description ?? "");
     setPodcastAuthor(podcast?.author ?? "");
@@ -811,6 +822,10 @@ export default function SettingsPage() {
       return prev;
     });
   }, [audioBriefingDefaultPersona]);
+
+  useEffect(() => {
+    setPodcastRSSURL(buildPodcastRSSURL(podcastFeedSlug, podcastRSSURL));
+  }, [podcastFeedSlug]);
 
   useEffect(() => {
     let cancelled = false;

@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
@@ -71,6 +73,72 @@ func shouldRetryExtractBody(attempt int, err error) bool {
 		return false
 	}
 	return attempt < 2
+}
+
+var extractComparablePunctuation = regexp.MustCompile(`[[:punct:]\p{P}\p{S}]+`)
+
+func invalidExtractReason(title *string, content string) string {
+	contentTrimmed := strings.TrimSpace(content)
+	if contentTrimmed == "" {
+		return "empty extracted content"
+	}
+	if looksLikeJavaScriptPlaceholder(contentTrimmed) {
+		return "javascript placeholder content"
+	}
+	if looksLikeTitleOnlyExtract(title, contentTrimmed) {
+		return "title-only extracted content"
+	}
+	return ""
+}
+
+func looksLikeJavaScriptPlaceholder(content string) bool {
+	normalized := normalizeExtractComparable(content)
+	if normalized == "" {
+		return true
+	}
+	if utf8.RuneCountInString(normalized) > 200 {
+		return false
+	}
+	placeholders := []string{
+		"please enable javascript",
+		"please enable javascript to view the comments powered by disqus",
+		"javascript is disabled in your browser",
+		"javascript is required to view this page",
+		"javascriptを有効にしてください",
+		"javascriptを有効にしてご覧ください",
+	}
+	for _, placeholder := range placeholders {
+		if strings.Contains(normalized, normalizeExtractComparable(placeholder)) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeTitleOnlyExtract(title *string, content string) bool {
+	if title == nil {
+		return false
+	}
+	titleNormalized := normalizeExtractComparable(*title)
+	contentNormalized := normalizeExtractComparable(content)
+	if titleNormalized == "" || contentNormalized == "" {
+		return false
+	}
+	if contentNormalized == titleNormalized {
+		return true
+	}
+	contentLen := utf8.RuneCountInString(contentNormalized)
+	titleLen := utf8.RuneCountInString(titleNormalized)
+	if contentLen <= titleLen+16 && (strings.Contains(contentNormalized, titleNormalized) || strings.Contains(titleNormalized, contentNormalized)) {
+		return true
+	}
+	return false
+}
+
+func normalizeExtractComparable(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = extractComparablePunctuation.ReplaceAllString(value, " ")
+	return strings.Join(strings.Fields(value), " ")
 }
 
 func executionFailedModel(runtime *llmRuntime, resolvedModel *string) *string {

@@ -194,6 +194,30 @@ func TestShouldRetryExtractBody(t *testing.T) {
 	}
 }
 
+func TestInvalidExtractReason(t *testing.T) {
+	title := "HashiCorp Vault 1.21 Released"
+
+	tests := []struct {
+		name    string
+		title   *string
+		content string
+		want    string
+	}{
+		{name: "empty", title: &title, content: "   ", want: "empty extracted content"},
+		{name: "javascript placeholder ja", title: &title, content: "JavaScriptを有効にしてください", want: "javascript placeholder content"},
+		{name: "javascript placeholder en", title: &title, content: "Please enable JavaScript to view this page.", want: "javascript placeholder content"},
+		{name: "title only exact", title: &title, content: "HashiCorp Vault 1.21 Released", want: "title-only extracted content"},
+		{name: "title only with punctuation", title: &title, content: "# HashiCorp Vault 1.21 Released", want: "title-only extracted content"},
+		{name: "valid article body", title: &title, content: "HashiCorp shipped Vault 1.21 with new auth features and operational improvements for enterprise deployments.", want: ""},
+	}
+
+	for _, tt := range tests {
+		if got := invalidExtractReason(tt.title, tt.content); got != tt.want {
+			t.Fatalf("%s: invalidExtractReason() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
 func assertErr(msg string) error { return transientErr(msg) }
 
 func strptr(v string) *string { return &v }

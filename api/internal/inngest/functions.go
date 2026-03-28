@@ -2187,6 +2187,10 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				}
 			}
 			log.Printf("process-item extract-body done item_id=%s content_len=%d", itemID, len(extracted.Content))
+			if reason := invalidExtractReason(extracted.Title, extracted.Content); reason != "" {
+				log.Printf("process-item invalid-extract deleted item_id=%s reason=%s", itemID, reason)
+				return nil, markProcessItemDeleted(ctx, deps.itemRepo, deps.cache, itemID, reason, fmt.Errorf("content rejected after extract"))
+			}
 
 			if err := updateItemAfterExtract(ctx, deps.itemRepo, itemID, extracted); err != nil {
 				log.Printf("process-item update-after-extract failed item_id=%s err=%v", itemID, err)

@@ -51,6 +51,13 @@ function formatScriptModels(value: string | null | undefined) {
   return models.join(", ");
 }
 
+function formatBGMName(value: string | null | undefined) {
+  const raw = (value ?? "").trim();
+  if (!raw) return "—";
+  const parts = raw.split("/");
+  return parts[parts.length - 1] || raw;
+}
+
 export default function AudioBriefingDetailPage() {
   const RESUME_POLL_WINDOW_MS = 60_000;
   const { t, locale } = useI18n();
@@ -358,6 +365,11 @@ export default function AudioBriefingDetailPage() {
           {detail.job.script_llm_models ? (
             <div className="mt-3 text-[13px] text-[var(--color-editorial-ink-soft)]">
               {t("audioBriefing.scriptModel", "Script model")}: {formatScriptModels(detail.job.script_llm_models)}
+            </div>
+          ) : null}
+          {detail.job.bgm_object_key ? (
+            <div className="mt-2 text-[13px] text-[var(--color-editorial-ink-soft)]">
+              {t("audioBriefing.bgmTrack", "BGM")}: {formatBGMName(detail.job.bgm_object_key)}
             </div>
           ) : null}
           {detail.job.error_message ? (

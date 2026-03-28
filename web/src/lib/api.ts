@@ -1392,6 +1392,7 @@ export interface AudioBriefingJob {
   title?: string | null;
   r2_audio_object_key?: string | null;
   r2_manifest_object_key?: string | null;
+  bgm_object_key?: string | null;
   provider_job_id?: string | null;
   idempotency_key?: string | null;
   error_code?: string | null;

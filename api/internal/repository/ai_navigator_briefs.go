@@ -200,6 +200,36 @@ func (r *AINavigatorBriefRepo) ListBriefsByUser(ctx context.Context, userID, slo
 	return out, rows.Err()
 }
 
+func (r *AINavigatorBriefRepo) ListRecentPersonasByUser(ctx context.Context, userID string, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 3
+	}
+	if limit > 20 {
+		limit = 20
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT persona
+		FROM ai_navigator_briefs
+		WHERE user_id = $1
+		  AND persona <> ''
+		ORDER BY COALESCE(generated_at, created_at) DESC, created_at DESC
+		LIMIT $2
+	`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]string, 0, limit)
+	for rows.Next() {
+		var persona string
+		if err := rows.Scan(&persona); err != nil {
+			return nil, err
+		}
+		out = append(out, persona)
+	}
+	return out, rows.Err()
+}
+
 func (r *AINavigatorBriefRepo) GetBriefDetail(ctx context.Context, userID, briefID string) (*model.AINavigatorBrief, error) {
 	brief, err := scanAINavigatorBrief(r.db.QueryRow(ctx, `
 		SELECT id, user_id, slot, status, title, intro, summary, ending, persona, model,

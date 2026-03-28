@@ -240,6 +240,36 @@ func (r *AudioBriefingRepo) ListJobsByUser(ctx context.Context, userID string, l
 	return out, rows.Err()
 }
 
+func (r *AudioBriefingRepo) ListRecentPersonasByUser(ctx context.Context, userID string, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 3
+	}
+	if limit > 20 {
+		limit = 20
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT persona
+		FROM audio_briefing_jobs
+		WHERE user_id = $1
+		  AND persona <> ''
+		ORDER BY slot_started_at_jst DESC, created_at DESC
+		LIMIT $2
+	`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]string, 0, limit)
+	for rows.Next() {
+		var persona string
+		if err := rows.Scan(&persona); err != nil {
+			return nil, err
+		}
+		out = append(out, persona)
+	}
+	return out, rows.Err()
+}
+
 func (r *AudioBriefingRepo) ListPodcastPublishedJobsByUser(ctx context.Context, userID string, publishedAfter time.Time, limit int) ([]model.AudioBriefingJob, error) {
 	if limit <= 0 {
 		limit = 30

@@ -77,7 +77,11 @@ func (o *AudioBriefingOrchestrator) GenerateManual(ctx context.Context, userID s
 		return nil, err
 	}
 	now := timeutil.NowJST()
-	return o.createPendingJob(ctx, userID, settings, now, AudioBriefingManualSlotKeyAt(now), ResolvePersona(settings.DefaultPersonaMode, settings.DefaultPersona))
+	recentPersonas, err := o.repo.ListRecentPersonasByUser(ctx, userID, 3)
+	if err != nil {
+		return nil, err
+	}
+	return o.createPendingJob(ctx, userID, settings, now, AudioBriefingManualSlotKeyAt(now), ResolvePersonaAvoidRecent(settings.DefaultPersonaMode, settings.DefaultPersona, recentPersonas))
 }
 
 func (o *AudioBriefingOrchestrator) GenerateScheduled(ctx context.Context, userID string, now time.Time) (*model.AudioBriefingJob, error) {
@@ -101,7 +105,11 @@ func (o *AudioBriefingOrchestrator) GenerateScheduled(ctx context.Context, userI
 		return nil, err
 	}
 
-	job, err := o.createPendingJob(ctx, userID, settings, slotStartedAt, slotKey, ResolvePersona(settings.DefaultPersonaMode, settings.DefaultPersona))
+	recentPersonas, err := o.repo.ListRecentPersonasByUser(ctx, userID, 3)
+	if err != nil {
+		return nil, err
+	}
+	job, err := o.createPendingJob(ctx, userID, settings, slotStartedAt, slotKey, ResolvePersonaAvoidRecent(settings.DefaultPersonaMode, settings.DefaultPersona, recentPersonas))
 	if err != nil {
 		if errors.Is(err, repository.ErrConflict) {
 			return o.repo.GetJobBySlotKey(ctx, userID, slotKey)

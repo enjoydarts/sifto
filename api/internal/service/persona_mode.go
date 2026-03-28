@@ -48,13 +48,60 @@ func ResolvePersona(mode string, fixed string) string {
 	return NormalizePersonaValue(fixed)
 }
 
-func randomPersona() (string, bool) {
+func ResolvePersonaAvoidRecent(mode string, fixed string, recent []string) string {
+	return resolvePersonaWithPicker(mode, fixed, recent, randomPersonaFromCandidates)
+}
+
+func resolvePersonaWithPicker(mode string, fixed string, recent []string, picker func([]string) (string, bool)) string {
+	if NormalizePersonaMode(&mode) != PersonaModeRandom {
+		return NormalizePersonaValue(fixed)
+	}
+	candidates := availableRandomPersonas(recent)
+	if picked, ok := picker(candidates); ok {
+		return NormalizePersonaValue(picked)
+	}
+	return NormalizePersonaValue(fixed)
+}
+
+func availableRandomPersonas(recent []string) []string {
 	if len(supportedPersonaKeys) == 0 {
+		return nil
+	}
+	blocked := make(map[string]struct{}, len(recent))
+	for _, persona := range recent {
+		normalized := NormalizePersonaValue(persona)
+		if normalized == "" {
+			continue
+		}
+		blocked[normalized] = struct{}{}
+		if len(blocked) >= 3 {
+			break
+		}
+	}
+	out := make([]string, 0, len(supportedPersonaKeys))
+	for _, persona := range supportedPersonaKeys {
+		if _, ok := blocked[persona]; ok {
+			continue
+		}
+		out = append(out, persona)
+	}
+	if len(out) == 0 {
+		return append([]string(nil), supportedPersonaKeys...)
+	}
+	return out
+}
+
+func randomPersona() (string, bool) {
+	return randomPersonaFromCandidates(supportedPersonaKeys)
+}
+
+func randomPersonaFromCandidates(candidates []string) (string, bool) {
+	if len(candidates) == 0 {
 		return "", false
 	}
-	n, err := crand.Int(crand.Reader, big.NewInt(int64(len(supportedPersonaKeys))))
+	n, err := crand.Int(crand.Reader, big.NewInt(int64(len(candidates))))
 	if err != nil {
 		return "", false
 	}
-	return supportedPersonaKeys[int(n.Int64())], true
+	return candidates[int(n.Int64())], true
 }

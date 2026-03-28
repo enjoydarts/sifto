@@ -41,3 +41,46 @@ func TestNavigatorPersonaKeysIncludesExpectedValues(t *testing.T) {
 		t.Fatalf("NavigatorPersonaKeys() = %#v, want editor..urban", got)
 	}
 }
+
+func TestAvailableRandomPersonas(t *testing.T) {
+	got := availableRandomPersonas([]string{"editor", "editor", "hype", "analyst", "urban"})
+	for _, blocked := range []string{"editor", "hype", "analyst"} {
+		for _, persona := range got {
+			if persona == blocked {
+				t.Fatalf("availableRandomPersonas included blocked persona %q in %#v", blocked, got)
+			}
+		}
+	}
+	if len(got) != 5 {
+		t.Fatalf("len(availableRandomPersonas()) = %d, want 5", len(got))
+	}
+}
+
+func TestAvailableRandomPersonasUsesOnlyFirstThreeUniqueRecentPersonas(t *testing.T) {
+	got := availableRandomPersonas([]string{"editor", "hype", "analyst", "concierge", "snark", "native", "junior", "urban"})
+	for _, blocked := range []string{"editor", "hype", "analyst"} {
+		for _, persona := range got {
+			if persona == blocked {
+				t.Fatalf("availableRandomPersonas included blocked persona %q in %#v", blocked, got)
+			}
+		}
+	}
+	if len(got) != 5 {
+		t.Fatalf("len(availableRandomPersonas()) = %d, want 5", len(got))
+	}
+}
+
+func TestResolvePersonaAvoidRecent(t *testing.T) {
+	picker := func(candidates []string) (string, bool) {
+		for _, persona := range candidates {
+			if persona == "urban" {
+				return persona, true
+			}
+		}
+		return "", false
+	}
+	got := resolvePersonaWithPicker(PersonaModeRandom, "editor", []string{"editor", "hype", "analyst"}, picker)
+	if got != "urban" {
+		t.Fatalf("ResolvePersonaAvoidRecent(random) = %q, want %q", got, "urban")
+	}
+}

@@ -165,7 +165,11 @@ func (s *AINavigatorBriefService) EnqueueBriefForSlot(ctx context.Context, userI
 	if modelName == nil {
 		return nil, fmt.Errorf("navigator model not configured")
 	}
-	persona := ResolvePersona(settings.NavigatorPersonaMode, settings.NavigatorPersona)
+	recentPersonas, err := s.briefs.ListRecentPersonasByUser(ctx, userID, 3)
+	if err != nil {
+		return nil, err
+	}
+	persona := ResolvePersonaAvoidRecent(settings.NavigatorPersonaMode, settings.NavigatorPersona, recentPersonas)
 	now := s.now().In(timeutil.JST)
 	windowStart, windowEnd, err := ResolveAINavigatorBriefSlotWindow(now, slot)
 	if err != nil {
@@ -369,7 +373,11 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 	if modelName == nil {
 		return nil, fmt.Errorf("navigator model not configured")
 	}
-	persona := ResolvePersona(settings.NavigatorPersonaMode, settings.NavigatorPersona)
+	recentPersonas, err := s.briefs.ListRecentPersonasByUser(ctx, userID, 3)
+	if err != nil {
+		return nil, err
+	}
+	persona := ResolvePersonaAvoidRecent(settings.NavigatorPersonaMode, settings.NavigatorPersona, recentPersonas)
 	now := s.now().In(timeutil.JST)
 	windowStart, windowEnd, err := ResolveAINavigatorBriefSlotWindow(now, slot)
 	if err != nil {

@@ -20,6 +20,7 @@ import (
 var briefingSnapshotMaxAge = loadBriefingSnapshotMaxAge()
 
 const briefingNavigatorCacheTTL = 30 * time.Minute
+const briefingNavigatorPersonaHistoryTTL = 30 * 24 * time.Hour
 
 type BriefingHandler struct {
 	itemRepo     *repository.ItemRepo
@@ -161,7 +162,7 @@ func (h *BriefingHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, model.BriefingNavigatorEnvelope{})
 		return
 	}
-	persona := selectBriefingNavigatorPersona(settings)
+	persona := selectBriefingNavigatorPersona(r.Context(), h.cache, userID, settings)
 	modelName := resolveBriefingNavigatorModel(settings)
 	resolvedModel := ""
 	if modelName != nil {
@@ -210,6 +211,9 @@ func (h *BriefingHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, briefingNavigatorCacheTTL); err != nil {
 			log.Printf("briefing navigator cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
+	}
+	if !preview && resp.Navigator != nil {
+		rememberBriefingNavigatorPersona(r.Context(), h.cache, userID, persona)
 	}
 	writeJSON(w, resp)
 }
@@ -607,11 +611,43 @@ func normalizeBriefingNavigatorPersona(v string) string {
 	return service.NormalizePersonaValue(v)
 }
 
-func selectBriefingNavigatorPersona(settings *model.UserSettings) string {
+func cacheKeyBriefingNavigatorPersonaHistory(userID string) string {
+	return "v1:briefing:navigator:persona_history:user=" + strings.TrimSpace(userID)
+}
+
+func selectBriefingNavigatorPersona(ctx context.Context, cache service.JSONCache, userID string, settings *model.UserSettings) string {
 	if settings == nil {
 		return "editor"
 	}
+	if cache != nil && strings.TrimSpace(userID) != "" {
+		var recent []string
+		if ok, err := cache.GetJSON(ctx, cacheKeyBriefingNavigatorPersonaHistory(userID), &recent); err == nil && ok {
+			return service.ResolvePersonaAvoidRecent(settings.NavigatorPersonaMode, settings.NavigatorPersona, recent)
+		}
+	}
 	return service.ResolvePersona(settings.NavigatorPersonaMode, settings.NavigatorPersona)
+}
+
+func rememberBriefingNavigatorPersona(ctx context.Context, cache service.JSONCache, userID, persona string) {
+	if cache == nil || strings.TrimSpace(userID) == "" {
+		return
+	}
+	normalized := service.NormalizePersonaValue(persona)
+	var recent []string
+	_, _ = cache.GetJSON(ctx, cacheKeyBriefingNavigatorPersonaHistory(userID), &recent)
+	next := make([]string, 0, 3)
+	next = append(next, normalized)
+	for _, item := range recent {
+		item = service.NormalizePersonaValue(item)
+		if item == normalized {
+			continue
+		}
+		next = append(next, item)
+		if len(next) >= 3 {
+			break
+		}
+	}
+	_ = cache.SetJSON(ctx, cacheKeyBriefingNavigatorPersonaHistory(userID), next, briefingNavigatorPersonaHistoryTTL)
 }
 
 func briefingNavigatorCandidateTitle(candidate model.BriefingNavigatorCandidate) string {

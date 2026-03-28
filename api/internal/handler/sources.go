@@ -221,7 +221,7 @@ func (h *SourceHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, model.SourceNavigatorEnvelope{})
 		return
 	}
-	persona := selectBriefingNavigatorPersona(settings)
+	persona := selectBriefingNavigatorPersona(r.Context(), h.cache, userID, settings)
 	modelName := resolveBriefingNavigatorModel(settings)
 	resolvedModel := ""
 	if modelName != nil {
@@ -244,6 +244,9 @@ func (h *SourceHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, briefingNavigatorCacheTTL); err != nil {
 			log.Printf("source navigator cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
 		}
+	}
+	if navigator != nil && strings.TrimSpace(navigator.Overview) != "" {
+		rememberBriefingNavigatorPersona(r.Context(), h.cache, userID, persona)
 	}
 	writeJSON(w, resp)
 }

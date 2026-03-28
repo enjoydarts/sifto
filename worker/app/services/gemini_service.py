@@ -45,6 +45,7 @@ from app.services.summary_task_common import build_summary_task
 from app.services.summary_parse_common import finalize_summary_result
 from app.services.title_translation_common import TITLE_TRANSLATION_SCHEMA, run_title_translation
 from app.services.digest_task_common import (
+    DIGEST_CLUSTER_DRAFT_MAX_OUTPUT_TOKENS,
     build_cluster_draft_task,
     build_digest_task,
     parse_cluster_draft_result,
@@ -768,7 +769,7 @@ def compose_digest_cluster_draft(
         task["prompt"],
         model=model,
         api_key=api_key,
-        max_output_tokens=1500,
+        max_output_tokens=DIGEST_CLUSTER_DRAFT_MAX_OUTPUT_TOKENS,
         system_instruction=task["system_instruction"],
         response_schema=task["schema"],
     )

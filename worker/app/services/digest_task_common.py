@@ -81,6 +81,9 @@ CLUSTER_DRAFT_SCHEMA = {
 }
 
 
+DIGEST_CLUSTER_DRAFT_MAX_OUTPUT_TOKENS = 2500
+
+
 def build_simple_digest_input(items: list[dict]) -> str:
     lines = []
     for idx, item in enumerate(items, start=1):

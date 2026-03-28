@@ -35,6 +35,7 @@ from app.services.summary_task_common import build_summary_task
 from app.services.summary_parse_common import finalize_summary_result
 from app.services.title_translation_common import TITLE_TRANSLATION_SCHEMA, run_title_translation
 from app.services.digest_task_common import (
+    DIGEST_CLUSTER_DRAFT_MAX_OUTPUT_TOKENS,
     build_cluster_draft_task,
     build_digest_task,
     fallback_cluster_draft_from_source_lines,
@@ -428,14 +429,14 @@ def compose_digest_cluster_draft(cluster_label: str, item_count: int, topics: li
             model,
             api_key,
             system_instruction=task["system_instruction"],
-            max_output_tokens=1500,
+            max_output_tokens=DIGEST_CLUSTER_DRAFT_MAX_OUTPUT_TOKENS,
             response_schema=task["schema"],
             schema_name="digest_cluster_draft",
         )
     except Exception as exc:
         _log.warning("moonshot compose_digest_cluster_draft primary attempt failed: %s", exc)
         try:
-            text, usage = _chat_json(task["fallback_prompt"], model, api_key, max_output_tokens=1500, response_schema=None)
+            text, usage = _chat_json(task["fallback_prompt"], model, api_key, max_output_tokens=DIGEST_CLUSTER_DRAFT_MAX_OUTPUT_TOKENS, response_schema=None)
         except Exception as retry_exc:
             _log.warning("moonshot compose_digest_cluster_draft fallback failed: %s", retry_exc)
             return {"draft_summary": fallback_cluster_draft_from_source_lines(task["source_lines"]), "llm": _llm_meta(model, "digest_cluster_draft", {"input_tokens": 0, "output_tokens": 0})}

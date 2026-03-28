@@ -10,6 +10,7 @@ import {
   Bug,
   CheckCheck,
   ChevronDown,
+  ChevronRight,
   History,
   RefreshCw,
   Menu,
@@ -51,6 +52,7 @@ const secondaryLinks = [
   { href: "/playback-history", labelKey: "nav.playbackHistory", icon: History },
   { href: "/llm-usage", labelKey: "nav.llmUsage", icon: Brain },
   { href: "/llm-analysis", labelKey: "nav.llmAnalysis", icon: TableProperties },
+  { href: "/provider-model-snapshots", labelKey: "nav.providerModelSnapshots", icon: Link2 },
   { href: "/poe-models", labelKey: "nav.poeModels", icon: Link2 },
   { href: "/openrouter-models", labelKey: "nav.openrouterModels", icon: Link2 },
   { href: "/aivis-models", labelKey: "nav.aivisModels", icon: Link2 },
@@ -58,13 +60,15 @@ const secondaryLinks = [
   { href: "/debug/digests", labelKey: "nav.debug", icon: Bug },
 ];
 
-const secondaryLinkGroups = [
+const moreStandaloneLinks = secondaryLinks.filter((link) => ["/settings", "/debug/digests"].includes(link.href));
+
+const moreSubmenuGroups = [
   {
-    labelKey: "nav.group.explore",
+    labelKey: "nav.group.insights",
     items: secondaryLinks.filter((link) => ["/clusters", "/pulse", "/goals", "/favorites"].includes(link.href)),
   },
   {
-    labelKey: "nav.group.content",
+    labelKey: "nav.group.library",
     items: secondaryLinks.filter((link) =>
       ["/sources", "/digests", "/audio-briefings", "/ai-navigator-briefs", "/playback-history"].includes(link.href),
     ),
@@ -72,12 +76,8 @@ const secondaryLinkGroups = [
   {
     labelKey: "nav.group.llm",
     items: secondaryLinks.filter((link) =>
-      ["/llm-usage", "/llm-analysis", "/poe-models", "/openrouter-models", "/aivis-models"].includes(link.href),
+      ["/llm-usage", "/llm-analysis", "/provider-model-snapshots", "/poe-models", "/openrouter-models", "/aivis-models"].includes(link.href),
     ),
-  },
-  {
-    labelKey: "nav.group.system",
-    items: secondaryLinks.filter((link) => ["/settings", "/debug/digests"].includes(link.href)),
   },
 ];
 
@@ -111,9 +111,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   const { locale, setLocale, t } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
-  const [collapsedMoreGroups, setCollapsedMoreGroups] = useState<Record<string, boolean>>({
-    "nav.group.llm": true,
-  });
+  const [openMoreSubmenu, setOpenMoreSubmenu] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [openRouterSyncRun, setOpenRouterSyncRun] = useState<OpenRouterSyncRun | null>(null);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
@@ -121,19 +119,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
   const isLinkActive = (href: string, activeHref?: string) => isActive(activeHref ?? href);
   const isMoreActive = secondaryLinks.some((v) => isActive(v.href));
-  const isCollapsibleMoreGroup = (labelKey: string) => labelKey === "nav.group.llm";
-  const isMoreGroupExpanded = (labelKey: string) => {
-    if (!isCollapsibleMoreGroup(labelKey)) return true;
-    return !collapsedMoreGroups[labelKey];
-  };
-
-  const toggleMoreGroup = (labelKey: string) => {
-    if (!isCollapsibleMoreGroup(labelKey)) return;
-    setCollapsedMoreGroups((prev) => ({
-      ...prev,
-      [labelKey]: !prev[labelKey],
-    }));
-  };
+  const activeMoreSubmenu = moreSubmenuGroups.find((group) => group.items.some((item) => isActive(item.href)))?.labelKey ?? null;
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -146,6 +132,11 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [moreOpen]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    setOpenMoreSubmenu(activeMoreSubmenu);
+  }, [activeMoreSubmenu, moreOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -275,49 +266,74 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                   <span>{t("nav.more")}</span>
                 </button>
                 {moreOpen && (
-                  <div className="absolute left-0 top-11 z-30 w-56 rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3 shadow-[var(--shadow-dropdown)] motion-safe:animate-scale-in">
-                    {secondaryLinkGroups.map((group, groupIdx) => (
-                      <div key={group.labelKey}>
-                        {groupIdx > 0 && <div className="my-2 h-px bg-[var(--color-editorial-line)]" />}
-                        {(() => {
-                          const expanded = isMoreGroupExpanded(group.labelKey);
-                          return (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => toggleMoreGroup(group.labelKey)}
-                                className={`flex w-full items-center justify-between rounded-[12px] px-2 pb-1 pt-1 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)] ${
-                                  isCollapsibleMoreGroup(group.labelKey) ? "hover:bg-[var(--color-editorial-panel)]" : ""
-                                }`}
-                              >
-                                <span>{t(group.labelKey)}</span>
-                                {isCollapsibleMoreGroup(group.labelKey) ? (
-                                  <ChevronDown className={`size-3 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
-                                ) : null}
-                              </button>
-                              {expanded ? group.items.map(({ href, labelKey, icon: Icon }) => {
-                                const active = isActive(href);
+                  <div className="absolute left-0 top-11 z-30 w-64 rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3 shadow-[var(--shadow-dropdown)] motion-safe:animate-scale-in">
+                    {moreSubmenuGroups.map((group) => {
+                      const active = group.items.some((item) => isActive(item.href));
+                      const expanded = openMoreSubmenu === group.labelKey;
+                      return (
+                        <div
+                          key={group.labelKey}
+                          className="relative"
+                          onMouseEnter={() => setOpenMoreSubmenu(group.labelKey)}
+                        >
+                          <button
+                            type="button"
+                            className={`flex w-full items-center justify-between rounded-[14px] px-4 py-3 text-left text-[14px] transition-colors duration-150 press focus-ring ${
+                              active || expanded
+                                ? "bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink)]"
+                                : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
+                            }`}
+                          >
+                            <span>{t(group.labelKey)}</span>
+                            <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
+                          </button>
+                          {expanded ? (
+                            <div className="absolute left-[calc(100%+0.6rem)] top-0 z-40 w-64 rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3 shadow-[var(--shadow-dropdown)]">
+                              <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                                {t(group.labelKey)}
+                              </div>
+                              {group.items.map(({ href, labelKey, icon: Icon }) => {
+                                const childActive = isActive(href);
                                 return (
                                   <Link
                                     key={href}
                                     href={href}
                                     onClick={() => setMoreOpen(false)}
                                     className={`flex items-center gap-2 rounded-[14px] px-4 py-3 text-[14px] transition-colors duration-150 press focus-ring ${
-                                      active
+                                      childActive
                                         ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
                                         : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
                                     }`}
                                   >
-                                    <NavIcon icon={Icon} active={active} />
+                                    <NavIcon icon={Icon} active={childActive} />
                                     <span>{t(labelKey)}</span>
                                   </Link>
                                 );
-                              }) : null}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    ))}
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                    <div className="my-2 h-px bg-[var(--color-editorial-line)]" />
+                    {moreStandaloneLinks.map(({ href, labelKey, icon: Icon }) => {
+                      const active = isActive(href);
+                      return (
+                        <Link
+                          key={href}
+                          href={href}
+                          onClick={() => setMoreOpen(false)}
+                          className={`flex items-center gap-2 rounded-[14px] px-4 py-3 text-[14px] transition-colors duration-150 press focus-ring ${
+                            active
+                              ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                              : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
+                          }`}
+                        >
+                          <NavIcon icon={Icon} active={active} />
+                          <span>{t(labelKey)}</span>
+                        </Link>
+                      );
+                    })}
                     {hasSignedInUser && (
                       <div className="mt-2 border-t border-[var(--color-editorial-line)] px-2 pt-2">
                         <div className="truncate text-xs text-[var(--color-editorial-ink-faint)]">
@@ -381,48 +397,63 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                   );
                 })}
                 <div className="my-1 h-px bg-[var(--color-editorial-line)]" />
-                {secondaryLinkGroups.map((group, groupIdx) => (
-                  <div key={group.labelKey}>
-                    {groupIdx > 0 && <div className="my-1 h-px bg-[var(--color-editorial-line)]" />}
-                    {(() => {
-                      const expanded = isMoreGroupExpanded(group.labelKey);
-                      return (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => toggleMoreGroup(group.labelKey)}
-                            className={`flex w-full items-center justify-between rounded-[12px] px-4 py-1 text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)] ${
-                              isCollapsibleMoreGroup(group.labelKey) ? "hover:bg-[var(--color-editorial-panel)]" : ""
+                {moreSubmenuGroups.map((group) => {
+                  const expanded = openMoreSubmenu === group.labelKey;
+                  const active = group.items.some((item) => isActive(item.href));
+                  return (
+                    <div key={group.labelKey}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenMoreSubmenu((current) => (current === group.labelKey ? null : group.labelKey))}
+                        className={`flex w-full items-center justify-between rounded-[14px] px-4 py-3 text-left text-sm font-medium transition-colors duration-150 press focus-ring ${
+                          active || expanded
+                            ? "bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink)]"
+                            : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
+                        }`}
+                      >
+                        <span>{t(group.labelKey)}</span>
+                        <ChevronDown className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
+                      </button>
+                      {expanded ? group.items.map(({ href, labelKey, icon: Icon }) => {
+                        const childActive = isActive(href);
+                        return (
+                          <Link
+                            key={href}
+                            href={href}
+                            onClick={() => setMenuOpen(false)}
+                            className={`ml-3 inline-flex items-center gap-2 rounded-[14px] px-4 py-3 text-sm font-medium transition-colors duration-150 press focus-ring ${
+                              childActive
+                                ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                                : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
                             }`}
                           >
-                            <span>{t(group.labelKey)}</span>
-                            {isCollapsibleMoreGroup(group.labelKey) ? (
-                              <ChevronDown className={`size-3 transition-transform ${expanded ? "rotate-180" : ""}`} aria-hidden="true" />
-                            ) : null}
-                          </button>
-                          {expanded ? group.items.map(({ href, labelKey, icon: Icon }) => {
-                            const active = isActive(href);
-                            return (
-                              <Link
-                                key={href}
-                                href={href}
-                                onClick={() => setMenuOpen(false)}
-                                className={`inline-flex items-center gap-2 rounded-[14px] px-4 py-3 text-sm font-medium transition-colors duration-150 press focus-ring ${
-                                  active
-                                    ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
-                                    : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
-                                }`}
-                              >
-                                <NavIcon icon={Icon} active={active} />
-                                <span>{t(labelKey)}</span>
-                              </Link>
-                            );
-                          }) : null}
-                        </>
-                      );
-                    })()}
-                  </div>
-                ))}
+                            <NavIcon icon={Icon} active={childActive} />
+                            <span>{t(labelKey)}</span>
+                          </Link>
+                        );
+                      }) : null}
+                    </div>
+                  );
+                })}
+                <div className="my-1 h-px bg-[var(--color-editorial-line)]" />
+                {moreStandaloneLinks.map(({ href, labelKey, icon: Icon }) => {
+                  const active = isActive(href);
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      onClick={() => setMenuOpen(false)}
+                      className={`inline-flex items-center gap-2 rounded-[14px] px-4 py-3 text-sm font-medium transition-colors duration-150 press focus-ring ${
+                        active
+                          ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
+                          : "text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
+                      }`}
+                    >
+                      <NavIcon icon={Icon} active={active} />
+                      <span>{t(labelKey)}</span>
+                    </Link>
+                  );
+                })}
               </nav>
               {hasSignedInUser && (
                 <div className="mt-2 border-t border-[var(--color-editorial-line)] px-2 pt-2">

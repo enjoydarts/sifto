@@ -208,6 +208,27 @@ export interface AivisModelsResponse {
   removed_models?: AivisModelSnapshot[];
 }
 
+export interface ProviderModelSnapshotEntry {
+  provider: string;
+  model_id: string;
+  fetched_at: string;
+  status: string;
+  error?: string | null;
+}
+
+export interface ProviderModelSnapshotListResponse {
+  items: ProviderModelSnapshotEntry[];
+  providers: string[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ProviderModelSnapshotSyncSummary {
+  providers: number;
+  changes: number;
+}
+
 export interface AivisUserDictionary {
   uuid: string;
   name: string;
@@ -2083,6 +2104,22 @@ export const api = {
     if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString();
     return apiFetch<ProviderModelChangeEvent[]>(`/provider-model-updates${qs ? `?${qs}` : ""}`);
+  },
+  getProviderModelSnapshots: (params?: { providers?: string[]; q?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    for (const provider of params?.providers ?? []) {
+      if (provider) q.append("provider", provider);
+    }
+    if (params?.q) q.set("q", params.q);
+    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.offset) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return apiFetch<ProviderModelSnapshotListResponse>(`/provider-model-snapshots${qs ? `?${qs}` : ""}`);
+  },
+  syncProviderModelSnapshots: () => {
+    return apiFetch<ProviderModelSnapshotSyncSummary>("/provider-model-snapshots/sync", {
+      method: "POST",
+    });
   },
   getAudioBriefings: (params?: { limit?: number; tab?: "published" | "archived" | "pending" | "storage" }) => {
     const q = new URLSearchParams();

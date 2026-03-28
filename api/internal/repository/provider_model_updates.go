@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
@@ -158,4 +160,101 @@ func (r *ProviderModelUpdateRepo) ListLatestProviderSummary(ctx context.Context,
 		}
 	}
 	return summary, rows.Err()
+}
+
+func (r *ProviderModelUpdateRepo) ListSnapshotEntries(ctx context.Context, providers []string, query string, limit, offset int) ([]model.ProviderModelSnapshotEntry, int, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	excludedProviders := []string{"aivis", "openrouter", "poe"}
+	args := []any{excludedProviders}
+	conditions := []string{"NOT (provider = ANY($1))"}
+
+	if len(providers) > 0 {
+		normalized := make([]string, 0, len(providers))
+		for _, provider := range providers {
+			provider = strings.TrimSpace(strings.ToLower(provider))
+			if provider == "" || provider == "aivis" {
+				continue
+			}
+			normalized = append(normalized, provider)
+		}
+		if len(normalized) > 0 {
+			args = append(args, normalized)
+			conditions = append(conditions, fmt.Sprintf("provider = ANY($%d)", len(args)))
+		}
+	}
+
+	if q := strings.TrimSpace(query); q != "" {
+		args = append(args, "%"+q+"%")
+		conditions = append(conditions, fmt.Sprintf("(provider ILIKE $%d OR model_id ILIKE $%d)", len(args), len(args)))
+	}
+
+	whereClause := strings.Join(conditions, " AND ")
+
+	var total int
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(*)
+		FROM provider_model_snapshots pms
+		CROSS JOIN LATERAL jsonb_array_elements_text(pms.models) AS model_entry(model_id)
+		WHERE %s`, whereClause)
+	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	args = append(args, limit, offset)
+	rowsQuery := fmt.Sprintf(`
+		SELECT provider, model_entry.model_id, fetched_at, status, error
+		FROM provider_model_snapshots pms
+		CROSS JOIN LATERAL jsonb_array_elements_text(pms.models) AS model_entry(model_id)
+		WHERE %s
+		ORDER BY fetched_at DESC, provider ASC, model_entry.model_id ASC
+		LIMIT $%d OFFSET $%d`, whereClause, len(args)-1, len(args))
+	rows, err := r.db.Query(ctx, rowsQuery, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	items := make([]model.ProviderModelSnapshotEntry, 0, limit)
+	for rows.Next() {
+		var entry model.ProviderModelSnapshotEntry
+		if err := rows.Scan(&entry.Provider, &entry.ModelID, &entry.FetchedAt, &entry.Status, &entry.Error); err != nil {
+			return nil, 0, err
+		}
+		items = append(items, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
+func (r *ProviderModelUpdateRepo) ListSnapshotProviders(ctx context.Context) ([]string, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT provider
+		FROM provider_model_snapshots
+		WHERE provider NOT IN ('aivis', 'openrouter', 'poe')
+		ORDER BY provider ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	providers := make([]string, 0, 16)
+	for rows.Next() {
+		var provider string
+		if err := rows.Scan(&provider); err != nil {
+			return nil, err
+		}
+		providers = append(providers, provider)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return providers, nil
 }

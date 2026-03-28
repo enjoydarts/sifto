@@ -83,6 +83,14 @@ func main() {
 	llmValueMetricsRepo := repository.NewLLMValueMetricsRepo(db)
 	llmExecutionRepo := repository.NewLLMExecutionEventRepo(db)
 	providerModelUpdateRepo := repository.NewProviderModelUpdateRepo(db)
+	providerModelSnapshotSyncSvc := service.NewProviderModelSnapshotSyncService(
+		userRepo,
+		userSettingsRepo,
+		providerModelUpdateRepo,
+		pushNotificationLogRepo,
+		oneSignal,
+		secretCipher,
+	)
 	openRouterModelRepo := repository.NewOpenRouterModelRepo(db)
 	poeModelRepo := repository.NewPoeModelRepo(db)
 	aivisModelRepo := repository.NewAivisModelRepo(db)
@@ -116,7 +124,7 @@ func main() {
 	itemNotesH := handler.NewItemNotesHandler(itemRepo, reviewQueueRepo)
 	reviewsH := handler.NewReviewsHandler(reviewQueueRepo, weeklyReviewRepo)
 	askInsightsH := handler.NewAskInsightsHandler(askInsightRepo)
-	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo)
+	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo, providerModelSnapshotSyncSvc)
 	openRouterCatalogSvc := service.NewOpenRouterCatalogService()
 	openRouterModelsH := handler.NewOpenRouterModelsHandler(openRouterModelRepo, openRouterModelOverrideRepo, providerModelUpdateRepo, openRouterCatalogSvc, cache)
 	poeCatalogSvc := service.NewPoeCatalogService()
@@ -281,6 +289,10 @@ func main() {
 
 		r.Route("/provider-model-updates", func(r chi.Router) {
 			r.Get("/", providerModelUpdateH.ListRecent)
+		})
+		r.Route("/provider-model-snapshots", func(r chi.Router) {
+			r.Get("/", providerModelUpdateH.ListSnapshots)
+			r.Post("/sync", providerModelUpdateH.SyncSnapshots)
 		})
 		r.Route("/openrouter-models", func(r chi.Router) {
 			r.Get("/", openRouterModelsH.List)

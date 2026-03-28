@@ -2,12 +2,37 @@ package model
 
 import "time"
 
+func ExcludeFromProviderModelSnapshots(provider string) bool {
+	switch provider {
+	case "aivis", "openrouter", "poe":
+		return true
+	default:
+		return false
+	}
+}
+
 type ProviderModelSnapshot struct {
 	Provider  string    `json:"provider"`
 	Models    []string  `json:"models"`
 	FetchedAt time.Time `json:"fetched_at"`
 	Status    string    `json:"status"`
 	Error     *string   `json:"error,omitempty"`
+}
+
+type ProviderModelSnapshotEntry struct {
+	Provider  string    `json:"provider"`
+	ModelID   string    `json:"model_id"`
+	FetchedAt time.Time `json:"fetched_at"`
+	Status    string    `json:"status"`
+	Error     *string   `json:"error,omitempty"`
+}
+
+type ProviderModelSnapshotList struct {
+	Items     []ProviderModelSnapshotEntry `json:"items"`
+	Providers []string                     `json:"providers"`
+	Total     int                          `json:"total"`
+	Limit     int                          `json:"limit"`
+	Offset    int                          `json:"offset"`
 }
 
 type ProviderModelChangeEvent struct {

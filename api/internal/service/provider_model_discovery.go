@@ -15,6 +15,7 @@ import (
 
 type ProviderModelDiscoveryService struct {
 	http *http.Client
+	keys ProviderModelDiscoveryKeys
 }
 
 type ProviderModelsResult struct {
@@ -22,9 +23,31 @@ type ProviderModelsResult struct {
 	Models   []string
 }
 
+type ProviderModelDiscoveryKeys struct {
+	OpenAI    string
+	Anthropic string
+	Google    string
+	Groq      string
+	DeepSeek  string
+	Alibaba   string
+	Mistral   string
+	Moonshot  string
+	XAI       string
+	ZAI       string
+	Poe       string
+	Fireworks string
+}
+
 func NewProviderModelDiscoveryService() *ProviderModelDiscoveryService {
 	return &ProviderModelDiscoveryService{
 		http: &http.Client{Timeout: 30 * time.Second},
+	}
+}
+
+func NewProviderModelDiscoveryServiceWithKeys(keys ProviderModelDiscoveryKeys) *ProviderModelDiscoveryService {
+	return &ProviderModelDiscoveryService{
+		http: &http.Client{Timeout: 30 * time.Second},
+		keys: keys,
 	}
 }
 
@@ -91,7 +114,10 @@ func readJSONResponse(resp *http.Response, dst any) error {
 }
 
 func (s *ProviderModelDiscoveryService) fetchOpenAIModels(ctx context.Context) ([]string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	apiKey := strings.TrimSpace(s.keys.OpenAI)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
@@ -124,7 +150,10 @@ func (s *ProviderModelDiscoveryService) fetchOpenAIModels(ctx context.Context) (
 }
 
 func (s *ProviderModelDiscoveryService) fetchAnthropicModels(ctx context.Context) ([]string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY"))
+	apiKey := strings.TrimSpace(s.keys.Anthropic)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY"))
+	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
@@ -154,7 +183,10 @@ func (s *ProviderModelDiscoveryService) fetchAnthropicModels(ctx context.Context
 }
 
 func (s *ProviderModelDiscoveryService) fetchGoogleModels(ctx context.Context) ([]string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("GOOGLE_API_KEY"))
+	apiKey := strings.TrimSpace(s.keys.Google)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("GOOGLE_API_KEY"))
+	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
@@ -187,7 +219,10 @@ func (s *ProviderModelDiscoveryService) fetchGoogleModels(ctx context.Context) (
 }
 
 func (s *ProviderModelDiscoveryService) fetchGroqModels(ctx context.Context) ([]string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("GROQ_API_KEY"))
+	apiKey := strings.TrimSpace(s.keys.Groq)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("GROQ_API_KEY"))
+	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
@@ -216,7 +251,10 @@ func (s *ProviderModelDiscoveryService) fetchGroqModels(ctx context.Context) ([]
 }
 
 func (s *ProviderModelDiscoveryService) fetchDeepSeekModels(ctx context.Context) ([]string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))
+	apiKey := strings.TrimSpace(s.keys.DeepSeek)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))
+	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
@@ -245,7 +283,10 @@ func (s *ProviderModelDiscoveryService) fetchDeepSeekModels(ctx context.Context)
 }
 
 func (s *ProviderModelDiscoveryService) fetchAlibabaModels(ctx context.Context) ([]string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("ALIBABA_API_KEY"))
+	apiKey := strings.TrimSpace(s.keys.Alibaba)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("ALIBABA_API_KEY"))
+	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
@@ -280,7 +321,10 @@ func (s *ProviderModelDiscoveryService) fetchAlibabaModels(ctx context.Context) 
 }
 
 func (s *ProviderModelDiscoveryService) fetchMoonshotModels(ctx context.Context) ([]string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("MOONSHOT_API_KEY"))
+	apiKey := strings.TrimSpace(s.keys.Moonshot)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("MOONSHOT_API_KEY"))
+	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
@@ -315,7 +359,10 @@ func (s *ProviderModelDiscoveryService) fetchMoonshotModels(ctx context.Context)
 }
 
 func (s *ProviderModelDiscoveryService) fetchPoeModels(ctx context.Context) ([]string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("POE_API_KEY"))
+	apiKey := strings.TrimSpace(s.keys.Poe)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("POE_API_KEY"))
+	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
@@ -344,7 +391,10 @@ func (s *ProviderModelDiscoveryService) fetchPoeModels(ctx context.Context) ([]s
 }
 
 func (s *ProviderModelDiscoveryService) fetchZAIModels(ctx context.Context) ([]string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("ZAI_API_KEY"))
+	apiKey := strings.TrimSpace(s.keys.ZAI)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("ZAI_API_KEY"))
+	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
@@ -379,7 +429,10 @@ func (s *ProviderModelDiscoveryService) fetchZAIModels(ctx context.Context) ([]s
 }
 
 func (s *ProviderModelDiscoveryService) fetchMistralModels(ctx context.Context) ([]string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("MISTRAL_API_KEY"))
+	apiKey := strings.TrimSpace(s.keys.Mistral)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("MISTRAL_API_KEY"))
+	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
@@ -414,7 +467,10 @@ func (s *ProviderModelDiscoveryService) fetchMistralModels(ctx context.Context) 
 }
 
 func (s *ProviderModelDiscoveryService) fetchXAIModels(ctx context.Context) ([]string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("XAI_API_KEY"))
+	apiKey := strings.TrimSpace(s.keys.XAI)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("XAI_API_KEY"))
+	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
@@ -498,7 +554,10 @@ func isFireworksTextModel(item fireworksModelListItem) bool {
 }
 
 func (s *ProviderModelDiscoveryService) fetchFireworksModels(ctx context.Context) ([]string, error) {
-	apiKey := strings.TrimSpace(os.Getenv("FIREWORKS_API_KEY"))
+	apiKey := strings.TrimSpace(s.keys.Fireworks)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("FIREWORKS_API_KEY"))
+	}
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -1752,133 +1751,26 @@ func exportObsidianFavoritesFn(client inngestgo.Client, db *pgxpool.Pool, obsidi
 }
 
 func trackProviderModelUpdatesFn(client inngestgo.Client, db *pgxpool.Pool, oneSignal *service.OneSignalClient) (inngestgo.ServableFunction, error) {
-	userRepo := repository.NewUserRepo(db)
 	updateRepo := repository.NewProviderModelUpdateRepo(db)
-	discovery := service.NewProviderModelDiscoveryService()
-	pushLogRepo := repository.NewPushNotificationLogRepo(db)
+	syncSvc := service.NewProviderModelSnapshotSyncService(
+		repository.NewUserRepo(db),
+		repository.NewUserSettingsRepo(db),
+		updateRepo,
+		repository.NewPushNotificationLogRepo(db),
+		oneSignal,
+		service.NewSecretCipher(),
+	)
 
 	return inngestgo.CreateFunction(
 		client,
 		inngestgo.FunctionOpts{ID: "track-provider-model-updates", Name: "Track Provider Model Updates"},
 		inngestgo.CronTrigger("0 */6 * * *"),
 		func(ctx context.Context, input inngestgo.Input[any]) (any, error) {
-			results, err := discovery.DiscoverAll(ctx)
+			result, err := syncSvc.SyncCommonProviders(ctx, "cron")
 			if err != nil {
 				return nil, err
 			}
-			now := timeutil.NowJST()
-			events := make([]model.ProviderModelChangeEvent, 0)
-			for _, res := range results {
-				prev, err := updateRepo.GetSnapshot(ctx, res.Provider)
-				if err != nil && !errors.Is(err, repository.ErrNotFound) {
-					return nil, err
-				}
-				if prev != nil {
-					prevSet := make(map[string]struct{}, len(prev.Models))
-					for _, modelID := range prev.Models {
-						prevSet[modelID] = struct{}{}
-					}
-					nextSet := make(map[string]struct{}, len(res.Models))
-					for _, modelID := range res.Models {
-						nextSet[modelID] = struct{}{}
-						if _, ok := prevSet[modelID]; !ok {
-							events = append(events, model.ProviderModelChangeEvent{
-								Provider:   res.Provider,
-								ChangeType: "added",
-								ModelID:    modelID,
-								DetectedAt: now,
-								Metadata:   map[string]any{"source": "provider_api", "trigger": "cron"},
-							})
-						}
-					}
-					for _, modelID := range prev.Models {
-						if _, ok := nextSet[modelID]; !ok {
-							events = append(events, model.ProviderModelChangeEvent{
-								Provider:   res.Provider,
-								ChangeType: "removed",
-								ModelID:    modelID,
-								DetectedAt: now,
-								Metadata:   map[string]any{"source": "provider_api", "trigger": "cron"},
-							})
-						}
-					}
-				}
-				if err := updateRepo.UpsertSnapshot(ctx, res.Provider, res.Models, "ok", nil); err != nil {
-					return nil, err
-				}
-			}
-			if len(events) == 0 {
-				return map[string]any{"providers": len(results), "changes": 0}, nil
-			}
-			if err := updateRepo.InsertChangeEvents(ctx, events); err != nil {
-				return nil, err
-			}
-
-			if oneSignal != nil && oneSignal.Enabled() {
-				users, err := userRepo.ListAll(ctx)
-				if err != nil {
-					return nil, err
-				}
-				added := 0
-				removed := 0
-				providers := make(map[string]struct{})
-				for _, ev := range events {
-					providers[ev.Provider] = struct{}{}
-					if ev.ChangeType == "added" {
-						added++
-					} else if ev.ChangeType == "removed" {
-						removed++
-					}
-				}
-				title := "Sifto: LLMモデル更新を検知しました"
-				message := fmt.Sprintf("追加%d件 / 削除%d件。%dプロバイダーで変更があります。", added, removed, len(providers))
-				day := timeutil.StartOfDayJST(now)
-				for _, u := range users {
-					alreadyNotified, err := pushLogRepo.CountByUserKindDay(ctx, u.ID, "provider_model_update", day)
-					if err != nil || alreadyNotified > 0 {
-						continue
-					}
-					pushRes, pErr := oneSignal.SendToExternalID(
-						ctx,
-						u.Email,
-						title,
-						message,
-						appPageURL("/settings"),
-						map[string]any{
-							"type":    "provider_model_update",
-							"url":     appPageURL("/settings"),
-							"added":   added,
-							"removed": removed,
-						},
-					)
-					if pErr != nil {
-						log.Printf("track-provider-model-updates push user=%s: %v", u.ID, pErr)
-						continue
-					}
-					var oneSignalID *string
-					recipients := 0
-					if pushRes != nil {
-						if strings.TrimSpace(pushRes.ID) != "" {
-							id := strings.TrimSpace(pushRes.ID)
-							oneSignalID = &id
-						}
-						recipients = pushRes.Recipients
-					}
-					if err := pushLogRepo.Insert(ctx, repository.PushNotificationLogInput{
-						UserID:                  u.ID,
-						Kind:                    "provider_model_update",
-						ItemID:                  nil,
-						DayJST:                  day,
-						Title:                   title,
-						Message:                 message,
-						OneSignalNotificationID: oneSignalID,
-						Recipients:              recipients,
-					}); err != nil {
-						log.Printf("track-provider-model-updates push log user=%s: %v", u.ID, err)
-					}
-				}
-			}
-			return map[string]any{"providers": len(results), "changes": len(events)}, nil
+			return map[string]any{"providers": result.Providers, "changes": result.Changes}, nil
 		},
 	)
 }

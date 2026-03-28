@@ -119,8 +119,6 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
   const isLinkActive = (href: string, activeHref?: string) => isActive(activeHref ?? href);
   const isMoreActive = secondaryLinks.some((v) => isActive(v.href));
-  const activeMoreSubmenu = moreSubmenuGroups.find((group) => group.items.some((item) => isActive(item.href)))?.labelKey ?? null;
-
   useEffect(() => {
     if (!moreOpen) return;
     const onDocClick = (e: MouseEvent) => {
@@ -132,11 +130,6 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [moreOpen]);
-
-  useEffect(() => {
-    if (!moreOpen) return;
-    setOpenMoreSubmenu(activeMoreSubmenu);
-  }, [activeMoreSubmenu, moreOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -275,9 +268,11 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                           key={group.labelKey}
                           className="relative"
                           onMouseEnter={() => setOpenMoreSubmenu(group.labelKey)}
+                          onMouseLeave={() => setOpenMoreSubmenu((current) => (current === group.labelKey ? null : current))}
                         >
                           <button
                             type="button"
+                            onFocus={() => setOpenMoreSubmenu(group.labelKey)}
                             className={`flex w-full items-center justify-between rounded-[14px] px-4 py-3 text-left text-[14px] transition-colors duration-150 press focus-ring ${
                               active || expanded
                                 ? "bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink)]"
@@ -323,6 +318,8 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                           key={href}
                           href={href}
                           onClick={() => setMoreOpen(false)}
+                          onMouseEnter={() => setOpenMoreSubmenu(null)}
+                          onFocus={() => setOpenMoreSubmenu(null)}
                           className={`flex items-center gap-2 rounded-[14px] px-4 py-3 text-[14px] transition-colors duration-150 press focus-ring ${
                             active
                               ? "bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"

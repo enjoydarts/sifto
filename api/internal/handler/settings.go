@@ -296,6 +296,8 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		NavigatorPersona            *string `json:"navigator_persona"`
 		Navigator                   *string `json:"navigator"`
 		NavigatorFallback           *string `json:"navigator_fallback"`
+		AINavigatorBrief            *string `json:"ai_navigator_brief"`
+		AINavigatorBriefFallback    *string `json:"ai_navigator_brief_fallback"`
 		AudioBriefingScript         *string `json:"audio_briefing_script"`
 		AudioBriefingScriptFallback *string `json:"audio_briefing_script_fallback"`
 	}
@@ -321,6 +323,8 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		NavigatorPersona:            body.NavigatorPersona,
 		Navigator:                   body.Navigator,
 		NavigatorFallback:           body.NavigatorFallback,
+		AINavigatorBrief:            body.AINavigatorBrief,
+		AINavigatorBriefFallback:    body.AINavigatorBriefFallback,
 		AudioBriefingScript:         body.AudioBriefingScript,
 		AudioBriefingScriptFallback: body.AudioBriefingScriptFallback,
 	})

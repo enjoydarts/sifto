@@ -38,6 +38,8 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 		SummaryFallbackModel:             strptr("openrouter::openai/gpt-oss-120b"),
 		NavigatorPersonaMode:             PersonaModeRandom,
 		NavigatorPersona:                 "editor",
+		AINavigatorBriefModel:            strptr("kimi-k2.5"),
+		AINavigatorBriefFallbackModel:    strptr("google/gemini-2.5-flash"),
 		AudioBriefingScriptModel:         strptr("gpt-5.4"),
 		AudioBriefingScriptFallbackModel: strptr("google/gemini-2.5-flash"),
 		HasPoeAPIKey:                     true,
@@ -60,6 +62,29 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 	}
 	if gotNavigatorPersonaMode, _ := got["navigator_persona_mode"].(string); gotNavigatorPersonaMode != PersonaModeRandom {
 		t.Fatalf("navigator_persona_mode = %v, want %q", got["navigator_persona_mode"], PersonaModeRandom)
+	}
+	if gotBriefModel, _ := got["ai_navigator_brief"].(*string); gotBriefModel == nil || *gotBriefModel != "kimi-k2.5" {
+		t.Fatalf("ai_navigator_brief = %v, want %q", got["ai_navigator_brief"], "kimi-k2.5")
+	}
+	if gotBriefFallback, _ := got["ai_navigator_brief_fallback"].(*string); gotBriefFallback == nil || *gotBriefFallback != "google/gemini-2.5-flash" {
+		t.Fatalf("ai_navigator_brief_fallback = %v, want %q", got["ai_navigator_brief_fallback"], "google/gemini-2.5-flash")
+	}
+}
+
+func TestResolveAINavigatorBriefModelUsesBriefSpecificOverrides(t *testing.T) {
+	settings := &model.UserSettings{
+		NavigatorModel:                strptr("gpt-5.4"),
+		NavigatorFallbackModel:        strptr("google/gemini-2.5-flash"),
+		AINavigatorBriefModel:         strptr("kimi-k2.5"),
+		AINavigatorBriefFallbackModel: strptr("google/gemini-2.5-flash"),
+		HasOpenAIAPIKey:               true,
+		HasGoogleAPIKey:               true,
+		HasMoonshotAPIKey:             true,
+	}
+
+	got := resolveAINavigatorBriefModel(settings)
+	if got == nil || *got != "kimi-k2.5" {
+		t.Fatalf("resolveAINavigatorBriefModel(...) = %v, want %q", got, "kimi-k2.5")
 	}
 }
 

@@ -702,10 +702,10 @@ func resolveAINavigatorBriefModel(settings *model.UserSettings) *string {
 	if settings == nil {
 		return nil
 	}
-	if modelName := chooseAINavigatorBriefModelOverride(settings.NavigatorModel, settings); modelName != nil {
+	if modelName := chooseAINavigatorBriefModelOverride(settings.AINavigatorBriefModel, settings); modelName != nil {
 		return modelName
 	}
-	if modelName := chooseAINavigatorBriefModelOverride(settings.NavigatorFallbackModel, settings); modelName != nil {
+	if modelName := chooseAINavigatorBriefModelOverride(settings.AINavigatorBriefFallbackModel, settings); modelName != nil {
 		return modelName
 	}
 	for _, provider := range CostEfficientLLMProviders("") {

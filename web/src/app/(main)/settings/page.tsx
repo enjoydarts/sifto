@@ -137,6 +137,10 @@ function localizeLLMSettingKey(settingKey: string, t: (key: string, fallback?: s
       return t("settings.model.navigator");
     case "navigator_fallback":
       return t("settings.model.navigatorFallback");
+    case "ai_navigator_brief":
+      return t("settings.model.aiNavigatorBrief");
+    case "ai_navigator_brief_fallback":
+      return t("settings.model.aiNavigatorBriefFallback");
     case "audio_briefing_script":
       return t("settings.model.audioBriefingScript");
     case "audio_briefing_script_fallback":
@@ -474,6 +478,8 @@ export default function SettingsPage() {
   const [navigatorPersona, setNavigatorPersona] = useState("editor");
   const [navigatorModel, setNavigatorModel] = useState("");
   const [navigatorFallbackModel, setNavigatorFallbackModel] = useState("");
+  const [aiNavigatorBriefModel, setAINavigatorBriefModel] = useState("");
+  const [aiNavigatorBriefFallbackModel, setAINavigatorBriefFallbackModel] = useState("");
   const [audioBriefingScriptModel, setAudioBriefingScriptModel] = useState("");
   const [audioBriefingScriptFallbackModel, setAudioBriefingScriptFallbackModel] = useState("");
   const [navigatorPersonaDefinitions, setNavigatorPersonaDefinitions] = useState<Record<string, NavigatorPersonaDefinition>>({});
@@ -544,6 +550,8 @@ export default function SettingsPage() {
     setNavigatorPersona(llmModels?.navigator_persona ?? "editor");
     setNavigatorModel(llmModels?.navigator ?? "");
     setNavigatorFallbackModel(llmModels?.navigator_fallback ?? "");
+    setAINavigatorBriefModel(llmModels?.ai_navigator_brief ?? "");
+    setAINavigatorBriefFallbackModel(llmModels?.ai_navigator_brief_fallback ?? "");
     setAudioBriefingScriptModel(llmModels?.audio_briefing_script ?? "");
     setAudioBriefingScriptFallbackModel(llmModels?.audio_briefing_script_fallback ?? "");
   }, []);
@@ -572,6 +580,8 @@ export default function SettingsPage() {
       navigator_persona: string | null;
       navigator: string | null;
       navigator_fallback: string | null;
+      ai_navigator_brief: string | null;
+      ai_navigator_brief_fallback: string | null;
       audio_briefing_script: string | null;
       audio_briefing_script_fallback: string | null;
     }>) => {
@@ -597,6 +607,8 @@ export default function SettingsPage() {
         navigator_persona: navigatorPersona,
         navigator: emptyToNull(navigatorModel),
         navigator_fallback: emptyToNull(navigatorFallbackModel),
+        ai_navigator_brief: emptyToNull(aiNavigatorBriefModel),
+        ai_navigator_brief_fallback: emptyToNull(aiNavigatorBriefFallbackModel),
         audio_briefing_script: emptyToNull(audioBriefingScriptModel),
         audio_briefing_script_fallback: emptyToNull(audioBriefingScriptFallbackModel),
         ...overrides,
@@ -614,6 +626,8 @@ export default function SettingsPage() {
       factsCheckModel,
       faithfulnessCheckModel,
       aiNavigatorBriefEnabled,
+      aiNavigatorBriefFallbackModel,
+      aiNavigatorBriefModel,
       navigatorEnabled,
       navigatorFallbackModel,
       navigatorModel,
@@ -902,6 +916,8 @@ export default function SettingsPage() {
       ["faithfulness_check", llmModels.faithfulness_check],
       ["navigator", llmModels.navigator],
       ["navigator_fallback", llmModels.navigator_fallback],
+      ["ai_navigator_brief", llmModels.ai_navigator_brief],
+      ["ai_navigator_brief_fallback", llmModels.ai_navigator_brief_fallback],
     ];
     for (const [settingKey, modelID] of candidates) {
       if (!modelID) continue;
@@ -3820,6 +3836,8 @@ export default function SettingsPage() {
                   <div className="mt-3 grid gap-4 md:grid-cols-2">
                     <ModelSelect label={t("settings.model.navigator")} value={navigatorModel} onChange={(value) => onChangeLLMModel(setNavigatorModel, value)} options={optionsForPurpose("summary", navigatorModel)} labels={modelSelectLabels} variant="modal" />
                     <ModelSelect label={t("settings.model.navigatorFallback")} value={navigatorFallbackModel} onChange={(value) => onChangeLLMModel(setNavigatorFallbackModel, value)} options={optionsForPurpose("summary", navigatorFallbackModel)} labels={modelSelectLabels} variant="modal" />
+                    <ModelSelect label={t("settings.model.aiNavigatorBrief")} value={aiNavigatorBriefModel} onChange={(value) => onChangeLLMModel(setAINavigatorBriefModel, value)} options={optionsForPurpose("summary", aiNavigatorBriefModel)} labels={modelSelectLabels} variant="modal" />
+                    <ModelSelect label={t("settings.model.aiNavigatorBriefFallback")} value={aiNavigatorBriefFallbackModel} onChange={(value) => onChangeLLMModel(setAINavigatorBriefFallbackModel, value)} options={optionsForPurpose("summary", aiNavigatorBriefFallbackModel)} labels={modelSelectLabels} variant="modal" />
                   </div>
                 </section>
 

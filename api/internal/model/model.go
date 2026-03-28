@@ -88,6 +88,8 @@ type UserSettings struct {
 	NavigatorPersona                 string     `json:"navigator_persona"`
 	NavigatorModel                   *string    `json:"navigator_model,omitempty"`
 	NavigatorFallbackModel           *string    `json:"navigator_fallback_model,omitempty"`
+	AINavigatorBriefModel            *string    `json:"ai_navigator_brief_model,omitempty"`
+	AINavigatorBriefFallbackModel    *string    `json:"ai_navigator_brief_fallback_model,omitempty"`
 	AudioBriefingScriptModel         *string    `json:"audio_briefing_script_model,omitempty"`
 	AudioBriefingScriptFallbackModel *string    `json:"audio_briefing_script_fallback_model,omitempty"`
 	HasInoreaderOAuth                bool       `json:"has_inoreader_oauth"`

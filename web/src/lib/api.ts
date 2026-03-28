@@ -1287,6 +1287,8 @@ export interface UserSettings {
     navigator_persona?: string | null;
     navigator?: string | null;
     navigator_fallback?: string | null;
+    ai_navigator_brief?: string | null;
+    ai_navigator_brief_fallback?: string | null;
     audio_briefing_script?: string | null;
     audio_briefing_script_fallback?: string | null;
   };
@@ -2284,6 +2286,8 @@ export const api = {
     navigator_persona?: string | null;
     navigator?: string | null;
     navigator_fallback?: string | null;
+    ai_navigator_brief?: string | null;
+    ai_navigator_brief_fallback?: string | null;
     audio_briefing_script?: string | null;
     audio_briefing_script_fallback?: string | null;
   }) =>

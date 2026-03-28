@@ -1168,6 +1168,8 @@ export const jaDict: Dict = {
   "settings.model.sourceSuggestion": "ソース提案",
   "settings.model.navigator": "AIナビゲーター",
   "settings.model.navigatorFallback": "AIナビゲーター fallback",
+  "settings.model.aiNavigatorBrief": "AIナビブリーフ",
+  "settings.model.aiNavigatorBriefFallback": "AIナビブリーフ fallback",
   "settings.model.audioBriefingScript": "音声ブリーフィング台本",
   "settings.model.audioBriefingScriptFallback": "音声ブリーフィング台本 fallback",
   "settings.audioBriefing.scriptModelHelp": "音声ブリーフィングの台本生成に使うLLMです。通常系とフォールバック系をここで分けて設定します。",

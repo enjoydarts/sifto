@@ -92,6 +92,8 @@ type UpdateLLMModelsInput struct {
 	NavigatorPersona            *string
 	Navigator                   *string
 	NavigatorFallback           *string
+	AINavigatorBrief            *string
+	AINavigatorBriefFallback    *string
 	AudioBriefingScript         *string
 	AudioBriefingScriptFallback *string
 }
@@ -149,6 +151,8 @@ var modelSettingPurposes = map[string]string{
 	"faithfulness_check":             "summary",
 	"navigator":                      "summary",
 	"navigator_fallback":             "summary",
+	"ai_navigator_brief":             "summary",
+	"ai_navigator_brief_fallback":    "summary",
 	"audio_briefing_script":          "summary",
 	"audio_briefing_script_fallback": "summary",
 }
@@ -166,6 +170,8 @@ var modelSettingRequiredCapabilities = map[string][]string{
 	"faithfulness_check":             {"structured_output"},
 	"navigator":                      {"structured_output"},
 	"navigator_fallback":             {"structured_output"},
+	"ai_navigator_brief":             {"structured_output"},
+	"ai_navigator_brief_fallback":    {"structured_output"},
 	"audio_briefing_script":          {"structured_output"},
 	"audio_briefing_script_fallback": {"structured_output"},
 }
@@ -221,6 +227,8 @@ func LLMModelSettingsPayload(settings *model.UserSettings) map[string]any {
 		"navigator_persona":              settings.NavigatorPersona,
 		"navigator":                      settings.NavigatorModel,
 		"navigator_fallback":             settings.NavigatorFallbackModel,
+		"ai_navigator_brief":             settings.AINavigatorBriefModel,
+		"ai_navigator_brief_fallback":    settings.AINavigatorBriefFallbackModel,
 		"audio_briefing_script":          settings.AudioBriefingScriptModel,
 		"audio_briefing_script_fallback": settings.AudioBriefingScriptFallbackModel,
 	}
@@ -668,6 +676,8 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		"faithfulness_check":             normalizeOptionalModel(in.FaithfulnessCheck),
 		"navigator":                      normalizeOptionalModel(in.Navigator),
 		"navigator_fallback":             normalizeOptionalModel(in.NavigatorFallback),
+		"ai_navigator_brief":             normalizeOptionalModel(in.AINavigatorBrief),
+		"ai_navigator_brief_fallback":    normalizeOptionalModel(in.AINavigatorBriefFallback),
 		"audio_briefing_script":          normalizeOptionalModel(in.AudioBriefingScript),
 		"audio_briefing_script_fallback": normalizeOptionalModel(in.AudioBriefingScriptFallback),
 	}
@@ -703,6 +713,8 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		normalizeNavigatorPersona(in.NavigatorPersona),
 		normalized["navigator"],
 		normalized["navigator_fallback"],
+		normalized["ai_navigator_brief"],
+		normalized["ai_navigator_brief_fallback"],
 		normalized["audio_briefing_script"],
 		normalized["audio_briefing_script_fallback"],
 	)

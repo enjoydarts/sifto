@@ -1168,6 +1168,8 @@ export const enDict: Dict = {
   "settings.model.sourceSuggestion": "Source Suggestions",
   "settings.model.navigator": "AI Navigator",
   "settings.model.navigatorFallback": "AI Navigator fallback",
+  "settings.model.aiNavigatorBrief": "AI Navigator Brief",
+  "settings.model.aiNavigatorBriefFallback": "AI Navigator Brief fallback",
   "settings.model.audioBriefingScript": "Audio Briefing Script",
   "settings.model.audioBriefingScriptFallback": "Audio Briefing Script fallback",
   "settings.audioBriefing.scriptModelHelp": "LLMs used for audio briefing script generation. Configure the primary and fallback models here.",

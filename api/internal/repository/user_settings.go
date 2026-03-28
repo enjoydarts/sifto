@@ -151,6 +151,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	       navigator_persona,
 	       navigator_model,
 	       navigator_fallback_model,
+	       ai_navigator_brief_model,
+	       ai_navigator_brief_fallback_model,
 	       audio_briefing_script_model,
 	       audio_briefing_script_fallback_model,
 	       inoreader_access_token_enc,
@@ -226,6 +228,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.NavigatorPersona,
 		&v.NavigatorModel,
 		&v.NavigatorFallbackModel,
+		&v.AINavigatorBriefModel,
+		&v.AINavigatorBriefFallbackModel,
 		&v.AudioBriefingScriptModel,
 		&v.AudioBriefingScriptFallbackModel,
 		&inoreaderAccessTokenEnc,
@@ -449,7 +453,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 	ctx context.Context,
 	userID string,
 	factsModel, factsFallbackModel, summaryModel, summaryFallbackModel, digestClusterModel, digestModel, askModel, sourceSuggestionModel, embeddingModel, factsCheckModel, faithfulnessCheckModel *string,
-	navigatorEnabled bool, aiNavigatorBriefEnabled bool, navigatorPersonaMode string, navigatorPersona string, navigatorModel, navigatorFallbackModel, audioBriefingScriptModel, audioBriefingScriptFallbackModel *string,
+	navigatorEnabled bool, aiNavigatorBriefEnabled bool, navigatorPersonaMode string, navigatorPersona string, navigatorModel, navigatorFallbackModel, aiNavigatorBriefModel, aiNavigatorBriefFallbackModel, audioBriefingScriptModel, audioBriefingScriptFallbackModel *string,
 ) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (
@@ -471,9 +475,11 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 				navigator_persona,
 				navigator_model,
 				navigator_fallback_model,
+				ai_navigator_brief_model,
+				ai_navigator_brief_fallback_model,
 				audio_briefing_script_model,
 				audio_briefing_script_fallback_model
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
 			ON CONFLICT (user_id) DO UPDATE
 			SET facts_model = EXCLUDED.facts_model,
 			    facts_fallback_model = EXCLUDED.facts_fallback_model,
@@ -492,6 +498,8 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 			    navigator_persona = EXCLUDED.navigator_persona,
 			    navigator_model = EXCLUDED.navigator_model,
 			    navigator_fallback_model = EXCLUDED.navigator_fallback_model,
+			    ai_navigator_brief_model = EXCLUDED.ai_navigator_brief_model,
+			    ai_navigator_brief_fallback_model = EXCLUDED.ai_navigator_brief_fallback_model,
 			    audio_briefing_script_model = EXCLUDED.audio_briefing_script_model,
 			    audio_briefing_script_fallback_model = EXCLUDED.audio_briefing_script_fallback_model,
 			    updated_at = NOW()`,
@@ -513,6 +521,8 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 		navigatorPersona,
 		navigatorModel,
 		navigatorFallbackModel,
+		aiNavigatorBriefModel,
+		aiNavigatorBriefFallbackModel,
 		audioBriefingScriptModel,
 		audioBriefingScriptFallbackModel,
 	)

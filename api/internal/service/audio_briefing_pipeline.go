@@ -257,7 +257,7 @@ func (o *AudioBriefingOrchestrator) runScriptingStage(ctx context.Context, job *
 		_, _ = o.repo.FailScriptingJob(ctx, job.ID, "script_settings_failed", err.Error())
 		return err
 	}
-	items, err := o.repo.ListCandidateItems(ctx, job.UserID, settings.ArticlesPerEpisode)
+	items, err := o.repo.ListCandidateItems(ctx, job.UserID, settings.IntervalHours, settings.ArticlesPerEpisode)
 	if err != nil {
 		_, _ = o.repo.FailScriptingJob(ctx, job.ID, "script_candidates_failed", err.Error())
 		return err

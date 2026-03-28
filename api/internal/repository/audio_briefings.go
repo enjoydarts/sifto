@@ -595,14 +595,11 @@ func (r *AudioBriefingRepo) MarkPodcastPublicObjectDeleted(ctx context.Context, 
 	return &job, nil
 }
 
-func (r *AudioBriefingRepo) ListCandidateItems(ctx context.Context, userID string, limit int) ([]model.AudioBriefingJobItem, error) {
-	if limit <= 0 {
-		limit = 6
+func audioBriefingCandidateItemsQuery(userID string, intervalHours int, limit int) (string, []any) {
+	if intervalHours <= 0 {
+		intervalHours = 6
 	}
-	if limit > 30 {
-		limit = 30
-	}
-	rows, err := r.db.Query(ctx, `
+	query := `
 		SELECT i.id,
 		       i.title,
 		       sm.translated_title,
@@ -616,9 +613,26 @@ func (r *AudioBriefingRepo) ListCandidateItems(ctx context.Context, userID strin
 		  AND i.deleted_at IS NULL
 		  AND i.status = 'summarized'
 		  AND NULLIF(BTRIM(sm.summary), '') IS NOT NULL
-		ORDER BY COALESCE(i.published_at, i.created_at) DESC, sm.score DESC NULLS LAST
-		LIMIT $2
-	`, userID, limit)
+		ORDER BY CASE
+		           WHEN COALESCE(i.fetched_at, i.created_at) >= NOW() - make_interval(hours => $2::int) THEN 0
+		           ELSE 1
+		         END,
+		         COALESCE(i.fetched_at, i.created_at) DESC,
+		         COALESCE(i.published_at, i.created_at) DESC,
+		         sm.score DESC NULLS LAST
+		LIMIT $3`
+	return query, []any{userID, intervalHours, limit}
+}
+
+func (r *AudioBriefingRepo) ListCandidateItems(ctx context.Context, userID string, intervalHours int, limit int) ([]model.AudioBriefingJobItem, error) {
+	if limit <= 0 {
+		limit = 6
+	}
+	if limit > 30 {
+		limit = 30
+	}
+	query, args := audioBriefingCandidateItemsQuery(userID, intervalHours, limit)
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -29,3 +29,13 @@ class R2Client:
     def upload_file(self, source: Path, object_key: str, content_type: str = "audio/mpeg") -> None:
         extra_args = {"ContentType": content_type}
         self._client.upload_file(str(source), self.bucket, object_key, ExtraArgs=extra_args)
+
+    def list_object_keys(self, prefix: str) -> list[str]:
+        paginator = self._client.get_paginator("list_objects_v2")
+        out: list[str] = []
+        for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
+            for item in page.get("Contents", []):
+                key = str(item.get("Key") or "").strip()
+                if key:
+                    out.append(key)
+        return out

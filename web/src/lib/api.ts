@@ -1339,6 +1339,8 @@ export interface AudioBriefingSettings {
   target_duration_minutes: number;
   default_persona_mode: string;
   default_persona: string;
+  bgm_enabled: boolean;
+  bgm_r2_prefix?: string | null;
 }
 
 export interface PodcastCategoryOption {

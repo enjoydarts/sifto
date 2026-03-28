@@ -28,6 +28,7 @@ type concatCompleteRequest struct {
 	Status            string  `json:"status"`
 	AudioObjectKey    *string `json:"audio_object_key"`
 	ManifestObjectKey *string `json:"manifest_object_key"`
+	BGMObjectKey      *string `json:"bgm_object_key"`
 	AudioDurationSec  *int    `json:"audio_duration_sec"`
 	ErrorCode         *string `json:"error_code"`
 	ErrorMessage      *string `json:"error_message"`
@@ -73,6 +74,7 @@ func (h *InternalAudioBriefingsHandler) ConcatComplete(w http.ResponseWriter, r 
 	providerJobID := trimOptionalString(body.ProviderJobID)
 	audioObjectKey := trimOptionalString(body.AudioObjectKey)
 	manifestObjectKey := trimOptionalString(body.ManifestObjectKey)
+	bgmObjectKey := trimOptionalString(body.BGMObjectKey)
 	errorCode := trimOptionalString(body.ErrorCode)
 	errorMessage := trimOptionalString(body.ErrorMessage)
 
@@ -98,6 +100,7 @@ func (h *InternalAudioBriefingsHandler) ConcatComplete(w http.ResponseWriter, r 
 		body.Status,
 		audioObjectKey,
 		manifestObjectKey,
+		bgmObjectKey,
 		body.AudioDurationSec,
 		errorCode,
 		errorMessage,

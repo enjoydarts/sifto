@@ -73,6 +73,7 @@ func TestAudioBriefingJobScanReadsStorageBucket(t *testing.T) {
 		"夕方の音声ブリーフィング",
 		audioKey,
 		manifestKey,
+		"bgm/track-1.mp3",
 		"briefings-ia",
 		audioKey,
 		"briefings-public",

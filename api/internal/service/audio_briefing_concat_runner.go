@@ -25,6 +25,8 @@ type AudioConcatRunRequest struct {
 	CallbackToken   string   `json:"callback_token"`
 	AudioObjectKeys []string `json:"audio_object_keys"`
 	OutputObjectKey string   `json:"output_object_key"`
+	BGMEnabled      bool     `json:"bgm_enabled"`
+	BGMR2Prefix     string   `json:"bgm_r2_prefix"`
 }
 
 type AudioConcatRunResponse struct {

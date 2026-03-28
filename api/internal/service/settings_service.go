@@ -105,6 +105,8 @@ type UpdateAudioBriefingSettingsInput struct {
 	TargetDurationMinutes int
 	DefaultPersonaMode    *string
 	DefaultPersona        *string
+	BGMEnabled            bool
+	BGMR2Prefix           *string
 }
 
 type UpdatePodcastSettingsInput struct {
@@ -252,6 +254,8 @@ func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) map[str
 			"target_duration_minutes": 20,
 			"default_persona_mode":    PersonaModeFixed,
 			"default_persona":         "editor",
+			"bgm_enabled":             false,
+			"bgm_r2_prefix":           nil,
 		}
 	}
 	return map[string]any{
@@ -261,6 +265,8 @@ func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) map[str
 		"target_duration_minutes": settings.TargetDurationMinutes,
 		"default_persona_mode":    NormalizePersonaMode(&settings.DefaultPersonaMode),
 		"default_persona":         settings.DefaultPersona,
+		"bgm_enabled":             settings.BGMEnabled,
+		"bgm_r2_prefix":           settings.BGMR2Prefix,
 	}
 }
 
@@ -745,6 +751,10 @@ func (s *SettingsService) UpdateAudioBriefingSettings(ctx context.Context, userI
 	if in.TargetDurationMinutes < 5 || in.TargetDurationMinutes > 60 {
 		return nil, fmt.Errorf("invalid target_duration_minutes")
 	}
+	bgmPrefix := normalizeOptionalString(in.BGMR2Prefix)
+	if in.BGMEnabled && bgmPrefix == nil {
+		return nil, fmt.Errorf("invalid bgm_r2_prefix")
+	}
 	return s.audioBriefingRepo.UpsertSettings(
 		ctx,
 		userID,
@@ -754,6 +764,8 @@ func (s *SettingsService) UpdateAudioBriefingSettings(ctx context.Context, userI
 		in.TargetDurationMinutes,
 		NormalizePersonaMode(in.DefaultPersonaMode),
 		normalizeAudioBriefingDefaultPersona(in.DefaultPersona),
+		in.BGMEnabled,
+		bgmPrefix,
 	)
 }
 

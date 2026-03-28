@@ -14,6 +14,7 @@ import (
 
 type audioBriefingConcatRepo interface {
 	GetJobByID(ctx context.Context, userID, jobID string) (*model.AudioBriefingJob, error)
+	GetSettings(ctx context.Context, userID string) (*model.AudioBriefingSettings, error)
 	ListJobChunks(ctx context.Context, userID, jobID string) ([]model.AudioBriefingScriptChunk, error)
 	BeginConcatCallback(ctx context.Context, jobID, requestID, tokenHash string, providerJobID, audioObjectKey *string, expiresAt time.Time) (*model.AudioBriefingJob, *model.AudioBriefingCallbackToken, error)
 	UpdateConcatProviderJobID(ctx context.Context, jobID string, providerJobID string) (*model.AudioBriefingJob, error)
@@ -43,6 +44,10 @@ func (s *AudioBriefingConcatStarter) Start(ctx context.Context, userID string, j
 	}
 
 	job, err := s.repo.GetJobByID(ctx, userID, jobID)
+	if err != nil {
+		return err
+	}
+	settings, err := s.repo.GetSettings(ctx, userID)
 	if err != nil {
 		return err
 	}
@@ -83,6 +88,8 @@ func (s *AudioBriefingConcatStarter) Start(ctx context.Context, userID string, j
 		CallbackToken:   callbackToken,
 		AudioObjectKeys: audioObjectKeys,
 		OutputObjectKey: outputObjectKey,
+		BGMEnabled:      settings != nil && settings.BGMEnabled,
+		BGMR2Prefix:     strings.TrimSpace(derefString(settings.BGMR2Prefix)),
 	})
 	if err != nil {
 		_, _ = s.repo.FailConcatLaunch(ctx, job.ID, "concat_launch_failed", err.Error())

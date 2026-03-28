@@ -354,6 +354,8 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 		TargetDurationMinutes int     `json:"target_duration_minutes"`
 		DefaultPersonaMode    *string `json:"default_persona_mode"`
 		DefaultPersona        *string `json:"default_persona"`
+		BGMEnabled            bool    `json:"bgm_enabled"`
+		BGMR2Prefix           *string `json:"bgm_r2_prefix"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -366,10 +368,12 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 		TargetDurationMinutes: body.TargetDurationMinutes,
 		DefaultPersonaMode:    body.DefaultPersonaMode,
 		DefaultPersona:        body.DefaultPersona,
+		BGMEnabled:            body.BGMEnabled,
+		BGMR2Prefix:           body.BGMR2Prefix,
 	})
 	if err != nil {
 		switch err.Error() {
-		case "invalid interval_hours", "invalid articles_per_episode", "invalid target_duration_minutes":
+		case "invalid interval_hours", "invalid articles_per_episode", "invalid target_duration_minutes", "invalid bgm_r2_prefix":
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

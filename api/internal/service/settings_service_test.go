@@ -198,6 +198,8 @@ func TestAudioBriefingSettingsPayload(t *testing.T) {
 		ArticlesPerEpisode:    6,
 		TargetDurationMinutes: 20,
 		DefaultPersona:        "editor",
+		BGMEnabled:            true,
+		BGMR2Prefix:           strptr("audio/bgm"),
 	}
 
 	got := AudioBriefingSettingsPayload(settings)
@@ -210,6 +212,12 @@ func TestAudioBriefingSettingsPayload(t *testing.T) {
 	}
 	if persona, _ := got["default_persona"].(string); persona != "editor" {
 		t.Fatalf("default_persona = %v, want editor", got["default_persona"])
+	}
+	if bgmEnabled, _ := got["bgm_enabled"].(bool); !bgmEnabled {
+		t.Fatalf("bgm_enabled = %v, want true", got["bgm_enabled"])
+	}
+	if bgmPrefix, _ := got["bgm_r2_prefix"].(*string); bgmPrefix == nil || *bgmPrefix != "audio/bgm" {
+		t.Fatalf("bgm_r2_prefix = %v, want audio/bgm", got["bgm_r2_prefix"])
 	}
 }
 

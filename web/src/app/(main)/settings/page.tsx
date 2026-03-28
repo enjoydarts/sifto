@@ -421,6 +421,8 @@ export default function SettingsPage() {
   const [audioBriefingTargetDurationMinutes, setAudioBriefingTargetDurationMinutes] = useState("20");
   const [audioBriefingDefaultPersonaMode, setAudioBriefingDefaultPersonaMode] = useState<"fixed" | "random">("fixed");
   const [audioBriefingDefaultPersona, setAudioBriefingDefaultPersona] = useState("editor");
+  const [audioBriefingBGMEnabled, setAudioBriefingBGMEnabled] = useState(false);
+  const [audioBriefingBGMR2Prefix, setAudioBriefingBGMR2Prefix] = useState("");
   const [podcastEnabled, setPodcastEnabled] = useState(false);
   const [podcastFeedSlug, setPodcastFeedSlug] = useState("");
   const [podcastRSSURL, setPodcastRSSURL] = useState("");
@@ -503,6 +505,8 @@ export default function SettingsPage() {
       setAudioBriefingTargetDurationMinutes(String(audioBriefing?.target_duration_minutes ?? 20));
       setAudioBriefingDefaultPersonaMode(audioBriefing?.default_persona_mode === "random" ? "random" : "fixed");
       setAudioBriefingDefaultPersona(audioBriefing?.default_persona ?? "editor");
+      setAudioBriefingBGMEnabled(Boolean(audioBriefing?.bgm_enabled));
+      setAudioBriefingBGMR2Prefix(audioBriefing?.bgm_r2_prefix ?? "");
       const defaults = buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS);
       const byPersona = new Map((voices ?? []).map((voice) => [voice.persona, voice]));
       const nextVoices = defaults.map((voice) => byPersona.get(voice.persona) ?? voice);
@@ -1990,6 +1994,8 @@ export default function SettingsPage() {
         target_duration_minutes: Number(audioBriefingTargetDurationMinutes),
         default_persona_mode: audioBriefingDefaultPersonaMode,
         default_persona: audioBriefingDefaultPersona,
+        bgm_enabled: audioBriefingBGMEnabled,
+        bgm_r2_prefix: audioBriefingBGMR2Prefix.trim() || null,
       };
       const resp = await api.updateAudioBriefingSettings(payload);
       setSettings((prev) => (prev ? { ...prev, audio_briefing: resp.audio_briefing } : prev));
@@ -2565,6 +2571,41 @@ export default function SettingsPage() {
                         {audioBriefingDefaultPersonaMode === "random"
                           ? t("settings.audioBriefing.randomPersonaHelp")
                           : t("settings.audioBriefing.defaultPersonaHelp")}
+                      </p>
+                    </label>
+
+                    <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.bgmTitle")}
+                      </div>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <div className="whitespace-nowrap text-sm font-medium text-[var(--color-editorial-ink)]">
+                          {audioBriefingBGMEnabled ? t("settings.on") : t("settings.off")}
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={audioBriefingBGMEnabled}
+                          onChange={(e) => setAudioBriefingBGMEnabled(e.target.checked)}
+                          className="size-4 rounded border-[var(--color-editorial-line-strong)]"
+                        />
+                      </div>
+                      <p className="mt-2 text-[11px] leading-5 text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.audioBriefing.bgmHelp")}
+                      </p>
+                    </label>
+
+                    <label className="flex min-w-[260px] flex-[1.4] flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.bgmPrefix")}
+                      </div>
+                      <input
+                        value={audioBriefingBGMR2Prefix}
+                        onChange={(e) => setAudioBriefingBGMR2Prefix(e.target.value)}
+                        placeholder="audio-briefings/bgm/"
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                      <p className="mt-2 text-[11px] leading-5 text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.audioBriefing.bgmPrefixHelp")}
                       </p>
                     </label>
                   </div>

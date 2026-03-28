@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import random
 import shlex
 import shutil
 import subprocess
@@ -13,6 +14,13 @@ from app.r2_client import R2Client
 
 logger = logging.getLogger(__name__)
 
+_BGM_ALLOWED_SUFFIXES = {".mp3", ".m4a", ".aac", ".wav", ".ogg"}
+_BGM_FADE_IN_SEC = 2
+_BGM_FADE_OUT_SEC = 4
+_LOUDNORM_TARGET_I = "-16"
+_LOUDNORM_TARGET_TP = "-1.5"
+_BGM_VOLUME_FILTER = "volume=0.10"
+
 
 def run_from_env() -> int:
     job_id = required_env("AUDIO_BRIEFING_JOB_ID")
@@ -21,6 +29,8 @@ def run_from_env() -> int:
     callback_token = required_env("AUDIO_BRIEFING_CALLBACK_TOKEN")
     output_object_key = required_env("AUDIO_BRIEFING_OUTPUT_OBJECT_KEY")
     audio_object_keys = json.loads(required_env("AUDIO_BRIEFING_AUDIO_OBJECT_KEYS_JSON"))
+    bgm_enabled = env_bool("AUDIO_BRIEFING_BGM_ENABLED")
+    bgm_r2_prefix = os.getenv("AUDIO_BRIEFING_BGM_R2_PREFIX", "").strip() or None
     provider_job_id = os.getenv("CLOUD_RUN_EXECUTION", "").strip() or None
     return run_job(
         job_id=job_id,
@@ -30,6 +40,8 @@ def run_from_env() -> int:
         output_object_key=output_object_key,
         audio_object_keys=audio_object_keys,
         provider_job_id=provider_job_id,
+        bgm_enabled=bgm_enabled,
+        bgm_r2_prefix=bgm_r2_prefix,
     )
 
 
@@ -42,14 +54,26 @@ def run_job(
     output_object_key: str,
     audio_object_keys: list[str],
     provider_job_id: str | None = None,
+    bgm_enabled: bool = False,
+    bgm_r2_prefix: str | None = None,
 ) -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="audio-concat-") as tmp_dir:
             tmp_path = Path(tmp_dir)
             r2 = R2Client()
             segment_files = download_segments(tmp_path, r2, audio_object_keys)
-            output_path = tmp_path / "episode.mp3"
-            concat_audio(segment_files, output_path)
+            concat_path = tmp_path / "episode-concat.mp3"
+            concat_audio(segment_files, concat_path)
+            bgm_object_key = None
+            try:
+                if bgm_enabled and bgm_r2_prefix:
+                    bgm_object_key, output_path = mix_bgm_with_normalize(concat_path, tmp_path, r2, bgm_r2_prefix)
+                else:
+                    output_path = normalize_audio(concat_path, tmp_path / "episode.mp3")
+            except Exception:
+                logger.exception("audio concat bgm mix failed", extra={"job_id": job_id, "bgm_r2_prefix": bgm_r2_prefix})
+                bgm_object_key = None
+                output_path = normalize_audio(concat_path, tmp_path / "episode.mp3")
             duration_sec = probe_duration_seconds(output_path)
             r2.upload_file(output_path, output_object_key)
         callback_error = try_post_callback(
@@ -60,6 +84,7 @@ def run_job(
                 "provider_job_id": provider_job_id,
                 "status": "published",
                 "audio_object_key": output_object_key,
+                "bgm_object_key": bgm_object_key,
                 "audio_duration_sec": duration_sec,
             },
         )
@@ -106,6 +131,10 @@ def required_env(name: str) -> str:
     if not value:
         raise RuntimeError(f"missing env: {name}")
     return value
+
+
+def env_bool(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def download_segments(tmp_path: Path, r2: R2Client, audio_object_keys: list[str]) -> list[Path]:
@@ -166,6 +195,73 @@ def concat_audio(segment_files: list[Path], output_path: Path) -> None:
     if run_command(second_try):
         return
     raise RuntimeError("ffmpeg concat failed")
+
+
+def list_bgm_candidates(r2: R2Client, prefix: str) -> list[str]:
+    prefix = prefix.strip()
+    if not prefix:
+        return []
+    keys = r2.list_object_keys(prefix)
+    return [key for key in keys if Path(key).suffix.lower() in _BGM_ALLOWED_SUFFIXES]
+
+
+def mix_bgm_with_normalize(main_audio_path: Path, tmp_path: Path, r2: R2Client, bgm_r2_prefix: str) -> tuple[str, Path]:
+    candidates = list_bgm_candidates(r2, bgm_r2_prefix)
+    if not candidates:
+        raise RuntimeError("bgm candidates are empty")
+    bgm_object_key = random.choice(candidates)
+    bgm_path = tmp_path / f"bgm{Path(bgm_object_key).suffix or '.mp3'}"
+    r2.download_file(bgm_object_key, bgm_path)
+
+    output_path = tmp_path / "episode.mp3"
+    duration_sec = probe_duration_seconds(main_audio_path)
+    fade_out_start = max(duration_sec - _BGM_FADE_OUT_SEC, 0)
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(main_audio_path),
+        "-stream_loop",
+        "-1",
+        "-i",
+        str(bgm_path),
+        "-filter_complex",
+        (
+            f"[1:a]atrim=duration={duration_sec},afade=t=in:st=0:d={_BGM_FADE_IN_SEC},"
+            f"afade=t=out:st={fade_out_start}:d={_BGM_FADE_OUT_SEC},{_BGM_VOLUME_FILTER}[bgm];"
+            f"[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=0,"
+            f"loudnorm=I={_LOUDNORM_TARGET_I}:TP={_LOUDNORM_TARGET_TP}:LRA=11[out]"
+        ),
+        "-map",
+        "[out]",
+        "-c:a",
+        "libmp3lame",
+        "-q:a",
+        "2",
+        str(output_path),
+    ]
+    if not run_command(command):
+        raise RuntimeError("ffmpeg bgm mix failed")
+    return bgm_object_key, output_path
+
+
+def normalize_audio(input_path: Path, output_path: Path) -> Path:
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(input_path),
+        "-af",
+        f"loudnorm=I={_LOUDNORM_TARGET_I}:TP={_LOUDNORM_TARGET_TP}:LRA=11",
+        "-c:a",
+        "libmp3lame",
+        "-q:a",
+        "2",
+        str(output_path),
+    ]
+    if not run_command(command):
+        raise RuntimeError("ffmpeg loudnorm failed")
+    return output_path
 
 
 def run_command(command: list[str]) -> bool:

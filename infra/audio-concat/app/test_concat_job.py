@@ -46,6 +46,7 @@ class DownloadDirectTests(unittest.TestCase):
             patch("app.concat_job.R2Client", return_value=FakeR2Client()),
             patch("app.concat_job.download_segments", return_value=[Path("/tmp/segment-001.mp3")]),
             patch("app.concat_job.concat_audio"),
+            patch("app.concat_job.normalize_audio", return_value=Path("/tmp/final.mp3")),
             patch("app.concat_job.probe_duration_seconds", return_value=42),
             patch(
                 "app.concat_job.post_callback",
@@ -64,6 +65,70 @@ class DownloadDirectTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertEqual(post_callback_mock.call_count, 2)
+
+    def test_run_job_mixes_random_bgm_and_reports_selected_key(self):
+        class FakeR2Client:
+            def upload_file(self, path: Path, object_key: str) -> None:
+                return None
+
+        with (
+            patch("app.concat_job.R2Client", return_value=FakeR2Client()),
+            patch("app.concat_job.download_segments", return_value=[Path("/tmp/segment-001.mp3")]),
+            patch("app.concat_job.concat_audio"),
+            patch("app.concat_job.list_bgm_candidates", return_value=["bgm/track-1.mp3", "bgm/track-2.mp3"]),
+            patch("app.concat_job.random.choice", return_value="bgm/track-2.mp3"),
+            patch("app.concat_job.mix_bgm_with_normalize", return_value=("bgm/track-2.mp3", Path("/tmp/final.mp3"))),
+            patch("app.concat_job.probe_duration_seconds", return_value=42),
+            patch("app.concat_job.post_callback") as post_callback_mock,
+        ):
+            exit_code = run_job(
+                job_id="job-1",
+                request_id="request-1",
+                callback_url="https://api.example.com/callback",
+                callback_token="token",
+                output_object_key="audio-briefings/user/job/episode.mp3",
+                audio_object_keys=["audio-briefings/user/job/chunk-1.mp3"],
+                provider_job_id="execution-1",
+                bgm_enabled=True,
+                bgm_r2_prefix="bgm/",
+            )
+
+        self.assertEqual(exit_code, 0)
+        payload = post_callback_mock.call_args.args[2]
+        self.assertEqual(payload["bgm_object_key"], "bgm/track-2.mp3")
+
+    def test_run_job_falls_back_to_normalized_main_audio_when_bgm_mix_fails(self):
+        class FakeR2Client:
+            def upload_file(self, path: Path, object_key: str) -> None:
+                return None
+
+        with (
+            patch("app.concat_job.R2Client", return_value=FakeR2Client()),
+            patch("app.concat_job.download_segments", return_value=[Path("/tmp/segment-001.mp3")]),
+            patch("app.concat_job.concat_audio"),
+            patch("app.concat_job.list_bgm_candidates", return_value=["bgm/track-1.mp3"]),
+            patch("app.concat_job.random.choice", return_value="bgm/track-1.mp3"),
+            patch("app.concat_job.mix_bgm_with_normalize", side_effect=RuntimeError("mix failed")),
+            patch("app.concat_job.normalize_audio", return_value=Path("/tmp/final.mp3")) as normalize_mock,
+            patch("app.concat_job.probe_duration_seconds", return_value=42),
+            patch("app.concat_job.post_callback") as post_callback_mock,
+        ):
+            exit_code = run_job(
+                job_id="job-1",
+                request_id="request-1",
+                callback_url="https://api.example.com/callback",
+                callback_token="token",
+                output_object_key="audio-briefings/user/job/episode.mp3",
+                audio_object_keys=["audio-briefings/user/job/chunk-1.mp3"],
+                provider_job_id="execution-1",
+                bgm_enabled=True,
+                bgm_r2_prefix="bgm/",
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(normalize_mock.call_count, 1)
+        payload = post_callback_mock.call_args.args[2]
+        self.assertIsNone(payload.get("bgm_object_key"))
 
 
 if __name__ == "__main__":

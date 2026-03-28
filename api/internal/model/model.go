@@ -106,6 +106,8 @@ type AudioBriefingSettings struct {
 	TargetDurationMinutes int       `json:"target_duration_minutes"`
 	DefaultPersonaMode    string    `json:"default_persona_mode"`
 	DefaultPersona        string    `json:"default_persona"`
+	BGMEnabled            bool      `json:"bgm_enabled"`
+	BGMR2Prefix           *string   `json:"bgm_r2_prefix,omitempty"`
 	CreatedAt             time.Time `json:"created_at"`
 	UpdatedAt             time.Time `json:"updated_at"`
 }
@@ -143,6 +145,7 @@ type AudioBriefingJob struct {
 	Title                  *string    `json:"title,omitempty"`
 	R2AudioObjectKey       *string    `json:"r2_audio_object_key,omitempty"`
 	R2ManifestObjectKey    *string    `json:"r2_manifest_object_key,omitempty"`
+	BGMObjectKey           *string    `json:"bgm_object_key,omitempty"`
 	R2StorageBucket        string     `json:"r2_storage_bucket"`
 	PodcastPublicObjectKey *string    `json:"podcast_public_object_key,omitempty"`
 	PodcastPublicBucket    string     `json:"podcast_public_bucket"`

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -191,7 +192,15 @@ func normalizePoeModel(item poeModel, fetchedAt time.Time) repository.PoeModelSn
 }
 
 func poeModelsURL() string {
-	return "https://api.poe.com/v1/models"
+	base := strings.TrimRight(strings.TrimSpace(os.Getenv("POE_API_BASE_URL")), "/")
+	if base == "" {
+		base = "https://api.poe.com/v1"
+	} else if strings.HasSuffix(base, "/chat/completions") {
+		base = strings.TrimSuffix(base, "/chat/completions")
+	} else if strings.HasSuffix(base, "/models") {
+		base = strings.TrimSuffix(base, "/models")
+	}
+	return base + "/models"
 }
 
 func parsePoePrice(raw json.RawMessage, key string) float64 {

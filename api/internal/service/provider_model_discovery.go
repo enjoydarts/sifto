@@ -43,6 +43,7 @@ func (s *ProviderModelDiscoveryService) DiscoverAll(ctx context.Context) ([]Prov
 		{"moonshot", s.fetchMoonshotModels},
 		{"zai", s.fetchZAIModels},
 		{"xai", s.fetchXAIModels},
+		{"poe", s.fetchPoeModels},
 		{"fireworks", s.fetchFireworksModels},
 	}
 	out := make([]ProviderModelsResult, 0, len(providers))
@@ -290,6 +291,35 @@ func (s *ProviderModelDiscoveryService) fetchMoonshotModels(ctx context.Context)
 		base = strings.TrimSuffix(base, "/chat/completions")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	var decoded struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if err := readJSONResponse(resp, &decoded); err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(decoded.Data))
+	for _, item := range decoded.Data {
+		models = append(models, item.ID)
+	}
+	return normalizeModelIDs(models), nil
+}
+
+func (s *ProviderModelDiscoveryService) fetchPoeModels(ctx context.Context) ([]string, error) {
+	apiKey := strings.TrimSpace(os.Getenv("POE_API_KEY"))
+	if apiKey == "" {
+		return nil, fmt.Errorf("api key is required")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, poeModelsURL(), nil)
 	if err != nil {
 		return nil, err
 	}

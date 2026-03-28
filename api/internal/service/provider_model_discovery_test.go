@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -48,10 +49,21 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 			baseURL:  "/api/paas/v4/chat/completions",
 			wantPath: "/api/paas/v4/models",
 		},
+		{
+			name: "poe",
+			fetchFunc: func(ctx context.Context, svc *ProviderModelDiscoveryService) ([]string, error) {
+				return svc.fetchPoeModels(ctx)
+			},
+			apiKey:   "test-poe-key",
+			baseKey:  "POE_API_BASE_URL",
+			baseURL:  "/v1",
+			wantPath: "/v1/models",
+		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			c := c
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.Method != http.MethodGet {
 					t.Fatalf("method = %s, want %s", r.Method, http.MethodGet)
@@ -73,7 +85,9 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 			}))
 			defer server.Close()
 
-			t.Setenv(c.baseKey, server.URL+c.baseURL)
+			if c.baseKey != "" {
+				t.Setenv(c.baseKey, server.URL+c.baseURL)
+			}
 			t.Setenv(strings.ToUpper(c.name)+"_API_KEY", c.apiKey)
 			svc := NewProviderModelDiscoveryService()
 			svc.http = server.Client()
@@ -90,6 +104,8 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 }
 
 func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredProviders(t *testing.T) {
+	moonshotKey := "test-moonshot-key"
+	poeKey := "test-poe-key"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -102,13 +118,26 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 				ID string `json:"id"`
 			}{{ID: "alibaba-model-1"}}})
 		case "/v1/models":
-			_ = json.NewEncoder(w).Encode(struct {
-				Data []struct {
+			switch r.Header.Get("Authorization") {
+			case "Bearer " + moonshotKey:
+				_ = json.NewEncoder(w).Encode(struct {
+					Data []struct {
+						ID string `json:"id"`
+					} `json:"data"`
+				}{Data: []struct {
 					ID string `json:"id"`
-				} `json:"data"`
-			}{Data: []struct {
-				ID string `json:"id"`
-			}{{ID: "moonshot-model-1"}}})
+				}{{ID: "moonshot-model-1"}}})
+			case "Bearer " + poeKey:
+				_ = json.NewEncoder(w).Encode(struct {
+					Data []struct {
+						ID string `json:"id"`
+					} `json:"data"`
+				}{Data: []struct {
+					ID string `json:"id"`
+				}{{ID: "poe-model-1"}}})
+			default:
+				t.Fatalf("unexpected authorization for /v1/models: %q", r.Header.Get("Authorization"))
+			}
 		case "/api/paas/v4/models":
 			_ = json.NewEncoder(w).Encode(struct {
 				Data []struct {
@@ -131,9 +160,11 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 	t.Setenv("MISTRAL_API_KEY", "")
 	t.Setenv("XAI_API_KEY", "")
 	t.Setenv("FIREWORKS_API_KEY", "")
+	t.Setenv("POE_API_KEY", poeKey)
+	t.Setenv("POE_API_BASE_URL", server.URL+"/v1")
 	t.Setenv("ALIBABA_API_KEY", "test-alibaba-key")
 	t.Setenv("ALIBABA_API_BASE_URL", server.URL+"/compatible-mode/v1/chat/completions")
-	t.Setenv("MOONSHOT_API_KEY", "test-moonshot-key")
+	t.Setenv("MOONSHOT_API_KEY", moonshotKey)
 	t.Setenv("MOONSHOT_API_BASE_URL", server.URL+"/v1/chat/completions")
 	t.Setenv("ZAI_API_KEY", "test-zai-key")
 	t.Setenv("ZAI_API_BASE_URL", server.URL+"/api/paas/v4/chat/completions")
@@ -144,23 +175,40 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 	if err != nil {
 		t.Fatalf("DiscoverAll failed: %v", err)
 	}
-	if len(results) != 3 {
-		t.Fatalf("providers count = %d, want 3", len(results))
+	if len(results) != 4 {
+		t.Fatalf("providers count = %d, want 4", len(results))
 	}
-	want := []string{"alibaba", "moonshot", "zai"}
-	for i := range want {
-		if results[i].Provider != want[i] {
-			t.Fatalf("results[%d].Provider = %q, want %q", i, results[i].Provider, want[i])
+	got := make([]string, 0, len(results))
+	for _, item := range results {
+		got = append(got, item.Provider)
+		if item.Provider == "alibaba" {
+			if item.Models[0] != "alibaba-model-1" {
+				t.Fatalf("alibaba model = %q, want %q", item.Models[0], "alibaba-model-1")
+			}
+		}
+		if item.Provider == "moonshot" {
+			if item.Models[0] != "moonshot-model-1" {
+				t.Fatalf("moonshot model = %q, want %q", item.Models[0], "moonshot-model-1")
+			}
+		}
+		if item.Provider == "zai" {
+			if item.Models[0] != "zai-model-1" {
+				t.Fatalf("zai model = %q, want %q", item.Models[0], "zai-model-1")
+			}
+		}
+		if item.Provider == "poe" {
+			if item.Models[0] != "poe-model-1" {
+				t.Fatalf("poe model = %q, want %q", item.Models[0], "poe-model-1")
+			}
 		}
 	}
-	if got := results[0].Models[0]; got != "alibaba-model-1" {
-		t.Fatalf("alibaba model = %q, want %q", got, "alibaba-model-1")
-	}
-	if got := results[1].Models[0]; got != "moonshot-model-1" {
-		t.Fatalf("moonshot model = %q, want %q", got, "moonshot-model-1")
-	}
-	if got := results[2].Models[0]; got != "zai-model-1" {
-		t.Fatalf("zai model = %q, want %q", got, "zai-model-1")
+	want := []string{"alibaba", "moonshot", "poe", "zai"}
+	slices.Sort(got)
+	slices.Sort(want)
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("providers = %#v, want %#v", got, want)
+		}
 	}
 }
 

@@ -285,6 +285,7 @@ func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string,
 	zaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
 	poeKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
+	siliconFlowKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetSiliconFlowAPIKeyEncrypted, h.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
 	switch service.LLMProviderForModel(modelName) {
 	case "openrouter":
@@ -293,6 +294,8 @@ func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string,
 		openAIKey = moonshotKey
 	case "poe":
 		openAIKey = poeKey
+	case "siliconflow":
+		openAIKey = siliconFlowKey
 	}
 
 	workerCandidates := make([]service.SourceNavigatorCandidate, 0, len(candidates))
@@ -860,6 +863,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 	zaiAPIKey := h.getUserZAIAPIKey(ctx, userID)
 	openRouterAPIKey := h.getUserOpenRouterAPIKey(ctx, userID)
 	poeAPIKey := h.getUserPoeAPIKey(ctx, userID)
+	siliconFlowAPIKey := h.getUserSiliconFlowAPIKey(ctx, userID)
 	openAIAPIKey := h.getUserOpenAIAPIKey(ctx, userID)
 	anthropicSourceSuggestionModel := h.getUserSourceSuggestionModel(ctx, userID)
 	anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, openAIAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
@@ -874,6 +878,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 		zaiAPIKey,
 		openRouterAPIKey,
 		poeAPIKey,
+		siliconFlowAPIKey,
 		openAIAPIKey,
 		anthropicSourceSuggestionModel,
 	)
@@ -1598,6 +1603,25 @@ func (h *SourceHandler) getUserPoeAPIKey(ctx context.Context, userID string) *st
 	return &plain
 }
 
+func (h *SourceHandler) getUserSiliconFlowAPIKey(ctx context.Context, userID string) *string {
+	if h.settingsRepo == nil || h.cipher == nil {
+		return nil
+	}
+	enc, err := h.settingsRepo.GetSiliconFlowAPIKeyEncrypted(ctx, userID)
+	if err != nil || enc == nil || *enc == "" {
+		return nil
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil
+	}
+	plain = strings.TrimSpace(plain)
+	if plain == "" {
+		return nil
+	}
+	return &plain
+}
+
 func (h *SourceHandler) getUserOpenAIAPIKey(ctx context.Context, userID string) *string {
 	if h.settingsRepo == nil || h.cipher == nil {
 		return nil
@@ -1617,7 +1641,7 @@ func (h *SourceHandler) getUserOpenAIAPIKey(ctx context.Context, userID string) 
 	return &plain
 }
 
-func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, poeAPIKey, openAIAPIKey, model *string) (*string, *string, *string, *string, *string, *string, *string, *string, *string, *string, *string) {
+func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, openAIAPIKey, model *string) (*string, *string, *string, *string, *string, *string, *string, *string, *string, *string, *string) {
 	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
 	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
 	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
@@ -1629,6 +1653,7 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 	hasZAI := zaiAPIKey != nil && strings.TrimSpace(*zaiAPIKey) != ""
 	hasOpenRouter := openRouterAPIKey != nil && strings.TrimSpace(*openRouterAPIKey) != ""
 	hasPoe := poeAPIKey != nil && strings.TrimSpace(*poeAPIKey) != ""
+	hasSiliconFlow := siliconFlowAPIKey != nil && strings.TrimSpace(*siliconFlowAPIKey) != ""
 	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
 	purpose := "source_suggestion"
 
@@ -1678,6 +1703,10 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 		case "poe":
 			if hasPoe {
 				return nil, nil, nil, nil, nil, nil, nil, nil, nil, poeAPIKey, resolved
+			}
+		case "siliconflow":
+			if hasSiliconFlow {
+				return nil, nil, nil, nil, nil, nil, nil, nil, nil, siliconFlowAPIKey, resolved
 			}
 		case "openai":
 			if hasOpenAI {

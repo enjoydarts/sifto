@@ -1277,6 +1277,8 @@ export interface UserSettings {
   fireworks_api_key_last4: string | null;
   has_poe_api_key: boolean;
   poe_api_key_last4: string | null;
+  has_siliconflow_api_key: boolean;
+  siliconflow_api_key_last4: string | null;
   has_openrouter_api_key: boolean;
   openrouter_api_key_last4: string | null;
   has_aivis_api_key: boolean;
@@ -2461,6 +2463,16 @@ export const api = {
   deletePoeApiKey: () =>
     apiFetch<{ user_id: string; has_poe_api_key: boolean; poe_api_key_last4: string | null }>(
       "/settings/poe-key",
+      { method: "DELETE" }
+    ),
+  setSiliconFlowApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_siliconflow_api_key: boolean; siliconflow_api_key_last4: string | null }>(
+      "/settings/siliconflow-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteSiliconFlowApiKey: () =>
+    apiFetch<{ user_id: string; has_siliconflow_api_key: boolean; siliconflow_api_key_last4: string | null }>(
+      "/settings/siliconflow-key",
       { method: "DELETE" }
     ),
   setOpenRouterApiKey: (apiKey: string) =>

@@ -82,6 +82,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var zaiAPIKeyEnc *string
 	var fireworksAPIKeyEnc *string
 	var poeAPIKeyEnc *string
+	var siliconflowAPIKeyEnc *string
 	var openrouterAPIKeyEnc *string
 	var aivisAPIKeyEnc *string
 	var inoreaderAccessTokenEnc *string
@@ -111,6 +112,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       fireworks_api_key_last4,
 		       poe_api_key_enc,
 		       poe_api_key_last4,
+		       siliconflow_api_key_enc,
+		       siliconflow_api_key_last4,
 		       openrouter_api_key_enc,
 		       openrouter_api_key_last4,
 		       aivis_api_key_enc,
@@ -192,6 +195,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.FireworksAPIKeyLast4,
 		&poeAPIKeyEnc,
 		&v.PoeAPIKeyLast4,
+		&siliconflowAPIKeyEnc,
+		&v.SiliconFlowAPIKeyLast4,
 		&openrouterAPIKeyEnc,
 		&v.OpenRouterAPIKeyLast4,
 		&aivisAPIKeyEnc,
@@ -260,6 +265,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasZAIAPIKey = zaiAPIKeyEnc != nil && *zaiAPIKeyEnc != ""
 	v.HasFireworksAPIKey = fireworksAPIKeyEnc != nil && *fireworksAPIKeyEnc != ""
 	v.HasPoeAPIKey = poeAPIKeyEnc != nil && *poeAPIKeyEnc != ""
+	v.HasSiliconFlowAPIKey = siliconflowAPIKeyEnc != nil && *siliconflowAPIKeyEnc != ""
 	v.HasOpenRouterAPIKey = openrouterAPIKeyEnc != nil && *openrouterAPIKeyEnc != ""
 	v.HasAivisAPIKey = aivisAPIKeyEnc != nil && *aivisAPIKeyEnc != ""
 	v.HasInoreaderOAuth = inoreaderAccessTokenEnc != nil && *inoreaderAccessTokenEnc != ""
@@ -787,6 +793,25 @@ func (r *UserSettingsRepo) GetPoeAPIKeyEncrypted(ctx context.Context, userID str
 	return v, nil
 }
 
+func (r *UserSettingsRepo) GetSiliconFlowAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT siliconflow_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1
+	`, userID).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
 func (r *UserSettingsRepo) GetAivisAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
 	var v *string
 	err := r.db.QueryRow(ctx, `
@@ -1067,6 +1092,22 @@ func (r *UserSettingsRepo) SetPoeAPIKey(ctx context.Context, userID, encryptedKe
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetSiliconFlowAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, siliconflow_api_key_enc, siliconflow_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET siliconflow_api_key_enc = EXCLUDED.siliconflow_api_key_enc,
+		    siliconflow_api_key_last4 = EXCLUDED.siliconflow_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) SetOpenRouterAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, openrouter_api_key_enc, openrouter_api_key_last4)
@@ -1297,6 +1338,22 @@ func (r *UserSettingsRepo) ClearPoeAPIKey(ctx context.Context, userID string) (*
 		ON CONFLICT (user_id) DO UPDATE
 		SET poe_api_key_enc = NULL,
 		    poe_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearSiliconFlowAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, siliconflow_api_key_enc, siliconflow_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET siliconflow_api_key_enc = NULL,
+		    siliconflow_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

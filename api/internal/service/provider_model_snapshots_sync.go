@@ -63,44 +63,10 @@ func (s *ProviderModelSnapshotSyncService) SyncCommonProviders(ctx context.Conte
 		if model.ExcludeFromProviderModelSnapshots(res.Provider) {
 			continue
 		}
+		if err := s.syncSnapshotProvider(ctx, res.Provider, res.Models, "provider_api", trigger, now, &events); err != nil {
+			return nil, err
+		}
 		syncedProviders++
-		prev, err := s.updates.GetSnapshot(ctx, res.Provider)
-		if err != nil && !errors.Is(err, repository.ErrNotFound) {
-			return nil, err
-		}
-		if prev != nil {
-			prevSet := make(map[string]struct{}, len(prev.Models))
-			for _, modelID := range prev.Models {
-				prevSet[modelID] = struct{}{}
-			}
-			nextSet := make(map[string]struct{}, len(res.Models))
-			for _, modelID := range res.Models {
-				nextSet[modelID] = struct{}{}
-				if _, ok := prevSet[modelID]; !ok {
-					events = append(events, model.ProviderModelChangeEvent{
-						Provider:   res.Provider,
-						ChangeType: "added",
-						ModelID:    modelID,
-						DetectedAt: now,
-						Metadata:   map[string]any{"source": "provider_api", "trigger": trigger},
-					})
-				}
-			}
-			for _, modelID := range prev.Models {
-				if _, ok := nextSet[modelID]; !ok {
-					events = append(events, model.ProviderModelChangeEvent{
-						Provider:   res.Provider,
-						ChangeType: "removed",
-						ModelID:    modelID,
-						DetectedAt: now,
-						Metadata:   map[string]any{"source": "provider_api", "trigger": trigger},
-					})
-				}
-			}
-		}
-		if err := s.updates.UpsertSnapshot(ctx, res.Provider, res.Models, "ok", nil); err != nil {
-			return nil, err
-		}
 	}
 
 	if len(events) > 0 {
@@ -116,6 +82,52 @@ func (s *ProviderModelSnapshotSyncService) SyncCommonProviders(ctx context.Conte
 		Providers: syncedProviders,
 		Changes:   len(events),
 	}, nil
+}
+
+func (s *ProviderModelSnapshotSyncService) syncSnapshotProvider(
+	ctx context.Context,
+	provider string,
+	models []string,
+	source string,
+	trigger string,
+	now time.Time,
+	events *[]model.ProviderModelChangeEvent,
+) error {
+	prev, err := s.updates.GetSnapshot(ctx, provider)
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+		return err
+	}
+	if prev != nil {
+		prevSet := make(map[string]struct{}, len(prev.Models))
+		for _, modelID := range prev.Models {
+			prevSet[modelID] = struct{}{}
+		}
+		nextSet := make(map[string]struct{}, len(models))
+		for _, modelID := range models {
+			nextSet[modelID] = struct{}{}
+			if _, ok := prevSet[modelID]; !ok {
+				*events = append(*events, model.ProviderModelChangeEvent{
+					Provider:   provider,
+					ChangeType: "added",
+					ModelID:    modelID,
+					DetectedAt: now,
+					Metadata:   map[string]any{"source": source, "trigger": trigger},
+				})
+			}
+		}
+		for _, modelID := range prev.Models {
+			if _, ok := nextSet[modelID]; !ok {
+				*events = append(*events, model.ProviderModelChangeEvent{
+					Provider:   provider,
+					ChangeType: "removed",
+					ModelID:    modelID,
+					DetectedAt: now,
+					Metadata:   map[string]any{"source": source, "trigger": trigger},
+				})
+			}
+		}
+	}
+	return s.updates.UpsertSnapshot(ctx, provider, models, "ok", nil)
 }
 
 func (s *ProviderModelSnapshotSyncService) sendNotifications(ctx context.Context, now time.Time, events []model.ProviderModelChangeEvent) error {
@@ -227,6 +239,9 @@ func (s *ProviderModelSnapshotSyncService) buildDiscoveryService(ctx context.Con
 		}
 		if keys.Moonshot == "" {
 			keys.Moonshot = s.loadUserKey(ctx, user.ID, s.settings.GetMoonshotAPIKeyEncrypted)
+		}
+		if keys.SiliconFlow == "" {
+			keys.SiliconFlow = s.loadUserKey(ctx, user.ID, s.settings.GetSiliconFlowAPIKeyEncrypted)
 		}
 		if keys.XAI == "" {
 			keys.XAI = s.loadUserKey(ctx, user.ID, s.settings.GetXAIAPIKeyEncrypted)

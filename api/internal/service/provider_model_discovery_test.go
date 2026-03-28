@@ -59,6 +59,16 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 			baseURL:  "/v1",
 			wantPath: "/v1/models",
 		},
+		{
+			name: "siliconflow",
+			fetchFunc: func(ctx context.Context, svc *ProviderModelDiscoveryService) ([]string, error) {
+				return svc.fetchSiliconFlowModels(ctx)
+			},
+			apiKey:   "test-siliconflow-key",
+			baseKey:  "SILICONFLOW_API_BASE_URL",
+			baseURL:  "/v1/chat/completions",
+			wantPath: "/v1/models",
+		},
 	}
 
 	for _, c := range cases {
@@ -106,6 +116,7 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredProviders(t *testing.T) {
 	moonshotKey := "test-moonshot-key"
 	poeKey := "test-poe-key"
+	siliconFlowKey := "test-siliconflow-key"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -135,6 +146,14 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 				}{Data: []struct {
 					ID string `json:"id"`
 				}{{ID: "poe-model-1"}}})
+			case "Bearer " + siliconFlowKey:
+				_ = json.NewEncoder(w).Encode(struct {
+					Data []struct {
+						ID string `json:"id"`
+					} `json:"data"`
+				}{Data: []struct {
+					ID string `json:"id"`
+				}{{ID: "siliconflow-model-1"}}})
 			default:
 				t.Fatalf("unexpected authorization for /v1/models: %q", r.Header.Get("Authorization"))
 			}
@@ -166,6 +185,8 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 	t.Setenv("ALIBABA_API_BASE_URL", server.URL+"/compatible-mode/v1/chat/completions")
 	t.Setenv("MOONSHOT_API_KEY", moonshotKey)
 	t.Setenv("MOONSHOT_API_BASE_URL", server.URL+"/v1/chat/completions")
+	t.Setenv("SILICONFLOW_API_KEY", siliconFlowKey)
+	t.Setenv("SILICONFLOW_API_BASE_URL", server.URL+"/v1/chat/completions")
 	t.Setenv("ZAI_API_KEY", "test-zai-key")
 	t.Setenv("ZAI_API_BASE_URL", server.URL+"/api/paas/v4/chat/completions")
 
@@ -175,8 +196,8 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 	if err != nil {
 		t.Fatalf("DiscoverAll failed: %v", err)
 	}
-	if len(results) != 4 {
-		t.Fatalf("providers count = %d, want 4", len(results))
+	if len(results) != 5 {
+		t.Fatalf("providers count = %d, want 5", len(results))
 	}
 	got := make([]string, 0, len(results))
 	for _, item := range results {
@@ -201,8 +222,13 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 				t.Fatalf("poe model = %q, want %q", item.Models[0], "poe-model-1")
 			}
 		}
+		if item.Provider == "siliconflow" {
+			if item.Models[0] != "siliconflow-model-1" {
+				t.Fatalf("siliconflow model = %q, want %q", item.Models[0], "siliconflow-model-1")
+			}
+		}
 	}
-	want := []string{"alibaba", "moonshot", "poe", "zai"}
+	want := []string{"alibaba", "moonshot", "poe", "siliconflow", "zai"}
 	slices.Sort(got)
 	slices.Sort(want)
 	for i := range want {

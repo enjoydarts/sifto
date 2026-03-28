@@ -66,6 +66,7 @@ var (
 
 const openRouterAliasPrefix = "openrouter::"
 const poeAliasPrefix = "poe::"
+const siliconFlowAliasPrefix = "siliconflow::"
 
 var anthropicOpenRouterResolvedPattern = regexp.MustCompile(`^anthropic/claude-(\d+(?:\.\d+)*)-(opus|sonnet|haiku)-\d{8}$`)
 
@@ -118,6 +119,26 @@ func ResolvePoeModelID(model string) string {
 
 func IsPoeAliasedModel(model string) bool {
 	return strings.HasPrefix(strings.TrimSpace(model), poeAliasPrefix)
+}
+
+func SiliconFlowAliasModelID(model string) string {
+	m := strings.TrimSpace(model)
+	if m == "" {
+		return ""
+	}
+	if strings.HasPrefix(m, siliconFlowAliasPrefix) {
+		return m
+	}
+	return siliconFlowAliasPrefix + m
+}
+
+func ResolveSiliconFlowModelID(model string) string {
+	m := strings.TrimSpace(model)
+	return strings.TrimPrefix(m, siliconFlowAliasPrefix)
+}
+
+func IsSiliconFlowAliasedModel(model string) bool {
+	return strings.HasPrefix(strings.TrimSpace(model), siliconFlowAliasPrefix)
 }
 
 func LLMCatalogData() *LLMCatalog {
@@ -294,6 +315,9 @@ func CatalogProviderForModel(model string) string {
 	}
 	if IsPoeAliasedModel(m) {
 		return "poe"
+	}
+	if IsSiliconFlowAliasedModel(m) {
+		return "siliconflow"
 	}
 	if entry := findModelCatalog(m); entry != nil && entry.Provider != "" {
 		return entry.Provider

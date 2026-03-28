@@ -179,6 +179,11 @@
       "default_models": {}
     },
     {
+      "id": "siliconflow",
+      "api_key_header": "x-openai-api-key",
+      "default_models": {}
+    },
+    {
       "id": "openai",
       "api_key_header": "x-openai-api-key",
       "match_prefixes": ["gpt-5"],
@@ -193,6 +198,98 @@
     }
   ],
   "chat_models": [
+    {
+      "id": "siliconflow::deepseek-ai/DeepSeek-V3.1",
+      "provider": "siliconflow",
+      "source_provider": "deepseek-ai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": ["experimental"],
+      "comment": "DeepSeek 系の比較用ベースライン。SiliconFlow 側の固定モデルとして残す。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": false,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_model_pages_2026_03",
+        "input_per_mtok_usd": 0.27,
+        "output_per_mtok_usd": 1.0
+      }
+    },
+    {
+      "id": "siliconflow::deepseek-ai/DeepSeek-V3.1-Terminus",
+      "provider": "siliconflow",
+      "source_provider": "deepseek-ai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": ["experimental"],
+      "comment": "DeepSeek 系の比較候補。重めの整理や生成品質の見比べ用に残す。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": false,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_model_pages_2026_03",
+        "input_per_mtok_usd": 0.27,
+        "output_per_mtok_usd": 1.0
+      }
+    },
+    {
+      "id": "siliconflow::deepseek-ai/DeepSeek-V3.2",
+      "provider": "siliconflow",
+      "source_provider": "deepseek-ai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": ["experimental"],
+      "comment": "DeepSeek 系の標準候補。SiliconFlow で使う代表モデルとして静的登録する。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": false,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_model_pages_2026_03",
+        "input_per_mtok_usd": 0.27,
+        "output_per_mtok_usd": 0.42
+      }
+    },
+    {
+      "id": "siliconflow::deepseek-ai/DeepSeek-V3.2-Exp",
+      "provider": "siliconflow",
+      "source_provider": "deepseek-ai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "experimental",
+      "highlights": ["experimental"],
+      "comment": "実験系の比較候補。通常枠とは分けて挙動を見たい時に使う前提の静的登録。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": true,
+        "supports_reasoning": false,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_model_pages_2026_03",
+        "input_per_mtok_usd": 0.27,
+        "output_per_mtok_usd": 0.41
+      }
+    },
     {
       "id": "claude-haiku-4-5",
       "provider": "anthropic",

@@ -13,6 +13,7 @@ from app.services.moonshot_service import ask_question as ask_question_moonshot
 from app.services.openai_service import ask_question as ask_question_openai
 from app.services.openrouter_service import ask_question as ask_question_openrouter
 from app.services.poe_service import ask_question as ask_question_poe
+from app.services.siliconflow_service import ask_question as ask_question_siliconflow
 from app.services.xai_service import ask_question as ask_question_xai
 from app.services.zai_service import ask_question as ask_question_zai
 from app.services.router_observe import llm_usage_summary, run_observed_request
@@ -74,6 +75,7 @@ def ask_endpoint(req: AskRequest, request: Request):
                     "zai": lambda api_key: ask_question_zai(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                     "openrouter": lambda api_key: ask_question_openrouter(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                     "poe": lambda api_key: ask_question_poe(req.query, candidates, model=str(req.model), api_key=api_key or ""),
+                    "siliconflow": lambda api_key: ask_question_siliconflow(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: ask_question_openai(req.query, candidates, model=str(req.model), api_key=api_key or ""),
                 },
             ),

@@ -47,6 +47,8 @@ type UserSettings struct {
 	HasFireworksAPIKey               bool       `json:"has_fireworks_api_key"`
 	PoeAPIKeyLast4                   *string    `json:"poe_api_key_last4,omitempty"`
 	HasPoeAPIKey                     bool       `json:"has_poe_api_key"`
+	SiliconFlowAPIKeyLast4           *string    `json:"siliconflow_api_key_last4,omitempty"`
+	HasSiliconFlowAPIKey             bool       `json:"has_siliconflow_api_key"`
 	OpenRouterAPIKeyLast4            *string    `json:"openrouter_api_key_last4,omitempty"`
 	HasOpenRouterAPIKey              bool       `json:"has_openrouter_api_key"`
 	AivisAPIKeyLast4                 *string    `json:"aivis_api_key_last4,omitempty"`

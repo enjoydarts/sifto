@@ -11,6 +11,7 @@ from app.services.mistral_service import extract_facts as extract_facts_mistral
 from app.services.openai_service import extract_facts as extract_facts_openai
 from app.services.openrouter_service import extract_facts as extract_facts_openrouter
 from app.services.poe_service import extract_facts as extract_facts_poe
+from app.services.siliconflow_service import extract_facts as extract_facts_siliconflow
 from app.services.moonshot_service import extract_facts as extract_facts_moonshot
 from app.services.xai_service import extract_facts as extract_facts_xai
 from app.services.zai_service import extract_facts as extract_facts_zai
@@ -54,6 +55,7 @@ def extract_facts_endpoint(req: FactsRequest, request: Request):
                     "zai": lambda api_key: extract_facts_zai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "openrouter": lambda api_key: extract_facts_openrouter(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "poe": lambda api_key: extract_facts_poe(req.title, req.content, model=str(req.model), api_key=api_key or ""),
+                    "siliconflow": lambda api_key: extract_facts_siliconflow(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: extract_facts_openai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                 },
             ),

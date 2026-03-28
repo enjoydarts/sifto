@@ -672,6 +672,27 @@ func loadUserPoeAPIKey(ctx context.Context, settingsRepo *repository.UserSetting
 	return &plain, nil
 }
 
+func loadUserSiliconFlowAPIKey(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string) (*string, error) {
+	if settingsRepo == nil || userID == nil || *userID == "" {
+		return nil, fmt.Errorf("user siliconflow api key is required")
+	}
+	enc, err := settingsRepo.GetSiliconFlowAPIKeyEncrypted(ctx, *userID)
+	if err != nil || enc == nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("user siliconflow api key is required")
+	}
+	if cipher == nil || !cipher.Enabled() {
+		return nil, fmt.Errorf("user secret encryption is not configured")
+	}
+	plain, err := cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt user siliconflow key: %w", err)
+	}
+	return &plain, nil
+}
+
 func ptrStringOrNil(v *string) *string {
 	if v == nil || *v == "" {
 		return nil
@@ -748,6 +769,11 @@ func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSetti
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
 						return nil, nil, nil, nil, nil, nil, nil, nil, nil, key, &fallback, nil
 					}
+				case "siliconflow":
+					if key, err := loadUserSiliconFlowAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
+						return nil, nil, nil, nil, nil, nil, nil, nil, nil, key, &fallback, nil
+					}
 				case "anthropic":
 					if key, err := loadUserAnthropicAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
@@ -793,6 +819,9 @@ func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSetti
 		return nil, nil, nil, nil, nil, nil, nil, nil, nil, key, model, err
 	case "poe":
 		key, err := loadUserPoeAPIKey(ctx, settingsRepo, cipher, userID)
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, key, model, err
+	case "siliconflow":
+		key, err := loadUserSiliconFlowAPIKey(ctx, settingsRepo, cipher, userID)
 		return nil, nil, nil, nil, nil, nil, nil, nil, nil, key, model, err
 	default:
 		key, err := loadUserAnthropicAPIKey(ctx, settingsRepo, cipher, userID)

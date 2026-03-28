@@ -103,10 +103,11 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		settings.HasZAIAPIKey,
 		settings.HasOpenRouterAPIKey,
 		settings.HasPoeAPIKey,
+		settings.HasSiliconFlowAPIKey,
 		settings.HasOpenAIAPIKey,
 	)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or moonshot or xai or zai or openrouter or poe or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or moonshot or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
 		return
 	}
 	cacheKey := cacheKeyAsk(userID, query, *modelName, embeddingModel, body.Days, body.UnreadOnly, body.Limit, body.SourceIDs)
@@ -167,10 +168,11 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	zaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
 	poeKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
+	siliconFlowKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetSiliconFlowAPIKeyEncrypted, h.cipher, userID, "")
 	openAIChatKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
-	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, fireworksKey != nil, groqKey != nil, deepseekKey != nil, alibabaKey != nil, mistralKey != nil, moonshotKey != nil, xaiKey != nil, zaiKey != nil, openRouterKey != nil, poeKey != nil, openAIChatKey != nil)
+	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, fireworksKey != nil, groqKey != nil, deepseekKey != nil, alibabaKey != nil, mistralKey != nil, moonshotKey != nil, xaiKey != nil, zaiKey != nil, openRouterKey != nil, poeKey != nil, siliconFlowKey != nil, openAIChatKey != nil)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or moonshot or xai or zai or openrouter or poe or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or moonshot or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
 		return
 	}
 	if service.LLMProviderForModel(modelName) == "openrouter" {
@@ -179,6 +181,8 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		openAIChatKey = moonshotKey
 	} else if service.LLMProviderForModel(modelName) == "poe" {
 		openAIChatKey = poeKey
+	} else if service.LLMProviderForModel(modelName) == "siliconflow" {
+		openAIChatKey = siliconFlowKey
 	}
 
 	workerCandidates := make([]service.AskCandidate, 0, len(candidates))
@@ -355,6 +359,7 @@ func (h *AskHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 	zaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
 	poeKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
+	siliconFlowKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetSiliconFlowAPIKeyEncrypted, h.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
 	switch service.LLMProviderForModel(modelName) {
 	case "openrouter":
@@ -363,6 +368,8 @@ func (h *AskHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		openAIKey = moonshotKey
 	case "poe":
 		openAIKey = poeKey
+	case "siliconflow":
+		openAIKey = siliconFlowKey
 	}
 
 	workerCitations := make([]service.AskNavigatorCitation, 0, len(body.Citations))
@@ -468,7 +475,7 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 	return &v
 }
 
-func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFireworks, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasMoonshot, hasXAI, hasZAI, hasOpenRouter, hasPoe, hasOpenAI bool) *string {
+func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFireworks, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasMoonshot, hasXAI, hasZAI, hasOpenRouter, hasPoe, hasSiliconFlow, hasOpenAI bool) *string {
 	if settings != nil && settings.AskModel != nil && strings.TrimSpace(*settings.AskModel) != "" {
 		v := strings.TrimSpace(*settings.AskModel)
 		switch service.LLMProviderForModel(&v) {
@@ -518,6 +525,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "poe":
 			if hasPoe {
+				return &v
+			}
+		case "siliconflow":
+			if hasSiliconFlow {
 				return &v
 			}
 		default:
@@ -577,6 +588,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			if hasPoe {
 				return &v
 			}
+		case "siliconflow":
+			if hasSiliconFlow {
+				return &v
+			}
 		default:
 			if hasAnthropic {
 				return &v
@@ -632,6 +647,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "poe":
 			if hasPoe {
+				return &v
+			}
+		case "siliconflow":
+			if hasSiliconFlow {
 				return &v
 			}
 		default:
@@ -694,6 +713,22 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "openrouter":
 			if hasOpenRouter {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				if strings.TrimSpace(v) == "" {
+					continue
+				}
+				return &v
+			}
+		case "poe":
+			if hasPoe {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				if strings.TrimSpace(v) == "" {
+					continue
+				}
+				return &v
+			}
+		case "siliconflow":
+			if hasSiliconFlow {
 				v := service.DefaultLLMModelForPurpose(provider, "ask")
 				if strings.TrimSpace(v) == "" {
 					continue

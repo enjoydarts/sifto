@@ -153,7 +153,6 @@ func main() {
 	} else {
 		service.SetDynamicChatModelsForProvider("poe", service.PoeSnapshotsToCatalogModels(latestModels))
 	}
-
 	inngestHandler := inngestfn.NewHandler(db, worker, resend, oneSignal, obsidianExportSvc, cache, search)
 
 	r := chi.NewRouter()
@@ -404,6 +403,8 @@ func main() {
 			r.Delete("/fireworks-key", settingsH.DeleteFireworksAPIKey)
 			r.Post("/poe-key", settingsH.SetPoeAPIKey)
 			r.Delete("/poe-key", settingsH.DeletePoeAPIKey)
+			r.Post("/siliconflow-key", settingsH.SetSiliconFlowAPIKey)
+			r.Delete("/siliconflow-key", settingsH.DeleteSiliconFlowAPIKey)
 			r.Post("/openrouter-key", settingsH.SetOpenRouterAPIKey)
 			r.Delete("/openrouter-key", settingsH.DeleteOpenRouterAPIKey)
 			r.Post("/aivis-key", settingsH.SetAivisAPIKey)

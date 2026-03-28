@@ -1,5 +1,9 @@
 export function formatModelDisplayName(model: string): string {
-  const raw = model.startsWith("openrouter::") ? model.slice("openrouter::".length) : model;
+  const raw = model.startsWith("openrouter::")
+    ? model.slice("openrouter::".length)
+    : model.startsWith("siliconflow::")
+      ? model.slice("siliconflow::".length)
+      : model;
   switch (raw) {
     case "deepseek-chat":
       return "deepseek-chat(V3.2)";

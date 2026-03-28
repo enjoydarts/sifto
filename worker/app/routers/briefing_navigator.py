@@ -13,6 +13,7 @@ from app.services.moonshot_service import generate_briefing_navigator as generat
 from app.services.openai_service import generate_briefing_navigator as generate_briefing_navigator_openai
 from app.services.openrouter_service import generate_briefing_navigator as generate_briefing_navigator_openrouter
 from app.services.poe_service import generate_briefing_navigator as generate_briefing_navigator_poe
+from app.services.siliconflow_service import generate_briefing_navigator as generate_briefing_navigator_siliconflow
 from app.services.router_observe import llm_usage_summary, run_observed_request
 from app.services.xai_service import generate_briefing_navigator as generate_briefing_navigator_xai
 from app.services.zai_service import generate_briefing_navigator as generate_briefing_navigator_zai
@@ -151,6 +152,13 @@ def generate_briefing_navigator_endpoint(req: BriefingNavigatorRequest, request:
                     api_key=api_key or "",
                 ),
                 "poe": lambda api_key: generate_briefing_navigator_poe(
+                    persona=req.persona,
+                    candidates=candidates,
+                    intro_context=req.intro_context,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "siliconflow": lambda api_key: generate_briefing_navigator_siliconflow(
                     persona=req.persona,
                     candidates=candidates,
                     intro_context=req.intro_context,

@@ -386,6 +386,8 @@ export default function SettingsPage() {
   const [deletingFireworksKey, setDeletingFireworksKey] = useState(false);
   const [savingPoeKey, setSavingPoeKey] = useState(false);
   const [deletingPoeKey, setDeletingPoeKey] = useState(false);
+  const [savingSiliconFlowKey, setSavingSiliconFlowKey] = useState(false);
+  const [deletingSiliconFlowKey, setDeletingSiliconFlowKey] = useState(false);
   const [savingOpenRouterKey, setSavingOpenRouterKey] = useState(false);
   const [deletingOpenRouterKey, setDeletingOpenRouterKey] = useState(false);
   const [savingAivisKey, setSavingAivisKey] = useState(false);
@@ -420,6 +422,7 @@ export default function SettingsPage() {
   const [zaiApiKeyInput, setZaiApiKeyInput] = useState("");
   const [fireworksApiKeyInput, setFireworksApiKeyInput] = useState("");
   const [poeApiKeyInput, setPoeApiKeyInput] = useState("");
+  const [siliconFlowApiKeyInput, setSiliconFlowApiKeyInput] = useState("");
   const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
   const [aivisApiKeyInput, setAivisApiKeyInput] = useState("");
   const [aivisUserDictionaryUUID, setAivisUserDictionaryUUID] = useState("");
@@ -1203,6 +1206,21 @@ export default function SettingsPage() {
           notSet: t("settings.poeNotSet"),
         },
         {
+          id: "siliconflow",
+          title: t("settings.siliconflowTitle"),
+          description: t("settings.siliconflowDescription"),
+          configured: settings.has_siliconflow_api_key,
+          last4: settings.siliconflow_api_key_last4,
+          value: siliconFlowApiKeyInput,
+          onChange: setSiliconFlowApiKeyInput,
+          onSubmit: submitSiliconFlowApiKey,
+          onDelete: handleDeleteSiliconFlowApiKey,
+          placeholder: "sk-...",
+          saving: savingSiliconFlowKey,
+          deleting: deletingSiliconFlowKey,
+          notSet: t("settings.siliconflowNotSet"),
+        },
+        {
           id: "openrouter",
           title: t("settings.openrouterTitle"),
           description: t("settings.openrouterDescription"),
@@ -1866,6 +1884,24 @@ export default function SettingsPage() {
     }
   }
 
+  async function submitSiliconFlowApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingSiliconFlowKey(true);
+    try {
+      if (!siliconFlowApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setSiliconFlowApiKey(siliconFlowApiKeyInput.trim());
+      setSiliconFlowApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.siliconflowSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingSiliconFlowKey(false);
+    }
+  }
+
   async function handleDeletePoeApiKey() {
     if (!(await confirm({
       title: t("settings.poeDeleteTitle"),
@@ -1905,6 +1941,27 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setDeletingOpenRouterKey(false);
+    }
+  }
+
+  async function handleDeleteSiliconFlowApiKey() {
+    if (!(await confirm({
+      title: t("settings.siliconflowDeleteTitle"),
+      message: t("settings.siliconflowDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingSiliconFlowKey(true);
+    try {
+      await api.deleteSiliconFlowApiKey();
+      await load();
+      showToast(t("settings.toast.siliconflowDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingSiliconFlowKey(false);
     }
   }
 

@@ -771,6 +771,8 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				openAIKey, err = h.loadOpenAIAPIKey(r.Context(), t.UserID)
 			case "poe":
 				openAIKey, err = h.loadPoeAPIKey(r.Context(), t.UserID)
+			case "siliconflow":
+				openAIKey, err = h.loadSiliconFlowAPIKey(r.Context(), t.UserID)
 			default:
 				anthropicKey, err = h.loadAnthropicAPIKey(r.Context(), t.UserID)
 			}
@@ -1047,6 +1049,24 @@ func (h *InternalHandler) loadPoeAPIKey(ctx context.Context, userID string) (*st
 	}
 	if enc == nil || *enc == "" {
 		return nil, fmt.Errorf("poe api key is not set")
+	}
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+func (h *InternalHandler) loadSiliconFlowAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetSiliconFlowAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("siliconflow api key is not set")
 	}
 	if !h.cipher.Enabled() {
 		return nil, fmt.Errorf("secret cipher is not configured")

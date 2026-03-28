@@ -403,6 +403,7 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetZAIAPIKeyEncrypted, o.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenRouterAPIKeyEncrypted, o.cipher, userID, "")
 	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetPoeAPIKeyEncrypted, o.cipher, userID, "")
+	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetSiliconFlowAPIKeyEncrypted, o.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenAIAPIKeyEncrypted, o.cipher, userID, "")
 
 	normalizedPersona := normalizeAudioBriefingPersona(persona)
@@ -442,6 +443,8 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 					effectiveOpenAIKey = moonshotKey
 				case "poe":
 					effectiveOpenAIKey = poeKey
+				case "siliconflow":
+					effectiveOpenAIKey = siliconFlowKey
 				}
 				resp, err := generateAudioBriefingScriptWithRetry(workerCtx, func(callCtx context.Context) (*AudioBriefingScriptResponse, error) {
 					return o.worker.GenerateAudioBriefingScriptWithModel(

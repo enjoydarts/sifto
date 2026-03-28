@@ -281,6 +281,7 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 	zaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
 	poeKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
+	siliconFlowKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetSiliconFlowAPIKeyEncrypted, h.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
 	switch service.LLMProviderForModel(modelName) {
 	case "openrouter":
@@ -289,6 +290,8 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 		openAIKey = moonshotKey
 	case "poe":
 		openAIKey = poeKey
+	case "siliconflow":
+		openAIKey = siliconFlowKey
 	}
 
 	introContext := buildBriefingNavigatorIntroContext(generatedAt)

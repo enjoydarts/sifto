@@ -24,18 +24,19 @@ type ProviderModelsResult struct {
 }
 
 type ProviderModelDiscoveryKeys struct {
-	OpenAI    string
-	Anthropic string
-	Google    string
-	Groq      string
-	DeepSeek  string
-	Alibaba   string
-	Mistral   string
-	Moonshot  string
-	XAI       string
-	ZAI       string
-	Poe       string
-	Fireworks string
+	OpenAI      string
+	Anthropic   string
+	Google      string
+	Groq        string
+	DeepSeek    string
+	Alibaba     string
+	Mistral     string
+	Moonshot    string
+	SiliconFlow string
+	XAI         string
+	ZAI         string
+	Poe         string
+	Fireworks   string
 }
 
 func NewProviderModelDiscoveryService() *ProviderModelDiscoveryService {
@@ -64,6 +65,7 @@ func (s *ProviderModelDiscoveryService) DiscoverAll(ctx context.Context) ([]Prov
 		{"deepseek", s.fetchDeepSeekModels},
 		{"mistral", s.fetchMistralModels},
 		{"moonshot", s.fetchMoonshotModels},
+		{"siliconflow", s.fetchSiliconFlowModels},
 		{"zai", s.fetchZAIModels},
 		{"xai", s.fetchXAIModels},
 		{"poe", s.fetchPoeModels},
@@ -331,6 +333,44 @@ func (s *ProviderModelDiscoveryService) fetchMoonshotModels(ctx context.Context)
 	base := strings.TrimRight(strings.TrimSpace(os.Getenv("MOONSHOT_API_BASE_URL")), "/")
 	if base == "" {
 		base = "https://api.moonshot.ai/v1"
+	} else if strings.HasSuffix(base, "/chat/completions") {
+		base = strings.TrimSuffix(base, "/chat/completions")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	var decoded struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if err := readJSONResponse(resp, &decoded); err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(decoded.Data))
+	for _, item := range decoded.Data {
+		models = append(models, item.ID)
+	}
+	return normalizeModelIDs(models), nil
+}
+
+func (s *ProviderModelDiscoveryService) fetchSiliconFlowModels(ctx context.Context) ([]string, error) {
+	apiKey := strings.TrimSpace(s.keys.SiliconFlow)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("SILICONFLOW_API_KEY"))
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("api key is required")
+	}
+	base := strings.TrimRight(strings.TrimSpace(os.Getenv("SILICONFLOW_API_BASE_URL")), "/")
+	if base == "" {
+		base = "https://api.siliconflow.com/v1"
 	} else if strings.HasSuffix(base, "/chat/completions") {
 		base = strings.TrimSuffix(base, "/chat/completions")
 	}

@@ -2,7 +2,7 @@ package service
 
 import "strings"
 
-var costEfficientProviderPriority = []string{"groq", "zai", "fireworks", "moonshot", "alibaba", "google", "mistral", "xai", "deepseek", "openrouter", "openai", "anthropic"}
+var costEfficientProviderPriority = []string{"groq", "zai", "fireworks", "moonshot", "alibaba", "google", "mistral", "xai", "deepseek", "siliconflow", "openrouter", "openai", "anthropic"}
 
 func IsGeminiModel(model *string) bool {
 	if model == nil {

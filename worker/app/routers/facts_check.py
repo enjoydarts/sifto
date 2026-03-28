@@ -13,6 +13,7 @@ from app.services.openai_service import check_facts as check_facts_openai
 from app.services.openrouter_service import check_facts as check_facts_openrouter
 from app.services.moonshot_service import check_facts as check_facts_moonshot
 from app.services.poe_service import check_facts as check_facts_poe
+from app.services.siliconflow_service import check_facts as check_facts_siliconflow
 from app.services.xai_service import check_facts as check_facts_xai
 from app.services.zai_service import check_facts as check_facts_zai
 from app.services.router_observe import llm_usage_summary, run_observed_request
@@ -56,6 +57,7 @@ def check_facts_endpoint(req: FactsCheckRequest, request: Request):
                     "zai": lambda api_key: check_facts_zai(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
                     "openrouter": lambda api_key: check_facts_openrouter(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
                     "poe": lambda api_key: check_facts_poe(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
+                    "siliconflow": lambda api_key: check_facts_siliconflow(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: check_facts_openai(req.title, req.content, req.facts, model=str(req.model), api_key=api_key or ""),
                 },
             ),

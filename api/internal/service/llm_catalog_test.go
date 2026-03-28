@@ -31,6 +31,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("text-embedding-3-small"); got == nil {
 		t.Fatal("text-embedding-3-small not found in catalog")
 	}
+	if got := findModelCatalog("siliconflow::deepseek-ai/DeepSeek-V3.2"); got == nil {
+		t.Fatal("siliconflow::deepseek-ai/DeepSeek-V3.2 not found in catalog")
+	}
+	if got := findModelCatalog("siliconflow::zai-org/GLM-5"); got == nil {
+		t.Fatal("siliconflow::zai-org/GLM-5 not found in catalog")
+	}
 }
 
 func TestCatalogProviderAndDefaults(t *testing.T) {
@@ -53,6 +59,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "gpt-5.4-mini", provider: "openai"},
 		{model: "openrouter::openai/gpt-oss-120b", provider: "openrouter"},
 		{model: "poe::Claude-Sonnet-4.5", provider: "poe"},
+		{model: "siliconflow::deepseek-ai/DeepSeek-V3.2", provider: "siliconflow"},
 	}
 	for _, tt := range tests {
 		if got := CatalogProviderForModel(tt.model); got != tt.provider {

@@ -13,6 +13,7 @@ from app.services.openai_service import check_summary_faithfulness as check_summ
 from app.services.openrouter_service import check_summary_faithfulness as check_summary_faithfulness_openrouter
 from app.services.moonshot_service import check_summary_faithfulness as check_summary_faithfulness_moonshot
 from app.services.poe_service import check_summary_faithfulness as check_summary_faithfulness_poe
+from app.services.siliconflow_service import check_summary_faithfulness as check_summary_faithfulness_siliconflow
 from app.services.xai_service import check_summary_faithfulness as check_summary_faithfulness_xai
 from app.services.zai_service import check_summary_faithfulness as check_summary_faithfulness_zai
 from app.services.router_observe import llm_usage_summary, run_observed_request
@@ -56,6 +57,7 @@ def check_summary_faithfulness_endpoint(req: SummaryFaithfulnessRequest, request
                     "zai": lambda api_key: check_summary_faithfulness_zai(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "openrouter": lambda api_key: check_summary_faithfulness_openrouter(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "poe": lambda api_key: check_summary_faithfulness_poe(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
+                    "siliconflow": lambda api_key: check_summary_faithfulness_siliconflow(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: check_summary_faithfulness_openai(req.title, req.facts, req.summary, model=str(req.model), api_key=api_key or ""),
                 },
             ),

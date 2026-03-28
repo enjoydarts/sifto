@@ -367,6 +367,7 @@ func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID str
 	zaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
 	poeKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
+	siliconFlowKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetSiliconFlowAPIKeyEncrypted, h.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
 	switch service.LLMProviderForModel(modelName) {
 	case "openrouter":
@@ -375,6 +376,8 @@ func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID str
 		openAIKey = moonshotKey
 	case "poe":
 		openAIKey = poeKey
+	case "siliconflow":
+		openAIKey = siliconFlowKey
 	}
 
 	var publishedAt *string

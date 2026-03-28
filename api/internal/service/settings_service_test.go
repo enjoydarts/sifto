@@ -118,6 +118,20 @@ func TestSettingsGetPayloadSupportsPoeFields(t *testing.T) {
 	}
 }
 
+func TestSettingsGetPayloadSupportsSiliconFlowFields(t *testing.T) {
+	payload := &SettingsGetPayload{
+		HasSiliconFlowAPIKey:   true,
+		SiliconFlowAPIKeyLast4: strptr("sf42"),
+	}
+
+	if !payload.HasSiliconFlowAPIKey {
+		t.Fatal("HasSiliconFlowAPIKey should be true")
+	}
+	if payload.SiliconFlowAPIKeyLast4 == nil || *payload.SiliconFlowAPIKeyLast4 != "sf42" {
+		t.Fatalf("SiliconFlowAPIKeyLast4 = %v, want %q", payload.SiliconFlowAPIKeyLast4, "sf42")
+	}
+}
+
 func TestSettingsGetPayloadSupportsMoonshotFields(t *testing.T) {
 	payload := &SettingsGetPayload{
 		HasMoonshotAPIKey:   true,

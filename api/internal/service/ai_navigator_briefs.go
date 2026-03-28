@@ -245,6 +245,7 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetZAIAPIKeyEncrypted, s.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenRouterAPIKeyEncrypted, s.cipher, userID, "")
 	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetPoeAPIKeyEncrypted, s.cipher, userID, "")
+	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetSiliconFlowAPIKeyEncrypted, s.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenAIAPIKeyEncrypted, s.cipher, userID, "")
 	modelName := &brief.Model
 	switch LLMProviderForModel(modelName) {
@@ -254,6 +255,8 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 		openAIKey = moonshotKey
 	case "poe":
 		openAIKey = poeKey
+	case "siliconflow":
+		openAIKey = siliconFlowKey
 	}
 	workerCandidates := make([]BriefingNavigatorCandidate, 0, len(candidates))
 	candidateByID := make(map[string]model.BriefingNavigatorCandidate, len(candidates))
@@ -417,6 +420,7 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetZAIAPIKeyEncrypted, s.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenRouterAPIKeyEncrypted, s.cipher, userID, "")
 	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetPoeAPIKeyEncrypted, s.cipher, userID, "")
+	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetSiliconFlowAPIKeyEncrypted, s.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenAIAPIKeyEncrypted, s.cipher, userID, "")
 	switch LLMProviderForModel(modelName) {
 	case "openrouter":
@@ -425,6 +429,8 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 		openAIKey = moonshotKey
 	case "poe":
 		openAIKey = poeKey
+	case "siliconflow":
+		openAIKey = siliconFlowKey
 	}
 	workerCandidates := make([]BriefingNavigatorCandidate, 0, len(candidates))
 	candidateByID := make(map[string]model.BriefingNavigatorCandidate, len(candidates))
@@ -772,6 +778,8 @@ func hasAINavigatorBriefProviderKey(settings *model.UserSettings, provider strin
 		return settings.HasOpenRouterAPIKey
 	case "poe":
 		return settings.HasPoeAPIKey
+	case "siliconflow":
+		return settings.HasSiliconFlowAPIKey
 	default:
 		return settings.HasAnthropicAPIKey
 	}

@@ -5,6 +5,7 @@ from pathlib import Path
 
 OPENROUTER_ALIAS_PREFIX = "openrouter::"
 POE_ALIAS_PREFIX = "poe::"
+SILICONFLOW_ALIAS_PREFIX = "siliconflow::"
 
 
 def resolve_model_id(model: str | None) -> str:
@@ -13,6 +14,8 @@ def resolve_model_id(model: str | None) -> str:
         return m[len(OPENROUTER_ALIAS_PREFIX) :]
     if m.startswith(POE_ALIAS_PREFIX):
         return m[len(POE_ALIAS_PREFIX) :]
+    if m.startswith(SILICONFLOW_ALIAS_PREFIX):
+        return m[len(SILICONFLOW_ALIAS_PREFIX) :]
     return m
 
 
@@ -49,6 +52,8 @@ def provider_for_model(model: str | None) -> str:
         return "openrouter"
     if m.startswith(POE_ALIAS_PREFIX):
         return "poe"
+    if m.startswith(SILICONFLOW_ALIAS_PREFIX):
+        return "siliconflow"
     catalog = load_llm_catalog()
     for group in ("chat_models", "embedding_models"):
         for item in catalog.get(group, []):

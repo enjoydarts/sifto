@@ -13,6 +13,7 @@ from app.services.moonshot_service import compose_ai_navigator_brief as compose_
 from app.services.openai_service import compose_ai_navigator_brief as compose_ai_navigator_brief_openai
 from app.services.openrouter_service import compose_ai_navigator_brief as compose_ai_navigator_brief_openrouter
 from app.services.poe_service import compose_ai_navigator_brief as compose_ai_navigator_brief_poe
+from app.services.siliconflow_service import compose_ai_navigator_brief as compose_ai_navigator_brief_siliconflow
 from app.services.router_observe import llm_usage_summary, run_observed_request
 from app.services.xai_service import compose_ai_navigator_brief as compose_ai_navigator_brief_xai
 from app.services.zai_service import compose_ai_navigator_brief as compose_ai_navigator_brief_zai
@@ -154,6 +155,13 @@ def compose_ai_navigator_brief_endpoint(req: AINavigatorBriefRequest, request: R
                     api_key=api_key or "",
                 ),
                 "poe": lambda api_key: compose_ai_navigator_brief_poe(
+                    persona=req.persona,
+                    candidates=candidates,
+                    intro_context=req.intro_context,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "siliconflow": lambda api_key: compose_ai_navigator_brief_siliconflow(
                     persona=req.persona,
                     candidates=candidates,
                     intro_context=req.intro_context,

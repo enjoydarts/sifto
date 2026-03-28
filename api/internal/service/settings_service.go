@@ -53,6 +53,8 @@ type SettingsGetPayload struct {
 	FireworksAPIKeyLast4    *string          `json:"fireworks_api_key_last4,omitempty"`
 	HasPoeAPIKey            bool             `json:"has_poe_api_key"`
 	PoeAPIKeyLast4          *string          `json:"poe_api_key_last4,omitempty"`
+	HasSiliconFlowAPIKey    bool             `json:"has_siliconflow_api_key"`
+	SiliconFlowAPIKeyLast4  *string          `json:"siliconflow_api_key_last4,omitempty"`
 	HasOpenRouterAPIKey     bool             `json:"has_openrouter_api_key"`
 	OpenRouterAPIKeyLast4   *string          `json:"openrouter_api_key_last4,omitempty"`
 	HasAivisAPIKey          bool             `json:"has_aivis_api_key"`
@@ -432,6 +434,8 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		FireworksAPIKeyLast4:    settings.FireworksAPIKeyLast4,
 		HasPoeAPIKey:            settings.HasPoeAPIKey,
 		PoeAPIKeyLast4:          settings.PoeAPIKeyLast4,
+		HasSiliconFlowAPIKey:    settings.HasSiliconFlowAPIKey,
+		SiliconFlowAPIKeyLast4:  settings.SiliconFlowAPIKeyLast4,
 		HasOpenRouterAPIKey:     settings.HasOpenRouterAPIKey,
 		OpenRouterAPIKeyLast4:   settings.OpenRouterAPIKeyLast4,
 		HasAivisAPIKey:          settings.HasAivisAPIKey,
@@ -970,6 +974,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetFireworksAPIKey(ctx, userID, enc, last4)
 	case "poe":
 		return s.repo.SetPoeAPIKey(ctx, userID, enc, last4)
+	case "siliconflow":
+		return s.repo.SetSiliconFlowAPIKey(ctx, userID, enc, last4)
 	case "openrouter":
 		return s.repo.SetOpenRouterAPIKey(ctx, userID, enc, last4)
 	case "aivis":
@@ -1005,6 +1011,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearFireworksAPIKey(ctx, userID)
 	case "poe":
 		return s.repo.ClearPoeAPIKey(ctx, userID)
+	case "siliconflow":
+		return s.repo.ClearSiliconFlowAPIKey(ctx, userID)
 	case "openrouter":
 		return s.repo.ClearOpenRouterAPIKey(ctx, userID)
 	case "aivis":

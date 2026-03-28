@@ -235,3 +235,33 @@ func TestIsFireworksTextModel(t *testing.T) {
 		}
 	})
 }
+
+func TestFireworksModelID(t *testing.T) {
+	got := fireworksModelID("accounts/fireworks/models/fireworks/glm-5")
+	if got != "fireworks/glm-5" {
+		t.Fatalf("model id = %q, want %q", got, "fireworks/glm-5")
+	}
+}
+
+func TestFireworksSupportsServerless(t *testing.T) {
+	t.Run("accepts explicit serverless models", func(t *testing.T) {
+		item := fireworksModelListItem{Name: "fireworks/glm-5", SupportsServerless: true}
+		if !fireworksSupportsServerless(item) {
+			t.Fatal("expected explicit serverless model to be accepted")
+		}
+	})
+
+	t.Run("accepts public models when serverless flag is absent", func(t *testing.T) {
+		item := fireworksModelListItem{Name: "accounts/fireworks/models/fireworks/glm-5", Public: true}
+		if !fireworksSupportsServerless(item) {
+			t.Fatal("expected public fireworks model to be accepted")
+		}
+	})
+
+	t.Run("rejects non-public models without serverless flag", func(t *testing.T) {
+		item := fireworksModelListItem{Name: "accounts/fireworks/models/private/model-1"}
+		if fireworksSupportsServerless(item) {
+			t.Fatal("expected non-public model without serverless flag to be rejected")
+		}
+	})
+}

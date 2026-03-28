@@ -510,10 +510,20 @@ type fireworksModelListItem struct {
 	Description           string `json:"description"`
 	SupportsServerless    bool   `json:"supportsServerless"`
 	SupportsServerlessAlt bool   `json:"supports_serverless"`
+	Public                bool   `json:"public"`
 	BaseModelDetails      struct {
 		ModelType string `json:"modelType"`
 	} `json:"baseModelDetails"`
 	ModelType string `json:"modelType"`
+}
+
+func fireworksModelID(name string) string {
+	name = strings.TrimSpace(name)
+	const marker = "/models/"
+	if idx := strings.Index(name, marker); idx >= 0 {
+		return strings.TrimSpace(name[idx+len(marker):])
+	}
+	return name
 }
 
 func isFireworksTextModel(item fireworksModelListItem) bool {
@@ -553,6 +563,15 @@ func isFireworksTextModel(item fireworksModelListItem) bool {
 	return true
 }
 
+func fireworksSupportsServerless(item fireworksModelListItem) bool {
+	if item.SupportsServerless || item.SupportsServerlessAlt {
+		return true
+	}
+	// Fireworks list-models responses do not always include explicit serverless flags.
+	// Treat public text models as eligible so discovery does not collapse to zero.
+	return item.Public
+}
+
 func (s *ProviderModelDiscoveryService) fetchFireworksModels(ctx context.Context) ([]string, error) {
 	apiKey := strings.TrimSpace(s.keys.Fireworks)
 	if apiKey == "" {
@@ -561,40 +580,61 @@ func (s *ProviderModelDiscoveryService) fetchFireworksModels(ctx context.Context
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
-	base := strings.TrimRight(strings.TrimSpace(os.Getenv("FIREWORKS_API_BASE_URL")), "/")
+	base := strings.TrimSpace(os.Getenv("FIREWORKS_API_BASE_URL"))
 	if base == "" {
-		base = "https://api.fireworks.ai/inference/v1"
+		base = "https://api.fireworks.ai"
 	}
-	modelsURL := strings.TrimSuffix(base, "/chat/completions") + "/models?filter=supports_serverless=true"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
+	parsedBase, err := url.Parse(base)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	var decoded struct {
-		Data   []fireworksModelListItem `json:"data"`
-		Models []fireworksModelListItem `json:"models"`
+	if parsedBase.Scheme == "" {
+		parsedBase.Scheme = "https"
 	}
-	resp, err := s.http.Do(req)
-	if err != nil {
-		return nil, err
+	if parsedBase.Host == "" {
+		parsedBase.Host = parsedBase.Path
+		parsedBase.Path = ""
 	}
-	if err := readJSONResponse(resp, &decoded); err != nil {
-		return nil, err
-	}
-	items := decoded.Data
-	if len(items) == 0 {
-		items = decoded.Models
-	}
-	models := make([]string, 0, len(items))
-	for _, item := range items {
-		if !(item.SupportsServerless || item.SupportsServerlessAlt) {
-			continue
+	parsedBase.Path = "/v1/accounts/fireworks/models"
+	query := url.Values{}
+	query.Set("pageSize", "200")
+	models := make([]string, 0, 128)
+	for {
+		parsedBase.RawQuery = query.Encode()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedBase.String(), nil)
+		if err != nil {
+			return nil, err
 		}
-		if !isFireworksTextModel(item) {
-			continue
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+		var decoded struct {
+			Data          []fireworksModelListItem `json:"data"`
+			Models        []fireworksModelListItem `json:"models"`
+			NextPageToken string                   `json:"nextPageToken"`
 		}
-		models = append(models, strings.TrimSpace(item.Name))
+		resp, err := s.http.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if err := readJSONResponse(resp, &decoded); err != nil {
+			return nil, err
+		}
+		items := decoded.Models
+		if len(items) == 0 {
+			items = decoded.Data
+		}
+		for _, item := range items {
+			if !fireworksSupportsServerless(item) {
+				continue
+			}
+			if !isFireworksTextModel(item) {
+				continue
+			}
+			models = append(models, fireworksModelID(item.Name))
+		}
+		if strings.TrimSpace(decoded.NextPageToken) == "" {
+			break
+		}
+		query.Set("pageToken", strings.TrimSpace(decoded.NextPageToken))
 	}
 	return normalizeModelIDs(models), nil
 }

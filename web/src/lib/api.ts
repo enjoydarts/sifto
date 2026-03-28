@@ -1292,8 +1292,12 @@ export interface UserSettings {
   reading_plan: UserReadingPlanSettings;
   llm_models?: {
     facts?: string | null;
+    facts_secondary?: string | null;
+    facts_secondary_rate_percent?: number;
     facts_fallback?: string | null;
     summary?: string | null;
+    summary_secondary?: string | null;
+    summary_secondary_rate_percent?: number;
     summary_fallback?: string | null;
     digest_cluster?: string | null;
     digest?: string | null;
@@ -2310,8 +2314,12 @@ export const api = {
     }),
   updateLLMModelSettings: (body: {
     facts?: string | null;
+    facts_secondary?: string | null;
+    facts_secondary_rate_percent?: number;
     facts_fallback?: string | null;
     summary?: string | null;
+    summary_secondary?: string | null;
+    summary_secondary_rate_percent?: number;
     summary_fallback?: string | null;
     digest_cluster?: string | null;
     digest?: string | null;

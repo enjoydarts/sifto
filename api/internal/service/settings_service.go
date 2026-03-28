@@ -76,8 +76,12 @@ type SettingsGetPayload struct {
 
 type UpdateLLMModelsInput struct {
 	Facts                       *string
+	FactsSecondary              *string
+	FactsSecondaryRatePercent   *int
 	FactsFallback               *string
 	Summary                     *string
+	SummarySecondary            *string
+	SummarySecondaryRatePercent *int
 	SummaryFallback             *string
 	DigestCluster               *string
 	Digest                      *string
@@ -142,8 +146,10 @@ type UpdateAudioBriefingPersonaVoiceInput struct {
 
 var modelSettingPurposes = map[string]string{
 	"facts":                          "facts",
+	"facts_secondary":                "facts",
 	"facts_fallback":                 "facts",
 	"summary":                        "summary",
+	"summary_secondary":              "summary",
 	"summary_fallback":               "summary",
 	"digest_cluster":                 "digest_cluster_draft",
 	"digest":                         "digest",
@@ -161,8 +167,10 @@ var modelSettingPurposes = map[string]string{
 
 var modelSettingRequiredCapabilities = map[string][]string{
 	"facts":                          {"structured_output"},
+	"facts_secondary":                {"structured_output"},
 	"facts_fallback":                 {"structured_output"},
 	"summary":                        {"structured_output"},
+	"summary_secondary":              {"structured_output"},
 	"summary_fallback":               {"structured_output"},
 	"digest_cluster":                 {"structured_output"},
 	"digest":                         {"structured_output"},
@@ -213,8 +221,12 @@ func obsidianExportPayload(settings *model.ObsidianExportSettings, githubApp *Gi
 func LLMModelSettingsPayload(settings *model.UserSettings) map[string]any {
 	return map[string]any{
 		"facts":                          settings.FactsModel,
+		"facts_secondary":                settings.FactsSecondaryModel,
+		"facts_secondary_rate_percent":   settings.FactsSecondaryRatePercent,
 		"facts_fallback":                 settings.FactsFallbackModel,
 		"summary":                        settings.SummaryModel,
+		"summary_secondary":              settings.SummarySecondaryModel,
+		"summary_secondary_rate_percent": settings.SummarySecondaryRatePercent,
 		"summary_fallback":               settings.SummaryFallbackModel,
 		"digest_cluster":                 settings.DigestClusterModel,
 		"digest":                         settings.DigestModel,
@@ -670,8 +682,10 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 	}
 	normalized := map[string]*string{
 		"facts":                          normalizeOptionalModel(in.Facts),
+		"facts_secondary":                normalizeOptionalModel(in.FactsSecondary),
 		"facts_fallback":                 normalizeOptionalModel(in.FactsFallback),
 		"summary":                        normalizeOptionalModel(in.Summary),
+		"summary_secondary":              normalizeOptionalModel(in.SummarySecondary),
 		"summary_fallback":               normalizeOptionalModel(in.SummaryFallback),
 		"digest_cluster":                 normalizeOptionalModel(in.DigestCluster),
 		"digest":                         normalizeOptionalModel(in.Digest),
@@ -703,8 +717,12 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		ctx,
 		userID,
 		normalized["facts"],
+		normalized["facts_secondary"],
+		normalizeModelSplitRatePercent(in.FactsSecondaryRatePercent),
 		normalized["facts_fallback"],
 		normalized["summary"],
+		normalized["summary_secondary"],
+		normalizeModelSplitRatePercent(in.SummarySecondaryRatePercent),
 		normalized["summary_fallback"],
 		normalized["digest_cluster"],
 		normalized["digest"],

@@ -115,10 +115,14 @@ function localizeLLMSettingKey(settingKey: string, t: (key: string, fallback?: s
   switch (settingKey) {
     case "facts":
       return t("settings.model.facts");
+    case "facts_secondary":
+      return t("settings.model.factsSecondary");
     case "facts_fallback":
       return t("settings.model.factsFallback");
     case "summary":
       return t("settings.model.summary");
+    case "summary_secondary":
+      return t("settings.model.summarySecondary");
     case "summary_fallback":
       return t("settings.model.summaryFallback");
     case "digest_cluster":
@@ -475,8 +479,12 @@ export default function SettingsPage() {
   const [obsidianRepoBranch, setObsidianRepoBranch] = useState("main");
   const [obsidianRootPath, setObsidianRootPath] = useState("Sifto/Favorites");
   const [anthropicFactsModel, setAnthropicFactsModel] = useState("");
+  const [anthropicFactsSecondaryModel, setAnthropicFactsSecondaryModel] = useState("");
+  const [anthropicFactsSecondaryRatePercent, setAnthropicFactsSecondaryRatePercent] = useState("0");
   const [anthropicFactsFallbackModel, setAnthropicFactsFallbackModel] = useState("");
   const [anthropicSummaryModel, setAnthropicSummaryModel] = useState("");
+  const [anthropicSummarySecondaryModel, setAnthropicSummarySecondaryModel] = useState("");
+  const [anthropicSummarySecondaryRatePercent, setAnthropicSummarySecondaryRatePercent] = useState("0");
   const [anthropicSummaryFallbackModel, setAnthropicSummaryFallbackModel] = useState("");
   const [anthropicDigestClusterModel, setAnthropicDigestClusterModel] = useState("");
   const [anthropicDigestModel, setAnthropicDigestModel] = useState("");
@@ -549,8 +557,12 @@ export default function SettingsPage() {
 
   const syncLLMModelForm = useCallback((llmModels?: UserSettings["llm_models"] | null) => {
     setAnthropicFactsModel(llmModels?.facts ?? "");
+    setAnthropicFactsSecondaryModel(llmModels?.facts_secondary ?? "");
+    setAnthropicFactsSecondaryRatePercent(String(llmModels?.facts_secondary_rate_percent ?? 0));
     setAnthropicFactsFallbackModel(llmModels?.facts_fallback ?? "");
     setAnthropicSummaryModel(llmModels?.summary ?? "");
+    setAnthropicSummarySecondaryModel(llmModels?.summary_secondary ?? "");
+    setAnthropicSummarySecondaryRatePercent(String(llmModels?.summary_secondary_rate_percent ?? 0));
     setAnthropicSummaryFallbackModel(llmModels?.summary_fallback ?? "");
     setAnthropicDigestClusterModel(llmModels?.digest_cluster ?? "");
     setAnthropicDigestModel(llmModels?.digest ?? "");
@@ -579,8 +591,12 @@ export default function SettingsPage() {
   const buildLLMModelPayload = useCallback(
     (overrides?: Partial<{
       facts: string | null;
+      facts_secondary: string | null;
+      facts_secondary_rate_percent: number;
       facts_fallback: string | null;
       summary: string | null;
+      summary_secondary: string | null;
+      summary_secondary_rate_percent: number;
       summary_fallback: string | null;
       digest_cluster: string | null;
       digest: string | null;
@@ -604,10 +620,19 @@ export default function SettingsPage() {
         const s = v.trim();
         return s === "" ? null : s;
       };
+      const normalizeRate = (v: string) => {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return 0;
+        return Math.min(100, Math.max(0, Math.round(n)));
+      };
       return {
         facts: emptyToNull(anthropicFactsModel),
+        facts_secondary: emptyToNull(anthropicFactsSecondaryModel),
+        facts_secondary_rate_percent: normalizeRate(anthropicFactsSecondaryRatePercent),
         facts_fallback: emptyToNull(anthropicFactsFallbackModel),
         summary: emptyToNull(anthropicSummaryModel),
+        summary_secondary: emptyToNull(anthropicSummarySecondaryModel),
+        summary_secondary_rate_percent: normalizeRate(anthropicSummarySecondaryRatePercent),
         summary_fallback: emptyToNull(anthropicSummaryFallbackModel),
         digest_cluster: emptyToNull(anthropicDigestClusterModel),
         digest: emptyToNull(anthropicDigestModel),
@@ -635,9 +660,13 @@ export default function SettingsPage() {
       anthropicDigestModel,
       anthropicFactsFallbackModel,
       anthropicFactsModel,
+      anthropicFactsSecondaryModel,
+      anthropicFactsSecondaryRatePercent,
       anthropicSourceSuggestionModel,
       anthropicSummaryFallbackModel,
       anthropicSummaryModel,
+      anthropicSummarySecondaryModel,
+      anthropicSummarySecondaryRatePercent,
       factsCheckModel,
       faithfulnessCheckModel,
       aiNavigatorBriefEnabled,
@@ -893,8 +922,12 @@ export default function SettingsPage() {
     const preset = buildCostPerformancePreset(catalog);
     llmModelsDirtyRef.current = true;
     setAnthropicFactsModel(preset.facts ?? "");
+    setAnthropicFactsSecondaryModel("");
+    setAnthropicFactsSecondaryRatePercent("0");
     setAnthropicFactsFallbackModel("");
     setAnthropicSummaryModel(preset.summary ?? "");
+    setAnthropicSummarySecondaryModel("");
+    setAnthropicSummarySecondaryRatePercent("0");
     setAnthropicSummaryFallbackModel("");
     setAnthropicDigestClusterModel(preset.digest_cluster ?? "");
     setAnthropicDigestModel(preset.digest ?? "");
@@ -3624,8 +3657,40 @@ export default function SettingsPage() {
                       <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.group.summary")}</h4>
                       <div className="mt-3 grid gap-4 md:grid-cols-2">
                         <ModelSelect label={t("settings.model.facts")} value={anthropicFactsModel} onChange={(value) => onChangeLLMModel(setAnthropicFactsModel, value)} options={optionsForPurpose("facts", anthropicFactsModel)} labels={modelSelectLabels} variant="modal" />
+                        <ModelSelect label={t("settings.model.factsSecondary")} value={anthropicFactsSecondaryModel} onChange={(value) => onChangeLLMModel(setAnthropicFactsSecondaryModel, value)} options={optionsForPurpose("facts", anthropicFactsSecondaryModel)} labels={modelSelectLabels} variant="modal" />
+                        <label className="space-y-2 text-sm text-[var(--color-editorial-ink-soft)]">
+                          <span className="block text-sm font-medium text-[var(--color-editorial-ink)]">{t("settings.model.factsSecondaryRatePercent")}</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={anthropicFactsSecondaryRatePercent}
+                            onChange={(event) => {
+                              llmModelsDirtyRef.current = true;
+                              setAnthropicFactsSecondaryRatePercent(event.target.value);
+                            }}
+                            className="w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink)] outline-none placeholder:text-[var(--color-editorial-ink-faint)]"
+                          />
+                        </label>
                         <ModelSelect label={t("settings.model.factsFallback")} value={anthropicFactsFallbackModel} onChange={(value) => onChangeLLMModel(setAnthropicFactsFallbackModel, value)} options={optionsForPurpose("facts", anthropicFactsFallbackModel)} labels={modelSelectLabels} variant="modal" />
                         <ModelSelect label={t("settings.model.summary")} value={anthropicSummaryModel} onChange={(value) => onChangeLLMModel(setAnthropicSummaryModel, value)} options={optionsForPurpose("summary", anthropicSummaryModel)} labels={modelSelectLabels} variant="modal" />
+                        <ModelSelect label={t("settings.model.summarySecondary")} value={anthropicSummarySecondaryModel} onChange={(value) => onChangeLLMModel(setAnthropicSummarySecondaryModel, value)} options={optionsForPurpose("summary", anthropicSummarySecondaryModel)} labels={modelSelectLabels} variant="modal" />
+                        <label className="space-y-2 text-sm text-[var(--color-editorial-ink-soft)]">
+                          <span className="block text-sm font-medium text-[var(--color-editorial-ink)]">{t("settings.model.summarySecondaryRatePercent")}</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={anthropicSummarySecondaryRatePercent}
+                            onChange={(event) => {
+                              llmModelsDirtyRef.current = true;
+                              setAnthropicSummarySecondaryRatePercent(event.target.value);
+                            }}
+                            className="w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink)] outline-none placeholder:text-[var(--color-editorial-ink-faint)]"
+                          />
+                        </label>
                         <ModelSelect label={t("settings.model.summaryFallback")} value={anthropicSummaryFallbackModel} onChange={(value) => onChangeLLMModel(setAnthropicSummaryFallbackModel, value)} options={optionsForPurpose("summary", anthropicSummaryFallbackModel)} labels={modelSelectLabels} variant="modal" />
                       </div>
                     </section>

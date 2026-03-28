@@ -315,7 +315,11 @@ func extractAndPersistFacts(
 	var primaryModelOverride *string
 	var fallbackModelOverride *string
 	if userModelSettings != nil {
-		primaryModelOverride = ptrStringOrNil(userModelSettings.FactsModel)
+		primaryModelOverride = service.ChooseSplitPrimaryModel(
+			ptrStringOrNil(userModelSettings.FactsModel),
+			ptrStringOrNil(userModelSettings.FactsSecondaryModel),
+			userModelSettings.FactsSecondaryRatePercent,
+		)
 		fallbackModelOverride = ptrStringOrNil(userModelSettings.FactsFallbackModel)
 	}
 	currentModelOverride := primaryModelOverride
@@ -521,7 +525,11 @@ func summarizeAndPersistItem(
 		var primaryModelOverride *string
 		var fallbackModelOverride *string
 		if userModelSettings != nil {
-			primaryModelOverride = ptrStringOrNil(userModelSettings.SummaryModel)
+			primaryModelOverride = service.ChooseSplitPrimaryModel(
+				ptrStringOrNil(userModelSettings.SummaryModel),
+				ptrStringOrNil(userModelSettings.SummarySecondaryModel),
+				userModelSettings.SummarySecondaryRatePercent,
+			)
 			fallbackModelOverride = ptrStringOrNil(userModelSettings.SummaryFallbackModel)
 		}
 		var primaryRuntime *llmRuntime

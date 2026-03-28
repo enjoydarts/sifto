@@ -72,8 +72,12 @@ type UserSettings struct {
 	ReadingPlanDiversifyTopics       bool       `json:"reading_plan_diversify_topics"`
 	ReadingPlanExcludeRead           bool       `json:"reading_plan_exclude_read"`
 	FactsModel                       *string    `json:"facts_model,omitempty"`
+	FactsSecondaryModel              *string    `json:"facts_secondary_model,omitempty"`
+	FactsSecondaryRatePercent        int        `json:"facts_secondary_rate_percent"`
 	FactsFallbackModel               *string    `json:"facts_fallback_model,omitempty"`
 	SummaryModel                     *string    `json:"summary_model,omitempty"`
+	SummarySecondaryModel            *string    `json:"summary_secondary_model,omitempty"`
+	SummarySecondaryRatePercent      int        `json:"summary_secondary_rate_percent"`
 	SummaryFallbackModel             *string    `json:"summary_fallback_model,omitempty"`
 	DigestClusterModel               *string    `json:"digest_cluster_model,omitempty"`
 	DigestModel                      *string    `json:"digest_model,omitempty"`

@@ -33,8 +33,12 @@ func TestValidateCatalogModelForPurpose(t *testing.T) {
 func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 	settings := &model.UserSettings{
 		FactsModel:                       strptr("gpt-5.4-mini"),
+		FactsSecondaryModel:              strptr("google/gemini-2.5-flash"),
+		FactsSecondaryRatePercent:        33,
 		FactsFallbackModel:               strptr("google/gemini-2.5-flash"),
 		SummaryModel:                     strptr("gpt-5.4"),
+		SummarySecondaryModel:            strptr("openrouter::openai/gpt-oss-120b"),
+		SummarySecondaryRatePercent:      25,
 		SummaryFallbackModel:             strptr("openrouter::openai/gpt-oss-120b"),
 		NavigatorPersonaMode:             PersonaModeRandom,
 		NavigatorPersona:                 "editor",
@@ -51,8 +55,20 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 	if gotFactsFallback, _ := got["facts_fallback"].(*string); gotFactsFallback == nil || *gotFactsFallback != "google/gemini-2.5-flash" {
 		t.Fatalf("facts_fallback = %v, want %q", got["facts_fallback"], "google/gemini-2.5-flash")
 	}
+	if gotFactsSecondary, _ := got["facts_secondary"].(*string); gotFactsSecondary == nil || *gotFactsSecondary != "google/gemini-2.5-flash" {
+		t.Fatalf("facts_secondary = %v, want %q", got["facts_secondary"], "google/gemini-2.5-flash")
+	}
+	if gotFactsSecondaryRate, _ := got["facts_secondary_rate_percent"].(int); gotFactsSecondaryRate != 33 {
+		t.Fatalf("facts_secondary_rate_percent = %v, want 33", got["facts_secondary_rate_percent"])
+	}
 	if gotSummaryFallback, _ := got["summary_fallback"].(*string); gotSummaryFallback == nil || *gotSummaryFallback != "openrouter::openai/gpt-oss-120b" {
 		t.Fatalf("summary_fallback = %v, want %q", got["summary_fallback"], "openrouter::openai/gpt-oss-120b")
+	}
+	if gotSummarySecondary, _ := got["summary_secondary"].(*string); gotSummarySecondary == nil || *gotSummarySecondary != "openrouter::openai/gpt-oss-120b" {
+		t.Fatalf("summary_secondary = %v, want %q", got["summary_secondary"], "openrouter::openai/gpt-oss-120b")
+	}
+	if gotSummarySecondaryRate, _ := got["summary_secondary_rate_percent"].(int); gotSummarySecondaryRate != 25 {
+		t.Fatalf("summary_secondary_rate_percent = %v, want 25", got["summary_secondary_rate_percent"])
 	}
 	if gotAudioBriefingScript, _ := got["audio_briefing_script"].(*string); gotAudioBriefingScript == nil || *gotAudioBriefingScript != "gpt-5.4" {
 		t.Fatalf("audio_briefing_script = %v, want %q", got["audio_briefing_script"], "gpt-5.4")

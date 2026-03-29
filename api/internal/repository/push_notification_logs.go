@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -62,7 +63,28 @@ type PushNotificationLogInput struct {
 	Recipients              int
 }
 
+func normalizePushNotificationLogText(v string) string {
+	return strings.ToValidUTF8(v, "�")
+}
+
+func normalizePushNotificationLogInput(in PushNotificationLogInput) PushNotificationLogInput {
+	in.UserID = normalizePushNotificationLogText(in.UserID)
+	in.Kind = normalizePushNotificationLogText(in.Kind)
+	in.Title = normalizePushNotificationLogText(in.Title)
+	in.Message = normalizePushNotificationLogText(in.Message)
+	if in.ItemID != nil {
+		v := normalizePushNotificationLogText(*in.ItemID)
+		in.ItemID = &v
+	}
+	if in.OneSignalNotificationID != nil {
+		v := normalizePushNotificationLogText(*in.OneSignalNotificationID)
+		in.OneSignalNotificationID = &v
+	}
+	return in
+}
+
 func (r *PushNotificationLogRepo) Insert(ctx context.Context, in PushNotificationLogInput) error {
+	in = normalizePushNotificationLogInput(in)
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO push_notification_logs (
 			user_id, kind, item_id, day_jst, title, message, onesignal_notification_id, recipients

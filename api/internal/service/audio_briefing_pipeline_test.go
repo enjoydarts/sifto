@@ -157,8 +157,8 @@ func TestAudioBriefingArticleBatchSize(t *testing.T) {
 		{itemCount: 0, want: 1},
 		{itemCount: 1, want: 1},
 		{itemCount: 3, want: 3},
-		{itemCount: 4, want: 4},
-		{itemCount: 12, want: 4},
+		{itemCount: 4, want: 3},
+		{itemCount: 12, want: 3},
 	}
 
 	for _, tt := range tests {

@@ -289,7 +289,7 @@ _NAVIGATOR_VERBOSITY_INSTRUCTIONS = {
     "expansive": "ややふくらみを持たせてよい。比喩や余韻を少し許しつつ、散らからないようにする。",
 }
 
-AUDIO_BRIEFING_CHARS_PER_MINUTE = 650
+AUDIO_BRIEFING_CHARS_PER_MINUTE = 600
 
 
 def resolve_navigator_persona_profile(persona: str, variant: str) -> tuple[str, dict]:

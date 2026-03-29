@@ -559,10 +559,10 @@ func audioBriefingArticleBatchSize(itemCount int) int {
 	if itemCount <= 0 {
 		return 1
 	}
-	if itemCount < 4 {
+	if itemCount < 3 {
 		return itemCount
 	}
-	return 4
+	return 3
 }
 
 func audioBriefingGenerateArticleSegmentsBatch(

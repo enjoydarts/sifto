@@ -896,9 +896,11 @@ def build_audio_briefing_script_task(
         response_properties.append('  "overall_summary": "全体サマリー"')
     if include_article_segments:
         section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
+        section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。headline を除き、1記事あたりの summary_intro と commentary の合計は約 {article_budget} 文字以内を厳守する")
         section_rules.append("- article_segments の各 summary_intro は 1〜2文で、その記事が何の話かを最初に素早く伝える簡潔な要約にする")
         section_rules.append("- summary_intro では事実の骨子を優先し、いきなり感想や評価から入らない")
         section_rules.append(f"- article_segments の各 commentary は 4〜8文で、summary_intro を受けてから論評や含意に入る。音声で聞きやすい自然な話し言葉にし、要点だけで切り上げず必要な背景や含意まで入れる。目安は summary_intro と合わせて約 {article_budget} 文字以内")
+        section_rules.append("- article_segments は各記事にほぼ均等に尺を配る。1本だけ極端に長くしない。長くなりそうなら commentary 側を先に圧縮して収める")
         target_lines.append(f"- 各 article segment の目安: summary_intro と commentary を合わせて約 {article_budget} 文字以内")
         response_properties.extend([
             '  "article_segments": [',
@@ -942,6 +944,7 @@ def build_audio_briefing_script_task(
 - 前置き・後置き・コードフェンスは不要です。
 - articles にない item_id を作らない
 - 冗長な前置きや言い換えを避け、文字数目標を強く意識する
+- 今回与えられた target_chars と記事数から逆算した尺配分を守り、特定のセクションや特定の記事だけを必要以上に長くしない
 - 各記事では、summary の言い換えだけで終わらせず、このペルソナなら何に反応するかを話す
 - 第一印象、良いと感じる点、引っかかる点、今読む理由のうち2〜3個が自然ににじむようにする
 - 客観的な無味乾燥レビューではなく、このペルソナの主観で語る
@@ -973,6 +976,7 @@ def build_audio_briefing_script_task(
 {chr(10).join(target_lines)}
 - 全体は目標文字数の前後10%程度に収める意識で書く
 - 目標文字数を大きく下回らない。特に長尺回では 85% 未満まで縮めない意識で書く
+- article_segments は各記事の持ち分を使い切る意識で、記事数に対して不自然に長くしない
 
 追加ルール:
 - JSONのみを返す

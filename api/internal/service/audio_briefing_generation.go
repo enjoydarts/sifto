@@ -28,8 +28,9 @@ type AudioBriefingNarration struct {
 }
 
 type AudioBriefingNarrationArticle struct {
-	Headline   string
-	Commentary string
+	Headline     string
+	SummaryIntro string
+	Commentary   string
 }
 
 const audioBriefingCharsPerMinute = 650
@@ -75,9 +76,9 @@ func BuildAudioBriefingDraft(
 		if headline == "" {
 			headline = fmt.Sprintf("記事%d", item.Rank)
 		}
-		body := strings.TrimSpace(coalesceString(item.SummarySnapshot, item.SegmentTitle))
-		body = fitAudioBriefingTextToChars(body, commentaryBudget)
-		text := audioBriefingArticleText(headline, body)
+		summaryIntro := strings.TrimSpace(coalesceString(item.SummarySnapshot, item.SegmentTitle))
+		summaryIntro = fitAudioBriefingTextToChars(summaryIntro, audioBriefingSummaryIntroBudget(commentaryBudget))
+		text := audioBriefingArticleText(headline, summaryIntro, "")
 		for _, part := range audioBriefingSectionParts(text, 1200, true) {
 			chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", part, ttsProvider, voiceModel, voiceStyle))
 			totalChars += charCount(part)
@@ -151,17 +152,22 @@ func BuildAudioBriefingDraftFromNarration(
 		if headline == "" {
 			headline = fmt.Sprintf("記事%d", item.Rank)
 		}
-		commentary := strings.TrimSpace(coalesceString(item.SummarySnapshot, item.SegmentTitle))
+		summaryIntro := strings.TrimSpace(coalesceString(item.SummarySnapshot, item.SegmentTitle))
+		commentary := ""
 		if article, ok := narration.Articles[item.ItemID]; ok {
 			if candidate := strings.TrimSpace(article.Headline); candidate != "" {
 				headline = candidate
+			}
+			if candidate := strings.TrimSpace(article.SummaryIntro); candidate != "" {
+				summaryIntro = candidate
 			}
 			if candidate := strings.TrimSpace(article.Commentary); candidate != "" {
 				commentary = candidate
 			}
 		}
+		summaryIntro = fitAudioBriefingTextToChars(summaryIntro, audioBriefingSummaryIntroBudget(commentaryBudget))
 		commentary = fitAudioBriefingTextToChars(commentary, commentaryBudget)
-		text := audioBriefingArticleText(headline, commentary)
+		text := audioBriefingArticleText(headline, summaryIntro, commentary)
 		for _, part := range audioBriefingSectionParts(text, 1200, true) {
 			chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", part, ttsProvider, voiceModel, voiceStyle))
 			totalChars += charCount(part)
@@ -291,17 +297,21 @@ func charCount(v string) int {
 	return utf8.RuneCountInString(v)
 }
 
-func audioBriefingArticleText(headline, commentary string) string {
+func audioBriefingArticleText(headline, summaryIntro, commentary string) string {
 	headline = strings.TrimSpace(headline)
+	summaryIntro = strings.TrimSpace(summaryIntro)
 	commentary = strings.TrimSpace(commentary)
-	switch {
-	case headline == "":
-		return commentary
-	case commentary == "":
-		return headline
-	default:
-		return fmt.Sprintf("%sです。%s", headline, commentary)
+	parts := make([]string, 0, 3)
+	if headline != "" {
+		parts = append(parts, fmt.Sprintf("%sです。", headline))
 	}
+	if summaryIntro != "" {
+		parts = append(parts, summaryIntro)
+	}
+	if commentary != "" {
+		parts = append(parts, commentary)
+	}
+	return strings.TrimSpace(strings.Join(parts, " "))
 }
 
 func AudioBriefingTargetChars(targetDurationMinutes int) int {
@@ -325,6 +335,20 @@ func audioBriefingCommentaryBudget(targetChars, itemCount int) int {
 		return minimum
 	}
 	return perArticle
+}
+
+func audioBriefingSummaryIntroBudget(commentaryBudget int) int {
+	if commentaryBudget <= 0 {
+		return 240
+	}
+	budget := commentaryBudget / 3
+	if budget < 240 {
+		return 240
+	}
+	if budget > 520 {
+		return 520
+	}
+	return budget
 }
 
 func audioBriefingOpeningBudget(targetChars int) int {

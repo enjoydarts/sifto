@@ -525,8 +525,9 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 			}
 			for _, segment := range result.Segments {
 				narration.Articles[segment.ItemID] = AudioBriefingNarrationArticle{
-					Headline:   strings.TrimSpace(segment.Headline),
-					Commentary: strings.TrimSpace(segment.Commentary),
+					Headline:     strings.TrimSpace(segment.Headline),
+					SummaryIntro: strings.TrimSpace(segment.SummaryIntro),
+					Commentary:   strings.TrimSpace(segment.Commentary),
 				}
 			}
 		}
@@ -546,7 +547,7 @@ func audioBriefingArticleBatchTargetChars(targetChars, totalArticles, batchArtic
 		return 0
 	}
 	perArticle := audioBriefingCommentaryBudget(targetChars, totalArticles)
-	target := perArticle*batchArticles + batchArticles*40
+	target := (perArticle+audioBriefingSummaryIntroBudget(perArticle))*batchArticles + batchArticles*40
 	minimum := batchArticles * 500
 	if target < minimum {
 		return minimum

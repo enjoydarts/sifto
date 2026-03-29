@@ -328,9 +328,10 @@ type AudioBriefingScriptArticle struct {
 }
 
 type AudioBriefingScriptSegment struct {
-	ItemID     string `json:"item_id"`
-	Headline   string `json:"headline"`
-	Commentary string `json:"commentary"`
+	ItemID       string `json:"item_id"`
+	Headline     string `json:"headline"`
+	SummaryIntro string `json:"summary_intro"`
+	Commentary   string `json:"commentary"`
 }
 
 type AudioBriefingScriptResponse struct {

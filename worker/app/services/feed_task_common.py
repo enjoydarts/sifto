@@ -151,9 +151,10 @@ AUDIO_BRIEFING_SCRIPT_SCHEMA = {
                 "properties": {
                     "item_id": {"type": "string"},
                     "headline": {"type": "string"},
+                    "summary_intro": {"type": "string"},
                     "commentary": {"type": "string"},
                 },
-                "required": ["item_id", "headline", "commentary"],
+                "required": ["item_id", "headline", "summary_intro", "commentary"],
                 "additionalProperties": False,
             },
         },
@@ -887,7 +888,7 @@ def build_audio_briefing_script_task(
         target_lines.append(f"- opening の目安: 約 {opening_budget} 文字以内")
         response_properties.append('  "opening": "導入"')
     if include_overall_summary:
-        section_rules.append(f"- overall_summary は総括であり、12文以上で、その回の全体像、流れ、聞きどころ、記事群のつながりまでしっかり話す。長尺回では恐れず十分に伸ばし、短くまとめすぎない。目安は約 {summary_budget} 文字以内")
+        section_rules.append(f"- overall_summary は総括であり、10文以上で、その回の全体像、流れ、聞きどころ、記事群のつながりまでしっかり話す。長尺回では恐れず十分に伸ばし、短くまとめすぎない。目安は約 {summary_budget} 文字以内")
         section_rules.append("- overall_summary で記事の順番紹介をしない。各記事の1行要約を並べない")
         section_rules.append("- overall_summary で見出しの焼き直しや、記事ごとの固有名詞の機械的な列挙をしない")
         section_rules.append("- overall_summary では、回全体を俯瞰して共通テーマ、対立軸、温度感、いま追う意味を語る")
@@ -895,11 +896,13 @@ def build_audio_briefing_script_task(
         response_properties.append('  "overall_summary": "全体サマリー"')
     if include_article_segments:
         section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
-        section_rules.append(f"- article_segments の各 commentary は 4〜7文で、音声で聞きやすい自然な話し言葉にする。要点だけで切り上げず、必要な背景や含意まで入れる。目安は約 {article_budget} 文字以内")
-        target_lines.append(f"- 各 commentary の目安: 約 {article_budget} 文字以内")
+        section_rules.append("- article_segments の各 summary_intro は 1〜2文で、その記事が何の話かを最初に素早く伝える簡潔な要約にする")
+        section_rules.append("- summary_intro では事実の骨子を優先し、いきなり感想や評価から入らない")
+        section_rules.append(f"- article_segments の各 commentary は 4〜8文で、summary_intro を受けてから論評や含意に入る。音声で聞きやすい自然な話し言葉にし、要点だけで切り上げず必要な背景や含意まで入れる。目安は summary_intro と合わせて約 {article_budget} 文字以内")
+        target_lines.append(f"- 各 article segment の目安: summary_intro と commentary を合わせて約 {article_budget} 文字以内")
         response_properties.extend([
             '  "article_segments": [',
-            '    {"item_id": "uuid", "headline": "記事見出し", "commentary": "記事ごとの話し言葉コメント"}',
+            '    {"item_id": "uuid", "headline": "記事見出し", "summary_intro": "その記事が何の話かを伝える1〜2文", "commentary": "記事ごとの話し言葉コメント"}',
             "  ]",
         ])
     else:
@@ -1074,6 +1077,9 @@ def parse_audio_briefing_script_result(
             headline = str(raw.get("headline") or "").strip()
             if not headline:
                 raise ValueError(f"audio briefing script missing headline for item_id: {item_id}")
+            summary_intro = _normalize_audio_briefing_generated_text(str(raw.get("summary_intro") or "").strip())
+            if not summary_intro:
+                raise ValueError(f"audio briefing script missing summary_intro for item_id: {item_id}")
             commentary = _normalize_audio_briefing_generated_text(str(raw.get("commentary") or "").strip())
             if not commentary:
                 raise ValueError(f"audio briefing script missing commentary for item_id: {item_id}")
@@ -1081,6 +1087,7 @@ def parse_audio_briefing_script_result(
                 {
                     "item_id": item_id,
                     "headline": headline[:160],
+                    "summary_intro": summary_intro[:max(240, article_cap // 3)],
                     "commentary": commentary[:article_cap],
                 }
             )
@@ -1100,6 +1107,7 @@ _AUDIO_BRIEFING_SCRIPT_RETRYABLE_ERROR_MARKERS = (
     "audio briefing script article_segments count mismatch",
     "audio briefing script segment must be an object",
     "audio briefing script missing headline for item_id:",
+    "audio briefing script missing summary_intro for item_id:",
     "audio briefing script missing commentary for item_id:",
 )
 

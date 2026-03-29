@@ -159,6 +159,49 @@ class _RetryThenSuccessClient:
         )
 
 
+class _EmptyLengthThenSuccessClient:
+    call_count = 0
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def post(self, url, headers=None, json=None):
+        _EmptyLengthThenSuccessClient.call_count += 1
+        if _EmptyLengthThenSuccessClient.call_count == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "provider": "DeepInfra",
+                    "choices": [
+                        {
+                            "finish_reason": "length",
+                            "message": {
+                                "content": None,
+                                "refusal": "",
+                                "reasoning": {"tokens": 123},
+                            },
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 11, "completion_tokens": 6400},
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "model": "moonshotai/kimi-k2.5",
+                "provider": "DeepInfra",
+                "choices": [{"finish_reason": "stop", "message": {"content": '{"answer":"ok"}'}}],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 34},
+            },
+        )
+
+
 class _ListLogger:
     def __init__(self):
         self.messages = []
@@ -173,6 +216,7 @@ class RunChatJsonTests(unittest.TestCase):
     def setUp(self):
         _FakeClient.last_json = None
         _RetryThenSuccessClient.call_count = 0
+        _EmptyLengthThenSuccessClient.call_count = 0
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
     def test_zai_requests_disable_thinking(self):
@@ -366,6 +410,30 @@ class RunChatJsonTests(unittest.TestCase):
             usage.get("execution_failures"),
             [{"model": "openrouter::auto", "reason": "status=429 body={\"error\":{\"message\":\"Rate limit reached\"}}"}],
         )
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _EmptyLengthThenSuccessClient)
+    def test_empty_json_content_with_length_retries_and_records_execution_failure(self):
+        _text, usage = run_chat_json(
+            "Return JSON",
+            "openrouter::moonshotai/kimi-k2.5",
+            "test-key",
+            url="https://example.com/chat/completions",
+            normalize_model_name=lambda model: model,
+            supports_strict_schema=lambda model: False,
+            timeout_sec=5,
+            attempts=2,
+            base_sleep_sec=0,
+            provider_name="openrouter",
+            logger=_ListLogger(),
+            response_schema={"type": "object"},
+        )
+
+        self.assertEqual(_text, '{"answer":"ok"}')
+        self.assertEqual(
+            usage.get("execution_failures"),
+            [{"model": "openrouter::moonshotai/kimi-k2.5", "reason": "empty_json_content finish_reason=length provider=DeepInfra"}],
+        )
+        self.assertEqual(usage.get("resolved_model"), "moonshotai/kimi-k2.5")
 
 
 if __name__ == "__main__":

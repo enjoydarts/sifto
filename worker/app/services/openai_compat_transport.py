@@ -52,6 +52,15 @@ def _log_empty_message_content(logger, provider_name: str, model: str, body: dic
     )
 
 
+def _should_retry_empty_length_json(body: dict, choice: dict, text: str) -> bool:
+    if str(text or "").strip() != "":
+        return False
+    response_format = body.get("response_format") or {}
+    if str(response_format.get("type") or "").strip() != "json_object":
+        return False
+    return str(choice.get("finish_reason") or "").strip() == "length"
+
+
 def usage_from_chat_response(data: dict) -> dict:
     usage = data.get("usage") or {}
     prompt_details = usage.get("prompt_tokens_details") or {}
@@ -178,7 +187,48 @@ def run_chat_json(
             raise RuntimeError(f"{provider_name} chat.completions request failed: {e}") from e
 
         if resp.status_code < 400:
-            break
+            data = resp.json() if resp.content else {}
+            choices = data.get("choices") or []
+            if not choices:
+                snippet = ""
+                try:
+                    snippet = json.dumps(data, ensure_ascii=False)[:1000]
+                except Exception:
+                    snippet = (resp.text or "")[:1000]
+                if snippet:
+                    raise RuntimeError(f"{provider_name} chat.completions failed: empty choices body={snippet}")
+                raise RuntimeError(f"{provider_name} chat.completions failed: empty choices")
+            message = choices[0].get("message") or {}
+            content = message.get("content")
+            if isinstance(content, list):
+                text = "\n".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
+            else:
+                text = str(content or "")
+            text = text.strip()
+            if text == "":
+                _log_empty_message_content(logger, provider_name, normalize_model_name(model), body, data, choices[0], message)
+                if i < attempts - 1 and _should_retry_empty_length_json(body, choices[0], text):
+                    _append_execution_failure(
+                        retry_usage,
+                        requested_model,
+                        f"empty_json_content finish_reason=length provider={str(data.get('provider') or '').strip() or 'unknown'}",
+                    )
+                    sleep_sec = base_sleep_sec * (2**i)
+                    logger.warning(
+                        "%s chat.completions retrying model=%s reason=empty_json_content_length retry_in=%.1fs attempt=%d/%d",
+                        provider_name,
+                        normalize_model_name(model),
+                        sleep_sec,
+                        i + 1,
+                        attempts,
+                    )
+                    time.sleep(sleep_sec)
+                    continue
+            usage = usage_from_chat_response(data)
+            usage["requested_model"] = requested_model
+            if retry_usage.get("execution_failures"):
+                usage["execution_failures"] = list(retry_usage["execution_failures"])
+            return text, usage
         if resp.status_code in retryable_status and i < attempts - 1:
             _append_execution_failure(retry_usage, requested_model, f"status={resp.status_code} body={resp.text[:1000]}")
             sleep_sec = base_sleep_sec * (2**i)
@@ -201,29 +251,4 @@ def run_chat_json(
         raise RuntimeError(f"{provider_name} chat.completions failed: no response")
     if resp.status_code >= 400:
         raise RuntimeError(f"{provider_name} chat.completions failed status={resp.status_code} body={resp.text[:1000]}")
-
-    data = resp.json() if resp.content else {}
-    choices = data.get("choices") or []
-    if not choices:
-        snippet = ""
-        try:
-            snippet = json.dumps(data, ensure_ascii=False)[:1000]
-        except Exception:
-            snippet = (resp.text or "")[:1000]
-        if snippet:
-            raise RuntimeError(f"{provider_name} chat.completions failed: empty choices body={snippet}")
-        raise RuntimeError(f"{provider_name} chat.completions failed: empty choices")
-    message = choices[0].get("message") or {}
-    content = message.get("content")
-    if isinstance(content, list):
-        text = "\n".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
-    else:
-        text = str(content or "")
-    text = text.strip()
-    if text == "":
-        _log_empty_message_content(logger, provider_name, normalize_model_name(model), body, data, choices[0], message)
-    usage = usage_from_chat_response(data)
-    usage["requested_model"] = requested_model
-    if retry_usage.get("execution_failures"):
-        usage["execution_failures"] = list(retry_usage["execution_failures"])
-    return text, usage
+    raise RuntimeError(f"{provider_name} chat.completions failed: unexpected retry exit")

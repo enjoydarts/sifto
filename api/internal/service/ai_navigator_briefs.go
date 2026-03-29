@@ -635,23 +635,30 @@ func (s *AINavigatorBriefService) NotifyBrief(ctx context.Context, brief *model.
 			}
 			recipients = pushRes.Recipients
 		}
-		itemID := brief.ID
-		if err := s.pushLogs.Insert(ctx, repository.PushNotificationLogInput{
-			UserID:                  brief.UserID,
-			Kind:                    aiNavigatorBriefNotificationKind,
-			ItemID:                  &itemID,
-			DayJST:                  timeutil.StartOfDayJST(now),
-			Title:                   title,
-			Message:                 body,
-			OneSignalNotificationID: oneSignalID,
-			Recipients:              recipients,
-		}); err != nil {
+		if err := s.pushLogs.Insert(ctx, buildAINavigatorBriefPushLogInput(brief, now, title, body, oneSignalID, recipients)); err != nil {
 			return err
 		}
 	}
 	brief.Status = model.AINavigatorBriefStatusNotified
 	brief.NotificationSentAt = &now
 	return nil
+}
+
+func buildAINavigatorBriefPushLogInput(brief *model.AINavigatorBrief, now time.Time, title, body string, oneSignalID *string, recipients int) repository.PushNotificationLogInput {
+	userID := ""
+	if brief != nil {
+		userID = brief.UserID
+	}
+	return repository.PushNotificationLogInput{
+		UserID:                  userID,
+		Kind:                    aiNavigatorBriefNotificationKind,
+		ItemID:                  nil,
+		DayJST:                  timeutil.StartOfDayJST(now),
+		Title:                   title,
+		Message:                 body,
+		OneSignalNotificationID: oneSignalID,
+		Recipients:              recipients,
+	}
 }
 
 func buildAINavigatorBriefIntroContext(now time.Time, slot string) BriefingNavigatorIntroContext {

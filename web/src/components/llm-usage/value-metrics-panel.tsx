@@ -27,6 +27,8 @@ function providerLabel(provider: string) {
       return "Fireworks";
     case "openrouter":
       return "OpenRouter";
+    case "siliconflow":
+      return "SiliconFlow";
     default:
       return provider;
   }

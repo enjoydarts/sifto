@@ -60,6 +60,7 @@ const PROVIDER_COLORS: Record<string, { stroke: string; fill: string; fillOpacit
   fireworks: { stroke: "#c2410c", fill: "#fb923c", fillOpacity: 0.55, label: "Fireworks" },
   openrouter: { stroke: "#7c3aed", fill: "#c4b5fd", fillOpacity: 0.55, label: "OpenRouter" },
   poe: { stroke: "#0f766e", fill: "#2dd4bf", fillOpacity: 0.55, label: "Poe" },
+  siliconflow: { stroke: "#2563eb", fill: "#93c5fd", fillOpacity: 0.55, label: "SiliconFlow" },
 };
 
 const FALLBACK_PROVIDER_COLORS = [
@@ -73,6 +74,9 @@ function normalizeProvider(provider: string) {
   const p = provider.trim().toLowerCase();
   if (p.startsWith("poe::") || p.startsWith("poe/")) {
     return "poe";
+  }
+  if (p.startsWith("siliconflow::") || p.startsWith("siliconflow/")) {
+    return "siliconflow";
   }
   return p;
 }

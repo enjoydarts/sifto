@@ -55,6 +55,8 @@ function providerLabel(provider: string) {
       return "Fireworks";
     case "openrouter":
       return "OpenRouter";
+    case "siliconflow":
+      return "SiliconFlow";
     default:
       return provider;
   }
@@ -82,6 +84,8 @@ function providerColor(provider: string) {
       return "#22d3ee";
     case "fireworks":
       return "#f97316";
+    case "siliconflow":
+      return "#2563eb";
     default:
       return "#71717a";
   }

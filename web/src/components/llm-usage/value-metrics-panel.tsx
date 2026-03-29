@@ -25,8 +25,12 @@ function providerLabel(provider: string) {
       return "Z.ai";
     case "fireworks":
       return "Fireworks";
+    case "moonshot":
+      return "Moonshot";
     case "openrouter":
       return "OpenRouter";
+    case "poe":
+      return "Poe";
     case "siliconflow":
       return "SiliconFlow";
     default:

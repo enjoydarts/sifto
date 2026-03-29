@@ -53,8 +53,12 @@ function providerLabel(provider: string) {
       return "Z.ai";
     case "fireworks":
       return "Fireworks";
+    case "moonshot":
+      return "Moonshot";
     case "openrouter":
       return "OpenRouter";
+    case "poe":
+      return "Poe";
     case "siliconflow":
       return "SiliconFlow";
     default:
@@ -84,6 +88,10 @@ function providerColor(provider: string) {
       return "#22d3ee";
     case "fireworks":
       return "#f97316";
+    case "moonshot":
+      return "#db2777";
+    case "poe":
+      return "#0f766e";
     case "siliconflow":
       return "#2563eb";
     default:

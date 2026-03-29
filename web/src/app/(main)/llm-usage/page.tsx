@@ -58,6 +58,7 @@ const PROVIDER_COLORS: Record<string, { stroke: string; fill: string; fillOpacit
   xai: { stroke: "#4338ca", fill: "#818cf8", fillOpacity: 0.55, label: "xAI" },
   zai: { stroke: "#0891b2", fill: "#22d3ee", fillOpacity: 0.55, label: "Z.ai" },
   fireworks: { stroke: "#c2410c", fill: "#fb923c", fillOpacity: 0.55, label: "Fireworks" },
+  moonshot: { stroke: "#db2777", fill: "#f9a8d4", fillOpacity: 0.55, label: "Moonshot" },
   openrouter: { stroke: "#7c3aed", fill: "#c4b5fd", fillOpacity: 0.55, label: "OpenRouter" },
   poe: { stroke: "#0f766e", fill: "#2dd4bf", fillOpacity: 0.55, label: "Poe" },
   siliconflow: { stroke: "#2563eb", fill: "#93c5fd", fillOpacity: 0.55, label: "SiliconFlow" },

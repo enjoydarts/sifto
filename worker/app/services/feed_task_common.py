@@ -876,8 +876,7 @@ def build_audio_briefing_script_task(
     opening_budget, summary_budget, ending_budget, article_budget = _audio_briefing_script_budgets(
         target_chars, len(trimmed_articles)
     )
-    article_intro_budget = max(min(article_budget // 3, 520), 240)
-    article_commentary_budget = max(article_budget - article_intro_budget, 180)
+    article_intro_budget, article_commentary_budget = _audio_briefing_article_section_budgets(article_budget)
     section_rules: list[str] = []
     target_lines: list[str] = []
     response_properties: list[str] = []
@@ -1133,9 +1132,19 @@ def _audio_briefing_script_budgets(target_chars: int, article_count: int) -> tup
     ending_budget = max(min(round(target_chars * 0.13), 1800), 380)
     article_budget = max(
         (target_chars - opening_budget - summary_budget - ending_budget - 100) // max(int(article_count or 0), 1),
-        360,
+        120,
     )
     return opening_budget, summary_budget, ending_budget, article_budget
+
+
+def _audio_briefing_article_section_budgets(article_budget: int) -> tuple[int, int]:
+    article_budget = max(int(article_budget or 0), 1)
+    intro_budget = max(round(article_budget * 0.3), 60)
+    intro_budget = min(intro_budget, 240)
+    if intro_budget >= article_budget:
+        intro_budget = max(article_budget // 2, 1)
+    commentary_budget = max(article_budget - intro_budget, 1)
+    return intro_budget, commentary_budget
 
 
 def _normalize_audio_briefing_generated_text(text: str) -> str:

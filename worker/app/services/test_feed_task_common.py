@@ -10,6 +10,8 @@ from app.services.feed_task_common import (
     is_audio_briefing_script_retryable_validation_error,
     resolve_navigator_sampling_profile,
     _resolve_persona_file,
+    _audio_briefing_article_section_budgets,
+    _audio_briefing_script_budgets,
     build_audio_briefing_script_task,
     build_ask_navigator_task,
     build_briefing_navigator_task,
@@ -20,6 +22,15 @@ from app.services.feed_task_common import (
 
 
 class FeedTaskCommonTests(unittest.TestCase):
+    def test_audio_briefing_article_section_budgets_fit_within_article_budget(self):
+        _opening_budget, _summary_budget, _ending_budget, article_budget = _audio_briefing_script_budgets(12000, 30)
+        intro_budget, commentary_budget = _audio_briefing_article_section_budgets(article_budget)
+
+        self.assertEqual(article_budget, 172)
+        self.assertEqual(intro_budget + commentary_budget, article_budget)
+        self.assertLessEqual(intro_budget, article_budget)
+        self.assertLessEqual(commentary_budget, article_budget)
+
     def test_resolve_persona_file_prefers_llm_catalog_dir(self):
         with patch.dict("os.environ", {"NAVIGATOR_PERSONAS_PATH": "", "LLM_CATALOG_PATH": "/app/shared/llm_catalog.json"}, clear=False):
             path = _resolve_persona_file()

@@ -876,6 +876,8 @@ def build_audio_briefing_script_task(
     opening_budget, summary_budget, ending_budget, article_budget = _audio_briefing_script_budgets(
         target_chars, len(trimmed_articles)
     )
+    article_intro_budget = max(min(article_budget // 3, 520), 240)
+    article_commentary_budget = max(article_budget - article_intro_budget, 180)
     section_rules: list[str] = []
     target_lines: list[str] = []
     response_properties: list[str] = []
@@ -888,7 +890,7 @@ def build_audio_briefing_script_task(
         target_lines.append(f"- opening の目安: 約 {opening_budget} 文字以内")
         response_properties.append('  "opening": "導入"')
     if include_overall_summary:
-        section_rules.append(f"- overall_summary は総括であり、10文以上で、その回の全体像、流れ、聞きどころ、記事群のつながりまでしっかり話す。長尺回では恐れず十分に伸ばし、短くまとめすぎない。目安は約 {summary_budget} 文字以内")
+        section_rules.append(f"- overall_summary は総括であり、8〜10文で、その回の全体像、流れ、聞きどころ、記事群のつながりをしっかり話す。必要以上に長く引き延ばさず、約 {summary_budget} 文字以内を厳守する")
         section_rules.append("- overall_summary で記事の順番紹介をしない。各記事の1行要約を並べない")
         section_rules.append("- overall_summary で見出しの焼き直しや、記事ごとの固有名詞の機械的な列挙をしない")
         section_rules.append("- overall_summary では、回全体を俯瞰して共通テーマ、対立軸、温度感、いま追う意味を語る")
@@ -897,9 +899,9 @@ def build_audio_briefing_script_task(
     if include_article_segments:
         section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
         section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。headline を除き、1記事あたりの summary_intro と commentary の合計は約 {article_budget} 文字以内を厳守する")
-        section_rules.append("- article_segments の各 summary_intro は 1〜2文で、その記事が何の話かを最初に素早く伝える簡潔な要約にする")
+        section_rules.append(f"- article_segments の各 summary_intro は 1〜2文で、その記事が何の話かを最初に素早く伝える簡潔な要約にする。長さは約 {article_intro_budget} 文字以内を目安にして短く収める")
         section_rules.append("- summary_intro では事実の骨子を優先し、いきなり感想や評価から入らない")
-        section_rules.append(f"- article_segments の各 commentary は 4〜8文で、summary_intro を受けてから論評や含意に入る。音声で聞きやすい自然な話し言葉にし、要点だけで切り上げず必要な背景や含意まで入れる。目安は summary_intro と合わせて約 {article_budget} 文字以内")
+        section_rules.append(f"- article_segments の各 commentary は 4〜8文で、summary_intro を受けてから論評や含意に入る。音声で聞きやすい自然な話し言葉にし、要点だけで切り上げず必要な背景や含意まで入れる。長さは約 {article_commentary_budget} 文字以内を目安にし、summary_intro と合わせて約 {article_budget} 文字以内に収める")
         section_rules.append("- article_segments は各記事にほぼ均等に尺を配る。1本だけ極端に長くしない。長くなりそうなら commentary 側を先に圧縮して収める")
         target_lines.append(f"- 各 article segment の目安: summary_intro と commentary を合わせて約 {article_budget} 文字以内")
         response_properties.extend([

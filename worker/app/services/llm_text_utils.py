@@ -33,7 +33,7 @@ def summary_max_tokens(target_chars: int) -> int:
 
 
 def audio_briefing_script_max_tokens(target_chars: int) -> int:
-    return clamp_int(round(target_chars * 2), 4800, 28000)
+    return clamp_int(round(target_chars), 2400, 14000)
 
 
 def summary_composite_score(breakdown: dict) -> float:

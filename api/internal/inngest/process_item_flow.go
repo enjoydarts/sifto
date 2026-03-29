@@ -78,6 +78,9 @@ func shouldRetryExtractBody(attempt int, err error) bool {
 var extractComparablePunctuation = regexp.MustCompile(`[[:punct:]\p{P}\p{S}]+`)
 
 func invalidExtractReason(title *string, content string) string {
+	if looksLikeInvalidExtractTitle(title) {
+		return "invalid extracted title"
+	}
 	contentTrimmed := strings.TrimSpace(content)
 	if contentTrimmed == "" {
 		return "empty extracted content"
@@ -89,6 +92,20 @@ func invalidExtractReason(title *string, content string) string {
 		return "title-only extracted content"
 	}
 	return ""
+}
+
+func looksLikeInvalidExtractTitle(title *string) bool {
+	if title == nil {
+		return false
+	}
+	switch normalizeExtractComparable(*title) {
+	case normalizeExtractComparable("JavaScriptが利用できません。"):
+		return true
+	case normalizeExtractComparable("JavaScriptは利用できません。"):
+		return true
+	default:
+		return false
+	}
 }
 
 func looksLikeJavaScriptPlaceholder(content string) bool {

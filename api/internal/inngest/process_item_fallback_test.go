@@ -196,6 +196,8 @@ func TestShouldRetryExtractBody(t *testing.T) {
 
 func TestInvalidExtractReason(t *testing.T) {
 	title := "HashiCorp Vault 1.21 Released"
+	invalidTitle := "JavaScriptが利用できません。"
+	invalidTitleAlt := "JavaScriptは利用できません。"
 
 	tests := []struct {
 		name    string
@@ -203,6 +205,8 @@ func TestInvalidExtractReason(t *testing.T) {
 		content string
 		want    string
 	}{
+		{name: "invalid title", title: &invalidTitle, content: "通常の本文が入っていても削除対象", want: "invalid extracted title"},
+		{name: "invalid title alt", title: &invalidTitleAlt, content: "通常の本文が入っていても削除対象", want: "invalid extracted title"},
 		{name: "empty", title: &title, content: "   ", want: "empty extracted content"},
 		{name: "javascript placeholder ja", title: &title, content: "JavaScriptを有効にしてください", want: "javascript placeholder content"},
 		{name: "javascript placeholder en", title: &title, content: "Please enable JavaScript to view this page.", want: "javascript placeholder content"},

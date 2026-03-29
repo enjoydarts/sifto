@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Bell, BookOpen, Flame, Sparkles, X } from "lucide-react";
-import { api, BriefingCluster, Item, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
+import { api, BriefingCluster, Item, NavigatorLLM, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
 import { ReadingGoalsPanel } from "@/components/briefing/reading-goals-panel";
 import { DueReviewPanel } from "@/components/reviews/due-review-panel";
 import { WeeklyReviewPanel } from "@/components/reviews/weekly-review-panel";
@@ -18,6 +18,7 @@ import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { useToast } from "@/components/toast-provider";
 import { SectionCard } from "@/components/ui/section-card";
 import { Tag } from "@/components/ui/tag";
+import { formatModelDisplayName } from "@/lib/model-display";
 
 const EMPTY_ITEMS: Item[] = [];
 const EMPTY_CLUSTERS: BriefingCluster[] = [];
@@ -26,6 +27,15 @@ const EMPTY_GOALS: ReadingGoal[] = [];
 const EMPTY_TODAY_QUEUE: TodayQueueItem[] = [];
 const EMPTY_REVIEW_QUEUE: ReviewQueueItem[] = [];
 const MODEL_UPDATES_DISMISSED_AT_KEY = "provider-model-updates:dismissed-at";
+
+function navigatorResolvedModelLabel(llm?: NavigatorLLM | null) {
+  const provider = (llm?.provider ?? "").trim();
+  const resolved = (llm?.resolved_model ?? "").trim();
+  if (resolved) return provider ? `${provider} / ${formatModelDisplayName(resolved)}` : formatModelDisplayName(resolved);
+  const model = (llm?.model ?? "").trim();
+  if (model) return provider ? `${provider} / ${formatModelDisplayName(model)}` : formatModelDisplayName(model);
+  return "";
+}
 
 export default function BriefingPage() {
   const { t, locale } = useI18n();
@@ -671,6 +681,11 @@ export default function BriefingPage() {
                     </h3>
                     <span className="font-sans text-xs text-[var(--color-editorial-ink-soft)]">{navigator.character_title}</span>
                   </div>
+                  {navigatorResolvedModelLabel(navigator.llm) ? (
+                    <div className="mt-1 text-[11px] text-[var(--color-editorial-ink-faint)]">
+                      {t("briefing.navigator.usedModel")}: {navigatorResolvedModelLabel(navigator.llm)}
+                    </div>
+                  ) : null}
                 </div>
                 {navigatorPreview ? null : (
                   <button

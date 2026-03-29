@@ -291,6 +291,52 @@
       }
     },
     {
+      "id": "siliconflow::Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "provider": "siliconflow",
+      "source_provider": "qwen",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "digest",
+      "highlights": ["experimental"],
+      "comment": "Qwen3 の大型 instruct 枠。JSON mode 前提で、重めの整理や比較用途を SiliconFlow で試したい時向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_model_pages_2026_03",
+        "input_per_mtok_usd": 0.09,
+        "output_per_mtok_usd": 0.6
+      }
+    },
+    {
+      "id": "siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507",
+      "provider": "siliconflow",
+      "source_provider": "qwen",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["experimental"],
+      "comment": "Qwen3 の中量 instruct 枠。軽めの事実抽出や要約比較を SiliconFlow で試したい時向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "siliconflow_model_pages_2026_03",
+        "input_per_mtok_usd": 0.09,
+        "output_per_mtok_usd": 0.3
+      }
+    },
+    {
       "id": "claude-haiku-4-5",
       "provider": "anthropic",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],

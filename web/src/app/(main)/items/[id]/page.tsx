@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Info, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
-import { api, ItemDetail, ItemLLMExecutionAttempt, RelatedItem } from "@/lib/api";
+import { api, ItemDetail, ItemLLMExecutionAttempt, NavigatorLLM, RelatedItem } from "@/lib/api";
 import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { formatModelDisplayName } from "@/lib/model-display";
 import { InlineReader } from "@/components/inline-reader";
@@ -81,6 +81,15 @@ function renderLLMModelDisplay(
       {t("itemDetail.model.resolved")}: {formatModelDisplayName(resolved ?? "")}
     </>
   );
+}
+
+function resolvedNavigatorModelLabel(llm?: NavigatorLLM | null) {
+  const provider = (llm?.provider ?? "").trim();
+  const resolved = (llm?.resolved_model ?? "").trim();
+  if (resolved) return provider ? `${provider} / ${formatModelDisplayName(resolved)}` : formatModelDisplayName(resolved);
+  const model = (llm?.model ?? "").trim();
+  if (model) return provider ? `${provider} / ${formatModelDisplayName(model)}` : formatModelDisplayName(model);
+  return "";
 }
 
 function extractHttpStatus(error: unknown): number | null {
@@ -1525,6 +1534,11 @@ export default function ItemDetailPage() {
                       {itemNavigator.character_name}
                       <span className="ml-2 text-xs font-medium text-[var(--color-editorial-ink-faint)]">{itemNavigator.character_title}</span>
                     </div>
+                    {resolvedNavigatorModelLabel(itemNavigator.llm) ? (
+                      <div className="mt-1 text-[11px] text-[var(--color-editorial-ink-faint)]">
+                        {t("itemDetail.navigatorUsedModel")}: {resolvedNavigatorModelLabel(itemNavigator.llm)}
+                      </div>
+                    ) : null}
                     {itemNavigator.headline ? (
                       <p className="mt-2 text-sm font-medium leading-6 text-[var(--color-editorial-ink-soft)]">{itemNavigator.headline}</p>
                     ) : null}

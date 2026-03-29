@@ -34,8 +34,8 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("siliconflow::deepseek-ai/DeepSeek-V3.2"); got == nil {
 		t.Fatal("siliconflow::deepseek-ai/DeepSeek-V3.2 not found in catalog")
 	}
-	if got := findModelCatalog("siliconflow::zai-org/GLM-5"); got == nil {
-		t.Fatal("siliconflow::zai-org/GLM-5 not found in catalog")
+	if got := findModelCatalog("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507"); got == nil {
+		t.Fatal("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507 not found in catalog")
 	}
 }
 

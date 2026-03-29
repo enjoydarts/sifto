@@ -929,6 +929,13 @@ type BriefingNavigatorCandidate struct {
 	PublishedAt     *time.Time `json:"published_at,omitempty"`
 }
 
+type NavigatorLLM struct {
+	Provider       string `json:"provider"`
+	Model          string `json:"model"`
+	RequestedModel string `json:"requested_model,omitempty"`
+	ResolvedModel  string `json:"resolved_model,omitempty"`
+}
+
 type BriefingNavigator struct {
 	Enabled        bool                    `json:"enabled"`
 	Persona        string                  `json:"persona"`
@@ -939,6 +946,7 @@ type BriefingNavigator struct {
 	Intro          string                  `json:"intro"`
 	GeneratedAt    *time.Time              `json:"generated_at,omitempty"`
 	Picks          []BriefingNavigatorPick `json:"picks"`
+	LLM            *NavigatorLLM           `json:"llm,omitempty"`
 }
 
 type BriefingNavigatorEnvelope struct {
@@ -946,17 +954,18 @@ type BriefingNavigatorEnvelope struct {
 }
 
 type ItemNavigator struct {
-	Enabled        bool       `json:"enabled"`
-	ItemID         string     `json:"item_id"`
-	Persona        string     `json:"persona"`
-	CharacterName  string     `json:"character_name"`
-	CharacterTitle string     `json:"character_title"`
-	AvatarStyle    string     `json:"avatar_style"`
-	SpeechStyle    string     `json:"speech_style"`
-	Headline       string     `json:"headline"`
-	Commentary     string     `json:"commentary"`
-	StanceTags     []string   `json:"stance_tags,omitempty"`
-	GeneratedAt    *time.Time `json:"generated_at,omitempty"`
+	Enabled        bool          `json:"enabled"`
+	ItemID         string        `json:"item_id"`
+	Persona        string        `json:"persona"`
+	CharacterName  string        `json:"character_name"`
+	CharacterTitle string        `json:"character_title"`
+	AvatarStyle    string        `json:"avatar_style"`
+	SpeechStyle    string        `json:"speech_style"`
+	Headline       string        `json:"headline"`
+	Commentary     string        `json:"commentary"`
+	StanceTags     []string      `json:"stance_tags,omitempty"`
+	GeneratedAt    *time.Time    `json:"generated_at,omitempty"`
+	LLM            *NavigatorLLM `json:"llm,omitempty"`
 }
 
 type ItemNavigatorEnvelope struct {

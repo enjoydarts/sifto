@@ -379,6 +379,7 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 		Intro:          strings.TrimSpace(resp.Intro),
 		GeneratedAt:    &generatedAt,
 		Picks:          picks,
+		LLM:            navigatorLLMMeta(resp.LLM),
 	}
 }
 
@@ -468,6 +469,18 @@ func (h *BriefingHandler) buildNavigatorPreview(ctx context.Context, userID stri
 		Intro:          briefingNavigatorPreviewIntro(persona),
 		GeneratedAt:    &generatedAt,
 		Picks:          picks,
+	}
+}
+
+func navigatorLLMMeta(llm *service.LLMUsage) *model.NavigatorLLM {
+	if llm == nil {
+		return nil
+	}
+	return &model.NavigatorLLM{
+		Provider:       strings.TrimSpace(llm.Provider),
+		Model:          strings.TrimSpace(llm.Model),
+		RequestedModel: strings.TrimSpace(llm.RequestedModel),
+		ResolvedModel:  strings.TrimSpace(llm.ResolvedModel),
 	}
 }
 

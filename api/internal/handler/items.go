@@ -431,6 +431,7 @@ func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID str
 		Commentary:     strings.TrimSpace(resp.Commentary),
 		StanceTags:     resp.StanceTags,
 		GeneratedAt:    &generatedAt,
+		LLM:            navigatorLLMMeta(resp.LLM),
 	}
 }
 

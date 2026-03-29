@@ -1507,11 +1507,19 @@ export interface BriefingTodayResponse {
       comment: string;
       reason_tags?: string[];
     }>;
+    llm?: NavigatorLLM | null;
   } | null;
 }
 
 export interface BriefingNavigatorResponse {
   navigator?: BriefingTodayResponse["navigator"];
+}
+
+export interface NavigatorLLM {
+  provider: string;
+  model: string;
+  requested_model?: string | null;
+  resolved_model?: string | null;
 }
 
 export interface ItemNavigatorResponse {
@@ -1527,6 +1535,7 @@ export interface ItemNavigatorResponse {
     commentary: string;
     stance_tags?: string[];
     generated_at?: string | null;
+    llm?: NavigatorLLM | null;
   } | null;
 }
 

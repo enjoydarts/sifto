@@ -1060,7 +1060,7 @@ def parse_audio_briefing_script_result(
     if include_article_segments and len(raw_segments) != len(articles):
         raise ValueError("audio briefing script article_segments count mismatch")
 
-    opening_cap, summary_cap, ending_cap, article_cap = _audio_briefing_script_budgets(target_chars, len(articles))
+    opening_cap, summary_cap, ending_cap, _article_cap = _audio_briefing_script_budgets(target_chars, len(articles))
 
     segments: list[dict] = []
     if include_article_segments:
@@ -1087,8 +1087,8 @@ def parse_audio_briefing_script_result(
                 {
                     "item_id": item_id,
                     "headline": headline[:160],
-                    "summary_intro": summary_intro[:max(240, article_cap // 3)],
-                    "commentary": commentary[:article_cap],
+                    "summary_intro": summary_intro,
+                    "commentary": commentary,
                 }
             )
 

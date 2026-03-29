@@ -55,8 +55,6 @@ func BuildAudioBriefingDraft(
 	title := fmt.Sprintf("%sの音声ブリーフィング", slotLabel)
 	chunks := make([]model.AudioBriefingScriptChunk, 0, len(items)+3)
 	ttsProvider, voiceModel, voiceStyle := audioBriefingVoiceRefs(voice)
-	commentaryBudget := audioBriefingCommentaryBudget(targetChars, len(items))
-
 	opening := fmt.Sprintf("%sです。%sのSifto音声ブリーフィングをお届けします。今回は直近の注目記事を%d本まとめて見ていきます。", audioBriefingSpeakerName(persona), slotLabel, len(items))
 	for _, part := range audioBriefingSectionParts(opening, 1200, true) {
 		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "opening", part, ttsProvider, voiceModel, voiceStyle))
@@ -77,7 +75,6 @@ func BuildAudioBriefingDraft(
 			headline = fmt.Sprintf("記事%d", item.Rank)
 		}
 		summaryIntro := strings.TrimSpace(coalesceString(item.SummarySnapshot, item.SegmentTitle))
-		summaryIntro = fitAudioBriefingTextToChars(summaryIntro, audioBriefingSummaryIntroBudget(commentaryBudget))
 		text := audioBriefingArticleText(headline, summaryIntro, "")
 		for _, part := range audioBriefingSectionParts(text, 1200, true) {
 			chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", part, ttsProvider, voiceModel, voiceStyle))
@@ -119,7 +116,6 @@ func BuildAudioBriefingDraftFromNarration(
 	title := fmt.Sprintf("%sの音声ブリーフィング", slotLabel)
 	chunks := make([]model.AudioBriefingScriptChunk, 0, len(items)+3)
 	ttsProvider, voiceModel, voiceStyle := audioBriefingVoiceRefs(voice)
-	commentaryBudget := audioBriefingCommentaryBudget(targetChars, len(items))
 	openingBudget := audioBriefingOpeningBudget(targetChars)
 	summaryBudget := audioBriefingSummaryBudget(targetChars)
 	endingBudget := audioBriefingEndingBudget(targetChars)
@@ -165,8 +161,6 @@ func BuildAudioBriefingDraftFromNarration(
 				commentary = candidate
 			}
 		}
-		summaryIntro = fitAudioBriefingTextToChars(summaryIntro, audioBriefingSummaryIntroBudget(commentaryBudget))
-		commentary = fitAudioBriefingTextToChars(commentary, commentaryBudget)
 		text := audioBriefingArticleText(headline, summaryIntro, commentary)
 		for _, part := range audioBriefingSectionParts(text, 1200, true) {
 			chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", part, ttsProvider, voiceModel, voiceStyle))

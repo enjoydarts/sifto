@@ -283,7 +283,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                             <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
                           </button>
                           {expanded ? (
-                            <div className="absolute left-[calc(100%+0.6rem)] top-0 z-40 w-64 rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3 shadow-[var(--shadow-dropdown)]">
+                            <div className="absolute left-full top-0 z-40 w-64 rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3 shadow-[var(--shadow-dropdown)]">
                               <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
                                 {t(group.labelKey)}
                               </div>

@@ -16,7 +16,7 @@ func (r *ItemRepo) LoadByIDsPreservingOrder(ctx context.Context, userID string, 
 			SELECT item_id, ord
 			FROM unnest($2::uuid[]) WITH ORDINALITY AS ids(item_id, ord)
 		)
-		SELECT i.id, i.source_id, i.url, i.title, i.thumbnail_url, COALESCE(sm.summary, i.content_text) AS content_text, i.status, i.processing_error,
+		SELECT i.id, i.source_id, s.title AS source_title, i.url, i.title, i.thumbnail_url, COALESCE(sm.summary, i.content_text) AS content_text, i.status, i.processing_error,
 		       fc.final_result AS facts_check_result,
 		       sfc.final_result AS faithfulness_result,
 		       (ir.item_id IS NOT NULL) AS is_read,

@@ -69,6 +69,8 @@ export default function BriefingPage() {
     queryFn: () => api.getBriefingNavigator({ navigator_preview: navigatorPreview }),
     enabled: settingsQuery.isSuccess,
     staleTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
     placeholderData: (prev) => prev,
   });
   const modelUpdatesQuery = useQuery({

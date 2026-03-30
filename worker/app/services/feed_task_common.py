@@ -898,28 +898,28 @@ def build_audio_briefing_script_task(
     response_properties: list[str] = []
     if include_opening:
         section_rules.append(f"- opening は {opening_sentence_spec} で、時間帯に合う自然な導入にする。少なくとも {opening_min_sentences}文は使い、伸ばしすぎず、目安は約 {opening_budget} 文字以内")
-        section_rules.append("- opening は番組のオープニングトークとして書く。挨拶、時間帯や季節感、軽い日常雑談、これから番組が始まる雰囲気づくりを中心にする")
+        section_rules.append("- opening は番組のオープニングトークとして書く。リスナーに向かって語りかけ、挨拶、時間帯や季節感、軽い日常雑談、これから番組が始まる雰囲気づくりを必ず入れる")
         section_rules.append("- opening では個別記事の紹介を始めない。記事内容の長い解説、細かな要約、最初の1本への導入を書かない")
         section_rules.append("- opening では articles 内の固有名詞、企業名、製品名、出来事、具体的ニュース内容に触れない")
-        section_rules.append("- opening の軽い雑談は、天気感、気温、季節の空気、曜日感、通勤や休憩などの生活導線にあることを話す。ニュースの話題へ滑らせない")
-        section_rules.append("- opening では、今回の回のテーマ感、空気感、何を見ていく回かを、抽象的な言い方でもう少し厚めに話してよい")
+        section_rules.append("- opening の軽い雑談では、天気感、気温、季節の空気、曜日感、通勤や休憩などの生活導線のうち少なくとも2つに必ず触れる。ニュースの話題へ滑らせない")
+        section_rules.append("- opening では、今回の回のテーマ感、空気感、何を見ていく回かを必ず話す。ただの挨拶だけで終わらせない")
         target_lines.append(f"- opening の目安: 約 {opening_budget} 文字以内")
         response_properties.append('  "opening": "導入"')
     if include_overall_summary:
         section_rules.append(f"- overall_summary は総括であり、{summary_sentence_spec} で、その回の全体像、流れ、聞きどころ、記事群のつながりだけを絞って話す。少なくとも {summary_min_sentences}文は使い、必要以上に長く引き延ばさず、約 {summary_budget} 文字以内を厳守する")
         section_rules.append("- overall_summary で記事の順番紹介をしない。各記事の1行要約を機械的に並べない")
-        section_rules.append("- overall_summary で見出しの焼き直しや、記事ごとの固有名詞の機械的な列挙をしない")
-        section_rules.append("- overall_summary では、回全体を俯瞰して共通テーマ、対立軸、温度感、いま追う意味を語る。記事群の共通点や流れを具体化してよい")
-        section_rules.append("- overall_summary では、記事群の共通点、対立軸、流れ、温度差を、抽象論だけで終わらせずもう少し具体的にしてよい")
+        section_rules.append("- overall_summary では、回全体を俯瞰して共通テーマ、対立軸、温度感、いま追う意味、記事間のつながりを広く語ってよい")
+        section_rules.append("- overall_summary では、記事群の共通点、流れ、温度差、見方の違い、別の話に見える記事どうしのつながりまで具体的にしてよい")
+        section_rules.append("- overall_summary では、なぜ今この回として追う価値があるのか、何が引っかかりとして残るのかまで話してよい")
         target_lines.append(f"- overall_summary の目安: 約 {summary_budget} 文字以内")
         response_properties.append('  "overall_summary": "全体サマリー"')
     if include_article_segments:
         section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
         section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。1記事あたりの headline と commentary の合計は約 {article_budget} 文字以内を厳守する")
-        section_rules.append(f"- article_segments の各 headline は {article_headline_sentence_spec} で、その記事が何の記事かを短く示す。少なくとも {article_headline_min_sentences}文は使い、長さは約 {article_headline_budget} 文字以内を厳守し、見出しの読み上げとして一息で入る長さにする")
+        section_rules.append(f"- article_segments の各 headline は {article_headline_sentence_spec} で、これから扱う記事をリスナーに紹介する導入として書く。少なくとも {article_headline_min_sentences}文は使い、長さは約 {article_headline_budget} 文字以内を厳守し、見出しの読み上げとして一息で入る長さにする")
         section_rules.append(f"- article_segments の各 commentary は {article_commentary_sentence_spec} で書く。少なくとも {article_commentary_min_sentences}文は使い、headline を受けて、そのペルソナの反応を広げる。脱線せず、長い前置きや言い換えを避け、長さは約 {article_commentary_budget} 文字以内を厳守する")
         section_rules.append("- article_segments は各記事にほぼ均等に尺を配る。1本だけ極端に長くしない。長くなりそうなら commentary 側を先に圧縮し、例示・補足・言い換えを削って収める")
-        section_rules.append("- headline では、その記事の短い要約をしてよい。1〜3個の要点に絞って、その記事の芯が短く伝わるようにする")
+        section_rules.append("- headline では、その記事をリスナーに紹介するつもりで話してよい。何の記事で、どこが気になるのかが自然に伝わるようにする")
         section_rules.append("- article_segments の commentary は、そのペルソナ本人が自然に口にしそうな感想だけを書く。無難な解説調、誰にでも当てはまる一般論、ニュースキャスター風の中立コメントに寄せない")
         section_rules.append("- commentary では記事の長い説明、論点整理、一般論への脱線は避ける。このペルソナがどこに反応したか、なぜそう感じたか、どう受け止めたかを話す")
         section_rules.append("- commentary では反応だけで終わらせず、その反応の理由、軽い背景説明、比較、自分ならどう見るかまで話してよい")
@@ -929,7 +929,7 @@ def build_audio_briefing_script_task(
         target_lines.append(f"- commentary の個別目安: 約 {article_commentary_budget} 文字以内")
         response_properties.extend([
             '  "article_segments": [',
-            '    {"item_id": "uuid", "headline": "その記事が何の記事かを短く示す1〜2文", "commentary": "そのペルソナがどう受け止めたかの2〜3文"}',
+            '    {"item_id": "uuid", "headline": "これから扱う記事をリスナーに紹介する1〜2文", "commentary": "そのペルソナがどう受け止めたかの2〜3文"}',
             "  ]",
         ])
     else:
@@ -937,8 +937,8 @@ def build_audio_briefing_script_task(
     if include_ending:
         section_rules.append(f"- ending は番組を終わらせる締めの言葉として {ending_sentence_spec} で書く。少なくとも {ending_min_sentences}文は使い、だらだら締めず、目安は約 {ending_budget} 文字以内")
         section_rules.append("- ending で記事内容の再整理や論点のまとめ直しをしない。ただし今日の回で残った感触や温度感を1〜2点だけ軽く振り返るのはよい")
-        section_rules.append("- ending では、最後に残った印象や引っかかりを言葉にしてよい")
-        section_rules.append("- ending では、聞いてくれたことへの一言、次回へつながる余韻、静かな締めを優先する")
+        section_rules.append("- ending では、最後に残った印象や引っかかりを必ず言葉にする")
+        section_rules.append("- ending では、聞いてくれたことへの一言と、次の時間へ戻っていく感じを必ず入れる。短いお礼だけで終わらせない")
         target_lines.append(f"- ending の目安: 約 {ending_budget} 文字以内")
         response_properties.append('  "ending": "締め"')
 
@@ -978,7 +978,7 @@ def build_audio_briefing_script_task(
 - 冗長な前置きや言い換えを避け、文字数目標を強く意識する
 - 今回与えられた target_chars と記事数から逆算した尺配分を守り、特定のセクションや特定の記事だけを必要以上に長くしない
 - 1文は {sentence_length_spec} を目安にし、1文1論点でだらだら伸ばさない
-- 各記事では、headline で何の記事かを短く置いたうえで、このペルソナなら何に反応するかを話す
+- 各記事では、headline でこれから扱う記事をリスナーに紹介したうえで、このペルソナなら何に反応するかを話す
 - 尺配分や流れは意識するが、整えすぎた台本調ではなく、あくまでこのペルソナ本人が自然に話しているように聞こえることを優先する
 - 第一印象、良いと感じる点、引っかかる点、今読む理由のうち2〜3個が自然ににじむようにする
 - 客観的な無味乾燥レビューではなく、このペルソナの主観で語る
@@ -1044,7 +1044,7 @@ def build_audio_briefing_script_task(
     }}
   ]
 }}
-- headline で何の記事かを短く置き、commentary でそのペルソナの反応を書く
+- headline でこれから扱う記事をリスナーに紹介し、commentary でそのペルソナの反応を書く
 
 articles:
 {json.dumps(trimmed_articles, ensure_ascii=False)}

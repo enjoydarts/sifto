@@ -900,14 +900,14 @@ def build_audio_briefing_script_task(
         section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。headline を除き、1記事あたりの summary_intro と commentary の合計は約 {article_budget} 文字以内を厳守する")
         section_rules.append(f"- article_segments の各 summary_intro は 1文固定で、その記事が何の話かを最初に素早く伝える簡潔な要約にする。長さは約 {article_intro_budget} 文字以内を目安にして収める")
         section_rules.append("- summary_intro では事実の骨子を優先し、いきなり感想や評価から入らない")
-        section_rules.append(f"- article_segments の各 commentary は 1〜2文で、summary_intro を受けてからすぐ論評や含意に入る。脱線せず、長い前置きや言い換えを避け、長さは約 {article_commentary_budget} 文字以内を目安にし、summary_intro と合わせて約 {article_budget} 文字以内に収める")
+        section_rules.append(f"- article_segments の各 commentary は 1文固定で、summary_intro を受けてからすぐそのペルソナの反応だけを書く。脱線せず、長い前置きや言い換えを避け、長さは約 {article_commentary_budget} 文字以内を目安にし、summary_intro と合わせて約 {article_budget} 文字以内に収める")
         section_rules.append("- article_segments は各記事にほぼ均等に尺を配る。1本だけ極端に長くしない。長くなりそうなら commentary 側を先に圧縮し、例示・補足・言い換えを削って収める")
         section_rules.append("- article_segments の commentary は、そのペルソナ本人が自然に口にしそうな感想だけを書く。無難な解説調、誰にでも当てはまる一般論、ニュースキャスター風の中立コメントに寄せない")
-        section_rules.append("- commentary では summary_intro の内容を言い換えて繰り返さない。記事の説明ではなく、このペルソナがどこに反応したか、なぜ気になるか、どう受け止めたかだけを短く話す")
+        section_rules.append("- commentary では summary_intro の内容を言い換えて繰り返さない。記事の説明や背景整理は禁止。このペルソナがどこに反応したか、なぜ気になるか、どう受け止めたかのどれか1つだけを短く話す")
         target_lines.append(f"- 各 article segment の目安: summary_intro と commentary を合わせて約 {article_budget} 文字以内")
         response_properties.extend([
             '  "article_segments": [',
-            '    {"item_id": "uuid", "headline": "記事見出し", "summary_intro": "その記事が何の話かを伝える1文", "commentary": "そのペルソナがどう受け止めたかの1〜2文"}',
+            '    {"item_id": "uuid", "headline": "記事見出し", "summary_intro": "その記事が何の話かを伝える1文", "commentary": "そのペルソナがどう受け止めたかの1文"}',
             "  ]",
         ])
     else:
@@ -1005,11 +1005,11 @@ def build_audio_briefing_script_task(
       "item_id": "example-item",
       "headline": "見出しの言い換え",
       "summary_intro": "この話は、企業が新機能を出して競争が一段階進んだという話です。",
-      "commentary": "こういう更新って、便利さより先に使いどころの見極めが難しいんですよね。\nこのペルソナなら、盛り上がりより運用でどこまで定着するかを気にします。"
+      "commentary": "こういう更新って、盛り上がりより先に現場で定着するかを見たくなるんですよね。"
     }}
   ]
 }}
-- 例のように、summary_intro は短い1文、commentary は短い1〜2文で終える
+- 例のように、summary_intro は短い1文、commentary は短い1文で終える
 - commentary は記事の説明を繰り返さず、そのペルソナの反応だけを書く
 
 articles:

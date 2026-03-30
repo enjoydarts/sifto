@@ -1,6 +1,44 @@
 import httpx
 import time
 import json
+import os
+import threading
+from contextlib import contextmanager
+
+
+_PROVIDER_CONCURRENCY_LOCK = threading.Lock()
+_PROVIDER_CONCURRENCY_SEMAPHORES: dict[tuple[str, int], threading.Semaphore] = {}
+
+
+def _provider_max_concurrency(provider_name: str) -> int | None:
+    provider = str(provider_name or "").strip().lower()
+    if provider != "zai":
+        return None
+    raw = str(os.getenv("ZAI_MAX_CONCURRENCY", "1") or "1").strip()
+    try:
+        value = int(raw)
+    except Exception:
+        return 1
+    return value if value > 0 else None
+
+
+@contextmanager
+def _provider_concurrency_guard(provider_name: str):
+    limit = _provider_max_concurrency(provider_name)
+    if limit is None:
+        yield
+        return
+    key = (str(provider_name or "").strip().lower(), limit)
+    with _PROVIDER_CONCURRENCY_LOCK:
+        semaphore = _PROVIDER_CONCURRENCY_SEMAPHORES.get(key)
+        if semaphore is None:
+            semaphore = threading.Semaphore(limit)
+            _PROVIDER_CONCURRENCY_SEMAPHORES[key] = semaphore
+    semaphore.acquire()
+    try:
+        yield
+    finally:
+        semaphore.release()
 
 
 def _append_execution_failure(usage: dict, model: str, reason: str) -> None:
@@ -155,97 +193,98 @@ def run_chat_json(
     def is_json_validation_error(response: httpx.Response) -> bool:
         return response.status_code == 400 and "json_validate_failed" in (response.text or "")
 
-    for i in range(attempts):
-        try:
-            with httpx.Client(timeout=timeout_sec) as client:
-                resp = client.post(url, headers=headers, json=body)
-                if is_json_validation_error(resp) and response_schema is not None:
-                    if use_strict_schema:
-                        fallback_body = dict(body)
-                        fallback_body["response_format"] = {"type": "json_object"}
-                        resp = client.post(url, headers=headers, json=fallback_body)
-                    if is_json_validation_error(resp):
-                        fallback_body = dict(body)
-                        fallback_body.pop("response_format", None)
-                        resp = client.post(url, headers=headers, json=fallback_body)
-        except Exception as e:
-            last_error = e
-            if i < attempts - 1:
-                _append_execution_failure(retry_usage, requested_model, f"request failed: {e}")
-                sleep_sec = base_sleep_sec * (2**i)
-                logger.warning(
-                    "%s chat.completions request failed model=%s retry_in=%.1fs attempt=%d/%d err=%s",
-                    provider_name,
-                    normalize_model_name(model),
-                    sleep_sec,
-                    i + 1,
-                    attempts,
-                    e,
-                )
-                time.sleep(sleep_sec)
-                continue
-            raise RuntimeError(f"{provider_name} chat.completions request failed: {e}") from e
-
-        if resp.status_code < 400:
-            data = resp.json() if resp.content else {}
-            choices = data.get("choices") or []
-            if not choices:
-                snippet = ""
-                try:
-                    snippet = json.dumps(data, ensure_ascii=False)[:1000]
-                except Exception:
-                    snippet = (resp.text or "")[:1000]
-                if snippet:
-                    raise RuntimeError(f"{provider_name} chat.completions failed: empty choices body={snippet}")
-                raise RuntimeError(f"{provider_name} chat.completions failed: empty choices")
-            message = choices[0].get("message") or {}
-            content = message.get("content")
-            if isinstance(content, list):
-                text = "\n".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
-            else:
-                text = str(content or "")
-            text = text.strip()
-            if text == "":
-                _log_empty_message_content(logger, provider_name, normalize_model_name(model), body, data, choices[0], message)
-                if i < attempts - 1 and _should_retry_empty_json(body, choices[0], text):
-                    finish_reason = str(choices[0].get("finish_reason") or "").strip() or "unknown"
-                    _append_execution_failure(
-                        retry_usage,
-                        requested_model,
-                        f"empty_json_content finish_reason={finish_reason} provider={str(data.get('provider') or '').strip() or 'unknown'}",
-                    )
+    with _provider_concurrency_guard(provider_name):
+        for i in range(attempts):
+            try:
+                with httpx.Client(timeout=timeout_sec) as client:
+                    resp = client.post(url, headers=headers, json=body)
+                    if is_json_validation_error(resp) and response_schema is not None:
+                        if use_strict_schema:
+                            fallback_body = dict(body)
+                            fallback_body["response_format"] = {"type": "json_object"}
+                            resp = client.post(url, headers=headers, json=fallback_body)
+                        if is_json_validation_error(resp):
+                            fallback_body = dict(body)
+                            fallback_body.pop("response_format", None)
+                            resp = client.post(url, headers=headers, json=fallback_body)
+            except Exception as e:
+                last_error = e
+                if i < attempts - 1:
+                    _append_execution_failure(retry_usage, requested_model, f"request failed: {e}")
                     sleep_sec = base_sleep_sec * (2**i)
                     logger.warning(
-                        "%s chat.completions retrying model=%s reason=empty_json_content finish_reason=%s retry_in=%.1fs attempt=%d/%d",
+                        "%s chat.completions request failed model=%s retry_in=%.1fs attempt=%d/%d err=%s",
                         provider_name,
                         normalize_model_name(model),
-                        finish_reason,
                         sleep_sec,
                         i + 1,
                         attempts,
+                        e,
                     )
                     time.sleep(sleep_sec)
                     continue
-            usage = usage_from_chat_response(data)
-            usage["requested_model"] = requested_model
-            if retry_usage.get("execution_failures"):
-                usage["execution_failures"] = list(retry_usage["execution_failures"])
-            return text, usage
-        if resp.status_code in retryable_status and i < attempts - 1:
-            _append_execution_failure(retry_usage, requested_model, f"status={resp.status_code} body={resp.text[:1000]}")
-            sleep_sec = base_sleep_sec * (2**i)
-            logger.warning(
-                "%s chat.completions retrying model=%s status=%d retry_in=%.1fs attempt=%d/%d",
-                provider_name,
-                normalize_model_name(model),
-                resp.status_code,
-                sleep_sec,
-                i + 1,
-                attempts,
-            )
-            time.sleep(sleep_sec)
-            continue
-        break
+                raise RuntimeError(f"{provider_name} chat.completions request failed: {e}") from e
+
+            if resp.status_code < 400:
+                data = resp.json() if resp.content else {}
+                choices = data.get("choices") or []
+                if not choices:
+                    snippet = ""
+                    try:
+                        snippet = json.dumps(data, ensure_ascii=False)[:1000]
+                    except Exception:
+                        snippet = (resp.text or "")[:1000]
+                    if snippet:
+                        raise RuntimeError(f"{provider_name} chat.completions failed: empty choices body={snippet}")
+                    raise RuntimeError(f"{provider_name} chat.completions failed: empty choices")
+                message = choices[0].get("message") or {}
+                content = message.get("content")
+                if isinstance(content, list):
+                    text = "\n".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
+                else:
+                    text = str(content or "")
+                text = text.strip()
+                if text == "":
+                    _log_empty_message_content(logger, provider_name, normalize_model_name(model), body, data, choices[0], message)
+                    if i < attempts - 1 and _should_retry_empty_json(body, choices[0], text):
+                        finish_reason = str(choices[0].get("finish_reason") or "").strip() or "unknown"
+                        _append_execution_failure(
+                            retry_usage,
+                            requested_model,
+                            f"empty_json_content finish_reason={finish_reason} provider={str(data.get('provider') or '').strip() or 'unknown'}",
+                        )
+                        sleep_sec = base_sleep_sec * (2**i)
+                        logger.warning(
+                            "%s chat.completions retrying model=%s reason=empty_json_content finish_reason=%s retry_in=%.1fs attempt=%d/%d",
+                            provider_name,
+                            normalize_model_name(model),
+                            finish_reason,
+                            sleep_sec,
+                            i + 1,
+                            attempts,
+                        )
+                        time.sleep(sleep_sec)
+                        continue
+                usage = usage_from_chat_response(data)
+                usage["requested_model"] = requested_model
+                if retry_usage.get("execution_failures"):
+                    usage["execution_failures"] = list(retry_usage["execution_failures"])
+                return text, usage
+            if resp.status_code in retryable_status and i < attempts - 1:
+                _append_execution_failure(retry_usage, requested_model, f"status={resp.status_code} body={resp.text[:1000]}")
+                sleep_sec = base_sleep_sec * (2**i)
+                logger.warning(
+                    "%s chat.completions retrying model=%s status=%d retry_in=%.1fs attempt=%d/%d",
+                    provider_name,
+                    normalize_model_name(model),
+                    resp.status_code,
+                    sleep_sec,
+                    i + 1,
+                    attempts,
+                )
+                time.sleep(sleep_sec)
+                continue
+            break
 
     if resp is None:
         if last_error is not None:

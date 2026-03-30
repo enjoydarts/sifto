@@ -1,4 +1,7 @@
 import unittest
+import threading
+import time
+import os
 from unittest.mock import patch
 
 import httpx
@@ -212,11 +215,44 @@ class _ListLogger:
         self.messages.append(msg)
 
 
+class _ConcurrentTrackingClient:
+    active_count = 0
+    max_active_count = 0
+    lock = threading.Lock()
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def post(self, url, headers=None, json=None):
+        with _ConcurrentTrackingClient.lock:
+            _ConcurrentTrackingClient.active_count += 1
+            if _ConcurrentTrackingClient.active_count > _ConcurrentTrackingClient.max_active_count:
+                _ConcurrentTrackingClient.max_active_count = _ConcurrentTrackingClient.active_count
+        time.sleep(0.05)
+        with _ConcurrentTrackingClient.lock:
+            _ConcurrentTrackingClient.active_count -= 1
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"content": '{"answer":"ok"}'}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+
 class RunChatJsonTests(unittest.TestCase):
     def setUp(self):
         _FakeClient.last_json = None
         _RetryThenSuccessClient.call_count = 0
         _EmptyLengthThenSuccessClient.call_count = 0
+        _ConcurrentTrackingClient.active_count = 0
+        _ConcurrentTrackingClient.max_active_count = 0
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
     def test_zai_requests_disable_thinking(self):
@@ -502,6 +538,43 @@ class RunChatJsonTests(unittest.TestCase):
             [{"model": "openrouter::z-ai/glm-4.7-flash", "reason": "empty_json_content finish_reason=stop provider=DeepInfra"}],
         )
         self.assertEqual(usage.get("resolved_model"), "z-ai/glm-4.7-flash")
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _ConcurrentTrackingClient)
+    def test_zai_requests_are_serialized_by_default(self):
+        previous = os.environ.get("ZAI_MAX_CONCURRENCY")
+        os.environ["ZAI_MAX_CONCURRENCY"] = "1"
+        try:
+            threads = [
+                threading.Thread(
+                    target=run_chat_json,
+                    kwargs={
+                        "prompt": "Return JSON",
+                        "model": "glm-5-turbo",
+                        "api_key": "test-key",
+                        "url": "https://example.com/chat/completions",
+                        "normalize_model_name": lambda model: model,
+                        "supports_strict_schema": lambda model: False,
+                        "timeout_sec": 5,
+                        "attempts": 1,
+                        "base_sleep_sec": 0,
+                        "provider_name": "zai",
+                        "logger": _ListLogger(),
+                        "response_schema": {"type": "object"},
+                    },
+                )
+                for _ in range(2)
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        finally:
+            if previous is None:
+                os.environ.pop("ZAI_MAX_CONCURRENCY", None)
+            else:
+                os.environ["ZAI_MAX_CONCURRENCY"] = previous
+
+        self.assertEqual(_ConcurrentTrackingClient.max_active_count, 1)
 
 
 if __name__ == "__main__":

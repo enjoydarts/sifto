@@ -882,7 +882,7 @@ func (w *WorkerClient) GenerateAudioBriefingScriptWithModel(
 	ctx context.Context,
 	persona string,
 	articles []AudioBriefingScriptArticle,
-	introContext BriefingNavigatorIntroContext,
+	introContext map[string]any,
 	anthropicAPIKey *string,
 	googleAPIKey *string,
 	groqAPIKey *string,

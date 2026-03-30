@@ -322,6 +322,29 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("1文は 50〜95文字 を目安", prompt)
         self.assertIn("commentary の個別目安: 約", prompt)
 
+    def test_build_audio_briefing_script_task_adds_supplement_instructions_for_existing_section(self):
+        task = build_audio_briefing_script_task(
+            persona="editor",
+            articles=[
+                {"item_id": "item-1", "title": "Title 1", "translated_title": "翻訳1", "summary": "Summary text"}
+            ],
+            intro_context={
+                "audio_briefing_generation_mode": "supplement",
+                "audio_briefing_generation_section": "opening",
+                "audio_briefing_existing_section_text": "おはようございます。\n今日は静かな朝ですね。",
+            },
+            include_opening=True,
+            include_overall_summary=False,
+            include_article_segments=False,
+            include_ending=False,
+        )
+
+        prompt = task["prompt"]
+        self.assertIn("opening の不足分を補う追記モード", prompt)
+        self.assertIn("差分だけを書く", prompt)
+        self.assertIn("既存の opening:", prompt)
+        self.assertIn("今日は静かな朝ですね。", prompt)
+
     def test_parse_audio_briefing_script_result_rejects_empty_payload(self):
         with self.assertRaises(ValueError):
             parse_audio_briefing_script_result(
@@ -484,6 +507,40 @@ class FeedTaskCommonTests(unittest.TestCase):
         )
         self.assertGreaterEqual(len(result["overall_summary"]), 980)
         self.assertGreater(len(result["article_segments"][0]["commentary"]), 1200)
+
+    def test_parse_audio_briefing_script_result_preserves_full_frame_sections(self):
+        long_opening = "導入です。" * 300
+        long_summary = "総括です。" * 500
+        long_ending = "締めです。" * 300
+        result = parse_audio_briefing_script_result(
+            f"""
+            {{
+              "opening": "{long_opening}",
+              "overall_summary": "{long_summary}",
+              "article_segments": [
+                {{
+                  "item_id": "item-1",
+                  "headline": "見出しA",
+                  "commentary": "コメントAです。"
+                }}
+              ],
+              "ending": "{long_ending}"
+            }}
+            """,
+            [
+                {
+                    "item_id": "item-1",
+                    "title": "Example title 1",
+                    "translated_title": "翻訳タイトル1",
+                    "summary": "Summary text 1",
+                }
+            ],
+            "editor",
+            target_chars=14000,
+        )
+        self.assertEqual(result["opening"], long_opening)
+        self.assertEqual(result["overall_summary"], long_summary)
+        self.assertEqual(result["ending"], long_ending)
 
     def test_parse_audio_briefing_script_result_preserves_commentary_line_breaks(self):
         result = parse_audio_briefing_script_result(

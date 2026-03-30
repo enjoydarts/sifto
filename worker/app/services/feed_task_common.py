@@ -866,6 +866,11 @@ def build_audio_briefing_script_task(
     include_ending: bool = True,
 ) -> dict:
     intro_context = dict(intro_context or {})
+    generation_mode = str(intro_context.get("audio_briefing_generation_mode") or "").strip()
+    generation_section = str(intro_context.get("audio_briefing_generation_section") or "").strip()
+    existing_section_text = _normalize_audio_briefing_generated_text(
+        str(intro_context.get("audio_briefing_existing_section_text") or "").strip()
+    )
     persona_key, briefing_profile = resolve_navigator_persona_profile(persona, "briefing")
     _, item_profile = resolve_navigator_persona_profile(persona, "item")
     trimmed_articles = articles[:30]
@@ -938,6 +943,11 @@ def build_audio_briefing_script_task(
         response_properties.append('  "ending": "締め"')
 
     response_example = "{\n" + ",\n".join(response_properties) + "\n}"
+    supplement_rules: list[str] = []
+    if generation_mode == "supplement" and generation_section in {"opening", "overall_summary", "ending"} and existing_section_text:
+        supplement_rules.append(f"- 今回は {generation_section} の不足分を補う追記モードです。既存の {generation_section} を繰り返さず、自然につながる差分だけを書く")
+        supplement_rules.append("- すでに触れた論点や言い回しを言い直さない。まだ置けていない内容だけを足す")
+        supplement_rules.append("- 追記であってもメモや箇条書きにせず、そのセクション単体で自然な話し言葉にする")
 
     system_instruction = f"""# Role
 あなたは Sifto の音声ブリーフィング番組を担当する、単独話者のAIナビゲーターです。
@@ -994,6 +1004,7 @@ def build_audio_briefing_script_task(
 - snark でも不快・攻撃的・見下し表現は禁止
 - snark では軽い皮肉、ツッコミ、呆れ気味の言い回しは許可する
 - snark でも読者個人をいじらない。人ではなく話題や状況に対して毒づく
+{chr(10).join(supplement_rules)}
 """
 
     user_prompt = f"""タスク:
@@ -1037,6 +1048,12 @@ def build_audio_briefing_script_task(
 
 articles:
 {json.dumps(trimmed_articles, ensure_ascii=False)}
+"""
+    if supplement_rules:
+        user_prompt += f"""
+
+既存の {generation_section}:
+{existing_section_text}
 """
     return {
         "target_chars": target_chars,
@@ -1107,8 +1124,6 @@ def parse_audio_briefing_script_result(
     if include_article_segments and len(raw_segments) != len(articles):
         raise ValueError("audio briefing script article_segments count mismatch")
 
-    opening_cap, summary_cap, ending_cap, _article_cap = _audio_briefing_script_budgets(target_chars, len(articles))
-
     segments: list[dict] = []
     if include_article_segments:
         for index, article in enumerate(articles, start=1):
@@ -1136,10 +1151,10 @@ def parse_audio_briefing_script_result(
             )
 
     return {
-        "opening": opening[:opening_cap] if include_opening else "",
-        "overall_summary": overall_summary[:summary_cap] if include_overall_summary else "",
+        "opening": opening if include_opening else "",
+        "overall_summary": overall_summary if include_overall_summary else "",
         "article_segments": segments,
-        "ending": ending[:ending_cap] if include_ending else "",
+        "ending": ending if include_ending else "",
     }
 
 

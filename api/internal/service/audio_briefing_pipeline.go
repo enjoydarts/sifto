@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"strings"
 	"time"
 
@@ -431,7 +432,7 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 	scriptLLMModels := make([]string, 0, 2)
 	if len(workerArticles) > 0 {
 		workerCtx := WithWorkerTraceMetadata(ctx, "audio_briefing_script", &userID, nil, nil, nil)
-		callScriptWorker := func(batch []AudioBriefingScriptArticle, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error) {
+		callScriptWorker := func(batch []AudioBriefingScriptArticle, introContext map[string]any, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error) {
 			var errs []string
 			for idx, modelName := range modelNames {
 				modelValue := modelName
@@ -486,22 +487,44 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 			}
 			return nil, fmt.Errorf("audio briefing script failed across models: %s", strings.Join(errs, " | "))
 		}
-
-		frameResp, err := callScriptWorker(
+		opening, openingModels, err := audioBriefingGenerateFrameSection(
 			workerArticles,
-			audioBriefingFrameTargetChars(targetChars),
-			true,
-			true,
-			false,
-			true,
+			introContext,
+			targetChars,
+			"opening",
+			callScriptWorker,
 		)
 		if err != nil {
 			return AudioBriefingDraft{}, err
 		}
-		scriptLLMModels = appendAudioBriefingScriptModel(scriptLLMModels, frameResp.LLM)
-		narration.Opening = strings.TrimSpace(frameResp.Opening)
-		narration.OverallSummary = strings.TrimSpace(frameResp.OverallSummary)
-		narration.Ending = strings.TrimSpace(frameResp.Ending)
+		narration.Opening = opening
+		scriptLLMModels = appendAudioBriefingScriptModels(scriptLLMModels, openingModels)
+
+		overallSummary, summaryModels, err := audioBriefingGenerateFrameSection(
+			workerArticles,
+			introContext,
+			targetChars,
+			"overall_summary",
+			callScriptWorker,
+		)
+		if err != nil {
+			return AudioBriefingDraft{}, err
+		}
+		narration.OverallSummary = overallSummary
+		scriptLLMModels = appendAudioBriefingScriptModels(scriptLLMModels, summaryModels)
+
+		ending, endingModels, err := audioBriefingGenerateFrameSection(
+			workerArticles,
+			introContext,
+			targetChars,
+			"ending",
+			callScriptWorker,
+		)
+		if err != nil {
+			return AudioBriefingDraft{}, err
+		}
+		narration.Ending = ending
+		scriptLLMModels = appendAudioBriefingScriptModels(scriptLLMModels, endingModels)
 
 		batchSize := audioBriefingArticleBatchSize(len(workerArticles))
 		for start := 0; start < len(workerArticles); start += batchSize {
@@ -515,6 +538,7 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 				targetChars,
 				len(workerArticles),
 				callScriptWorker,
+				introContext,
 			)
 			if err != nil {
 				return AudioBriefingDraft{}, err
@@ -541,6 +565,191 @@ func audioBriefingFrameTargetChars(targetChars int) int {
 	return audioBriefingOpeningBudget(targetChars) + audioBriefingSummaryBudget(targetChars) + audioBriefingEndingBudget(targetChars)
 }
 
+func audioBriefingGenerateFrameSection(
+	articles []AudioBriefingScriptArticle,
+	introContext map[string]any,
+	targetChars int,
+	section string,
+	call func(batch []AudioBriefingScriptArticle, introContext map[string]any, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error),
+) (string, []string, error) {
+	if call == nil {
+		return "", nil, fmt.Errorf("audio briefing script caller is unavailable")
+	}
+	sectionTarget := audioBriefingFrameSectionTargetChars(targetChars, section)
+	includeOpening := section == "opening"
+	includeOverallSummary := section == "overall_summary"
+	includeEnding := section == "ending"
+
+	resp, err := call(articles, introContext, sectionTarget, includeOpening, includeOverallSummary, false, includeEnding)
+	if err != nil {
+		return "", nil, err
+	}
+	text := audioBriefingFrameSectionText(resp, section)
+	models := appendAudioBriefingScriptModel(nil, resp.LLM)
+	if !audioBriefingFrameSectionNeedsSupplement(section, sectionTarget, text) {
+		return text, models, nil
+	}
+
+	supplementContext := audioBriefingSupplementIntroContext(introContext, section, text)
+	supplementTarget := audioBriefingFrameSectionSupplementTargetChars(section, sectionTarget, text)
+	if supplementTarget <= 0 {
+		return text, models, nil
+	}
+	supplementResp, err := call(articles, supplementContext, supplementTarget, includeOpening, includeOverallSummary, false, includeEnding)
+	if err != nil {
+		return text, models, nil
+	}
+	text = audioBriefingMergeSectionText(text, audioBriefingFrameSectionText(supplementResp, section))
+	models = appendAudioBriefingScriptModel(models, supplementResp.LLM)
+	return text, models, nil
+}
+
+func audioBriefingFrameSectionTargetChars(targetChars int, section string) int {
+	switch section {
+	case "opening":
+		return audioBriefingOpeningBudget(targetChars)
+	case "overall_summary":
+		return audioBriefingSummaryBudget(targetChars)
+	case "ending":
+		return audioBriefingEndingBudget(targetChars)
+	default:
+		return 0
+	}
+}
+
+func audioBriefingFrameSectionCharsPerSentence(section string) int {
+	switch section {
+	case "overall_summary":
+		return 70
+	default:
+		return 65
+	}
+}
+
+func audioBriefingFrameSectionMinSentences(section string, targetChars int) int {
+	budget := audioBriefingFrameSectionTargetChars(targetChars, section)
+	charsPerSentence := audioBriefingFrameSectionCharsPerSentence(section)
+	minSentences := 2
+	maxSentences := 12
+	if section == "overall_summary" {
+		maxSentences = 14
+	}
+	count := int(math.Round(float64(budget) / float64(charsPerSentence)))
+	if count < minSentences {
+		count = minSentences
+	}
+	if count > maxSentences {
+		count = maxSentences
+	}
+	low := count - 1
+	if low < minSentences {
+		low = minSentences
+	}
+	return low
+}
+
+func audioBriefingFrameSectionNeedsSupplement(section string, targetChars int, text string) bool {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return true
+	}
+	budget := audioBriefingFrameSectionTargetChars(targetChars, section)
+	if budget <= 0 {
+		return false
+	}
+	if charCount(text) < maxInt(budget*2/3, 120) {
+		return true
+	}
+	return audioBriefingSentenceCount(text) < audioBriefingFrameSectionMinSentences(section, targetChars)
+}
+
+func audioBriefingFrameSectionSupplementTargetChars(section string, targetChars int, text string) int {
+	budget := audioBriefingFrameSectionTargetChars(targetChars, section)
+	if budget <= 0 {
+		return 0
+	}
+	missingChars := budget - charCount(strings.TrimSpace(text))
+	missingSentences := audioBriefingFrameSectionMinSentences(section, targetChars) - audioBriefingSentenceCount(text)
+	supplementChars := maxInt(missingChars, missingSentences*audioBriefingFrameSectionCharsPerSentence(section))
+	if supplementChars <= 0 {
+		return 0
+	}
+	if supplementChars < 120 {
+		supplementChars = 120
+	}
+	if supplementChars > budget {
+		supplementChars = budget
+	}
+	return supplementChars
+}
+
+func audioBriefingSupplementIntroContext(base map[string]any, section string, existingText string) map[string]any {
+	out := make(map[string]any, len(base)+3)
+	for key, value := range base {
+		out[key] = value
+	}
+	out["audio_briefing_generation_mode"] = "supplement"
+	out["audio_briefing_generation_section"] = section
+	out["audio_briefing_existing_section_text"] = strings.TrimSpace(existingText)
+	return out
+}
+
+func audioBriefingFrameSectionText(resp *AudioBriefingScriptResponse, section string) string {
+	if resp == nil {
+		return ""
+	}
+	switch section {
+	case "opening":
+		return strings.TrimSpace(resp.Opening)
+	case "overall_summary":
+		return strings.TrimSpace(resp.OverallSummary)
+	case "ending":
+		return strings.TrimSpace(resp.Ending)
+	default:
+		return ""
+	}
+}
+
+func audioBriefingMergeSectionText(base string, supplement string) string {
+	base = strings.TrimSpace(base)
+	supplement = strings.TrimSpace(supplement)
+	switch {
+	case base == "":
+		return supplement
+	case supplement == "":
+		return base
+	case strings.Contains(base, supplement):
+		return base
+	default:
+		return strings.TrimSpace(base + "\n" + supplement)
+	}
+}
+
+func audioBriefingSentenceCount(text string) int {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0
+	}
+	parts := strings.FieldsFunc(text, func(r rune) bool {
+		switch r {
+		case '\n', '。', '！', '？':
+			return true
+		default:
+			return false
+		}
+	})
+	count := 0
+	for _, part := range parts {
+		if strings.TrimSpace(part) != "" {
+			count++
+		}
+	}
+	if count == 0 {
+		return 1
+	}
+	return count
+}
+
 func audioBriefingArticleBatchTargetChars(targetChars, totalArticles, batchArticles int) int {
 	if batchArticles <= 0 {
 		return 0
@@ -560,14 +769,23 @@ func audioBriefingArticleBatchSize(itemCount int) int {
 	return 3
 }
 
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 func audioBriefingGenerateArticleSegmentsBatch(
 	batch []AudioBriefingScriptArticle,
 	targetChars int,
 	totalArticles int,
-	call func(batch []AudioBriefingScriptArticle, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error),
+	call func(batch []AudioBriefingScriptArticle, introContext map[string]any, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error),
+	introContext map[string]any,
 ) (audioBriefingArticleBatchResult, error) {
 	resp, err := call(
 		batch,
+		introContext,
 		audioBriefingArticleBatchTargetChars(targetChars, totalArticles, len(batch)),
 		false,
 		false,
@@ -585,11 +803,11 @@ func audioBriefingGenerateArticleSegmentsBatch(
 	}
 
 	mid := len(batch) / 2
-	left, leftErr := audioBriefingGenerateArticleSegmentsBatch(batch[:mid], targetChars, totalArticles, call)
+	left, leftErr := audioBriefingGenerateArticleSegmentsBatch(batch[:mid], targetChars, totalArticles, call, introContext)
 	if leftErr != nil {
 		return audioBriefingArticleBatchResult{}, leftErr
 	}
-	right, rightErr := audioBriefingGenerateArticleSegmentsBatch(batch[mid:], targetChars, totalArticles, call)
+	right, rightErr := audioBriefingGenerateArticleSegmentsBatch(batch[mid:], targetChars, totalArticles, call, introContext)
 	if rightErr != nil {
 		return audioBriefingArticleBatchResult{}, rightErr
 	}
@@ -919,14 +1137,14 @@ func hasAudioBriefingProviderKey(settings *model.UserSettings, provider string) 
 	}
 }
 
-func buildAudioBriefingIntroContext(now time.Time) BriefingNavigatorIntroContext {
+func buildAudioBriefingIntroContext(now time.Time) map[string]any {
 	now = now.In(timeutil.JST)
-	return BriefingNavigatorIntroContext{
-		NowJST:     now.Format(time.RFC3339),
-		DateJST:    now.Format("2006-01-02"),
-		WeekdayJST: now.Weekday().String(),
-		TimeOfDay:  audioBriefingTimeOfDay(now.Hour()),
-		SeasonHint: audioBriefingSeasonHint(now),
+	return map[string]any{
+		"now_jst":     now.Format(time.RFC3339),
+		"date_jst":    now.Format("2006-01-02"),
+		"weekday_jst": now.Weekday().String(),
+		"time_of_day": audioBriefingTimeOfDay(now.Hour()),
+		"season_hint": audioBriefingSeasonHint(now),
 	}
 }
 

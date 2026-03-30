@@ -183,7 +183,7 @@ func TestAudioBriefingGenerateArticleSegmentsBatchSplitsOnError(t *testing.T) {
 		{ItemID: "item-4"},
 	}
 	var seen []int
-	call := func(batch []AudioBriefingScriptArticle, _ int, _ bool, _ bool, _ bool, _ bool) (*AudioBriefingScriptResponse, error) {
+	call := func(batch []AudioBriefingScriptArticle, _ map[string]any, _ int, _ bool, _ bool, _ bool, _ bool) (*AudioBriefingScriptResponse, error) {
 		seen = append(seen, len(batch))
 		if len(batch) > 1 {
 			return nil, fmt.Errorf("batch too large")
@@ -195,7 +195,7 @@ func TestAudioBriefingGenerateArticleSegmentsBatchSplitsOnError(t *testing.T) {
 		}, nil
 	}
 
-	got, err := audioBriefingGenerateArticleSegmentsBatch(articles, 12000, 4, call)
+	got, err := audioBriefingGenerateArticleSegmentsBatch(articles, 12000, 4, call, map[string]any{"time_of_day": "morning"})
 	if err != nil {
 		t.Fatalf("audioBriefingGenerateArticleSegmentsBatch(...) error = %v", err)
 	}
@@ -214,7 +214,7 @@ func TestAudioBriefingGenerateArticleSegmentsBatchTracksRecoveredFailures(t *tes
 		{ItemID: "item-3"},
 		{ItemID: "item-4"},
 	}
-	call := func(batch []AudioBriefingScriptArticle, _ int, _ bool, _ bool, _ bool, _ bool) (*AudioBriefingScriptResponse, error) {
+	call := func(batch []AudioBriefingScriptArticle, _ map[string]any, _ int, _ bool, _ bool, _ bool, _ bool) (*AudioBriefingScriptResponse, error) {
 		if len(batch) > 1 {
 			return nil, fmt.Errorf("batch too large")
 		}
@@ -225,7 +225,7 @@ func TestAudioBriefingGenerateArticleSegmentsBatchTracksRecoveredFailures(t *tes
 		}, nil
 	}
 
-	result, err := audioBriefingGenerateArticleSegmentsBatch(articles, 12000, 4, call)
+	result, err := audioBriefingGenerateArticleSegmentsBatch(articles, 12000, 4, call, map[string]any{"time_of_day": "morning"})
 	if err != nil {
 		t.Fatalf("audioBriefingGenerateArticleSegmentsBatch(...) error = %v", err)
 	}
@@ -234,6 +234,33 @@ func TestAudioBriefingGenerateArticleSegmentsBatchTracksRecoveredFailures(t *tes
 	}
 	if len(result.RecoveredFailures) == 0 {
 		t.Fatal("expected recovered failures to be recorded")
+	}
+}
+
+func TestAudioBriefingFrameSectionNeedsSupplement(t *testing.T) {
+	if !audioBriefingFrameSectionNeedsSupplement("opening", 12000, "おはようございます。") {
+		t.Fatal("short opening should require supplement")
+	}
+	if audioBriefingFrameSectionNeedsSupplement("opening", 12000, strings.Repeat("朝の空気が少し軽いですね。\n", 40)) {
+		t.Fatal("longer opening should not require supplement")
+	}
+}
+
+func TestAudioBriefingSupplementIntroContextIncludesExistingText(t *testing.T) {
+	base := map[string]any{"time_of_day": "morning"}
+	got := audioBriefingSupplementIntroContext(base, "ending", "ここまでです。")
+
+	if got["time_of_day"] != "morning" {
+		t.Fatalf("time_of_day = %#v, want morning", got["time_of_day"])
+	}
+	if got["audio_briefing_generation_mode"] != "supplement" {
+		t.Fatalf("generation_mode = %#v, want supplement", got["audio_briefing_generation_mode"])
+	}
+	if got["audio_briefing_generation_section"] != "ending" {
+		t.Fatalf("generation_section = %#v, want ending", got["audio_briefing_generation_section"])
+	}
+	if got["audio_briefing_existing_section_text"] != "ここまでです。" {
+		t.Fatalf("existing_section_text = %#v, want original text", got["audio_briefing_existing_section_text"])
 	}
 }
 

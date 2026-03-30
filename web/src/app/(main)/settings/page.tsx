@@ -40,6 +40,27 @@ function formatModelOptionNote(item: LLMCatalogModel): string | undefined {
   return parts.join(" / ");
 }
 
+function inferProviderLabelFromModelID(
+  modelID: string,
+  t: (key: string, fallback?: string) => string,
+): string | null {
+  if (modelID.startsWith("openrouter::")) {
+    return t("settings.modelGuide.provider.openrouter", "OpenRouter");
+  }
+  if (modelID.startsWith("siliconflow::")) {
+    return t("settings.modelGuide.provider.siliconflow", "SiliconFlow");
+  }
+  return null;
+}
+
+function formatProviderModelLabel(
+  providerLabel: string | null | undefined,
+  modelID: string,
+): string {
+  const modelLabel = formatModelDisplayName(modelID);
+  return providerLabel ? `${providerLabel} / ${modelLabel}` : modelLabel;
+}
+
 function firstMatchingModelId(models: LLMCatalogModel[], candidates: string[]): string {
   for (const candidate of candidates) {
     if (models.some((item) => item.id === candidate)) {
@@ -898,12 +919,16 @@ export default function SettingsPage() {
     }
   }, [showToast, t]);
 
-  const toModelOption = useCallback((item: LLMCatalogModel): ModelOption => ({
-    value: item.id,
-    label: formatModelDisplayName(item.id),
-    note: formatModelOptionNote(item),
-    provider: t(`settings.modelGuide.provider.${item.provider}`, item.provider),
-  }), [t]);
+  const toModelOption = useCallback((item: LLMCatalogModel): ModelOption => {
+    const providerLabel = t(`settings.modelGuide.provider.${item.provider}`, item.provider);
+    return {
+      value: item.id,
+      label: formatModelDisplayName(item.id),
+      selectedLabel: formatProviderModelLabel(providerLabel, item.id),
+      note: formatModelOptionNote(item),
+      provider: providerLabel,
+    };
+  }, [t]);
 
   const modelSelectLabels = useMemo(() => ({
     defaultOption: t("settings.modelSelect.default"),
@@ -942,15 +967,29 @@ export default function SettingsPage() {
   }, [catalog]);
 
   const optionsForPurpose = useCallback(
-    (purpose: string, currentValue?: string): ModelOption[] =>
-      (catalog?.chat_models ?? [])
+    (purpose: string, currentValue?: string): ModelOption[] => {
+      const items = (catalog?.chat_models ?? [])
         .filter((item) => {
           if (!(item.available_purposes ?? []).includes(purpose)) return false;
           if (item.id === currentValue) return true;
           return !isUnavailableOpenRouterModel(item);
         })
-        .map(toModelOption),
-    [catalog?.chat_models, toModelOption]
+        .map(toModelOption);
+      if (!currentValue || items.some((item) => item.value === currentValue)) {
+        return items;
+      }
+      const providerLabel = inferProviderLabelFromModelID(currentValue, t);
+      return [
+        {
+          value: currentValue,
+          label: formatModelDisplayName(currentValue),
+          selectedLabel: formatProviderModelLabel(providerLabel, currentValue),
+          provider: providerLabel ?? undefined,
+        },
+        ...items,
+      ];
+    },
+    [catalog?.chat_models, t, toModelOption]
   );
 
   const unavailableSelectedModelWarnings = useMemo(() => {

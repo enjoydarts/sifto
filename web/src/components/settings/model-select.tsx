@@ -6,6 +6,7 @@ import { Check, ChevronDown, Search, X } from "lucide-react";
 type ModelOption = {
   value: string;
   label: string;
+  selectedLabel?: string;
   note?: string;
   provider?: string;
 };
@@ -135,11 +136,11 @@ export default function ModelSelect({
         >
           <span className="min-w-0">
             <span className={`block truncate font-medium ${selected ? "text-zinc-900" : "text-zinc-500"}`}>
-              {selected?.label ?? labels.defaultOption}
+              {selected?.selectedLabel ?? selected?.label ?? labels.defaultOption}
             </span>
             {showMeta ? (
               <span className="mt-0.5 block truncate text-xs text-zinc-500">
-                {selected?.note ?? (selected?.provider ?? "")}
+                {selected?.note ?? ""}
               </span>
             ) : null}
           </span>
@@ -284,11 +285,11 @@ export default function ModelSelect({
       >
         <span className="min-w-0">
           <span className={`block truncate font-medium ${selected ? "text-zinc-900" : "text-zinc-500"}`}>
-            {selected?.label ?? labels.defaultOption}
+            {selected?.selectedLabel ?? selected?.label ?? labels.defaultOption}
           </span>
           {showMeta ? (
             <span className="mt-0.5 block truncate text-xs text-zinc-500">
-              {selected?.note ?? (selected?.provider ?? "")}
+              {selected?.note ?? ""}
             </span>
           ) : null}
         </span>

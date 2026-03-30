@@ -36,3 +36,23 @@ func TestBuildAINavigatorBriefPushLogInputUsesNilItemID(t *testing.T) {
 		t.Fatalf("DayJST = %s, want 2026-03-29", got.DayJST.Format("2006-01-02"))
 	}
 }
+
+func TestFormatAINavigatorBriefModelLabelPrefersProviderAndResolvedModel(t *testing.T) {
+	got := formatAINavigatorBriefModelLabel("kimi-k2.5", &LLMUsage{
+		Provider:      "zai",
+		Model:         "glm-4.5-air",
+		ResolvedModel: "kimi-k2.5",
+	})
+
+	if got != "zai / kimi-k2.5" {
+		t.Fatalf("formatAINavigatorBriefModelLabel(...) = %q, want %q", got, "zai / kimi-k2.5")
+	}
+}
+
+func TestFormatAINavigatorBriefModelLabelFallsBackToConfiguredModelWithProvider(t *testing.T) {
+	got := formatAINavigatorBriefModelLabel("openrouter::openai/gpt-oss-120b", nil)
+
+	if got != "openrouter / openai/gpt-oss-120b" {
+		t.Fatalf("formatAINavigatorBriefModelLabel(...) = %q, want provider-prefixed configured model", got)
+	}
+}

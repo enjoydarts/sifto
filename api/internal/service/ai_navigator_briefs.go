@@ -180,7 +180,7 @@ func (s *AINavigatorBriefService) EnqueueBriefForSlot(ctx context.Context, userI
 		Slot:              slot,
 		Status:            model.AINavigatorBriefStatusQueued,
 		Persona:           persona,
-		Model:             strings.TrimSpace(*modelName),
+		Model:             formatAINavigatorBriefModelLabel(strings.TrimSpace(*modelName), nil),
 		SourceWindowStart: &windowStart,
 		SourceWindowEnd:   &windowEnd,
 	}
@@ -396,7 +396,7 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 			Slot:              slot,
 			Status:            model.AINavigatorBriefStatusFailed,
 			Persona:           persona,
-			Model:             strings.TrimSpace(*modelName),
+			Model:             formatAINavigatorBriefModelLabel(strings.TrimSpace(*modelName), nil),
 			SourceWindowStart: &windowStart,
 			SourceWindowEnd:   &windowEnd,
 			GeneratedAt:       &now,
@@ -477,7 +477,7 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 			Slot:              slot,
 			Status:            model.AINavigatorBriefStatusFailed,
 			Persona:           persona,
-			Model:             strings.TrimSpace(*modelName),
+			Model:             formatAINavigatorBriefModelLabel(strings.TrimSpace(*modelName), respOrNilLLM(resp)),
 			SourceWindowStart: &windowStart,
 			SourceWindowEnd:   &windowEnd,
 			GeneratedAt:       &now,
@@ -497,7 +497,7 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 		Summary:           strings.TrimSpace(resp.Summary),
 		Ending:            strings.TrimSpace(resp.Ending),
 		Persona:           persona,
-		Model:             strings.TrimSpace(*modelName),
+		Model:             formatAINavigatorBriefModelLabel(strings.TrimSpace(*modelName), resp.LLM),
 		SourceWindowStart: &windowStart,
 		SourceWindowEnd:   &windowEnd,
 		GeneratedAt:       &now,
@@ -590,6 +590,44 @@ func recordAINavigatorBriefLLMExecutionFailure(ctx context.Context, purpose, mod
 		return
 	}
 	log.Printf("llm execution failure purpose=%s user_id=%s model=%s err=%v", purpose, userID, strings.TrimSpace(modelName), workerErr)
+}
+
+func formatAINavigatorBriefModelLabel(configuredModel string, usage *LLMUsage) string {
+	if usage != nil {
+		provider := strings.TrimSpace(usage.Provider)
+		resolved := strings.TrimSpace(usage.ResolvedModel)
+		model := strings.TrimSpace(usage.Model)
+		switch {
+		case provider != "" && resolved != "":
+			return provider + " / " + resolved
+		case provider != "" && model != "":
+			return provider + " / " + model
+		case resolved != "":
+			return resolved
+		case model != "":
+			return model
+		}
+	}
+
+	configuredModel = strings.TrimSpace(configuredModel)
+	if configuredModel == "" {
+		return ""
+	}
+	provider := strings.TrimSpace(LLMProviderForModel(&configuredModel))
+	if provider == "" {
+		return configuredModel
+	}
+	if parts := strings.SplitN(configuredModel, "::", 2); len(parts) == 2 && strings.TrimSpace(parts[1]) != "" {
+		configuredModel = strings.TrimSpace(parts[1])
+	}
+	return provider + " / " + configuredModel
+}
+
+func respOrNilLLM(resp *AINavigatorBriefResponse) *LLMUsage {
+	if resp == nil {
+		return nil
+	}
+	return resp.LLM
 }
 
 func (s *AINavigatorBriefService) NotifyBrief(ctx context.Context, brief *model.AINavigatorBrief) error {

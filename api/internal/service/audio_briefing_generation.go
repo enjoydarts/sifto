@@ -320,25 +320,21 @@ func audioBriefingCommentaryBudget(targetChars, itemCount int) int {
 		return 0
 	}
 	usable := targetChars - audioBriefingOpeningBudget(targetChars) - audioBriefingSummaryBudget(targetChars) - audioBriefingEndingBudget(targetChars) - 100
-	minimum := 360
 	if usable <= 0 {
-		return minimum
+		return 0
 	}
 	perArticle := usable / itemCount
-	if perArticle < minimum {
-		return minimum
+	if perArticle < 0 {
+		return 0
 	}
 	return perArticle
 }
 
 func audioBriefingSummaryIntroBudget(commentaryBudget int) int {
 	if commentaryBudget <= 0 {
-		return 240
+		return 0
 	}
 	budget := commentaryBudget / 3
-	if budget < 240 {
-		return 240
-	}
 	if budget > 520 {
 		return 520
 	}

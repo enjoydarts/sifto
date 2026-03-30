@@ -170,8 +170,8 @@ func TestAudioBriefingArticleBatchSize(t *testing.T) {
 
 func TestAudioBriefingArticleBatchTargetChars(t *testing.T) {
 	got := audioBriefingArticleBatchTargetChars(12000, 20, 4)
-	if got < 2000 {
-		t.Fatalf("audioBriefingArticleBatchTargetChars(...) = %d, want at least 2000", got)
+	if got != 1540 {
+		t.Fatalf("audioBriefingArticleBatchTargetChars(...) = %d, want %d", got, 1540)
 	}
 }
 

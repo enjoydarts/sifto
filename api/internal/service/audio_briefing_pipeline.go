@@ -548,10 +548,6 @@ func audioBriefingArticleBatchTargetChars(targetChars, totalArticles, batchArtic
 	}
 	perArticle := audioBriefingCommentaryBudget(targetChars, totalArticles)
 	target := (perArticle+audioBriefingSummaryIntroBudget(perArticle))*batchArticles + batchArticles*40
-	minimum := batchArticles * 500
-	if target < minimum {
-		return minimum
-	}
 	return target
 }
 

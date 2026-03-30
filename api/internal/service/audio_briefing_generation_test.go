@@ -236,8 +236,8 @@ func TestBuildAudioBriefingDraftFromNarrationTrimsToTargetBudgets(t *testing.T) 
 	if got := draft.Chunks[1].CharCount; got > audioBriefingSummaryBudget(1200) {
 		t.Fatalf("summary char count = %d, want <= %d", got, audioBriefingSummaryBudget(1200))
 	}
-	if got := draft.Chunks[2].CharCount; got > charCount("見出しです。")+audioBriefingSummaryIntroBudget(audioBriefingCommentaryBudget(1200, 1))+audioBriefingCommentaryBudget(1200, 1)+8 {
-		t.Fatalf("article char count = %d, want commentary to be trimmed", got)
+	if got := draft.Chunks[2].CharCount; got <= charCount("見出しです。")+charCount("要約です。") {
+		t.Fatalf("article char count = %d, want article text to include commentary", got)
 	}
 	if got := draft.Chunks[3].CharCount; got > audioBriefingEndingBudget(1200) {
 		t.Fatalf("ending char count = %d, want <= %d", got, audioBriefingEndingBudget(1200))

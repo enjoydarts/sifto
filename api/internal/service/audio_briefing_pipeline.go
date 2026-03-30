@@ -830,6 +830,83 @@ func audioBriefingArticleSegmentsNeedSupplement(segments []AudioBriefingScriptSe
 	return false
 }
 
+func audioBriefingArticleSegmentSupplementReasons(segment AudioBriefingScriptSegment, targetChars, totalArticles int) []string {
+	if totalArticles <= 0 {
+		return nil
+	}
+	articleBudget := audioBriefingCommentaryBudget(targetChars, totalArticles)
+	if articleBudget <= 0 {
+		return nil
+	}
+	headlineBudget, summaryBudget, commentaryBudget := audioBriefingArticleSectionBudgets(articleBudget)
+	articleMinChars, _ := audioBriefingCharBounds(articleBudget)
+	headlineMinChars, _ := audioBriefingCharBounds(headlineBudget)
+	summaryMinChars, _ := audioBriefingCharBounds(summaryBudget)
+	commentaryMinChars, _ := audioBriefingCharBounds(commentaryBudget)
+	reasons := make([]string, 0, 4)
+	if charCount(audioBriefingArticleText(segment.Headline, segment.SummaryIntro, segment.Commentary)) < articleMinChars {
+		reasons = append(reasons, "article_total")
+	}
+	if charCount(strings.TrimSpace(segment.Headline)) < headlineMinChars {
+		reasons = append(reasons, "headline")
+	}
+	if charCount(strings.TrimSpace(segment.SummaryIntro)) < summaryMinChars {
+		reasons = append(reasons, "summary_intro")
+	}
+	if charCount(strings.TrimSpace(segment.Commentary)) < commentaryMinChars {
+		reasons = append(reasons, "commentary")
+	}
+	return reasons
+}
+
+func logAudioBriefingArticleSupplementDecision(targetChars, totalArticles int, before []AudioBriefingScriptSegment) {
+	for _, segment := range before {
+		reasons := audioBriefingArticleSegmentSupplementReasons(segment, targetChars, totalArticles)
+		if len(reasons) == 0 {
+			continue
+		}
+		log.Printf(
+			"audio briefing article supplement needed item_id=%s reasons=%s before_headline_chars=%d before_summary_intro_chars=%d before_commentary_chars=%d before_total_chars=%d",
+			strings.TrimSpace(segment.ItemID),
+			strings.Join(reasons, ","),
+			charCount(strings.TrimSpace(segment.Headline)),
+			charCount(strings.TrimSpace(segment.SummaryIntro)),
+			charCount(strings.TrimSpace(segment.Commentary)),
+			charCount(audioBriefingArticleText(segment.Headline, segment.SummaryIntro, segment.Commentary)),
+		)
+	}
+}
+
+func logAudioBriefingArticleSupplementResult(before []AudioBriefingScriptSegment, after []AudioBriefingScriptSegment) {
+	if len(before) == 0 || len(after) == 0 {
+		return
+	}
+	byID := make(map[string]AudioBriefingScriptSegment, len(after))
+	for _, segment := range after {
+		itemID := strings.TrimSpace(segment.ItemID)
+		if itemID == "" {
+			continue
+		}
+		byID[itemID] = segment
+	}
+	for _, segment := range before {
+		itemID := strings.TrimSpace(segment.ItemID)
+		merged, ok := byID[itemID]
+		if !ok {
+			continue
+		}
+		log.Printf(
+			"audio briefing article supplement result item_id=%s after_headline_chars=%d after_summary_intro_chars=%d after_commentary_chars=%d after_total_chars=%d delta_total_chars=%d",
+			itemID,
+			charCount(strings.TrimSpace(merged.Headline)),
+			charCount(strings.TrimSpace(merged.SummaryIntro)),
+			charCount(strings.TrimSpace(merged.Commentary)),
+			charCount(audioBriefingArticleText(merged.Headline, merged.SummaryIntro, merged.Commentary)),
+			charCount(audioBriefingArticleText(merged.Headline, merged.SummaryIntro, merged.Commentary))-charCount(audioBriefingArticleText(segment.Headline, segment.SummaryIntro, segment.Commentary)),
+		)
+	}
+}
+
 func audioBriefingArticleSegmentsSupplementTargetChars(segments []AudioBriefingScriptSegment, targetChars, totalArticles int) int {
 	if len(segments) == 0 || totalArticles <= 0 {
 		return 0
@@ -942,6 +1019,7 @@ func audioBriefingGenerateArticleSegmentsBatch(
 		segments := resp.ArticleSegments
 		models := appendAudioBriefingScriptModel(nil, resp.LLM)
 		if audioBriefingArticleSegmentsNeedSupplement(segments, targetChars, totalArticles) {
+			logAudioBriefingArticleSupplementDecision(targetChars, totalArticles, segments)
 			supplementContext := audioBriefingArticleSupplementIntroContext(introContext, segments)
 			supplementTargetChars := audioBriefingArticleSegmentsSupplementTargetChars(segments, targetChars, totalArticles)
 			if supplementTargetChars > 0 {
@@ -956,6 +1034,7 @@ func audioBriefingGenerateArticleSegmentsBatch(
 				)
 				if supplementErr == nil {
 					segments = audioBriefingMergeArticleSegments(segments, supplementResp.ArticleSegments)
+					logAudioBriefingArticleSupplementResult(resp.ArticleSegments, segments)
 					models = appendAudioBriefingScriptModel(models, supplementResp.LLM)
 				}
 			}

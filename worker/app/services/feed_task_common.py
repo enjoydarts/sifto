@@ -878,8 +878,8 @@ def build_audio_briefing_script_task(
     opening_sentence_spec = _audio_briefing_section_sentence_spec(opening_budget, "opening")
     summary_sentence_spec = _audio_briefing_section_sentence_spec(summary_budget, "summary")
     ending_sentence_spec = _audio_briefing_section_sentence_spec(ending_budget, "ending")
-    _article_intro_budget, article_commentary_budget = _audio_briefing_article_section_budgets(article_budget)
-    _article_intro_sentence_spec, article_commentary_sentence_spec = _audio_briefing_article_sentence_specs(article_budget)
+    article_headline_budget, article_commentary_budget = _audio_briefing_article_section_budgets(article_budget)
+    article_headline_sentence_spec, article_commentary_sentence_spec = _audio_briefing_article_sentence_specs(article_budget)
     sentence_length_spec = _audio_briefing_sentence_length_spec(article_budget)
     section_rules: list[str] = []
     target_lines: list[str] = []
@@ -901,18 +901,20 @@ def build_audio_briefing_script_task(
         response_properties.append('  "overall_summary": "全体サマリー"')
     if include_article_segments:
         section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
-        section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。headline を除き、1記事あたりの commentary は約 {article_budget} 文字以内を厳守する")
-        section_rules.append(f"- article_segments の各 commentary は {article_commentary_sentence_spec} で書く。1文目はその記事が何の記事かを短く説明する文、2文目以降でそのペルソナの反応を書く。脱線せず、長い前置きや言い換えを避け、長さは約 {article_commentary_budget} 文字以内を厳守する")
+        section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。1記事あたりの headline と commentary の合計は約 {article_budget} 文字以内を厳守する")
+        section_rules.append(f"- article_segments の各 headline は {article_headline_sentence_spec} で、その記事が何の記事かを短く示す。長さは約 {article_headline_budget} 文字以内を厳守し、見出しの読み上げとして一息で入る長さにする")
+        section_rules.append(f"- article_segments の各 commentary は {article_commentary_sentence_spec} で書く。headline を受けて、そのペルソナの反応を広げる。脱線せず、長い前置きや言い換えを避け、長さは約 {article_commentary_budget} 文字以内を厳守する")
         section_rules.append("- article_segments は各記事にほぼ均等に尺を配る。1本だけ極端に長くしない。長くなりそうなら commentary 側を先に圧縮し、例示・補足・言い換えを削って収める")
+        section_rules.append("- headline は記事本文の要約ではなく、話題ラベルと芯だけを短く置く。長い説明文や列挙にしない")
         section_rules.append("- article_segments の commentary は、そのペルソナ本人が自然に口にしそうな感想だけを書く。無難な解説調、誰にでも当てはまる一般論、ニュースキャスター風の中立コメントに寄せない")
-        section_rules.append("- commentary の1文目は、その記事が何の記事かを短く示すためだけに使う。実装手順、検証方法、背景事情、事例列挙まで広げない")
-        section_rules.append("- commentary の2文目以降では記事の説明、背景整理、論点整理、一般論、今後の含意の解説は禁止。このペルソナがどこに反応したか、なぜ引っかかったか、どう受け止めたかのどれか1つだけを短く話す")
+        section_rules.append("- commentary では記事の説明、背景整理、論点整理、一般論、今後の含意の解説は禁止。このペルソナがどこに反応したか、なぜ引っかかったか、どう受け止めたかを短く話す")
         section_rules.append("- commentary で headline の内容を長く言い換えて繰り返さない。記事本文の要約や、その要約の要約を書かない")
-        target_lines.append(f"- 各 article segment の目安: commentary を約 {article_budget} 文字以内")
+        target_lines.append(f"- 各 article segment の目安: headline と commentary を合わせて約 {article_budget} 文字以内")
+        target_lines.append(f"- headline の個別目安: 約 {article_headline_budget} 文字以内")
         target_lines.append(f"- commentary の個別目安: 約 {article_commentary_budget} 文字以内")
         response_properties.extend([
             '  "article_segments": [',
-            '    {"item_id": "uuid", "headline": "記事見出し", "commentary": "そのペルソナがどう受け止めたかの1文"}',
+            '    {"item_id": "uuid", "headline": "その記事が何の記事かを短く示す1〜2文", "commentary": "そのペルソナがどう受け止めたかの2〜3文"}',
             "  ]",
         ])
     else:
@@ -954,13 +956,13 @@ def build_audio_briefing_script_task(
 - 冗長な前置きや言い換えを避け、文字数目標を強く意識する
 - 今回与えられた target_chars と記事数から逆算した尺配分を守り、特定のセクションや特定の記事だけを必要以上に長くしない
 - 1文は {sentence_length_spec} を目安にし、1文1論点でだらだら伸ばさない
-- 各記事では、headline の言い換えや summary の要約で終わらせず、このペルソナなら何に反応するかを話す
+- 各記事では、headline で何の記事かを短く置いたうえで、このペルソナなら何に反応するかを話す
 - 第一印象、良いと感じる点、引っかかる点、今読む理由のうち2〜3個が自然ににじむようにする
 - 客観的な無味乾燥レビューではなく、このペルソナの主観で語る
 - 各記事の commentary では、必ずこのペルソナの口癖・温度感・価値観がにじむようにし、他のペルソナでも成立する無個性な書き方をしない
-- 記事の commentary は「要約の続き」ではなく「最初に何の記事かを短く置き、そのあとこのペルソナならどう受け取るか」を短く話す
-- commentary の1文目は、その記事が何の記事かを短く示すための説明に使う
-- commentary の2文目以降は反応だけを書く。記事内容の補足説明、背景解説、論点整理、一般論への展開は禁止
+- headline は短い導入見出しとして使い、何の記事かを一息でわかる形で置く
+- 記事の commentary は「headline の続き」として、このペルソナならどう受け取るかを短く話す
+- commentary は反応を中心に書く。記事内容の補足説明、背景解説、論点整理、一般論への展開は禁止
 - commentary で記事の説明を長く続けない。headline で足りる事実を繰り返さない
 - commentary では「つまり」「要するに」「背景として」「ポイントは」など、解説調に見えやすい運びを避ける
 - opening は番組の導入トークとして扱い、記事本編とは役割を分ける
@@ -1012,12 +1014,12 @@ def build_audio_briefing_script_task(
   "article_segments": [
     {{
       "item_id": "example-item",
-      "headline": "見出しの言い換え",
-      "commentary": "これは企業どうしの競争がまた一段動いた記事です。\nこういう更新って、派手さより先に現場でちゃんと残るのかが気になるんですよね。"
+      "headline": "これは企業どうしの競争がまた一段動いた、そういう記事です。",
+      "commentary": "こういう更新って、派手さより先に現場でちゃんと残るのかが気になるんですよね。\n派手な発表より、その後の定着のほうを見たくなるんです。"
     }}
   ]
 }}
-- commentary の1文目で何の記事かを短く置き、2文目以降でそのペルソナの反応を書く
+- headline で何の記事かを短く置き、commentary でそのペルソナの反応を書く
 
 articles:
 {json.dumps(trimmed_articles, ensure_ascii=False)}

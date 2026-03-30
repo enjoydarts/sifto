@@ -286,7 +286,11 @@ func audioBriefingArticleText(headline, commentary string) string {
 	commentary = strings.TrimSpace(commentary)
 	parts := make([]string, 0, 2)
 	if headline != "" {
-		parts = append(parts, fmt.Sprintf("%sです。", headline))
+		if strings.HasSuffix(headline, "。") || strings.HasSuffix(headline, "！") || strings.HasSuffix(headline, "？") {
+			parts = append(parts, headline)
+		} else {
+			parts = append(parts, fmt.Sprintf("%sです。", headline))
+		}
 	}
 	if commentary != "" {
 		parts = append(parts, commentary)

@@ -117,6 +117,14 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 	}
 }
 
+func TestAudioBriefingArticleTextKeepsHeadlineSentenceEnding(t *testing.T) {
+	got := audioBriefingArticleText("これは競争環境が変わる記事です。", "ここは温度感が出ます。")
+	want := "これは競争環境が変わる記事です。 ここは温度感が出ます。"
+	if got != want {
+		t.Fatalf("audioBriefingArticleText(...) = %q, want %q", got, want)
+	}
+}
+
 func TestBuildAudioBriefingDraftDoesNotAddBlankLineBetweenSections(t *testing.T) {
 	title := "原題"
 	translated := "翻訳題"

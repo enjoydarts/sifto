@@ -341,14 +341,14 @@ func audioBriefingOpeningBudget(targetChars int) int {
 
 func audioBriefingSummaryBudget(targetChars int) int {
 	if targetChars <= 0 {
-		return 800
+		return 560
 	}
-	budget := int(math.Round(float64(targetChars) * 0.10))
-	if budget < 360 {
-		return 360
+	budget := int(math.Round(float64(targetChars) * 0.07))
+	if budget < 300 {
+		return 300
 	}
-	if budget > 2000 {
-		return 2000
+	if budget > 1600 {
+		return 1600
 	}
 	return budget
 }

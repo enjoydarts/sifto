@@ -1152,7 +1152,7 @@ def is_audio_briefing_script_retryable_validation_error(exc: Exception) -> bool:
 def _audio_briefing_script_budgets(target_chars: int, article_count: int) -> tuple[int, int, int, int]:
     target_chars = max(int(target_chars or 0), AUDIO_BRIEFING_CHARS_PER_MINUTE)
     opening_budget = max(min(round(target_chars * 0.05), 1000), 180)
-    summary_budget = max(min(round(target_chars * 0.10), 2000), 360)
+    summary_budget = max(min(round(target_chars * 0.07), 1600), 300)
     ending_budget = max(min(round(target_chars * 0.05), 1000), 180)
     article_budget = max(
         (target_chars - opening_budget - summary_budget - ending_budget - 100) // max(int(article_count or 0), 1),

@@ -26,7 +26,7 @@ class FeedTaskCommonTests(unittest.TestCase):
         _opening_budget, _summary_budget, _ending_budget, article_budget = _audio_briefing_script_budgets(12000, 30)
         intro_budget, commentary_budget = _audio_briefing_article_section_budgets(article_budget)
 
-        self.assertEqual(article_budget, 316)
+        self.assertEqual(article_budget, 328)
         self.assertEqual(intro_budget + commentary_budget, article_budget)
         self.assertLessEqual(intro_budget, article_budget)
         self.assertLessEqual(commentary_budget, article_budget)
@@ -475,7 +475,7 @@ class FeedTaskCommonTests(unittest.TestCase):
             "editor",
             target_chars=14000,
         )
-        self.assertGreaterEqual(len(result["overall_summary"]), 1400)
+        self.assertGreaterEqual(len(result["overall_summary"]), 980)
         self.assertGreater(len(result["article_segments"][0]["commentary"]), 1200)
 
     def test_parse_audio_briefing_script_result_preserves_commentary_line_breaks(self):

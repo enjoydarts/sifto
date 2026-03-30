@@ -52,13 +52,13 @@ def _log_empty_message_content(logger, provider_name: str, model: str, body: dic
     )
 
 
-def _should_retry_empty_length_json(body: dict, choice: dict, text: str) -> bool:
+def _should_retry_empty_json(body: dict, choice: dict, text: str) -> bool:
     if str(text or "").strip() != "":
         return False
     response_format = body.get("response_format") or {}
     if str(response_format.get("type") or "").strip() != "json_object":
         return False
-    return str(choice.get("finish_reason") or "").strip() == "length"
+    return True
 
 
 def usage_from_chat_response(data: dict) -> dict:
@@ -207,17 +207,19 @@ def run_chat_json(
             text = text.strip()
             if text == "":
                 _log_empty_message_content(logger, provider_name, normalize_model_name(model), body, data, choices[0], message)
-                if i < attempts - 1 and _should_retry_empty_length_json(body, choices[0], text):
+                if i < attempts - 1 and _should_retry_empty_json(body, choices[0], text):
+                    finish_reason = str(choices[0].get("finish_reason") or "").strip() or "unknown"
                     _append_execution_failure(
                         retry_usage,
                         requested_model,
-                        f"empty_json_content finish_reason=length provider={str(data.get('provider') or '').strip() or 'unknown'}",
+                        f"empty_json_content finish_reason={finish_reason} provider={str(data.get('provider') or '').strip() or 'unknown'}",
                     )
                     sleep_sec = base_sleep_sec * (2**i)
                     logger.warning(
-                        "%s chat.completions retrying model=%s reason=empty_json_content_length retry_in=%.1fs attempt=%d/%d",
+                        "%s chat.completions retrying model=%s reason=empty_json_content finish_reason=%s retry_in=%.1fs attempt=%d/%d",
                         provider_name,
                         normalize_model_name(model),
+                        finish_reason,
                         sleep_sec,
                         i + 1,
                         attempts,

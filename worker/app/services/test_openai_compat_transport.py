@@ -435,6 +435,74 @@ class RunChatJsonTests(unittest.TestCase):
         )
         self.assertEqual(usage.get("resolved_model"), "moonshotai/kimi-k2.5")
 
+    @patch("app.services.openai_compat_transport.httpx.Client", _EmptyContentClient)
+    def test_empty_json_content_with_stop_retries_and_records_execution_failure(self):
+        class _EmptyStopThenSuccessClient:
+            call_count = 0
+
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def post(self, url, headers=None, json=None):
+                _EmptyStopThenSuccessClient.call_count += 1
+                if _EmptyStopThenSuccessClient.call_count == 1:
+                    return httpx.Response(
+                        200,
+                        json={
+                            "provider": "DeepInfra",
+                            "choices": [
+                                {
+                                    "finish_reason": "stop",
+                                    "message": {
+                                        "content": "",
+                                        "refusal": "",
+                                        "reasoning": {"tokens": 12},
+                                    },
+                                }
+                            ],
+                            "usage": {"prompt_tokens": 11, "completion_tokens": 0},
+                        },
+                    )
+                return httpx.Response(
+                    200,
+                    json={
+                        "model": "z-ai/glm-4.7-flash",
+                        "provider": "DeepInfra",
+                        "choices": [{"finish_reason": "stop", "message": {"content": '{"answer":"ok"}'}}],
+                        "usage": {"prompt_tokens": 12, "completion_tokens": 34},
+                    },
+                )
+
+        _EmptyStopThenSuccessClient.call_count = 0
+        with patch("app.services.openai_compat_transport.httpx.Client", _EmptyStopThenSuccessClient):
+            _text, usage = run_chat_json(
+                "Return JSON",
+                "openrouter::z-ai/glm-4.7-flash",
+                "test-key",
+                url="https://example.com/chat/completions",
+                normalize_model_name=lambda model: model,
+                supports_strict_schema=lambda model: False,
+                timeout_sec=5,
+                attempts=2,
+                base_sleep_sec=0,
+                provider_name="openrouter",
+                logger=_ListLogger(),
+                response_schema={"type": "object"},
+            )
+
+        self.assertEqual(_text, '{"answer":"ok"}')
+        self.assertEqual(
+            usage.get("execution_failures"),
+            [{"model": "openrouter::z-ai/glm-4.7-flash", "reason": "empty_json_content finish_reason=stop provider=DeepInfra"}],
+        )
+        self.assertEqual(usage.get("resolved_model"), "z-ai/glm-4.7-flash")
+
 
 if __name__ == "__main__":
     unittest.main()

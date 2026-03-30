@@ -981,6 +981,25 @@ func audioBriefingMergeArticleSegments(base []AudioBriefingScriptSegment, supple
 	return merged
 }
 
+func audioBriefingValidateArticleSegments(segments []AudioBriefingScriptSegment) error {
+	for _, segment := range segments {
+		itemID := strings.TrimSpace(segment.ItemID)
+		if itemID == "" {
+			itemID = "<unknown>"
+		}
+		if strings.TrimSpace(segment.Headline) == "" {
+			return fmt.Errorf("audio briefing script invalid article segment item_id=%s missing headline", itemID)
+		}
+		if strings.TrimSpace(segment.SummaryIntro) == "" {
+			return fmt.Errorf("audio briefing script invalid article segment item_id=%s missing summary_intro", itemID)
+		}
+		if strings.TrimSpace(segment.Commentary) == "" {
+			return fmt.Errorf("audio briefing script invalid article segment item_id=%s missing commentary", itemID)
+		}
+	}
+	return nil
+}
+
 func audioBriefingArticleBatchSize(itemCount int) int {
 	if itemCount <= 0 {
 		return 1
@@ -1015,6 +1034,14 @@ func audioBriefingGenerateArticleSegmentsBatch(
 		true,
 		false,
 	)
+	if err == nil {
+		segments := resp.ArticleSegments
+		models := appendAudioBriefingScriptModel(nil, resp.LLM)
+		if validationErr := audioBriefingValidateArticleSegments(segments); validationErr != nil {
+			log.Printf("audio briefing article batch invalid models=%s err=%v", strings.Join(models, ","), validationErr)
+			err = validationErr
+		}
+	}
 	if err == nil {
 		segments := resp.ArticleSegments
 		models := appendAudioBriefingScriptModel(nil, resp.LLM)

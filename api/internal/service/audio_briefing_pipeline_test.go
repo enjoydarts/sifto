@@ -190,7 +190,7 @@ func TestAudioBriefingGenerateArticleSegmentsBatchSplitsOnError(t *testing.T) {
 		}
 		return &AudioBriefingScriptResponse{
 			ArticleSegments: []AudioBriefingScriptSegment{
-				{ItemID: batch[0].ItemID, Headline: "h", Commentary: "c"},
+				{ItemID: batch[0].ItemID, Headline: "h", SummaryIntro: "s", Commentary: "c"},
 			},
 		}, nil
 	}
@@ -220,7 +220,7 @@ func TestAudioBriefingGenerateArticleSegmentsBatchTracksRecoveredFailures(t *tes
 		}
 		return &AudioBriefingScriptResponse{
 			ArticleSegments: []AudioBriefingScriptSegment{
-				{ItemID: batch[0].ItemID, Headline: "h", Commentary: "c"},
+				{ItemID: batch[0].ItemID, Headline: "h", SummaryIntro: "s", Commentary: "c"},
 			},
 		}, nil
 	}
@@ -327,6 +327,45 @@ func TestAudioBriefingGenerateArticleSegmentsBatchSupplementsShortSegments(t *te
 	}
 	if len(got.ScriptLLMModels) != 2 {
 		t.Fatalf("script models len = %d, want 2", len(got.ScriptLLMModels))
+	}
+}
+
+func TestAudioBriefingGenerateArticleSegmentsBatchRetriesInvalidInitialSegments(t *testing.T) {
+	articles := []AudioBriefingScriptArticle{
+		{ItemID: "item-1"},
+		{ItemID: "item-2"},
+	}
+	var seen []int
+	call := func(batch []AudioBriefingScriptArticle, _ map[string]any, _ int, _ bool, _ bool, _ bool, _ bool) (*AudioBriefingScriptResponse, error) {
+		seen = append(seen, len(batch))
+		if len(batch) > 1 {
+			return &AudioBriefingScriptResponse{
+				ArticleSegments: []AudioBriefingScriptSegment{
+					{ItemID: batch[0].ItemID, Headline: "見出し1", SummaryIntro: "", Commentary: "感想1"},
+					{ItemID: batch[1].ItemID, Headline: "見出し2", SummaryIntro: "要約2", Commentary: "感想2"},
+				},
+				LLM: &LLMUsage{Provider: "openrouter", ResolvedModel: "moonshot/kimi-k2"},
+			}, nil
+		}
+		return &AudioBriefingScriptResponse{
+			ArticleSegments: []AudioBriefingScriptSegment{
+				{ItemID: batch[0].ItemID, Headline: "見出し", SummaryIntro: "要約", Commentary: "感想"},
+			},
+		}, nil
+	}
+
+	got, err := audioBriefingGenerateArticleSegmentsBatch(articles, 12000, 20, call, map[string]any{"time_of_day": "morning"})
+	if err != nil {
+		t.Fatalf("audioBriefingGenerateArticleSegmentsBatch(...) error = %v", err)
+	}
+	if len(got.Segments) != 2 {
+		t.Fatalf("segments len = %d, want 2", len(got.Segments))
+	}
+	if len(seen) < 3 {
+		t.Fatalf("expected retry via recursive split, saw %v", seen)
+	}
+	if len(got.RecoveredFailures) == 0 {
+		t.Fatal("expected invalid initial response to be recorded as recovered failure")
 	}
 }
 

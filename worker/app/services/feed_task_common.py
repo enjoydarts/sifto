@@ -892,27 +892,36 @@ def build_audio_briefing_script_task(
     article_headline_sentence_spec, article_summary_intro_sentence_spec, article_commentary_sentence_spec = _audio_briefing_article_sentence_specs(
         article_headline_budget, article_summary_intro_budget, article_commentary_budget
     )
-    opening_min_sentences = _audio_briefing_min_sentences(opening_sentence_spec)
-    summary_min_sentences = _audio_briefing_min_sentences(summary_sentence_spec)
-    ending_min_sentences = _audio_briefing_min_sentences(ending_sentence_spec)
-    article_headline_min_sentences = _audio_briefing_min_sentences(article_headline_sentence_spec)
-    article_summary_intro_min_sentences = _audio_briefing_min_sentences(article_summary_intro_sentence_spec)
-    article_commentary_min_sentences = _audio_briefing_min_sentences(article_commentary_sentence_spec)
+    opening_min_sentences, opening_max_sentences = _audio_briefing_sentence_bounds(opening_sentence_spec)
+    summary_min_sentences, summary_max_sentences = _audio_briefing_sentence_bounds(summary_sentence_spec)
+    ending_min_sentences, ending_max_sentences = _audio_briefing_sentence_bounds(ending_sentence_spec)
+    article_headline_min_sentences, article_headline_max_sentences = _audio_briefing_sentence_bounds(article_headline_sentence_spec)
+    article_summary_intro_min_sentences, article_summary_intro_max_sentences = _audio_briefing_sentence_bounds(article_summary_intro_sentence_spec)
+    article_commentary_min_sentences, article_commentary_max_sentences = _audio_briefing_sentence_bounds(article_commentary_sentence_spec)
+    opening_min_chars, opening_max_chars = _audio_briefing_char_bounds(opening_budget)
+    summary_min_chars, summary_max_chars = _audio_briefing_char_bounds(summary_budget)
+    ending_min_chars, ending_max_chars = _audio_briefing_char_bounds(ending_budget)
+    article_min_chars, article_max_chars = _audio_briefing_char_bounds(article_budget)
+    article_headline_min_chars, article_headline_max_chars = _audio_briefing_char_bounds(article_headline_budget)
+    article_summary_intro_min_chars, article_summary_intro_max_chars = _audio_briefing_char_bounds(article_summary_intro_budget)
+    article_commentary_min_chars, article_commentary_max_chars = _audio_briefing_char_bounds(article_commentary_budget)
+    target_chars_min = max(1, round(target_chars * 0.9))
+    target_chars_max = max(target_chars_min, round(target_chars * 1.1))
     sentence_length_spec = _audio_briefing_sentence_length_spec(article_budget)
     section_rules: list[str] = []
     target_lines: list[str] = []
     response_properties: list[str] = []
     if include_opening:
-        section_rules.append(f"- opening は {opening_sentence_spec} で、時間帯に合う自然な導入にする。少なくとも {opening_min_sentences}文は使い、目安は約 {opening_budget} 文字以内")
+        section_rules.append(f"- opening は {opening_min_sentences}文以上 {opening_max_sentences}文以下で、時間帯に合う自然な導入にする。必ず {opening_min_chars}文字以上 {opening_max_chars}文字以下で書く")
         section_rules.append("- opening は番組のオープニングトークとして書く。リスナーに向かって語りかけ、挨拶、時間帯や季節感、軽い日常雑談、これから番組が始まる雰囲気づくりを必ず入れる")
         section_rules.append("- opening では個別記事の紹介を始めない。記事内容の長い解説、細かな要約、最初の1本への導入を書かない")
         section_rules.append("- opening では articles 内の固有名詞、企業名、製品名、出来事、具体的ニュース内容に触れない")
         section_rules.append("- opening の軽い雑談では、天気感、気温、季節の空気、曜日感、通勤や休憩などの生活導線のうち少なくとも2つに必ず触れる。ニュースの話題へ滑らせない")
         section_rules.append("- opening では、今回の回のテーマ感、空気感、何を見ていく回かを必ず話す。ただの挨拶だけで終わらせない")
-        target_lines.append(f"- opening の目安: 約 {opening_budget} 文字以内")
+        target_lines.append(f"- opening の制約: {opening_min_chars}文字以上 {opening_max_chars}文字以下")
         response_properties.append('  "opening": "導入"')
     if include_overall_summary:
-        section_rules.append(f"- overall_summary は総括であり、{summary_sentence_spec} で、その回の全体像、流れ、聞きどころ、記事群のつながりだけを絞って話す。少なくとも {summary_min_sentences}文は使い、約 {summary_budget} 文字以内を目安にする")
+        section_rules.append(f"- overall_summary は総括であり、{summary_min_sentences}文以上 {summary_max_sentences}文以下で、その回の全体像、流れ、聞きどころ、記事群のつながりだけを絞って話す。必ず {summary_min_chars}文字以上 {summary_max_chars}文字以下で書く")
         section_rules.append("- overall_summary で記事の順番紹介をしない")
         section_rules.append("- overall_summary では、回全体を俯瞰して共通テーマ、対立軸、温度感、いま追う意味、記事間のつながりを広く語ってよい")
         section_rules.append("- overall_summary では、記事群の共通点、流れ、温度差、見方の違い、別の話に見える記事どうしのつながりまで具体的にしてよい")
@@ -920,25 +929,25 @@ def build_audio_briefing_script_task(
         section_rules.append("- overall_summary では、前半から後半へどう流れが変わるか、どこで話題の重心が移るかまで具体的にしてよい")
         section_rules.append("- overall_summary では、別々の話に見える記事どうしがどの点でつながっているか、同じ根っこを持っているかをはっきり述べてよい")
         section_rules.append("- overall_summary では、表面上の出来事の列挙ではなく、この回で何が続いていて何が切り替わっているのかを具体的に語る")
-        target_lines.append(f"- overall_summary の目安: 約 {summary_budget} 文字以内")
+        target_lines.append(f"- overall_summary の制約: {summary_min_chars}文字以上 {summary_max_chars}文字以下")
         response_properties.append('  "overall_summary": "全体サマリー"')
     if include_article_segments:
         section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
-        section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。1記事あたりの headline と summary_intro と commentary の合計は約 {article_budget} 文字以上を目安にし、必要なら少し超えてよい")
-        section_rules.append(f"- article_segments の各 headline は {article_headline_sentence_spec} で、これから扱う記事をリスナーに詳細に紹介する導入として書く。少なくとも {article_headline_min_sentences}文は使い、長さは約 {article_headline_budget} 文字以上を目安にし、見出しの読み上げとして一息で入る長さにする")
-        section_rules.append(f"- article_segments の各 summary_intro は {article_summary_intro_sentence_spec} で、記事の中身や何が起きたかを置く役割として書く。少なくとも {article_summary_intro_min_sentences}文は使い、長さは約 {article_summary_intro_budget} 文字以上を目安にする")
-        section_rules.append(f"- article_segments の各 commentary は {article_commentary_sentence_spec} で書く。少なくとも {article_commentary_min_sentences}文は使い、summary_intro を受けて、そのペルソナの反応、理由、比較、引っかかりを広げる。長さは約 {article_commentary_budget} 文字以上を目安にする")
+        section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。1記事あたりの headline と summary_intro と commentary の合計は必ず {article_min_chars}文字以上 {article_max_chars}文字以下で収める")
+        section_rules.append(f"- article_segments の各 headline は {article_headline_min_sentences}文以上 {article_headline_max_sentences}文以下で、これから扱う記事をリスナーに詳細に紹介する導入として書く。必ず {article_headline_min_chars}文字以上 {article_headline_max_chars}文字以下で、見出しの読み上げとして一息で入る長さにする")
+        section_rules.append(f"- article_segments の各 summary_intro は {article_summary_intro_min_sentences}文以上 {article_summary_intro_max_sentences}文以下で、記事の中身や何が起きたかを置く役割として書く。必ず {article_summary_intro_min_chars}文字以上 {article_summary_intro_max_chars}文字以下で書く")
+        section_rules.append(f"- article_segments の各 commentary は {article_commentary_min_sentences}文以上 {article_commentary_max_sentences}文以下で書く。summary_intro を受けて、そのペルソナの反応、理由、比較、引っかかりを広げる。必ず {article_commentary_min_chars}文字以上 {article_commentary_max_chars}文字以下で書く")
         section_rules.append("- article_segments は各記事にほぼ均等に尺を配る")
         section_rules.append("- headline では、その記事をリスナーに詳細に紹介するつもりで話す。何の記事で、何が起きていて、どこが気になるのかが自然に伝わるようにする")
         section_rules.append("- summary_intro では、記事の要点、何が起きたか、何が新しいか、どこがポイントか、なぜ今見る記事かをやや詳しく要約してよい。ただし記事全文の言い換えや細部の列挙にはしない")
         section_rules.append("- article_segments の commentary は、そのペルソナ本人が自然に口にしそうな感想だけを書く。無難な解説調、誰にでも当てはまる一般論、ニュースキャスター風の中立コメントに寄せない")
         section_rules.append("- commentary では summary_intro の続きを受けて、このペルソナがどこに反応したか、なぜそう感じたか、どう受け止めたかを話す")
-        section_rules.append("- commentary では反応だけで終わらせず、その反応の理由、比較、引っかかり、今追う意味のうち複数を必ず入れる。軽い背景説明や自分ならどう見るかまで話してよい")
+        section_rules.append("- commentary では反応だけで終わらせず、その反応の理由、比較、背景、引っかかり、今後の見方、今追う意味のうち少なくとも3つを必ず入れる。軽い背景説明や自分ならどう見るかまで話してよい")
         section_rules.append("- commentary で headline や summary_intro の内容を長く言い換えて繰り返さない。要点を置いたら、反応、理由、比較に進む")
-        target_lines.append(f"- 各 article segment の目安: headline と summary_intro と commentary を合わせて約 {article_budget} 文字以上")
-        target_lines.append(f"- headline の個別目安: 約 {article_headline_budget} 文字以上")
-        target_lines.append(f"- summary_intro の個別目安: 約 {article_summary_intro_budget} 文字以上")
-        target_lines.append(f"- commentary の個別目安: 約 {article_commentary_budget} 文字以上")
+        target_lines.append(f"- 各 article segment の制約: headline と summary_intro と commentary を合わせて {article_min_chars}文字以上 {article_max_chars}文字以下")
+        target_lines.append(f"- headline の個別制約: {article_headline_min_chars}文字以上 {article_headline_max_chars}文字以下")
+        target_lines.append(f"- summary_intro の個別制約: {article_summary_intro_min_chars}文字以上 {article_summary_intro_max_chars}文字以下")
+        target_lines.append(f"- commentary の個別制約: {article_commentary_min_chars}文字以上 {article_commentary_max_chars}文字以下")
         response_properties.extend([
             '  "article_segments": [',
             '    {"item_id": "uuid", "headline": "これから扱う記事をリスナーに詳細に紹介する導入", "summary_intro": "記事の中身や何が起きたかを置く", "commentary": "そのペルソナがどう受け止めたかを理由や比較も含めて話す"}',
@@ -947,11 +956,11 @@ def build_audio_briefing_script_task(
     else:
         section_rules.append("- article_segments は返さない")
     if include_ending:
-        section_rules.append(f"- ending は番組を終わらせる締めの言葉として {ending_sentence_spec} で書く。少なくとも {ending_min_sentences}文は使い、だらだら締めず、目安は約 {ending_budget} 文字以内")
+        section_rules.append(f"- ending は番組を終わらせる締めの言葉として {ending_min_sentences}文以上 {ending_max_sentences}文以下で書く。だらだら締めず、必ず {ending_min_chars}文字以上 {ending_max_chars}文字以下で書く")
         section_rules.append("- ending で記事内容の再整理や論点のまとめ直しをしない。ただし今日の回で残った感触や温度感を1〜2点だけ軽く振り返るのはよい")
         section_rules.append("- ending では、最後に残った印象や引っかかりを必ず言葉にする")
         section_rules.append("- ending では、聞いてくれたことへの一言と、次の時間へ戻っていく感じを必ず入れる。短いお礼だけで終わらせない")
-        target_lines.append(f"- ending の目安: 約 {ending_budget} 文字以内")
+        target_lines.append(f"- ending の制約: {ending_min_chars}文字以上 {ending_max_chars}文字以下")
         response_properties.append('  "ending": "締め"')
 
     response_example = "{\n" + ",\n".join(response_properties) + "\n}"
@@ -987,8 +996,14 @@ def build_audio_briefing_script_task(
 - 出力は必ず有効なJSONオブジェクト1つのみにしてください。
 - 前置き・後置き・コードフェンスは不要です。
 - articles にない item_id を作らない
+- 文字数制約は努力目標ではなく必須条件として扱う
 - 今回与えられた target_chars と記事数から逆算した尺配分を守り、特定のセクションや特定の記事だけを必要以上に長くしない
+- 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
+- 各セクションは指定された最低文字数を下回ってはいけない
+- 短く安全にまとめるより、必要な厚みを保つことを優先する
+- 長さが不足する場合は article_segments の commentary を優先して厚くする
 - 1文は {sentence_length_spec} を目安にする
+- 各文は内容を切り詰めすぎず、自然な話し言葉として十分な情報量と厚みを持たせる
 - 各記事では、headline でこれから扱う記事をリスナーに詳細に紹介し、summary_intro で記事の中身を置いたうえで、このペルソナなら何に反応するかを話す
 - 尺配分や流れは意識するが、整えすぎた台本調ではなく、あくまでこのペルソナ本人が自然に話しているように聞こえることを優先する
 - 第一印象、良いと感じる点、引っかかる点、今読む理由のうち2〜3個が自然ににじむようにする
@@ -1027,12 +1042,14 @@ def build_audio_briefing_script_task(
 - 換算レート: 1分あたり {chars_per_minute} 文字
 - 今回返すセクションの目標文字数: 約 {target_chars} 文字
 {chr(10).join(target_lines)}
+- 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
 - 全体は目標文字数の前後10%程度に収める意識で書く
 - 目標文字数を大きく下回らない。特に長尺回では 85% 未満まで縮めない意識で書く
 - article_segments は各記事の持ち分を使い切る意識で、記事数に対して不自然に長くしない
 
 追加ルール:
 - JSONのみを返す
+- 出力後、内部的に文字数不足がないか確認し、不足があれば自分で補ってから返す
 {chr(10).join(section_rules)}
 
 導入トークの文脈:
@@ -1239,6 +1256,36 @@ def _audio_briefing_min_sentences(sentence_spec: str) -> int:
     if not match:
         return 1
     return max(int(match.group(1)), 1)
+
+
+def _audio_briefing_sentence_bounds(sentence_spec: str) -> tuple[int, int]:
+    text = str(sentence_spec or "").strip()
+    fixed_match = re.match(r"^\s*(\d+)\s*文固定\s*$", text)
+    if fixed_match:
+        count = max(int(fixed_match.group(1)), 1)
+        return count, count
+    range_match = re.match(r"^\s*(\d+)\s*〜\s*(\d+)\s*文\s*$", text)
+    if range_match:
+        low = max(int(range_match.group(1)), 1)
+        high = max(int(range_match.group(2)), low)
+        return low, high
+    count = _audio_briefing_min_sentences(text)
+    return count, count
+
+
+def _audio_briefing_char_bounds(
+    budget: int,
+    *,
+    min_ratio: float = 0.9,
+    max_ratio: float = 1.15,
+    min_slack: int = 20,
+) -> tuple[int, int]:
+    budget = max(int(budget or 0), 1)
+    lower = max(1, round(budget * min_ratio))
+    upper = max(lower, round(budget * max_ratio))
+    if upper-lower < min_slack:
+        upper = lower + min_slack
+    return lower, upper
 
 
 def _audio_briefing_article_sentence_specs(headline_budget: int, summary_intro_budget: int, commentary_budget: int) -> tuple[str, str, str]:

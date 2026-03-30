@@ -48,6 +48,7 @@ class AudioBriefingScriptRequest(BaseModel):
 class AudioBriefingScriptSegment(BaseModel):
     item_id: str
     headline: str
+    summary_intro: str
     commentary: str
 
 

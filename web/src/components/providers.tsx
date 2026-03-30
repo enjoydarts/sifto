@@ -49,7 +49,10 @@ function QueryRefreshOnResume() {
       const now = Date.now();
       if (now - lastRefreshAt < 5000) return;
       lastRefreshAt = now;
-      void queryClient.refetchQueries({ type: "active" });
+      void queryClient.refetchQueries({
+        type: "active",
+        predicate: (query) => Array.isArray(query.queryKey) && query.queryKey[0] !== "briefing-navigator",
+      });
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {

@@ -998,6 +998,20 @@ def build_audio_briefing_script_task(
 返却形式:
 {response_example}
 
+短い書き方の例:
+{{
+  "article_segments": [
+    {{
+      "item_id": "example-item",
+      "headline": "見出しの言い換え",
+      "summary_intro": "この話は、企業が新機能を出して競争が一段階進んだという話です。",
+      "commentary": "こういう更新って、便利さより先に使いどころの見極めが難しいんですよね。\nこのペルソナなら、盛り上がりより運用でどこまで定着するかを気にします。"
+    }}
+  ]
+}}
+- 例のように、summary_intro は短い1文、commentary は短い1〜2文で終える
+- commentary は記事の説明を繰り返さず、そのペルソナの反応だけを書く
+
 articles:
 {json.dumps(trimmed_articles, ensure_ascii=False)}
 """

@@ -67,6 +67,7 @@ export default function BriefingPage() {
   const navigatorQuery = useQuery({
     queryKey: ["briefing-navigator", navigatorPreview, settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor"] as const,
     queryFn: () => api.getBriefingNavigator({ navigator_preview: navigatorPreview }),
+    enabled: settingsQuery.isSuccess,
     staleTime: 30 * 60 * 1000,
     placeholderData: (prev) => prev,
   });

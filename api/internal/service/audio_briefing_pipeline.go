@@ -619,12 +619,60 @@ func appendAudioBriefingScriptModel(models []string, llm *LLMUsage) []string {
 	if name == "" {
 		return models
 	}
+	name = audioBriefingScriptModelLabel(strings.TrimSpace(llm.Provider), name)
 	for _, existing := range models {
 		if existing == name {
 			return models
 		}
 	}
 	return append(models, name)
+}
+
+func audioBriefingScriptModelLabel(provider string, modelName string) string {
+	name := strings.TrimSpace(modelName)
+	if name == "" {
+		return ""
+	}
+	label := audioBriefingProviderLabel(provider)
+	if label == "" {
+		return name
+	}
+	return label + " / " + name
+}
+
+func audioBriefingProviderLabel(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "anthropic":
+		return "Anthropic"
+	case "google":
+		return "Google"
+	case "groq":
+		return "Groq"
+	case "deepseek":
+		return "DeepSeek"
+	case "alibaba":
+		return "Alibaba"
+	case "mistral":
+		return "Mistral"
+	case "moonshot":
+		return "Moonshot"
+	case "xai":
+		return "xAI"
+	case "zai":
+		return "Z.ai"
+	case "fireworks":
+		return "Fireworks"
+	case "openai":
+		return "OpenAI"
+	case "openrouter":
+		return "OpenRouter"
+	case "poe":
+		return "Poe"
+	case "siliconflow":
+		return "SiliconFlow"
+	default:
+		return strings.TrimSpace(provider)
+	}
 }
 
 func appendAudioBriefingScriptModels(dst []string, src []string) []string {

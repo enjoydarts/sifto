@@ -373,6 +373,36 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("既存の opening:", prompt)
         self.assertIn("今日は静かな朝ですね。", prompt)
 
+    def test_build_audio_briefing_script_task_adds_article_supplement_instructions(self):
+        task = build_audio_briefing_script_task(
+            persona="editor",
+            articles=[
+                {"item_id": "item-1", "title": "Title 1", "translated_title": "翻訳1", "summary": "Summary text"}
+            ],
+            intro_context={
+                "audio_briefing_generation_mode": "supplement",
+                "audio_briefing_generation_section": "article_segments",
+                "audio_briefing_existing_article_segments": [
+                    {
+                        "item_id": "item-1",
+                        "headline": "見出しです。",
+                        "summary_intro": "要点です。",
+                        "commentary": "短い感想です。",
+                    }
+                ],
+            },
+            include_opening=False,
+            include_overall_summary=False,
+            include_article_segments=True,
+            include_ending=False,
+        )
+
+        prompt = task["prompt"]
+        self.assertIn("article_segments の不足分を補う追記モード", prompt)
+        self.assertIn("commentary を最優先で厚くし", prompt)
+        self.assertIn("既存の article_segments:", prompt)
+        self.assertIn('"item_id": "item-1"', prompt)
+
     def test_parse_audio_briefing_script_result_rejects_empty_payload(self):
         with self.assertRaises(ValueError):
             parse_audio_briefing_script_result(

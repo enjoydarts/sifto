@@ -872,6 +872,7 @@ def build_audio_briefing_script_task(
     existing_section_text = _normalize_audio_briefing_generated_text(
         str(intro_context.get("audio_briefing_existing_section_text") or "").strip()
     )
+    existing_article_segments = intro_context.get("audio_briefing_existing_article_segments") or []
     persona_key, briefing_profile = resolve_navigator_persona_profile(persona, "briefing")
     _, item_profile = resolve_navigator_persona_profile(persona, "item")
     trimmed_articles = articles[:30]
@@ -969,6 +970,11 @@ def build_audio_briefing_script_task(
         supplement_rules.append(f"- 今回は {generation_section} の不足分を補う追記モードです。既存の {generation_section} を繰り返さず、自然につながる差分だけを書く")
         supplement_rules.append("- すでに触れた論点や言い回しを言い直さない。まだ置けていない内容だけを足す")
         supplement_rules.append("- 追記であってもメモや箇条書きにせず、そのセクション単体で自然な話し言葉にする")
+    if generation_mode == "supplement" and generation_section == "article_segments" and include_article_segments and existing_article_segments:
+        supplement_rules.append("- 今回は article_segments の不足分を補う追記モードです。入力記事と同じ item_id・同じ順番で article_segments を返す")
+        supplement_rules.append("- 既存の article_segments を短くしない。既存の流れを保ったまま、不足している厚みだけを足す")
+        supplement_rules.append("- 長さが不足している場合は commentary を最優先で厚くし、次に summary_intro を厚くする。headline は明らかに短いときだけ補う")
+        supplement_rules.append("- commentary では既存の反応をなぞるだけで終わらせず、新しい理由、比較、背景、今後の見方を追加して厚みを出す")
 
     system_instruction = f"""# Role
 あなたは Sifto の音声ブリーフィング番組を担当する、単独話者のAIナビゲーターです。
@@ -1071,6 +1077,12 @@ articles:
 
 既存の {generation_section}:
 {existing_section_text}
+"""
+    if generation_mode == "supplement" and generation_section == "article_segments" and include_article_segments and existing_article_segments:
+        user_prompt += f"""
+
+既存の article_segments:
+{json.dumps(existing_article_segments, ensure_ascii=False)}
 """
     return {
         "target_chars": target_chars,

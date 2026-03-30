@@ -264,6 +264,72 @@ func TestAudioBriefingSupplementIntroContextIncludesExistingText(t *testing.T) {
 	}
 }
 
+func TestAudioBriefingArticleSupplementIntroContextIncludesExistingSegments(t *testing.T) {
+	base := map[string]any{"time_of_day": "morning"}
+	segments := []AudioBriefingScriptSegment{{ItemID: "item-1", Headline: "見出し", SummaryIntro: "要約", Commentary: "感想"}}
+
+	got := audioBriefingArticleSupplementIntroContext(base, segments)
+
+	if got["time_of_day"] != "morning" {
+		t.Fatalf("time_of_day = %#v, want morning", got["time_of_day"])
+	}
+	if got["audio_briefing_generation_mode"] != "supplement" {
+		t.Fatalf("generation_mode = %#v, want supplement", got["audio_briefing_generation_mode"])
+	}
+	if got["audio_briefing_generation_section"] != "article_segments" {
+		t.Fatalf("generation_section = %#v, want article_segments", got["audio_briefing_generation_section"])
+	}
+	gotSegments, ok := got["audio_briefing_existing_article_segments"].([]AudioBriefingScriptSegment)
+	if !ok || len(gotSegments) != 1 || gotSegments[0].ItemID != "item-1" {
+		t.Fatalf("existing_article_segments = %#v", got["audio_briefing_existing_article_segments"])
+	}
+}
+
+func TestAudioBriefingGenerateArticleSegmentsBatchSupplementsShortSegments(t *testing.T) {
+	articles := []AudioBriefingScriptArticle{{ItemID: "item-1"}}
+	callCount := 0
+	call := func(batch []AudioBriefingScriptArticle, intro map[string]any, _ int, _ bool, _ bool, _ bool, _ bool) (*AudioBriefingScriptResponse, error) {
+		callCount++
+		if callCount == 1 {
+			return &AudioBriefingScriptResponse{
+				ArticleSegments: []AudioBriefingScriptSegment{
+					{ItemID: batch[0].ItemID, Headline: "短い見出し", SummaryIntro: "短い要約", Commentary: "短い感想"},
+				},
+				LLM: &LLMUsage{Provider: "openai", ResolvedModel: "gpt-5.4"},
+			}, nil
+		}
+		if intro["audio_briefing_generation_section"] != "article_segments" {
+			t.Fatalf("generation_section = %#v, want article_segments", intro["audio_briefing_generation_section"])
+		}
+		return &AudioBriefingScriptResponse{
+			ArticleSegments: []AudioBriefingScriptSegment{
+				{ItemID: batch[0].ItemID, Headline: "", SummaryIntro: "補足の要約です。追加の焦点も入れます。", Commentary: "補足の感想です。理由も比較も今後の見方も足します。"},
+			},
+			LLM: &LLMUsage{Provider: "google", ResolvedModel: "gemini-2.5-pro"},
+		}, nil
+	}
+
+	got, err := audioBriefingGenerateArticleSegmentsBatch(articles, 12000, 20, call, map[string]any{"time_of_day": "morning"})
+	if err != nil {
+		t.Fatalf("audioBriefingGenerateArticleSegmentsBatch(...) error = %v", err)
+	}
+	if callCount != 2 {
+		t.Fatalf("callCount = %d, want 2", callCount)
+	}
+	if len(got.Segments) != 1 {
+		t.Fatalf("segments len = %d, want 1", len(got.Segments))
+	}
+	if !strings.Contains(got.Segments[0].SummaryIntro, "補足の要約です。") {
+		t.Fatalf("summary_intro = %q", got.Segments[0].SummaryIntro)
+	}
+	if !strings.Contains(got.Segments[0].Commentary, "補足の感想です。") {
+		t.Fatalf("commentary = %q", got.Segments[0].Commentary)
+	}
+	if len(got.ScriptLLMModels) != 2 {
+		t.Fatalf("script models len = %d, want 2", len(got.ScriptLLMModels))
+	}
+}
+
 func TestResolveAudioBriefingScriptModelsPrefersPrimaryThenFallback(t *testing.T) {
 	settings := &model.UserSettings{
 		AudioBriefingScriptModel:         stringPtr("openrouter::openai/gpt-oss-120b"),

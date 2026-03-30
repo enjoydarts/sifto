@@ -205,7 +205,7 @@ func (o *AudioBriefingOrchestrator) continuePipeline(ctx context.Context, userID
 		if err != nil {
 			return nil, false, err
 		}
-		if voiceResult != nil && voiceResult.ProcessedChunk {
+		if audioBriefingShouldRequeueVoiceResult(voiceResult) {
 			return nextJob, true, nil
 		}
 		return nextJob, false, nil
@@ -755,6 +755,13 @@ func audioBriefingShouldContinue(status string) bool {
 	default:
 		return false
 	}
+}
+
+func audioBriefingShouldRequeueVoiceResult(result *AudioBriefingVoiceRunResult) bool {
+	if result == nil {
+		return false
+	}
+	return result.ProcessedChunk || result.Waiting
 }
 
 func audioBriefingJobCanBeResumedAt(job *model.AudioBriefingJob, now time.Time, staleAfter time.Duration) bool {

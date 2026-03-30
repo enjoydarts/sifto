@@ -243,3 +243,43 @@ func TestBuildAudioBriefingDraftFromNarrationTrimsToTargetBudgets(t *testing.T) 
 		t.Fatalf("ending char count = %d, want <= %d", got, audioBriefingEndingBudget(1200))
 	}
 }
+
+func TestBuildAudioBriefingDraftFromNarrationDoesNotSplitSingleArticleIntoMultipleChunks(t *testing.T) {
+	title := "原題"
+	translated := "翻訳題"
+	summary := "要約本文です。"
+	longSentence := "これはかなり長めの説明文です。"
+	longCommentary := strings.Repeat(longSentence, 120)
+
+	draft := BuildAudioBriefingDraftFromNarration(
+		time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST),
+		"editor",
+		[]model.AudioBriefingJobItem{{
+			ItemID:          "item-1",
+			Rank:            1,
+			Title:           &title,
+			TranslatedTitle: &translated,
+			SummarySnapshot: &summary,
+		}},
+		nil,
+		AudioBriefingNarration{
+			Opening:        "導入です。",
+			OverallSummary: "総括です。",
+			Articles: map[string]AudioBriefingNarrationArticle{
+				"item-1": {Headline: "見出し", SummaryIntro: "要約です。", Commentary: longCommentary},
+			},
+			Ending: "締めです。",
+		},
+		1200,
+	)
+
+	articleChunks := 0
+	for _, chunk := range draft.Chunks {
+		if chunk.PartType == "article" {
+			articleChunks++
+		}
+	}
+	if articleChunks != 1 {
+		t.Fatalf("article chunk count = %d, want 1", articleChunks)
+	}
+}

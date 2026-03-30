@@ -76,10 +76,8 @@ func BuildAudioBriefingDraft(
 		}
 		summaryIntro := strings.TrimSpace(coalesceString(item.SummarySnapshot, item.SegmentTitle))
 		text := audioBriefingArticleText(headline, summaryIntro, "")
-		for _, part := range audioBriefingSectionParts(text, 1200, true) {
-			chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", part, ttsProvider, voiceModel, voiceStyle))
-			totalChars += charCount(part)
-		}
+		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", text, ttsProvider, voiceModel, voiceStyle))
+		totalChars += charCount(text)
 	}
 
 	ending := "この時間はここまでです。最後まで聞いていただき、ありがとうございました。"
@@ -162,10 +160,8 @@ func BuildAudioBriefingDraftFromNarration(
 			}
 		}
 		text := audioBriefingArticleText(headline, summaryIntro, commentary)
-		for _, part := range audioBriefingSectionParts(text, 1200, true) {
-			chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", part, ttsProvider, voiceModel, voiceStyle))
-			totalChars += charCount(part)
-		}
+		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", text, ttsProvider, voiceModel, voiceStyle))
+		totalChars += charCount(text)
 	}
 
 	ending := strings.TrimSpace(narration.Ending)

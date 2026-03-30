@@ -119,7 +119,7 @@ func main() {
 	aiNavigatorBriefH := handler.NewAINavigatorBriefHandler(aiNavigatorBriefSvc)
 	internalAudioBriefingsH := handler.NewInternalAudioBriefingsHandler(audioBriefingRepo, audioBriefingPublishedNotifier, podcastPublicationSvc)
 	podcastFeedSvc := service.NewPodcastFeedService(userSettingsRepo, audioBriefingRepo, worker)
-	podcastsH := handler.NewPodcastsHandler(podcastFeedSvc)
+	podcastsH := handler.NewPodcastsHandler(podcastFeedSvc, cache)
 	readingGoalsH := handler.NewReadingGoalsHandler(readingGoalRepo)
 	itemNotesH := handler.NewItemNotesHandler(itemRepo, reviewQueueRepo)
 	reviewsH := handler.NewReviewsHandler(reviewQueueRepo, weeklyReviewRepo)

@@ -128,25 +128,6 @@ func TestAudioBriefingShouldContinue(t *testing.T) {
 	}
 }
 
-func TestAudioBriefingShouldRequeueVoiceResult(t *testing.T) {
-	tests := []struct {
-		name   string
-		result *AudioBriefingVoiceRunResult
-		want   bool
-	}{
-		{name: "nil does not requeue", result: nil, want: false},
-		{name: "processed chunk requeues", result: &AudioBriefingVoiceRunResult{ProcessedChunk: true}, want: true},
-		{name: "waiting requeues", result: &AudioBriefingVoiceRunResult{Waiting: true}, want: true},
-		{name: "completed alone does not requeue", result: &AudioBriefingVoiceRunResult{Completed: true}, want: false},
-	}
-
-	for _, tt := range tests {
-		if got := audioBriefingShouldRequeueVoiceResult(tt.result); got != tt.want {
-			t.Fatalf("%s: audioBriefingShouldRequeueVoiceResult(...) = %t, want %t", tt.name, got, tt.want)
-		}
-	}
-}
-
 func TestAudioBriefingJobCanBeResumedAt(t *testing.T) {
 	now := time.Date(2026, 3, 25, 12, 0, 0, 0, time.UTC)
 	staleAfter := 30 * time.Minute

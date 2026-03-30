@@ -924,24 +924,24 @@ def build_audio_briefing_script_task(
         response_properties.append('  "overall_summary": "全体サマリー"')
     if include_article_segments:
         section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
-        section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。1記事あたりの headline と summary_intro と commentary の合計は約 {article_budget} 文字を目安にし、必要なら少し超えてよい")
-        section_rules.append(f"- article_segments の各 headline は {article_headline_sentence_spec} で、これから扱う記事をリスナーに詳細に紹介する導入として書く。少なくとも {article_headline_min_sentences}文は使い、長さは約 {article_headline_budget} 文字以内を目安にし、見出しの読み上げとして一息で入る長さにする")
-        section_rules.append(f"- article_segments の各 summary_intro は {article_summary_intro_sentence_spec} で、記事の中身や何が起きたかを 2〜4文で置く役割として書く。少なくとも {article_summary_intro_min_sentences}文は使い、長さは約 {article_summary_intro_budget} 文字を目安にする")
-        section_rules.append(f"- article_segments の各 commentary は {article_commentary_sentence_spec} で書く。少なくとも {article_commentary_min_sentences}文は使い、summary_intro を受けて、そのペルソナの反応を広げる。長さは約 {article_commentary_budget} 文字を目安にする")
+        section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。1記事あたりの headline と summary_intro と commentary の合計は約 {article_budget} 文字以上を目安にし、必要なら少し超えてよい")
+        section_rules.append(f"- article_segments の各 headline は {article_headline_sentence_spec} で、これから扱う記事をリスナーに詳細に紹介する導入として書く。少なくとも {article_headline_min_sentences}文は使い、長さは約 {article_headline_budget} 文字以上を目安にし、見出しの読み上げとして一息で入る長さにする")
+        section_rules.append(f"- article_segments の各 summary_intro は {article_summary_intro_sentence_spec} で、記事の中身や何が起きたかを置く役割として書く。少なくとも {article_summary_intro_min_sentences}文は使い、長さは約 {article_summary_intro_budget} 文字以上を目安にする")
+        section_rules.append(f"- article_segments の各 commentary は {article_commentary_sentence_spec} で書く。少なくとも {article_commentary_min_sentences}文は使い、summary_intro を受けて、そのペルソナの反応、理由、比較、引っかかりを広げる。長さは約 {article_commentary_budget} 文字以上を目安にする")
         section_rules.append("- article_segments は各記事にほぼ均等に尺を配る")
         section_rules.append("- headline では、その記事をリスナーに詳細に紹介するつもりで話す。何の記事で、何が起きていて、どこが気になるのかが自然に伝わるようにする")
-        section_rules.append("- summary_intro では、記事の要点、何が起きたか、どこを見る記事かをやや詳しく要約してよい。ただし記事全文の言い換えや細部の列挙にはしない")
+        section_rules.append("- summary_intro では、記事の要点、何が起きたか、何が新しいか、どこがポイントか、なぜ今見る記事かをやや詳しく要約してよい。ただし記事全文の言い換えや細部の列挙にはしない")
         section_rules.append("- article_segments の commentary は、そのペルソナ本人が自然に口にしそうな感想だけを書く。無難な解説調、誰にでも当てはまる一般論、ニュースキャスター風の中立コメントに寄せない")
         section_rules.append("- commentary では summary_intro の続きを受けて、このペルソナがどこに反応したか、なぜそう感じたか、どう受け止めたかを話す")
-        section_rules.append("- commentary では反応だけで終わらせず、その反応の理由、軽い背景説明、比較、自分ならどう見るかまで話してよい")
+        section_rules.append("- commentary では反応だけで終わらせず、その反応の理由、比較、引っかかり、今追う意味のうち複数を必ず入れる。軽い背景説明や自分ならどう見るかまで話してよい")
         section_rules.append("- commentary で headline や summary_intro の内容を長く言い換えて繰り返さない。要点を置いたら、反応、理由、比較に進む")
-        target_lines.append(f"- 各 article segment の目安: headline と summary_intro と commentary を合わせて約 {article_budget} 文字")
-        target_lines.append(f"- headline の個別目安: 約 {article_headline_budget} 文字以内")
-        target_lines.append(f"- summary_intro の個別目安: 約 {article_summary_intro_budget} 文字")
-        target_lines.append(f"- commentary の個別目安: 約 {article_commentary_budget} 文字以内")
+        target_lines.append(f"- 各 article segment の目安: headline と summary_intro と commentary を合わせて約 {article_budget} 文字以上")
+        target_lines.append(f"- headline の個別目安: 約 {article_headline_budget} 文字以上")
+        target_lines.append(f"- summary_intro の個別目安: 約 {article_summary_intro_budget} 文字以上")
+        target_lines.append(f"- commentary の個別目安: 約 {article_commentary_budget} 文字以上")
         response_properties.extend([
             '  "article_segments": [',
-            '    {"item_id": "uuid", "headline": "これから扱う記事をリスナーに詳細に紹介する1〜2文", "summary_intro": "記事の中身や何が起きたかを2〜4文で置く", "commentary": "そのペルソナがどう受け止めたかの2〜3文"}',
+            '    {"item_id": "uuid", "headline": "これから扱う記事をリスナーに詳細に紹介する導入", "summary_intro": "記事の中身や何が起きたかを置く", "commentary": "そのペルソナがどう受け止めたかを理由や比較も含めて話す"}',
             "  ]",
         ])
     else:
@@ -1202,14 +1202,14 @@ def _audio_briefing_script_budgets(
 
 def _audio_briefing_article_section_budgets(article_budget: int) -> tuple[int, int, int]:
     article_budget = max(int(article_budget or 0), 1)
-    headline_budget = max(round(article_budget * 0.2), 50)
-    headline_budget = min(headline_budget, 220)
-    summary_intro_budget = max(round(article_budget * 0.35), 80)
-    summary_intro_budget = min(summary_intro_budget, 320)
+    headline_budget = max(round(article_budget * 0.12), 40)
+    headline_budget = min(headline_budget, 160)
+    summary_intro_budget = max(round(article_budget * 0.43), 130)
+    summary_intro_budget = min(summary_intro_budget, 460)
     used = headline_budget + summary_intro_budget
     if used >= article_budget:
-        headline_budget = max(round(article_budget * 0.2), 1)
-        summary_intro_budget = max(round(article_budget * 0.35), 1)
+        headline_budget = max(round(article_budget * 0.12), 1)
+        summary_intro_budget = max(round(article_budget * 0.43), 1)
         used = headline_budget + summary_intro_budget
     commentary_budget = max(article_budget - used, 1)
     return headline_budget, summary_intro_budget, commentary_budget
@@ -1245,21 +1245,21 @@ def _audio_briefing_article_sentence_specs(headline_budget: int, summary_intro_b
     return (
         _audio_briefing_sentence_spec_from_budget(
             headline_budget,
-            chars_per_sentence=45,
+            chars_per_sentence=42,
             min_sentences=2,
-            max_sentences=5,
+            max_sentences=6,
         ),
         _audio_briefing_sentence_spec_from_budget(
             summary_intro_budget,
-            chars_per_sentence=55,
-            min_sentences=3,
-            max_sentences=8,
+            chars_per_sentence=45,
+            min_sentences=4,
+            max_sentences=10,
         ),
         _audio_briefing_sentence_spec_from_budget(
             commentary_budget,
-            chars_per_sentence=50,
-            min_sentences=4,
-            max_sentences=12,
+            chars_per_sentence=40,
+            min_sentences=5,
+            max_sentences=14,
         ),
     )
 

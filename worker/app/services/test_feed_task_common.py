@@ -32,6 +32,20 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertLessEqual(summary_intro_budget, article_budget)
         self.assertLessEqual(commentary_budget, article_budget)
 
+    def test_audio_briefing_script_budgets_do_not_reserve_frame_budget_for_article_only_batches(self):
+        opening_budget, summary_budget, ending_budget, article_budget = _audio_briefing_script_budgets(
+            1104,
+            3,
+            include_opening=False,
+            include_overall_summary=False,
+            include_ending=False,
+        )
+
+        self.assertEqual(opening_budget, 0)
+        self.assertEqual(summary_budget, 0)
+        self.assertEqual(ending_budget, 0)
+        self.assertGreater(article_budget, 300)
+
     def test_resolve_persona_file_prefers_llm_catalog_dir(self):
         with patch.dict("os.environ", {"NAVIGATOR_PERSONAS_PATH": "", "LLM_CATALOG_PATH": "/app/shared/llm_catalog.json"}, clear=False):
             path = _resolve_persona_file()

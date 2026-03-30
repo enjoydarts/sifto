@@ -879,7 +879,11 @@ def build_audio_briefing_script_task(
     target_duration_minutes = max(int(target_duration_minutes or 20), 1)
     target_chars = max(int(target_chars or 0), chars_per_minute)
     opening_budget, summary_budget, ending_budget, article_budget = _audio_briefing_script_budgets(
-        target_chars, len(trimmed_articles)
+        target_chars,
+        len(trimmed_articles),
+        include_opening=include_opening,
+        include_overall_summary=include_overall_summary,
+        include_ending=include_ending,
     )
     opening_sentence_spec = _audio_briefing_section_sentence_spec(opening_budget, "opening")
     summary_sentence_spec = _audio_briefing_section_sentence_spec(summary_budget, "summary")
@@ -1176,11 +1180,18 @@ def is_audio_briefing_script_retryable_validation_error(exc: Exception) -> bool:
     return any(message.startswith(marker) for marker in _AUDIO_BRIEFING_SCRIPT_RETRYABLE_ERROR_MARKERS)
 
 
-def _audio_briefing_script_budgets(target_chars: int, article_count: int) -> tuple[int, int, int, int]:
+def _audio_briefing_script_budgets(
+    target_chars: int,
+    article_count: int,
+    *,
+    include_opening: bool = True,
+    include_overall_summary: bool = True,
+    include_ending: bool = True,
+) -> tuple[int, int, int, int]:
     target_chars = max(int(target_chars or 0), AUDIO_BRIEFING_CHARS_PER_MINUTE)
-    opening_budget = max(min(round(target_chars * 0.05), 1000), 180)
-    summary_budget = max(min(round(target_chars * 0.07), 1600), 300)
-    ending_budget = max(min(round(target_chars * 0.05), 1000), 180)
+    opening_budget = max(min(round(target_chars * 0.05), 1000), 180) if include_opening else 0
+    summary_budget = max(min(round(target_chars * 0.07), 1600), 300) if include_overall_summary else 0
+    ending_budget = max(min(round(target_chars * 0.05), 1000), 180) if include_ending else 0
     article_budget = max(
         (target_chars - opening_budget - summary_budget - ending_budget - 100) // max(int(article_count or 0), 1),
         120,

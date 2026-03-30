@@ -244,19 +244,10 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("overall_summary は総括", prompt)
         self.assertIn("記事の順番紹介", prompt)
         self.assertIn("見出しの焼き直し", prompt)
-        self.assertIn("summary_intro は 2文固定", prompt)
-        self.assertIn("summary_intro もこのペルソナ本人の話し方・温度感・語彙で書く", prompt)
-        self.assertIn("summary_intro では事実の骨子を優先", prompt)
-        self.assertIn("無機質な要約文にせず", prompt)
-        self.assertIn("summary_intro は記事全体を縮約しようとしない", prompt)
-        self.assertIn("必要でも主要ポイントは1つまでに絞る", prompt)
-        self.assertIn("summary_intro は元の summary の 20% 以下まで圧縮するつもりで書く", prompt)
-        self.assertIn("実装手順、インストール手順、検証方法、対応言語や対応環境の列挙、事例の列挙、開発経緯、注意事項や既知の問題の細目を入れない", prompt)
-        self.assertIn("summary_intro は記事のラベル付けが役割", prompt)
         self.assertIn("commentary は 3〜4文", prompt)
+        self.assertIn("1文目はその記事が何の記事かを短く説明する文", prompt)
         self.assertIn("長さは約", prompt)
-        self.assertIn("1記事あたりの summary_intro と commentary の合計は約", prompt)
-        self.assertIn("summary_intro の個別目安: 約", prompt)
+        self.assertIn("1記事あたりの commentary は約", prompt)
         self.assertIn("commentary の個別目安: 約", prompt)
         self.assertIn("文字以内を厳守する", prompt)
         self.assertIn("各記事にほぼ均等に尺を配る", prompt)
@@ -264,21 +255,15 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("1文は 60〜110文字 を目安", prompt)
         self.assertIn("無個性な書き方をしない", prompt)
         self.assertIn("このペルソナならどう受け取るか", prompt)
-        self.assertIn("summary_intro でも、このペルソナ本人が自然に話している感じを崩さない", prompt)
-        self.assertIn("summary_intro は記事全体を説明しようとせず、ラベルのように短く出す", prompt)
-        self.assertIn("summary_intro は元の summary の 20% 以下まで圧縮する意識で書く", prompt)
-        self.assertIn("実装やインストールの手順、検証の詳しさ、対応環境や事例の列挙、開発の裏話、注意事項の細目まで抱え込まない", prompt)
-        self.assertIn("「何の話か」を最優先にし、必要でも主要ポイントは1つまでにとどめ", prompt)
-        self.assertIn("summary_intro は説明パートではなくラベル付けだと考え", prompt)
-        self.assertIn("summary_intro の内容を言い換えて繰り返さない", prompt)
-        self.assertIn("記事の説明、背景整理、論点整理、一般論、今後の含意の解説は禁止", prompt)
-        self.assertIn("commentary は説明ではなく反応だけを書く", prompt)
+        self.assertIn("1文目は、その記事が何の記事かを短く示すためだけに使う", prompt)
+        self.assertIn("2文目以降では記事の説明、背景整理、論点整理、一般論、今後の含意の解説は禁止", prompt)
+        self.assertIn("commentary の1文目は、その記事が何の記事かを短く示すための説明に使う", prompt)
+        self.assertIn("commentary の2文目以降は反応だけを書く", prompt)
+        self.assertIn("headline の内容を長く言い換えて繰り返さない", prompt)
         self.assertIn("解説調に見えやすい運びを避ける", prompt)
         self.assertIn("短い書き方の例", prompt)
         self.assertIn('"item_id": "example-item"', prompt)
-        self.assertIn("summary_intro もキャラを崩さず短い導入にする", prompt)
-        self.assertIn("summary_intro で記事の細部まで説明しない", prompt)
-        self.assertIn("summary_intro はラベルを置いたら止める", prompt)
+        self.assertIn("1文目で何の記事かを短く置き、2文目以降でそのペルソナの反応を書く", prompt)
         self.assertIn("ending は番組を終わらせる締めの言葉", prompt)
         self.assertIn("ending で総括や振り返りをしない", prompt)
         self.assertIn("85% 未満まで縮めない", prompt)
@@ -325,10 +310,8 @@ class FeedTaskCommonTests(unittest.TestCase):
         )
 
         prompt = task["prompt"]
-        self.assertIn("summary_intro は 1文固定", prompt)
         self.assertIn("commentary は 1〜2文", prompt)
         self.assertIn("1文は 40〜80文字 を目安", prompt)
-        self.assertIn("summary_intro の個別目安: 約", prompt)
         self.assertIn("commentary の個別目安: 約", prompt)
 
     def test_parse_audio_briefing_script_result_rejects_empty_payload(self):
@@ -356,8 +339,7 @@ class FeedTaskCommonTests(unittest.TestCase):
                   "article_segments": [
                     {
                       "item_id": "item-1",
-                      "headline": "見出し",
-                      "summary_intro": "概要です。"
+                      "headline": "見出し"
                     }
                   ],
                   "ending": "締めです。"
@@ -396,7 +378,6 @@ class FeedTaskCommonTests(unittest.TestCase):
                 {
                   "item_id": "item-1",
                   "headline": "見出し",
-                  "summary_intro": "要約です。",
                   "commentary": "コメントです。"
                 }
               ]
@@ -429,13 +410,11 @@ class FeedTaskCommonTests(unittest.TestCase):
                 {
                   "item_id": "wrong-item-id",
                   "headline": "見出しA",
-                  "summary_intro": "要約Aです。",
                   "commentary": "コメントAです。"
                 },
                 {
                   "item_id": "another-wrong-id",
                   "headline": "見出しB",
-                  "summary_intro": "要約Bです。",
                   "commentary": "コメントBです。"
                 }
               ]
@@ -478,7 +457,6 @@ class FeedTaskCommonTests(unittest.TestCase):
                 {{
                   "item_id": "item-1",
                   "headline": "見出しA",
-                  "summary_intro": "要約です。",
                   "commentary": "{long_commentary}"
                 }}
               ],
@@ -507,7 +485,6 @@ class FeedTaskCommonTests(unittest.TestCase):
                 {
                   "item_id": "item-1",
                   "headline": "見出し",
-                  "summary_intro": "最初に何の記事かを伝えます。",
                   "commentary": "一文目です。\\n二文目です。\\n三文目です。"
                 }
               ]
@@ -528,35 +505,6 @@ class FeedTaskCommonTests(unittest.TestCase):
             include_ending=False,
         )
         self.assertEqual(result["article_segments"][0]["commentary"], "一文目です。\n二文目です。\n三文目です。")
-
-    def test_parse_audio_briefing_script_result_rejects_missing_summary_intro(self):
-        with self.assertRaises(ValueError):
-            parse_audio_briefing_script_result(
-                """
-                {
-                  "article_segments": [
-                    {
-                      "item_id": "item-1",
-                      "headline": "見出し",
-                      "commentary": "コメントです。"
-                    }
-                  ]
-                }
-                """,
-                [
-                    {
-                        "item_id": "item-1",
-                        "title": "Example title",
-                        "translated_title": "翻訳タイトル",
-                        "summary": "Summary text",
-                    }
-                ],
-                "editor",
-                include_opening=False,
-                include_overall_summary=False,
-                include_article_segments=True,
-                include_ending=False,
-            )
 
     def test_ask_navigator_schema_requires_all_fields(self):
         self.assertEqual(

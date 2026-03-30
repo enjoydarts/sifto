@@ -86,9 +86,8 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 			OverallSummary: "まず全体として、AIとプロダクトの境目がまた一段近づいています。",
 			Articles: map[string]AudioBriefingNarrationArticle{
 				"item-1": {
-					Headline:     "LLMで見た翻訳題",
-					SummaryIntro: "まずは新しい翻訳機能の発表を押さえます。",
-					Commentary:   "ここは背景と含意を押さえておく価値があります。",
+					Headline:   "LLMで見た翻訳題",
+					Commentary: "ここは背景と含意を押さえておく価値があります。",
 				},
 			},
 			Ending: "続きはSiftoで確認してください。",
@@ -110,7 +109,7 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 	if got := draft.Chunks[1].Text; got != "まず全体として、AIとプロダクトの境目がまた一段近づいています。" {
 		t.Fatalf("summary = %q", got)
 	}
-	if got := draft.Chunks[2].Text; got != "LLMで見た翻訳題です。 まずは新しい翻訳機能の発表を押さえます。 ここは背景と含意を押さえておく価値があります。" {
+	if got := draft.Chunks[2].Text; got != "LLMで見た翻訳題です。 ここは背景と含意を押さえておく価値があります。" {
 		t.Fatalf("article = %q", got)
 	}
 	if got := draft.Chunks[3].Text; got != "続きはSiftoで確認してください。" {
@@ -223,7 +222,7 @@ func TestBuildAudioBriefingDraftFromNarrationTrimsToTargetBudgets(t *testing.T) 
 			Opening:        longOpening,
 			OverallSummary: longSummary,
 			Articles: map[string]AudioBriefingNarrationArticle{
-				"item-1": {Headline: "見出し", SummaryIntro: "要約です。", Commentary: longCommentary},
+				"item-1": {Headline: "見出し", Commentary: longCommentary},
 			},
 			Ending: longEnding,
 		},
@@ -236,7 +235,7 @@ func TestBuildAudioBriefingDraftFromNarrationTrimsToTargetBudgets(t *testing.T) 
 	if got := draft.Chunks[1].CharCount; got > audioBriefingSummaryBudget(1200) {
 		t.Fatalf("summary char count = %d, want <= %d", got, audioBriefingSummaryBudget(1200))
 	}
-	if got := draft.Chunks[2].CharCount; got <= charCount("見出しです。")+charCount("要約です。") {
+	if got := draft.Chunks[2].CharCount; got <= charCount("見出しです。") {
 		t.Fatalf("article char count = %d, want article text to include commentary", got)
 	}
 	if got := draft.Chunks[3].CharCount; got > audioBriefingEndingBudget(1200) {
@@ -266,7 +265,7 @@ func TestBuildAudioBriefingDraftFromNarrationDoesNotSplitSingleArticleIntoMultip
 			Opening:        "導入です。",
 			OverallSummary: "総括です。",
 			Articles: map[string]AudioBriefingNarrationArticle{
-				"item-1": {Headline: "見出し", SummaryIntro: "要約です。", Commentary: longCommentary},
+				"item-1": {Headline: "見出し", Commentary: longCommentary},
 			},
 			Ending: "締めです。",
 		},

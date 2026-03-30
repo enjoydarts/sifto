@@ -28,9 +28,8 @@ type AudioBriefingNarration struct {
 }
 
 type AudioBriefingNarrationArticle struct {
-	Headline     string
-	SummaryIntro string
-	Commentary   string
+	Headline   string
+	Commentary string
 }
 
 const audioBriefingCharsPerMinute = 400
@@ -74,8 +73,7 @@ func BuildAudioBriefingDraft(
 		if headline == "" {
 			headline = fmt.Sprintf("記事%d", item.Rank)
 		}
-		summaryIntro := strings.TrimSpace(coalesceString(item.SummarySnapshot, item.SegmentTitle))
-		text := audioBriefingArticleText(headline, summaryIntro, "")
+		text := audioBriefingArticleText(headline, "")
 		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", text, ttsProvider, voiceModel, voiceStyle))
 		totalChars += charCount(text)
 	}
@@ -146,20 +144,16 @@ func BuildAudioBriefingDraftFromNarration(
 		if headline == "" {
 			headline = fmt.Sprintf("記事%d", item.Rank)
 		}
-		summaryIntro := strings.TrimSpace(coalesceString(item.SummarySnapshot, item.SegmentTitle))
 		commentary := ""
 		if article, ok := narration.Articles[item.ItemID]; ok {
 			if candidate := strings.TrimSpace(article.Headline); candidate != "" {
 				headline = candidate
 			}
-			if candidate := strings.TrimSpace(article.SummaryIntro); candidate != "" {
-				summaryIntro = candidate
-			}
 			if candidate := strings.TrimSpace(article.Commentary); candidate != "" {
 				commentary = candidate
 			}
 		}
-		text := audioBriefingArticleText(headline, summaryIntro, commentary)
+		text := audioBriefingArticleText(headline, commentary)
 		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", text, ttsProvider, voiceModel, voiceStyle))
 		totalChars += charCount(text)
 	}
@@ -287,16 +281,12 @@ func charCount(v string) int {
 	return utf8.RuneCountInString(v)
 }
 
-func audioBriefingArticleText(headline, summaryIntro, commentary string) string {
+func audioBriefingArticleText(headline, commentary string) string {
 	headline = strings.TrimSpace(headline)
-	summaryIntro = strings.TrimSpace(summaryIntro)
 	commentary = strings.TrimSpace(commentary)
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, 2)
 	if headline != "" {
 		parts = append(parts, fmt.Sprintf("%sです。", headline))
-	}
-	if summaryIntro != "" {
-		parts = append(parts, summaryIntro)
 	}
 	if commentary != "" {
 		parts = append(parts, commentary)

@@ -261,7 +261,7 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("少なくとも 10文は使い", prompt)
         self.assertIn("overall_summary は総括", prompt)
         self.assertIn("記事の順番紹介", prompt)
-        self.assertIn("記事の1行要約を機械的に並べない", prompt)
+        self.assertNotIn("記事の1行要約を機械的に並べない", prompt)
         self.assertIn("共通テーマ、対立軸、温度感、いま追う意味、記事間のつながりを広く語ってよい", prompt)
         self.assertIn("共通点、流れ、温度差、見方の違い、別の話に見える記事どうしのつながりまで具体的にしてよい", prompt)
         self.assertIn("前半から後半へどう流れが変わるか、どこで話題の重心が移るかまで具体的にしてよい", prompt)
@@ -281,7 +281,7 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("必要なら少し超えてよい", prompt)
         self.assertIn("各記事にほぼ均等に尺を配る", prompt)
         self.assertIn("target_chars と記事数から逆算した尺配分を守り", prompt)
-        self.assertIn("1文は 60〜110文字 を目安", prompt)
+        self.assertIn("1文は 60〜110文字 を目安にする", prompt)
         self.assertIn("無個性な書き方をしない", prompt)
         self.assertIn("このペルソナならどう受け取るか", prompt)
         self.assertIn("headline では、その記事をリスナーに詳細に紹介するつもりで話す。何の記事で、何が起きていて、どこが気になるのかが自然に伝わるようにする", prompt)
@@ -299,6 +299,10 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("article_segments は各記事の持ち分を使い切る意識", prompt)
         self.assertIn("全セクションで1文ごとに改行", prompt)
         self.assertIn("article commentary でも1文ごとに改行", prompt)
+        self.assertNotIn("冗長な前置きや言い換えを避け", prompt)
+        self.assertNotIn("必要以上に長く引き延ばさず", prompt)
+        self.assertNotIn("長い前置きや言い換えを避け", prompt)
+        self.assertNotIn("長い背景解説、論点整理、一般論への展開は禁止", prompt)
 
     def test_build_audio_briefing_script_task_omits_unrequested_sections(self):
         task = build_audio_briefing_script_task(

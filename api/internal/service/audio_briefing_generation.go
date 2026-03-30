@@ -112,15 +112,11 @@ func BuildAudioBriefingDraftFromNarration(
 	title := fmt.Sprintf("%sの音声ブリーフィング", slotLabel)
 	chunks := make([]model.AudioBriefingScriptChunk, 0, len(items)+3)
 	ttsProvider, voiceModel, voiceStyle := audioBriefingVoiceRefs(voice)
-	openingBudget := audioBriefingOpeningBudget(targetChars)
-	summaryBudget := audioBriefingSummaryBudget(targetChars)
-	endingBudget := audioBriefingEndingBudget(targetChars)
 
 	opening := strings.TrimSpace(narration.Opening)
 	if opening == "" {
 		opening = fmt.Sprintf("%sです。%sのSifto音声ブリーフィングをお届けします。今回は直近の注目記事を%d本まとめて見ていきます。", audioBriefingSpeakerName(persona), slotLabel, len(items))
 	}
-	opening = fitAudioBriefingTextToChars(opening, openingBudget)
 	for _, part := range audioBriefingSectionParts(opening, 1200, true) {
 		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "opening", part, ttsProvider, voiceModel, voiceStyle))
 	}
@@ -132,7 +128,6 @@ func BuildAudioBriefingDraftFromNarration(
 
 	overallSummary := strings.TrimSpace(narration.OverallSummary)
 	if overallSummary != "" {
-		overallSummary = fitAudioBriefingTextToChars(overallSummary, summaryBudget)
 		for _, part := range audioBriefingSectionParts(overallSummary, 1200, true) {
 			chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "summary", part, ttsProvider, voiceModel, voiceStyle))
 			totalChars += charCount(part)
@@ -162,7 +157,6 @@ func BuildAudioBriefingDraftFromNarration(
 	if ending == "" {
 		ending = "この時間はここまでです。最後まで聞いていただき、ありがとうございました。"
 	}
-	ending = fitAudioBriefingTextToChars(ending, endingBudget)
 	chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "ending", ending, ttsProvider, voiceModel, voiceStyle))
 	totalChars += charCount(ending)
 
@@ -371,26 +365,6 @@ func audioBriefingEndingBudget(targetChars int) int {
 		return 1000
 	}
 	return budget
-}
-
-func fitAudioBriefingTextToChars(text string, maxChars int) string {
-	text = strings.TrimSpace(text)
-	if text == "" || maxChars <= 0 || charCount(text) <= maxChars {
-		return text
-	}
-	runes := []rune(text)
-	if len(runes) <= maxChars {
-		return text
-	}
-	cut := maxChars
-	for i := maxChars; i > maxChars/2; i-- {
-		switch runes[i-1] {
-		case '。', '！', '？':
-			cut = i
-			i = 0
-		}
-	}
-	return strings.TrimSpace(string(runes[:cut]))
 }
 
 func coalesceString(values ...*string) string {

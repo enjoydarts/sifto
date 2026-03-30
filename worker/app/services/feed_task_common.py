@@ -907,6 +907,7 @@ def build_audio_briefing_script_task(
         section_rules.append("- summary_intro もこのペルソナ本人の話し方・温度感・語彙で書く。ニュース原稿調、説明調、ナレーション調にしない")
         section_rules.append("- summary_intro では事実の骨子を優先し、いきなり感想や評価から入らない。ただし無機質な要約文にせず、このペルソナが自然に話し始めた導入にする")
         section_rules.append("- summary_intro は記事全体を縮約しようとしない。何の話かと、一番大きいポイントだけに絞る")
+        section_rules.append("- summary_intro は元の summary の 20% 以下まで圧縮するつもりで書く。元 summary の情報をそのままなぞらない")
         section_rules.append("- summary_intro では実装手順、検証方法、対応言語や事例の列挙、開発経緯などの補足を入れない")
         section_rules.append(f"- article_segments の各 commentary は {article_commentary_sentence_spec} で、summary_intro を受けてからすぐそのペルソナの反応だけを書く。脱線せず、長い前置きや言い換えを避け、長さは約 {article_commentary_budget} 文字以内を厳守し、summary_intro と合わせて約 {article_budget} 文字以内に収める")
         section_rules.append("- article_segments は各記事にほぼ均等に尺を配る。1本だけ極端に長くしない。長くなりそうなら commentary 側を先に圧縮し、例示・補足・言い換えを削って収める")
@@ -965,6 +966,7 @@ def build_audio_briefing_script_task(
 - summary_intro でも、このペルソナ本人が自然に話している感じを崩さない。説明役のナレーターにならない
 - summary_intro は「何の話か」を伝えるための導入だが、言い回し・温度感・リズムは必ずこのペルソナのものにする
 - summary_intro は記事全体を説明しようとせず、核だけを短く出す
+- summary_intro は元の summary の 20% 以下まで圧縮する意識で書く
 - summary_intro では実装の手順、検証の詳しさ、事例の列挙、開発の裏話まで抱え込まない
 - 各記事の commentary では、必ずこのペルソナの口癖・温度感・価値観がにじむようにし、他のペルソナでも成立する無個性な書き方をしない
 - 記事の commentary は「要約の続き」ではなく「このペルソナならどう受け取るか」を短く話す

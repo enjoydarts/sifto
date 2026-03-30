@@ -879,7 +879,9 @@ def build_audio_briefing_script_task(
     summary_sentence_spec = _audio_briefing_section_sentence_spec(summary_budget, "summary")
     ending_sentence_spec = _audio_briefing_section_sentence_spec(ending_budget, "ending")
     article_headline_budget, article_commentary_budget = _audio_briefing_article_section_budgets(article_budget)
-    article_headline_sentence_spec, article_commentary_sentence_spec = _audio_briefing_article_sentence_specs(article_budget)
+    article_headline_sentence_spec, article_commentary_sentence_spec = _audio_briefing_article_sentence_specs(
+        article_headline_budget, article_commentary_budget
+    )
     sentence_length_spec = _audio_briefing_sentence_length_spec(article_budget)
     section_rules: list[str] = []
     target_lines: list[str] = []
@@ -1149,9 +1151,9 @@ def is_audio_briefing_script_retryable_validation_error(exc: Exception) -> bool:
 
 def _audio_briefing_script_budgets(target_chars: int, article_count: int) -> tuple[int, int, int, int]:
     target_chars = max(int(target_chars or 0), AUDIO_BRIEFING_CHARS_PER_MINUTE)
-    opening_budget = max(min(round(target_chars * 0.15), 2200), 420)
-    summary_budget = max(min(round(target_chars * 0.28), 4600), 1500)
-    ending_budget = max(min(round(target_chars * 0.13), 1800), 380)
+    opening_budget = max(min(round(target_chars * 0.05), 1000), 180)
+    summary_budget = max(min(round(target_chars * 0.10), 2000), 360)
+    ending_budget = max(min(round(target_chars * 0.05), 1000), 180)
     article_budget = max(
         (target_chars - opening_budget - summary_budget - ending_budget - 100) // max(int(article_count or 0), 1),
         120,
@@ -1169,43 +1171,65 @@ def _audio_briefing_article_section_budgets(article_budget: int) -> tuple[int, i
     return intro_budget, commentary_budget
 
 
-def _audio_briefing_article_sentence_specs(article_budget: int) -> tuple[str, str]:
-    article_budget = max(int(article_budget or 0), 1)
-    if article_budget < 220:
-        return "1文固定", "1文固定"
-    if article_budget < 420:
-        return "1文固定", "1〜2文"
-    if article_budget < 700:
-        return "1〜2文", "2〜3文"
-    return "2文固定", "3〜4文"
+def _audio_briefing_sentence_spec_from_budget(
+    budget: int,
+    *,
+    chars_per_sentence: int,
+    min_sentences: int,
+    max_sentences: int,
+    spread: int = 1,
+) -> str:
+    budget = max(int(budget or 0), 1)
+    chars_per_sentence = max(int(chars_per_sentence or 0), 1)
+    count = round(budget / chars_per_sentence)
+    count = max(min(count, max_sentences), min_sentences)
+    low = max(min_sentences, count - spread)
+    high = min(max_sentences, count + spread)
+    if low >= high:
+        return f"{count}文固定"
+    return f"{low}〜{high}文"
+
+
+def _audio_briefing_article_sentence_specs(headline_budget: int, commentary_budget: int) -> tuple[str, str]:
+    return (
+        _audio_briefing_sentence_spec_from_budget(
+            headline_budget,
+            chars_per_sentence=55,
+            min_sentences=1,
+            max_sentences=4,
+        ),
+        _audio_briefing_sentence_spec_from_budget(
+            commentary_budget,
+            chars_per_sentence=60,
+            min_sentences=1,
+            max_sentences=10,
+        ),
+    )
 
 
 def _audio_briefing_section_sentence_spec(section_budget: int, section_kind: str) -> str:
     section_budget = max(int(section_budget or 0), 1)
     if section_kind == "opening":
-        if section_budget < 700:
-            return "2〜3文"
-        if section_budget < 1300:
-            return "3〜4文"
-        if section_budget < 1900:
-            return "4〜5文"
-        return "5〜6文"
+        return _audio_briefing_sentence_spec_from_budget(
+            section_budget,
+            chars_per_sentence=65,
+            min_sentences=2,
+            max_sentences=12,
+        )
     if section_kind == "summary":
-        if section_budget < 1800:
-            return "3〜4文"
-        if section_budget < 2800:
-            return "4〜5文"
-        if section_budget < 3800:
-            return "5〜6文"
-        return "6〜7文"
+        return _audio_briefing_sentence_spec_from_budget(
+            section_budget,
+            chars_per_sentence=70,
+            min_sentences=2,
+            max_sentences=14,
+        )
     if section_kind == "ending":
-        if section_budget < 550:
-            return "2〜3文"
-        if section_budget < 1000:
-            return "3〜4文"
-        if section_budget < 1500:
-            return "4〜5文"
-        return "5〜6文"
+        return _audio_briefing_sentence_spec_from_budget(
+            section_budget,
+            chars_per_sentence=65,
+            min_sentences=2,
+            max_sentences=12,
+        )
     return "3〜4文"
 
 

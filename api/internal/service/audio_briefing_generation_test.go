@@ -191,17 +191,17 @@ func TestAudioBriefingTargetCharsUsesSixHundredFiftyCharsPerMinute(t *testing.T)
 }
 
 func TestAudioBriefingSectionBudgetsFavorLongerFrameSections(t *testing.T) {
-	if got := audioBriefingOpeningBudget(14000); got < 2000 {
-		t.Fatalf("opening budget = %d, want >= 2000", got)
+	if got := audioBriefingOpeningBudget(14000); got != 700 {
+		t.Fatalf("opening budget = %d, want %d", got, 700)
 	}
-	if got := audioBriefingSummaryBudget(14000); got < 3900 {
-		t.Fatalf("summary budget = %d, want >= 3900", got)
+	if got := audioBriefingSummaryBudget(14000); got != 1400 {
+		t.Fatalf("summary budget = %d, want %d", got, 1400)
 	}
-	if got := audioBriefingEndingBudget(14000); got < 1800 {
-		t.Fatalf("ending budget = %d, want >= 1800", got)
+	if got := audioBriefingEndingBudget(14000); got != 700 {
+		t.Fatalf("ending budget = %d, want %d", got, 700)
 	}
-	if got := audioBriefingCommentaryBudget(14000, 5); got < 1200 {
-		t.Fatalf("commentary budget = %d, want >= 1200", got)
+	if got := audioBriefingCommentaryBudget(14000, 5); got != 2220 {
+		t.Fatalf("commentary budget = %d, want %d", got, 2220)
 	}
 }
 

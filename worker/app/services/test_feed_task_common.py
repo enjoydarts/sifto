@@ -26,7 +26,7 @@ class FeedTaskCommonTests(unittest.TestCase):
         _opening_budget, _summary_budget, _ending_budget, article_budget = _audio_briefing_script_budgets(12000, 30)
         intro_budget, commentary_budget = _audio_briefing_article_section_budgets(article_budget)
 
-        self.assertEqual(article_budget, 172)
+        self.assertEqual(article_budget, 316)
         self.assertEqual(intro_budget + commentary_budget, article_budget)
         self.assertLessEqual(intro_budget, article_budget)
         self.assertLessEqual(commentary_budget, article_budget)
@@ -234,18 +234,18 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("目標尺: 約 20 分", prompt)
         self.assertIn("今回返すセクションの目標文字数: 約 14000 文字", prompt)
         self.assertIn(f"1分あたり {AUDIO_BRIEFING_CHARS_PER_MINUTE} 文字", prompt)
-        self.assertIn("opening は 5〜6文", prompt)
+        self.assertIn("opening は 10〜12文", prompt)
         self.assertIn("opening は番組のオープニングトークとして書く", prompt)
         self.assertIn("挨拶、時間帯や季節感、軽い日常雑談", prompt)
         self.assertIn("opening では個別記事の紹介を始めない", prompt)
         self.assertIn("企業名、製品名、出来事、具体的ニュース内容に触れない", prompt)
-        self.assertIn("overall_summary は総括であり、6〜7文", prompt)
-        self.assertIn("ending は番組を終わらせる締めの言葉として 5〜6文", prompt)
+        self.assertIn("overall_summary は総括であり、13〜14文", prompt)
+        self.assertIn("ending は番組を終わらせる締めの言葉として 10〜12文", prompt)
         self.assertIn("overall_summary は総括", prompt)
         self.assertIn("記事の順番紹介", prompt)
         self.assertIn("見出しの焼き直し", prompt)
-        self.assertIn("headline は 2文固定", prompt)
-        self.assertIn("commentary は 3〜4文", prompt)
+        self.assertIn("headline は 3〜4文", prompt)
+        self.assertIn("commentary は 9〜10文", prompt)
         self.assertIn("長さは約", prompt)
         self.assertIn("1記事あたりの headline と commentary の合計は約", prompt)
         self.assertIn("headline の個別目安: 約", prompt)
@@ -310,9 +310,9 @@ class FeedTaskCommonTests(unittest.TestCase):
         )
 
         prompt = task["prompt"]
-        self.assertIn("headline は 1文固定", prompt)
-        self.assertIn("commentary は 1〜2文", prompt)
-        self.assertIn("1文は 40〜80文字 を目安", prompt)
+        self.assertIn("headline は 2〜4文", prompt)
+        self.assertIn("commentary は 5〜7文", prompt)
+        self.assertIn("1文は 50〜95文字 を目安", prompt)
         self.assertIn("commentary の個別目安: 約", prompt)
 
     def test_parse_audio_briefing_script_result_rejects_empty_payload(self):
@@ -475,7 +475,7 @@ class FeedTaskCommonTests(unittest.TestCase):
             "editor",
             target_chars=14000,
         )
-        self.assertGreater(len(result["overall_summary"]), 2400)
+        self.assertGreaterEqual(len(result["overall_summary"]), 1400)
         self.assertGreater(len(result["article_segments"][0]["commentary"]), 1200)
 
     def test_parse_audio_briefing_script_result_preserves_commentary_line_breaks(self):

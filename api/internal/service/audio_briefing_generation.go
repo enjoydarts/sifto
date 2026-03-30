@@ -333,42 +333,42 @@ func audioBriefingSummaryIntroBudget(commentaryBudget int) int {
 
 func audioBriefingOpeningBudget(targetChars int) int {
 	if targetChars <= 0 {
-		return 840
+		return 300
 	}
-	budget := int(math.Round(float64(targetChars) * 0.15))
-	if budget < 420 {
-		return 420
+	budget := int(math.Round(float64(targetChars) * 0.05))
+	if budget < 180 {
+		return 180
 	}
-	if budget > 2200 {
-		return 2200
+	if budget > 1000 {
+		return 1000
 	}
 	return budget
 }
 
 func audioBriefingSummaryBudget(targetChars int) int {
 	if targetChars <= 0 {
-		return 2400
+		return 800
 	}
-	budget := int(math.Round(float64(targetChars) * 0.28))
-	if budget < 1500 {
-		return 1500
+	budget := int(math.Round(float64(targetChars) * 0.10))
+	if budget < 360 {
+		return 360
 	}
-	if budget > 4600 {
-		return 4600
+	if budget > 2000 {
+		return 2000
 	}
 	return budget
 }
 
 func audioBriefingEndingBudget(targetChars int) int {
 	if targetChars <= 0 {
-		return 840
+		return 300
 	}
-	budget := int(math.Round(float64(targetChars) * 0.13))
-	if budget < 380 {
-		return 380
+	budget := int(math.Round(float64(targetChars) * 0.05))
+	if budget < 180 {
+		return 180
 	}
-	if budget > 1800 {
-		return 1800
+	if budget > 1000 {
+		return 1000
 	}
 	return budget
 }

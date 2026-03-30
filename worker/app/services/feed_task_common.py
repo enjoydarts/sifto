@@ -928,7 +928,7 @@ def build_audio_briefing_script_task(
         section_rules.append(f"- article_segments の各 headline は {article_headline_sentence_spec} で、これから扱う記事をリスナーに詳細に紹介する導入として書く。少なくとも {article_headline_min_sentences}文は使い、長さは約 {article_headline_budget} 文字以内を厳守し、見出しの読み上げとして一息で入る長さにする")
         section_rules.append(f"- article_segments の各 summary_intro は {article_summary_intro_sentence_spec} で、記事の中身や何が起きたかを 2〜4文で置く役割として書く。少なくとも {article_summary_intro_min_sentences}文は使い、長さは約 {article_summary_intro_budget} 文字を目安にする")
         section_rules.append(f"- article_segments の各 commentary は {article_commentary_sentence_spec} で書く。少なくとも {article_commentary_min_sentences}文は使い、summary_intro を受けて、そのペルソナの反応を広げる。脱線せず、長い前置きや言い換えを避け、長さは約 {article_commentary_budget} 文字を目安にする")
-        section_rules.append("- article_segments は各記事にほぼ均等に尺を配る。1本だけ極端に長くしない。長くなりそうなら commentary 側を先に圧縮し、例示・補足・言い換えを削って収める")
+        section_rules.append("- article_segments は各記事にほぼ均等に尺を配る。1本だけ極端に長くしない。ただし記事ごとの厚みが足りなくなるほど無理に圧縮しない")
         section_rules.append("- headline では、その記事をリスナーに詳細に紹介するつもりで話す。何の記事で、何が起きていて、どこが気になるのかが自然に伝わるようにする")
         section_rules.append("- summary_intro では、記事の要点、何が起きたか、どこを見る記事かをやや詳しく要約してよい。ただし記事全文の言い換えや細部の列挙にはしない")
         section_rules.append("- article_segments の commentary は、そのペルソナ本人が自然に口にしそうな感想だけを書く。無難な解説調、誰にでも当てはまる一般論、ニュースキャスター風の中立コメントに寄せない")
@@ -1247,21 +1247,21 @@ def _audio_briefing_article_sentence_specs(headline_budget: int, summary_intro_b
     return (
         _audio_briefing_sentence_spec_from_budget(
             headline_budget,
-            chars_per_sentence=55,
-            min_sentences=1,
-            max_sentences=4,
+            chars_per_sentence=45,
+            min_sentences=2,
+            max_sentences=5,
         ),
         _audio_briefing_sentence_spec_from_budget(
             summary_intro_budget,
-            chars_per_sentence=65,
-            min_sentences=2,
-            max_sentences=6,
+            chars_per_sentence=55,
+            min_sentences=3,
+            max_sentences=8,
         ),
         _audio_briefing_sentence_spec_from_budget(
             commentary_budget,
-            chars_per_sentence=60,
-            min_sentences=1,
-            max_sentences=10,
+            chars_per_sentence=50,
+            min_sentences=4,
+            max_sentences=12,
         ),
     )
 

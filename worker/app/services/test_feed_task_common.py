@@ -251,6 +251,8 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("commentary は 3〜4文", prompt)
         self.assertIn("長さは約", prompt)
         self.assertIn("1記事あたりの summary_intro と commentary の合計は約", prompt)
+        self.assertIn("summary_intro の個別目安: 約", prompt)
+        self.assertIn("commentary の個別目安: 約", prompt)
         self.assertIn("文字以内を厳守する", prompt)
         self.assertIn("各記事にほぼ均等に尺を配る", prompt)
         self.assertIn("target_chars と記事数から逆算した尺配分を守り", prompt)
@@ -314,6 +316,8 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("summary_intro は 1文固定", prompt)
         self.assertIn("commentary は 1〜2文", prompt)
         self.assertIn("1文は 40〜80文字 を目安", prompt)
+        self.assertIn("summary_intro の個別目安: 約", prompt)
+        self.assertIn("commentary の個別目安: 約", prompt)
 
     def test_parse_audio_briefing_script_result_rejects_empty_payload(self):
         with self.assertRaises(ValueError):

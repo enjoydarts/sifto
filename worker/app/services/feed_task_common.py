@@ -921,9 +921,9 @@ def build_audio_briefing_script_task(
         section_rules.append("- article_segments は各記事にほぼ均等に尺を配る。1本だけ極端に長くしない。長くなりそうなら commentary 側を先に圧縮し、例示・補足・言い換えを削って収める")
         section_rules.append("- headline では、その記事をリスナーに詳細に紹介するつもりで話す。何の記事で、何が起きていて、どこが気になるのかが自然に伝わるようにする")
         section_rules.append("- article_segments の commentary は、そのペルソナ本人が自然に口にしそうな感想だけを書く。無難な解説調、誰にでも当てはまる一般論、ニュースキャスター風の中立コメントに寄せない")
-        section_rules.append("- commentary では記事の長い説明、論点整理、一般論への脱線は避ける。このペルソナがどこに反応したか、なぜそう感じたか、どう受け止めたかを話す")
+        section_rules.append("- commentary の冒頭では、記事の要点や何が起きたかを 1〜2文だけ要約してよい。そのあとで、このペルソナがどこに反応したか、なぜそう感じたか、どう受け止めたかを話す")
         section_rules.append("- commentary では反応だけで終わらせず、その反応の理由、軽い背景説明、比較、自分ならどう見るかまで話してよい")
-        section_rules.append("- commentary で headline の内容を長く言い換えて繰り返さない。headline で置いた要約をなぞり直さず、反応、理由、比較に進む")
+        section_rules.append("- commentary で headline の内容を長く言い換えて繰り返さない。短い要点要約を置いたら、反応、理由、比較に進む")
         target_lines.append(f"- 各 article segment の目安: headline と commentary を合わせて約 {article_budget} 文字以内")
         target_lines.append(f"- headline の個別目安: 約 {article_headline_budget} 文字以内")
         target_lines.append(f"- commentary の個別目安: 約 {article_commentary_budget} 文字以内")
@@ -984,9 +984,9 @@ def build_audio_briefing_script_task(
 - 客観的な無味乾燥レビューではなく、このペルソナの主観で語る
 - 各記事の commentary では、必ずこのペルソナの口癖・温度感・価値観がにじむようにし、他のペルソナでも成立する無個性な書き方をしない
 - headline は短い導入見出しとして使い、何の記事かを一息でわかる形で置く
-- 記事の commentary は「headline の続き」として、このペルソナならどう受け取るかを短く話す
-- commentary は反応を中心に書く。記事内容の補足説明、背景解説、論点整理、一般論への展開は禁止
-- commentary で記事の説明を長く続けない。headline で足りる事実を繰り返さない
+- 記事の commentary は「headline の続き」として、冒頭で記事の要点を 1〜2文だけ置いてから、このペルソナならどう受け取るかを話す
+- commentary は反応を中心に書くが、記事の要点や何が起きたかを 1〜2文で押さえることは許可する。長い背景解説、論点整理、一般論への展開は禁止
+- commentary で記事の説明を長く続けない。headline や冒頭の要点要約で足りる事実を繰り返さない
 - commentary では「つまり」「要するに」「背景として」「ポイントは」など、解説調に見えやすい運びを避ける
 - opening は番組の導入トークとして扱い、記事本編とは役割を分ける
 - opening では挨拶、時候や時間帯の話、軽い日常雑談、聞き方のガイドを優先する

@@ -33,7 +33,7 @@ type AudioBriefingNarrationArticle struct {
 	Commentary   string
 }
 
-const audioBriefingCharsPerMinute = 600
+const audioBriefingCharsPerMinute = 400
 
 func BuildAudioBriefingDraft(
 	slotStartedAt time.Time,

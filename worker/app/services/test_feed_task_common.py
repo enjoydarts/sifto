@@ -24,11 +24,12 @@ from app.services.feed_task_common import (
 class FeedTaskCommonTests(unittest.TestCase):
     def test_audio_briefing_article_section_budgets_fit_within_article_budget(self):
         _opening_budget, _summary_budget, _ending_budget, article_budget = _audio_briefing_script_budgets(12000, 30)
-        intro_budget, commentary_budget = _audio_briefing_article_section_budgets(article_budget)
+        headline_budget, summary_intro_budget, commentary_budget = _audio_briefing_article_section_budgets(article_budget)
 
         self.assertEqual(article_budget, 328)
-        self.assertEqual(intro_budget + commentary_budget, article_budget)
-        self.assertLessEqual(intro_budget, article_budget)
+        self.assertEqual(headline_budget + summary_intro_budget + commentary_budget, article_budget)
+        self.assertLessEqual(headline_budget, article_budget)
+        self.assertLessEqual(summary_intro_budget, article_budget)
         self.assertLessEqual(commentary_budget, article_budget)
 
     def test_resolve_persona_file_prefers_llm_catalog_dir(self):
@@ -250,14 +251,17 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("共通テーマ、対立軸、温度感、いま追う意味、記事間のつながりを広く語ってよい", prompt)
         self.assertIn("共通点、流れ、温度差、見方の違い、別の話に見える記事どうしのつながりまで具体的にしてよい", prompt)
         self.assertIn("headline は 3〜4文", prompt)
+        self.assertIn("summary_intro は 4〜6文", prompt)
         self.assertIn("commentary は 9〜10文", prompt)
         self.assertIn("少なくとも 3文は使い", prompt)
+        self.assertIn("少なくとも 4文は使い", prompt)
         self.assertIn("少なくとも 9文は使い", prompt)
         self.assertIn("長さは約", prompt)
-        self.assertIn("1記事あたりの headline と commentary の合計は約", prompt)
+        self.assertIn("1記事あたりの headline と summary_intro と commentary の合計は約", prompt)
         self.assertIn("headline の個別目安: 約", prompt)
+        self.assertIn("summary_intro の個別目安: 約", prompt)
         self.assertIn("commentary の個別目安: 約", prompt)
-        self.assertIn("文字以内を厳守する", prompt)
+        self.assertIn("必要なら少し超えてよい", prompt)
         self.assertIn("各記事にほぼ均等に尺を配る", prompt)
         self.assertIn("target_chars と記事数から逆算した尺配分を守り", prompt)
         self.assertIn("1文は 60〜110文字 を目安", prompt)
@@ -265,11 +269,11 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("このペルソナならどう受け取るか", prompt)
         self.assertIn("headline では、その記事をリスナーに詳細に紹介するつもりで話す。何の記事で、何が起きていて、どこが気になるのかが自然に伝わるようにする", prompt)
         self.assertIn("headline は短い導入見出しとして使い", prompt)
-        self.assertIn("commentary の冒頭では、記事の要点や何が起きたかを 1〜2文だけ要約してよい。", prompt)
+        self.assertIn("summary_intro では、記事の要点、何が起きたか、どこを見る記事かをやや詳しく要約してよい。", prompt)
         self.assertIn("反応の理由、軽い背景説明、比較、自分ならどう見るかまで話してよい", prompt)
-        self.assertIn("短い要点要約を置いたら、反応、理由、比較に進む", prompt)
+        self.assertIn("要点を置いたら、反応、理由、比較に進む", prompt)
         self.assertIn("解説調に見えやすい運びを避ける", prompt)
-        self.assertIn("headline でこれから扱う記事をリスナーに詳細に紹介し、commentary でそのペルソナの反応を書く", prompt)
+        self.assertIn("headline でこれから扱う記事をリスナーに詳細に紹介し、summary_intro で記事の中身を置いたうえで、このペルソナなら何に反応するかを話す", prompt)
         self.assertIn("ending は番組を終わらせる締めの言葉", prompt)
         self.assertIn("今日の回で残った感触や温度感を1〜2点だけ軽く振り返る", prompt)
         self.assertIn("最後に残った印象や引っかかりを必ず言葉にする", prompt)
@@ -318,8 +322,9 @@ class FeedTaskCommonTests(unittest.TestCase):
         )
 
         prompt = task["prompt"]
-        self.assertIn("headline は 2〜4文", prompt)
-        self.assertIn("commentary は 5〜7文", prompt)
+        self.assertIn("headline は 1〜3文", prompt)
+        self.assertIn("summary_intro は 2〜4文", prompt)
+        self.assertIn("commentary は 3〜5文", prompt)
         self.assertIn("1文は 50〜95文字 を目安", prompt)
         self.assertIn("commentary の個別目安: 約", prompt)
 
@@ -371,7 +376,8 @@ class FeedTaskCommonTests(unittest.TestCase):
                   "article_segments": [
                     {
                       "item_id": "item-1",
-                      "headline": "見出し"
+                      "headline": "見出し",
+                      "summary_intro": "要約です。"
                     }
                   ],
                   "ending": "締めです。"
@@ -410,6 +416,7 @@ class FeedTaskCommonTests(unittest.TestCase):
                 {
                   "item_id": "item-1",
                   "headline": "見出し",
+                  "summary_intro": "要約です。",
                   "commentary": "コメントです。"
                 }
               ]
@@ -442,11 +449,13 @@ class FeedTaskCommonTests(unittest.TestCase):
                 {
                   "item_id": "wrong-item-id",
                   "headline": "見出しA",
+                  "summary_intro": "要約Aです。",
                   "commentary": "コメントAです。"
                 },
                 {
                   "item_id": "another-wrong-id",
                   "headline": "見出しB",
+                  "summary_intro": "要約Bです。",
                   "commentary": "コメントBです。"
                 }
               ]
@@ -489,6 +498,7 @@ class FeedTaskCommonTests(unittest.TestCase):
                 {{
                   "item_id": "item-1",
                   "headline": "見出しA",
+                  "summary_intro": "要約Aです。",
                   "commentary": "{long_commentary}"
                 }}
               ],
@@ -522,6 +532,7 @@ class FeedTaskCommonTests(unittest.TestCase):
                 {{
                   "item_id": "item-1",
                   "headline": "見出しA",
+                  "summary_intro": "要約Aです。",
                   "commentary": "コメントAです。"
                 }}
               ],
@@ -551,6 +562,7 @@ class FeedTaskCommonTests(unittest.TestCase):
                 {
                   "item_id": "item-1",
                   "headline": "見出し",
+                  "summary_intro": "要約です。",
                   "commentary": "一文目です。\\n二文目です。\\n三文目です。"
                 }
               ]

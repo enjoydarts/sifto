@@ -86,8 +86,9 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 			OverallSummary: "まず全体として、AIとプロダクトの境目がまた一段近づいています。",
 			Articles: map[string]AudioBriefingNarrationArticle{
 				"item-1": {
-					Headline:   "LLMで見た翻訳題",
-					Commentary: "ここは背景と含意を押さえておく価値があります。",
+					Headline:     "LLMで見た翻訳題",
+					SummaryIntro: "翻訳まわりの実運用がまた一段動いた、そういう記事です。",
+					Commentary:   "ここは背景と含意を押さえておく価値があります。",
 				},
 			},
 			Ending: "続きはSiftoで確認してください。",
@@ -109,7 +110,7 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 	if got := draft.Chunks[1].Text; got != "まず全体として、AIとプロダクトの境目がまた一段近づいています。" {
 		t.Fatalf("summary = %q", got)
 	}
-	if got := draft.Chunks[2].Text; got != "LLMで見た翻訳題です。 ここは背景と含意を押さえておく価値があります。" {
+	if got := draft.Chunks[2].Text; got != "LLMで見た翻訳題です。 翻訳まわりの実運用がまた一段動いた、そういう記事です。 ここは背景と含意を押さえておく価値があります。" {
 		t.Fatalf("article = %q", got)
 	}
 	if got := draft.Chunks[3].Text; got != "続きはSiftoで確認してください。" {
@@ -118,8 +119,8 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 }
 
 func TestAudioBriefingArticleTextKeepsHeadlineSentenceEnding(t *testing.T) {
-	got := audioBriefingArticleText("これは競争環境が変わる記事です。", "ここは温度感が出ます。")
-	want := "これは競争環境が変わる記事です。 ここは温度感が出ます。"
+	got := audioBriefingArticleText("これは競争環境が変わる記事です。", "ここで何が起きたかを置きます。", "ここは温度感が出ます。")
+	want := "これは競争環境が変わる記事です。 ここで何が起きたかを置きます。 ここは温度感が出ます。"
 	if got != want {
 		t.Fatalf("audioBriefingArticleText(...) = %q, want %q", got, want)
 	}

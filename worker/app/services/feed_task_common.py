@@ -151,9 +151,10 @@ AUDIO_BRIEFING_SCRIPT_SCHEMA = {
                 "properties": {
                     "item_id": {"type": "string"},
                     "headline": {"type": "string"},
+                    "summary_intro": {"type": "string"},
                     "commentary": {"type": "string"},
                 },
-                "required": ["item_id", "headline", "commentary"],
+                "required": ["item_id", "headline", "summary_intro", "commentary"],
                 "additionalProperties": False,
             },
         },
@@ -883,14 +884,15 @@ def build_audio_briefing_script_task(
     opening_sentence_spec = _audio_briefing_section_sentence_spec(opening_budget, "opening")
     summary_sentence_spec = _audio_briefing_section_sentence_spec(summary_budget, "summary")
     ending_sentence_spec = _audio_briefing_section_sentence_spec(ending_budget, "ending")
-    article_headline_budget, article_commentary_budget = _audio_briefing_article_section_budgets(article_budget)
-    article_headline_sentence_spec, article_commentary_sentence_spec = _audio_briefing_article_sentence_specs(
-        article_headline_budget, article_commentary_budget
+    article_headline_budget, article_summary_intro_budget, article_commentary_budget = _audio_briefing_article_section_budgets(article_budget)
+    article_headline_sentence_spec, article_summary_intro_sentence_spec, article_commentary_sentence_spec = _audio_briefing_article_sentence_specs(
+        article_headline_budget, article_summary_intro_budget, article_commentary_budget
     )
     opening_min_sentences = _audio_briefing_min_sentences(opening_sentence_spec)
     summary_min_sentences = _audio_briefing_min_sentences(summary_sentence_spec)
     ending_min_sentences = _audio_briefing_min_sentences(ending_sentence_spec)
     article_headline_min_sentences = _audio_briefing_min_sentences(article_headline_sentence_spec)
+    article_summary_intro_min_sentences = _audio_briefing_min_sentences(article_summary_intro_sentence_spec)
     article_commentary_min_sentences = _audio_briefing_min_sentences(article_commentary_sentence_spec)
     sentence_length_spec = _audio_briefing_sentence_length_spec(article_budget)
     section_rules: list[str] = []
@@ -915,21 +917,24 @@ def build_audio_briefing_script_task(
         response_properties.append('  "overall_summary": "全体サマリー"')
     if include_article_segments:
         section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
-        section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。1記事あたりの headline と commentary の合計は約 {article_budget} 文字以内を厳守する")
+        section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。1記事あたりの headline と summary_intro と commentary の合計は約 {article_budget} 文字を目安にし、必要なら少し超えてよい")
         section_rules.append(f"- article_segments の各 headline は {article_headline_sentence_spec} で、これから扱う記事をリスナーに詳細に紹介する導入として書く。少なくとも {article_headline_min_sentences}文は使い、長さは約 {article_headline_budget} 文字以内を厳守し、見出しの読み上げとして一息で入る長さにする")
-        section_rules.append(f"- article_segments の各 commentary は {article_commentary_sentence_spec} で書く。少なくとも {article_commentary_min_sentences}文は使い、headline を受けて、そのペルソナの反応を広げる。脱線せず、長い前置きや言い換えを避け、長さは約 {article_commentary_budget} 文字以内を厳守する")
+        section_rules.append(f"- article_segments の各 summary_intro は {article_summary_intro_sentence_spec} で、記事の中身や何が起きたかを 2〜4文で置く役割として書く。少なくとも {article_summary_intro_min_sentences}文は使い、長さは約 {article_summary_intro_budget} 文字を目安にする")
+        section_rules.append(f"- article_segments の各 commentary は {article_commentary_sentence_spec} で書く。少なくとも {article_commentary_min_sentences}文は使い、summary_intro を受けて、そのペルソナの反応を広げる。脱線せず、長い前置きや言い換えを避け、長さは約 {article_commentary_budget} 文字を目安にする")
         section_rules.append("- article_segments は各記事にほぼ均等に尺を配る。1本だけ極端に長くしない。長くなりそうなら commentary 側を先に圧縮し、例示・補足・言い換えを削って収める")
         section_rules.append("- headline では、その記事をリスナーに詳細に紹介するつもりで話す。何の記事で、何が起きていて、どこが気になるのかが自然に伝わるようにする")
+        section_rules.append("- summary_intro では、記事の要点、何が起きたか、どこを見る記事かをやや詳しく要約してよい。ただし記事全文の言い換えや細部の列挙にはしない")
         section_rules.append("- article_segments の commentary は、そのペルソナ本人が自然に口にしそうな感想だけを書く。無難な解説調、誰にでも当てはまる一般論、ニュースキャスター風の中立コメントに寄せない")
-        section_rules.append("- commentary の冒頭では、記事の要点や何が起きたかを 1〜2文だけ要約してよい。そのあとで、このペルソナがどこに反応したか、なぜそう感じたか、どう受け止めたかを話す")
+        section_rules.append("- commentary では summary_intro の続きを受けて、このペルソナがどこに反応したか、なぜそう感じたか、どう受け止めたかを話す")
         section_rules.append("- commentary では反応だけで終わらせず、その反応の理由、軽い背景説明、比較、自分ならどう見るかまで話してよい")
-        section_rules.append("- commentary で headline の内容を長く言い換えて繰り返さない。短い要点要約を置いたら、反応、理由、比較に進む")
-        target_lines.append(f"- 各 article segment の目安: headline と commentary を合わせて約 {article_budget} 文字以内")
+        section_rules.append("- commentary で headline や summary_intro の内容を長く言い換えて繰り返さない。要点を置いたら、反応、理由、比較に進む")
+        target_lines.append(f"- 各 article segment の目安: headline と summary_intro と commentary を合わせて約 {article_budget} 文字")
         target_lines.append(f"- headline の個別目安: 約 {article_headline_budget} 文字以内")
+        target_lines.append(f"- summary_intro の個別目安: 約 {article_summary_intro_budget} 文字")
         target_lines.append(f"- commentary の個別目安: 約 {article_commentary_budget} 文字以内")
         response_properties.extend([
             '  "article_segments": [',
-            '    {"item_id": "uuid", "headline": "これから扱う記事をリスナーに詳細に紹介する1〜2文", "commentary": "そのペルソナがどう受け止めたかの2〜3文"}',
+            '    {"item_id": "uuid", "headline": "これから扱う記事をリスナーに詳細に紹介する1〜2文", "summary_intro": "記事の中身や何が起きたかを2〜4文で置く", "commentary": "そのペルソナがどう受け止めたかの2〜3文"}',
             "  ]",
         ])
     else:
@@ -978,15 +983,16 @@ def build_audio_briefing_script_task(
 - 冗長な前置きや言い換えを避け、文字数目標を強く意識する
 - 今回与えられた target_chars と記事数から逆算した尺配分を守り、特定のセクションや特定の記事だけを必要以上に長くしない
 - 1文は {sentence_length_spec} を目安にし、1文1論点でだらだら伸ばさない
-- 各記事では、headline でこれから扱う記事をリスナーに詳細に紹介したうえで、このペルソナなら何に反応するかを話す
+- 各記事では、headline でこれから扱う記事をリスナーに詳細に紹介し、summary_intro で記事の中身を置いたうえで、このペルソナなら何に反応するかを話す
 - 尺配分や流れは意識するが、整えすぎた台本調ではなく、あくまでこのペルソナ本人が自然に話しているように聞こえることを優先する
 - 第一印象、良いと感じる点、引っかかる点、今読む理由のうち2〜3個が自然ににじむようにする
 - 客観的な無味乾燥レビューではなく、このペルソナの主観で語る
 - 各記事の commentary では、必ずこのペルソナの口癖・温度感・価値観がにじむようにし、他のペルソナでも成立する無個性な書き方をしない
 - headline は短い導入見出しとして使い、何の記事かを一息でわかる形で置く
-- 記事の commentary は「headline の続き」として、冒頭で記事の要点を 1〜2文だけ置いてから、このペルソナならどう受け取るかを話す
-- commentary は反応を中心に書くが、記事の要点や何が起きたかを 1〜2文で押さえることは許可する。長い背景解説、論点整理、一般論への展開は禁止
-- commentary で記事の説明を長く続けない。headline や冒頭の要点要約で足りる事実を繰り返さない
+- summary_intro は記事内容の短い本編として使い、何が起きたか、どこを見る記事かを置く
+- 記事の commentary は「summary_intro の続き」として、このペルソナならどう受け取るかを話す
+- commentary は反応を中心に書く。summary_intro で置いた事実を土台にしてよいが、長い背景解説、論点整理、一般論への展開は禁止
+- commentary で記事の説明を長く続けない。headline や summary_intro で足りる事実を繰り返さない
 - commentary では「つまり」「要するに」「背景として」「ポイントは」など、解説調に見えやすい運びを避ける
 - opening は番組の導入トークとして扱い、記事本編とは役割を分ける
 - opening では挨拶、時候や時間帯の話、軽い日常雑談、聞き方のガイドを優先する
@@ -1128,6 +1134,9 @@ def parse_audio_briefing_script_result(
             headline = str(raw.get("headline") or "").strip()
             if not headline:
                 raise ValueError(f"audio briefing script missing headline for item_id: {item_id}")
+            summary_intro = _normalize_audio_briefing_generated_text(str(raw.get("summary_intro") or "").strip())
+            if not summary_intro:
+                raise ValueError(f"audio briefing script missing summary_intro for item_id: {item_id}")
             commentary = _normalize_audio_briefing_generated_text(str(raw.get("commentary") or "").strip())
             if not commentary:
                 raise ValueError(f"audio briefing script missing commentary for item_id: {item_id}")
@@ -1135,6 +1144,7 @@ def parse_audio_briefing_script_result(
                 {
                     "item_id": item_id,
                     "headline": headline[:160],
+                    "summary_intro": summary_intro[:700],
                     "commentary": commentary,
                 }
             )
@@ -1154,6 +1164,7 @@ _AUDIO_BRIEFING_SCRIPT_RETRYABLE_ERROR_MARKERS = (
     "audio briefing script article_segments count mismatch",
     "audio briefing script segment must be an object",
     "audio briefing script missing headline for item_id:",
+    "audio briefing script missing summary_intro for item_id:",
     "audio briefing script missing commentary for item_id:",
 )
 
@@ -1177,14 +1188,19 @@ def _audio_briefing_script_budgets(target_chars: int, article_count: int) -> tup
     return opening_budget, summary_budget, ending_budget, article_budget
 
 
-def _audio_briefing_article_section_budgets(article_budget: int) -> tuple[int, int]:
+def _audio_briefing_article_section_budgets(article_budget: int) -> tuple[int, int, int]:
     article_budget = max(int(article_budget or 0), 1)
-    intro_budget = max(round(article_budget * 0.3), 60)
-    intro_budget = min(intro_budget, 240)
-    if intro_budget >= article_budget:
-        intro_budget = max(article_budget // 2, 1)
-    commentary_budget = max(article_budget - intro_budget, 1)
-    return intro_budget, commentary_budget
+    headline_budget = max(round(article_budget * 0.2), 50)
+    headline_budget = min(headline_budget, 220)
+    summary_intro_budget = max(round(article_budget * 0.35), 80)
+    summary_intro_budget = min(summary_intro_budget, 320)
+    used = headline_budget + summary_intro_budget
+    if used >= article_budget:
+        headline_budget = max(round(article_budget * 0.2), 1)
+        summary_intro_budget = max(round(article_budget * 0.35), 1)
+        used = headline_budget + summary_intro_budget
+    commentary_budget = max(article_budget - used, 1)
+    return headline_budget, summary_intro_budget, commentary_budget
 
 
 def _audio_briefing_sentence_spec_from_budget(
@@ -1213,13 +1229,19 @@ def _audio_briefing_min_sentences(sentence_spec: str) -> int:
     return max(int(match.group(1)), 1)
 
 
-def _audio_briefing_article_sentence_specs(headline_budget: int, commentary_budget: int) -> tuple[str, str]:
+def _audio_briefing_article_sentence_specs(headline_budget: int, summary_intro_budget: int, commentary_budget: int) -> tuple[str, str, str]:
     return (
         _audio_briefing_sentence_spec_from_budget(
             headline_budget,
             chars_per_sentence=55,
             min_sentences=1,
             max_sentences=4,
+        ),
+        _audio_briefing_sentence_spec_from_budget(
+            summary_intro_budget,
+            chars_per_sentence=65,
+            min_sentences=2,
+            max_sentences=6,
         ),
         _audio_briefing_sentence_spec_from_budget(
             commentary_budget,

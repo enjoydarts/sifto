@@ -549,8 +549,9 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 			}
 			for _, segment := range result.Segments {
 				narration.Articles[segment.ItemID] = AudioBriefingNarrationArticle{
-					Headline:   strings.TrimSpace(segment.Headline),
-					Commentary: strings.TrimSpace(segment.Commentary),
+					Headline:     strings.TrimSpace(segment.Headline),
+					SummaryIntro: strings.TrimSpace(segment.SummaryIntro),
+					Commentary:   strings.TrimSpace(segment.Commentary),
 				}
 			}
 		}

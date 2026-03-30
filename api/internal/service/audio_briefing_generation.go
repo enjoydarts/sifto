@@ -28,8 +28,9 @@ type AudioBriefingNarration struct {
 }
 
 type AudioBriefingNarrationArticle struct {
-	Headline   string
-	Commentary string
+	Headline     string
+	SummaryIntro string
+	Commentary   string
 }
 
 const audioBriefingCharsPerMinute = 400
@@ -73,7 +74,7 @@ func BuildAudioBriefingDraft(
 		if headline == "" {
 			headline = fmt.Sprintf("記事%d", item.Rank)
 		}
-		text := audioBriefingArticleText(headline, "")
+		text := audioBriefingArticleText(headline, "", "")
 		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", text, ttsProvider, voiceModel, voiceStyle))
 		totalChars += charCount(text)
 	}
@@ -140,15 +141,22 @@ func BuildAudioBriefingDraftFromNarration(
 			headline = fmt.Sprintf("記事%d", item.Rank)
 		}
 		commentary := ""
+		summaryIntro := ""
+		text := ""
 		if article, ok := narration.Articles[item.ItemID]; ok {
 			if candidate := strings.TrimSpace(article.Headline); candidate != "" {
 				headline = candidate
 			}
+			if candidate := strings.TrimSpace(article.SummaryIntro); candidate != "" {
+				summaryIntro = candidate
+			}
 			if candidate := strings.TrimSpace(article.Commentary); candidate != "" {
 				commentary = candidate
 			}
+			text = audioBriefingArticleText(headline, summaryIntro, commentary)
+		} else {
+			text = audioBriefingArticleText(headline, "", commentary)
 		}
-		text := audioBriefingArticleText(headline, commentary)
 		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", text, ttsProvider, voiceModel, voiceStyle))
 		totalChars += charCount(text)
 	}
@@ -275,16 +283,20 @@ func charCount(v string) int {
 	return utf8.RuneCountInString(v)
 }
 
-func audioBriefingArticleText(headline, commentary string) string {
+func audioBriefingArticleText(headline, summaryIntro, commentary string) string {
 	headline = strings.TrimSpace(headline)
+	summaryIntro = strings.TrimSpace(summaryIntro)
 	commentary = strings.TrimSpace(commentary)
-	parts := make([]string, 0, 2)
+	parts := make([]string, 0, 3)
 	if headline != "" {
 		if strings.HasSuffix(headline, "。") || strings.HasSuffix(headline, "！") || strings.HasSuffix(headline, "？") {
 			parts = append(parts, headline)
 		} else {
 			parts = append(parts, fmt.Sprintf("%sです。", headline))
 		}
+	}
+	if summaryIntro != "" {
+		parts = append(parts, summaryIntro)
 	}
 	if commentary != "" {
 		parts = append(parts, commentary)

@@ -461,23 +461,7 @@ func (r *AudioBriefingRepo) ListStaleVoicingJobs(ctx context.Context, cutoff tim
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := r.db.Query(ctx, `
-		SELECT j.id, j.user_id, j.slot_started_at_jst, j.slot_key, j.persona, j.status,
-		       j.source_item_count, j.reused_item_count, j.script_char_count, j.script_llm_models, j.audio_duration_sec,
-		       j.title, j.r2_audio_object_key, j.r2_manifest_object_key, j.bgm_object_key, j.r2_storage_bucket, j.podcast_public_object_key, j.podcast_public_bucket, j.podcast_public_deleted_at, j.provider_job_id, j.idempotency_key,
-		       j.error_code, j.error_message, j.published_at, j.failed_at, j.created_at, j.updated_at
-		FROM audio_briefing_jobs j
-		WHERE j.status = 'voicing'
-		  AND EXISTS (
-		    SELECT 1
-		    FROM audio_briefing_script_chunks c
-		    WHERE c.job_id = j.id
-		      AND c.tts_status = 'generating'
-		      AND COALESCE(c.last_heartbeat_at, c.updated_at) <= $1
-		  )
-		ORDER BY j.updated_at ASC, j.id ASC
-		LIMIT $2
-	`, cutoff, limit)
+	rows, err := r.db.Query(ctx, listStaleVoicingJobsQuery(), cutoff, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -492,6 +476,26 @@ func (r *AudioBriefingRepo) ListStaleVoicingJobs(ctx context.Context, cutoff tim
 		out = append(out, row)
 	}
 	return out, rows.Err()
+}
+
+func listStaleVoicingJobsQuery() string {
+	return `
+		SELECT j.id, j.user_id, j.slot_started_at_jst, j.slot_key, j.persona, j.status, j.archive_status,
+		       j.source_item_count, j.reused_item_count, j.script_char_count, j.script_llm_models, j.audio_duration_sec,
+		       j.title, j.r2_audio_object_key, j.r2_manifest_object_key, j.bgm_object_key, j.r2_storage_bucket, j.podcast_public_object_key, j.podcast_public_bucket, j.podcast_public_deleted_at, j.provider_job_id, j.idempotency_key,
+		       j.error_code, j.error_message, j.published_at, j.failed_at, j.created_at, j.updated_at
+		FROM audio_briefing_jobs j
+		WHERE j.status = 'voicing'
+		  AND EXISTS (
+		    SELECT 1
+		    FROM audio_briefing_script_chunks c
+		    WHERE c.job_id = j.id
+		      AND c.tts_status = 'generating'
+		      AND COALESCE(c.last_heartbeat_at, c.updated_at) <= $1
+		  )
+		ORDER BY j.updated_at ASC, j.id ASC
+		LIMIT $2
+	`
 }
 
 func (r *AudioBriefingRepo) UpdateStorageBucketForJobAndChunks(ctx context.Context, jobID string, bucket string) error {

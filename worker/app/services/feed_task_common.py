@@ -917,6 +917,9 @@ def build_audio_briefing_script_task(
         section_rules.append("- overall_summary では、回全体を俯瞰して共通テーマ、対立軸、温度感、いま追う意味、記事間のつながりを広く語ってよい")
         section_rules.append("- overall_summary では、記事群の共通点、流れ、温度差、見方の違い、別の話に見える記事どうしのつながりまで具体的にしてよい")
         section_rules.append("- overall_summary では、なぜ今この回として追う価値があるのか、何が引っかかりとして残るのかまで話してよい")
+        section_rules.append("- overall_summary では、前半から後半へどう流れが変わるか、どこで話題の重心が移るかまで具体的にしてよい")
+        section_rules.append("- overall_summary では、別々の話に見える記事どうしがどの点でつながっているか、同じ根っこを持っているかをはっきり述べてよい")
+        section_rules.append("- overall_summary では、表面上の出来事の列挙ではなく、この回で何が続いていて何が切り替わっているのかを具体的に語る")
         target_lines.append(f"- overall_summary の目安: 約 {summary_budget} 文字以内")
         response_properties.append('  "overall_summary": "全体サマリー"')
     if include_article_segments:

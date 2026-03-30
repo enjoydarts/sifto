@@ -234,25 +234,25 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("目標尺: 約 20 分", prompt)
         self.assertIn("今回返すセクションの目標文字数: 約 14000 文字", prompt)
         self.assertIn(f"1分あたり {AUDIO_BRIEFING_CHARS_PER_MINUTE} 文字", prompt)
-        self.assertIn("opening は 4〜6文", prompt)
+        self.assertIn("opening は 5〜6文", prompt)
         self.assertIn("opening は番組のオープニングトークとして書く", prompt)
         self.assertIn("挨拶、時間帯や季節感、軽い日常雑談", prompt)
         self.assertIn("opening では個別記事の紹介を始めない", prompt)
         self.assertIn("企業名、製品名、出来事、具体的ニュース内容に触れない", prompt)
-        self.assertIn("overall_summary は総括であり、4〜5文", prompt)
-        self.assertIn("ending は番組を終わらせる締めの言葉として 3〜4文", prompt)
+        self.assertIn("overall_summary は総括であり、6〜7文", prompt)
+        self.assertIn("ending は番組を終わらせる締めの言葉として 5〜6文", prompt)
         self.assertIn("overall_summary は総括", prompt)
         self.assertIn("記事の順番紹介", prompt)
         self.assertIn("見出しの焼き直し", prompt)
-        self.assertIn("summary_intro は 1文固定", prompt)
+        self.assertIn("summary_intro は 2文固定", prompt)
         self.assertIn("summary_intro では事実の骨子を優先", prompt)
-        self.assertIn("commentary は 1文固定", prompt)
+        self.assertIn("commentary は 3〜4文", prompt)
         self.assertIn("長さは約", prompt)
         self.assertIn("1記事あたりの summary_intro と commentary の合計は約", prompt)
         self.assertIn("文字以内を厳守する", prompt)
         self.assertIn("各記事にほぼ均等に尺を配る", prompt)
         self.assertIn("target_chars と記事数から逆算した尺配分を守り", prompt)
-        self.assertIn("1文は 45〜90 文字を目安", prompt)
+        self.assertIn("1文は 60〜110文字 を目安", prompt)
         self.assertIn("無個性な書き方をしない", prompt)
         self.assertIn("このペルソナならどう受け取るか", prompt)
         self.assertIn("summary_intro の内容を言い換えて繰り返さない", prompt)
@@ -291,6 +291,24 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertNotIn('"opening": "導入"', prompt)
         self.assertNotIn('"overall_summary": "全体サマリー"', prompt)
         self.assertNotIn('"ending": "締め"', prompt)
+
+    def test_build_audio_briefing_script_task_uses_tighter_ranges_for_dense_episode(self):
+        task = build_audio_briefing_script_task(
+            persona="editor",
+            articles=[
+                {"item_id": f"item-{i}", "title": f"Title {i}", "translated_title": f"翻訳{i}", "summary": "Summary text"}
+                for i in range(1, 21)
+            ],
+            intro_context={},
+            target_duration_minutes=30,
+            target_chars=12000,
+            chars_per_minute=AUDIO_BRIEFING_CHARS_PER_MINUTE,
+        )
+
+        prompt = task["prompt"]
+        self.assertIn("summary_intro は 1文固定", prompt)
+        self.assertIn("commentary は 1〜2文", prompt)
+        self.assertIn("1文は 40〜80文字 を目安", prompt)
 
     def test_parse_audio_briefing_script_result_rejects_empty_payload(self):
         with self.assertRaises(ValueError):

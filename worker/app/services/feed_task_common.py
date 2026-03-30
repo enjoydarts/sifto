@@ -876,12 +876,17 @@ def build_audio_briefing_script_task(
     opening_budget, summary_budget, ending_budget, article_budget = _audio_briefing_script_budgets(
         target_chars, len(trimmed_articles)
     )
+    opening_sentence_spec = _audio_briefing_section_sentence_spec(opening_budget, "opening")
+    summary_sentence_spec = _audio_briefing_section_sentence_spec(summary_budget, "summary")
+    ending_sentence_spec = _audio_briefing_section_sentence_spec(ending_budget, "ending")
     article_intro_budget, article_commentary_budget = _audio_briefing_article_section_budgets(article_budget)
+    article_intro_sentence_spec, article_commentary_sentence_spec = _audio_briefing_article_sentence_specs(article_budget)
+    sentence_length_spec = _audio_briefing_sentence_length_spec(article_budget)
     section_rules: list[str] = []
     target_lines: list[str] = []
     response_properties: list[str] = []
     if include_opening:
-        section_rules.append(f"- opening は 4〜6文で、時間帯に合う自然な導入にする。伸ばしすぎず、目安は約 {opening_budget} 文字以内")
+        section_rules.append(f"- opening は {opening_sentence_spec} で、時間帯に合う自然な導入にする。伸ばしすぎず、目安は約 {opening_budget} 文字以内")
         section_rules.append("- opening は番組のオープニングトークとして書く。挨拶、時間帯や季節感、軽い日常雑談、これから番組が始まる雰囲気づくりを中心にする")
         section_rules.append("- opening では個別記事の紹介を始めない。記事内容の解説、要約、論点整理、最初の1本への導入を書かない")
         section_rules.append("- opening では articles 内の固有名詞、企業名、製品名、出来事、具体的ニュース内容に触れない")
@@ -889,7 +894,7 @@ def build_audio_briefing_script_task(
         target_lines.append(f"- opening の目安: 約 {opening_budget} 文字以内")
         response_properties.append('  "opening": "導入"')
     if include_overall_summary:
-        section_rules.append(f"- overall_summary は総括であり、4〜5文で、その回の全体像、流れ、聞きどころ、記事群のつながりだけを絞って話す。必要以上に長く引き延ばさず、約 {summary_budget} 文字以内を厳守する")
+        section_rules.append(f"- overall_summary は総括であり、{summary_sentence_spec} で、その回の全体像、流れ、聞きどころ、記事群のつながりだけを絞って話す。必要以上に長く引き延ばさず、約 {summary_budget} 文字以内を厳守する")
         section_rules.append("- overall_summary で記事の順番紹介をしない。各記事の1行要約を並べない")
         section_rules.append("- overall_summary で見出しの焼き直しや、記事ごとの固有名詞の機械的な列挙をしない")
         section_rules.append("- overall_summary では、回全体を俯瞰して共通テーマ、対立軸、温度感、いま追う意味を語る")
@@ -898,9 +903,9 @@ def build_audio_briefing_script_task(
     if include_article_segments:
         section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
         section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。headline を除き、1記事あたりの summary_intro と commentary の合計は約 {article_budget} 文字以内を厳守する")
-        section_rules.append(f"- article_segments の各 summary_intro は 1文固定で、その記事が何の話かを最初に素早く伝える簡潔な要約にする。長さは約 {article_intro_budget} 文字以内を目安にして収める")
+        section_rules.append(f"- article_segments の各 summary_intro は {article_intro_sentence_spec} で、その記事が何の話かを最初に素早く伝える簡潔な要約にする。長さは約 {article_intro_budget} 文字以内を目安にして収める")
         section_rules.append("- summary_intro では事実の骨子を優先し、いきなり感想や評価から入らない")
-        section_rules.append(f"- article_segments の各 commentary は 1文固定で、summary_intro を受けてからすぐそのペルソナの反応だけを書く。脱線せず、長い前置きや言い換えを避け、長さは約 {article_commentary_budget} 文字以内を目安にし、summary_intro と合わせて約 {article_budget} 文字以内に収める")
+        section_rules.append(f"- article_segments の各 commentary は {article_commentary_sentence_spec} で、summary_intro を受けてからすぐそのペルソナの反応だけを書く。脱線せず、長い前置きや言い換えを避け、長さは約 {article_commentary_budget} 文字以内を目安にし、summary_intro と合わせて約 {article_budget} 文字以内に収める")
         section_rules.append("- article_segments は各記事にほぼ均等に尺を配る。1本だけ極端に長くしない。長くなりそうなら commentary 側を先に圧縮し、例示・補足・言い換えを削って収める")
         section_rules.append("- article_segments の commentary は、そのペルソナ本人が自然に口にしそうな感想だけを書く。無難な解説調、誰にでも当てはまる一般論、ニュースキャスター風の中立コメントに寄せない")
         section_rules.append("- commentary では summary_intro の内容を言い換えて繰り返さない。記事の説明や背景整理は禁止。このペルソナがどこに反応したか、なぜ気になるか、どう受け止めたかのどれか1つだけを短く話す")
@@ -913,7 +918,7 @@ def build_audio_briefing_script_task(
     else:
         section_rules.append("- article_segments は返さない")
     if include_ending:
-        section_rules.append(f"- ending は番組を終わらせる締めの言葉として 3〜4文で書く。だらだら締めず、目安は約 {ending_budget} 文字以内")
+        section_rules.append(f"- ending は番組を終わらせる締めの言葉として {ending_sentence_spec} で書く。だらだら締めず、目安は約 {ending_budget} 文字以内")
         section_rules.append("- ending で総括や振り返りをしない。記事内容の再整理や論点のまとめ直しをしない")
         section_rules.append("- ending では、聞いてくれたことへの一言、次回へつながる余韻、静かな締めを優先する")
         target_lines.append(f"- ending の目安: 約 {ending_budget} 文字以内")
@@ -948,7 +953,7 @@ def build_audio_briefing_script_task(
 - articles にない item_id を作らない
 - 冗長な前置きや言い換えを避け、文字数目標を強く意識する
 - 今回与えられた target_chars と記事数から逆算した尺配分を守り、特定のセクションや特定の記事だけを必要以上に長くしない
-- 1文は 45〜90 文字を目安にし、1文1論点でだらだら伸ばさない
+- 1文は {sentence_length_spec} を目安にし、1文1論点でだらだら伸ばさない
 - 各記事では、summary の言い換えだけで終わらせず、このペルソナなら何に反応するかを話す
 - 第一印象、良いと感じる点、引っかかる点、今読む理由のうち2〜3個が自然ににじむようにする
 - 客観的な無味乾燥レビューではなく、このペルソナの主観で語る
@@ -1163,6 +1168,57 @@ def _audio_briefing_article_section_budgets(article_budget: int) -> tuple[int, i
         intro_budget = max(article_budget // 2, 1)
     commentary_budget = max(article_budget - intro_budget, 1)
     return intro_budget, commentary_budget
+
+
+def _audio_briefing_article_sentence_specs(article_budget: int) -> tuple[str, str]:
+    article_budget = max(int(article_budget or 0), 1)
+    if article_budget < 220:
+        return "1文固定", "1文固定"
+    if article_budget < 420:
+        return "1文固定", "1〜2文"
+    if article_budget < 700:
+        return "1〜2文", "2〜3文"
+    return "2文固定", "3〜4文"
+
+
+def _audio_briefing_section_sentence_spec(section_budget: int, section_kind: str) -> str:
+    section_budget = max(int(section_budget or 0), 1)
+    if section_kind == "opening":
+        if section_budget < 700:
+            return "2〜3文"
+        if section_budget < 1300:
+            return "3〜4文"
+        if section_budget < 1900:
+            return "4〜5文"
+        return "5〜6文"
+    if section_kind == "summary":
+        if section_budget < 1800:
+            return "3〜4文"
+        if section_budget < 2800:
+            return "4〜5文"
+        if section_budget < 3800:
+            return "5〜6文"
+        return "6〜7文"
+    if section_kind == "ending":
+        if section_budget < 550:
+            return "2〜3文"
+        if section_budget < 1000:
+            return "3〜4文"
+        if section_budget < 1500:
+            return "4〜5文"
+        return "5〜6文"
+    return "3〜4文"
+
+
+def _audio_briefing_sentence_length_spec(article_budget: int) -> str:
+    article_budget = max(int(article_budget or 0), 1)
+    if article_budget < 220:
+        return "35〜70文字"
+    if article_budget < 420:
+        return "40〜80文字"
+    if article_budget < 700:
+        return "50〜95文字"
+    return "60〜110文字"
 
 
 def _normalize_audio_briefing_generated_text(text: str) -> str:

@@ -33,6 +33,11 @@ type AudioBriefingNarrationArticle struct {
 	Commentary   string
 }
 
+type audioBriefingSpeakerVoices struct {
+	Host    *model.AudioBriefingPersonaVoice
+	Partner *model.AudioBriefingPersonaVoice
+}
+
 const audioBriefingCharsPerMinute = 400
 
 func BuildAudioBriefingDraft(
@@ -177,6 +182,54 @@ func BuildAudioBriefingDraftFromNarration(
 	}
 }
 
+func BuildAudioBriefingDraftFromTurns(
+	slotStartedAt time.Time,
+	hostPersona string,
+	partnerPersona string,
+	items []model.AudioBriefingJobItem,
+	hostVoice *model.AudioBriefingPersonaVoice,
+	partnerVoice *model.AudioBriefingPersonaVoice,
+	turns []AudioBriefingScriptTurn,
+	targetChars int,
+) AudioBriefingDraft {
+	slotStartedAt = slotStartedAt.In(timeutil.JST)
+	_ = partnerPersona
+	if len(items) == 0 {
+		title := fmt.Sprintf("%02d:%02d便の音声ブリーフィング", slotStartedAt.Hour(), slotStartedAt.Minute())
+		return AudioBriefingDraft{
+			Title:  title,
+			Status: "skipped",
+		}
+	}
+
+	slotLabel := fmt.Sprintf("%02d:%02d便", slotStartedAt.Hour(), slotStartedAt.Minute())
+	title := fmt.Sprintf("%sの音声ブリーフィング", slotLabel)
+	if len(turns) == 0 {
+		return BuildAudioBriefingDraft(slotStartedAt, hostPersona, items, hostVoice, targetChars)
+	}
+
+	voices := audioBriefingSpeakerVoices{Host: hostVoice, Partner: partnerVoice}
+	chunks := make([]model.AudioBriefingScriptChunk, 0, len(turns))
+	totalChars := 0
+	for _, turn := range turns {
+		text := strings.TrimSpace(turn.Text)
+		if text == "" {
+			continue
+		}
+		partType := audioBriefingTurnPartType(turn.Section)
+		ttsProvider, voiceModel, voiceStyle := audioBriefingVoiceRefsForSpeaker(voices, turn.Speaker)
+		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, partType, text, ttsProvider, voiceModel, voiceStyle))
+		totalChars += charCount(text)
+	}
+	return AudioBriefingDraft{
+		Title:           title,
+		Status:          "scripted",
+		ScriptCharCount: totalChars,
+		Items:           items,
+		Chunks:          chunks,
+	}
+}
+
 func splitAudioBriefingText(text string, maxChars int) []string {
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -215,6 +268,19 @@ func audioBriefingSectionParts(text string, maxChars int, addTrailingBreak bool)
 	return parts
 }
 
+func audioBriefingTurnPartType(section string) string {
+	switch strings.TrimSpace(section) {
+	case "opening":
+		return "opening"
+	case "overall_summary":
+		return "summary"
+	case "ending":
+		return "ending"
+	default:
+		return "article"
+	}
+}
+
 func newAudioBriefingChunk(seq int, partType, text string, ttsProvider, voiceModel, voiceStyle *string) model.AudioBriefingScriptChunk {
 	return model.AudioBriefingScriptChunk{
 		Seq:         seq,
@@ -246,6 +312,15 @@ func audioBriefingSpeakerName(persona string) string {
 		return "ナビゲーター"
 	default:
 		return "エディター"
+	}
+}
+
+func audioBriefingVoiceRefsForSpeaker(voices audioBriefingSpeakerVoices, speaker string) (*string, *string, *string) {
+	switch strings.TrimSpace(speaker) {
+	case "partner":
+		return audioBriefingVoiceRefs(voices.Partner)
+	default:
+		return audioBriefingVoiceRefs(voices.Host)
 	}
 }
 

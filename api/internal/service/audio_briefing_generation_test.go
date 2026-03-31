@@ -118,6 +118,58 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 	}
 }
 
+func TestBuildAudioBriefingDraftFromTurnsUsesSpeakerVoices(t *testing.T) {
+	title := "原題"
+	translated := "翻訳題"
+	summary := "要約本文です。"
+	hostVoice := &model.AudioBriefingPersonaVoice{
+		Persona:     "editor",
+		TTSProvider: "aivis",
+		VoiceModel:  "speaker-host",
+		VoiceStyle:  "calm",
+	}
+	partnerVoice := &model.AudioBriefingPersonaVoice{
+		Persona:     "analyst",
+		TTSProvider: "aivis",
+		VoiceModel:  "speaker-partner",
+		VoiceStyle:  "bright",
+	}
+
+	draft := BuildAudioBriefingDraftFromTurns(
+		time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST),
+		"editor",
+		"analyst",
+		[]model.AudioBriefingJobItem{{
+			ItemID:          "item-1",
+			Rank:            1,
+			Title:           &title,
+			TranslatedTitle: &translated,
+			SummarySnapshot: &summary,
+		}},
+		hostVoice,
+		partnerVoice,
+		[]AudioBriefingScriptTurn{
+			{Speaker: "host", Section: "opening", Text: "おはようございます。"},
+			{Speaker: "partner", Section: "article", ItemID: stringPtr("item-1"), Text: "ここは少し見方が割れそうです。"},
+			{Speaker: "host", Section: "ending", Text: "では今日はこのへんで。"},
+		},
+		0,
+	)
+
+	if len(draft.Chunks) != 3 {
+		t.Fatalf("len(draft.Chunks) = %d, want 3", len(draft.Chunks))
+	}
+	if got := derefString(draft.Chunks[0].VoiceModel); got != "speaker-host" {
+		t.Fatalf("host voice model = %q, want speaker-host", got)
+	}
+	if got := derefString(draft.Chunks[1].VoiceModel); got != "speaker-partner" {
+		t.Fatalf("partner voice model = %q, want speaker-partner", got)
+	}
+	if got := draft.Chunks[1].PartType; got != "article" {
+		t.Fatalf("partner part type = %q, want article", got)
+	}
+}
+
 func TestAudioBriefingArticleTextKeepsHeadlineSentenceEnding(t *testing.T) {
 	got := audioBriefingArticleText("これは競争環境が変わる記事です。", "ここで何が起きたかを置きます。", "ここは温度感が出ます。")
 	want := "これは競争環境が変わる記事です。 ここで何が起きたかを置きます。 ここは温度感が出ます。"

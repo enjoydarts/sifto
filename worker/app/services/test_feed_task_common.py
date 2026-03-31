@@ -403,6 +403,63 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("既存の article_segments:", prompt)
         self.assertIn('"item_id": "item-1"', prompt)
 
+    def test_build_audio_briefing_script_task_duo_requires_turns_and_two_personas(self):
+        task = build_audio_briefing_script_task(
+            persona="editor",
+            articles=[
+                {"item_id": "item-1", "title": "Title 1", "translated_title": "翻訳1", "summary": "Summary text"}
+            ],
+            intro_context={
+                "audio_briefing_conversation_mode": "duo",
+                "audio_briefing_host_persona": "editor",
+                "audio_briefing_partner_persona": "analyst",
+            },
+            target_duration_minutes=20,
+            target_chars=12000,
+            chars_per_minute=AUDIO_BRIEFING_CHARS_PER_MINUTE,
+        )
+
+        prompt = task["prompt"]
+        self.assertIn("二人組のAIナビゲーター", prompt)
+        self.assertIn("host は", prompt)
+        self.assertIn("partner は", prompt)
+        self.assertIn("turns", prompt)
+        self.assertIn("speaker", prompt)
+        self.assertIn("section", prompt)
+        self.assertIn("host と partner が交互に会話しながら番組を進めます", prompt)
+        self.assertNotIn("単独話者のAIナビゲーター", prompt)
+
+    def test_parse_audio_briefing_script_result_accepts_duo_turns_only(self):
+        result = parse_audio_briefing_script_result(
+            """
+            {
+              "turns": [
+                {"speaker": "host", "section": "opening", "text": "おはようございます。今日は二人で見ていきます。"},
+                {"speaker": "partner", "section": "opening", "text": "朝の一本目としては、ちょっと面白い並びですね。"},
+                {"speaker": "host", "section": "article", "item_id": "item-1", "text": "まずはこの記事です。"},
+                {"speaker": "partner", "section": "article", "item_id": "item-1", "text": "ここは見方の違いが出そうです。"},
+                {"speaker": "host", "section": "ending", "text": "では今日はこのへんで。"}
+              ]
+            }
+            """,
+            [
+                {
+                    "item_id": "item-1",
+                    "title": "Example title",
+                    "translated_title": "翻訳タイトル",
+                    "summary": "Summary text",
+                }
+            ],
+            "editor",
+        )
+        self.assertEqual(result["opening"], "")
+        self.assertEqual(result["overall_summary"], "")
+        self.assertEqual(result["ending"], "")
+        self.assertEqual(result["article_segments"], [])
+        self.assertEqual(len(result["turns"]), 5)
+        self.assertEqual(result["turns"][0]["speaker"], "host")
+        self.assertEqual(result["turns"][2]["item_id"], "item-1")
+
     def test_parse_audio_briefing_script_result_rejects_empty_payload(self):
         with self.assertRaises(ValueError):
             parse_audio_briefing_script_result(

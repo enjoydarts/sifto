@@ -278,7 +278,7 @@ func (o *AudioBriefingOrchestrator) runScriptingStage(ctx context.Context, job *
 		_, _ = o.repo.FailScriptingJob(ctx, job.ID, "script_voice_missing", err.Error())
 		return err
 	}
-	draft, err := o.draftStrategy(job.ConversationMode).BuildDraft(ctx, job.UserID, job.SlotStartedAtJST, job.Persona, items, voice, settings.TargetDurationMinutes)
+	draft, err := o.draftStrategy(job.ConversationMode).BuildDraft(ctx, job, items, voice, settings.TargetDurationMinutes)
 	if err != nil {
 		_, _ = o.repo.FailScriptingJob(ctx, job.ID, "script_failed", err.Error())
 		return err
@@ -576,6 +576,181 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 	draft := BuildAudioBriefingDraftFromNarration(slotStartedAt, normalizedPersona, items, voice, narration, targetChars)
 	draft.ScriptLLMModels = scriptLLMModels
 	return draft, nil
+}
+
+func (o *AudioBriefingOrchestrator) buildDuoDraft(
+	ctx context.Context,
+	job *model.AudioBriefingJob,
+	items []model.AudioBriefingJobItem,
+	hostVoice *model.AudioBriefingPersonaVoice,
+	targetDurationMinutes int,
+) (AudioBriefingDraft, error) {
+	if job == nil {
+		return AudioBriefingDraft{}, repository.ErrNotFound
+	}
+	targetChars := AudioBriefingTargetChars(targetDurationMinutes)
+	if hostVoice == nil {
+		return AudioBriefingDraft{}, fmt.Errorf("audio briefing host voice is not configured")
+	}
+	if len(items) == 0 {
+		return BuildAudioBriefingDraft(job.SlotStartedAtJST, job.Persona, items, hostVoice, targetChars), nil
+	}
+	if o.settingsRepo == nil || o.worker == nil || o.cipher == nil || o.repo == nil {
+		return AudioBriefingDraft{}, fmt.Errorf("audio briefing duo script dependencies are unavailable")
+	}
+
+	settings, err := o.settingsRepo.EnsureDefaults(ctx, job.UserID)
+	if err != nil {
+		return AudioBriefingDraft{}, err
+	}
+	modelNames := resolveAudioBriefingScriptModels(settings)
+	if len(modelNames) == 0 {
+		return AudioBriefingDraft{}, fmt.Errorf("audio briefing script model is not configured")
+	}
+
+	hostPersona := normalizeAudioBriefingPersona(job.Persona)
+	partnerPersona, partnerVoice, err := o.resolveAudioBriefingPartnerVoice(ctx, job)
+	if err != nil {
+		return AudioBriefingDraft{}, err
+	}
+
+	anthropicKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetAnthropicAPIKeyEncrypted, o.cipher, job.UserID, "")
+	googleKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetGoogleAPIKeyEncrypted, o.cipher, job.UserID, "")
+	groqKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetGroqAPIKeyEncrypted, o.cipher, job.UserID, "")
+	fireworksKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetFireworksAPIKeyEncrypted, o.cipher, job.UserID, "")
+	deepseekKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetDeepSeekAPIKeyEncrypted, o.cipher, job.UserID, "")
+	alibabaKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetAlibabaAPIKeyEncrypted, o.cipher, job.UserID, "")
+	mistralKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMistralAPIKeyEncrypted, o.cipher, job.UserID, "")
+	moonshotKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMoonshotAPIKeyEncrypted, o.cipher, job.UserID, "")
+	xaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetXAIAPIKeyEncrypted, o.cipher, job.UserID, "")
+	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetZAIAPIKeyEncrypted, o.cipher, job.UserID, "")
+	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenRouterAPIKeyEncrypted, o.cipher, job.UserID, "")
+	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetPoeAPIKeyEncrypted, o.cipher, job.UserID, "")
+	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetSiliconFlowAPIKeyEncrypted, o.cipher, job.UserID, "")
+	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenAIAPIKeyEncrypted, o.cipher, job.UserID, "")
+
+	introContext := buildAudioBriefingIntroContext(job.SlotStartedAtJST)
+	workerArticles := make([]AudioBriefingScriptArticle, 0, len(items))
+	for _, item := range items {
+		var publishedAt *string
+		if item.PublishedAt != nil {
+			value := item.PublishedAt.Format(time.RFC3339)
+			publishedAt = &value
+		}
+		workerArticles = append(workerArticles, AudioBriefingScriptArticle{
+			ItemID:          item.ItemID,
+			Title:           item.Title,
+			TranslatedTitle: item.TranslatedTitle,
+			SourceTitle:     item.SourceTitle,
+			Summary:         strings.TrimSpace(serviceAudioBriefingCoalesceTitle(item.SummarySnapshot, item.SegmentTitle)),
+			PublishedAt:     publishedAt,
+		})
+	}
+
+	workerCtx := WithWorkerTraceMetadata(ctx, "audio_briefing_duo_script", &job.UserID, nil, nil, nil)
+	var errs []string
+	for idx, modelName := range modelNames {
+		modelValue := modelName
+		effectiveOpenAIKey := openAIKey
+		switch LLMProviderForModel(&modelValue) {
+		case "openrouter":
+			effectiveOpenAIKey = openRouterKey
+		case "moonshot":
+			effectiveOpenAIKey = moonshotKey
+		case "poe":
+			effectiveOpenAIKey = poeKey
+		case "siliconflow":
+			effectiveOpenAIKey = siliconFlowKey
+		}
+		resp, callErr := generateAudioBriefingScriptWithRetry(workerCtx, func(callCtx context.Context) (*AudioBriefingScriptResponse, error) {
+			return o.worker.GenerateAudioBriefingScriptWithModel(
+				callCtx,
+				hostPersona,
+				"duo",
+				&hostPersona,
+				&partnerPersona,
+				workerArticles,
+				introContext,
+				anthropicKey,
+				googleKey,
+				groqKey,
+				deepseekKey,
+				alibabaKey,
+				mistralKey,
+				xaiKey,
+				zaiKey,
+				fireworksKey,
+				effectiveOpenAIKey,
+				&modelValue,
+				targetDurationMinutes,
+				targetChars,
+				audioBriefingCharsPerMinute,
+				true,
+				true,
+				true,
+				true,
+			)
+		})
+		if callErr != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", modelValue, callErr))
+			if idx < len(modelNames)-1 {
+				log.Printf("audio briefing duo script fallback retrying user=%s host=%s partner=%s model=%s err=%v", job.UserID, hostPersona, partnerPersona, modelValue, callErr)
+			}
+			continue
+		}
+		recordAudioBriefingLLMUsage(ctx, o.llmUsageRepo, o.cache, "audio_briefing_script", resp.LLM, &job.UserID)
+		draft := BuildAudioBriefingDraftFromTurns(job.SlotStartedAtJST, hostPersona, partnerPersona, items, hostVoice, partnerVoice, resp.Turns, targetChars)
+		draft.ScriptLLMModels = appendAudioBriefingScriptModel(nil, resp.LLM)
+		if idx > 0 {
+			log.Printf("audio briefing duo script fallback succeeded user=%s host=%s partner=%s model=%s", job.UserID, hostPersona, partnerPersona, modelValue)
+		}
+		return draft, nil
+	}
+	return AudioBriefingDraft{}, fmt.Errorf("audio briefing duo script failed across models: %s", strings.Join(errs, " | "))
+}
+
+func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context.Context, job *model.AudioBriefingJob) (string, *model.AudioBriefingPersonaVoice, error) {
+	if job == nil {
+		return "", nil, repository.ErrNotFound
+	}
+	hostPersona := normalizeAudioBriefingPersona(job.Persona)
+	if existing := strings.TrimSpace(derefString(job.PartnerPersona)); existing != "" {
+		voice, err := o.repo.GetPersonaVoice(ctx, job.UserID, existing)
+		if err != nil {
+			return "", nil, err
+		}
+		if voice == nil {
+			return "", nil, fmt.Errorf("audio briefing duo partner voice is not configured")
+		}
+		return normalizeAudioBriefingPersona(existing), voice, nil
+	}
+
+	voices, err := o.repo.ListPersonaVoicesByUser(ctx, job.UserID)
+	if err != nil {
+		return "", nil, err
+	}
+	candidates := make([]string, 0, len(voices))
+	voiceByPersona := make(map[string]model.AudioBriefingPersonaVoice, len(voices))
+	for _, voice := range voices {
+		persona := normalizeAudioBriefingPersona(voice.Persona)
+		if persona == "" || persona == hostPersona {
+			continue
+		}
+		if strings.TrimSpace(voice.TTSProvider) == "" || strings.TrimSpace(voice.VoiceModel) == "" || strings.TrimSpace(voice.VoiceStyle) == "" {
+			continue
+		}
+		candidates = append(candidates, persona)
+		voiceByPersona[persona] = voice
+	}
+	picked, ok := randomPersonaFromCandidates(candidates)
+	if !ok {
+		return "", nil, fmt.Errorf("audio briefing duo partner voice is not configured")
+	}
+	if _, err := o.repo.SetPartnerPersona(ctx, job.ID, picked); err != nil {
+		return "", nil, err
+	}
+	voice := voiceByPersona[picked]
+	return picked, &voice, nil
 }
 
 func audioBriefingFrameTargetChars(targetChars int) int {

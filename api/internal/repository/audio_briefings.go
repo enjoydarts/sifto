@@ -755,6 +755,31 @@ func (r *AudioBriefingRepo) CreatePendingJob(
 	return r.GetJobByID(ctx, userID, jobID)
 }
 
+func (r *AudioBriefingRepo) SetPartnerPersona(ctx context.Context, jobID string, partnerPersona string) (*model.AudioBriefingJob, error) {
+	partnerPersona = strings.TrimSpace(partnerPersona)
+	if partnerPersona == "" {
+		return nil, ErrInvalidState
+	}
+	job, err := scanAudioBriefingJob(r.db.QueryRow(ctx, `
+		UPDATE audio_briefing_jobs
+		SET partner_persona = $2,
+		    updated_at = NOW()
+		WHERE id = $1
+		  AND status IN ('pending', 'scripting', 'failed')
+		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
+		          error_code, error_message, published_at, failed_at, created_at, updated_at
+	`, jobID, partnerPersona))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrInvalidState
+		}
+		return nil, err
+	}
+	return &job, nil
+}
+
 func (r *AudioBriefingRepo) StartScriptingJob(ctx context.Context, jobID string) (*model.AudioBriefingJob, error) {
 	job, err := scanAudioBriefingJob(r.db.QueryRow(ctx, `
 		UPDATE audio_briefing_jobs

@@ -167,11 +167,34 @@ AUDIO_BRIEFING_SCRIPT_SCHEMA = {
 
 def build_audio_briefing_script_schema(
     *,
+    conversation_mode: str = "single",
     include_opening: bool,
     include_overall_summary: bool,
     include_article_segments: bool,
     include_ending: bool,
 ) -> dict:
+    if str(conversation_mode).strip() == "duo":
+        return {
+            "type": "object",
+            "properties": {
+                "turns": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "speaker": {"type": "string"},
+                            "section": {"type": "string"},
+                            "item_id": {"type": ["string", "null"]},
+                            "text": {"type": "string"},
+                        },
+                        "required": ["speaker", "section", "text"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["turns"],
+            "additionalProperties": False,
+        }
     properties: dict[str, object] = {}
     required: list[str] = []
     if include_opening:
@@ -867,6 +890,11 @@ def build_audio_briefing_script_task(
     include_ending: bool = True,
 ) -> dict:
     intro_context = dict(intro_context or {})
+    conversation_mode = _normalize_audio_briefing_conversation_mode(
+        str(intro_context.get("audio_briefing_conversation_mode") or "single")
+    )
+    host_persona = str(intro_context.get("audio_briefing_host_persona") or persona)
+    partner_persona = str(intro_context.get("audio_briefing_partner_persona") or "analyst")
     generation_mode = str(intro_context.get("audio_briefing_generation_mode") or "").strip()
     generation_section = str(intro_context.get("audio_briefing_generation_section") or "").strip()
     existing_section_text = _normalize_audio_briefing_generated_text(
@@ -875,6 +903,8 @@ def build_audio_briefing_script_task(
     existing_article_segments = intro_context.get("audio_briefing_existing_article_segments") or []
     persona_key, briefing_profile = resolve_navigator_persona_profile(persona, "briefing")
     _, item_profile = resolve_navigator_persona_profile(persona, "item")
+    host_persona_key, host_profile = resolve_navigator_persona_profile(host_persona, "briefing")
+    partner_persona_key, partner_profile = resolve_navigator_persona_profile(partner_persona, "briefing")
     trimmed_articles = articles[:30]
     chars_per_minute = max(int(chars_per_minute or AUDIO_BRIEFING_CHARS_PER_MINUTE), 1)
     target_duration_minutes = max(int(target_duration_minutes or 20), 1)
@@ -975,6 +1005,114 @@ def build_audio_briefing_script_task(
         supplement_rules.append("- 既存の article_segments を短くしない。既存の流れを保ったまま、不足している厚みだけを足す")
         supplement_rules.append("- 長さが不足している場合は commentary を最優先で厚くし、次に summary_intro を厚くする。headline は明らかに短いときだけ補う")
         supplement_rules.append("- commentary では既存の反応をなぞるだけで終わらせず、新しい理由、比較、背景、今後の見方を追加して厚みを出す")
+
+    if conversation_mode == "duo":
+        section_names = []
+        if include_opening:
+            section_names.append("opening")
+        if include_overall_summary:
+            section_names.append("overall_summary")
+        if include_article_segments:
+            section_names.append("article")
+        if include_ending:
+            section_names.append("ending")
+        allowed_sections = ", ".join(section_names)
+        response_example = """{
+  "turns": [
+    {"speaker": "host", "section": "opening", "text": "導入のひとこと"},
+    {"speaker": "partner", "section": "opening", "text": "相棒の返し"},
+    {"speaker": "host", "section": "article", "item_id": "uuid", "text": "記事の導入"},
+    {"speaker": "partner", "section": "article", "item_id": "uuid", "text": "反応や比較"},
+    {"speaker": "host", "section": "ending", "text": "締め"}
+  ]
+}"""
+        system_instruction = f"""# Role
+あなたは Sifto の音声ブリーフィング番組を担当する、二人組のAIナビゲーターです。
+host と partner が交互に会話しながら番組を進めます。
+
+host:
+- persona: {host_persona_key}
+- display_name: {host_profile["name"]}
+- 一人称: {host_profile["first_person"]}
+- 話し方: {host_profile["speech_style"]}
+- 性格: {host_profile["personality"]}
+- 価値観: {host_profile["values"]}
+- tone: {host_profile["voice"]}
+
+partner:
+- persona: {partner_persona_key}
+- display_name: {partner_profile["name"]}
+- 一人称: {partner_profile["first_person"]}
+- 話し方: {partner_profile["speech_style"]}
+- 性格: {partner_profile["personality"]}
+- 価値観: {partner_profile["values"]}
+- tone: {partner_profile["voice"]}
+
+# Rules
+- 出力は必ず有効なJSONオブジェクト1つのみにしてください。
+- 前置き・後置き・コードフェンスは不要です。
+- turns だけを返す
+- turns は上から読み上げ順に並べる
+- speaker は必ず host または partner のどちらかだけを使う
+- section は必ず {allowed_sections} のどれかにする
+- article セクションの turns では item_id を必ず articles の item_id に合わせる
+- opening / overall_summary / ending では item_id を入れない
+- host は進行役で、記事の要点整理と流れを担う
+- partner は相棒役で、短い相槌ではなく会話感を作る。host の言い換えはせず、反応、比較、違和感、問い返し、新しい視点を足す
+- 同じ情報を host と partner が言い直さない
+- 単独話者のモノローグにしない。必ず会話として往復させる
+- 各 turn は1〜4文で、1文ごとに改行する
+- 一つの section に最低2 turn は使う
+- article では記事ごとに host と partner の両方が必ず話す
+- 文字数制約は努力目標ではなく必須条件として扱う
+- 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
+- 短く安全にまとめるより、必要な厚みと会話感を保つことを優先する
+- host は事実を置き、partner は反応だけで終わらせず、理由、比較、背景、今後の見方のうち少なくとも2つを入れる
+- articles から読めることだけを使い、事実を捏造しない
+- host は {host_profile["name"]} として、partner は {partner_profile["name"]} として自然に話す
+- 別ペルソナの名前・肩書き・口調を混ぜない
+"""
+        user_prompt = f"""タスク:
+- 与えられた記事だけを根拠に、日本語の二人会話の音声ブリーフィング台本を作る
+- host は {host_profile["name"]}、partner は {partner_profile["name"]} の会話として書く
+
+文字量の目安:
+- 目標尺: 約 {target_duration_minutes} 分
+- 換算レート: 1分あたり {chars_per_minute} 文字
+- 今回返すセクションの目標文字数: 約 {target_chars} 文字
+- 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
+- article の会話は各記事にほぼ均等に配る
+
+会話の役割:
+- opening: host が番組を開き、partner が空気を受ける
+- overall_summary: 二人で回全体の見取り図と流れを話す
+- article: host が記事を紹介し、partner が反応や比較を返し、会話として厚みを作る
+- ending: host が締め、partner が余韻を返す
+
+返却形式:
+{response_example}
+
+articles:
+{json.dumps(trimmed_articles, ensure_ascii=False)}
+"""
+        return {
+            "target_chars": target_chars,
+            "system_instruction": system_instruction,
+            "user_prompt": user_prompt,
+            "prompt": f"{system_instruction}\n\n{user_prompt}",
+            "schema": build_audio_briefing_script_schema(
+                conversation_mode=conversation_mode,
+                include_opening=include_opening,
+                include_overall_summary=include_overall_summary,
+                include_article_segments=include_article_segments,
+                include_ending=include_ending,
+            ),
+            "persona": persona_key,
+            "articles": trimmed_articles,
+            "intro_context": intro_context,
+            "briefing_profile": briefing_profile,
+            "item_profile": item_profile,
+        }
 
     system_instruction = f"""# Role
 あなたは Sifto の音声ブリーフィング番組を担当する、単独話者のAIナビゲーターです。
@@ -1090,6 +1228,7 @@ articles:
         "user_prompt": user_prompt,
         "prompt": f"{system_instruction}\n\n{user_prompt}",
         "schema": build_audio_briefing_script_schema(
+            conversation_mode=conversation_mode,
             include_opening=include_opening,
             include_overall_summary=include_overall_summary,
             include_article_segments=include_article_segments,
@@ -1138,6 +1277,42 @@ def parse_audio_briefing_script_result(
     include_ending: bool = True,
 ) -> dict:
     data = extract_first_json_object(text) or {}
+    raw_turns = data.get("turns") if isinstance(data.get("turns"), list) else []
+    if raw_turns:
+        turns: list[dict] = []
+        for index, raw in enumerate(raw_turns, start=1):
+            if not isinstance(raw, dict):
+                raise ValueError("audio briefing script turn must be an object")
+            speaker = _normalize_audio_briefing_turn_speaker(str(raw.get("speaker") or "").strip())
+            if speaker == "":
+                raise ValueError(f"audio briefing script missing speaker for turn index: {index}")
+            section = _normalize_audio_briefing_turn_section(str(raw.get("section") or "").strip())
+            if section == "":
+                raise ValueError(f"audio briefing script missing section for turn index: {index}")
+            item_id = str(raw.get("item_id") or "").strip() or None
+            text_value = _normalize_audio_briefing_generated_text(str(raw.get("text") or "").strip())
+            if not text_value:
+                raise ValueError(f"audio briefing script missing text for turn index: {index}")
+            if section == "article":
+                if not item_id:
+                    raise ValueError(f"audio briefing script missing item_id for article turn index: {index}")
+            else:
+                item_id = None
+            turns.append(
+                {
+                    "speaker": speaker,
+                    "section": section,
+                    "item_id": item_id,
+                    "text": text_value,
+                }
+            )
+        return {
+            "opening": "",
+            "overall_summary": "",
+            "article_segments": [],
+            "turns": turns,
+            "ending": "",
+        }
     opening = _normalize_audio_briefing_generated_text(str(data.get("opening") or "").strip())
     overall_summary = _normalize_audio_briefing_generated_text(str(data.get("overall_summary") or "").strip())
     ending = _normalize_audio_briefing_generated_text(str(data.get("ending") or "").strip())
@@ -1187,6 +1362,7 @@ def parse_audio_briefing_script_result(
         "opening": opening if include_opening else "",
         "overall_summary": overall_summary if include_overall_summary else "",
         "article_segments": segments,
+        "turns": [],
         "ending": ending if include_ending else "",
     }
 
@@ -1197,10 +1373,35 @@ _AUDIO_BRIEFING_SCRIPT_RETRYABLE_ERROR_MARKERS = (
     "audio briefing script missing ending",
     "audio briefing script article_segments count mismatch",
     "audio briefing script segment must be an object",
+    "audio briefing script turn must be an object",
+    "audio briefing script missing speaker for turn index:",
+    "audio briefing script missing section for turn index:",
+    "audio briefing script missing text for turn index:",
+    "audio briefing script missing item_id for article turn index:",
     "audio briefing script missing headline for item_id:",
     "audio briefing script missing summary_intro for item_id:",
     "audio briefing script missing commentary for item_id:",
 )
+
+
+def _normalize_audio_briefing_conversation_mode(value: str) -> str:
+    if str(value).strip() == "duo":
+        return "duo"
+    return "single"
+
+
+def _normalize_audio_briefing_turn_speaker(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"host", "partner"}:
+        return normalized
+    return ""
+
+
+def _normalize_audio_briefing_turn_section(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"opening", "overall_summary", "article", "ending"}:
+        return normalized
+    return ""
 
 
 def is_audio_briefing_script_retryable_validation_error(exc: Exception) -> bool:

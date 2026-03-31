@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/enjoydarts/sifto/api/internal/repository"
 )
 
 type audioBriefingSingleDraftStrategy struct {
@@ -13,14 +13,15 @@ type audioBriefingSingleDraftStrategy struct {
 
 func (s audioBriefingSingleDraftStrategy) BuildDraft(
 	ctx context.Context,
-	userID string,
-	slotStartedAt time.Time,
-	persona string,
+	job *model.AudioBriefingJob,
 	items []model.AudioBriefingJobItem,
 	voice *model.AudioBriefingPersonaVoice,
 	targetDurationMinutes int,
 ) (AudioBriefingDraft, error) {
-	return s.orchestrator.buildSingleDraft(ctx, userID, slotStartedAt, persona, items, voice, targetDurationMinutes)
+	if job == nil {
+		return AudioBriefingDraft{}, repository.ErrNotFound
+	}
+	return s.orchestrator.buildSingleDraft(ctx, job.UserID, job.SlotStartedAtJST, job.Persona, items, voice, targetDurationMinutes)
 }
 
 type audioBriefingDuoDraftStrategy struct {
@@ -29,13 +30,13 @@ type audioBriefingDuoDraftStrategy struct {
 
 func (s audioBriefingDuoDraftStrategy) BuildDraft(
 	ctx context.Context,
-	userID string,
-	slotStartedAt time.Time,
-	persona string,
+	job *model.AudioBriefingJob,
 	items []model.AudioBriefingJobItem,
 	voice *model.AudioBriefingPersonaVoice,
 	targetDurationMinutes int,
 ) (AudioBriefingDraft, error) {
-	// Duo runtime is implemented incrementally; keep single behavior available until turn-based script/TTS lands.
-	return s.orchestrator.buildSingleDraft(ctx, userID, slotStartedAt, persona, items, voice, targetDurationMinutes)
+	if job == nil {
+		return AudioBriefingDraft{}, repository.ErrNotFound
+	}
+	return s.orchestrator.buildDuoDraft(ctx, job, items, voice, targetDurationMinutes)
 }

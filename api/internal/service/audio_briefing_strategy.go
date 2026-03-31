@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 )
@@ -10,9 +9,7 @@ import (
 type audioBriefingDraftStrategy interface {
 	BuildDraft(
 		ctx context.Context,
-		userID string,
-		slotStartedAt time.Time,
-		persona string,
+		job *model.AudioBriefingJob,
 		items []model.AudioBriefingJobItem,
 		voice *model.AudioBriefingPersonaVoice,
 		targetDurationMinutes int,

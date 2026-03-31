@@ -1343,8 +1343,10 @@ export interface AudioBriefingSettings {
   interval_hours: number;
   articles_per_episode: number;
   target_duration_minutes: number;
+  chunk_trailing_silence_seconds: number;
   default_persona_mode: string;
   default_persona: string;
+  conversation_mode: "single" | "duo" | string;
   bgm_enabled: boolean;
   bgm_r2_prefix?: string | null;
 }
@@ -1388,6 +1390,9 @@ export interface AudioBriefingJob {
   slot_started_at_jst: string;
   slot_key: string;
   persona: string;
+  conversation_mode?: "single" | "duo" | string;
+  partner_persona?: string | null;
+  pipeline_stage?: string | null;
   status: string;
   archive_status: "active" | "archived" | string;
   source_item_count: number;
@@ -1423,6 +1428,7 @@ export interface AudioBriefingJobItem {
 export interface AudioBriefingScriptChunk {
   seq: number;
   part_type: string;
+  speaker?: "host" | "partner" | string | null;
   text: string;
   char_count: number;
   tts_status: string;

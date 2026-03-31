@@ -53,7 +53,7 @@ def messages_create(
     client = client_for_api_key(api_key)
     if client is None:
         return None
-    req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 90.0)
+    req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 300.0)
     kwargs = {
         "model": model,
         "max_tokens": max_tokens,

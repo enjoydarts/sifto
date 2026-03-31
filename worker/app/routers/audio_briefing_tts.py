@@ -15,6 +15,7 @@ class AudioBriefingSynthesizeRequest(BaseModel):
     emotional_intensity: float = 1.0
     tempo_dynamics: float = 1.0
     line_break_silence_seconds: float = 0.4
+    chunk_trailing_silence_seconds: float = 1.0
     pitch: float = 0.0
     volume_gain: float = 0.0
     output_object_key: str
@@ -92,6 +93,7 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
             emotional_intensity=req.emotional_intensity,
             tempo_dynamics=req.tempo_dynamics,
             line_break_silence_seconds=req.line_break_silence_seconds,
+            chunk_trailing_silence_seconds=req.chunk_trailing_silence_seconds,
             pitch=req.pitch,
             volume_gain=req.volume_gain,
             output_object_key=req.output_object_key,

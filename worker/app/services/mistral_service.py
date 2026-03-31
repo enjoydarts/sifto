@@ -167,7 +167,7 @@ def _chat_json(
     api_key = (api_key or "").strip()
     if not api_key:
         raise RuntimeError("mistral api key is required")
-    req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("MISTRAL_TIMEOUT_SEC", 90.0)
+    req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("MISTRAL_TIMEOUT_SEC", 300.0)
     attempts = max(1, int(os.getenv("MISTRAL_RETRY_ATTEMPTS", "3") or "3"))
     base_sleep_sec = _env_timeout_seconds("MISTRAL_RETRY_BASE_SEC", 0.5)
     return run_chat_json(
@@ -377,7 +377,7 @@ def compose_digest(digest_date: str, items: list[dict], model: str, api_key: str
         max_output_tokens=8000,
         response_schema=task["schema"],
         schema_name="digest",
-        timeout_sec=_env_timeout_seconds("MISTRAL_COMPOSE_DIGEST_TIMEOUT_SEC", 240.0),
+        timeout_sec=_env_timeout_seconds("MISTRAL_COMPOSE_DIGEST_TIMEOUT_SEC", 300.0),
     )
     subject, body = parse_digest_result(text, error_prefix="mistral compose_digest parse failed")
     return {"subject": subject, "body": body, "llm": _llm_meta(model, "digest", usage)}
@@ -484,11 +484,19 @@ def generate_audio_briefing_script(
         include_article_segments=include_article_segments,
         include_ending=include_ending,
     )
-    text, usage = _chat_json(task["prompt"], model, api_key, max_output_tokens=_audio_briefing_script_max_tokens(task["target_chars"]), response_schema=task["schema"], schema_name="audio_briefing_script")
+    text, usage = _chat_json(
+        task["prompt"],
+        model,
+        api_key,
+        max_output_tokens=_audio_briefing_script_max_tokens(task["target_chars"], str((intro_context or {}).get("audio_briefing_conversation_mode") or "single")),
+        response_schema=task["schema"],
+        schema_name="audio_briefing_script",
+    )
     out = parse_audio_briefing_script_result(
         text,
         task["articles"],
         persona,
+        conversation_mode=str((intro_context or {}).get("audio_briefing_conversation_mode") or "single"),
         target_chars=target_chars,
         include_opening=include_opening,
         include_overall_summary=include_overall_summary,
@@ -499,6 +507,7 @@ def generate_audio_briefing_script(
         "opening": out["opening"],
         "overall_summary": out["overall_summary"],
         "article_segments": out["article_segments"],
+        "turns": out["turns"],
         "ending": out["ending"],
         "llm": _llm_meta(model, "audio_briefing_script", usage),
     }

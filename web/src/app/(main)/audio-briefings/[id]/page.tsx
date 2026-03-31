@@ -59,6 +59,86 @@ function formatBGMName(value: string | null | undefined) {
   return filename.replace(/\.[^.]+$/, "");
 }
 
+function formatConversationMode(mode: string | null | undefined, t: (key: string, fallback?: string) => string) {
+  const normalized = mode === "duo" ? "duo" : "single";
+  return t(`audioBriefing.conversationMode.${normalized}`, normalized);
+}
+
+function formatChunkSpeaker(
+  speaker: string | null | undefined,
+  personaDefinitions: Record<string, { name: string }> | undefined,
+  detail: AudioBriefingDetailResponse,
+  t: (key: string, fallback?: string) => string
+) {
+  if (speaker === "host") {
+    return resolvePersonaCharacterName(detail.job.persona, personaDefinitions) || t("audioBriefing.speaker.host", "Host");
+  }
+  if (speaker === "partner") {
+    return resolvePersonaCharacterName(detail.job.partner_persona, personaDefinitions) || t("audioBriefing.speaker.partner", "Partner");
+  }
+  return null;
+}
+
+function resolvePersonaCharacterName(
+  persona: string | null | undefined,
+  personaDefinitions?: Record<string, { name: string }>
+) {
+  const key = (persona ?? "").trim();
+  if (!key) return null;
+  return personaDefinitions?.[key]?.name?.trim() || key;
+}
+
+function formatArticleChunkOrdinal(
+  chunk: AudioBriefingDetailResponse["chunks"][number],
+  chunkIndex: number,
+  detail: AudioBriefingDetailResponse,
+  locale: string,
+  t: (key: string, fallback?: string) => string
+) {
+  if (chunk.part_type !== "article") return null;
+  const articleChunksBefore = detail.chunks
+    .slice(0, chunkIndex + 1)
+    .filter((candidate) => candidate.part_type === "article");
+  let ordinal = articleChunksBefore.length;
+  if (detail.job.conversation_mode === "duo") {
+    ordinal = 0;
+    let previousSpeaker: string | null = null;
+    for (const articleChunk of articleChunksBefore) {
+      const speaker = articleChunk.speaker ?? null;
+      if (ordinal === 0) {
+        ordinal = 1;
+      } else if (speaker === "host" && previousSpeaker === "host") {
+        ordinal += 1;
+      }
+      previousSpeaker = speaker;
+    }
+  }
+  if (locale === "ja") {
+    return `${ordinal}${t("audioBriefing.articleOrdinalSuffix", "本目の記事")}`;
+  }
+  return `${t("audioBriefing.partType.article", "Article")} ${ordinal}`;
+}
+
+function formatPipelineStage(stage: string | null | undefined, t: (key: string, fallback?: string) => string) {
+  if (!stage) return "—";
+  return t(`audioBriefing.pipelineStage.${stage}`, stage);
+}
+
+function formatChunkPartType(partType: string, t: (key: string, fallback?: string) => string) {
+  switch (partType) {
+    case "opening":
+      return t("audioBriefing.partType.opening", "Opening");
+    case "summary":
+      return t("audioBriefing.partType.summary", "Summary");
+    case "article":
+      return t("audioBriefing.partType.article", "Article");
+    case "ending":
+      return t("audioBriefing.partType.ending", "Ending");
+    default:
+      return partType;
+  }
+}
+
 export default function AudioBriefingDetailPage() {
   const RESUME_POLL_WINDOW_MS = 60_000;
   const { t, locale } = useI18n();
@@ -70,6 +150,10 @@ export default function AudioBriefingDetailPage() {
   const latestSessionsQuery = useQuery({
     queryKey: ["latest-playback-sessions"],
     queryFn: () => api.getLatestPlaybackSessions(),
+  });
+  const navigatorPersonasQuery = useQuery({
+    queryKey: ["navigator-personas"],
+    queryFn: () => api.getNavigatorPersonas(),
   });
   const latestAudioSession = latestSessionsQuery.data?.audio_briefing ?? null;
   const [detail, setDetail] = useState<AudioBriefingDetailResponse | null>(null);
@@ -293,28 +377,40 @@ export default function AudioBriefingDetailPage() {
               ) : null}
             </div>
           }
-          meta={
-            <div className="flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
-                {t(`audioBriefing.status.${detail.job.status}`, detail.job.status)}
-              </span>
-              <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
-                {t("audioBriefing.persona", "Persona")}: {detail.job.persona}
-              </span>
-              <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
-                {t("audioBriefing.characters", "Chars")}: {totalChars}
-              </span>
-              <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
-                {t("audioBriefing.duration", "Duration")}: {formatDuration(detail.job.audio_duration_sec)}
-              </span>
-              {detail.job.error_code ? (
-                <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
-                  {t("audioBriefing.errorCode", "Error code")}: {detail.job.error_code}
-                </span>
-              ) : null}
-            </div>
-          }
         />
+
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
+            {t(`audioBriefing.status.${detail.job.status}`, detail.job.status)}
+          </span>
+          <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
+            {t("audioBriefing.hostPersona", "Host")}: {resolvePersonaCharacterName(detail.job.persona, navigatorPersonasQuery.data)}
+          </span>
+          {detail.job.partner_persona ? (
+            <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
+              {t("audioBriefing.partnerPersona", "Partner")}: {resolvePersonaCharacterName(detail.job.partner_persona, navigatorPersonasQuery.data)}
+            </span>
+          ) : null}
+          <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
+            {t("audioBriefing.conversationMode", "Conversation")}: {formatConversationMode(detail.job.conversation_mode, t)}
+          </span>
+          {detail.job.pipeline_stage ? (
+            <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
+              {t("audioBriefing.pipelineStage", "Pipeline")}: {formatPipelineStage(detail.job.pipeline_stage, t)}
+            </span>
+          ) : null}
+          <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
+            {t("audioBriefing.characters", "Chars")}: {totalChars}
+          </span>
+          <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
+            {t("audioBriefing.duration", "Duration")}: {formatDuration(detail.job.audio_duration_sec)}
+          </span>
+          {detail.job.error_code ? (
+            <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
+              {t("audioBriefing.errorCode", "Error code")}: {detail.job.error_code}
+            </span>
+          ) : null}
+        </div>
 
         <section className="surface-editorial rounded-[28px] px-5 py-5">
           <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
@@ -390,13 +486,21 @@ export default function AudioBriefingDetailPage() {
             </div>
           </div>
           <div className="mt-4 grid gap-3">
-            {detail.chunks.map((chunk) => (
+            {detail.chunks.map((chunk, chunkIndex) => (
               <article key={`${chunk.seq}-${chunk.part_type}`} className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] p-4">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-editorial-ink-soft)]">
                   <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1">
                     {chunk.seq}
                   </span>
-                  <span>{chunk.part_type}</span>
+                  <span>{formatChunkPartType(chunk.part_type, t)}</span>
+                  {formatArticleChunkOrdinal(chunk, chunkIndex, detail, locale, t) ? (
+                    <span>{formatArticleChunkOrdinal(chunk, chunkIndex, detail, locale, t)}</span>
+                  ) : null}
+                  {formatChunkSpeaker(chunk.speaker, navigatorPersonasQuery.data, detail, t) ? (
+                    <span>
+                      {t("audioBriefing.speaker", "Speaker")}: {formatChunkSpeaker(chunk.speaker, navigatorPersonasQuery.data, detail, t)}
+                    </span>
+                  ) : null}
                   <span>{chunk.tts_status}</span>
                   <span>{chunk.char_count} chars</span>
                 </div>

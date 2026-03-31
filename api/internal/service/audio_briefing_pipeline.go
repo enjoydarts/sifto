@@ -47,6 +47,12 @@ type audioBriefingArticleBatchResult struct {
 	ScriptLLMModels   []string
 }
 
+type audioBriefingTurnBatchResult struct {
+	Turns             []AudioBriefingScriptTurn
+	RecoveredFailures []audioBriefingRecoveredFailure
+	ScriptLLMModels   []string
+}
+
 func NewAudioBriefingOrchestrator(
 	repo *repository.AudioBriefingRepo,
 	settingsRepo *repository.UserSettingsRepo,
@@ -157,7 +163,8 @@ func (o *AudioBriefingOrchestrator) createPendingJob(
 	if settings == nil {
 		return nil, fmt.Errorf("audio briefing settings are required")
 	}
-	return o.repo.CreatePendingJob(ctx, userID, slotStartedAt, slotKey, persona)
+	mode := normalizeAudioBriefingConversationModeValue(settings.ConversationMode)
+	return o.repo.CreatePendingJob(ctx, userID, slotStartedAt, slotKey, persona, mode, audioBriefingInitialPipelineStageForMode(mode))
 }
 
 func (o *AudioBriefingOrchestrator) continuePipeline(ctx context.Context, userID string, jobID string) (*model.AudioBriefingJob, bool, error) {
@@ -277,7 +284,7 @@ func (o *AudioBriefingOrchestrator) runScriptingStage(ctx context.Context, job *
 		_, _ = o.repo.FailScriptingJob(ctx, job.ID, "script_voice_missing", err.Error())
 		return err
 	}
-	draft, err := o.buildDraft(ctx, job.UserID, job.SlotStartedAtJST, job.Persona, items, voice, settings.TargetDurationMinutes)
+	draft, err := o.draftStrategy(job.ConversationMode).BuildDraft(ctx, job, items, voice, settings.TargetDurationMinutes)
 	if err != nil {
 		_, _ = o.repo.FailScriptingJob(ctx, job.ID, "script_failed", err.Error())
 		return err
@@ -372,6 +379,18 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 	voice *model.AudioBriefingPersonaVoice,
 	targetDurationMinutes int,
 ) (AudioBriefingDraft, error) {
+	return o.buildSingleDraft(ctx, userID, slotStartedAt, persona, items, voice, targetDurationMinutes)
+}
+
+func (o *AudioBriefingOrchestrator) buildSingleDraft(
+	ctx context.Context,
+	userID string,
+	slotStartedAt time.Time,
+	persona string,
+	items []model.AudioBriefingJobItem,
+	voice *model.AudioBriefingPersonaVoice,
+	targetDurationMinutes int,
+) (AudioBriefingDraft, error) {
 	targetChars := AudioBriefingTargetChars(targetDurationMinutes)
 	if voice == nil {
 		return AudioBriefingDraft{}, fmt.Errorf("audio briefing voice is not configured")
@@ -451,6 +470,9 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 					return o.worker.GenerateAudioBriefingScriptWithModel(
 						callCtx,
 						normalizedPersona,
+						normalizeAudioBriefingConversationModeValue("single"),
+						nil,
+						nil,
 						batch,
 						introContext,
 						anthropicKey,
@@ -474,9 +496,6 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 					)
 				})
 				if err == nil {
-					if idx > 0 {
-						log.Printf("audio briefing script fallback succeeded user=%s persona=%s model=%s batch_size=%d", userID, normalizedPersona, modelValue, len(batch))
-					}
 					recordAudioBriefingLLMUsage(ctx, o.llmUsageRepo, o.cache, "audio_briefing_script", resp.LLM, &userID)
 					return resp, nil
 				}
@@ -544,9 +563,6 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 				return AudioBriefingDraft{}, err
 			}
 			scriptLLMModels = appendAudioBriefingScriptModels(scriptLLMModels, result.ScriptLLMModels)
-			for _, recovered := range result.RecoveredFailures {
-				log.Printf("audio briefing script recovered user=%s persona=%s models=%s batch_size=%d err=%v", userID, normalizedPersona, strings.Join(modelNames, ","), recovered.BatchSize, recovered.Err)
-			}
 			for _, segment := range result.Segments {
 				narration.Articles[segment.ItemID] = AudioBriefingNarrationArticle{
 					Headline:     strings.TrimSpace(segment.Headline),
@@ -560,6 +576,244 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 	draft := BuildAudioBriefingDraftFromNarration(slotStartedAt, normalizedPersona, items, voice, narration, targetChars)
 	draft.ScriptLLMModels = scriptLLMModels
 	return draft, nil
+}
+
+func (o *AudioBriefingOrchestrator) buildDuoDraft(
+	ctx context.Context,
+	job *model.AudioBriefingJob,
+	items []model.AudioBriefingJobItem,
+	hostVoice *model.AudioBriefingPersonaVoice,
+	targetDurationMinutes int,
+) (AudioBriefingDraft, error) {
+	if job == nil {
+		return AudioBriefingDraft{}, repository.ErrNotFound
+	}
+	targetChars := AudioBriefingTargetChars(targetDurationMinutes)
+	if hostVoice == nil {
+		return AudioBriefingDraft{}, fmt.Errorf("audio briefing host voice is not configured")
+	}
+	if len(items) == 0 {
+		return BuildAudioBriefingDraft(job.SlotStartedAtJST, job.Persona, items, hostVoice, targetChars), nil
+	}
+	if o.settingsRepo == nil || o.worker == nil || o.cipher == nil || o.repo == nil {
+		return AudioBriefingDraft{}, fmt.Errorf("audio briefing duo script dependencies are unavailable")
+	}
+
+	settings, err := o.settingsRepo.EnsureDefaults(ctx, job.UserID)
+	if err != nil {
+		return AudioBriefingDraft{}, err
+	}
+	modelNames := resolveAudioBriefingScriptModels(settings)
+	if len(modelNames) == 0 {
+		return AudioBriefingDraft{}, fmt.Errorf("audio briefing script model is not configured")
+	}
+
+	hostPersona := normalizeAudioBriefingPersona(job.Persona)
+	partnerPersona, partnerVoice, err := o.resolveAudioBriefingPartnerVoice(ctx, job)
+	if err != nil {
+		return AudioBriefingDraft{}, err
+	}
+
+	anthropicKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetAnthropicAPIKeyEncrypted, o.cipher, job.UserID, "")
+	googleKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetGoogleAPIKeyEncrypted, o.cipher, job.UserID, "")
+	groqKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetGroqAPIKeyEncrypted, o.cipher, job.UserID, "")
+	fireworksKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetFireworksAPIKeyEncrypted, o.cipher, job.UserID, "")
+	deepseekKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetDeepSeekAPIKeyEncrypted, o.cipher, job.UserID, "")
+	alibabaKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetAlibabaAPIKeyEncrypted, o.cipher, job.UserID, "")
+	mistralKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMistralAPIKeyEncrypted, o.cipher, job.UserID, "")
+	moonshotKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMoonshotAPIKeyEncrypted, o.cipher, job.UserID, "")
+	xaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetXAIAPIKeyEncrypted, o.cipher, job.UserID, "")
+	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetZAIAPIKeyEncrypted, o.cipher, job.UserID, "")
+	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenRouterAPIKeyEncrypted, o.cipher, job.UserID, "")
+	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetPoeAPIKeyEncrypted, o.cipher, job.UserID, "")
+	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetSiliconFlowAPIKeyEncrypted, o.cipher, job.UserID, "")
+	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenAIAPIKeyEncrypted, o.cipher, job.UserID, "")
+
+	introContext := buildAudioBriefingIntroContext(job.SlotStartedAtJST)
+	workerArticles := make([]AudioBriefingScriptArticle, 0, len(items))
+	for _, item := range items {
+		var publishedAt *string
+		if item.PublishedAt != nil {
+			value := item.PublishedAt.Format(time.RFC3339)
+			publishedAt = &value
+		}
+		workerArticles = append(workerArticles, AudioBriefingScriptArticle{
+			ItemID:          item.ItemID,
+			Title:           item.Title,
+			TranslatedTitle: item.TranslatedTitle,
+			SourceTitle:     item.SourceTitle,
+			Summary:         strings.TrimSpace(serviceAudioBriefingCoalesceTitle(item.SummarySnapshot, item.SegmentTitle)),
+			PublishedAt:     publishedAt,
+		})
+	}
+
+	workerCtx := WithWorkerTraceMetadata(ctx, "audio_briefing_duo_script", &job.UserID, nil, nil, nil)
+	callScriptWorker := func(batch []AudioBriefingScriptArticle, introContext map[string]any, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error) {
+		var errs []string
+		for idx, modelName := range modelNames {
+			modelValue := modelName
+			effectiveOpenAIKey := openAIKey
+			switch LLMProviderForModel(&modelValue) {
+			case "openrouter":
+				effectiveOpenAIKey = openRouterKey
+			case "moonshot":
+				effectiveOpenAIKey = moonshotKey
+			case "poe":
+				effectiveOpenAIKey = poeKey
+			case "siliconflow":
+				effectiveOpenAIKey = siliconFlowKey
+			}
+			resp, err := generateAudioBriefingScriptWithRetry(workerCtx, func(callCtx context.Context) (*AudioBriefingScriptResponse, error) {
+				return o.worker.GenerateAudioBriefingScriptWithModel(
+					callCtx,
+					hostPersona,
+					"duo",
+					&hostPersona,
+					&partnerPersona,
+					batch,
+					introContext,
+					anthropicKey,
+					googleKey,
+					groqKey,
+					deepseekKey,
+					alibabaKey,
+					mistralKey,
+					xaiKey,
+					zaiKey,
+					fireworksKey,
+					effectiveOpenAIKey,
+					&modelValue,
+					targetDurationMinutes,
+					batchTargetChars,
+					audioBriefingCharsPerMinute,
+					includeOpening,
+					includeOverallSummary,
+					includeArticleSegments,
+					includeEnding,
+				)
+			})
+			if err == nil {
+				recordAudioBriefingLLMUsage(ctx, o.llmUsageRepo, o.cache, "audio_briefing_script", resp.LLM, &job.UserID)
+				return resp, nil
+			}
+			errs = append(errs, fmt.Sprintf("%s: %v", modelValue, err))
+			if idx < len(modelNames)-1 {
+				log.Printf("audio briefing duo script fallback retrying user=%s host=%s partner=%s model=%s batch_size=%d err=%v", job.UserID, hostPersona, partnerPersona, modelValue, len(batch), err)
+			}
+		}
+		return nil, fmt.Errorf("audio briefing duo script failed across models: %s", strings.Join(errs, " | "))
+	}
+
+	allTurns := make([]AudioBriefingScriptTurn, 0, len(workerArticles)*4)
+	scriptLLMModels := make([]string, 0, 4)
+
+	openingTurns, openingModels, err := audioBriefingGenerateTurnSection(
+		workerArticles,
+		audioBriefingTurnSectionIntroContext(introContext, "opening"),
+		targetChars,
+		"opening",
+		callScriptWorker,
+	)
+	if err != nil {
+		return AudioBriefingDraft{}, err
+	}
+	allTurns = append(allTurns, openingTurns...)
+	scriptLLMModels = appendAudioBriefingScriptModels(scriptLLMModels, openingModels)
+
+	summaryTurns, summaryModels, err := audioBriefingGenerateTurnSection(
+		workerArticles,
+		audioBriefingTurnSectionIntroContext(introContext, "overall_summary"),
+		targetChars,
+		"overall_summary",
+		callScriptWorker,
+	)
+	if err != nil {
+		return AudioBriefingDraft{}, err
+	}
+	allTurns = append(allTurns, summaryTurns...)
+	scriptLLMModels = appendAudioBriefingScriptModels(scriptLLMModels, summaryModels)
+
+	batchSize := audioBriefingDuoArticleBatchSize(len(workerArticles))
+	for start := 0; start < len(workerArticles); start += batchSize {
+		end := start + batchSize
+		if end > len(workerArticles) {
+			end = len(workerArticles)
+		}
+		batch := workerArticles[start:end]
+		result, err := audioBriefingGenerateTurnArticleBatch(
+			batch,
+			targetChars,
+			len(workerArticles),
+			callScriptWorker,
+			audioBriefingTurnArticleIntroContext(introContext, start, end, len(workerArticles)),
+		)
+		if err != nil {
+			return AudioBriefingDraft{}, err
+		}
+		allTurns = append(allTurns, result.Turns...)
+		scriptLLMModels = appendAudioBriefingScriptModels(scriptLLMModels, result.ScriptLLMModels)
+	}
+
+	endingTurns, endingModels, err := audioBriefingGenerateTurnSection(
+		workerArticles,
+		audioBriefingTurnSectionIntroContext(introContext, "ending"),
+		targetChars,
+		"ending",
+		callScriptWorker,
+	)
+	if err != nil {
+		return AudioBriefingDraft{}, err
+	}
+	allTurns = append(allTurns, endingTurns...)
+	scriptLLMModels = appendAudioBriefingScriptModels(scriptLLMModels, endingModels)
+
+	draft := BuildAudioBriefingDraftFromTurns(job.SlotStartedAtJST, hostPersona, items, hostVoice, partnerVoice, allTurns, targetChars)
+	draft.ScriptLLMModels = scriptLLMModels
+	return draft, nil
+}
+
+func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context.Context, job *model.AudioBriefingJob) (string, *model.AudioBriefingPersonaVoice, error) {
+	if job == nil {
+		return "", nil, repository.ErrNotFound
+	}
+	hostPersona := normalizeAudioBriefingPersona(job.Persona)
+	if existing := strings.TrimSpace(derefString(job.PartnerPersona)); existing != "" {
+		voice, err := o.repo.GetPersonaVoice(ctx, job.UserID, existing)
+		if err != nil {
+			return "", nil, err
+		}
+		if voice == nil {
+			return "", nil, fmt.Errorf("audio briefing duo partner voice is not configured")
+		}
+		return normalizeAudioBriefingPersona(existing), voice, nil
+	}
+
+	voices, err := o.repo.ListPersonaVoicesByUser(ctx, job.UserID)
+	if err != nil {
+		return "", nil, err
+	}
+	candidates := make([]string, 0, len(voices))
+	voiceByPersona := make(map[string]model.AudioBriefingPersonaVoice, len(voices))
+	for _, voice := range voices {
+		persona := normalizeAudioBriefingPersona(voice.Persona)
+		if persona == "" || persona == hostPersona {
+			continue
+		}
+		if strings.TrimSpace(voice.TTSProvider) == "" || strings.TrimSpace(voice.VoiceModel) == "" || strings.TrimSpace(voice.VoiceStyle) == "" {
+			continue
+		}
+		candidates = append(candidates, persona)
+		voiceByPersona[persona] = voice
+	}
+	picked, ok := randomPersonaFromCandidates(candidates)
+	if !ok {
+		return "", nil, fmt.Errorf("audio briefing duo partner voice is not configured")
+	}
+	if _, err := o.repo.SetPartnerPersona(ctx, job.ID, picked); err != nil {
+		return "", nil, err
+	}
+	voice := voiceByPersona[picked]
+	return picked, &voice, nil
 }
 
 func audioBriefingFrameTargetChars(targetChars int) int {
@@ -1014,6 +1268,38 @@ func audioBriefingArticleSupplementIntroContext(base map[string]any, segments []
 	return out
 }
 
+func audioBriefingTurnSectionIntroContext(base map[string]any, section string) map[string]any {
+	out := make(map[string]any, len(base)+3)
+	for key, value := range base {
+		out[key] = value
+	}
+	out["audio_briefing_generation_section"] = section
+	switch section {
+	case "opening":
+		out["audio_briefing_program_position"] = "program_start"
+	case "overall_summary":
+		out["audio_briefing_program_position"] = "after_opening_before_articles"
+	case "ending":
+		out["audio_briefing_program_position"] = "after_articles_program_end"
+	default:
+		out["audio_briefing_program_position"] = section
+	}
+	return out
+}
+
+func audioBriefingTurnArticleIntroContext(base map[string]any, start int, end int, totalArticles int) map[string]any {
+	out := make(map[string]any, len(base)+6)
+	for key, value := range base {
+		out[key] = value
+	}
+	out["audio_briefing_generation_section"] = "article_segments"
+	out["audio_briefing_program_position"] = "article_midstream"
+	out["audio_briefing_article_batch_start_index"] = start + 1
+	out["audio_briefing_article_batch_end_index"] = end
+	out["audio_briefing_total_articles"] = totalArticles
+	return out
+}
+
 func audioBriefingMergeArticleSegments(base []AudioBriefingScriptSegment, supplement []AudioBriefingScriptSegment) []AudioBriefingScriptSegment {
 	if len(base) == 0 || len(supplement) == 0 {
 		return base
@@ -1064,6 +1350,16 @@ func audioBriefingValidateArticleSegments(segments []AudioBriefingScriptSegment)
 }
 
 func audioBriefingArticleBatchSize(itemCount int) int {
+	if itemCount <= 0 {
+		return 1
+	}
+	if itemCount < 3 {
+		return itemCount
+	}
+	return 3
+}
+
+func audioBriefingDuoArticleBatchSize(itemCount int) int {
 	if itemCount <= 0 {
 		return 1
 	}
@@ -1153,6 +1449,81 @@ func audioBriefingGenerateArticleSegmentsBatch(
 	recovered = append(recovered, right.RecoveredFailures...)
 	return audioBriefingArticleBatchResult{
 		Segments:          append(left.Segments, right.Segments...),
+		RecoveredFailures: recovered,
+		ScriptLLMModels:   appendAudioBriefingScriptModels(left.ScriptLLMModels, right.ScriptLLMModels),
+	}, nil
+}
+
+func audioBriefingGenerateTurnSection(
+	articles []AudioBriefingScriptArticle,
+	introContext map[string]any,
+	targetChars int,
+	section string,
+	call func(batch []AudioBriefingScriptArticle, introContext map[string]any, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error),
+) ([]AudioBriefingScriptTurn, []string, error) {
+	if call == nil {
+		return nil, nil, fmt.Errorf("audio briefing duo script caller is unavailable")
+	}
+	sectionTarget := audioBriefingFrameSectionTargetChars(targetChars, section)
+	includeOpening := section == "opening"
+	includeOverallSummary := section == "overall_summary"
+	includeEnding := section == "ending"
+	resp, err := call(articles, introContext, sectionTarget, includeOpening, includeOverallSummary, false, includeEnding)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(resp.Turns) == 0 {
+		return nil, appendAudioBriefingScriptModel(nil, resp.LLM), fmt.Errorf("audio briefing duo section %s returned no turns", section)
+	}
+	return append([]AudioBriefingScriptTurn{}, resp.Turns...), appendAudioBriefingScriptModel(nil, resp.LLM), nil
+}
+
+func audioBriefingGenerateTurnArticleBatch(
+	batch []AudioBriefingScriptArticle,
+	targetChars int,
+	totalArticles int,
+	call func(batch []AudioBriefingScriptArticle, introContext map[string]any, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error),
+	introContext map[string]any,
+) (audioBriefingTurnBatchResult, error) {
+	batchTargetChars := audioBriefingArticleBatchTargetChars(targetChars, totalArticles, len(batch))
+	resp, err := call(
+		batch,
+		introContext,
+		batchTargetChars,
+		false,
+		false,
+		true,
+		false,
+	)
+	if err == nil {
+		if len(resp.Turns) == 0 {
+			err = fmt.Errorf("audio briefing duo article batch returned no turns")
+		}
+	}
+	if err == nil {
+		return audioBriefingTurnBatchResult{
+			Turns:           append([]AudioBriefingScriptTurn{}, resp.Turns...),
+			ScriptLLMModels: appendAudioBriefingScriptModel(nil, resp.LLM),
+		}, nil
+	}
+	if len(batch) <= 1 {
+		return audioBriefingTurnBatchResult{}, err
+	}
+	mid := len(batch) / 2
+	left, leftErr := audioBriefingGenerateTurnArticleBatch(batch[:mid], targetChars, totalArticles, call, introContext)
+	if leftErr != nil {
+		return audioBriefingTurnBatchResult{}, leftErr
+	}
+	right, rightErr := audioBriefingGenerateTurnArticleBatch(batch[mid:], targetChars, totalArticles, call, introContext)
+	if rightErr != nil {
+		return audioBriefingTurnBatchResult{}, rightErr
+	}
+	recovered := make([]audioBriefingRecoveredFailure, 0, 1+len(left.RecoveredFailures)+len(right.RecoveredFailures))
+	recovered = append(recovered, audioBriefingRecoveredFailure{BatchSize: len(batch), Err: err})
+	recovered = append(recovered, left.RecoveredFailures...)
+	recovered = append(recovered, right.RecoveredFailures...)
+	return audioBriefingTurnBatchResult{
+		Turns:             append(left.Turns, right.Turns...),
 		RecoveredFailures: recovered,
 		ScriptLLMModels:   appendAudioBriefingScriptModels(left.ScriptLLMModels, right.ScriptLLMModels),
 	}, nil

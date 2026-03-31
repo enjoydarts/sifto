@@ -81,6 +81,51 @@ func TestNextAudioBriefingVoicingChunkCompletesWhenAllChunksGenerated(t *testing
 	}
 }
 
+func TestAudioBriefingSpeechParamsForChunkUsesPartnerVoiceForPartnerChunk(t *testing.T) {
+	hostVoice := &model.AudioBriefingPersonaVoice{
+		SpeechRate:              1.1,
+		EmotionalIntensity:      1.2,
+		TempoDynamics:           1.3,
+		LineBreakSilenceSeconds: 0.4,
+		Pitch:                   0.1,
+		VolumeGain:              0.2,
+	}
+	partnerVoice := &model.AudioBriefingPersonaVoice{
+		SpeechRate:              0.9,
+		EmotionalIntensity:      0.8,
+		TempoDynamics:           0.7,
+		LineBreakSilenceSeconds: 0.6,
+		Pitch:                   -0.1,
+		VolumeGain:              -0.2,
+	}
+	settings := &model.AudioBriefingSettings{ChunkTrailingSilenceSeconds: 1.0}
+	chunk := &model.AudioBriefingScriptChunk{Speaker: stringPtr("partner")}
+
+	got := audioBriefingSpeechParamsForChunk(chunk, hostVoice, partnerVoice, settings)
+
+	if got.SpeechRate != partnerVoice.SpeechRate {
+		t.Fatalf("SpeechRate = %v, want %v", got.SpeechRate, partnerVoice.SpeechRate)
+	}
+	if got.EmotionalIntensity != partnerVoice.EmotionalIntensity {
+		t.Fatalf("EmotionalIntensity = %v, want %v", got.EmotionalIntensity, partnerVoice.EmotionalIntensity)
+	}
+	if got.TempoDynamics != partnerVoice.TempoDynamics {
+		t.Fatalf("TempoDynamics = %v, want %v", got.TempoDynamics, partnerVoice.TempoDynamics)
+	}
+	if got.LineBreakSilenceSeconds != partnerVoice.LineBreakSilenceSeconds {
+		t.Fatalf("LineBreakSilenceSeconds = %v, want %v", got.LineBreakSilenceSeconds, partnerVoice.LineBreakSilenceSeconds)
+	}
+	if got.Pitch != partnerVoice.Pitch {
+		t.Fatalf("Pitch = %v, want %v", got.Pitch, partnerVoice.Pitch)
+	}
+	if got.VolumeGain != partnerVoice.VolumeGain {
+		t.Fatalf("VolumeGain = %v, want %v", got.VolumeGain, partnerVoice.VolumeGain)
+	}
+	if got.ChunkTrailingSilenceSecond != settings.ChunkTrailingSilenceSeconds {
+		t.Fatalf("ChunkTrailingSilenceSecond = %v, want %v", got.ChunkTrailingSilenceSecond, settings.ChunkTrailingSilenceSeconds)
+	}
+}
+
 func ptrTime(v time.Time) *time.Time {
 	return &v
 }

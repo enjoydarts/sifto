@@ -98,7 +98,7 @@ def run_responses_json(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("OPENAI_TIMEOUT_SEC", 90.0)
+    req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else _env_timeout_seconds("OPENAI_TIMEOUT_SEC", 300.0)
     attempts = max(1, int(os.getenv("OPENAI_RETRY_ATTEMPTS", "3") or "3"))
     base_sleep_sec = _env_timeout_seconds("OPENAI_RETRY_BASE_SEC", 0.5)
     retryable_status = {408, 409, 429, 500, 502, 503, 504}

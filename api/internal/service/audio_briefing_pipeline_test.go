@@ -128,6 +128,27 @@ func TestAudioBriefingShouldContinue(t *testing.T) {
 	}
 }
 
+func TestNormalizeAudioBriefingConversationModeValue(t *testing.T) {
+	if got := normalizeAudioBriefingConversationModeValue("duo"); got != "duo" {
+		t.Fatalf("normalizeAudioBriefingConversationModeValue(duo) = %q, want duo", got)
+	}
+	if got := normalizeAudioBriefingConversationModeValue(" Duo "); got != "duo" {
+		t.Fatalf("normalizeAudioBriefingConversationModeValue(trimmed duo) = %q, want duo", got)
+	}
+	if got := normalizeAudioBriefingConversationModeValue("something-else"); got != "single" {
+		t.Fatalf("normalizeAudioBriefingConversationModeValue(invalid) = %q, want single", got)
+	}
+}
+
+func TestAudioBriefingInitialPipelineStageForMode(t *testing.T) {
+	if got := audioBriefingInitialPipelineStageForMode("single"); got != "single_script" {
+		t.Fatalf("audioBriefingInitialPipelineStageForMode(single) = %q, want single_script", got)
+	}
+	if got := audioBriefingInitialPipelineStageForMode("duo"); got != "duo_script" {
+		t.Fatalf("audioBriefingInitialPipelineStageForMode(duo) = %q, want duo_script", got)
+	}
+}
+
 func TestAudioBriefingJobCanBeResumedAt(t *testing.T) {
 	now := time.Date(2026, 3, 25, 12, 0, 0, 0, time.UTC)
 	staleAfter := 30 * time.Minute
@@ -165,6 +186,67 @@ func TestAudioBriefingArticleBatchSize(t *testing.T) {
 		if got := audioBriefingArticleBatchSize(tt.itemCount); got != tt.want {
 			t.Fatalf("audioBriefingArticleBatchSize(%d) = %d, want %d", tt.itemCount, got, tt.want)
 		}
+	}
+}
+
+func TestAudioBriefingDuoArticleBatchSize(t *testing.T) {
+	tests := []struct {
+		itemCount int
+		want      int
+	}{
+		{itemCount: 0, want: 1},
+		{itemCount: 1, want: 1},
+		{itemCount: 2, want: 2},
+		{itemCount: 3, want: 3},
+		{itemCount: 4, want: 3},
+		{itemCount: 12, want: 3},
+	}
+
+	for _, tt := range tests {
+		if got := audioBriefingDuoArticleBatchSize(tt.itemCount); got != tt.want {
+			t.Fatalf("audioBriefingDuoArticleBatchSize(%d) = %d, want %d", tt.itemCount, got, tt.want)
+		}
+	}
+}
+
+func TestAudioBriefingTurnSectionIntroContext(t *testing.T) {
+	base := map[string]any{"time_of_day": "morning"}
+
+	got := audioBriefingTurnSectionIntroContext(base, "overall_summary")
+
+	if got["time_of_day"] != "morning" {
+		t.Fatalf("time_of_day = %#v, want morning", got["time_of_day"])
+	}
+	if got["audio_briefing_generation_section"] != "overall_summary" {
+		t.Fatalf("generation_section = %#v, want overall_summary", got["audio_briefing_generation_section"])
+	}
+	if got["audio_briefing_program_position"] != "after_opening_before_articles" {
+		t.Fatalf("program_position = %#v, want after_opening_before_articles", got["audio_briefing_program_position"])
+	}
+}
+
+func TestAudioBriefingTurnArticleIntroContext(t *testing.T) {
+	base := map[string]any{"time_of_day": "morning"}
+
+	got := audioBriefingTurnArticleIntroContext(base, 3, 6, 20)
+
+	if got["time_of_day"] != "morning" {
+		t.Fatalf("time_of_day = %#v, want morning", got["time_of_day"])
+	}
+	if got["audio_briefing_generation_section"] != "article_segments" {
+		t.Fatalf("generation_section = %#v, want article_segments", got["audio_briefing_generation_section"])
+	}
+	if got["audio_briefing_program_position"] != "article_midstream" {
+		t.Fatalf("program_position = %#v, want article_midstream", got["audio_briefing_program_position"])
+	}
+	if got["audio_briefing_article_batch_start_index"] != 4 {
+		t.Fatalf("batch_start = %#v, want 4", got["audio_briefing_article_batch_start_index"])
+	}
+	if got["audio_briefing_article_batch_end_index"] != 6 {
+		t.Fatalf("batch_end = %#v, want 6", got["audio_briefing_article_batch_end_index"])
+	}
+	if got["audio_briefing_total_articles"] != 20 {
+		t.Fatalf("total_articles = %#v, want 20", got["audio_briefing_total_articles"])
 	}
 }
 
@@ -234,6 +316,66 @@ func TestAudioBriefingGenerateArticleSegmentsBatchTracksRecoveredFailures(t *tes
 	}
 	if len(result.RecoveredFailures) == 0 {
 		t.Fatal("expected recovered failures to be recorded")
+	}
+}
+
+func TestAudioBriefingGenerateTurnSectionFailsOnEmptyTurns(t *testing.T) {
+	call := func(batch []AudioBriefingScriptArticle, _ map[string]any, _ int, _ bool, _ bool, _ bool, _ bool) (*AudioBriefingScriptResponse, error) {
+		return &AudioBriefingScriptResponse{
+			Turns: nil,
+			LLM:   &LLMUsage{Provider: "anthropic", ResolvedModel: "claude-sonnet-4-6"},
+		}, nil
+	}
+
+	_, _, err := audioBriefingGenerateTurnSection(
+		[]AudioBriefingScriptArticle{{ItemID: "item-1"}},
+		map[string]any{"time_of_day": "morning"},
+		12000,
+		"opening",
+		call,
+	)
+	if err == nil {
+		t.Fatal("expected empty turns to fail")
+	}
+	if !strings.Contains(err.Error(), "returned no turns") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAudioBriefingGenerateTurnArticleBatchSplitsOnEmptyTurns(t *testing.T) {
+	articles := []AudioBriefingScriptArticle{
+		{ItemID: "item-1"},
+		{ItemID: "item-2"},
+		{ItemID: "item-3"},
+		{ItemID: "item-4"},
+	}
+	var seen []int
+	call := func(batch []AudioBriefingScriptArticle, _ map[string]any, _ int, _ bool, _ bool, _ bool, _ bool) (*AudioBriefingScriptResponse, error) {
+		seen = append(seen, len(batch))
+		if len(batch) > 1 {
+			return &AudioBriefingScriptResponse{
+				Turns: nil,
+				LLM:   &LLMUsage{Provider: "openai", ResolvedModel: "gpt-5.4"},
+			}, nil
+		}
+		return &AudioBriefingScriptResponse{
+			Turns: []AudioBriefingScriptTurn{{Speaker: "host", Section: "article", ItemID: stringPtr(batch[0].ItemID), Text: "本文です。"}},
+			LLM:   &LLMUsage{Provider: "openai", ResolvedModel: "gpt-5.4"},
+		}, nil
+	}
+
+	got, err := audioBriefingGenerateTurnArticleBatch(articles, 12000, 4, call, map[string]any{"time_of_day": "morning"})
+	if err != nil {
+		t.Fatalf("audioBriefingGenerateTurnArticleBatch(...) error = %v", err)
+	}
+	if len(got.Turns) != 4 {
+		t.Fatalf("turns len = %d, want 4", len(got.Turns))
+	}
+	if len(got.RecoveredFailures) == 0 {
+		t.Fatal("expected recovered failures to be recorded")
+	}
+	if len(seen) < 3 {
+		t.Fatalf("expected recursive split calls, saw %v", seen)
 	}
 }
 

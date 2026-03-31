@@ -33,6 +33,9 @@ class AudioBriefingScriptArticle(BaseModel):
 
 class AudioBriefingScriptRequest(BaseModel):
     persona: str = "editor"
+    conversation_mode: str = "single"
+    host_persona: str | None = None
+    partner_persona: str | None = None
     articles: list[AudioBriefingScriptArticle]
     intro_context: dict
     model: str | None = None
@@ -52,16 +55,30 @@ class AudioBriefingScriptSegment(BaseModel):
     commentary: str
 
 
+class AudioBriefingScriptTurn(BaseModel):
+    speaker: str
+    section: str
+    item_id: str | None = None
+    text: str
+
+
 class AudioBriefingScriptResponse(BaseModel):
-    opening: str
-    overall_summary: str
-    article_segments: list[AudioBriefingScriptSegment]
-    ending: str
+    opening: str = ""
+    overall_summary: str = ""
+    article_segments: list[AudioBriefingScriptSegment] = []
+    turns: list[AudioBriefingScriptTurn] = []
+    ending: str = ""
     llm: dict | None = None
 
 
 @router.post("/audio-briefing-script", response_model=AudioBriefingScriptResponse)
 def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, request: Request):
+    intro_context = dict(req.intro_context or {})
+    intro_context["audio_briefing_conversation_mode"] = req.conversation_mode
+    if req.host_persona:
+        intro_context["audio_briefing_host_persona"] = req.host_persona
+    if req.partner_persona:
+        intro_context["audio_briefing_partner_persona"] = req.partner_persona
     articles = [
         {
             "item_id": article.item_id,
@@ -76,8 +93,8 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
     try:
         result = run_observed_request(
             request,
-            metadata={"model": req.model or "", "persona": req.persona, "articles_count": len(articles)},
-            input_payload={"persona": req.persona, "articles_count": len(articles), "model": req.model, "target_chars": req.target_chars},
+            metadata={"model": req.model or "", "persona": req.persona, "conversation_mode": req.conversation_mode, "articles_count": len(articles)},
+            input_payload={"persona": req.persona, "conversation_mode": req.conversation_mode, "articles_count": len(articles), "model": req.model, "target_chars": req.target_chars},
             call=lambda: dispatch_by_model(
                 request,
                 req.model,
@@ -85,7 +102,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "anthropic": lambda api_key: generate_audio_briefing_script(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -99,7 +116,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "google": lambda api_key: generate_audio_briefing_script_gemini(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -113,7 +130,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "fireworks": lambda api_key: generate_audio_briefing_script_fireworks(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -127,7 +144,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "groq": lambda api_key: generate_audio_briefing_script_groq(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -141,7 +158,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "deepseek": lambda api_key: generate_audio_briefing_script_deepseek(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -155,7 +172,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "alibaba": lambda api_key: generate_audio_briefing_script_alibaba(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -169,7 +186,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "mistral": lambda api_key: generate_audio_briefing_script_mistral(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -183,7 +200,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "moonshot": lambda api_key: generate_audio_briefing_script_moonshot(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -197,7 +214,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "xai": lambda api_key: generate_audio_briefing_script_xai(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -211,7 +228,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "zai": lambda api_key: generate_audio_briefing_script_zai(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -225,7 +242,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "openrouter": lambda api_key: generate_audio_briefing_script_openrouter(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -239,7 +256,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "poe": lambda api_key: generate_audio_briefing_script_poe(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -253,7 +270,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "siliconflow": lambda api_key: generate_audio_briefing_script_siliconflow(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,
@@ -267,7 +284,7 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                 "openai": lambda api_key: generate_audio_briefing_script_openai(
                     persona=req.persona,
                     articles=articles,
-                    intro_context=req.intro_context,
+                    intro_context=intro_context,
                     target_duration_minutes=req.target_duration_minutes,
                     target_chars=req.target_chars,
                     chars_per_minute=req.chars_per_minute,

@@ -63,6 +63,9 @@ func TestAudioBriefingJobScanReadsStorageBucket(t *testing.T) {
 		now,
 		"2026-03-25-18",
 		"editor",
+		"single",
+		nil,
+		"single_concat",
 		"published",
 		"active",
 		6,
@@ -101,12 +104,14 @@ func TestAudioBriefingScriptChunkScanReadsStorageBucket(t *testing.T) {
 	ttsProvider := "aivis"
 	voiceModel := "voice-model"
 	voiceStyle := "voice-style"
+	speaker := "partner"
 
 	chunk, err := scanAudioBriefingScriptChunk(stubAudioBriefingScanner{values: []any{
 		"chunk-1",
 		"job-1",
 		1,
 		"opening",
+		speaker,
 		"本文です。",
 		12,
 		"generated",
@@ -131,5 +136,8 @@ func TestAudioBriefingScriptChunkScanReadsStorageBucket(t *testing.T) {
 	}
 	if chunk.R2StorageBucket != "briefings-standard" {
 		t.Fatalf("chunk.R2StorageBucket = %q, want briefings-standard", chunk.R2StorageBucket)
+	}
+	if chunk.Speaker == nil || *chunk.Speaker != speaker {
+		t.Fatalf("chunk.Speaker = %v, want %q", chunk.Speaker, speaker)
 	}
 }

@@ -63,6 +63,11 @@ function statusTone(status: string) {
   }
 }
 
+function formatConversationMode(mode: string | null | undefined, t: (key: string, fallback?: string) => string) {
+  const normalized = mode === "duo" ? "duo" : "single";
+  return t(`audioBriefing.conversationMode.${normalized}`, normalized);
+}
+
 export default function AudioBriefingsPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
@@ -224,7 +229,9 @@ export default function AudioBriefingsPage() {
                     {item.title || t("audioBriefing.untitled", "無題のエピソード")}
                   </h2>
                   <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[13px] text-[var(--color-editorial-ink-soft)]">
-                    <span>{t("audioBriefing.persona", "Persona")}: {item.persona}</span>
+                    <span>{t("audioBriefing.hostPersona", "Host")}: {item.persona}</span>
+                    {item.partner_persona ? <span>{t("audioBriefing.partnerPersona", "Partner")}: {item.partner_persona}</span> : null}
+                    <span>{t("audioBriefing.conversationMode", "Conversation")}: {formatConversationMode(item.conversation_mode, t)}</span>
                     <span>{t("audioBriefing.itemsCount", "Items")}: {item.source_item_count}</span>
                     <span>{t("audioBriefing.duration", "Duration")}: {formatDuration(item.audio_duration_sec)}</span>
                     <span>{t("audioBriefing.createdAt", "Created")}: {formatDateTime(item.created_at, locale)}</span>

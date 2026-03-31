@@ -458,8 +458,10 @@ export default function SettingsPage() {
   const [audioBriefingIntervalHours, setAudioBriefingIntervalHours] = useState<3 | 6>(6);
   const [audioBriefingArticlesPerEpisode, setAudioBriefingArticlesPerEpisode] = useState("5");
   const [audioBriefingTargetDurationMinutes, setAudioBriefingTargetDurationMinutes] = useState("20");
+  const [audioBriefingChunkTrailingSilenceSeconds, setAudioBriefingChunkTrailingSilenceSeconds] = useState("1.0");
   const [audioBriefingDefaultPersonaMode, setAudioBriefingDefaultPersonaMode] = useState<"fixed" | "random">("fixed");
   const [audioBriefingDefaultPersona, setAudioBriefingDefaultPersona] = useState("editor");
+  const [audioBriefingConversationMode, setAudioBriefingConversationMode] = useState<"single" | "duo">("single");
   const [audioBriefingBGMEnabled, setAudioBriefingBGMEnabled] = useState(false);
   const [audioBriefingBGMR2Prefix, setAudioBriefingBGMR2Prefix] = useState("");
   const [podcastEnabled, setPodcastEnabled] = useState(false);
@@ -546,8 +548,10 @@ export default function SettingsPage() {
       setAudioBriefingIntervalHours(audioBriefing?.interval_hours === 3 ? 3 : 6);
       setAudioBriefingArticlesPerEpisode(String(audioBriefing?.articles_per_episode ?? 5));
       setAudioBriefingTargetDurationMinutes(String(audioBriefing?.target_duration_minutes ?? 20));
+      setAudioBriefingChunkTrailingSilenceSeconds(formatAudioBriefingDecimalInput(audioBriefing?.chunk_trailing_silence_seconds ?? 1.0));
       setAudioBriefingDefaultPersonaMode(audioBriefing?.default_persona_mode === "random" ? "random" : "fixed");
       setAudioBriefingDefaultPersona(audioBriefing?.default_persona ?? "editor");
+      setAudioBriefingConversationMode(audioBriefing?.conversation_mode === "duo" ? "duo" : "single");
       setAudioBriefingBGMEnabled(Boolean(audioBriefing?.bgm_enabled));
       setAudioBriefingBGMR2Prefix(audioBriefing?.bgm_r2_prefix ?? "");
       const defaults = buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS);
@@ -2129,6 +2133,10 @@ export default function SettingsPage() {
   }
 
   async function persistAudioBriefingSettings() {
+    if (audioBriefingConversationMode === "duo" && configuredAudioBriefingVoiceCount < 2) {
+      showToast(t("settings.audioBriefing.duoRequiresTwoVoices"), "error");
+      return;
+    }
     setSavingAudioBriefing(true);
     try {
       const payload = {
@@ -2136,8 +2144,10 @@ export default function SettingsPage() {
         interval_hours: audioBriefingIntervalHours,
         articles_per_episode: Number(audioBriefingArticlesPerEpisode),
         target_duration_minutes: Number(audioBriefingTargetDurationMinutes),
+        chunk_trailing_silence_seconds: Number(audioBriefingChunkTrailingSilenceSeconds),
         default_persona_mode: audioBriefingDefaultPersonaMode,
         default_persona: audioBriefingDefaultPersona,
+        conversation_mode: audioBriefingConversationMode,
         bgm_enabled: audioBriefingBGMEnabled,
         bgm_r2_prefix: audioBriefingBGMR2Prefix.trim() || null,
       };
@@ -2625,6 +2635,16 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
+                  <div className="rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-4 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                    <div className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.audioBriefing.modeGuideTitle", "Single / Duo guide")}</div>
+                    <p className="mt-2">{t("settings.audioBriefing.modeGuideBody", "Single keeps the current one-person narration path. Duo adds a host-and-partner conversation, which increases turns, processing time, and TTS cost, but makes the listening experience more conversational.")}</p>
+                    <p className="mt-2">
+                      {audioBriefingConversationMode === "duo"
+                        ? t("settings.audioBriefing.modeGuideDuoActive", "Duo is currently selected. If persona mode is random, the host follows the same random selection as single mode and the partner is chosen from a different persona.")
+                        : t("settings.audioBriefing.modeGuideSingleActive", "Single is currently selected. This is the existing stable path, and you can switch back to it at any time if duo quality is not where you want it yet.")}
+                    </p>
+                  </div>
+
                   <div className="flex flex-wrap items-stretch gap-3">
                     <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
@@ -2679,6 +2699,35 @@ export default function SettingsPage() {
                         inputMode="numeric"
                         className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                       />
+                    </label>
+
+                    <label className="flex min-w-[180px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.chunkTrailingSilenceSeconds")}
+                      </div>
+                      <input
+                        value={audioBriefingChunkTrailingSilenceSeconds}
+                        onChange={(e) => setAudioBriefingChunkTrailingSilenceSeconds(e.target.value)}
+                        inputMode="decimal"
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                      <p className="mt-2 text-[11px] leading-5 text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.audioBriefing.chunkTrailingSilenceSecondsHelp")}
+                      </p>
+                    </label>
+
+                    <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.conversationMode")}
+                      </div>
+                      <select
+                        value={audioBriefingConversationMode}
+                        onChange={(e) => setAudioBriefingConversationMode(e.target.value === "duo" ? "duo" : "single")}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      >
+                        <option value="single">{t("settings.audioBriefing.conversationMode.single")}</option>
+                        <option value="duo">{t("settings.audioBriefing.conversationMode.duo")}</option>
+                      </select>
                     </label>
 
                     <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
@@ -2753,6 +2802,29 @@ export default function SettingsPage() {
                       </p>
                     </label>
                   </div>
+
+                  {audioBriefingConversationMode === "duo" ? (
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] px-4 py-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                          {t("settings.audioBriefing.duoHostRuleTitle", "Host selection")}
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">
+                          {audioBriefingDefaultPersonaMode === "random"
+                            ? t("settings.audioBriefing.duoHostRuleRandom", "Because persona mode is random, the host also follows the same random selection used by single mode.")
+                            : t("settings.audioBriefing.duoHostRuleFixed", "Because persona mode is fixed, the selected default persona will always act as the host.")}
+                        </p>
+                      </div>
+                      <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] px-4 py-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                          {t("settings.audioBriefing.duoPartnerRuleTitle", "Partner selection")}
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">
+                          {t("settings.audioBriefing.duoPartnerRuleBody", "The partner is picked from a different persona than the host. Make sure multiple persona voices are configured if you plan to use duo regularly.")}
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
                 </form>
               </SectionCard>
 

@@ -33,6 +33,11 @@ type AudioBriefingNarrationArticle struct {
 	Commentary   string
 }
 
+type audioBriefingSpeakerVoices struct {
+	Host    *model.AudioBriefingPersonaVoice
+	Partner *model.AudioBriefingPersonaVoice
+}
+
 const audioBriefingCharsPerMinute = 400
 
 func BuildAudioBriefingDraft(
@@ -57,12 +62,12 @@ func BuildAudioBriefingDraft(
 	ttsProvider, voiceModel, voiceStyle := audioBriefingVoiceRefs(voice)
 	opening := fmt.Sprintf("%sです。%sのSifto音声ブリーフィングをお届けします。今回は直近の注目記事を%d本まとめて見ていきます。", audioBriefingSpeakerName(persona), slotLabel, len(items))
 	for _, part := range audioBriefingSectionParts(opening, 1200, true) {
-		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "opening", part, ttsProvider, voiceModel, voiceStyle))
+		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "opening", nil, part, ttsProvider, voiceModel, voiceStyle))
 	}
 
 	summary := fmt.Sprintf("今日は%sを中心に、重要度と新しさを優先してピックアップしました。少し重複を含むことがありますが、流れがつかみやすい順で並べています。", audioBriefingSourceDigest(items))
 	for _, part := range audioBriefingSectionParts(summary, 1200, true) {
-		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "summary", part, ttsProvider, voiceModel, voiceStyle))
+		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "summary", nil, part, ttsProvider, voiceModel, voiceStyle))
 	}
 
 	totalChars := 0
@@ -75,12 +80,12 @@ func BuildAudioBriefingDraft(
 			headline = fmt.Sprintf("記事%d", item.Rank)
 		}
 		text := audioBriefingArticleText(headline, "", "")
-		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", text, ttsProvider, voiceModel, voiceStyle))
+		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", nil, text, ttsProvider, voiceModel, voiceStyle))
 		totalChars += charCount(text)
 	}
 
 	ending := "この時間はここまでです。最後まで聞いていただき、ありがとうございました。"
-	chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "ending", ending, ttsProvider, voiceModel, voiceStyle))
+	chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "ending", nil, ending, ttsProvider, voiceModel, voiceStyle))
 	totalChars += charCount(ending)
 
 	return AudioBriefingDraft{
@@ -119,7 +124,7 @@ func BuildAudioBriefingDraftFromNarration(
 		opening = fmt.Sprintf("%sです。%sのSifto音声ブリーフィングをお届けします。今回は直近の注目記事を%d本まとめて見ていきます。", audioBriefingSpeakerName(persona), slotLabel, len(items))
 	}
 	for _, part := range audioBriefingSectionParts(opening, 1200, true) {
-		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "opening", part, ttsProvider, voiceModel, voiceStyle))
+		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "opening", nil, part, ttsProvider, voiceModel, voiceStyle))
 	}
 
 	totalChars := 0
@@ -130,7 +135,7 @@ func BuildAudioBriefingDraftFromNarration(
 	overallSummary := strings.TrimSpace(narration.OverallSummary)
 	if overallSummary != "" {
 		for _, part := range audioBriefingSectionParts(overallSummary, 1200, true) {
-			chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "summary", part, ttsProvider, voiceModel, voiceStyle))
+			chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "summary", nil, part, ttsProvider, voiceModel, voiceStyle))
 			totalChars += charCount(part)
 		}
 	}
@@ -157,7 +162,7 @@ func BuildAudioBriefingDraftFromNarration(
 		} else {
 			text = audioBriefingArticleText(headline, "", commentary)
 		}
-		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", text, ttsProvider, voiceModel, voiceStyle))
+		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "article", nil, text, ttsProvider, voiceModel, voiceStyle))
 		totalChars += charCount(text)
 	}
 
@@ -165,9 +170,67 @@ func BuildAudioBriefingDraftFromNarration(
 	if ending == "" {
 		ending = "この時間はここまでです。最後まで聞いていただき、ありがとうございました。"
 	}
-	chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "ending", ending, ttsProvider, voiceModel, voiceStyle))
+	chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "ending", nil, ending, ttsProvider, voiceModel, voiceStyle))
 	totalChars += charCount(ending)
 
+	return AudioBriefingDraft{
+		Title:           title,
+		Status:          "scripted",
+		ScriptCharCount: totalChars,
+		Items:           items,
+		Chunks:          chunks,
+	}
+}
+
+func BuildAudioBriefingDraftFromTurns(
+	slotStartedAt time.Time,
+	hostPersona string,
+	items []model.AudioBriefingJobItem,
+	hostVoice *model.AudioBriefingPersonaVoice,
+	partnerVoice *model.AudioBriefingPersonaVoice,
+	turns []AudioBriefingScriptTurn,
+	targetChars int,
+) AudioBriefingDraft {
+	slotStartedAt = slotStartedAt.In(timeutil.JST)
+	if len(items) == 0 {
+		title := fmt.Sprintf("%02d:%02d便の音声ブリーフィング", slotStartedAt.Hour(), slotStartedAt.Minute())
+		return AudioBriefingDraft{
+			Title:  title,
+			Status: "skipped",
+		}
+	}
+
+	slotLabel := fmt.Sprintf("%02d:%02d便", slotStartedAt.Hour(), slotStartedAt.Minute())
+	title := fmt.Sprintf("%sの音声ブリーフィング", slotLabel)
+	if len(turns) == 0 {
+		return AudioBriefingDraft{
+			Title:  title,
+			Status: "failed",
+			Items:  items,
+		}
+	}
+
+	voices := audioBriefingSpeakerVoices{Host: hostVoice, Partner: partnerVoice}
+	chunks := make([]model.AudioBriefingScriptChunk, 0, len(turns))
+	totalChars := 0
+	for _, turn := range turns {
+		text := strings.TrimSpace(turn.Text)
+		if text == "" {
+			continue
+		}
+		partType := audioBriefingTurnPartType(turn.Section)
+		speaker := audioBriefingSpeakerPtr(turn.Speaker)
+		ttsProvider, voiceModel, voiceStyle := audioBriefingVoiceRefsForSpeaker(voices, turn.Speaker)
+		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, partType, speaker, text, ttsProvider, voiceModel, voiceStyle))
+		totalChars += charCount(text)
+	}
+	if len(chunks) == 0 {
+		return AudioBriefingDraft{
+			Title:  title,
+			Status: "failed",
+			Items:  items,
+		}
+	}
 	return AudioBriefingDraft{
 		Title:           title,
 		Status:          "scripted",
@@ -215,10 +278,24 @@ func audioBriefingSectionParts(text string, maxChars int, addTrailingBreak bool)
 	return parts
 }
 
-func newAudioBriefingChunk(seq int, partType, text string, ttsProvider, voiceModel, voiceStyle *string) model.AudioBriefingScriptChunk {
+func audioBriefingTurnPartType(section string) string {
+	switch strings.TrimSpace(section) {
+	case "opening":
+		return "opening"
+	case "overall_summary":
+		return "summary"
+	case "ending":
+		return "ending"
+	default:
+		return "article"
+	}
+}
+
+func newAudioBriefingChunk(seq int, partType string, speaker *string, text string, ttsProvider, voiceModel, voiceStyle *string) model.AudioBriefingScriptChunk {
 	return model.AudioBriefingScriptChunk{
 		Seq:         seq,
 		PartType:    partType,
+		Speaker:     speaker,
 		Text:        text,
 		CharCount:   charCount(text),
 		TTSStatus:   "pending",
@@ -246,6 +323,25 @@ func audioBriefingSpeakerName(persona string) string {
 		return "ナビゲーター"
 	default:
 		return "エディター"
+	}
+}
+
+func audioBriefingVoiceRefsForSpeaker(voices audioBriefingSpeakerVoices, speaker string) (*string, *string, *string) {
+	switch strings.TrimSpace(speaker) {
+	case "partner":
+		return audioBriefingVoiceRefs(voices.Partner)
+	default:
+		return audioBriefingVoiceRefs(voices.Host)
+	}
+}
+
+func audioBriefingSpeakerPtr(speaker string) *string {
+	switch strings.TrimSpace(speaker) {
+	case "host", "partner":
+		value := strings.TrimSpace(speaker)
+		return &value
+	default:
+		return nil
 	}
 }
 

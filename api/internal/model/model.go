@@ -105,17 +105,19 @@ type UserSettings struct {
 }
 
 type AudioBriefingSettings struct {
-	UserID                string    `json:"user_id"`
-	Enabled               bool      `json:"enabled"`
-	IntervalHours         int       `json:"interval_hours"`
-	ArticlesPerEpisode    int       `json:"articles_per_episode"`
-	TargetDurationMinutes int       `json:"target_duration_minutes"`
-	DefaultPersonaMode    string    `json:"default_persona_mode"`
-	DefaultPersona        string    `json:"default_persona"`
-	BGMEnabled            bool      `json:"bgm_enabled"`
-	BGMR2Prefix           *string   `json:"bgm_r2_prefix,omitempty"`
-	CreatedAt             time.Time `json:"created_at"`
-	UpdatedAt             time.Time `json:"updated_at"`
+	UserID                      string    `json:"user_id"`
+	Enabled                     bool      `json:"enabled"`
+	IntervalHours               int       `json:"interval_hours"`
+	ArticlesPerEpisode          int       `json:"articles_per_episode"`
+	TargetDurationMinutes       int       `json:"target_duration_minutes"`
+	ChunkTrailingSilenceSeconds float64   `json:"chunk_trailing_silence_seconds"`
+	DefaultPersonaMode          string    `json:"default_persona_mode"`
+	DefaultPersona              string    `json:"default_persona"`
+	ConversationMode            string    `json:"conversation_mode"`
+	BGMEnabled                  bool      `json:"bgm_enabled"`
+	BGMR2Prefix                 *string   `json:"bgm_r2_prefix,omitempty"`
+	CreatedAt                   time.Time `json:"created_at"`
+	UpdatedAt                   time.Time `json:"updated_at"`
 }
 
 type AudioBriefingPersonaVoice struct {
@@ -141,6 +143,9 @@ type AudioBriefingJob struct {
 	SlotStartedAtJST       time.Time  `json:"slot_started_at_jst"`
 	SlotKey                string     `json:"slot_key"`
 	Persona                string     `json:"persona"`
+	ConversationMode       string     `json:"conversation_mode"`
+	PartnerPersona         *string    `json:"partner_persona,omitempty"`
+	PipelineStage          *string    `json:"pipeline_stage,omitempty"`
 	Status                 string     `json:"status"`
 	ArchiveStatus          string     `json:"archive_status"`
 	SourceItemCount        int        `json:"source_item_count"`
@@ -185,6 +190,7 @@ type AudioBriefingScriptChunk struct {
 	JobID            string     `json:"job_id"`
 	Seq              int        `json:"seq"`
 	PartType         string     `json:"part_type"`
+	Speaker          *string    `json:"speaker,omitempty"`
 	Text             string     `json:"text"`
 	CharCount        int        `json:"char_count"`
 	TTSStatus        string     `json:"tts_status"`

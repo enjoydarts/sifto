@@ -305,6 +305,22 @@ func TestAudioBriefingSettingsPayloadIncludesPersonaMode(t *testing.T) {
 	}
 }
 
+func TestAudioBriefingSettingsPayloadIncludesConversationMode(t *testing.T) {
+	got := AudioBriefingSettingsPayload(&model.AudioBriefingSettings{
+		Enabled:               true,
+		IntervalHours:         6,
+		ArticlesPerEpisode:    5,
+		TargetDurationMinutes: 20,
+		DefaultPersonaMode:    PersonaModeRandom,
+		DefaultPersona:        "editor",
+		ConversationMode:      "duo",
+	})
+
+	if gotMode, _ := got["conversation_mode"].(string); gotMode != "duo" {
+		t.Fatalf("conversation_mode = %v, want %q", got["conversation_mode"], "duo")
+	}
+}
+
 func TestValidateAudioBriefingPersonaVoiceInputs(t *testing.T) {
 	valid, err := validateAudioBriefingPersonaVoiceInputs([]UpdateAudioBriefingPersonaVoiceInput{
 		{

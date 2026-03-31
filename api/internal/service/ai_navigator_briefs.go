@@ -180,7 +180,7 @@ func (s *AINavigatorBriefService) EnqueueBriefForSlot(ctx context.Context, userI
 		Slot:              slot,
 		Status:            model.AINavigatorBriefStatusQueued,
 		Persona:           persona,
-		Model:             formatAINavigatorBriefModelLabel(strings.TrimSpace(*modelName), nil),
+		Model:             strings.TrimSpace(*modelName),
 		SourceWindowStart: &windowStart,
 		SourceWindowEnd:   &windowEnd,
 	}
@@ -247,7 +247,11 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetPoeAPIKeyEncrypted, s.cipher, userID, "")
 	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetSiliconFlowAPIKeyEncrypted, s.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenAIAPIKeyEncrypted, s.cipher, userID, "")
-	modelName := &brief.Model
+	executionModel := resolveAINavigatorBriefExecutionModel(brief.Model)
+	if executionModel == "" {
+		return nil, fmt.Errorf("ai navigator brief model not configured")
+	}
+	modelName := &executionModel
 	switch LLMProviderForModel(modelName) {
 	case "openrouter":
 		openAIKey = openRouterKey
@@ -621,6 +625,35 @@ func formatAINavigatorBriefModelLabel(configuredModel string, usage *LLMUsage) s
 		configuredModel = strings.TrimSpace(parts[1])
 	}
 	return provider + " / " + configuredModel
+}
+
+func resolveAINavigatorBriefExecutionModel(savedModel string) string {
+	v := strings.TrimSpace(savedModel)
+	if v == "" {
+		return ""
+	}
+	if provider := CatalogProviderForModel(v); provider != "" {
+		return v
+	}
+	parts := strings.SplitN(v, " / ", 2)
+	if len(parts) != 2 {
+		return v
+	}
+	provider := strings.ToLower(strings.TrimSpace(parts[0]))
+	modelID := strings.TrimSpace(parts[1])
+	if modelID == "" {
+		return ""
+	}
+	switch provider {
+	case "openrouter":
+		return OpenRouterAliasModelID(modelID)
+	case "poe":
+		return PoeAliasModelID(modelID)
+	case "siliconflow":
+		return SiliconFlowAliasModelID(modelID)
+	default:
+		return modelID
+	}
 }
 
 func respOrNilLLM(resp *AINavigatorBriefResponse) *LLMUsage {

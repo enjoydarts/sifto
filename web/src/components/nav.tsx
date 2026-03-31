@@ -114,6 +114,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   const [openMoreSubmenu, setOpenMoreSubmenu] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [openRouterSyncRun, setOpenRouterSyncRun] = useState<OpenRouterSyncRun | null>(null);
+  const [watchOpenRouterSync, setWatchOpenRouterSync] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
@@ -149,18 +150,27 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
     };
 
     const onStarted = () => {
+      setWatchOpenRouterSync(true);
       loadStatus();
     };
 
     loadStatus();
-    interval = window.setInterval(loadStatus, openRouterSyncRun ? 3000 : 15000);
+    if (watchOpenRouterSync) {
+      interval = window.setInterval(loadStatus, 3000);
+    }
     window.addEventListener("openrouter-sync-started", onStarted);
     return () => {
       cancelled = true;
       if (interval != null) window.clearInterval(interval);
       window.removeEventListener("openrouter-sync-started", onStarted);
     };
-  }, [openRouterSyncRun]);
+  }, [watchOpenRouterSync]);
+
+  useEffect(() => {
+    if (!watchOpenRouterSync) return;
+    if (openRouterSyncRun?.status === "running") return;
+    setWatchOpenRouterSync(false);
+  }, [openRouterSyncRun, watchOpenRouterSync]);
 
   const handleForceRefresh = () => {
     if (refreshing) return;

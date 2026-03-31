@@ -56,3 +56,19 @@ func TestFormatAINavigatorBriefModelLabelFallsBackToConfiguredModelWithProvider(
 		t.Fatalf("formatAINavigatorBriefModelLabel(...) = %q, want provider-prefixed configured model", got)
 	}
 }
+
+func TestResolveAINavigatorBriefExecutionModelRestoresProviderAliasedModel(t *testing.T) {
+	got := resolveAINavigatorBriefExecutionModel("openrouter / openai/gpt-oss-120b")
+
+	if got != "openrouter::openai/gpt-oss-120b" {
+		t.Fatalf("resolveAINavigatorBriefExecutionModel(...) = %q, want %q", got, "openrouter::openai/gpt-oss-120b")
+	}
+}
+
+func TestResolveAINavigatorBriefExecutionModelRestoresPlainProviderModel(t *testing.T) {
+	got := resolveAINavigatorBriefExecutionModel("zai / glm-5")
+
+	if got != "glm-5" {
+		t.Fatalf("resolveAINavigatorBriefExecutionModel(...) = %q, want %q", got, "glm-5")
+	}
+}

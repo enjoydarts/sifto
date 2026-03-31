@@ -36,6 +36,32 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["content"], "pdf text")
         mocked_extract.assert_called_once_with(b"%PDF-1.7 fake", "https://example.com/final")
 
+    def test_extract_body_decodes_shift_jis_html_without_charset_header(self):
+        html = "<html><head><title>50歳独身男性のインシデント対応を分析</title></head><body>GoogleがM-Trends 2026公開</body></html>"
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.headers = {"content-type": "text/html"}
+        response.content = html.encode("cp932")
+        response.url = "https://example.com/final"
+        response.text = response.content.decode("utf-8", errors="replace")
+        captured = {}
+
+        def fake_bare_extraction(downloaded, **kwargs):
+            captured["downloaded"] = downloaded
+            return {"title": "50歳独身男性のインシデント対応を分析", "text": "GoogleがM-Trends 2026公開", "date": None}
+
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=None), patch(
+            "app.services.trafilatura_service.httpx.get", return_value=response
+        ), patch(
+            "app.services.trafilatura_service.trafilatura.bare_extraction",
+            side_effect=fake_bare_extraction,
+        ):
+            result = extract_body("https://example.com/start")
+
+        self.assertIn("50歳独身男性のインシデント対応を分析", captured["downloaded"])
+        self.assertEqual(result["title"], "50歳独身男性のインシデント対応を分析")
+        self.assertEqual(result["content"], "GoogleがM-Trends 2026公開")
+
 
 if __name__ == "__main__":
     unittest.main()

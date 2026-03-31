@@ -2,6 +2,7 @@ import html
 import logging
 import os
 import re
+from cgi import parse_header
 from urllib.parse import urljoin
 
 import httpx
@@ -17,6 +18,52 @@ _META_IMAGE_PATTERNS = [
     re.compile(r'(?is)<meta[^>]+name=["\']twitter:image(?::src)?["\'][^>]+content=["\']([^"\']+)["\']'),
     re.compile(r'(?is)<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']twitter:image(?::src)?["\']'),
 ]
+
+_META_CHARSET_PATTERNS = [
+    re.compile(br'(?is)<meta[^>]+charset=["\']?\s*([a-zA-Z0-9._\-]+)'),
+    re.compile(br'(?is)<meta[^>]+content=["\'][^"\']*charset=\s*([a-zA-Z0-9._\-]+)[^"\']*["\']'),
+]
+
+
+def _decode_html_response(resp: httpx.Response) -> str:
+    content = resp.content or b""
+    if not content:
+        return resp.text or ""
+
+    declared = _declared_response_encoding(resp.headers.get("content-type"), content)
+    candidates = []
+    if declared:
+        candidates.append(declared)
+    candidates.extend(["utf-8", "cp932", "shift_jis", "euc_jp", "iso2022_jp"])
+
+    seen = set()
+    for enc in candidates:
+        normalized = (enc or "").strip().lower()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        try:
+            return content.decode(normalized)
+        except Exception:
+            continue
+    return content.decode("utf-8", errors="replace")
+
+
+def _declared_response_encoding(content_type: str | None, content: bytes) -> str | None:
+    if content_type:
+        _, params = parse_header(content_type)
+        charset = str(params.get("charset") or "").strip()
+        if charset:
+            return charset
+    head = content[:4096]
+    for pattern in _META_CHARSET_PATTERNS:
+        match = pattern.search(head)
+        if not match:
+            continue
+        charset = match.group(1).decode("ascii", errors="ignore").strip()
+        if charset:
+            return charset
+    return None
 
 
 def _extract_image_url(downloaded: str, page_url: str) -> str | None:
@@ -85,7 +132,7 @@ def extract_body(url: str) -> dict | None:
                 resp.raise_for_status()
                 if is_pdf_response(str(resp.url), resp.headers.get("content-type"), resp.content):
                     return extract_pdf_body_from_bytes(resp.content, str(resp.url))
-                downloaded = resp.text
+                downloaded = _decode_html_response(resp)
             except Exception as e:
                 _log.warning("extract fetch failed url=%s err=%s", url, e)
                 if os.getenv("ALLOW_DEV_EXTRACT_PLACEHOLDER") == "true":

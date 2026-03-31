@@ -392,7 +392,7 @@ func (r *AudioBriefingRepo) ListJobItems(ctx context.Context, userID, jobID stri
 
 func (r *AudioBriefingRepo) ListJobChunks(ctx context.Context, userID, jobID string) ([]model.AudioBriefingScriptChunk, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT c.id, c.job_id, c.seq, c.part_type, c.text, c.char_count, c.tts_status, c.attempt_count, c.last_error_code,
+		SELECT c.id, c.job_id, c.seq, c.part_type, c.speaker, c.text, c.char_count, c.tts_status, c.attempt_count, c.last_error_code,
 		       c.tts_provider, c.voice_model, c.voice_style, c.r2_audio_object_key,
 		       c.r2_storage_bucket, c.duration_sec, c.error_message, c.heartbeat_token, c.last_heartbeat_at, c.started_at, c.completed_at, c.created_at, c.updated_at
 		FROM audio_briefing_script_chunks c
@@ -713,9 +713,9 @@ func (r *AudioBriefingRepo) CreateJobWithContent(
 	for _, chunk := range chunks {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO audio_briefing_script_chunks (
-				job_id, seq, part_type, text, char_count, tts_status, tts_provider, voice_model, voice_style, r2_storage_bucket
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		`, jobID, chunk.Seq, chunk.PartType, chunk.Text, chunk.CharCount, chunk.TTSStatus, chunk.TTSProvider, chunk.VoiceModel, chunk.VoiceStyle, firstNonEmpty(chunk.R2StorageBucket, standardBucket)); err != nil {
+				job_id, seq, part_type, speaker, text, char_count, tts_status, tts_provider, voice_model, voice_style, r2_storage_bucket
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		`, jobID, chunk.Seq, chunk.PartType, chunk.Speaker, chunk.Text, chunk.CharCount, chunk.TTSStatus, chunk.TTSProvider, chunk.VoiceModel, chunk.VoiceStyle, firstNonEmpty(chunk.R2StorageBucket, standardBucket)); err != nil {
 			return nil, err
 		}
 	}
@@ -877,9 +877,9 @@ func (r *AudioBriefingRepo) CompleteScriptingJob(
 	for _, chunk := range chunks {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO audio_briefing_script_chunks (
-				job_id, seq, part_type, text, char_count, tts_status, tts_provider, voice_model, voice_style, r2_storage_bucket
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		`, jobID, chunk.Seq, chunk.PartType, chunk.Text, chunk.CharCount, chunk.TTSStatus, chunk.TTSProvider, chunk.VoiceModel, chunk.VoiceStyle, firstNonEmpty(chunk.R2StorageBucket, audioBriefingStandardBucket())); err != nil {
+				job_id, seq, part_type, speaker, text, char_count, tts_status, tts_provider, voice_model, voice_style, r2_storage_bucket
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		`, jobID, chunk.Seq, chunk.PartType, chunk.Speaker, chunk.Text, chunk.CharCount, chunk.TTSStatus, chunk.TTSProvider, chunk.VoiceModel, chunk.VoiceStyle, firstNonEmpty(chunk.R2StorageBucket, audioBriefingStandardBucket())); err != nil {
 			return nil, err
 		}
 	}
@@ -1426,6 +1426,7 @@ func scanAudioBriefingScriptChunk(row audioBriefingJobScanner) (model.AudioBrief
 		&chunk.JobID,
 		&chunk.Seq,
 		&chunk.PartType,
+		&chunk.Speaker,
 		&chunk.Text,
 		&chunk.CharCount,
 		&chunk.TTSStatus,

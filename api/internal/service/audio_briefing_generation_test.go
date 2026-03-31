@@ -162,8 +162,14 @@ func TestBuildAudioBriefingDraftFromTurnsUsesSpeakerVoices(t *testing.T) {
 	if got := derefString(draft.Chunks[0].VoiceModel); got != "speaker-host" {
 		t.Fatalf("host voice model = %q, want speaker-host", got)
 	}
+	if got := derefString(draft.Chunks[0].Speaker); got != "host" {
+		t.Fatalf("host speaker = %q, want host", got)
+	}
 	if got := derefString(draft.Chunks[1].VoiceModel); got != "speaker-partner" {
 		t.Fatalf("partner voice model = %q, want speaker-partner", got)
+	}
+	if got := derefString(draft.Chunks[1].Speaker); got != "partner" {
+		t.Fatalf("partner speaker = %q, want partner", got)
 	}
 	if got := draft.Chunks[1].PartType; got != "article" {
 		t.Fatalf("partner part type = %q, want article", got)

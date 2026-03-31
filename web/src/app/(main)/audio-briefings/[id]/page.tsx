@@ -59,6 +59,18 @@ function formatBGMName(value: string | null | undefined) {
   return filename.replace(/\.[^.]+$/, "");
 }
 
+function formatConversationMode(mode: string | null | undefined, t: (key: string, fallback?: string) => string) {
+  const normalized = mode === "duo" ? "duo" : "single";
+  return t(`audioBriefing.conversationMode.${normalized}`, normalized);
+}
+
+function formatChunkSpeaker(speaker: string | null | undefined, t: (key: string, fallback?: string) => string) {
+  if (speaker === "host" || speaker === "partner") {
+    return t(`audioBriefing.speaker.${speaker}`, speaker);
+  }
+  return null;
+}
+
 export default function AudioBriefingDetailPage() {
   const RESUME_POLL_WINDOW_MS = 60_000;
   const { t, locale } = useI18n();
@@ -299,7 +311,15 @@ export default function AudioBriefingDetailPage() {
                 {t(`audioBriefing.status.${detail.job.status}`, detail.job.status)}
               </span>
               <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
-                {t("audioBriefing.persona", "Persona")}: {detail.job.persona}
+                {t("audioBriefing.hostPersona", "Host")}: {detail.job.persona}
+              </span>
+              {detail.job.partner_persona ? (
+                <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
+                  {t("audioBriefing.partnerPersona", "Partner")}: {detail.job.partner_persona}
+                </span>
+              ) : null}
+              <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
+                {t("audioBriefing.conversationMode", "Conversation")}: {formatConversationMode(detail.job.conversation_mode, t)}
               </span>
               <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
                 {t("audioBriefing.characters", "Chars")}: {totalChars}
@@ -397,6 +417,7 @@ export default function AudioBriefingDetailPage() {
                     {chunk.seq}
                   </span>
                   <span>{chunk.part_type}</span>
+                  {formatChunkSpeaker(chunk.speaker, t) ? <span>{t("audioBriefing.speaker", "Speaker")}: {formatChunkSpeaker(chunk.speaker, t)}</span> : null}
                   <span>{chunk.tts_status}</span>
                   <span>{chunk.char_count} chars</span>
                 </div>

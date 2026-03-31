@@ -603,6 +603,7 @@ class FeedTaskCommonTests(unittest.TestCase):
                 }
             ],
             "editor",
+            conversation_mode="duo",
         )
         self.assertEqual(result["opening"], "")
         self.assertEqual(result["overall_summary"], "")
@@ -657,6 +658,28 @@ class FeedTaskCommonTests(unittest.TestCase):
                 ],
                 "editor",
                 conversation_mode="duo",
+            )
+
+    def test_parse_audio_briefing_script_result_single_rejects_turns_only_payload(self):
+        with self.assertRaisesRegex(ValueError, "audio briefing script missing opening"):
+            parse_audio_briefing_script_result(
+                """
+                {
+                  "turns": [
+                    {"speaker": "host", "section": "opening", "text": "おはようございます。"}
+                  ]
+                }
+                """,
+                [
+                    {
+                        "item_id": "item-1",
+                        "title": "Example title",
+                        "translated_title": "翻訳タイトル",
+                        "summary": "Summary text",
+                    }
+                ],
+                "editor",
+                conversation_mode="single",
             )
 
     def test_parse_audio_briefing_script_result_rejects_missing_commentary(self):

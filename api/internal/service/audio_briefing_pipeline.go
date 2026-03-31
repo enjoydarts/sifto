@@ -767,7 +767,7 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	allTurns = append(allTurns, endingTurns...)
 	scriptLLMModels = appendAudioBriefingScriptModels(scriptLLMModels, endingModels)
 
-	draft := BuildAudioBriefingDraftFromTurns(job.SlotStartedAtJST, hostPersona, partnerPersona, items, hostVoice, partnerVoice, allTurns, targetChars)
+	draft := BuildAudioBriefingDraftFromTurns(job.SlotStartedAtJST, hostPersona, items, hostVoice, partnerVoice, allTurns, targetChars)
 	draft.ScriptLLMModels = scriptLLMModels
 	return draft, nil
 }

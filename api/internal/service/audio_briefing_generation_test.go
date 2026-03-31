@@ -138,7 +138,6 @@ func TestBuildAudioBriefingDraftFromTurnsUsesSpeakerVoices(t *testing.T) {
 	draft := BuildAudioBriefingDraftFromTurns(
 		time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST),
 		"editor",
-		"analyst",
 		[]model.AudioBriefingJobItem{{
 			ItemID:          "item-1",
 			Rank:            1,
@@ -190,7 +189,6 @@ func TestBuildAudioBriefingDraftFromTurnsWithoutTurnsFailsInsteadOfSingleFallbac
 	draft := BuildAudioBriefingDraftFromTurns(
 		time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST),
 		"editor",
-		"analyst",
 		[]model.AudioBriefingJobItem{{
 			ItemID:          "item-1",
 			Rank:            1,

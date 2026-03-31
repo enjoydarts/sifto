@@ -1463,7 +1463,7 @@ def parse_audio_briefing_script_result(
     normalized_conversation_mode = str(conversation_mode or "single").strip().lower()
     turns_value = data.get("turns") if isinstance(data, dict) else None
     raw_turns = turns_value if isinstance(turns_value, list) else []
-    if raw_turns:
+    if normalized_conversation_mode == "duo" and raw_turns:
         turns: list[dict] = []
         for index, raw in enumerate(raw_turns, start=1):
             if not isinstance(raw, dict):

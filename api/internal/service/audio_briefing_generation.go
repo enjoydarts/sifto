@@ -185,7 +185,6 @@ func BuildAudioBriefingDraftFromNarration(
 func BuildAudioBriefingDraftFromTurns(
 	slotStartedAt time.Time,
 	hostPersona string,
-	partnerPersona string,
 	items []model.AudioBriefingJobItem,
 	hostVoice *model.AudioBriefingPersonaVoice,
 	partnerVoice *model.AudioBriefingPersonaVoice,
@@ -193,7 +192,6 @@ func BuildAudioBriefingDraftFromTurns(
 	targetChars int,
 ) AudioBriefingDraft {
 	slotStartedAt = slotStartedAt.In(timeutil.JST)
-	_ = partnerPersona
 	if len(items) == 0 {
 		title := fmt.Sprintf("%02d:%02d便の音声ブリーフィング", slotStartedAt.Hour(), slotStartedAt.Minute())
 		return AudioBriefingDraft{

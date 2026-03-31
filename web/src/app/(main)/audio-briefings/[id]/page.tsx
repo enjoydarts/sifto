@@ -96,11 +96,23 @@ function formatArticleChunkOrdinal(
   t: (key: string, fallback?: string) => string
 ) {
   if (chunk.part_type !== "article") return null;
-  const articleChunksBefore = detail.chunks.slice(0, chunkIndex + 1).filter((candidate) => candidate.part_type === "article").length;
-  const ordinal =
-    detail.job.conversation_mode === "duo"
-      ? Math.floor((articleChunksBefore - 1) / 5) + 1
-      : articleChunksBefore;
+  const articleChunksBefore = detail.chunks
+    .slice(0, chunkIndex + 1)
+    .filter((candidate) => candidate.part_type === "article");
+  let ordinal = articleChunksBefore.length;
+  if (detail.job.conversation_mode === "duo") {
+    ordinal = 0;
+    let previousSpeaker: string | null = null;
+    for (const articleChunk of articleChunksBefore) {
+      const speaker = articleChunk.speaker ?? null;
+      if (ordinal === 0) {
+        ordinal = 1;
+      } else if (speaker === "host" && previousSpeaker === "host") {
+        ordinal += 1;
+      }
+      previousSpeaker = speaker;
+    }
+  }
   if (locale === "ja") {
     return `${ordinal}${t("audioBriefing.articleOrdinalSuffix", "本目の記事")}`;
   }

@@ -29,6 +29,16 @@ type AudioBriefingVoiceRunner struct {
 
 const audioBriefingChunkMaxAttempts = 3
 
+type audioBriefingSpeechParams struct {
+	SpeechRate                 float64
+	EmotionalIntensity         float64
+	TempoDynamics              float64
+	LineBreakSilenceSeconds    float64
+	ChunkTrailingSilenceSecond float64
+	Pitch                      float64
+	VolumeGain                 float64
+}
+
 func NewAudioBriefingVoiceRunner(repo *repository.AudioBriefingRepo, userSettings *repository.UserSettingsRepo, cipher *SecretCipher, worker *WorkerClient) *AudioBriefingVoiceRunner {
 	return &AudioBriefingVoiceRunner{repo: repo, userSettings: userSettings, cipher: cipher, worker: worker}
 }
@@ -79,23 +89,10 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 		return nil, err
 	}
-	speechRate := 1.0
-	emotionalIntensity := 1.0
-	tempoDynamics := 1.0
-	lineBreakSilenceSeconds := 0.4
-	chunkTrailingSilenceSeconds := 1.0
-	pitch := 0.0
-	volumeGain := 0.0
-	if settings != nil && settings.ChunkTrailingSilenceSeconds >= 0 {
-		chunkTrailingSilenceSeconds = settings.ChunkTrailingSilenceSeconds
-	}
-	if voice != nil {
-		speechRate = voice.SpeechRate
-		emotionalIntensity = voice.EmotionalIntensity
-		tempoDynamics = voice.TempoDynamics
-		lineBreakSilenceSeconds = voice.LineBreakSilenceSeconds
-		pitch = voice.Pitch
-		volumeGain = voice.VolumeGain
+	partnerVoice, err := r.resolvePartnerVoiceForJob(ctx, job)
+	if err != nil {
+		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
+		return nil, err
 	}
 
 	selection, chunk, resetGenerating := nextAudioBriefingVoicingChunk(chunks, timeutilNow())
@@ -161,19 +158,20 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
 		}
 	}
+	speechParams := audioBriefingSpeechParamsForChunk(chunk, voice, partnerVoice, settings)
 	resp, err := r.worker.SynthesizeAudioBriefingUpload(
 		ctx,
 		provider,
 		voiceModel,
 		voiceStyle,
 		chunk.Text,
-		speechRate,
-		emotionalIntensity,
-		tempoDynamics,
-		lineBreakSilenceSeconds,
-		chunkTrailingSilenceSeconds,
-		pitch,
-		volumeGain,
+		speechParams.SpeechRate,
+		speechParams.EmotionalIntensity,
+		speechParams.TempoDynamics,
+		speechParams.LineBreakSilenceSeconds,
+		speechParams.ChunkTrailingSilenceSecond,
+		speechParams.Pitch,
+		speechParams.VolumeGain,
 		audioBriefingChunkObjectKey(userID, jobID, chunk.Seq),
 		chunk.ID,
 		audioBriefingChunkHeartbeatURL(chunk.ID),
@@ -195,6 +193,53 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		return nil, err
 	}
 	return &AudioBriefingVoiceRunResult{ProcessedChunk: true}, nil
+}
+
+func audioBriefingSpeechParamsForChunk(
+	chunk *model.AudioBriefingScriptChunk,
+	hostVoice *model.AudioBriefingPersonaVoice,
+	partnerVoice *model.AudioBriefingPersonaVoice,
+	settings *model.AudioBriefingSettings,
+) audioBriefingSpeechParams {
+	params := audioBriefingSpeechParams{
+		SpeechRate:                 1.0,
+		EmotionalIntensity:         1.0,
+		TempoDynamics:              1.0,
+		LineBreakSilenceSeconds:    0.4,
+		ChunkTrailingSilenceSecond: 1.0,
+		Pitch:                      0.0,
+		VolumeGain:                 0.0,
+	}
+	if settings != nil && settings.ChunkTrailingSilenceSeconds >= 0 {
+		params.ChunkTrailingSilenceSecond = settings.ChunkTrailingSilenceSeconds
+	}
+	selectedVoice := hostVoice
+	if chunk != nil && strings.TrimSpace(derefString(chunk.Speaker)) == "partner" && partnerVoice != nil {
+		selectedVoice = partnerVoice
+	}
+	if selectedVoice != nil {
+		params.SpeechRate = selectedVoice.SpeechRate
+		params.EmotionalIntensity = selectedVoice.EmotionalIntensity
+		params.TempoDynamics = selectedVoice.TempoDynamics
+		params.LineBreakSilenceSeconds = selectedVoice.LineBreakSilenceSeconds
+		params.Pitch = selectedVoice.Pitch
+		params.VolumeGain = selectedVoice.VolumeGain
+	}
+	return params
+}
+
+func (r *AudioBriefingVoiceRunner) resolvePartnerVoiceForJob(ctx context.Context, job *model.AudioBriefingJob) (*model.AudioBriefingPersonaVoice, error) {
+	if r == nil || r.repo == nil || job == nil {
+		return nil, nil
+	}
+	if strings.TrimSpace(job.ConversationMode) != "duo" {
+		return nil, nil
+	}
+	partnerPersona := strings.TrimSpace(derefString(job.PartnerPersona))
+	if partnerPersona == "" {
+		return nil, nil
+	}
+	return r.repo.GetPersonaVoice(ctx, job.UserID, partnerPersona)
 }
 
 func (r *AudioBriefingVoiceRunner) handleChunkGenerationFailure(ctx context.Context, jobID string, chunk *model.AudioBriefingScriptChunk, errorCode string, err error) (*AudioBriefingVoiceRunResult, error) {

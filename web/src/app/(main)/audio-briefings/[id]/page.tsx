@@ -71,6 +71,26 @@ function formatChunkSpeaker(speaker: string | null | undefined, t: (key: string,
   return null;
 }
 
+function formatPipelineStage(stage: string | null | undefined, t: (key: string, fallback?: string) => string) {
+  if (!stage) return "—";
+  return t(`audioBriefing.pipelineStage.${stage}`, stage);
+}
+
+function formatChunkPartType(partType: string, t: (key: string, fallback?: string) => string) {
+  switch (partType) {
+    case "opening":
+      return t("audioBriefing.partType.opening", "Opening");
+    case "summary":
+      return t("audioBriefing.partType.summary", "Summary");
+    case "article":
+      return t("audioBriefing.partType.article", "Article");
+    case "ending":
+      return t("audioBriefing.partType.ending", "Ending");
+    default:
+      return partType;
+  }
+}
+
 export default function AudioBriefingDetailPage() {
   const RESUME_POLL_WINDOW_MS = 60_000;
   const { t, locale } = useI18n();
@@ -147,6 +167,19 @@ export default function AudioBriefingDetailPage() {
     () => (detail?.chunks ?? []).reduce((sum, chunk) => sum + (chunk.char_count ?? 0), 0),
     [detail?.chunks]
   );
+  const chunkSummary = useMemo(() => {
+    const chunks = detail?.chunks ?? [];
+    return chunks.reduce(
+      (acc, chunk) => {
+        if (chunk.speaker === "host") acc.host += 1;
+        if (chunk.speaker === "partner") acc.partner += 1;
+        if (chunk.part_type === "article") acc.article += 1;
+        if (chunk.part_type === "summary") acc.summary += 1;
+        return acc;
+      },
+      { host: 0, partner: 0, article: 0, summary: 0 }
+    );
+  }, [detail?.chunks]);
   const canResume = useMemo(() => {
     if (!detail) return false;
     return !!detail.resume_allowed;
@@ -321,6 +354,11 @@ export default function AudioBriefingDetailPage() {
               <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
                 {t("audioBriefing.conversationMode", "Conversation")}: {formatConversationMode(detail.job.conversation_mode, t)}
               </span>
+              {detail.job.pipeline_stage ? (
+                <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
+                  {t("audioBriefing.pipelineStage", "Pipeline")}: {formatPipelineStage(detail.job.pipeline_stage, t)}
+                </span>
+              ) : null}
               <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-1 text-[var(--color-editorial-ink-soft)]">
                 {t("audioBriefing.characters", "Chars")}: {totalChars}
               </span>
@@ -398,6 +436,11 @@ export default function AudioBriefingDetailPage() {
               {t("audioBriefing.failureReason", "Failure")}: {detail.job.error_message}
             </div>
           ) : null}
+          {detail.job.conversation_mode === "duo" ? (
+            <div className="mt-4 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-4 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+              {t("audioBriefing.duoDetailHelp", "Duo mode uses a host and a partner. When the persona mode is random, the host follows the usual random selection and the partner is drawn from a different persona.")}
+            </div>
+          ) : null}
         </section>
 
         <section className="surface-editorial rounded-[28px] px-5 py-5">
@@ -409,6 +452,32 @@ export default function AudioBriefingDetailPage() {
               {detail.chunks.length} {t("common.rows")}
             </div>
           </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                {t("audioBriefing.chunkSummary.hostTurns", "Host turns")}
+              </div>
+              <div className="mt-2 text-2xl font-semibold text-[var(--color-editorial-ink)]">{chunkSummary.host}</div>
+            </div>
+            <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                {t("audioBriefing.chunkSummary.partnerTurns", "Partner turns")}
+              </div>
+              <div className="mt-2 text-2xl font-semibold text-[var(--color-editorial-ink)]">{chunkSummary.partner}</div>
+            </div>
+            <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                {t("audioBriefing.chunkSummary.articleTurns", "Article turns")}
+              </div>
+              <div className="mt-2 text-2xl font-semibold text-[var(--color-editorial-ink)]">{chunkSummary.article}</div>
+            </div>
+            <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                {t("audioBriefing.chunkSummary.summaryTurns", "Summary turns")}
+              </div>
+              <div className="mt-2 text-2xl font-semibold text-[var(--color-editorial-ink)]">{chunkSummary.summary}</div>
+            </div>
+          </div>
           <div className="mt-4 grid gap-3">
             {detail.chunks.map((chunk) => (
               <article key={`${chunk.seq}-${chunk.part_type}`} className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.62)] p-4">
@@ -416,7 +485,7 @@ export default function AudioBriefingDetailPage() {
                   <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-2.5 py-1">
                     {chunk.seq}
                   </span>
-                  <span>{chunk.part_type}</span>
+                  <span>{formatChunkPartType(chunk.part_type, t)}</span>
                   {formatChunkSpeaker(chunk.speaker, t) ? <span>{t("audioBriefing.speaker", "Speaker")}: {formatChunkSpeaker(chunk.speaker, t)}</span> : null}
                   <span>{chunk.tts_status}</span>
                   <span>{chunk.char_count} chars</span>

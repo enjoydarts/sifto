@@ -177,39 +177,61 @@ def build_audio_briefing_script_schema(
 ) -> dict:
     if str(conversation_mode).strip() == "duo":
         normalized_article_count = max(int(article_count or 0), 0)
-        min_turns = 3
+        min_turns = 0
         article_turn_count = 3 if int(article_turn_count or 0) <= 3 else 5
         allowed_sections = []
         if include_opening:
             allowed_sections.append("opening")
+            min_turns += 5
         if include_overall_summary:
             allowed_sections.append("overall_summary")
+            min_turns += 5
         if include_article_segments:
             allowed_sections.append("article")
-            min_turns = max(min_turns, normalized_article_count * article_turn_count)
+            min_turns += normalized_article_count * article_turn_count
         if include_ending:
             allowed_sections.append("ending")
-        properties = {
+            min_turns += 5
+        base_properties = {
             "speaker": {"type": "string", "enum": ["host", "partner"]},
-            "section": {"type": "string", "enum": allowed_sections or ["opening"]},
             "text": {"type": "string"},
         }
-        required = ["speaker", "section", "text"]
+        section_item_schemas: list[dict] = []
+        frame_sections = [section for section in allowed_sections if section != "article"]
+        if frame_sections:
+            section_item_schemas.append(
+                {
+                    "type": "object",
+                    "properties": {
+                        **base_properties,
+                        "section": {"type": "string", "enum": frame_sections},
+                    },
+                    "required": ["speaker", "section", "text"],
+                    "additionalProperties": False,
+                }
+            )
         if include_article_segments:
-            properties["item_id"] = {"type": "string"}
-            required.append("item_id")
+            section_item_schemas.append(
+                {
+                    "type": "object",
+                    "properties": {
+                        **base_properties,
+                        "section": {"type": "string", "enum": ["article"]},
+                        "item_id": {"type": "string"},
+                    },
+                    "required": ["speaker", "section", "item_id", "text"],
+                    "additionalProperties": False,
+                }
+            )
+        if min_turns <= 0:
+            min_turns = 1
         return {
             "type": "object",
             "properties": {
                 "turns": {
                     "type": "array",
                     "minItems": min_turns,
-                    "items": {
-                        "type": "object",
-                        "properties": properties,
-                        "required": required,
-                        "additionalProperties": False,
-                    },
+                    "items": section_item_schemas[0] if len(section_item_schemas) == 1 else {"anyOf": section_item_schemas},
                 }
             },
             "required": ["turns"],
@@ -975,60 +997,60 @@ def build_audio_briefing_script_task(
     target_chars_min = max(1, round(target_chars * 0.9))
     target_chars_max = max(target_chars_min, round(target_chars * 1.1))
     sentence_length_spec = _audio_briefing_sentence_length_spec(article_budget)
-    section_rules: list[str] = []
-    target_lines: list[str] = []
+    common_section_rules: list[str] = []
+    single_article_section_rules: list[str] = []
+    single_target_lines: list[str] = []
     response_properties: list[str] = []
     if include_opening:
-        section_rules.append(f"- opening は {opening_min_sentences}文以上 {opening_max_sentences}文以下で、時間帯に合う自然な導入にする。必ず {opening_min_chars}文字以上 {opening_max_chars}文字以下で書く")
-        section_rules.append("- opening は番組のオープニングトークとして書く。リスナーに向かって語りかけ、挨拶、時間帯や季節感、軽い日常雑談、これから番組が始まる雰囲気づくりを必ず入れる")
-        section_rules.append("- opening では個別記事の紹介を始めない。記事内容の長い解説、細かな要約、最初の1本への導入を書かない")
-        section_rules.append("- opening では articles 内の固有名詞、企業名、製品名、出来事、具体的ニュース内容に触れない")
-        section_rules.append("- opening の軽い雑談では、天気感、気温、季節の空気、曜日感、通勤や休憩などの生活導線のうち少なくとも2つに必ず触れる。ニュースの話題へ滑らせない")
-        section_rules.append("- opening では、今回の回のテーマ感、空気感、何を見ていく回かを必ず話す。ただの挨拶だけで終わらせない")
-        target_lines.append(f"- opening の制約: {opening_min_chars}文字以上 {opening_max_chars}文字以下")
+        common_section_rules.append(f"- opening は {opening_min_sentences}文以上 {opening_max_sentences}文以下で、時間帯に合う自然な導入にする。必ず {opening_min_chars}文字以上 {opening_max_chars}文字以下で書く")
+        common_section_rules.append("- opening は番組のオープニングトークとして書く。リスナーに向かって語りかけ、挨拶、時間帯や季節感、軽い日常雑談、これから番組が始まる雰囲気づくりを必ず入れる")
+        common_section_rules.append("- opening では個別記事の紹介を始めない。記事内容の長い解説、細かな要約、最初の1本への導入を書かない")
+        common_section_rules.append("- opening では articles 内の固有名詞、企業名、製品名、出来事、具体的ニュース内容に触れない")
+        common_section_rules.append("- opening の軽い雑談では、天気感、気温、季節の空気、曜日感、通勤や休憩などの生活導線のうち少なくとも2つに必ず触れる。ニュースの話題へ滑らせない")
+        common_section_rules.append("- opening では、今回の回のテーマ感、空気感、何を見ていく回かを必ず話す。ただの挨拶だけで終わらせない")
+        single_target_lines.append(f"- opening の制約: {opening_min_chars}文字以上 {opening_max_chars}文字以下")
         response_properties.append('  "opening": "導入"')
     if include_overall_summary:
-        section_rules.append(f"- overall_summary は総括であり、{summary_min_sentences}文以上 {summary_max_sentences}文以下で、その回の全体像、流れ、聞きどころ、記事群のつながりだけを絞って話す。必ず {summary_min_chars}文字以上 {summary_max_chars}文字以下で書く")
-        section_rules.append("- overall_summary で記事の順番紹介をしない")
-        section_rules.append("- overall_summary では、回全体を俯瞰して共通テーマ、対立軸、温度感、いま追う意味、記事間のつながりを広く語ってよい")
-        section_rules.append("- overall_summary では、記事群の共通点、流れ、温度差、見方の違い、別の話に見える記事どうしのつながりまで具体的にしてよい")
-        section_rules.append("- overall_summary では、なぜ今この回として追う価値があるのか、何が引っかかりとして残るのかまで話してよい")
-        section_rules.append("- overall_summary では、前半から後半へどう流れが変わるか、どこで話題の重心が移るかまで具体的にしてよい")
-        section_rules.append("- overall_summary では、別々の話に見える記事どうしがどの点でつながっているか、同じ根っこを持っているかをはっきり述べてよい")
-        section_rules.append("- overall_summary では、表面上の出来事の列挙ではなく、この回で何が続いていて何が切り替わっているのかを具体的に語る")
-        target_lines.append(f"- overall_summary の制約: {summary_min_chars}文字以上 {summary_max_chars}文字以下")
+        common_section_rules.append(f"- overall_summary は総括であり、{summary_min_sentences}文以上 {summary_max_sentences}文以下で、その回の全体像、流れ、聞きどころ、記事群のつながりだけを絞って話す。必ず {summary_min_chars}文字以上 {summary_max_chars}文字以下で書く")
+        common_section_rules.append("- overall_summary で記事の順番紹介をしない")
+        common_section_rules.append("- overall_summary では、回全体を俯瞰して共通テーマ、対立軸、温度感、いま追う意味、記事間のつながりを広く語ってよい")
+        common_section_rules.append("- overall_summary では、記事群の共通点、流れ、温度差、見方の違い、別の話に見える記事どうしのつながりまで具体的にしてよい")
+        common_section_rules.append("- overall_summary では、なぜ今この回として追う価値があるのか、何が引っかかりとして残るのかまで話してよい")
+        common_section_rules.append("- overall_summary では、前半から後半へどう流れが変わるか、どこで話題の重心が移るかまで具体的にしてよい")
+        common_section_rules.append("- overall_summary では、別々の話に見える記事どうしがどの点でつながっているか、同じ根っこを持っているかをはっきり述べてよい")
+        common_section_rules.append("- overall_summary では、表面上の出来事の列挙ではなく、この回で何が続いていて何が切り替わっているのかを具体的に語る")
+        single_target_lines.append(f"- overall_summary の制約: {summary_min_chars}文字以上 {summary_max_chars}文字以下")
         response_properties.append('  "overall_summary": "全体サマリー"')
     if include_article_segments:
-        section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
-        section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。1記事あたりの headline と summary_intro と commentary の合計は必ず {article_min_chars}文字以上 {article_max_chars}文字以下で収める")
-        section_rules.append(f"- article_segments の各 headline は {article_headline_min_sentences}文以上 {article_headline_max_sentences}文以下で、これから扱う記事をリスナーに詳細に紹介する導入として書く。必ず {article_headline_min_chars}文字以上 {article_headline_max_chars}文字以下で、見出しの読み上げとして一息で入る長さにする")
-        section_rules.append(f"- article_segments の各 summary_intro は {article_summary_intro_min_sentences}文以上 {article_summary_intro_max_sentences}文以下で、記事の中身や何が起きたかを置く役割として書く。必ず {article_summary_intro_min_chars}文字以上 {article_summary_intro_max_chars}文字以下で書く")
-        section_rules.append(f"- article_segments の各 commentary は {article_commentary_min_sentences}文以上 {article_commentary_max_sentences}文以下で書く。summary_intro を受けて、そのペルソナの反応、理由、比較、引っかかりを広げる。必ず {article_commentary_min_chars}文字以上 {article_commentary_max_chars}文字以下で書く")
-        section_rules.append("- article_segments は各記事にほぼ均等に尺を配る")
-        section_rules.append(f"- 今回の article は 1記事あたり予算が約 {article_budget}文字なので、各記事は {duo_article_turn_phrase} で組み立てる前提で密度を調整する")
-        section_rules.append("- headline では、その記事をリスナーに詳細に紹介するつもりで話す。何の記事で、何が起きていて、どこが気になるのかが自然に伝わるようにする")
-        section_rules.append("- summary_intro では、記事の要点、何が起きたか、何が新しいか、どこがポイントか、なぜ今見る記事かをやや詳しく要約してよい。ただし記事全文の言い換えや細部の列挙にはしない")
-        section_rules.append("- article_segments の commentary は、そのペルソナ本人が自然に口にしそうな感想だけを書く。無難な解説調、誰にでも当てはまる一般論、ニュースキャスター風の中立コメントに寄せない")
-        section_rules.append("- commentary では summary_intro の続きを受けて、このペルソナがどこに反応したか、なぜそう感じたか、どう受け止めたかを話す")
-        section_rules.append("- commentary では反応だけで終わらせず、その反応の理由、比較、背景、引っかかり、今後の見方、今追う意味のうち少なくとも3つを必ず入れる。軽い背景説明や自分ならどう見るかまで話してよい")
-        section_rules.append("- commentary で headline や summary_intro の内容を長く言い換えて繰り返さない。要点を置いたら、反応、理由、比較に進む")
-        target_lines.append(f"- 各 article segment の制約: headline と summary_intro と commentary を合わせて {article_min_chars}文字以上 {article_max_chars}文字以下")
-        target_lines.append(f"- headline の個別制約: {article_headline_min_chars}文字以上 {article_headline_max_chars}文字以下")
-        target_lines.append(f"- summary_intro の個別制約: {article_summary_intro_min_chars}文字以上 {article_summary_intro_max_chars}文字以下")
-        target_lines.append(f"- commentary の個別制約: {article_commentary_min_chars}文字以上 {article_commentary_max_chars}文字以下")
+        single_article_section_rules.append("- article_segments は入力 articles と同じ順番・同じ件数で返す")
+        single_article_section_rules.append(f"- article_segments は全体の target_chars={target_chars} と今回扱う記事数から逆算した配分として書く。1記事あたりの headline と summary_intro と commentary の合計は必ず {article_min_chars}文字以上 {article_max_chars}文字以下で収める")
+        single_article_section_rules.append(f"- article_segments の各 headline は {article_headline_min_sentences}文以上 {article_headline_max_sentences}文以下で、これから扱う記事をリスナーに詳細に紹介する導入として書く。必ず {article_headline_min_chars}文字以上 {article_headline_max_chars}文字以下で、見出しの読み上げとして一息で入る長さにする")
+        single_article_section_rules.append(f"- article_segments の各 summary_intro は {article_summary_intro_min_sentences}文以上 {article_summary_intro_max_sentences}文以下で、記事の中身や何が起きたかを置く役割として書く。必ず {article_summary_intro_min_chars}文字以上 {article_summary_intro_max_chars}文字以下で書く")
+        single_article_section_rules.append(f"- article_segments の各 commentary は {article_commentary_min_sentences}文以上 {article_commentary_max_sentences}文以下で書く。summary_intro を受けて、そのペルソナの反応、理由、比較、引っかかりを広げる。必ず {article_commentary_min_chars}文字以上 {article_commentary_max_chars}文字以下で書く")
+        single_article_section_rules.append("- article_segments は各記事にほぼ均等に尺を配る")
+        single_article_section_rules.append("- headline では、その記事をリスナーに詳細に紹介するつもりで話す。何の記事で、何が起きていて、どこが気になるのかが自然に伝わるようにする")
+        single_article_section_rules.append("- summary_intro では、記事の要点、何が起きたか、何が新しいか、どこがポイントか、なぜ今見る記事かをやや詳しく要約してよい。ただし記事全文の言い換えや細部の列挙にはしない")
+        single_article_section_rules.append("- article_segments の commentary は、そのペルソナ本人が自然に口にしそうな感想だけを書く。無難な解説調、誰にでも当てはまる一般論、ニュースキャスター風の中立コメントに寄せない")
+        single_article_section_rules.append("- commentary では summary_intro の続きを受けて、このペルソナがどこに反応したか、なぜそう感じたか、どう受け止めたかを話す")
+        single_article_section_rules.append("- commentary では反応だけで終わらせず、その反応の理由、比較、背景、引っかかり、今後の見方、今追う意味のうち少なくとも3つを必ず入れる。軽い背景説明や自分ならどう見るかまで話してよい")
+        single_article_section_rules.append("- commentary で headline や summary_intro の内容を長く言い換えて繰り返さない。要点を置いたら、反応、理由、比較に進む")
+        single_target_lines.append(f"- 各 article segment の制約: headline と summary_intro と commentary を合わせて {article_min_chars}文字以上 {article_max_chars}文字以下")
+        single_target_lines.append(f"- headline の個別制約: {article_headline_min_chars}文字以上 {article_headline_max_chars}文字以下")
+        single_target_lines.append(f"- summary_intro の個別制約: {article_summary_intro_min_chars}文字以上 {article_summary_intro_max_chars}文字以下")
+        single_target_lines.append(f"- commentary の個別制約: {article_commentary_min_chars}文字以上 {article_commentary_max_chars}文字以下")
         response_properties.extend([
             '  "article_segments": [',
             '    {"item_id": "uuid", "headline": "これから扱う記事をリスナーに詳細に紹介する導入", "summary_intro": "記事の中身や何が起きたかを置く", "commentary": "そのペルソナがどう受け止めたかを理由や比較も含めて話す"}',
             "  ]",
         ])
     else:
-        section_rules.append("- article_segments は返さない")
+        single_article_section_rules.append("- article_segments は返さない")
     if include_ending:
-        section_rules.append(f"- ending は番組を終わらせる締めの言葉として {ending_min_sentences}文以上 {ending_max_sentences}文以下で書く。だらだら締めず、必ず {ending_min_chars}文字以上 {ending_max_chars}文字以下で書く")
-        section_rules.append("- ending で記事内容の再整理や論点のまとめ直しをしない。ただし今日の回で残った感触や温度感を1〜2点だけ軽く振り返るのはよい")
-        section_rules.append("- ending では、最後に残った印象や引っかかりを必ず言葉にする")
-        section_rules.append("- ending では、聞いてくれたことへの一言と、次の時間へ戻っていく感じを必ず入れる。短いお礼だけで終わらせない")
-        target_lines.append(f"- ending の制約: {ending_min_chars}文字以上 {ending_max_chars}文字以下")
+        common_section_rules.append(f"- ending は番組を終わらせる締めの言葉として {ending_min_sentences}文以上 {ending_max_sentences}文以下で書く。だらだら締めず、必ず {ending_min_chars}文字以上 {ending_max_chars}文字以下で書く")
+        common_section_rules.append("- ending で記事内容の再整理や論点のまとめ直しをしない。ただし今日の回で残った感触や温度感を1〜2点だけ軽く振り返るのはよい")
+        common_section_rules.append("- ending では、最後に残った印象や引っかかりを必ず言葉にする")
+        common_section_rules.append("- ending では、聞いてくれたことへの一言と、次の時間へ戻っていく感じを必ず入れる。短いお礼だけで終わらせない")
+        single_target_lines.append(f"- ending の制約: {ending_min_chars}文字以上 {ending_max_chars}文字以下")
         response_properties.append('  "ending": "締め"')
 
     response_example = "{\n" + ",\n".join(response_properties) + "\n}"
@@ -1044,6 +1066,8 @@ def build_audio_briefing_script_task(
         supplement_rules.append("- commentary では既存の反応をなぞるだけで終わらせず、新しい理由、比較、背景、今後の見方を追加して厚みを出す")
 
     if conversation_mode == "duo":
+        duo_target_lines: list[str] = []
+        duo_section_rules: list[str] = []
         section_names = []
         if include_opening:
             section_names.append("opening")
@@ -1062,6 +1086,17 @@ def build_audio_briefing_script_task(
         ]
         bridge_rules: list[str] = []
         if include_article_segments:
+            duo_target_lines.append(f"- article の会話は各記事あたり {article_min_chars}文字以上 {article_max_chars}文字以下を目安に均等配分する")
+            duo_target_lines.append(f"- article は 1記事あたり約 {article_budget}文字の予算で、今回は {duo_article_turn_phrase} に収める")
+            duo_section_rules.extend(
+                [
+                    "- article の turns は入力 articles と同じ順番で進め、各記事を会話として扱う",
+                    f"- article は各記事を {duo_article_turn_phrase} の中で完結させる。足りないからといって追加 turn を生やさない",
+                    "- host の最初の article turn は、その記事が何の話かを自然に導入する",
+                    "- partner は直前の host を受けて、理由・比較・違和感・今後のいずれかを足す",
+                    "- host の最後の article turn は、その記事の着地点を作りつつ次へ渡せる温度で閉じる",
+                ]
+            )
             batch_position_rule = f"- 今回の batch は全{total_articles}本中の {article_batch_start_index}本目から{article_batch_end_index}本目までを担当する"
             if article_batch_start_index <= 0 or article_batch_end_index <= 0:
                 batch_position_rule = "- 今回の batch は article パート途中の連続した数本だけを担当する"
@@ -1217,7 +1252,7 @@ partner:
 - 目標尺: 約 {target_duration_minutes} 分
 - 換算レート: 1分あたり {chars_per_minute} 文字
 - 今回返すセクションの目標文字数: 約 {target_chars} 文字
-- {'\n'.join(target_lines)}
+- {'\n'.join(duo_target_lines)}
 - 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
 - 文字数超過は許容しない。各 section と全体の上限を超えるくらいなら、表現を圧縮して上限内に収める
 - article の会話は各記事にほぼ均等に配る
@@ -1268,7 +1303,8 @@ partner:
 {chr(10).join(section_scope_rules)}
 
 追加ルール:
-- {'\n'.join(section_rules)}
+- {'\n'.join(common_section_rules)}
+- {'\n'.join(duo_section_rules)}
 {chr(10).join(supplement_rules)}
 
 articles:
@@ -1366,7 +1402,7 @@ articles:
 - 目標尺: 約 {target_duration_minutes} 分
 - 換算レート: 1分あたり {chars_per_minute} 文字
 - 今回返すセクションの目標文字数: 約 {target_chars} 文字
-{chr(10).join(target_lines)}
+{chr(10).join(single_target_lines)}
 - 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
 - 全体は目標文字数の前後10%程度に収める意識で書く
 - 目標文字数を大きく下回らない。特に長尺回では 85% 未満まで縮めない意識で書く
@@ -1375,7 +1411,8 @@ articles:
 追加ルール:
 - JSONのみを返す
 - 出力後、内部的に文字数不足がないか確認し、不足があれば自分で補ってから返す
-{chr(10).join(section_rules)}
+{chr(10).join(common_section_rules)}
+{chr(10).join(single_article_section_rules)}
 
 導入トークの文脈:
 - now_jst: {intro_context.get("now_jst", "")}

@@ -36,7 +36,7 @@ class FeedTaskCommonTests(unittest.TestCase):
 
         self.assertEqual(schema["required"], ["turns"])
         turns = schema["properties"]["turns"]
-        self.assertEqual(turns["minItems"], 3)
+        self.assertEqual(turns["minItems"], 5)
         items = turns["items"]
         self.assertEqual(items["properties"]["speaker"]["enum"], ["host", "partner"])
         self.assertEqual(items["properties"]["section"]["enum"], ["opening"])
@@ -73,6 +73,27 @@ class FeedTaskCommonTests(unittest.TestCase):
 
         turns = schema["properties"]["turns"]
         self.assertEqual(turns["minItems"], 15)
+
+    def test_build_audio_briefing_script_schema_for_duo_mixed_sections_requires_item_id_only_for_article(self):
+        schema = build_audio_briefing_script_schema(
+            conversation_mode="duo",
+            include_opening=True,
+            include_overall_summary=True,
+            include_article_segments=True,
+            include_ending=True,
+            article_count=2,
+            article_turn_count=3,
+        )
+
+        turns = schema["properties"]["turns"]
+        self.assertEqual(turns["minItems"], 21)
+        item_schema = turns["items"]
+        self.assertIn("anyOf", item_schema)
+        self.assertEqual(len(item_schema["anyOf"]), 2)
+        frame_schema = item_schema["anyOf"][0]
+        article_schema = item_schema["anyOf"][1]
+        self.assertNotIn("item_id", frame_schema["required"])
+        self.assertIn("item_id", article_schema["required"])
 
     def test_audio_briefing_duo_article_turn_count_switches_by_budget(self):
         self.assertEqual(_audio_briefing_duo_article_turn_count(419), 3)
@@ -510,6 +531,8 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("now_jst: 2026-03-31T18:30:00+09:00", prompt)
         self.assertIn("time_of_day: evening", prompt)
         self.assertNotIn("単独話者のAIナビゲーター", prompt)
+        self.assertNotIn("article_segments の各 headline", prompt)
+        self.assertNotIn('"article_segments": [', prompt)
 
     def test_build_audio_briefing_script_task_duo_uses_three_turn_article_mode_when_budget_is_tight(self):
         articles = [
@@ -543,6 +566,7 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("article の 3手は `host(setup) -> partner(reaction/contrast) -> host(close)`", prompt)
         self.assertIn("article は各記事をこの手数の中で必ず収める", prompt)
         self.assertEqual(task["schema"]["properties"]["turns"]["minItems"], 60)
+        self.assertNotIn("article_segments の各 headline", prompt)
 
     def test_build_audio_briefing_script_task_duo_article_batch_includes_program_position(self):
         task = build_audio_briefing_script_task(

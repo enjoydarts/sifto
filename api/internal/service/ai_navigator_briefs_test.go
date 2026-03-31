@@ -72,3 +72,11 @@ func TestResolveAINavigatorBriefExecutionModelRestoresPlainProviderModel(t *test
 		t.Fatalf("resolveAINavigatorBriefExecutionModel(...) = %q, want %q", got, "glm-5")
 	}
 }
+
+func TestFormatAINavigatorBriefModelLabelFallsBackToConfiguredPlainProviderModel(t *testing.T) {
+	got := formatAINavigatorBriefModelLabel("glm-5", nil)
+
+	if got != "zai / glm-5" {
+		t.Fatalf("formatAINavigatorBriefModelLabel(...) = %q, want %q", got, "zai / glm-5")
+	}
+}

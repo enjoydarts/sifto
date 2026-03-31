@@ -117,11 +117,25 @@ func ResolveAINavigatorBriefSlot(now time.Time) (string, error) {
 }
 
 func (s *AINavigatorBriefService) ListBriefsByUser(ctx context.Context, userID, slot string, limit int) ([]model.AINavigatorBrief, error) {
-	return s.briefs.ListBriefsByUser(ctx, userID, slot, limit)
+	items, err := s.briefs.ListBriefsByUser(ctx, userID, slot, limit)
+	if err != nil {
+		return nil, err
+	}
+	for i := range items {
+		items[i].Model = formatAINavigatorBriefModelLabel(items[i].Model, nil)
+	}
+	return items, nil
 }
 
 func (s *AINavigatorBriefService) GetBriefDetail(ctx context.Context, userID, briefID string) (*model.AINavigatorBrief, error) {
-	return s.briefs.GetBriefDetail(ctx, userID, briefID)
+	brief, err := s.briefs.GetBriefDetail(ctx, userID, briefID)
+	if err != nil {
+		return nil, err
+	}
+	if brief != nil {
+		brief.Model = formatAINavigatorBriefModelLabel(brief.Model, nil)
+	}
+	return brief, nil
 }
 
 func (s *AINavigatorBriefService) DeleteBrief(ctx context.Context, userID, briefID string) error {
@@ -187,6 +201,7 @@ func (s *AINavigatorBriefService) EnqueueBriefForSlot(ctx context.Context, userI
 	if err := s.briefs.CreateBrief(ctx, brief); err != nil {
 		return nil, err
 	}
+	brief.Model = formatAINavigatorBriefModelLabel(brief.Model, nil)
 	return brief, nil
 }
 

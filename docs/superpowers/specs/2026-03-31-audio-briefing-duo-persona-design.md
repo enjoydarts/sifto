@@ -31,14 +31,32 @@
 
 初期値は `single` にする。既存の単独読み上げを壊さず、`duo` の品質検証を段階的に進めやすくするため。
 
+### 1.1 Implementation separation
+
+`single` は既存実装をそのまま残し、`duo` は別 strategy として追加する。
+
+- `single`: 既存の script generation / narration / voicing フローを温存
+- `duo`: 新しい会話用 strategy を追加
+
+上位 pipeline は `conversation_mode` を見て strategy を選択するだけに留める。`duo` が不安定でも設定を `single` に戻すだけで即時 rollback できることを優先する。
+
 ### 2. Duo role model
 
 `duo` は対等会話ではなく、役割を固定した `host + partner` にする。
 
-- `host`: 既定 persona。進行、要点説明、記事本文の芯を担う
+- `host`: 音声ブリーフィングの既存 persona 選出ロジックに従う。進行、要点説明、記事本文の芯を担う
 - `partner`: 全 persona からランダム選出。反応、比較、問い返し、補足視点を担う
 
 `partner` は毎記事で必ず登場させる。会話感を明確に出しつつ、本文の軸は `host` に固定して冗長化を抑える。
+
+`host` の選出は既存の audio briefing persona mode をそのまま踏襲する。
+
+- persona mode = `fixed`
+  - `host` は既定 persona
+- persona mode = `random`
+  - `host` は既存ルールどおりランダム選出
+
+`duo` で persona mode = `random` の場合は、`host` を先にランダム選出し、その後 `host` と異なる persona から `partner` をランダム選出する。結果として二人ともランダムになるが、`host` の選出ロジックだけは既存 single と同じに保つ。
 
 ### 3. Script structure
 
@@ -52,6 +70,22 @@
 - `text`: 読み上げ本文
 
 `single` では既存の narration 構造を維持し、`duo` のみ turn 配列を生成する。既存 draft や再生成処理への影響面を最小化するため、両 mode を同一 schema に無理に寄せない。
+
+### 3.1 Strategy boundaries
+
+strategy の分離点は以下の 3 層に限定する。
+
+- `script strategy`
+  - `single` 用 prompt / schema
+  - `duo` 用 prompt / schema
+- `narration strategy`
+  - `single` は既存 narration text
+  - `duo` は `turns[]`
+- `voicing strategy`
+  - `single` は既存 chunking
+  - `duo` は turn 単位 chunking
+
+pipeline 全体を mode ごとに二重化せず、差分が大きい部分だけを strategy 化する。
 
 ### 4. Article turn pattern
 
@@ -81,7 +115,7 @@
 
 `duo` の追加設定は持たず、
 
-- `host` は既定 persona の voice mapping
+- `host` は既存 persona mode に従って選ばれた persona の voice mapping
 - `partner` はランダム選出された persona の voice mapping
 
 をそのまま参照する。
@@ -100,8 +134,20 @@ voice 未設定 persona が `partner` に選ばれた場合は、その回は `s
 
 - `conversation_mode text not null default 'single'`
 - `partner_persona text null`
+- `pipeline_stage text null`
 
 生成時点の mode と `partner` を job 側へ固定して、再生成やデバッグで同一条件を追えるようにする。
+
+`pipeline_stage` は mode 別の内部進行を保持する。
+
+- `single_script`
+- `single_voice`
+- `single_concat`
+- `duo_script`
+- `duo_voice`
+- `duo_concat`
+
+外向けの大分類 status は既存寄りに維持しつつ、内部の再実行点とログだけを mode 別に細分化する。
 
 ### narration payload
 
@@ -110,12 +156,13 @@ voice 未設定 persona が `partner` に選ばれた場合は、その回は `s
 ## Flow
 
 1. job 作成時に `conversation_mode` を settings から固定する
-2. `single` なら既存フローをそのまま使う
-3. `duo` なら既定 persona を `host` とし、voice 設定済み persona から `partner` をランダム選出する
-4. worker が `duo` 用 script prompt で turn 配列を生成する
-5. API が turn 配列を保存し、voicing 対象 chunk を speaker 単位で分割する
-6. worker TTS が turn ごとに対応 persona の voice で音声を生成する
-7. concat が turn 順に結合し、完成音声を publish する
+2. pipeline が `conversation_mode` に応じて strategy を選ぶ
+3. `single` なら既存フローをそのまま使う
+4. `duo` なら既存 persona mode に従って `host` を選び、voice 設定済み persona から `host` と異なる `partner` をランダム選出する
+5. worker が `duo` 用 script prompt で turn 配列を生成する
+6. API が turn 配列を保存し、voicing 対象 chunk を speaker 単位で分割する
+7. worker TTS が turn ごとに対応 persona の voice で音声を生成する
+8. concat が turn 順に結合し、完成音声を publish する
 
 ## Failure handling
 

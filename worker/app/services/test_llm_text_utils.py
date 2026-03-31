@@ -26,6 +26,10 @@ class FactsLocalizationDetectionTests(unittest.TestCase):
     def test_audio_briefing_script_max_tokens_uses_target_chars_with_original_cap(self):
         self.assertEqual(audio_briefing_script_max_tokens(14000), 14000)
 
+    def test_audio_briefing_script_max_tokens_boosts_duo_mode(self):
+        self.assertGreater(audio_briefing_script_max_tokens(600, "duo"), audio_briefing_script_max_tokens(600, "single"))
+        self.assertEqual(audio_briefing_script_max_tokens(14000, "duo"), 30000)
+
 
 if __name__ == "__main__":
     unittest.main()

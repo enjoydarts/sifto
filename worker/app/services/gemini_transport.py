@@ -157,7 +157,7 @@ def get_or_create_cached_content(model: str, api_key: str, cache_key: str, syste
         "systemInstruction": {"parts": [{"text": system_instruction}]},
         "ttl": f"{ttl_sec}s",
     }
-    req_timeout = env_timeout_seconds("GEMINI_TIMEOUT_SEC", 90.0)
+    req_timeout = env_timeout_seconds("GEMINI_TIMEOUT_SEC", 300.0)
     with httpx.Client(timeout=req_timeout) as client:
         resp = client.post(url, json=body, params={"key": api_key})
     if resp.status_code >= 400:
@@ -239,7 +239,7 @@ def generate_content(
                     cached_content_name = cached_name
             except Exception as e:
                 logger.warning("gemini context cache unavailable key=%s err=%s", context_cache_key[:16], e)
-    req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else env_timeout_seconds("GEMINI_TIMEOUT_SEC", 90.0)
+    req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else env_timeout_seconds("GEMINI_TIMEOUT_SEC", 300.0)
     attempts = env_int("GEMINI_RETRY_ATTEMPTS", 3)
     base_sleep_sec = env_timeout_seconds("GEMINI_RETRY_BASE_SEC", 0.5)
     retryable_status = {408, 409, 429, 500, 502, 503, 504}

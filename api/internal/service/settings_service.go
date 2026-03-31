@@ -105,15 +105,16 @@ type UpdateLLMModelsInput struct {
 }
 
 type UpdateAudioBriefingSettingsInput struct {
-	Enabled               bool
-	IntervalHours         int
-	ArticlesPerEpisode    int
-	TargetDurationMinutes int
-	DefaultPersonaMode    *string
-	DefaultPersona        *string
-	ConversationMode      *string
-	BGMEnabled            bool
-	BGMR2Prefix           *string
+	Enabled                     bool
+	IntervalHours               int
+	ArticlesPerEpisode          int
+	TargetDurationMinutes       int
+	ChunkTrailingSilenceSeconds float64
+	DefaultPersonaMode          *string
+	DefaultPersona              *string
+	ConversationMode            *string
+	BGMEnabled                  bool
+	BGMR2Prefix                 *string
 }
 
 type UpdatePodcastSettingsInput struct {
@@ -263,27 +264,29 @@ func readingPlanPayload(settings *model.UserSettings) map[string]any {
 func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) map[string]any {
 	if settings == nil {
 		return map[string]any{
-			"enabled":                 false,
-			"interval_hours":          6,
-			"articles_per_episode":    5,
-			"target_duration_minutes": 20,
-			"default_persona_mode":    PersonaModeFixed,
-			"default_persona":         "editor",
-			"conversation_mode":       "single",
-			"bgm_enabled":             false,
-			"bgm_r2_prefix":           nil,
+			"enabled":                        false,
+			"interval_hours":                 6,
+			"articles_per_episode":           5,
+			"target_duration_minutes":        20,
+			"chunk_trailing_silence_seconds": 1.0,
+			"default_persona_mode":           PersonaModeFixed,
+			"default_persona":                "editor",
+			"conversation_mode":              "single",
+			"bgm_enabled":                    false,
+			"bgm_r2_prefix":                  nil,
 		}
 	}
 	return map[string]any{
-		"enabled":                 settings.Enabled,
-		"interval_hours":          settings.IntervalHours,
-		"articles_per_episode":    settings.ArticlesPerEpisode,
-		"target_duration_minutes": settings.TargetDurationMinutes,
-		"default_persona_mode":    NormalizePersonaMode(&settings.DefaultPersonaMode),
-		"default_persona":         settings.DefaultPersona,
-		"conversation_mode":       normalizeAudioBriefingConversationMode(&settings.ConversationMode),
-		"bgm_enabled":             settings.BGMEnabled,
-		"bgm_r2_prefix":           settings.BGMR2Prefix,
+		"enabled":                        settings.Enabled,
+		"interval_hours":                 settings.IntervalHours,
+		"articles_per_episode":           settings.ArticlesPerEpisode,
+		"target_duration_minutes":        settings.TargetDurationMinutes,
+		"chunk_trailing_silence_seconds": settings.ChunkTrailingSilenceSeconds,
+		"default_persona_mode":           NormalizePersonaMode(&settings.DefaultPersonaMode),
+		"default_persona":                settings.DefaultPersona,
+		"conversation_mode":              normalizeAudioBriefingConversationMode(&settings.ConversationMode),
+		"bgm_enabled":                    settings.BGMEnabled,
+		"bgm_r2_prefix":                  settings.BGMR2Prefix,
 	}
 }
 
@@ -776,6 +779,9 @@ func (s *SettingsService) UpdateAudioBriefingSettings(ctx context.Context, userI
 	if in.TargetDurationMinutes < 5 || in.TargetDurationMinutes > 60 {
 		return nil, fmt.Errorf("invalid target_duration_minutes")
 	}
+	if in.ChunkTrailingSilenceSeconds < 0 || in.ChunkTrailingSilenceSeconds > 5 {
+		return nil, fmt.Errorf("invalid chunk_trailing_silence_seconds")
+	}
 	bgmPrefix := normalizeOptionalString(in.BGMR2Prefix)
 	if in.BGMEnabled && bgmPrefix == nil {
 		return nil, fmt.Errorf("invalid bgm_r2_prefix")
@@ -787,6 +793,7 @@ func (s *SettingsService) UpdateAudioBriefingSettings(ctx context.Context, userI
 		in.IntervalHours,
 		in.ArticlesPerEpisode,
 		in.TargetDurationMinutes,
+		in.ChunkTrailingSilenceSeconds,
 		NormalizePersonaMode(in.DefaultPersonaMode),
 		normalizeAudioBriefingDefaultPersona(in.DefaultPersona),
 		normalizeAudioBriefingConversationMode(in.ConversationMode),

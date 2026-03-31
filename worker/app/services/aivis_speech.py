@@ -227,7 +227,7 @@ AIVIS_SYNTHESIS_GATE = AivisRedisExecutionGate(
     lease_sec=_AIVIS_EXECUTION_LEASE_SEC,
     fallback=AIVIS_PROCESS_EXECUTION_GATE,
 )
-AIVIS_TRAILING_SILENCE_SECONDS = 1.5
+AIVIS_TRAILING_SILENCE_SECONDS = 1.0
 
 _AIVIS_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
@@ -263,6 +263,7 @@ def build_aivis_payload(
     emotional_intensity: float,
     tempo_dynamics: float,
     line_break_silence_seconds: float,
+    chunk_trailing_silence_seconds: float,
     pitch: float,
     volume_gain: float,
     user_dictionary_uuid: str | None = None,
@@ -283,7 +284,7 @@ def build_aivis_payload(
         "tempo_dynamics": max(0.0, tempo_dynamics),
         "volume": max(0.0, 1.0 + volume_gain),
         "leading_silence_seconds": 0,
-        "trailing_silence_seconds": AIVIS_TRAILING_SILENCE_SECONDS,
+        "trailing_silence_seconds": max(0.0, chunk_trailing_silence_seconds),
         "line_break_silence_seconds": max(0.0, line_break_silence_seconds),
         "output_format": "mp3",
     }
@@ -323,6 +324,7 @@ class AivisSpeechService:
         emotional_intensity: float,
         tempo_dynamics: float,
         line_break_silence_seconds: float,
+        chunk_trailing_silence_seconds: float,
         pitch: float,
         volume_gain: float,
         user_dictionary_uuid: str | None,
@@ -342,6 +344,7 @@ class AivisSpeechService:
             emotional_intensity=emotional_intensity,
             tempo_dynamics=tempo_dynamics,
             line_break_silence_seconds=line_break_silence_seconds,
+            chunk_trailing_silence_seconds=chunk_trailing_silence_seconds,
             pitch=pitch,
             volume_gain=volume_gain,
             user_dictionary_uuid=user_dictionary_uuid,

@@ -455,7 +455,7 @@ def generate_audio_briefing_script(
         task["user_prompt"],
         model=model,
         api_key=api_key,
-        max_output_tokens=_audio_briefing_script_max_tokens(task["target_chars"]),
+        max_output_tokens=_audio_briefing_script_max_tokens(task["target_chars"], str((intro_context or {}).get("audio_briefing_conversation_mode") or "single")),
         system_instruction=task["system_instruction"],
         context_cache_key=cache_key,
         response_schema=task["schema"],
@@ -464,6 +464,7 @@ def generate_audio_briefing_script(
         text,
         task["articles"],
         persona,
+        conversation_mode=str((intro_context or {}).get("audio_briefing_conversation_mode") or "single"),
         target_chars=target_chars,
         include_opening=include_opening,
         include_overall_summary=include_overall_summary,
@@ -474,6 +475,7 @@ def generate_audio_briefing_script(
         "opening": out["opening"],
         "overall_summary": out["overall_summary"],
         "article_segments": out["article_segments"],
+        "turns": out["turns"],
         "ending": out["ending"],
         "llm": _llm_meta(model, "audio_briefing_script", usage),
     }
@@ -702,7 +704,7 @@ def compose_digest(digest_date: str, items: list[dict], model: str, api_key: str
     input_mode, digest_input = _build_digest_input_sections(items)
     task = build_digest_task(digest_date, len(items), digest_input, input_mode=input_mode)
 
-    compose_timeout = _env_timeout_seconds("GEMINI_COMPOSE_DIGEST_TIMEOUT_SEC", 240.0)
+    compose_timeout = _env_timeout_seconds("GEMINI_COMPOSE_DIGEST_TIMEOUT_SEC", 300.0)
     last_text = ""
     last_error = "unknown"
     for max_tokens in (10000, 15000):
@@ -749,7 +751,7 @@ def ask_question(query: str, candidates: list[dict], model: str, api_key: str) -
         api_key=api_key,
         max_output_tokens=3200,
         response_schema=task["schema"],
-        timeout_sec=_env_timeout_seconds("GEMINI_TIMEOUT_SEC", 90.0),
+        timeout_sec=_env_timeout_seconds("GEMINI_TIMEOUT_SEC", 300.0),
         system_instruction=task["system_instruction"],
     )
     result = parse_ask_result(text, candidates, error_prefix="gemini ask missing answer")

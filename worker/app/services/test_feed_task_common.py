@@ -11,7 +11,9 @@ from app.services.feed_task_common import (
     resolve_navigator_sampling_profile,
     _resolve_persona_file,
     _audio_briefing_article_section_budgets,
+    _audio_briefing_duo_article_turn_count,
     _audio_briefing_script_budgets,
+    build_audio_briefing_script_schema,
     build_audio_briefing_script_task,
     build_ask_navigator_task,
     build_briefing_navigator_task,
@@ -22,6 +24,60 @@ from app.services.feed_task_common import (
 
 
 class FeedTaskCommonTests(unittest.TestCase):
+    def test_build_audio_briefing_script_schema_for_duo_opening_requires_turns_shape(self):
+        schema = build_audio_briefing_script_schema(
+            conversation_mode="duo",
+            include_opening=True,
+            include_overall_summary=False,
+            include_article_segments=False,
+            include_ending=False,
+            article_count=0,
+        )
+
+        self.assertEqual(schema["required"], ["turns"])
+        turns = schema["properties"]["turns"]
+        self.assertEqual(turns["minItems"], 3)
+        items = turns["items"]
+        self.assertEqual(items["properties"]["speaker"]["enum"], ["host", "partner"])
+        self.assertEqual(items["properties"]["section"]["enum"], ["opening"])
+        self.assertNotIn("item_id", items["properties"])
+
+    def test_build_audio_briefing_script_schema_for_duo_article_requires_turns_shape(self):
+        schema = build_audio_briefing_script_schema(
+            conversation_mode="duo",
+            include_opening=False,
+            include_overall_summary=False,
+            include_article_segments=True,
+            include_ending=False,
+            article_count=5,
+            article_turn_count=5,
+        )
+
+        self.assertEqual(schema["required"], ["turns"])
+        turns = schema["properties"]["turns"]
+        self.assertEqual(turns["minItems"], 25)
+        items = turns["items"]
+        self.assertEqual(items["properties"]["section"]["enum"], ["article"])
+        self.assertIn("item_id", items["required"])
+
+    def test_build_audio_briefing_script_schema_for_duo_article_uses_three_turn_mode_when_requested(self):
+        schema = build_audio_briefing_script_schema(
+            conversation_mode="duo",
+            include_opening=False,
+            include_overall_summary=False,
+            include_article_segments=True,
+            include_ending=False,
+            article_count=5,
+            article_turn_count=3,
+        )
+
+        turns = schema["properties"]["turns"]
+        self.assertEqual(turns["minItems"], 15)
+
+    def test_audio_briefing_duo_article_turn_count_switches_by_budget(self):
+        self.assertEqual(_audio_briefing_duo_article_turn_count(419), 3)
+        self.assertEqual(_audio_briefing_duo_article_turn_count(420), 5)
+
     def test_audio_briefing_article_section_budgets_fit_within_article_budget(self):
         _opening_budget, _summary_budget, _ending_budget, article_budget = _audio_briefing_script_budgets(12000, 30)
         headline_budget, summary_intro_budget, commentary_budget = _audio_briefing_article_section_budgets(article_budget)
@@ -403,7 +459,7 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("既存の article_segments:", prompt)
         self.assertIn('"item_id": "item-1"', prompt)
 
-    def test_build_audio_briefing_script_task_duo_requires_turns_and_two_personas(self):
+    def test_build_audio_briefing_script_task_duo_uses_turns_and_two_personas(self):
         task = build_audio_briefing_script_task(
             persona="editor",
             articles=[
@@ -413,6 +469,11 @@ class FeedTaskCommonTests(unittest.TestCase):
                 "audio_briefing_conversation_mode": "duo",
                 "audio_briefing_host_persona": "editor",
                 "audio_briefing_partner_persona": "analyst",
+                "now_jst": "2026-03-31T18:30:00+09:00",
+                "date_jst": "2026-03-31",
+                "weekday_jst": "Tuesday",
+                "time_of_day": "evening",
+                "season_hint": "spring",
             },
             target_duration_minutes=20,
             target_chars=12000,
@@ -426,11 +487,99 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("turns", prompt)
         self.assertIn("speaker", prompt)
         self.assertIn("section", prompt)
-        self.assertIn("host と partner が交互に会話しながら番組を進めます", prompt)
-        self.assertIn("article は原則 `host -> partner -> host -> partner -> host` の順で進める", prompt)
-        self.assertIn("turn の型:", prompt)
-        self.assertIn("partner は毎回、会話を横に広げる", prompt)
+        self.assertIn("host と partner が会話しながら番組を進めます", prompt)
+        self.assertIn("opening は `host -> partner -> host -> partner -> host` の5手で必ず書く", prompt)
+        self.assertIn("overall_summary は `host -> partner -> host -> partner -> host` の5手で必ず書く", prompt)
+        self.assertIn("article は今回 `host -> partner -> host -> partner -> host` の5手で進める", prompt)
+        self.assertIn("ending は `host -> partner -> host -> partner -> host` の5手で必ず書く", prompt)
+        self.assertIn("partner は毎回、直前の host を受けて会話を横に広げる", prompt)
+        self.assertIn("partner の各 turn は、直前の host turn", prompt)
+        self.assertIn("host の各 turn は、直前の partner turn を軽く受けてから", prompt)
+        self.assertIn("必要に応じて接続詞や相づちを使って", prompt)
+        self.assertIn("partner の発話は以下のどれか1つを必ず含む", prompt)
+        self.assertIn("理由（なぜか）", prompt)
+        self.assertIn("比較（他と比べてどうか）", prompt)
+        self.assertIn("違和感（どこが引っかかるか）", prompt)
+        self.assertIn("今後（これからどうなるか）", prompt)
+        self.assertIn("section ごとの上限文字数と全体上限文字数を超えた出力は不正解", prompt)
+        self.assertIn("文字数超過は許容しない", prompt)
+        self.assertIn("article の 5手は `host(setup) -> partner(reaction) -> host(deepen) -> partner(contrast) -> host(close)`", prompt)
+        self.assertIn("overall_summary: 二人で回全体の流れや注目点を整理する", prompt)
+        self.assertIn("各記事の最後は完全に閉じすぎず、次の話題へ滑らかにつながる余地を残す", prompt)
+        self.assertIn("batch の最後のやり取りは、ここで番組全体を締めず", prompt)
+        self.assertIn("now_jst: 2026-03-31T18:30:00+09:00", prompt)
+        self.assertIn("time_of_day: evening", prompt)
         self.assertNotIn("単独話者のAIナビゲーター", prompt)
+
+    def test_build_audio_briefing_script_task_duo_uses_three_turn_article_mode_when_budget_is_tight(self):
+        articles = [
+            {"item_id": f"item-{idx}", "title": f"Title {idx}", "translated_title": f"翻訳{idx}", "summary": "Summary text"}
+            for idx in range(1, 21)
+        ]
+        task = build_audio_briefing_script_task(
+            persona="editor",
+            articles=articles,
+            intro_context={
+                "audio_briefing_conversation_mode": "duo",
+                "audio_briefing_host_persona": "editor",
+                "audio_briefing_partner_persona": "analyst",
+                "audio_briefing_generation_section": "article_segments",
+                "audio_briefing_program_position": "article_midstream",
+                "audio_briefing_article_batch_start_index": 1,
+                "audio_briefing_article_batch_end_index": 3,
+                "audio_briefing_total_articles": 20,
+            },
+            include_opening=False,
+            include_overall_summary=False,
+            include_article_segments=True,
+            include_ending=False,
+            target_duration_minutes=20,
+            target_chars=8000,
+            chars_per_minute=AUDIO_BRIEFING_CHARS_PER_MINUTE,
+        )
+
+        prompt = task["prompt"]
+        self.assertIn("article は今回 `host -> partner -> host` の3手で進める", prompt)
+        self.assertIn("article の 3手は `host(setup) -> partner(reaction/contrast) -> host(close)`", prompt)
+        self.assertIn("article は各記事をこの手数の中で必ず収める", prompt)
+        self.assertEqual(task["schema"]["properties"]["turns"]["minItems"], 60)
+
+    def test_build_audio_briefing_script_task_duo_article_batch_includes_program_position(self):
+        task = build_audio_briefing_script_task(
+            persona="editor",
+            articles=[
+                {"item_id": "item-1", "title": "Title 1", "translated_title": "翻訳1", "summary": "Summary text"},
+                {"item_id": "item-2", "title": "Title 2", "translated_title": "翻訳2", "summary": "Summary text"},
+                {"item_id": "item-3", "title": "Title 3", "translated_title": "翻訳3", "summary": "Summary text"},
+            ],
+            intro_context={
+                "audio_briefing_conversation_mode": "duo",
+                "audio_briefing_host_persona": "editor",
+                "audio_briefing_partner_persona": "analyst",
+                "audio_briefing_generation_section": "article_segments",
+                "audio_briefing_program_position": "article_midstream",
+                "audio_briefing_article_batch_start_index": 4,
+                "audio_briefing_article_batch_end_index": 6,
+                "audio_briefing_total_articles": 20,
+            },
+            include_opening=False,
+            include_overall_summary=False,
+            include_article_segments=True,
+            include_ending=False,
+            target_duration_minutes=20,
+            target_chars=12000,
+            chars_per_minute=AUDIO_BRIEFING_CHARS_PER_MINUTE,
+        )
+
+        prompt = task["prompt"]
+        self.assertIn("今回は番組の article パートだけを書く", prompt)
+        self.assertIn("current_section: article_segments", prompt)
+        self.assertIn("program_position: article_midstream", prompt)
+        self.assertIn("article_batch_range: 4 - 6", prompt)
+        self.assertIn("今回の batch は全20本中の 4本目から6本目までを担当する", prompt)
+        self.assertIn("opening と overall_summary はすでに終わっている前提で続きから入る", prompt)
+        self.assertIn("各記事の最後は完全に閉じすぎず、次の話題へ滑らかにつながる余地を残す", prompt)
+        self.assertIn("batch の最後のやり取りは、ここで番組全体を締めず", prompt)
 
     def test_parse_audio_briefing_script_result_accepts_duo_turns_only(self):
         result = parse_audio_briefing_script_result(
@@ -476,6 +625,38 @@ class FeedTaskCommonTests(unittest.TestCase):
                     }
                 ],
                 "editor",
+            )
+
+    def test_parse_audio_briefing_script_result_rejects_missing_turns_for_duo(self):
+        with self.assertRaisesRegex(ValueError, "audio briefing script missing turns"):
+            parse_audio_briefing_script_result(
+                "{}",
+                [
+                    {
+                        "item_id": "item-1",
+                        "title": "Example title",
+                        "translated_title": "翻訳タイトル",
+                        "summary": "Summary text",
+                    }
+                ],
+                "editor",
+                conversation_mode="duo",
+            )
+
+    def test_parse_audio_briefing_script_result_reports_empty_turns_state_for_duo(self):
+        with self.assertRaisesRegex(ValueError, r"state=list\(len=0\)"):
+            parse_audio_briefing_script_result(
+                '{"turns":[]}',
+                [
+                    {
+                        "item_id": "item-1",
+                        "title": "Example title",
+                        "translated_title": "翻訳タイトル",
+                        "summary": "Summary text",
+                    }
+                ],
+                "editor",
+                conversation_mode="duo",
             )
 
     def test_parse_audio_briefing_script_result_rejects_missing_commentary(self):

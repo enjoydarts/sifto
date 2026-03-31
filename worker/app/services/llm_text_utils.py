@@ -32,8 +32,15 @@ def summary_max_tokens(target_chars: int) -> int:
     return clamp_int(round(target_chars * 1.2), 700, 2600)
 
 
-def audio_briefing_script_max_tokens(target_chars: int) -> int:
-    return clamp_int(round(target_chars), 2400, 14000)
+def audio_briefing_script_max_tokens(target_chars: int, conversation_mode: str = "single") -> int:
+    target = int(target_chars or 0)
+    mode = str(conversation_mode or "single").strip().lower()
+    if mode == "duo":
+        # Duo scripts pay extra output overhead for speaker/section/item_id fields
+        # on every turn, so they need materially more output tokens than single mode.
+        boosted = round(target * 2.0) + 2000
+        return clamp_int(boosted, 4800, 32000)
+    return clamp_int(round(target), 2400, 14000)
 
 
 def summary_composite_score(breakdown: dict) -> float:

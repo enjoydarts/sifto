@@ -176,6 +176,42 @@ func TestBuildAudioBriefingDraftFromTurnsUsesSpeakerVoices(t *testing.T) {
 	}
 }
 
+func TestBuildAudioBriefingDraftFromTurnsWithoutTurnsFailsInsteadOfSingleFallback(t *testing.T) {
+	title := "原題"
+	translated := "翻訳題"
+	summary := "要約本文です。"
+	hostVoice := &model.AudioBriefingPersonaVoice{
+		Persona:     "editor",
+		TTSProvider: "aivis",
+		VoiceModel:  "speaker-host",
+		VoiceStyle:  "calm",
+	}
+
+	draft := BuildAudioBriefingDraftFromTurns(
+		time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST),
+		"editor",
+		"analyst",
+		[]model.AudioBriefingJobItem{{
+			ItemID:          "item-1",
+			Rank:            1,
+			Title:           &title,
+			TranslatedTitle: &translated,
+			SummarySnapshot: &summary,
+		}},
+		hostVoice,
+		nil,
+		nil,
+		0,
+	)
+
+	if got := draft.Status; got != "failed" {
+		t.Fatalf("draft.Status = %q, want failed", got)
+	}
+	if len(draft.Chunks) != 0 {
+		t.Fatalf("len(draft.Chunks) = %d, want 0", len(draft.Chunks))
+	}
+}
+
 func TestAudioBriefingArticleTextKeepsHeadlineSentenceEnding(t *testing.T) {
 	got := audioBriefingArticleText("これは競争環境が変わる記事です。", "ここで何が起きたかを置きます。", "ここは温度感が出ます。")
 	want := "これは競争環境が変わる記事です。 ここで何が起きたかを置きます。 ここは温度感が出ます。"

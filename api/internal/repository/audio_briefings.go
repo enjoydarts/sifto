@@ -30,7 +30,7 @@ func (r *AudioBriefingRepo) EnsureSettingsDefaults(ctx context.Context, userID s
 func (r *AudioBriefingRepo) GetSettings(ctx context.Context, userID string) (*model.AudioBriefingSettings, error) {
 	var v model.AudioBriefingSettings
 	err := r.db.QueryRow(ctx, `
-		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix, created_at, updated_at
+		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix, created_at, updated_at
 		FROM audio_briefing_settings
 		WHERE user_id = $1
 	`, userID).Scan(
@@ -39,6 +39,7 @@ func (r *AudioBriefingRepo) GetSettings(ctx context.Context, userID string) (*mo
 		&v.IntervalHours,
 		&v.ArticlesPerEpisode,
 		&v.TargetDurationMinutes,
+		&v.ChunkTrailingSilenceSeconds,
 		&v.DefaultPersonaMode,
 		&v.DefaultPersona,
 		&v.ConversationMode,
@@ -55,7 +56,7 @@ func (r *AudioBriefingRepo) GetSettings(ctx context.Context, userID string) (*mo
 
 func (r *AudioBriefingRepo) ListEnabledSettings(ctx context.Context) ([]model.AudioBriefingSettings, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix, created_at, updated_at
+		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix, created_at, updated_at
 		FROM audio_briefing_settings
 		WHERE enabled = TRUE
 		ORDER BY updated_at ASC, user_id ASC
@@ -74,6 +75,7 @@ func (r *AudioBriefingRepo) ListEnabledSettings(ctx context.Context) ([]model.Au
 			&row.IntervalHours,
 			&row.ArticlesPerEpisode,
 			&row.TargetDurationMinutes,
+			&row.ChunkTrailingSilenceSeconds,
 			&row.DefaultPersonaMode,
 			&row.DefaultPersona,
 			&row.ConversationMode,
@@ -89,7 +91,7 @@ func (r *AudioBriefingRepo) ListEnabledSettings(ctx context.Context) ([]model.Au
 	return out, rows.Err()
 }
 
-func (r *AudioBriefingRepo) UpsertSettings(ctx context.Context, userID string, enabled bool, intervalHours, articlesPerEpisode, targetDurationMinutes int, defaultPersonaMode string, defaultPersona string, conversationMode string, bgmEnabled bool, bgmR2Prefix *string) (*model.AudioBriefingSettings, error) {
+func (r *AudioBriefingRepo) UpsertSettings(ctx context.Context, userID string, enabled bool, intervalHours, articlesPerEpisode, targetDurationMinutes int, chunkTrailingSilenceSeconds float64, defaultPersonaMode string, defaultPersona string, conversationMode string, bgmEnabled bool, bgmR2Prefix *string) (*model.AudioBriefingSettings, error) {
 	if strings.TrimSpace(defaultPersona) == "" {
 		defaultPersona = "editor"
 	}
@@ -101,20 +103,21 @@ func (r *AudioBriefingRepo) UpsertSettings(ctx context.Context, userID string, e
 	}
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO audio_briefing_settings (
-			user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (user_id) DO UPDATE
 		SET enabled = EXCLUDED.enabled,
 		    interval_hours = EXCLUDED.interval_hours,
 		    articles_per_episode = EXCLUDED.articles_per_episode,
 		    target_duration_minutes = EXCLUDED.target_duration_minutes,
+		    chunk_trailing_silence_seconds = EXCLUDED.chunk_trailing_silence_seconds,
 		    default_persona_mode = EXCLUDED.default_persona_mode,
 		    default_persona = EXCLUDED.default_persona,
 		    conversation_mode = EXCLUDED.conversation_mode,
 		    bgm_enabled = EXCLUDED.bgm_enabled,
 		    bgm_r2_prefix = EXCLUDED.bgm_r2_prefix,
 		    updated_at = NOW()
-	`, userID, enabled, intervalHours, articlesPerEpisode, targetDurationMinutes, defaultPersonaMode, defaultPersona, conversationMode, bgmEnabled, bgmR2Prefix)
+	`, userID, enabled, intervalHours, articlesPerEpisode, targetDurationMinutes, chunkTrailingSilenceSeconds, defaultPersonaMode, defaultPersona, conversationMode, bgmEnabled, bgmR2Prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -486,7 +489,7 @@ func (r *AudioBriefingRepo) ListStaleVoicingJobs(ctx context.Context, cutoff tim
 
 func listStaleVoicingJobsQuery() string {
 	return `
-		SELECT j.id, j.user_id, j.slot_started_at_jst, j.slot_key, j.persona, j.status, j.archive_status,
+		SELECT j.id, j.user_id, j.slot_started_at_jst, j.slot_key, j.persona, j.conversation_mode, j.partner_persona, j.pipeline_stage, j.status, j.archive_status,
 		       j.source_item_count, j.reused_item_count, j.script_char_count, j.script_llm_models, j.audio_duration_sec,
 		       j.title, j.r2_audio_object_key, j.r2_manifest_object_key, j.bgm_object_key, j.r2_storage_bucket, j.podcast_public_object_key, j.podcast_public_bucket, j.podcast_public_deleted_at, j.provider_job_id, j.idempotency_key,
 		       j.error_code, j.error_message, j.published_at, j.failed_at, j.created_at, j.updated_at
@@ -784,6 +787,10 @@ func (r *AudioBriefingRepo) StartScriptingJob(ctx context.Context, jobID string)
 	job, err := scanAudioBriefingJob(r.db.QueryRow(ctx, `
 		UPDATE audio_briefing_jobs
 		SET status = 'scripting',
+		    pipeline_stage = CASE
+		      WHEN conversation_mode = 'duo' THEN 'duo_script'
+		      ELSE 'single_script'
+		    END,
 		    error_code = NULL,
 		    error_message = NULL,
 		    failed_at = NULL,
@@ -936,6 +943,10 @@ func (r *AudioBriefingRepo) BeginConcatCallback(
 	job, err := scanAudioBriefingJob(tx.QueryRow(ctx, `
 		UPDATE audio_briefing_jobs
 		SET status = 'concatenating',
+		    pipeline_stage = CASE
+		      WHEN conversation_mode = 'duo' THEN 'duo_concat'
+		      ELSE 'single_concat'
+		    END,
 		    provider_job_id = COALESCE($2, provider_job_id),
 		    r2_manifest_object_key = COALESCE($3, r2_manifest_object_key),
 		    bgm_object_key = NULL,
@@ -1142,6 +1153,10 @@ func (r *AudioBriefingRepo) StartVoicingJob(ctx context.Context, jobID string) (
 	job, err := scanAudioBriefingJob(r.db.QueryRow(ctx, `
 		UPDATE audio_briefing_jobs
 		SET status = 'voicing',
+		    pipeline_stage = CASE
+		      WHEN conversation_mode = 'duo' THEN 'duo_voicing'
+		      ELSE 'single_voicing'
+		    END,
 		    error_code = NULL,
 		    error_message = NULL,
 		    failed_at = NULL,

@@ -105,18 +105,19 @@ type UserSettings struct {
 }
 
 type AudioBriefingSettings struct {
-	UserID                string    `json:"user_id"`
-	Enabled               bool      `json:"enabled"`
-	IntervalHours         int       `json:"interval_hours"`
-	ArticlesPerEpisode    int       `json:"articles_per_episode"`
-	TargetDurationMinutes int       `json:"target_duration_minutes"`
-	DefaultPersonaMode    string    `json:"default_persona_mode"`
-	DefaultPersona        string    `json:"default_persona"`
-	ConversationMode      string    `json:"conversation_mode"`
-	BGMEnabled            bool      `json:"bgm_enabled"`
-	BGMR2Prefix           *string   `json:"bgm_r2_prefix,omitempty"`
-	CreatedAt             time.Time `json:"created_at"`
-	UpdatedAt             time.Time `json:"updated_at"`
+	UserID                      string    `json:"user_id"`
+	Enabled                     bool      `json:"enabled"`
+	IntervalHours               int       `json:"interval_hours"`
+	ArticlesPerEpisode          int       `json:"articles_per_episode"`
+	TargetDurationMinutes       int       `json:"target_duration_minutes"`
+	ChunkTrailingSilenceSeconds float64   `json:"chunk_trailing_silence_seconds"`
+	DefaultPersonaMode          string    `json:"default_persona_mode"`
+	DefaultPersona              string    `json:"default_persona"`
+	ConversationMode            string    `json:"conversation_mode"`
+	BGMEnabled                  bool      `json:"bgm_enabled"`
+	BGMR2Prefix                 *string   `json:"bgm_r2_prefix,omitempty"`
+	CreatedAt                   time.Time `json:"created_at"`
+	UpdatedAt                   time.Time `json:"updated_at"`
 }
 
 type AudioBriefingPersonaVoice struct {

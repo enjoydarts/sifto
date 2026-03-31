@@ -174,13 +174,14 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
             emotional_intensity=1.0,
             tempo_dynamics=1.0,
             line_break_silence_seconds=0.4,
+            chunk_trailing_silence_seconds=1.0,
             pitch=0.0,
             volume_gain=0.0,
             user_dictionary_uuid="5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861",
         )
 
         self.assertEqual(payload["user_dictionary_uuid"], "5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861")
-        self.assertEqual(payload["trailing_silence_seconds"], 1.5)
+        self.assertEqual(payload["trailing_silence_seconds"], 1.0)
 
     def test_init_reads_aivis_timeout_from_env(self):
         with patch.dict("os.environ", {"AIVIS_TTS_TIMEOUT_SEC": "420"}, clear=False):
@@ -353,6 +354,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
                 emotional_intensity=1.0,
                 tempo_dynamics=1.0,
                 line_break_silence_seconds=0.4,
+                chunk_trailing_silence_seconds=1.0,
                 pitch=0.0,
                 volume_gain=0.0,
                 user_dictionary_uuid=None,
@@ -424,6 +426,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
                 emotional_intensity=1.0,
                 tempo_dynamics=1.0,
                 line_break_silence_seconds=0.4,
+                chunk_trailing_silence_seconds=1.0,
                 pitch=0.0,
                 volume_gain=0.0,
                 user_dictionary_uuid=None,

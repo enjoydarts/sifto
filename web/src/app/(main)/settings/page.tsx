@@ -458,6 +458,7 @@ export default function SettingsPage() {
   const [audioBriefingIntervalHours, setAudioBriefingIntervalHours] = useState<3 | 6>(6);
   const [audioBriefingArticlesPerEpisode, setAudioBriefingArticlesPerEpisode] = useState("5");
   const [audioBriefingTargetDurationMinutes, setAudioBriefingTargetDurationMinutes] = useState("20");
+  const [audioBriefingChunkTrailingSilenceSeconds, setAudioBriefingChunkTrailingSilenceSeconds] = useState("1.0");
   const [audioBriefingDefaultPersonaMode, setAudioBriefingDefaultPersonaMode] = useState<"fixed" | "random">("fixed");
   const [audioBriefingDefaultPersona, setAudioBriefingDefaultPersona] = useState("editor");
   const [audioBriefingConversationMode, setAudioBriefingConversationMode] = useState<"single" | "duo">("single");
@@ -547,6 +548,7 @@ export default function SettingsPage() {
       setAudioBriefingIntervalHours(audioBriefing?.interval_hours === 3 ? 3 : 6);
       setAudioBriefingArticlesPerEpisode(String(audioBriefing?.articles_per_episode ?? 5));
       setAudioBriefingTargetDurationMinutes(String(audioBriefing?.target_duration_minutes ?? 20));
+      setAudioBriefingChunkTrailingSilenceSeconds(formatAudioBriefingDecimalInput(audioBriefing?.chunk_trailing_silence_seconds ?? 1.0));
       setAudioBriefingDefaultPersonaMode(audioBriefing?.default_persona_mode === "random" ? "random" : "fixed");
       setAudioBriefingDefaultPersona(audioBriefing?.default_persona ?? "editor");
       setAudioBriefingConversationMode(audioBriefing?.conversation_mode === "duo" ? "duo" : "single");
@@ -2138,6 +2140,7 @@ export default function SettingsPage() {
         interval_hours: audioBriefingIntervalHours,
         articles_per_episode: Number(audioBriefingArticlesPerEpisode),
         target_duration_minutes: Number(audioBriefingTargetDurationMinutes),
+        chunk_trailing_silence_seconds: Number(audioBriefingChunkTrailingSilenceSeconds),
         default_persona_mode: audioBriefingDefaultPersonaMode,
         default_persona: audioBriefingDefaultPersona,
         conversation_mode: audioBriefingConversationMode,
@@ -2694,6 +2697,21 @@ export default function SettingsPage() {
                       />
                     </label>
 
+                    <label className="flex min-w-[180px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.chunkTrailingSilenceSeconds")}
+                      </div>
+                      <input
+                        value={audioBriefingChunkTrailingSilenceSeconds}
+                        onChange={(e) => setAudioBriefingChunkTrailingSilenceSeconds(e.target.value)}
+                        inputMode="decimal"
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                      <p className="mt-2 text-[11px] leading-5 text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.audioBriefing.chunkTrailingSilenceSecondsHelp")}
+                      </p>
+                    </label>
+
                     <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
                         {t("settings.audioBriefing.conversationMode")}
@@ -2706,11 +2724,6 @@ export default function SettingsPage() {
                         <option value="single">{t("settings.audioBriefing.conversationMode.single")}</option>
                         <option value="duo">{t("settings.audioBriefing.conversationMode.duo")}</option>
                       </select>
-                      <p className="mt-2 text-[11px] leading-5 text-[var(--color-editorial-ink-soft)]">
-                        {audioBriefingConversationMode === "duo"
-                          ? t("settings.audioBriefing.conversationModeDuoHelp")
-                          : t("settings.audioBriefing.conversationModeSingleHelp")}
-                      </p>
                     </label>
 
                     <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">

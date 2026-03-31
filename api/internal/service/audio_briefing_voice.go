@@ -74,12 +74,21 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 		return nil, err
 	}
+	settings, err := r.repo.GetSettings(ctx, userID)
+	if err != nil {
+		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
+		return nil, err
+	}
 	speechRate := 1.0
 	emotionalIntensity := 1.0
 	tempoDynamics := 1.0
 	lineBreakSilenceSeconds := 0.4
+	chunkTrailingSilenceSeconds := 1.0
 	pitch := 0.0
 	volumeGain := 0.0
+	if settings != nil && settings.ChunkTrailingSilenceSeconds >= 0 {
+		chunkTrailingSilenceSeconds = settings.ChunkTrailingSilenceSeconds
+	}
 	if voice != nil {
 		speechRate = voice.SpeechRate
 		emotionalIntensity = voice.EmotionalIntensity
@@ -162,6 +171,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		emotionalIntensity,
 		tempoDynamics,
 		lineBreakSilenceSeconds,
+		chunkTrailingSilenceSeconds,
 		pitch,
 		volumeGain,
 		audioBriefingChunkObjectKey(userID, jobID, chunk.Seq),

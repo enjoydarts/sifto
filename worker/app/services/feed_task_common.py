@@ -172,22 +172,42 @@ def build_audio_briefing_script_schema(
     include_overall_summary: bool,
     include_article_segments: bool,
     include_ending: bool,
+    article_count: int = 0,
+    article_turn_count: int = 5,
 ) -> dict:
     if str(conversation_mode).strip() == "duo":
+        normalized_article_count = max(int(article_count or 0), 0)
+        min_turns = 3
+        article_turn_count = 3 if int(article_turn_count or 0) <= 3 else 5
+        allowed_sections = []
+        if include_opening:
+            allowed_sections.append("opening")
+        if include_overall_summary:
+            allowed_sections.append("overall_summary")
+        if include_article_segments:
+            allowed_sections.append("article")
+            min_turns = max(min_turns, normalized_article_count * article_turn_count)
+        if include_ending:
+            allowed_sections.append("ending")
+        properties = {
+            "speaker": {"type": "string", "enum": ["host", "partner"]},
+            "section": {"type": "string", "enum": allowed_sections or ["opening"]},
+            "text": {"type": "string"},
+        }
+        required = ["speaker", "section", "text"]
+        if include_article_segments:
+            properties["item_id"] = {"type": "string"}
+            required.append("item_id")
         return {
             "type": "object",
             "properties": {
                 "turns": {
                     "type": "array",
+                    "minItems": min_turns,
                     "items": {
                         "type": "object",
-                        "properties": {
-                            "speaker": {"type": "string"},
-                            "section": {"type": "string"},
-                            "item_id": {"type": ["string", "null"]},
-                            "text": {"type": "string"},
-                        },
-                        "required": ["speaker", "section", "text"],
+                        "properties": properties,
+                        "required": required,
                         "additionalProperties": False,
                     },
                 }
@@ -897,6 +917,9 @@ def build_audio_briefing_script_task(
     partner_persona = str(intro_context.get("audio_briefing_partner_persona") or "analyst")
     generation_mode = str(intro_context.get("audio_briefing_generation_mode") or "").strip()
     generation_section = str(intro_context.get("audio_briefing_generation_section") or "").strip()
+    program_position = str(intro_context.get("audio_briefing_program_position") or "").strip()
+    article_batch_start_index = int(intro_context.get("audio_briefing_article_batch_start_index") or 0)
+    article_batch_end_index = int(intro_context.get("audio_briefing_article_batch_end_index") or 0)
     existing_section_text = _normalize_audio_briefing_generated_text(
         str(intro_context.get("audio_briefing_existing_section_text") or "").strip()
     )
@@ -906,6 +929,7 @@ def build_audio_briefing_script_task(
     host_persona_key, host_profile = resolve_navigator_persona_profile(host_persona, "briefing")
     partner_persona_key, partner_profile = resolve_navigator_persona_profile(partner_persona, "briefing")
     trimmed_articles = articles[:30]
+    total_articles = int(intro_context.get("audio_briefing_total_articles") or len(trimmed_articles) or 0)
     chars_per_minute = max(int(chars_per_minute or AUDIO_BRIEFING_CHARS_PER_MINUTE), 1)
     target_duration_minutes = max(int(target_duration_minutes or 20), 1)
     target_chars = max(int(target_chars or 0), chars_per_minute)
@@ -936,6 +960,18 @@ def build_audio_briefing_script_task(
     article_headline_min_chars, article_headline_max_chars = _audio_briefing_char_bounds(article_headline_budget)
     article_summary_intro_min_chars, article_summary_intro_max_chars = _audio_briefing_char_bounds(article_summary_intro_budget)
     article_commentary_min_chars, article_commentary_max_chars = _audio_briefing_char_bounds(article_commentary_budget)
+    duo_article_turn_count = _audio_briefing_duo_article_turn_count(article_budget)
+    duo_article_turn_phrase = "3手" if duo_article_turn_count == 3 else "5手"
+    duo_article_turn_sequence = (
+        "`host -> partner -> host`"
+        if duo_article_turn_count == 3
+        else "`host -> partner -> host -> partner -> host`"
+    )
+    duo_article_turn_flow = (
+        "`host(setup) -> partner(reaction/contrast) -> host(close)`"
+        if duo_article_turn_count == 3
+        else "`host(setup) -> partner(reaction) -> host(deepen) -> partner(contrast) -> host(close)`"
+    )
     target_chars_min = max(1, round(target_chars * 0.9))
     target_chars_max = max(target_chars_min, round(target_chars * 1.1))
     sentence_length_spec = _audio_briefing_sentence_length_spec(article_budget)
@@ -969,6 +1005,7 @@ def build_audio_briefing_script_task(
         section_rules.append(f"- article_segments の各 summary_intro は {article_summary_intro_min_sentences}文以上 {article_summary_intro_max_sentences}文以下で、記事の中身や何が起きたかを置く役割として書く。必ず {article_summary_intro_min_chars}文字以上 {article_summary_intro_max_chars}文字以下で書く")
         section_rules.append(f"- article_segments の各 commentary は {article_commentary_min_sentences}文以上 {article_commentary_max_sentences}文以下で書く。summary_intro を受けて、そのペルソナの反応、理由、比較、引っかかりを広げる。必ず {article_commentary_min_chars}文字以上 {article_commentary_max_chars}文字以下で書く")
         section_rules.append("- article_segments は各記事にほぼ均等に尺を配る")
+        section_rules.append(f"- 今回の article は 1記事あたり予算が約 {article_budget}文字なので、各記事は {duo_article_turn_phrase} で組み立てる前提で密度を調整する")
         section_rules.append("- headline では、その記事をリスナーに詳細に紹介するつもりで話す。何の記事で、何が起きていて、どこが気になるのかが自然に伝わるようにする")
         section_rules.append("- summary_intro では、記事の要点、何が起きたか、何が新しいか、どこがポイントか、なぜ今見る記事かをやや詳しく要約してよい。ただし記事全文の言い換えや細部の列挙にはしない")
         section_rules.append("- article_segments の commentary は、そのペルソナ本人が自然に口にしそうな感想だけを書く。無難な解説調、誰にでも当てはまる一般論、ニュースキャスター風の中立コメントに寄せない")
@@ -1017,18 +1054,111 @@ def build_audio_briefing_script_task(
         if include_ending:
             section_names.append("ending")
         allowed_sections = ", ".join(section_names)
+        active_section = generation_section or ("article_segments" if include_article_segments else allowed_sections)
+        section_scope_rules: list[str] = []
+        program_flow_rules = [
+            "- 番組全体の流れは opening -> overall_summary -> article -> ending の順番で一度だけ進む",
+            "- 今回の call は番組全体の一部分だけを担当する。番組全体を最初からやり直さない",
+        ]
+        bridge_rules: list[str] = []
+        if include_article_segments:
+            batch_position_rule = f"- 今回の batch は全{total_articles}本中の {article_batch_start_index}本目から{article_batch_end_index}本目までを担当する"
+            if article_batch_start_index <= 0 or article_batch_end_index <= 0:
+                batch_position_rule = "- 今回の batch は article パート途中の連続した数本だけを担当する"
+            program_flow_rules.extend(
+                [
+                    "- opening と overall_summary はすでに終わっている前提で続きから入る",
+                    "- ending はまだ先なので、この batch の中で締めに入らない",
+                    batch_position_rule,
+                ]
+            )
+            bridge_rules.extend(
+                [
+                    "- この batch の最初のやり取りは、すでに番組が進んでいる流れを軽く受けて始める",
+                    "- 各記事の最後は完全に閉じすぎず、次の話題へ滑らかにつながる余地を残す",
+                    "- batch の最後のやり取りは、ここで番組全体を締めず、次の article へ続けられる温度で終える",
+                    "- 前の記事から次の記事へ移るときは、論点の差、温度差、共通点のどれかをひとこと挟んで自然につなぐ",
+                ]
+            )
+            section_scope_rules.extend(
+                [
+                    "- 今回は番組の article パートだけを書く。opening、overall_summary、ending は書かない",
+                    "- 各記事の会話だけを書く。番組の挨拶、仕切り直し、自己紹介、今日の全体テーマの再説明は禁止",
+                    "- 「おはようございます」「こんにちは」「こんばんは」「ではここから」「改めて」など、番組を開き直す導入は禁止",
+                    "- article パートは、すでに番組の途中に入っている前提で話す。各 batch の先頭でも opening や overall_summary の言い直しをしない",
+                    "- 各記事の最初の host turn は、その記事そのものの導入から始める。番組全体の前置きに戻らない",
+                ]
+            )
+        elif include_opening:
+            program_flow_rules.extend(
+                [
+                    "- 今回は番組冒頭の opening を担当する。まだ overall_summary や article には入っていない",
+                    "- opening はこのあとに overall_summary と記事パートが続く前提で空気を作る",
+                ]
+            )
+            bridge_rules.extend(
+                [
+                    "- opening の最後は、overall_summary が自然に始められるように今日の回の空気や見どころへ橋をかける",
+                    "- opening 単体で完結しすぎず、『これからこの回で何を見ていくか』へ軽く受け渡して終える",
+                ]
+            )
+            section_scope_rules.extend(
+                [
+                    "- 今回は opening だけを書く。overall_summary、article、ending は書かない",
+                    "- opening では番組の挨拶と導入だけを書く。個別記事の説明に入らない",
+                ]
+            )
+        elif include_overall_summary:
+            program_flow_rules.extend(
+                [
+                    "- opening はすでに終わっている。いまはその直後の overall_summary を担当する",
+                    "- これから article パートに入る直前なので、回全体の流れと注目点だけを整える",
+                ]
+            )
+            bridge_rules.extend(
+                [
+                    "- overall_summary の最初は opening の空気を軽く受けて始める",
+                    "- overall_summary の最後は、最初の記事へ自然に入れるように視点や温度感を整えて渡す",
+                ]
+            )
+            section_scope_rules.extend(
+                [
+                    "- 今回は overall_summary だけを書く。opening、article、ending は書かない",
+                    "- overall_summary では挨拶や番組開始の言い直しをしない。すぐに回全体の流れへ入る",
+                    "- 個別記事の導入トークや記事ごとの見出し読み上げは禁止",
+                ]
+            )
+        elif include_ending:
+            program_flow_rules.extend(
+                [
+                    "- opening、overall_summary、article はすでに終わっている。いまは最後の ending を担当する",
+                    "- ending は番組全体の締めだけを担い、新しい話題や記事紹介に戻らない",
+                ]
+            )
+            bridge_rules.extend(
+                [
+                    "- ending の最初は、最後の記事の余韻や番組全体に残った感触を軽く受けて始める",
+                    "- ending は唐突に切らず、ここまでの流れを受けた自然な着地として閉じる",
+                ]
+            )
+            section_scope_rules.extend(
+                [
+                    "- 今回は ending だけを書く。opening、overall_summary、article は書かない",
+                    "- ending では新しい記事紹介や番組冒頭の挨拶をしない",
+                ]
+            )
         response_example = """{
   "turns": [
-    {"speaker": "host", "section": "opening", "text": "導入のひとこと"},
-    {"speaker": "partner", "section": "opening", "text": "相棒の返し"},
-    {"speaker": "host", "section": "article", "item_id": "uuid", "text": "記事の導入"},
-    {"speaker": "partner", "section": "article", "item_id": "uuid", "text": "反応や比較"},
-    {"speaker": "host", "section": "ending", "text": "締め"}
+    {"speaker": "host", "section": "opening", "text": "host が導入する"},
+    {"speaker": "partner", "section": "opening", "text": "partner が受けて視点を足す"},
+    {"speaker": "host", "section": "opening", "text": "host が話を少し進める"},
+    {"speaker": "partner", "section": "opening", "text": "partner がさらに空気を足す"},
+    {"speaker": "host", "section": "opening", "text": "host がまとめて次へ進める"}
   ]
 }"""
         system_instruction = f"""# Role
 あなたは Sifto の音声ブリーフィング番組を担当する、二人組のAIナビゲーターです。
-host と partner が交互に会話しながら番組を進めます。
+host と partner が会話しながら番組を進めます。
 
 host:
 - persona: {host_persona_key}
@@ -1051,31 +1181,29 @@ partner:
 # Rules
 - 出力は必ず有効なJSONオブジェクト1つのみにしてください。
 - 前置き・後置き・コードフェンスは不要です。
-- turns だけを返す
-- turns は上から読み上げ順に並べる
-- speaker は必ず host または partner のどちらかだけを使う
-- section は必ず {allowed_sections} のどれかにする
-- article セクションの turns では item_id を必ず articles の item_id に合わせる
-- opening / overall_summary / ending では item_id を入れない
+- 今回の返却形式に含まれるキーだけを返す
 - host は進行役で、記事の要点整理と流れを担う
 - partner は相棒役で、短い相槌ではなく会話感を作る。host の言い換えはせず、反応、比較、違和感、問い返し、新しい視点を足す
 - 同じ情報を host と partner が言い直さない
 - 単独話者のモノローグにしない。必ず会話として往復させる
+- partner の各 turn は、直前の host turn の論点・感情・違和感のどれかを必ず受けて始める。独立した別コメントとして始めない
+- host の各 turn は、直前の partner turn を軽く受けてから話を前へ進める。partner を無視して自分の説明へ戻らない
+- 必要に応じて接続詞や相づちを使って、直前の発話とのつながりを自然に見せる
+- turns を必ず返す。空配列は禁止
+- 各 turn は speaker / section / text を必ず持つ
+- article の turn は item_id を必ず持つ
 - 各 turn は1〜4文で、1文ごとに改行する
-- 一つの section に最低2 turn は使う
-- article では記事ごとに host と partner の両方が必ず話す
-- opening は最低でも `host -> partner -> host` の順で進める
-- overall_summary は最低でも `host -> partner -> host` の順で進める
-- article は原則 `host -> partner -> host -> partner -> host` の順で進める
-- ending は最低でも `host -> partner -> host` の順で進める
-- host の最初の turn は導入・要点提示・進行を担い、partner の最初の turn は受け・反応・視点追加を担う
-- partner は host が置いた事実や論点をなぞらず、必ず新しい見方、比較、違和感、問い返しのどれかを足す
-- host の後半 turn は partner の反応を受けて、記事や回の流れを前に進める役割にする
-- 同じ speaker が長く連続しない。原則として speaker を交互に切り替える
 - 文字数制約は努力目標ではなく必須条件として扱う
 - 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
+- section ごとの上限文字数と全体上限文字数を超えた出力は不正解。会話感を保ったまま削ってでも上限内に収める
+- 上限を守れないときは、新しい論点を足さず、言い換え・重複・回り道・締めの重ね直しを削る
 - 短く安全にまとめるより、必要な厚みと会話感を保つことを優先する
-- host は事実を置き、partner は反応だけで終わらせず、理由、比較、背景、今後の見方のうち少なくとも2つを入れる
+- host は事実を置く
+- partner の発話は以下のどれか1つを必ず含む
+- 理由（なぜか）
+- 比較（他と比べてどうか）
+- 違和感（どこが引っかかるか）
+- 今後（これからどうなるか）
 - articles から読めることだけを使い、事実を捏造しない
 - host は {host_profile["name"]} として、partner は {partner_profile["name"]} として自然に話す
 - 別ペルソナの名前・肩書き・口調を混ぜない
@@ -1083,30 +1211,65 @@ partner:
         user_prompt = f"""タスク:
 - 与えられた記事だけを根拠に、日本語の二人会話の音声ブリーフィング台本を作る
 - host は {host_profile["name"]}、partner は {partner_profile["name"]} の会話として書く
+- 今回返すべきセクションだけを返す
 
 文字量の目安:
 - 目標尺: 約 {target_duration_minutes} 分
 - 換算レート: 1分あたり {chars_per_minute} 文字
 - 今回返すセクションの目標文字数: 約 {target_chars} 文字
+- {'\n'.join(target_lines)}
 - 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
+- 文字数超過は許容しない。各 section と全体の上限を超えるくらいなら、表現を圧縮して上限内に収める
 - article の会話は各記事にほぼ均等に配る
+- article は 1記事あたり約 {article_budget}文字の予算で、超えそうなら冗長な言い換えではなく手数と文量を削って収める
+- article で文字数が膨らみそうなときは、partner の後半の広げすぎと host の締めの言い直しを削ることを優先する
+
+番組全体の位置:
+- current_section: {active_section}
+- program_position: {program_position or "unspecified"}
+- total_articles: {total_articles}
+- article_batch_range: {article_batch_start_index or "-"} - {article_batch_end_index or "-"}
+- {'\n'.join(program_flow_rules)}
+
+導入トークの文脈:
+- now_jst: {intro_context.get("now_jst", "")}
+- date_jst: {intro_context.get("date_jst", "")}
+- weekday_jst: {intro_context.get("weekday_jst", "")}
+- time_of_day: {intro_context.get("time_of_day", "")}
+- season_hint: {intro_context.get("season_hint", "")}
 
 会話の役割:
 - opening: host が番組を開き、partner が空気を受ける
-- overall_summary: 二人で回全体の見取り図と流れを話す
+- overall_summary: 二人で回全体の流れや注目点を整理する
 - article: host が記事を紹介し、partner が反応や比較を返し、会話として厚みを作る
 - ending: host が締め、partner が余韻を返す
 
-turn の型:
-- opening は `host の挨拶と導入 -> partner の受けと空気づくり -> host の今日の流れ`
-- overall_summary は `host の俯瞰 -> partner の補助線や温度感 -> host のまとめ`
-- article は `host の記事導入 -> partner の第一反応 -> host の要点補足 -> partner の比較/違和感/問い返し -> host の軽い締め`
-- ending は `host の締め -> partner の余韻 -> host の見送り`
+つなぎ方:
+- {'\n'.join(bridge_rules)}
+
+会話の型:
+- opening は `host -> partner -> host -> partner -> host` の5手で必ず書く
+- overall_summary は `host -> partner -> host -> partner -> host` の5手で必ず書く
+- article は今回 {duo_article_turn_sequence} の{duo_article_turn_phrase}で進める
+- ending は `host -> partner -> host -> partner -> host` の5手で必ず書く
 - host は毎回、会話の起点と着地点を作る
-- partner は毎回、会話を横に広げる
+- partner は毎回、直前の host を受けて会話を横に広げる
+- article の {duo_article_turn_phrase}は {duo_article_turn_flow} の役割で進める
+- article は各記事をこの手数の中で必ず収める。足りないからといって別の追加 turn を生やさない
+- overall_summary と ending でも、後ろの turn ほど前の turn を受けて少しずつ話を進める
+- article の turn では item_id を入力 articles と同じ順番・同じ件数で使う
+- この call の対象セクションは {active_section} であり、それ以外のセクションへ脱線しない
+- section フィールドは今回許可されたセクション {allowed_sections} だけを使う
 
 返却形式:
 {response_example}
+
+今回の section 制約:
+{chr(10).join(section_scope_rules)}
+
+追加ルール:
+- {'\n'.join(section_rules)}
+{chr(10).join(supplement_rules)}
 
 articles:
 {json.dumps(trimmed_articles, ensure_ascii=False)}
@@ -1122,6 +1285,8 @@ articles:
                 include_overall_summary=include_overall_summary,
                 include_article_segments=include_article_segments,
                 include_ending=include_ending,
+                article_count=len(trimmed_articles),
+                article_turn_count=duo_article_turn_count,
             ),
             "persona": persona_key,
             "articles": trimmed_articles,
@@ -1249,6 +1414,7 @@ articles:
             include_overall_summary=include_overall_summary,
             include_article_segments=include_article_segments,
             include_ending=include_ending,
+            article_count=len(trimmed_articles),
         ),
         "persona": persona_key,
         "articles": trimmed_articles,
@@ -1286,6 +1452,7 @@ def parse_audio_briefing_script_result(
     articles: list[dict],
     persona: str,
     *,
+    conversation_mode: str = "single",
     target_chars: int = 12000,
     include_opening: bool = True,
     include_overall_summary: bool = True,
@@ -1293,7 +1460,9 @@ def parse_audio_briefing_script_result(
     include_ending: bool = True,
 ) -> dict:
     data = extract_first_json_object(text) or {}
-    raw_turns = data.get("turns") if isinstance(data.get("turns"), list) else []
+    normalized_conversation_mode = str(conversation_mode or "single").strip().lower()
+    turns_value = data.get("turns") if isinstance(data, dict) else None
+    raw_turns = turns_value if isinstance(turns_value, list) else []
     if raw_turns:
         turns: list[dict] = []
         for index, raw in enumerate(raw_turns, start=1):
@@ -1329,6 +1498,21 @@ def parse_audio_briefing_script_result(
             "turns": turns,
             "ending": "",
         }
+    if normalized_conversation_mode == "duo":
+        top_level_keys = []
+        if isinstance(data, dict):
+            top_level_keys = sorted(str(key) for key in data.keys())
+        turns_state = "missing"
+        if isinstance(data, dict) and "turns" in data:
+            if isinstance(turns_value, list):
+                turns_state = f"list(len={len(turns_value)})"
+            else:
+                turns_state = f"type={type(turns_value).__name__}"
+        snippet = strip_code_fence(text)
+        snippet = re.sub(r"\s+", " ", snippet).strip()[:240]
+        raise ValueError(
+            f"audio briefing script missing turns state={turns_state} keys={top_level_keys} snippet={snippet}"
+        )
     opening = _normalize_audio_briefing_generated_text(str(data.get("opening") or "").strip())
     overall_summary = _normalize_audio_briefing_generated_text(str(data.get("overall_summary") or "").strip())
     ending = _normalize_audio_briefing_generated_text(str(data.get("ending") or "").strip())
@@ -1390,6 +1574,7 @@ _AUDIO_BRIEFING_SCRIPT_RETRYABLE_ERROR_MARKERS = (
     "audio briefing script article_segments count mismatch",
     "audio briefing script segment must be an object",
     "audio briefing script turn must be an object",
+    "audio briefing script missing turns",
     "audio briefing script missing speaker for turn index:",
     "audio briefing script missing section for turn index:",
     "audio briefing script missing text for turn index:",
@@ -1575,6 +1760,13 @@ def _audio_briefing_sentence_length_spec(article_budget: int) -> str:
     if article_budget < 700:
         return "50〜95文字"
     return "60〜110文字"
+
+
+def _audio_briefing_duo_article_turn_count(article_budget: int) -> int:
+    article_budget = max(int(article_budget or 0), 1)
+    if article_budget < 420:
+        return 3
+    return 5
 
 
 def _normalize_audio_briefing_generated_text(text: str) -> str:

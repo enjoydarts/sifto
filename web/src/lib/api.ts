@@ -1343,6 +1343,7 @@ export interface AudioBriefingSettings {
   interval_hours: number;
   articles_per_episode: number;
   target_duration_minutes: number;
+  chunk_trailing_silence_seconds: number;
   default_persona_mode: string;
   default_persona: string;
   conversation_mode: "single" | "duo" | string;

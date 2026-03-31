@@ -713,7 +713,7 @@ func audioBriefingFrameSectionText(resp *AudioBriefingScriptResponse, section st
 
 func audioBriefingMergeSectionText(base string, supplement string) string {
 	base = strings.TrimSpace(base)
-	supplement = strings.TrimSpace(supplement)
+	supplement = audioBriefingTrimRepeatedLeadingSentences(base, strings.TrimSpace(supplement))
 	switch {
 	case base == "":
 		return supplement
@@ -724,6 +724,69 @@ func audioBriefingMergeSectionText(base string, supplement string) string {
 	default:
 		return strings.TrimSpace(base + "\n" + supplement)
 	}
+}
+
+func audioBriefingTrimRepeatedLeadingSentences(base string, supplement string) string {
+	base = strings.TrimSpace(base)
+	supplement = strings.TrimSpace(supplement)
+	if base == "" || supplement == "" {
+		return supplement
+	}
+	baseSentences := audioBriefingSplitSentences(base)
+	if len(baseSentences) == 0 {
+		return supplement
+	}
+	baseSeen := make(map[string]struct{}, len(baseSentences))
+	for _, sentence := range baseSentences {
+		key := audioBriefingSentenceKey(sentence)
+		if key == "" {
+			continue
+		}
+		baseSeen[key] = struct{}{}
+	}
+	supplementSentences := audioBriefingSplitSentences(supplement)
+	drop := 0
+	for drop < len(supplementSentences) {
+		key := audioBriefingSentenceKey(supplementSentences[drop])
+		if key == "" {
+			drop++
+			continue
+		}
+		if _, ok := baseSeen[key]; !ok {
+			break
+		}
+		drop++
+	}
+	if drop == 0 {
+		return supplement
+	}
+	return strings.TrimSpace(strings.Join(supplementSentences[drop:], "\n"))
+}
+
+func audioBriefingSplitSentences(text string) []string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	lines := strings.Split(text, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+func audioBriefingSentenceKey(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	text = strings.TrimRight(text, "。！？")
+	return strings.TrimSpace(text)
 }
 
 func audioBriefingSentenceCount(text string) int {

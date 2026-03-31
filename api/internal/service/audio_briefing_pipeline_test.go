@@ -246,6 +246,20 @@ func TestAudioBriefingFrameSectionNeedsSupplement(t *testing.T) {
 	}
 }
 
+func TestAudioBriefingMergeSectionTextDropsRepeatedLeadingSentences(t *testing.T) {
+	base := "おはようございます、編集長 水城です。\n火曜の朝は、空気が少し軽く、通勤や支度の足取りも変わりますね。\n今朝は、働き方や暮らし方、技術の行き先を静かに見比べる回です。"
+	supplement := "おはようございます、編集長 水城です。\n火曜の朝は、空気が少し軽く、通勤や支度の足取りも変わりますね。\n春の陽気に誘われて、カバンの中身も入れ替えたくなる頃ですが、わたくしは相変わらず無骨なトートで押し通しております。"
+
+	got := audioBriefingMergeSectionText(base, supplement)
+
+	if strings.Count(got, "おはようございます、編集長 水城です。") != 1 {
+		t.Fatalf("merged text duplicated greeting: %q", got)
+	}
+	if !strings.Contains(got, "春の陽気に誘われて") {
+		t.Fatalf("merged text missing new supplement sentence: %q", got)
+	}
+}
+
 func TestAudioBriefingSupplementIntroContextIncludesExistingText(t *testing.T) {
 	base := map[string]any{"time_of_day": "morning"}
 	got := audioBriefingSupplementIntroContext(base, "ending", "ここまでです。")

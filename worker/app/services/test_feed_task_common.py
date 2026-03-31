@@ -427,6 +427,9 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("speaker", prompt)
         self.assertIn("section", prompt)
         self.assertIn("host と partner が交互に会話しながら番組を進めます", prompt)
+        self.assertIn("article は原則 `host -> partner -> host -> partner -> host` の順で進める", prompt)
+        self.assertIn("turn の型:", prompt)
+        self.assertIn("partner は毎回、会話を横に広げる", prompt)
         self.assertNotIn("単独話者のAIナビゲーター", prompt)
 
     def test_parse_audio_briefing_script_result_accepts_duo_turns_only(self):

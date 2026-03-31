@@ -1064,6 +1064,14 @@ partner:
 - 各 turn は1〜4文で、1文ごとに改行する
 - 一つの section に最低2 turn は使う
 - article では記事ごとに host と partner の両方が必ず話す
+- opening は最低でも `host -> partner -> host` の順で進める
+- overall_summary は最低でも `host -> partner -> host` の順で進める
+- article は原則 `host -> partner -> host -> partner -> host` の順で進める
+- ending は最低でも `host -> partner -> host` の順で進める
+- host の最初の turn は導入・要点提示・進行を担い、partner の最初の turn は受け・反応・視点追加を担う
+- partner は host が置いた事実や論点をなぞらず、必ず新しい見方、比較、違和感、問い返しのどれかを足す
+- host の後半 turn は partner の反応を受けて、記事や回の流れを前に進める役割にする
+- 同じ speaker が長く連続しない。原則として speaker を交互に切り替える
 - 文字数制約は努力目標ではなく必須条件として扱う
 - 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
 - 短く安全にまとめるより、必要な厚みと会話感を保つことを優先する
@@ -1088,6 +1096,14 @@ partner:
 - overall_summary: 二人で回全体の見取り図と流れを話す
 - article: host が記事を紹介し、partner が反応や比較を返し、会話として厚みを作る
 - ending: host が締め、partner が余韻を返す
+
+turn の型:
+- opening は `host の挨拶と導入 -> partner の受けと空気づくり -> host の今日の流れ`
+- overall_summary は `host の俯瞰 -> partner の補助線や温度感 -> host のまとめ`
+- article は `host の記事導入 -> partner の第一反応 -> host の要点補足 -> partner の比較/違和感/問い返し -> host の軽い締め`
+- ending は `host の締め -> partner の余韻 -> host の見送り`
+- host は毎回、会話の起点と着地点を作る
+- partner は毎回、会話を横に広げる
 
 返却形式:
 {response_example}

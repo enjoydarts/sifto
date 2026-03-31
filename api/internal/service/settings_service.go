@@ -111,6 +111,7 @@ type UpdateAudioBriefingSettingsInput struct {
 	TargetDurationMinutes int
 	DefaultPersonaMode    *string
 	DefaultPersona        *string
+	ConversationMode      *string
 	BGMEnabled            bool
 	BGMR2Prefix           *string
 }
@@ -268,6 +269,7 @@ func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) map[str
 			"target_duration_minutes": 20,
 			"default_persona_mode":    PersonaModeFixed,
 			"default_persona":         "editor",
+			"conversation_mode":       "single",
 			"bgm_enabled":             false,
 			"bgm_r2_prefix":           nil,
 		}
@@ -279,6 +281,7 @@ func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) map[str
 		"target_duration_minutes": settings.TargetDurationMinutes,
 		"default_persona_mode":    NormalizePersonaMode(&settings.DefaultPersonaMode),
 		"default_persona":         settings.DefaultPersona,
+		"conversation_mode":       normalizeAudioBriefingConversationMode(&settings.ConversationMode),
 		"bgm_enabled":             settings.BGMEnabled,
 		"bgm_r2_prefix":           settings.BGMR2Prefix,
 	}
@@ -786,9 +789,22 @@ func (s *SettingsService) UpdateAudioBriefingSettings(ctx context.Context, userI
 		in.TargetDurationMinutes,
 		NormalizePersonaMode(in.DefaultPersonaMode),
 		normalizeAudioBriefingDefaultPersona(in.DefaultPersona),
+		normalizeAudioBriefingConversationMode(in.ConversationMode),
 		in.BGMEnabled,
 		bgmPrefix,
 	)
+}
+
+func normalizeAudioBriefingConversationMode(v *string) string {
+	if v == nil {
+		return "single"
+	}
+	switch strings.TrimSpace(strings.ToLower(*v)) {
+	case "duo":
+		return "duo"
+	default:
+		return "single"
+	}
 }
 
 func (s *SettingsService) UpdateAudioBriefingPersonaVoices(ctx context.Context, userID string, rows []UpdateAudioBriefingPersonaVoiceInput) ([]model.AudioBriefingPersonaVoice, error) {

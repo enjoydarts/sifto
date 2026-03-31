@@ -362,6 +362,7 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 		TargetDurationMinutes int     `json:"target_duration_minutes"`
 		DefaultPersonaMode    *string `json:"default_persona_mode"`
 		DefaultPersona        *string `json:"default_persona"`
+		ConversationMode      *string `json:"conversation_mode"`
 		BGMEnabled            bool    `json:"bgm_enabled"`
 		BGMR2Prefix           *string `json:"bgm_r2_prefix"`
 	}
@@ -376,6 +377,7 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 		TargetDurationMinutes: body.TargetDurationMinutes,
 		DefaultPersonaMode:    body.DefaultPersonaMode,
 		DefaultPersona:        body.DefaultPersona,
+		ConversationMode:      body.ConversationMode,
 		BGMEnabled:            body.BGMEnabled,
 		BGMR2Prefix:           body.BGMR2Prefix,
 	})

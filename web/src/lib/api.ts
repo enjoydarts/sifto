@@ -1345,6 +1345,7 @@ export interface AudioBriefingSettings {
   target_duration_minutes: number;
   default_persona_mode: string;
   default_persona: string;
+  conversation_mode: "single" | "duo" | string;
   bgm_enabled: boolean;
   bgm_r2_prefix?: string | null;
 }

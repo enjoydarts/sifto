@@ -157,7 +157,8 @@ func (o *AudioBriefingOrchestrator) createPendingJob(
 	if settings == nil {
 		return nil, fmt.Errorf("audio briefing settings are required")
 	}
-	return o.repo.CreatePendingJob(ctx, userID, slotStartedAt, slotKey, persona)
+	mode := normalizeAudioBriefingConversationModeValue(settings.ConversationMode)
+	return o.repo.CreatePendingJob(ctx, userID, slotStartedAt, slotKey, persona, mode, audioBriefingInitialPipelineStageForMode(mode))
 }
 
 func (o *AudioBriefingOrchestrator) continuePipeline(ctx context.Context, userID string, jobID string) (*model.AudioBriefingJob, bool, error) {
@@ -277,7 +278,7 @@ func (o *AudioBriefingOrchestrator) runScriptingStage(ctx context.Context, job *
 		_, _ = o.repo.FailScriptingJob(ctx, job.ID, "script_voice_missing", err.Error())
 		return err
 	}
-	draft, err := o.buildDraft(ctx, job.UserID, job.SlotStartedAtJST, job.Persona, items, voice, settings.TargetDurationMinutes)
+	draft, err := o.draftStrategy(job.ConversationMode).BuildDraft(ctx, job.UserID, job.SlotStartedAtJST, job.Persona, items, voice, settings.TargetDurationMinutes)
 	if err != nil {
 		_, _ = o.repo.FailScriptingJob(ctx, job.ID, "script_failed", err.Error())
 		return err
@@ -372,6 +373,18 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 	voice *model.AudioBriefingPersonaVoice,
 	targetDurationMinutes int,
 ) (AudioBriefingDraft, error) {
+	return o.buildSingleDraft(ctx, userID, slotStartedAt, persona, items, voice, targetDurationMinutes)
+}
+
+func (o *AudioBriefingOrchestrator) buildSingleDraft(
+	ctx context.Context,
+	userID string,
+	slotStartedAt time.Time,
+	persona string,
+	items []model.AudioBriefingJobItem,
+	voice *model.AudioBriefingPersonaVoice,
+	targetDurationMinutes int,
+) (AudioBriefingDraft, error) {
 	targetChars := AudioBriefingTargetChars(targetDurationMinutes)
 	if voice == nil {
 		return AudioBriefingDraft{}, fmt.Errorf("audio briefing voice is not configured")
@@ -451,6 +464,9 @@ func (o *AudioBriefingOrchestrator) buildDraft(
 					return o.worker.GenerateAudioBriefingScriptWithModel(
 						callCtx,
 						normalizedPersona,
+						normalizeAudioBriefingConversationModeValue("single"),
+						nil,
+						nil,
 						batch,
 						introContext,
 						anthropicKey,

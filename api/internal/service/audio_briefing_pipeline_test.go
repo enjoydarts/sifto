@@ -128,6 +128,24 @@ func TestAudioBriefingShouldContinue(t *testing.T) {
 	}
 }
 
+func TestNormalizeAudioBriefingConversationModeValue(t *testing.T) {
+	if got := normalizeAudioBriefingConversationModeValue("duo"); got != "duo" {
+		t.Fatalf("normalizeAudioBriefingConversationModeValue(duo) = %q, want duo", got)
+	}
+	if got := normalizeAudioBriefingConversationModeValue("something-else"); got != "single" {
+		t.Fatalf("normalizeAudioBriefingConversationModeValue(invalid) = %q, want single", got)
+	}
+}
+
+func TestAudioBriefingInitialPipelineStageForMode(t *testing.T) {
+	if got := audioBriefingInitialPipelineStageForMode("single"); got != "single_script" {
+		t.Fatalf("audioBriefingInitialPipelineStageForMode(single) = %q, want single_script", got)
+	}
+	if got := audioBriefingInitialPipelineStageForMode("duo"); got != "duo_script" {
+		t.Fatalf("audioBriefingInitialPipelineStageForMode(duo) = %q, want duo_script", got)
+	}
+}
+
 func TestAudioBriefingJobCanBeResumedAt(t *testing.T) {
 	now := time.Date(2026, 3, 25, 12, 0, 0, 0, time.UTC)
 	staleAfter := 30 * time.Minute

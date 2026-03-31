@@ -334,10 +334,18 @@ type AudioBriefingScriptSegment struct {
 	Commentary   string `json:"commentary"`
 }
 
+type AudioBriefingScriptTurn struct {
+	Speaker string  `json:"speaker"`
+	Section string  `json:"section"`
+	ItemID  *string `json:"item_id,omitempty"`
+	Text    string  `json:"text"`
+}
+
 type AudioBriefingScriptResponse struct {
 	Opening         string                       `json:"opening"`
 	OverallSummary  string                       `json:"overall_summary"`
 	ArticleSegments []AudioBriefingScriptSegment `json:"article_segments"`
+	Turns           []AudioBriefingScriptTurn    `json:"turns,omitempty"`
 	Ending          string                       `json:"ending"`
 	LLM             *LLMUsage                    `json:"llm,omitempty"`
 }
@@ -881,6 +889,9 @@ func (w *WorkerClient) GenerateItemNavigatorWithModel(
 func (w *WorkerClient) GenerateAudioBriefingScriptWithModel(
 	ctx context.Context,
 	persona string,
+	conversationMode string,
+	hostPersona *string,
+	partnerPersona *string,
 	articles []AudioBriefingScriptArticle,
 	introContext map[string]any,
 	anthropicAPIKey *string,
@@ -904,6 +915,9 @@ func (w *WorkerClient) GenerateAudioBriefingScriptWithModel(
 ) (*AudioBriefingScriptResponse, error) {
 	return postWithHeaders[AudioBriefingScriptResponse](ctx, w, "/audio-briefing-script", map[string]any{
 		"persona":                  persona,
+		"conversation_mode":        conversationMode,
+		"host_persona":             hostPersona,
+		"partner_persona":          partnerPersona,
 		"articles":                 articles,
 		"intro_context":            introContext,
 		"model":                    model,

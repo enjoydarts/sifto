@@ -112,6 +112,7 @@ type AudioBriefingSettings struct {
 	TargetDurationMinutes int       `json:"target_duration_minutes"`
 	DefaultPersonaMode    string    `json:"default_persona_mode"`
 	DefaultPersona        string    `json:"default_persona"`
+	ConversationMode      string    `json:"conversation_mode"`
 	BGMEnabled            bool      `json:"bgm_enabled"`
 	BGMR2Prefix           *string   `json:"bgm_r2_prefix,omitempty"`
 	CreatedAt             time.Time `json:"created_at"`
@@ -141,6 +142,9 @@ type AudioBriefingJob struct {
 	SlotStartedAtJST       time.Time  `json:"slot_started_at_jst"`
 	SlotKey                string     `json:"slot_key"`
 	Persona                string     `json:"persona"`
+	ConversationMode       string     `json:"conversation_mode"`
+	PartnerPersona         *string    `json:"partner_persona,omitempty"`
+	PipelineStage          *string    `json:"pipeline_stage,omitempty"`
 	Status                 string     `json:"status"`
 	ArchiveStatus          string     `json:"archive_status"`
 	SourceItemCount        int        `json:"source_item_count"`

@@ -460,6 +460,7 @@ export default function SettingsPage() {
   const [audioBriefingTargetDurationMinutes, setAudioBriefingTargetDurationMinutes] = useState("20");
   const [audioBriefingDefaultPersonaMode, setAudioBriefingDefaultPersonaMode] = useState<"fixed" | "random">("fixed");
   const [audioBriefingDefaultPersona, setAudioBriefingDefaultPersona] = useState("editor");
+  const [audioBriefingConversationMode, setAudioBriefingConversationMode] = useState<"single" | "duo">("single");
   const [audioBriefingBGMEnabled, setAudioBriefingBGMEnabled] = useState(false);
   const [audioBriefingBGMR2Prefix, setAudioBriefingBGMR2Prefix] = useState("");
   const [podcastEnabled, setPodcastEnabled] = useState(false);
@@ -548,6 +549,7 @@ export default function SettingsPage() {
       setAudioBriefingTargetDurationMinutes(String(audioBriefing?.target_duration_minutes ?? 20));
       setAudioBriefingDefaultPersonaMode(audioBriefing?.default_persona_mode === "random" ? "random" : "fixed");
       setAudioBriefingDefaultPersona(audioBriefing?.default_persona ?? "editor");
+      setAudioBriefingConversationMode(audioBriefing?.conversation_mode === "duo" ? "duo" : "single");
       setAudioBriefingBGMEnabled(Boolean(audioBriefing?.bgm_enabled));
       setAudioBriefingBGMR2Prefix(audioBriefing?.bgm_r2_prefix ?? "");
       const defaults = buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS);
@@ -2138,6 +2140,7 @@ export default function SettingsPage() {
         target_duration_minutes: Number(audioBriefingTargetDurationMinutes),
         default_persona_mode: audioBriefingDefaultPersonaMode,
         default_persona: audioBriefingDefaultPersona,
+        conversation_mode: audioBriefingConversationMode,
         bgm_enabled: audioBriefingBGMEnabled,
         bgm_r2_prefix: audioBriefingBGMR2Prefix.trim() || null,
       };
@@ -2679,6 +2682,25 @@ export default function SettingsPage() {
                         inputMode="numeric"
                         className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                       />
+                    </label>
+
+                    <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.conversationMode")}
+                      </div>
+                      <select
+                        value={audioBriefingConversationMode}
+                        onChange={(e) => setAudioBriefingConversationMode(e.target.value === "duo" ? "duo" : "single")}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      >
+                        <option value="single">{t("settings.audioBriefing.conversationMode.single")}</option>
+                        <option value="duo">{t("settings.audioBriefing.conversationMode.duo")}</option>
+                      </select>
+                      <p className="mt-2 text-[11px] leading-5 text-[var(--color-editorial-ink-soft)]">
+                        {audioBriefingConversationMode === "duo"
+                          ? t("settings.audioBriefing.conversationModeDuoHelp")
+                          : t("settings.audioBriefing.conversationModeSingleHelp")}
+                      </p>
                     </label>
 
                     <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">

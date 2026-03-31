@@ -86,8 +86,12 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 	}
 	settings, err := r.repo.GetSettings(ctx, userID)
 	if err != nil {
-		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
-		return nil, err
+		if errors.Is(err, repository.ErrNotFound) {
+			settings = nil
+		} else {
+			r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
+			return nil, err
+		}
 	}
 	partnerVoice, err := r.resolvePartnerVoiceForJob(ctx, job)
 	if err != nil {

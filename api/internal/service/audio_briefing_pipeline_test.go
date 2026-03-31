@@ -132,6 +132,9 @@ func TestNormalizeAudioBriefingConversationModeValue(t *testing.T) {
 	if got := normalizeAudioBriefingConversationModeValue("duo"); got != "duo" {
 		t.Fatalf("normalizeAudioBriefingConversationModeValue(duo) = %q, want duo", got)
 	}
+	if got := normalizeAudioBriefingConversationModeValue(" Duo "); got != "duo" {
+		t.Fatalf("normalizeAudioBriefingConversationModeValue(trimmed duo) = %q, want duo", got)
+	}
 	if got := normalizeAudioBriefingConversationModeValue("something-else"); got != "single" {
 		t.Fatalf("normalizeAudioBriefingConversationModeValue(invalid) = %q, want single", got)
 	}

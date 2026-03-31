@@ -843,6 +843,7 @@ export const jaDict: Dict = {
   "settings.audioBriefing.duoHostRuleFixed": "persona mode が fixed のため、選択した既定 persona が常に host になります。",
   "settings.audioBriefing.duoPartnerRuleTitle": "Partner の選ばれ方",
   "settings.audioBriefing.duoPartnerRuleBody": "partner は host と別の persona から選ばれます。Duo を常用するなら、複数 persona の voice を設定しておく方が安全です。",
+  "settings.audioBriefing.duoRequiresTwoVoices": "Duo を保存するには、少なくとも 2 つの persona voice 設定が必要です。",
   "settings.audioBriefing.summaryTitle": "配信の基本設定",
   "settings.audioBriefing.summaryHelp": "要約済み記事から、3時間または6時間ごとに音声エピソードを生成します。ここでは配信枠と既定ペルソナを管理し、下でペルソナごとの音声を調整します。",
   "settings.audioBriefing.saveSettings": "音声設定を保存",

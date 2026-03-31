@@ -2133,6 +2133,10 @@ export default function SettingsPage() {
   }
 
   async function persistAudioBriefingSettings() {
+    if (audioBriefingConversationMode === "duo" && configuredAudioBriefingVoiceCount < 2) {
+      showToast(t("settings.audioBriefing.duoRequiresTwoVoices"), "error");
+      return;
+    }
     setSavingAudioBriefing(true);
     try {
       const payload = {

@@ -224,6 +224,13 @@ func BuildAudioBriefingDraftFromTurns(
 		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, partType, speaker, text, ttsProvider, voiceModel, voiceStyle))
 		totalChars += charCount(text)
 	}
+	if len(chunks) == 0 {
+		return AudioBriefingDraft{
+			Title:  title,
+			Status: "failed",
+			Items:  items,
+		}
+	}
 	return AudioBriefingDraft{
 		Title:           title,
 		Status:          "scripted",

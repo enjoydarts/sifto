@@ -843,6 +843,7 @@ export const enDict: Dict = {
   "settings.audioBriefing.duoHostRuleFixed": "Because persona mode is fixed, the selected default persona always acts as the host.",
   "settings.audioBriefing.duoPartnerRuleTitle": "Partner selection",
   "settings.audioBriefing.duoPartnerRuleBody": "The partner is picked from a different persona than the host. If you want to use duo regularly, it is safer to configure voices for multiple personas.",
+  "settings.audioBriefing.duoRequiresTwoVoices": "Duo requires at least two configured persona voices before it can be saved.",
   "settings.audioBriefing.summaryTitle": "Delivery summary",
   "settings.audioBriefing.summaryHelp": "Generate audio episodes from summarized items every 3 or 6 hours. Manage schedule defaults here, then tune persona-specific voice assignments below.",
   "settings.audioBriefing.saveSettings": "Save audio settings",

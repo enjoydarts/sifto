@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 )
@@ -17,7 +18,7 @@ type audioBriefingDraftStrategy interface {
 }
 
 func normalizeAudioBriefingConversationModeValue(mode string) string {
-	if mode == "duo" {
+	if strings.ToLower(strings.TrimSpace(mode)) == "duo" {
 		return "duo"
 	}
 	return "single"

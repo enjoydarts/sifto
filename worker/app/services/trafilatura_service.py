@@ -23,6 +23,10 @@ _META_CHARSET_PATTERNS = [
     re.compile(br'(?is)<meta[^>]+charset=["\']?\s*([a-zA-Z0-9._\-]+)'),
     re.compile(br'(?is)<meta[^>]+content=["\'][^"\']*charset=\s*([a-zA-Z0-9._\-]+)[^"\']*["\']'),
 ]
+_META_CHARSET_TEXT_PATTERNS = [
+    re.compile(r'(?is)<meta[^>]+charset=["\']?\s*([a-zA-Z0-9._\-]+)'),
+    re.compile(r'(?is)<meta[^>]+content=["\'][^"\']*charset=\s*([a-zA-Z0-9._\-]+)[^"\']*["\']'),
+]
 
 
 def _looks_mojibake(text: str) -> bool:
@@ -31,6 +35,29 @@ def _looks_mojibake(text: str) -> bool:
         return False
     replacement_count = sample.count("\ufffd")
     return replacement_count >= 3 and replacement_count * 20 >= len(sample)
+
+
+def _declared_charset_in_text(text: str) -> str | None:
+    head = (text or "")[:8192]
+    for pattern in _META_CHARSET_TEXT_PATTERNS:
+        match = pattern.search(head)
+        if not match:
+            continue
+        charset = (match.group(1) or "").strip()
+        if charset:
+            return charset
+    return None
+
+
+def _needs_refetch(downloaded: str | None) -> bool:
+    if not downloaded:
+        return True
+    if _looks_mojibake(downloaded):
+        return True
+    declared = (_declared_charset_in_text(downloaded) or "").strip().lower()
+    if declared in {"shift_jis", "shift-jis", "sjis", "cp932", "ms932", "windows-31j"} and "\ufffd" in downloaded:
+        return True
+    return False
 
 
 def _decode_html_response(resp: httpx.Response) -> str:
@@ -142,7 +169,7 @@ def extract_body(url: str) -> dict | None:
         config.set("DEFAULT", "EXTRACTION_TIMEOUT", "30")
 
         downloaded = trafilatura.fetch_url(url)
-        if downloaded is None or _looks_mojibake(downloaded):
+        if _needs_refetch(downloaded):
             try:
                 downloaded, resp = _refetch_html(url)
                 if resp is not None and downloaded is None:

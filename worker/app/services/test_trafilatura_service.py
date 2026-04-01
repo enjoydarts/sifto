@@ -88,6 +88,33 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "映画『CUBA JAZZ』始動")
         self.assertEqual(result["content"], "キューバの音楽文化を追う")
 
+    def test_extract_body_refetches_when_shift_jis_page_contains_sparse_mojibake(self):
+        html = "<html><head><title>高橋慎一監督の新作映画『ハバナの奇跡』</title></head><body>社会主義国でのジャズクラブ誕生を追う</body></html>"
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.headers = {"content-type": "text/html"}
+        response.content = html.encode("cp932")
+        response.url = "https://example.com/final"
+        response.text = response.content.decode("utf-8", errors="replace")
+        captured = {}
+        fetched = "<html><head>" + ("a" * 3900) + '<meta charset="Shift_JIS" />' + "�����T��ē̐V" + "</head></html>"
+
+        def fake_bare_extraction(downloaded, **kwargs):
+            captured["downloaded"] = downloaded
+            return {"title": "高橋慎一監督の新作映画『ハバナの奇跡』", "text": "社会主義国でのジャズクラブ誕生を追う", "date": None}
+
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=fetched), patch(
+            "app.services.trafilatura_service.httpx.get", return_value=response
+        ), patch(
+            "app.services.trafilatura_service.trafilatura.bare_extraction",
+            side_effect=fake_bare_extraction,
+        ):
+            result = extract_body("https://example.com/start")
+
+        self.assertIn("高橋慎一監督の新作映画『ハバナの奇跡』", captured["downloaded"])
+        self.assertEqual(result["title"], "高橋慎一監督の新作映画『ハバナの奇跡』")
+        self.assertEqual(result["content"], "社会主義国でのジャズクラブ誕生を追う")
+
 
 if __name__ == "__main__":
     unittest.main()

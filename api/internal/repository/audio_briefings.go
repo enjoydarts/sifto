@@ -15,6 +15,15 @@ type AudioBriefingRepo struct{ db *pgxpool.Pool }
 
 func NewAudioBriefingRepo(db *pgxpool.Pool) *AudioBriefingRepo { return &AudioBriefingRepo{db: db} }
 
+type AudioBriefingPromptMetadata struct {
+	PromptKey             *string
+	PromptSource          *string
+	PromptVersionID       *string
+	PromptVersionNumber   *int
+	PromptExperimentID    *string
+	PromptExperimentArmID *string
+}
+
 func (r *AudioBriefingRepo) EnsureSettingsDefaults(ctx context.Context, userID string) (*model.AudioBriefingSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO audio_briefing_settings (user_id)
@@ -225,7 +234,9 @@ func (r *AudioBriefingRepo) ListJobsByUser(ctx context.Context, userID string, l
 	}
 	rows, err := r.db.Query(ctx, `
 		SELECT id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		       source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		       source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		       title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		       error_code, error_message, published_at, failed_at, created_at, updated_at
 		FROM audio_briefing_jobs
@@ -306,7 +317,9 @@ func (r *AudioBriefingRepo) ListPodcastPublishedJobsByUser(ctx context.Context, 
 func listPodcastPublishedJobsByUserQuery() string {
 	return `
 		SELECT id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		       source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		       source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		       title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		       error_code, error_message, published_at, failed_at, created_at, updated_at
 		FROM audio_briefing_jobs
@@ -324,7 +337,9 @@ func listPodcastPublishedJobsByUserQuery() string {
 func (r *AudioBriefingRepo) GetJobByID(ctx context.Context, userID, jobID string) (*model.AudioBriefingJob, error) {
 	row := r.db.QueryRow(ctx, `
 		SELECT id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		       source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		       source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		       title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		       error_code, error_message, published_at, failed_at, created_at, updated_at
 		FROM audio_briefing_jobs
@@ -340,7 +355,9 @@ func (r *AudioBriefingRepo) GetJobByID(ctx context.Context, userID, jobID string
 func (r *AudioBriefingRepo) GetJobBySlotKey(ctx context.Context, userID, slotKey string) (*model.AudioBriefingJob, error) {
 	row := r.db.QueryRow(ctx, `
 		SELECT id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		       source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		       source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		       title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		       error_code, error_message, published_at, failed_at, created_at, updated_at
 		FROM audio_briefing_jobs
@@ -439,7 +456,9 @@ func (r *AudioBriefingRepo) ListIAMoveCandidates(ctx context.Context, cutoff tim
 	}
 	rows, err := r.db.Query(ctx, `
 		SELECT id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		       source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		       source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		       title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		       error_code, error_message, published_at, failed_at, created_at, updated_at
 		FROM audio_briefing_jobs
@@ -490,7 +509,9 @@ func (r *AudioBriefingRepo) ListStaleVoicingJobs(ctx context.Context, cutoff tim
 func listStaleVoicingJobsQuery() string {
 	return `
 		SELECT j.id, j.user_id, j.slot_started_at_jst, j.slot_key, j.persona, j.conversation_mode, j.partner_persona, j.pipeline_stage, j.status, j.archive_status,
-		       j.source_item_count, j.reused_item_count, j.script_char_count, j.script_llm_models, j.audio_duration_sec,
+		       j.source_item_count, j.reused_item_count, j.script_char_count, j.script_llm_models,
+               j.prompt_key, j.prompt_source, j.prompt_version_id, j.prompt_version_number, j.prompt_experiment_id, j.prompt_experiment_arm_id,
+               j.audio_duration_sec,
 		       j.title, j.r2_audio_object_key, j.r2_manifest_object_key, j.bgm_object_key, j.r2_storage_bucket, j.podcast_public_object_key, j.podcast_public_bucket, j.podcast_public_deleted_at, j.provider_job_id, j.idempotency_key,
 		       j.error_code, j.error_message, j.published_at, j.failed_at, j.created_at, j.updated_at
 		FROM audio_briefing_jobs j
@@ -552,7 +573,9 @@ func (r *AudioBriefingRepo) UpdateArchiveStatus(ctx context.Context, userID, job
 		  AND user_id = $2
 		  AND status = 'published'
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, userID, archiveStatus))
@@ -579,7 +602,9 @@ func (r *AudioBriefingRepo) SetPodcastPublicObject(ctx context.Context, jobID st
 		    updated_at = NOW()
 		WHERE id = $1
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, bucket, objectKey))
@@ -598,7 +623,9 @@ func (r *AudioBriefingRepo) MarkPodcastPublicObjectDeleted(ctx context.Context, 
 		    updated_at = NOW()
 		WHERE id = $1
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID))
@@ -770,7 +797,9 @@ func (r *AudioBriefingRepo) SetPartnerPersona(ctx context.Context, jobID string,
 		WHERE id = $1
 		  AND status IN ('pending', 'scripting', 'failed')
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, partnerPersona))
@@ -809,7 +838,9 @@ func (r *AudioBriefingRepo) StartScriptingJob(ctx context.Context, jobID string)
 		    )
 		  )
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID))
@@ -829,6 +860,7 @@ func (r *AudioBriefingRepo) CompleteScriptingJob(
 	title *string,
 	scriptCharCount int,
 	scriptLLMModels *string,
+	prompt AudioBriefingPromptMetadata,
 	items []model.AudioBriefingJobItem,
 	chunks []model.AudioBriefingScriptChunk,
 ) (*model.AudioBriefingJob, error) {
@@ -845,7 +877,13 @@ func (r *AudioBriefingRepo) CompleteScriptingJob(
 		    reused_item_count = 0,
 		    script_char_count = $4,
 		    script_llm_models = NULLIF($5, ''),
-		    title = $6,
+		    prompt_key = NULLIF($6, ''),
+		    prompt_source = NULLIF($7, ''),
+		    prompt_version_id = $8,
+		    prompt_version_number = $9,
+		    prompt_experiment_id = $10,
+		    prompt_experiment_arm_id = $11,
+		    title = $12,
 		    error_code = NULL,
 		    error_message = NULL,
 		    failed_at = NULL,
@@ -853,10 +891,12 @@ func (r *AudioBriefingRepo) CompleteScriptingJob(
 		WHERE id = $1
 		  AND status = 'scripting'
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
-	`, jobID, strings.TrimSpace(status), len(items), scriptCharCount, strings.TrimSpace(valueOrEmpty(scriptLLMModels)), title))
+	`, jobID, strings.TrimSpace(status), len(items), scriptCharCount, strings.TrimSpace(valueOrEmpty(scriptLLMModels)), strings.TrimSpace(valueOrEmpty(prompt.PromptKey)), strings.TrimSpace(valueOrEmpty(prompt.PromptSource)), prompt.PromptVersionID, prompt.PromptVersionNumber, prompt.PromptExperimentID, prompt.PromptExperimentArmID, title))
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrInvalidState
@@ -912,7 +952,9 @@ func (r *AudioBriefingRepo) FailScriptingJob(ctx context.Context, jobID string, 
 		WHERE id = $1
 		  AND status IN ('pending', 'scripting')
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, errorCode, strings.TrimSpace(errorMessage)))
@@ -968,7 +1010,9 @@ func (r *AudioBriefingRepo) BeginConcatCallback(
 		    )
 		  )
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, providerJobID, manifestObjectKey))
@@ -1107,7 +1151,9 @@ func (r *AudioBriefingRepo) UpdateConcatProviderJobID(ctx context.Context, jobID
 		WHERE id = $1
 		  AND status = 'concatenating'
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, providerJobID))
@@ -1136,7 +1182,9 @@ func (r *AudioBriefingRepo) FailConcatLaunch(ctx context.Context, jobID string, 
 		WHERE id = $1
 		  AND status = 'concatenating'
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, errorCode, errorMessage))
@@ -1175,7 +1223,9 @@ func (r *AudioBriefingRepo) StartVoicingJob(ctx context.Context, jobID string) (
 		    )
 		  )
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID))
@@ -1351,7 +1401,9 @@ func (r *AudioBriefingRepo) CompleteVoicingJob(ctx context.Context, jobID string
 		      AND tts_status <> 'generated'
 		  )
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID))
@@ -1379,7 +1431,9 @@ func (r *AudioBriefingRepo) FailVoicingJob(ctx context.Context, jobID string, er
 		WHERE id = $1
 		  AND status IN ('scripted', 'voicing')
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, errorCode, strings.TrimSpace(errorMessage)))
@@ -1413,6 +1467,12 @@ func scanAudioBriefingJob(row audioBriefingJobScanner) (model.AudioBriefingJob, 
 		&job.ReusedItemCount,
 		&job.ScriptCharCount,
 		&job.ScriptLLMModels,
+		&job.PromptKey,
+		&job.PromptSource,
+		&job.PromptVersionID,
+		&job.PromptVersionNumber,
+		&job.PromptExperimentID,
+		&job.PromptExperimentArmID,
 		&job.AudioDurationSec,
 		&job.Title,
 		&job.R2AudioObjectKey,
@@ -1467,7 +1527,9 @@ func scanAudioBriefingScriptChunk(row audioBriefingJobScanner) (model.AudioBrief
 func getAudioBriefingJobByIDTx(ctx context.Context, tx pgx.Tx, jobID string) (*model.AudioBriefingJob, error) {
 	job, err := scanAudioBriefingJob(tx.QueryRow(ctx, `
 		SELECT id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		       source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		       source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		       title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		       error_code, error_message, published_at, failed_at, created_at, updated_at
 		FROM audio_briefing_jobs
@@ -1498,7 +1560,9 @@ func updateAudioBriefingJobPublishedTx(ctx context.Context, tx pgx.Tx, jobID str
 		WHERE id = $1
 		  AND status IN ('scripted', 'voiced', 'concatenating')
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, providerJobID, audioObjectKey, manifestObjectKey, bgmObjectKey, audioDurationSec, standardBucket))
@@ -1523,7 +1587,9 @@ func updateAudioBriefingJobFailedTx(ctx context.Context, tx pgx.Tx, jobID string
 		WHERE id = $1
 		  AND status IN ('scripted', 'voiced', 'concatenating')
 		RETURNING id, user_id, slot_started_at_jst, slot_key, persona, conversation_mode, partner_persona, pipeline_stage, status, archive_status,
-		          source_item_count, reused_item_count, script_char_count, script_llm_models, audio_duration_sec,
+		          source_item_count, reused_item_count, script_char_count, script_llm_models,
+               prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+               audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
 	`, jobID, providerJobID, errorCode, errorMessage))

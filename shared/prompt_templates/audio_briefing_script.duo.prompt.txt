@@ -1,0 +1,50 @@
+# Task
+与えられた記事だけを根拠に、日本語の二人会話の音声ブリーフィング台本を作成してください。
+今回有効なセクションは opening={{include_opening}}, overall_summary={{include_overall_summary}}, article={{include_article_segments}}, ending={{include_ending}} です。
+今回の対象 section は {{active_section}} で、使用してよい section は {{allowed_sections}} だけです。
+JSON schema と有効フラグに従い、今回返すべき section だけを返してください。
+
+# Length Constraints
+- 目標尺: 約 {{target_duration_minutes}} 分
+- 換算レート: 1分あたり {{chars_per_minute}} 文字
+- 今回返すセクション全体の目標文字数: 約 {{target_chars}} 文字
+- 全体の本文合計は必ず {{target_chars_min}}文字以上 {{target_chars_max}}文字以下にしてください。
+- article は各記事あたり {{article_char_range}} を目安に均等配分してください。
+- article は今回 {{duo_article_turn_phrase}}、並びは {{duo_article_turn_sequence}} です。
+- article の役割分担は {{duo_article_turn_flow}} です。
+
+# Conversation Rules
+- opening は番組の導入として、host が空気を作り partner が受ける会話にしてください。個別記事の説明には入らないでください。
+- overall_summary は回全体の流れ、つながり、温度差、いま追う意味を二人で整理してください。記事順の読み上げにはしないでください。
+- article では host の最初の turn で記事を自然に導入し、partner が反応や比較を返し、host が着地点を作って次へ渡してください。
+- ending は番組全体の締めです。新しい話題へ戻らず、今日残った感触を受けて自然に閉じてください。
+- opening / overall_summary / ending はそれぞれ 5手で書いてください。
+- article は各記事を {{duo_article_turn_phrase}} の中で完結させ、追加 turn を生やさないでください。
+- 各記事の最後は完全に閉じすぎず、次の話題へ滑らかにつながる温度を残してください。
+- partner は毎回、直前の host を受けて会話を横に広げてください。
+- host は毎回、会話の起点と着地点を作ってください。
+
+# Program Context
+- generation_mode: {{generation_mode}}
+- generation_section: {{generation_section}}
+- program_position: {{program_position}}
+- total_articles: {{total_articles}}
+- article_batch_range: {{article_batch_range}}
+- call_scope_note: {{call_scope_note}}
+- supplement_note: {{supplement_note}}
+
+# Intro Context
+- now_jst: {{now_jst}}
+- date_jst: {{date_jst}}
+- weekday_jst: {{weekday_jst}}
+- time_of_day: {{time_of_day}}
+- season_hint: {{season_hint}}
+
+# Existing Context
+{{existing_context}}
+
+# Response Format
+{{response_example}}
+
+# Input Articles
+{{articles_json}}

@@ -115,6 +115,79 @@ export interface PoeSyncStatusResponse {
   run: PoeSyncRun | null;
 }
 
+export interface PromptAdminCapabilities {
+  can_manage_prompts: boolean;
+  user_email: string | null;
+  purposes: string[];
+}
+
+export interface PromptTemplate {
+  id: string;
+  key: string;
+  purpose: string;
+  description: string;
+  status: string;
+  active_version_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PromptTemplateVersion {
+  id: string;
+  template_id: string;
+  version: number;
+  label: string;
+  system_instruction: string;
+  prompt_text: string;
+  fallback_prompt_text: string;
+  variables_schema?: Record<string, unknown> | string | null;
+  notes: string;
+  created_by_user_id?: string | null;
+  created_by_email: string;
+  created_at: string;
+}
+
+export interface PromptExperiment {
+  id: string;
+  template_id: string;
+  name: string;
+  status: string;
+  assignment_unit: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  created_by_user_id?: string | null;
+  created_by_email: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PromptExperimentArm {
+  id: string;
+  experiment_id: string;
+  version_id: string;
+  weight: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PromptTemplateDefault {
+  label: string;
+  system_instruction: string;
+  prompt_text: string;
+  fallback_prompt_text: string;
+  variables_schema?: Record<string, unknown> | string | null;
+  preview_variables?: Record<string, unknown> | string | null;
+  notes: string;
+}
+
+export interface PromptTemplateDetailResponse {
+  template: PromptTemplate;
+  versions: PromptTemplateVersion[];
+  experiments: PromptExperiment[];
+  arms: PromptExperimentArm[];
+  default_template: PromptTemplateDefault;
+}
+
 export interface AivisSyncRun {
   id: string;
   started_at: string;
@@ -481,6 +554,12 @@ export interface ItemSummaryLLM {
   requested_model?: string | null;
   resolved_model?: string | null;
   pricing_source: string;
+  prompt_key?: string | null;
+  prompt_source?: string | null;
+  prompt_version_id?: string | null;
+  prompt_version_number?: number | null;
+  prompt_experiment_id?: string | null;
+  prompt_experiment_arm_id?: string | null;
   created_at: string;
 }
 
@@ -488,6 +567,12 @@ export interface ItemLLMExecutionAttempt {
   provider: string;
   model: string;
   purpose: string;
+  prompt_key?: string;
+  prompt_source?: string;
+  prompt_version_id?: string | null;
+  prompt_version_number?: number | null;
+  prompt_experiment_id?: string | null;
+  prompt_experiment_arm_id?: string | null;
   status: string;
   attempt_index: number;
   error_kind?: string | null;
@@ -1399,6 +1484,12 @@ export interface AudioBriefingJob {
   reused_item_count: number;
   script_char_count: number;
   script_llm_models?: string | null;
+  prompt_key?: string | null;
+  prompt_source?: string | null;
+  prompt_version_id?: string | null;
+  prompt_version_number?: number | null;
+  prompt_experiment_id?: string | null;
+  prompt_experiment_arm_id?: string | null;
   audio_duration_sec?: number | null;
   title?: string | null;
   r2_audio_object_key?: string | null;
@@ -2512,6 +2603,58 @@ export const api = {
     ),
   getAivisUserDictionaries: () =>
     apiFetch<AivisUserDictionariesResponse>("/settings/aivis-user-dictionaries"),
+  getPromptAdminCapabilities: () =>
+    apiFetch<PromptAdminCapabilities>("/settings/prompt-admin/capabilities"),
+  getPromptTemplates: () =>
+    apiFetch<{ templates: PromptTemplate[] }>("/settings/prompt-admin/templates"),
+  getPromptTemplateDetail: (id: string) =>
+    apiFetch<PromptTemplateDetailResponse>(`/settings/prompt-admin/templates/${id}`),
+  createPromptTemplateVersion: (
+    id: string,
+    body: {
+      label: string;
+      system_instruction: string;
+      prompt_text: string;
+      fallback_prompt_text?: string;
+      variables_schema?: Record<string, unknown> | string | null;
+      notes?: string;
+    }
+  ) =>
+    apiFetch<PromptTemplateVersion>(`/settings/prompt-admin/templates/${id}/versions`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  activatePromptTemplateVersion: (id: string, versionId: string | null) =>
+    apiFetch<{ ok: boolean }>(`/settings/prompt-admin/templates/${id}/activate`, {
+      method: "POST",
+      body: JSON.stringify({ version_id: versionId }),
+    }),
+  createPromptExperiment: (body: {
+    template_id: string;
+    name: string;
+    status: string;
+    assignment_unit: string;
+    started_at?: string | null;
+    ended_at?: string | null;
+    arms: { version_id: string; weight: number }[];
+  }) =>
+    apiFetch<{ experiment: PromptExperiment; arms: PromptExperimentArm[] }>("/settings/prompt-admin/experiments", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updatePromptExperiment: (
+    id: string,
+    body: {
+      status?: string;
+      started_at?: string | null;
+      ended_at?: string | null;
+      arms?: { version_id: string; weight: number }[];
+    }
+  ) =>
+    apiFetch<{ experiment: PromptExperiment; arms: PromptExperimentArm[] }>(`/settings/prompt-admin/experiments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   setAivisUserDictionary: (uuid: string) =>
     apiFetch<{ user_id: string; aivis_user_dictionary_uuid: string | null }>(
       "/settings/aivis-user-dictionary",

@@ -12,6 +12,7 @@ from app.services.moonshot_service import summarize as summarize_moonshot
 from app.services.openai_service import summarize as summarize_openai
 from app.services.openrouter_service import summarize as summarize_openrouter
 from app.services.poe_service import summarize as summarize_poe
+from app.services.runtime_prompt_overrides import bind_prompt_override
 from app.services.siliconflow_service import summarize as summarize_siliconflow
 from app.services.xai_service import summarize as summarize_xai
 from app.services.zai_service import summarize as summarize_zai
@@ -25,6 +26,7 @@ class SummarizeRequest(BaseModel):
     facts: list[str]
     model: str | None = None
     source_text_chars: int | None = None
+    prompt: dict | None = None
 
 
 class SummarizeResponse(BaseModel):
@@ -41,14 +43,15 @@ class SummarizeResponse(BaseModel):
 @router.post("/summarize", response_model=SummarizeResponse)
 def summarize_endpoint(req: SummarizeRequest, request: Request):
     try:
-        result = run_observed_request(
-            request,
-            metadata={"model": req.model or "", "facts_count": len(req.facts or []), "source_text_chars": req.source_text_chars or 0},
-            input_payload={"title": req.title, "facts_count": len(req.facts or []), "model": req.model},
-            call=lambda: dispatch_by_model(
+        with bind_prompt_override((req.prompt or {}).get("prompt_key"), (req.prompt or {}).get("prompt_text"), (req.prompt or {}).get("system_instruction")):
+            result = run_observed_request(
                 request,
-                req.model,
-                handlers={
+                metadata={"model": req.model or "", "facts_count": len(req.facts or []), "source_text_chars": req.source_text_chars or 0},
+                input_payload={"title": req.title, "facts_count": len(req.facts or []), "model": req.model},
+                call=lambda: dispatch_by_model(
+                    request,
+                    req.model,
+                    handlers={
                     "anthropic": lambda api_key: summarize(
                         req.title,
                         req.facts,
@@ -147,15 +150,15 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
                         model=str(req.model),
                         api_key=api_key or "",
                     ),
+                    },
+                ),
+                output_builder=lambda result: {
+                    "topics_count": len(result.get("topics") or []),
+                    "summary_chars": len(result.get("summary") or ""),
+                    "translated_title_present": bool(result.get("translated_title")),
+                    **llm_usage_summary(result),
                 },
-            ),
-            output_builder=lambda result: {
-                "topics_count": len(result.get("topics") or []),
-                "summary_chars": len(result.get("summary") or ""),
-                "translated_title_present": bool(result.get("translated_title")),
-                **llm_usage_summary(result),
-            },
-        )
+            )
         return SummarizeResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"summarize failed: {e}")

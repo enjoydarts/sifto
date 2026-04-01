@@ -1,5 +1,7 @@
 import unittest
 
+from app.services.prompt_template_defaults import get_default_prompt_template
+from app.services.runtime_prompt_overrides import bind_prompt_override
 from app.services.summary_task_common import SUMMARY_SYSTEM_INSTRUCTION, build_summary_task
 
 
@@ -39,6 +41,32 @@ class SummaryTaskCommonTests(unittest.TestCase):
         prompt = task["prompt"]
         self.assertIn('"translated_title": ""', prompt)
         self.assertNotIn("英語タイトルの場合のみ日本語訳（日本語記事は空文字）", prompt)
+
+    def test_default_template_override_matches_code_default_rendering(self):
+        expected = build_summary_task(
+            "OpenAI updates model lineup",
+            [
+                "OpenAI announced a new lineup.",
+                "The company said the release targets enterprise use.",
+                "Pricing will change next month.",
+            ],
+            source_text_chars=2400,
+        )
+        default_template = get_default_prompt_template("summary.default")
+
+        with bind_prompt_override("summary.default", default_template["prompt_text"], default_template["system_instruction"]):
+            actual = build_summary_task(
+                "OpenAI updates model lineup",
+                [
+                    "OpenAI announced a new lineup.",
+                    "The company said the release targets enterprise use.",
+                    "Pricing will change next month.",
+                ],
+                source_text_chars=2400,
+            )
+
+        self.assertEqual(actual["system_instruction"], expected["system_instruction"])
+        self.assertEqual(actual["prompt"], expected["prompt"])
 
 
 if __name__ == "__main__":

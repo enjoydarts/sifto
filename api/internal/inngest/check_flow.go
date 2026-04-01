@@ -47,7 +47,7 @@ func executeLLMCheck[T any](ctx context.Context, deps processItemDeps, cfg llmCh
 		if resp == nil {
 			return nil, fmt.Errorf("%s returned nil response", cfg.purpose)
 		}
-		recordLLMUsage(ctx, deps.llmUsageRepo, cfg.purpose, cfg.getLLM(resp), cfg.userID, cfg.sourceID, cfg.itemID, nil)
+		recordLLMUsage(ctx, deps.llmUsageRepo, cfg.purpose, cfg.getLLM(resp), cfg.userID, cfg.sourceID, cfg.itemID, nil, nil)
 		return resp, nil
 	})
 	if err != nil {
@@ -55,13 +55,13 @@ func executeLLMCheck[T any](ctx context.Context, deps processItemDeps, cfg llmCh
 		if chooseModelOverride(failedModel, nil) == nil && cfg.defaultRuntime != nil {
 			failedModel = cfg.defaultRuntime.Model
 		}
-		recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, cfg.purpose, failedModel, cfg.attempt, cfg.userID, cfg.sourceID, cfg.itemID, nil, err)
+		recordLLMExecutionFailure(ctx, deps.llmExecutionRepo, cfg.purpose, failedModel, cfg.attempt, cfg.userID, cfg.sourceID, cfg.itemID, nil, nil, err)
 		if cfg.onExecutionError != nil {
 			return cfg.onExecutionError(err), false, nil
 		}
 		return nil, false, err
 	}
 
-	recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, cfg.purpose, cfg.getLLM(result), cfg.attempt, cfg.userID, cfg.sourceID, cfg.itemID, nil)
+	recordLLMExecutionSuccess(ctx, deps.llmExecutionRepo, cfg.purpose, cfg.getLLM(result), cfg.attempt, cfg.userID, cfg.sourceID, cfg.itemID, nil, nil)
 	return result, strings.EqualFold(strings.TrimSpace(cfg.getVerdict(result)), "fail"), nil
 }

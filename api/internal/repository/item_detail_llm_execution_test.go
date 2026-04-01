@@ -50,3 +50,49 @@ func TestNormalizeExecutionAttemptsForDetailWithoutLimit(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeExecutionAttemptsForDetailPreservesPromptMetadata(t *testing.T) {
+	base := time.Date(2026, 4, 1, 9, 0, 0, 0, time.UTC)
+	versionID := "pv_123"
+	experimentID := "exp_123"
+	armID := "arm_123"
+	in := []model.ItemLLMExecutionAttempt{
+		{
+			Model:                 "newer",
+			CreatedAt:             base.Add(time.Minute),
+			PromptKey:             "summary.default",
+			PromptSource:          "template_version",
+			PromptVersionID:       &versionID,
+			PromptVersionNumber:   ptrInt(3),
+			PromptExperimentID:    &experimentID,
+			PromptExperimentArmID: &armID,
+		},
+		{
+			Model:        "older",
+			CreatedAt:    base,
+			PromptKey:    "summary.default",
+			PromptSource: "default_code",
+		},
+	}
+
+	got := normalizeExecutionAttemptsForDetail(in, 0)
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+	if got[1].PromptSource != "template_version" {
+		t.Fatalf("got[1].PromptSource = %q, want template_version", got[1].PromptSource)
+	}
+	if got[1].PromptVersionNumber == nil || *got[1].PromptVersionNumber != 3 {
+		t.Fatalf("got[1].PromptVersionNumber = %v, want 3", got[1].PromptVersionNumber)
+	}
+	if got[1].PromptExperimentID == nil || *got[1].PromptExperimentID != experimentID {
+		t.Fatalf("got[1].PromptExperimentID = %v, want %q", got[1].PromptExperimentID, experimentID)
+	}
+	if got[1].PromptExperimentArmID == nil || *got[1].PromptExperimentArmID != armID {
+		t.Fatalf("got[1].PromptExperimentArmID = %v, want %q", got[1].PromptExperimentArmID, armID)
+	}
+}
+
+func ptrInt(v int) *int {
+	return &v
+}

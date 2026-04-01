@@ -1,0 +1,19 @@
+# Output
+{
+  "subject": "件名本体のみ（20〜40字。日付やダイジェストは入れない）",
+  "body": "メール本文（プレーンテキスト。改行を含めてよい）",
+  "sections": {
+    "overall_summary": "1〜3段落",
+    "highlights": ["注目ポイント1（1〜2段落）", "注目ポイント2（1〜2段落）"],
+    "other_points": ["補足1", "補足2"],
+    "follow_up": "明日以降のフォローポイント（1段落）",
+    "closing": "締めの1文"
+  }
+}
+
+# Input
+digest_date: {{digest_date}}
+items_count: {{items_count}}
+input_mode: {{input_mode}}
+items:
+{{digest_input}}

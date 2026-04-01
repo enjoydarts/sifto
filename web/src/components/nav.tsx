@@ -56,29 +56,9 @@ const secondaryLinks = [
   { href: "/poe-models", labelKey: "nav.poeModels", icon: Link2 },
   { href: "/openrouter-models", labelKey: "nav.openrouterModels", icon: Link2 },
   { href: "/aivis-models", labelKey: "nav.aivisModels", icon: Link2 },
+  { href: "/prompt-admin", labelKey: "nav.promptAdmin", icon: SettingsIcon },
   { href: "/settings", labelKey: "nav.settings", icon: SettingsIcon },
   { href: "/debug/digests", labelKey: "nav.debug", icon: Bug },
-];
-
-const moreStandaloneLinks = secondaryLinks.filter((link) => ["/settings", "/debug/digests"].includes(link.href));
-
-const moreSubmenuGroups = [
-  {
-    labelKey: "nav.group.insights",
-    items: secondaryLinks.filter((link) => ["/clusters", "/pulse", "/goals", "/favorites"].includes(link.href)),
-  },
-  {
-    labelKey: "nav.group.library",
-    items: secondaryLinks.filter((link) =>
-      ["/sources", "/digests", "/audio-briefings", "/ai-navigator-briefs", "/playback-history"].includes(link.href),
-    ),
-  },
-  {
-    labelKey: "nav.group.llm",
-    items: secondaryLinks.filter((link) =>
-      ["/llm-usage", "/llm-analysis", "/provider-model-snapshots", "/poe-models", "/openrouter-models", "/aivis-models"].includes(link.href),
-    ),
-  },
 ];
 
 type SharedNavProps = {
@@ -115,11 +95,32 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [openRouterSyncRun, setOpenRouterSyncRun] = useState<OpenRouterSyncRun | null>(null);
   const [watchOpenRouterSync, setWatchOpenRouterSync] = useState(false);
+  const [canManagePrompts, setCanManagePrompts] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  const visibleSecondaryLinks = secondaryLinks.filter((link) => (link.href === "/prompt-admin" ? canManagePrompts : true));
+  const moreStandaloneLinks = visibleSecondaryLinks.filter((link) => ["/settings", "/debug/digests"].includes(link.href));
+  const moreSubmenuGroups = [
+    {
+      labelKey: "nav.group.insights",
+      items: visibleSecondaryLinks.filter((link) => ["/clusters", "/pulse", "/goals", "/favorites"].includes(link.href)),
+    },
+    {
+      labelKey: "nav.group.library",
+      items: visibleSecondaryLinks.filter((link) =>
+        ["/sources", "/digests", "/audio-briefings", "/ai-navigator-briefs", "/playback-history"].includes(link.href),
+      ),
+    },
+    {
+      labelKey: "nav.group.llm",
+      items: visibleSecondaryLinks.filter((link) =>
+        ["/llm-usage", "/llm-analysis", "/provider-model-snapshots", "/poe-models", "/openrouter-models", "/aivis-models", "/prompt-admin"].includes(link.href),
+      ),
+    },
+  ];
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
   const isLinkActive = (href: string, activeHref?: string) => isActive(activeHref ?? href);
-  const isMoreActive = secondaryLinks.some((v) => isActive(v.href));
+  const isMoreActive = visibleSecondaryLinks.some((v) => isActive(v.href));
   useEffect(() => {
     if (!moreOpen) return;
     const onDocClick = (e: MouseEvent) => {
@@ -131,6 +132,20 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [moreOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getPromptAdminCapabilities()
+      .then((result) => {
+        if (!cancelled) setCanManagePrompts(Boolean(result.can_manage_prompts));
+      })
+      .catch(() => {
+        if (!cancelled) setCanManagePrompts(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -260,7 +275,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
                   type="button"
                   onClick={() => setMoreOpen((v) => !v)}
                   className={`group inline-flex items-center rounded-full border px-[14px] py-[10px] text-[13px] leading-none transition-colors duration-150 press focus-ring ${
-                    secondaryLinks.some((v) => isActive(v.href))
+                    visibleSecondaryLinks.some((v) => isActive(v.href))
                       ? "border-[var(--color-editorial-line-strong)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink)]"
                       : "border-transparent text-[var(--color-editorial-ink-soft)] hover:border-[var(--color-editorial-line)] hover:bg-[var(--color-editorial-panel)] hover:text-[var(--color-editorial-ink)]"
                   }`}

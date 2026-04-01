@@ -18,6 +18,12 @@ type LLMUsageLogInput struct {
 	SourceID                 *string
 	ItemID                   *string
 	DigestID                 *string
+	PromptKey                string
+	PromptSource             string
+	PromptVersionID          *string
+	PromptVersionNumber      *int
+	PromptExperimentID       *string
+	PromptExperimentArmID    *string
 	Provider                 string
 	Model                    string
 	RequestedModel           string
@@ -149,14 +155,16 @@ func (r *LLMUsageLogRepo) Insert(ctx context.Context, in LLMUsageLogInput) error
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO llm_usage_logs (
 			idempotency_key, user_id, source_id, item_id, digest_id,
+			prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
 			provider, model, requested_model, resolved_model, pricing_model_family, pricing_source, openrouter_cost_usd, openrouter_generation_id, purpose,
 			input_tokens, output_tokens,
 			cache_creation_input_tokens, cache_read_input_tokens,
 			estimated_cost_usd
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
 		ON CONFLICT (idempotency_key) DO NOTHING
 	`,
 		in.IdempotencyKey, in.UserID, in.SourceID, in.ItemID, in.DigestID,
+		in.PromptKey, in.PromptSource, in.PromptVersionID, in.PromptVersionNumber, in.PromptExperimentID, in.PromptExperimentArmID,
 		in.Provider, in.Model, nullIfEmpty(in.RequestedModel), nullIfEmpty(in.ResolvedModel), in.PricingModelFamily, in.PricingSource, in.OpenRouterCostUSD, nullIfEmpty(in.OpenRouterGenerationID), in.Purpose,
 		in.InputTokens, in.OutputTokens,
 		in.CacheCreationInputTokens, in.CacheReadInputTokens,

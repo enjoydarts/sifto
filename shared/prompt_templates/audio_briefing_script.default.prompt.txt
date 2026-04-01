@@ -1,0 +1,26 @@
+# Task
+与えられた記事だけを根拠に、日本語の音声ブリーフィング台本を作成してください。
+{{speaker_instruction}}
+{{section_scope_instruction}}
+
+# Length And Section Constraints
+{{length_constraints}}
+
+# Program Context
+{{program_context}}
+
+# Intro Context
+{{intro_context}}
+
+# Conversation And Section Flow
+{{conversation_flow}}
+
+# Response Format
+{{response_example}}
+
+# Additional Section Rules
+{{section_rules}}
+
+# Input Articles
+{{articles_json}}
+{{existing_context}}

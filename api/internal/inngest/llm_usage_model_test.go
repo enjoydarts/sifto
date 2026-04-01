@@ -46,11 +46,31 @@ func TestLLMUsageIdempotencyKeyUsesResolvedModelForOpenRouter(t *testing.T) {
 		EstimatedCostUSD:         0.1,
 	}
 
-	keyAuto := llmUsageIdempotencyKey("summary", usage, nil, nil, nil, nil)
+	keyAuto := llmUsageIdempotencyKey("summary", usage, nil, nil, nil, nil, nil)
 	usage.ResolvedModel = "google/gemini-2.5-flash"
-	keyGemini := llmUsageIdempotencyKey("summary", usage, nil, nil, nil, nil)
+	keyGemini := llmUsageIdempotencyKey("summary", usage, nil, nil, nil, nil, nil)
 
 	if keyAuto == keyGemini {
 		t.Fatal("idempotency key should change when resolved model changes")
+	}
+}
+
+func TestLLMUsageIdempotencyKeyChangesWithPromptVersion(t *testing.T) {
+	usage := &service.LLMUsage{
+		Provider:     "openai",
+		Model:        "gpt-5-mini",
+		InputTokens:  10,
+		OutputTokens: 20,
+	}
+	version1 := 1
+	version2 := 2
+	promptV1 := &service.PromptResolution{PromptKey: "summary.default", PromptSource: "template_version", PromptVersionNumber: &version1}
+	promptV2 := &service.PromptResolution{PromptKey: "summary.default", PromptSource: "template_version", PromptVersionNumber: &version2}
+
+	keyV1 := llmUsageIdempotencyKey("summary", usage, nil, nil, nil, nil, promptV1)
+	keyV2 := llmUsageIdempotencyKey("summary", usage, nil, nil, nil, nil, promptV2)
+
+	if keyV1 == keyV2 {
+		t.Fatal("idempotency key should change when prompt version changes")
 	}
 }

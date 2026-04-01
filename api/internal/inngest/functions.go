@@ -52,7 +52,7 @@ func llmExecutionTriggerFromContext(ctx context.Context) *llmExecutionTrigger {
 	return &v
 }
 
-func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpose string, usage *service.LLMUsage, userID, sourceID, itemID, digestID *string) {
+func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpose string, usage *service.LLMUsage, userID, sourceID, itemID, digestID *string, prompt *service.PromptResolution) {
 	usage = service.NormalizeCatalogPricedUsage(purpose, usage)
 	if repo == nil || usage == nil {
 		return
@@ -61,7 +61,7 @@ func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpo
 	if usage.Provider == "" || storedModel == "" {
 		return
 	}
-	idempotencyKey := llmUsageIdempotencyKey(purpose, usage, userID, sourceID, itemID, digestID)
+	idempotencyKey := llmUsageIdempotencyKey(purpose, usage, userID, sourceID, itemID, digestID, prompt)
 	pricingSource := usage.PricingSource
 	if pricingSource == "" {
 		pricingSource = "unknown"
@@ -72,6 +72,12 @@ func recordLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, purpo
 		SourceID:                 sourceID,
 		ItemID:                   itemID,
 		DigestID:                 digestID,
+		PromptKey:                promptKey(prompt),
+		PromptSource:             promptSource(prompt),
+		PromptVersionID:          promptVersionID(prompt),
+		PromptVersionNumber:      promptVersionNumber(prompt),
+		PromptExperimentID:       nil,
+		PromptExperimentArmID:    nil,
 		Provider:                 usage.Provider,
 		Model:                    storedModel,
 		RequestedModel:           strings.TrimSpace(usage.RequestedModel),
@@ -105,7 +111,7 @@ func llmUsageStoredModel(usage *service.LLMUsage) string {
 	return strings.TrimSpace(usage.Model)
 }
 
-func recordLLMExecutionSuccess(ctx context.Context, repo *repository.LLMExecutionEventRepo, purpose string, usage *service.LLMUsage, attemptIndex int, userID, sourceID, itemID, digestID *string) {
+func recordLLMExecutionSuccess(ctx context.Context, repo *repository.LLMExecutionEventRepo, purpose string, usage *service.LLMUsage, attemptIndex int, userID, sourceID, itemID, digestID *string, prompt *service.PromptResolution) {
 	if repo == nil || usage == nil {
 		return
 	}
@@ -117,17 +123,21 @@ func recordLLMExecutionSuccess(ctx context.Context, repo *repository.LLMExecutio
 	var triggerReason *string
 	if trigger := llmExecutionTriggerFromContext(ctx); trigger != nil {
 		key := llmExecutionEventIdempotencyKey(repository.LLMExecutionEventInput{
-			UserID:        userID,
-			SourceID:      sourceID,
-			ItemID:        itemID,
-			DigestID:      digestID,
-			TriggerID:     &trigger.TriggerID,
-			TriggerReason: triggerReason,
-			Provider:      usage.Provider,
-			Model:         usage.Model,
-			Purpose:       purpose,
-			Status:        "success",
-			AttemptIndex:  attemptIndex,
+			UserID:              userID,
+			SourceID:            sourceID,
+			ItemID:              itemID,
+			DigestID:            digestID,
+			PromptKey:           promptKey(prompt),
+			PromptSource:        promptSource(prompt),
+			PromptVersionID:     promptVersionID(prompt),
+			PromptVersionNumber: promptVersionNumber(prompt),
+			TriggerID:           &trigger.TriggerID,
+			TriggerReason:       triggerReason,
+			Provider:            usage.Provider,
+			Model:               usage.Model,
+			Purpose:             purpose,
+			Status:              "success",
+			AttemptIndex:        attemptIndex,
 		})
 		idempotencyKey = &key
 		triggerID = &trigger.TriggerID
@@ -137,18 +147,22 @@ func recordLLMExecutionSuccess(ctx context.Context, repo *repository.LLMExecutio
 		}
 	}
 	if err := repo.Insert(ctx, repository.LLMExecutionEventInput{
-		IdempotencyKey: idempotencyKey,
-		UserID:         userID,
-		SourceID:       sourceID,
-		ItemID:         itemID,
-		DigestID:       digestID,
-		TriggerID:      triggerID,
-		TriggerReason:  triggerReason,
-		Provider:       usage.Provider,
-		Model:          usage.Model,
-		Purpose:        purpose,
-		Status:         "success",
-		AttemptIndex:   attemptIndex,
+		IdempotencyKey:      idempotencyKey,
+		UserID:              userID,
+		SourceID:            sourceID,
+		ItemID:              itemID,
+		DigestID:            digestID,
+		PromptKey:           promptKey(prompt),
+		PromptSource:        promptSource(prompt),
+		PromptVersionID:     promptVersionID(prompt),
+		PromptVersionNumber: promptVersionNumber(prompt),
+		TriggerID:           triggerID,
+		TriggerReason:       triggerReason,
+		Provider:            usage.Provider,
+		Model:               usage.Model,
+		Purpose:             purpose,
+		Status:              "success",
+		AttemptIndex:        attemptIndex,
 	}); err != nil {
 		log.Printf("record llm execution success purpose=%s: %v", purpose, err)
 		return
@@ -158,7 +172,7 @@ func recordLLMExecutionSuccess(ctx context.Context, repo *repository.LLMExecutio
 	}
 }
 
-func recordLLMExecutionFailure(ctx context.Context, repo *repository.LLMExecutionEventRepo, purpose string, model *string, attemptIndex int, userID, sourceID, itemID, digestID *string, err error) {
+func recordLLMExecutionFailure(ctx context.Context, repo *repository.LLMExecutionEventRepo, purpose string, model *string, attemptIndex int, userID, sourceID, itemID, digestID *string, prompt *service.PromptResolution, err error) {
 	if repo == nil || model == nil || strings.TrimSpace(*model) == "" || err == nil {
 		return
 	}
@@ -174,20 +188,24 @@ func recordLLMExecutionFailure(ctx context.Context, repo *repository.LLMExecutio
 	var triggerReason *string
 	if trigger := llmExecutionTriggerFromContext(ctx); trigger != nil {
 		key := llmExecutionEventIdempotencyKey(repository.LLMExecutionEventInput{
-			UserID:        userID,
-			SourceID:      sourceID,
-			ItemID:        itemID,
-			DigestID:      digestID,
-			TriggerID:     &trigger.TriggerID,
-			TriggerReason: triggerReason,
-			Provider:      provider,
-			Model:         modelVal,
-			Purpose:       purpose,
-			Status:        "failure",
-			AttemptIndex:  attemptIndex,
-			EmptyResponse: emptyResponse,
-			ErrorKind:     &errorKind,
-			ErrorMessage:  &message,
+			UserID:              userID,
+			SourceID:            sourceID,
+			ItemID:              itemID,
+			DigestID:            digestID,
+			PromptKey:           promptKey(prompt),
+			PromptSource:        promptSource(prompt),
+			PromptVersionID:     promptVersionID(prompt),
+			PromptVersionNumber: promptVersionNumber(prompt),
+			TriggerID:           &trigger.TriggerID,
+			TriggerReason:       triggerReason,
+			Provider:            provider,
+			Model:               modelVal,
+			Purpose:             purpose,
+			Status:              "failure",
+			AttemptIndex:        attemptIndex,
+			EmptyResponse:       emptyResponse,
+			ErrorKind:           &errorKind,
+			ErrorMessage:        &message,
 		})
 		idempotencyKey = &key
 		triggerID = &trigger.TriggerID
@@ -197,21 +215,25 @@ func recordLLMExecutionFailure(ctx context.Context, repo *repository.LLMExecutio
 		}
 	}
 	if err := repo.Insert(ctx, repository.LLMExecutionEventInput{
-		IdempotencyKey: idempotencyKey,
-		UserID:         userID,
-		SourceID:       sourceID,
-		ItemID:         itemID,
-		DigestID:       digestID,
-		TriggerID:      triggerID,
-		TriggerReason:  triggerReason,
-		Provider:       provider,
-		Model:          modelVal,
-		Purpose:        purpose,
-		Status:         "failure",
-		AttemptIndex:   attemptIndex,
-		EmptyResponse:  emptyResponse,
-		ErrorKind:      &errorKind,
-		ErrorMessage:   &message,
+		IdempotencyKey:      idempotencyKey,
+		UserID:              userID,
+		SourceID:            sourceID,
+		ItemID:              itemID,
+		DigestID:            digestID,
+		PromptKey:           promptKey(prompt),
+		PromptSource:        promptSource(prompt),
+		PromptVersionID:     promptVersionID(prompt),
+		PromptVersionNumber: promptVersionNumber(prompt),
+		TriggerID:           triggerID,
+		TriggerReason:       triggerReason,
+		Provider:            provider,
+		Model:               modelVal,
+		Purpose:             purpose,
+		Status:              "failure",
+		AttemptIndex:        attemptIndex,
+		EmptyResponse:       emptyResponse,
+		ErrorKind:           &errorKind,
+		ErrorMessage:        &message,
 	}); err != nil {
 		log.Printf("record llm execution failure purpose=%s: %v", purpose, err)
 		return
@@ -221,7 +243,7 @@ func recordLLMExecutionFailure(ctx context.Context, repo *repository.LLMExecutio
 	}
 }
 
-func recordLLMExecutionFailuresFromUsage(ctx context.Context, repo *repository.LLMExecutionEventRepo, purpose string, usage *service.LLMUsage, attemptIndex int, userID, sourceID, itemID, digestID *string) {
+func recordLLMExecutionFailuresFromUsage(ctx context.Context, repo *repository.LLMExecutionEventRepo, purpose string, usage *service.LLMUsage, attemptIndex int, userID, sourceID, itemID, digestID *string, prompt *service.PromptResolution) {
 	if repo == nil || usage == nil || len(usage.ExecutionFailures) == 0 {
 		return
 	}
@@ -234,13 +256,13 @@ func recordLLMExecutionFailuresFromUsage(ctx context.Context, repo *repository.L
 		if reason == "" {
 			reason = "worker internal fallback"
 		}
-		recordLLMExecutionFailure(ctx, repo, purpose, &model, attemptIndex, userID, sourceID, itemID, digestID, fmt.Errorf("%s", reason))
+		recordLLMExecutionFailure(ctx, repo, purpose, &model, attemptIndex, userID, sourceID, itemID, digestID, prompt, fmt.Errorf("%s", reason))
 	}
 }
 
 func llmExecutionEventIdempotencyKey(in repository.LLMExecutionEventInput) string {
 	raw := fmt.Sprintf(
-		"trigger=%s|reason=%s|purpose=%s|provider=%s|model=%s|status=%s|attempt=%d|u=%s|s=%s|i=%s|d=%s|empty=%t|ek=%s|em=%s",
+		"trigger=%s|reason=%s|purpose=%s|provider=%s|model=%s|status=%s|attempt=%d|u=%s|s=%s|i=%s|d=%s|pk=%s|ps=%s|pvid=%s|pvn=%s|empty=%t|ek=%s|em=%s",
 		toVal(in.TriggerID),
 		toVal(in.TriggerReason),
 		in.Purpose,
@@ -252,6 +274,10 @@ func llmExecutionEventIdempotencyKey(in repository.LLMExecutionEventInput) strin
 		toVal(in.SourceID),
 		toVal(in.ItemID),
 		toVal(in.DigestID),
+		in.PromptKey,
+		in.PromptSource,
+		toVal(in.PromptVersionID),
+		toIntVal(in.PromptVersionNumber),
 		in.EmptyResponse,
 		toVal(in.ErrorKind),
 		toVal(in.ErrorMessage),
@@ -265,6 +291,13 @@ func toVal(v *string) string {
 		return ""
 	}
 	return *v
+}
+
+func toIntVal(v *int) string {
+	if v == nil {
+		return ""
+	}
+	return strconv.Itoa(*v)
 }
 
 func classifyLLMExecutionError(err error) (string, bool) {
@@ -292,10 +325,10 @@ func classifyLLMExecutionError(err error) (string, bool) {
 	}
 }
 
-func llmUsageIdempotencyKey(purpose string, usage *service.LLMUsage, userID, sourceID, itemID, digestID *string) string {
+func llmUsageIdempotencyKey(purpose string, usage *service.LLMUsage, userID, sourceID, itemID, digestID *string, prompt *service.PromptResolution) string {
 	model := llmUsageStoredModel(usage)
 	raw := fmt.Sprintf(
-		"purpose=%s|provider=%s|model=%s|u=%s|s=%s|i=%s|d=%s|in=%d|out=%d|cw=%d|cr=%d",
+		"purpose=%s|provider=%s|model=%s|u=%s|s=%s|i=%s|d=%s|pk=%s|ps=%s|pvid=%s|pvn=%s|in=%d|out=%d|cw=%d|cr=%d",
 		purpose,
 		usage.Provider,
 		model,
@@ -303,6 +336,10 @@ func llmUsageIdempotencyKey(purpose string, usage *service.LLMUsage, userID, sou
 		toVal(sourceID),
 		toVal(itemID),
 		toVal(digestID),
+		promptKey(prompt),
+		promptSource(prompt),
+		toVal(promptVersionID(prompt)),
+		toIntVal(promptVersionNumber(prompt)),
 		usage.InputTokens,
 		usage.OutputTokens,
 		usage.CacheCreationInputTokens,
@@ -310,6 +347,34 @@ func llmUsageIdempotencyKey(purpose string, usage *service.LLMUsage, userID, sou
 	)
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
+}
+
+func promptKey(prompt *service.PromptResolution) string {
+	if prompt == nil {
+		return ""
+	}
+	return strings.TrimSpace(prompt.PromptKey)
+}
+
+func promptSource(prompt *service.PromptResolution) string {
+	if prompt == nil {
+		return ""
+	}
+	return strings.TrimSpace(prompt.PromptSource)
+}
+
+func promptVersionID(prompt *service.PromptResolution) *string {
+	if prompt == nil || prompt.PromptVersionID == nil || strings.TrimSpace(*prompt.PromptVersionID) == "" {
+		return nil
+	}
+	return prompt.PromptVersionID
+}
+
+func promptVersionNumber(prompt *service.PromptResolution) *int {
+	if prompt == nil || prompt.PromptVersionNumber == nil {
+		return nil
+	}
+	return prompt.PromptVersionNumber
 }
 
 func digestTextLooksComplete(text string, minLen int) bool {
@@ -1233,11 +1298,13 @@ func generateAudioBriefingsFn(client inngestgo.Client, db *pgxpool.Pool, worker 
 	audioBriefingRepo := repository.NewAudioBriefingRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	promptTemplateRepo := repository.NewPromptTemplateRepo(db)
+	promptResolver := service.NewPromptResolver(promptTemplateRepo)
 	secretCipher := service.NewSecretCipher()
 	audioConcatRunner := service.NewAudioConcatRunnerFromEnv()
 	audioBriefingVoiceRunner := service.NewAudioBriefingVoiceRunner(audioBriefingRepo, userSettingsRepo, secretCipher, worker)
 	audioBriefingConcatStarter := service.NewAudioBriefingConcatStarter(audioBriefingRepo, audioConcatRunner)
-	orchestrator := service.NewAudioBriefingOrchestrator(audioBriefingRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, cache, audioBriefingVoiceRunner, audioBriefingConcatStarter)
+	orchestrator := service.NewAudioBriefingOrchestrator(audioBriefingRepo, userSettingsRepo, llmUsageRepo, promptResolver, secretCipher, worker, cache, audioBriefingVoiceRunner, audioBriefingConcatStarter)
 
 	return inngestgo.CreateFunction(
 		client,
@@ -1446,11 +1513,13 @@ func runAudioBriefingPipelineFn(client inngestgo.Client, db *pgxpool.Pool, worke
 	audioBriefingRepo := repository.NewAudioBriefingRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
+	promptTemplateRepo := repository.NewPromptTemplateRepo(db)
+	promptResolver := service.NewPromptResolver(promptTemplateRepo)
 	secretCipher := service.NewSecretCipher()
 	audioConcatRunner := service.NewAudioConcatRunnerFromEnv()
 	audioBriefingVoiceRunner := service.NewAudioBriefingVoiceRunner(audioBriefingRepo, userSettingsRepo, secretCipher, worker)
 	audioBriefingConcatStarter := service.NewAudioBriefingConcatStarter(audioBriefingRepo, audioConcatRunner)
-	orchestrator := service.NewAudioBriefingOrchestrator(audioBriefingRepo, userSettingsRepo, llmUsageRepo, secretCipher, worker, cache, audioBriefingVoiceRunner, audioBriefingConcatStarter)
+	orchestrator := service.NewAudioBriefingOrchestrator(audioBriefingRepo, userSettingsRepo, llmUsageRepo, promptResolver, secretCipher, worker, cache, audioBriefingVoiceRunner, audioBriefingConcatStarter)
 
 	return inngestgo.CreateFunction(
 		client,
@@ -2167,6 +2236,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 		pushLogRepo:        repository.NewPushNotificationLogRepo(db),
 		notificationRepo:   repository.NewNotificationPriorityRepo(db),
 		readingGoalRepo:    repository.NewReadingGoalRepo(db),
+		promptResolver:     service.NewPromptResolver(repository.NewPromptTemplateRepo(db)),
 		worker:             worker,
 		openAI:             openAI,
 		oneSignal:          oneSignal,
@@ -2312,15 +2382,15 @@ func embedItemFn(client inngestgo.Client, db *pgxpool.Pool, openAI *service.Open
 				return openAI.CreateEmbedding(ctx, *userOpenAIKey, embModel, inputText)
 			})
 			if err != nil {
-				recordLLMExecutionFailure(ctx, llmExecutionRepo, "embedding", &embModel, 0, &candidate.UserID, &candidate.SourceID, &candidate.ItemID, nil, err)
+				recordLLMExecutionFailure(ctx, llmExecutionRepo, "embedding", &embModel, 0, &candidate.UserID, &candidate.SourceID, &candidate.ItemID, nil, nil, err)
 				return nil, err
 			}
 			if err := itemRepo.UpsertEmbedding(ctx, candidate.ItemID, embModel, embResp.Embedding); err != nil {
 				return nil, fmt.Errorf("upsert embedding: %w", err)
 			}
 
-			recordLLMUsage(ctx, llmUsageRepo, "embedding", embResp.LLM, &candidate.UserID, &candidate.SourceID, &candidate.ItemID, nil)
-			recordLLMExecutionSuccess(ctx, llmExecutionRepo, "embedding", embResp.LLM, 0, &candidate.UserID, &candidate.SourceID, &candidate.ItemID, nil)
+			recordLLMUsage(ctx, llmUsageRepo, "embedding", embResp.LLM, &candidate.UserID, &candidate.SourceID, &candidate.ItemID, nil, nil)
+			recordLLMExecutionSuccess(ctx, llmExecutionRepo, "embedding", embResp.LLM, 0, &candidate.UserID, &candidate.SourceID, &candidate.ItemID, nil, nil)
 			return map[string]any{
 				"item_id":    candidate.ItemID,
 				"source_id":  candidate.SourceID,
@@ -2420,6 +2490,7 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
 	llmExecutionRepo := repository.NewLLMExecutionEventRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
+	promptResolver := service.NewPromptResolver(repository.NewPromptTemplateRepo(db))
 
 	return inngestgo.CreateFunction(
 		client,
@@ -2463,7 +2534,7 @@ func composeDigestCopyFn(client inngestgo.Client, db *pgxpool.Pool, worker *serv
 				log.Printf("compose-digest-copy reuse-copy digest_id=%s", data.DigestID)
 			} else {
 				_, err := step.Run(ctx, "compose-digest-copy", func(ctx context.Context) (string, error) {
-					if err := composeDigestEmailCopy(ctx, digestRepo, itemRepo, userSettingsRepo, llmUsageRepo, llmExecutionRepo, processItemDeps{worker: worker, secretCipher: secretCipher}, data, digest, userModelSettings); err != nil {
+					if err := composeDigestEmailCopy(ctx, digestRepo, itemRepo, userSettingsRepo, llmUsageRepo, llmExecutionRepo, processItemDeps{worker: worker, secretCipher: secretCipher, promptResolver: promptResolver}, data, digest, userModelSettings); err != nil {
 						return "", err
 					}
 					return "stored", nil

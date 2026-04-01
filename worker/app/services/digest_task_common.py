@@ -2,31 +2,10 @@ import json
 
 from app.services.llm_text_utils import extract_compose_digest_fields, extract_first_json_object, extract_json_string_value_loose
 from app.services.langfuse_client import get_prompt_text
+from app.services.prompt_template_defaults import get_default_prompt_template
+from app.services.runtime_prompt_overrides import apply_prompt_override
 
-
-DIGEST_SYSTEM_INSTRUCTION = """# Role
-あなたはニュースダイジェスト編集者です。
-
-# Task
-与えられた記事一覧をもとに、メール用のダイジェスト本文を日本語で作成してください。
-
-# Rules
-- 当日分の全記事要約を踏まえて全体像をまとめてください。記事を取りこぼさないでください。
-- subject は件名本体のみを返してください。
-- subject に日付は入れないでください。
-- subject に「ダイジェスト」という語は入れないでください。
-- subject は20〜40字程度の自然な日本語にしてください。
-- 本文は900〜2200字程度を目安とし、必要なら超えて構いません。
-- 本文は必ず次の順序で構成してください:
-  1) 全体サマリ（1〜3段落）
-  2) 注目ポイント（5〜10個。各ポイントは1〜2段落）
-  3) その他のポイント（個数指定なし。箇条書き）
-  4) 明日以降のフォローポイント（1段落）
-  5) 締めの1文
-- body は可読性を最優先し、各セクションの間に必ず空行1行（\\n\\n）を入れてください。
-- 段落同士も必要に応じて空行（\\n\\n）で分けてください。
-- 誇張せず、与えられた情報だけで書いてください。
-- 出力はJSONオブジェクトのみとしてください。"""
+DIGEST_SYSTEM_INSTRUCTION = str(get_default_prompt_template("digest.default").get("system_instruction") or "")
 
 
 DIGEST_SCHEMA = {
@@ -96,38 +75,21 @@ def build_simple_digest_input(items: list[dict]) -> str:
 
 
 def build_digest_task(digest_date: str, items_count: int, digest_input: str, *, input_mode: str = "items") -> dict:
-    prompt_fallback = f"""# Output
-{{
-  "subject": "件名本体のみ（20〜40字。日付やダイジェストは入れない）",
-  "body": "メール本文（プレーンテキスト。改行を含めてよい）",
-  "sections": {{
-    "overall_summary": "1〜3段落",
-    "highlights": ["注目ポイント1（1〜2段落）", "注目ポイント2（1〜2段落）"],
-    "other_points": ["補足1", "補足2"],
-    "follow_up": "明日以降のフォローポイント（1段落）",
-    "closing": "締めの1文"
-  }}
-}}
-
-# Input
-digest_date: {digest_date}
-items_count: {items_count}
-input_mode: {input_mode}
-items:
-{digest_input}
-"""
+    default_template = get_default_prompt_template("digest.default")
+    variables = {
+        "digest_date": digest_date,
+        "items_count": items_count,
+        "input_mode": input_mode,
+        "digest_input": digest_input,
+    }
     prompt = get_prompt_text(
         "digest.primary",
-        prompt_fallback,
-        variables={
-            "digest_date": digest_date,
-            "items_count": items_count,
-            "input_mode": input_mode,
-            "digest_input": digest_input,
-        },
+        str(default_template.get("prompt_text") or ""),
+        variables=variables,
     )
+    system_instruction, prompt = apply_prompt_override("digest.default", DIGEST_SYSTEM_INSTRUCTION, prompt, variables)
     return {
-        "system_instruction": DIGEST_SYSTEM_INSTRUCTION,
+        "system_instruction": system_instruction,
         "prompt": prompt,
         "schema": DIGEST_SCHEMA,
     }

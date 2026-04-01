@@ -11,6 +11,8 @@ from app.services.llm_text_utils import (
     normalize_url_for_match,
     strip_code_fence,
 )
+from app.services.prompt_template_defaults import get_default_prompt_template
+from app.services.runtime_prompt_overrides import apply_prompt_override
 
 
 ASK_SYSTEM_INSTRUCTION = """# Role
@@ -163,6 +165,10 @@ AUDIO_BRIEFING_SCRIPT_SCHEMA = {
     "required": ["opening", "overall_summary", "article_segments", "ending"],
     "additionalProperties": False,
 }
+
+
+def _join_non_empty_lines(lines: list[str]) -> str:
+    return "\n".join(str(line) for line in lines if str(line).strip())
 
 
 def build_audio_briefing_script_schema(
@@ -935,6 +941,8 @@ def build_audio_briefing_script_task(
     conversation_mode = _normalize_audio_briefing_conversation_mode(
         str(intro_context.get("audio_briefing_conversation_mode") or "single")
     )
+    prompt_key = "audio_briefing_script.duo" if conversation_mode == "duo" else "audio_briefing_script.single"
+    default_template = get_default_prompt_template(prompt_key)
     host_persona = str(intro_context.get("audio_briefing_host_persona") or persona)
     partner_persona = str(intro_context.get("audio_briefing_partner_persona") or "analyst")
     generation_mode = str(intro_context.get("audio_briefing_generation_mode") or "").strip()
@@ -1191,130 +1199,71 @@ def build_audio_briefing_script_task(
     {"speaker": "host", "section": "opening", "text": "host がまとめて次へ進める"}
   ]
 }"""
-        system_instruction = f"""# Role
-あなたは Sifto の音声ブリーフィング番組を担当する、二人組のAIナビゲーターです。
-host と partner が会話しながら番組を進めます。
-
-host:
-- persona: {host_persona_key}
-- display_name: {host_profile["name"]}
-- 一人称: {host_profile["first_person"]}
-- 話し方: {host_profile["speech_style"]}
-- 性格: {host_profile["personality"]}
-- 価値観: {host_profile["values"]}
-- tone: {host_profile["voice"]}
-
-partner:
-- persona: {partner_persona_key}
-- display_name: {partner_profile["name"]}
-- 一人称: {partner_profile["first_person"]}
-- 話し方: {partner_profile["speech_style"]}
-- 性格: {partner_profile["personality"]}
-- 価値観: {partner_profile["values"]}
-- tone: {partner_profile["voice"]}
-
-# Rules
-- 出力は必ず有効なJSONオブジェクト1つのみにしてください。
-- 前置き・後置き・コードフェンスは不要です。
-- 今回の返却形式に含まれるキーだけを返す
-- host は進行役で、記事の要点整理と流れを担う
-- partner は相棒役で、短い相槌ではなく会話感を作る。host の言い換えはせず、反応、比較、違和感、問い返し、新しい視点を足す
-- 同じ情報を host と partner が言い直さない
-- 単独話者のモノローグにしない。必ず会話として往復させる
-- partner の各 turn は、直前の host turn の論点・感情・違和感のどれかを必ず受けて始める。独立した別コメントとして始めない
-- host の各 turn は、直前の partner turn を軽く受けてから話を前へ進める。partner を無視して自分の説明へ戻らない
-- 必要に応じて接続詞や相づちを使って、直前の発話とのつながりを自然に見せる
-- turns を必ず返す。空配列は禁止
-- 各 turn は speaker / section / text を必ず持つ
-- article の turn は item_id を必ず持つ
-- 各 turn は1〜4文で、1文ごとに改行する
-- 文字数制約は努力目標ではなく必須条件として扱う
-- 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
-- section ごとの上限文字数と全体上限文字数を超えた出力は不正解。会話感を保ったまま削ってでも上限内に収める
-- 上限を守れないときは、新しい論点を足さず、言い換え・重複・回り道・締めの重ね直しを削る
-- 短く安全にまとめるより、必要な厚みと会話感を保つことを優先する
-- host は事実を置く
-- partner の発話は以下のどれか1つを必ず含む
-- 理由（なぜか）
-- 比較（他と比べてどうか）
-- 違和感（どこが引っかかるか）
-- 今後（これからどうなるか）
-- articles から読めることだけを使い、事実を捏造しない
-- host は {host_profile["name"]} として、partner は {partner_profile["name"]} として自然に話す
-- 別ペルソナの名前・肩書き・口調を混ぜない
-"""
-        user_prompt = f"""タスク:
-- 与えられた記事だけを根拠に、日本語の二人会話の音声ブリーフィング台本を作る
-- host は {host_profile["name"]}、partner は {partner_profile["name"]} の会話として書く
-- 今回返すべきセクションだけを返す
-
-文字量の目安:
-- 目標尺: 約 {target_duration_minutes} 分
-- 換算レート: 1分あたり {chars_per_minute} 文字
-- 今回返すセクションの目標文字数: 約 {target_chars} 文字
-- {'\n'.join(duo_target_lines)}
-- 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
-- 文字数超過は許容しない。各 section と全体の上限を超えるくらいなら、表現を圧縮して上限内に収める
-- article の会話は各記事にほぼ均等に配る
-- article は 1記事あたり約 {article_budget}文字の予算で、超えそうなら冗長な言い換えではなく手数と文量を削って収める
-- article で文字数が膨らみそうなときは、partner の後半の広げすぎと host の締めの言い直しを削ることを優先する
-
-番組全体の位置:
-- current_section: {active_section}
-- program_position: {program_position or "unspecified"}
-- total_articles: {total_articles}
-- article_batch_range: {article_batch_start_index or "-"} - {article_batch_end_index or "-"}
-- {'\n'.join(program_flow_rules)}
-
-導入トークの文脈:
-- now_jst: {intro_context.get("now_jst", "")}
-- date_jst: {intro_context.get("date_jst", "")}
-- weekday_jst: {intro_context.get("weekday_jst", "")}
-- time_of_day: {intro_context.get("time_of_day", "")}
-- season_hint: {intro_context.get("season_hint", "")}
-
-会話の役割:
-- opening: host が番組を開き、partner が空気を受ける
-- overall_summary: 二人で回全体の流れや注目点を整理する
-- article: host が記事を紹介し、partner が反応や比較を返し、会話として厚みを作る
-- ending: host が締め、partner が余韻を返す
-
-つなぎ方:
-- {'\n'.join(bridge_rules)}
-
-会話の型:
-- opening は `host -> partner -> host -> partner -> host` の5手で必ず書く
-- overall_summary は `host -> partner -> host -> partner -> host` の5手で必ず書く
-- article は今回 {duo_article_turn_sequence} の{duo_article_turn_phrase}で進める
-- ending は `host -> partner -> host -> partner -> host` の5手で必ず書く
-- host は毎回、会話の起点と着地点を作る
-- partner は毎回、直前の host を受けて会話を横に広げる
-- article の {duo_article_turn_phrase}は {duo_article_turn_flow} の役割で進める
-- article は各記事をこの手数の中で必ず収める。足りないからといって別の追加 turn を生やさない
-- overall_summary と ending でも、後ろの turn ほど前の turn を受けて少しずつ話を進める
-- article の turn では item_id を入力 articles と同じ順番・同じ件数で使う
-- この call の対象セクションは {active_section} であり、それ以外のセクションへ脱線しない
-- section フィールドは今回許可されたセクション {allowed_sections} だけを使う
-
-返却形式:
-{response_example}
-
-今回の section 制約:
-{chr(10).join(section_scope_rules)}
-
-追加ルール:
-- {'\n'.join(common_section_rules)}
-- {'\n'.join(duo_section_rules)}
-{chr(10).join(supplement_rules)}
-
-articles:
-{json.dumps(trimmed_articles, ensure_ascii=False)}
-"""
+        call_scope_note = _join_non_empty_lines(program_flow_rules + bridge_rules + section_scope_rules + duo_section_rules)
+        supplement_note = _join_non_empty_lines(supplement_rules) or "通常生成です。既存台本への追記ではありません。"
+        existing_context = "なし"
+        if generation_mode == "supplement" and generation_section in {"opening", "overall_summary", "ending"} and existing_section_text:
+            existing_context = f"既存の {generation_section}:\n{existing_section_text}"
+        elif generation_mode == "supplement" and generation_section == "article_segments" and include_article_segments and existing_article_segments:
+            existing_context = f"既存の article_segments:\n{json.dumps(existing_article_segments, ensure_ascii=False)}"
+        variables = {
+            "host_persona_key": host_persona_key,
+            "host_display_name": host_profile["name"],
+            "host_first_person": host_profile["first_person"],
+            "host_speech_style": host_profile["speech_style"],
+            "host_personality": host_profile["personality"],
+            "host_values": host_profile["values"],
+            "host_voice": host_profile["voice"],
+            "partner_persona_key": partner_persona_key,
+            "partner_display_name": partner_profile["name"],
+            "partner_first_person": partner_profile["first_person"],
+            "partner_speech_style": partner_profile["speech_style"],
+            "partner_personality": partner_profile["personality"],
+            "partner_values": partner_profile["values"],
+            "partner_voice": partner_profile["voice"],
+            "include_opening": "true" if include_opening else "false",
+            "include_overall_summary": "true" if include_overall_summary else "false",
+            "include_article_segments": "true" if include_article_segments else "false",
+            "include_ending": "true" if include_ending else "false",
+            "active_section": "article" if active_section == "article_segments" else active_section,
+            "allowed_sections": allowed_sections,
+            "target_duration_minutes": target_duration_minutes,
+            "chars_per_minute": chars_per_minute,
+            "target_chars": target_chars,
+            "target_chars_min": target_chars_min,
+            "target_chars_max": target_chars_max,
+            "article_char_range": f"{article_min_chars}〜{article_max_chars}文字",
+            "duo_article_turn_phrase": duo_article_turn_phrase,
+            "duo_article_turn_sequence": duo_article_turn_sequence.replace("`", ""),
+            "duo_article_turn_flow": duo_article_turn_flow.replace("`", ""),
+            "generation_mode": generation_mode or "full",
+            "generation_section": generation_section or "all",
+            "program_position": program_position or "unspecified",
+            "total_articles": total_articles,
+            "article_batch_range": f'{article_batch_start_index or "-"} - {article_batch_end_index or "-"}',
+            "call_scope_note": call_scope_note or "今回返すべきセクションだけを書き、他の section へ脱線しないでください。",
+            "supplement_note": supplement_note,
+            "now_jst": intro_context.get("now_jst", ""),
+            "date_jst": intro_context.get("date_jst", ""),
+            "weekday_jst": intro_context.get("weekday_jst", ""),
+            "time_of_day": intro_context.get("time_of_day", ""),
+            "season_hint": intro_context.get("season_hint", ""),
+            "response_example": response_example,
+            "articles_json": json.dumps(trimmed_articles, ensure_ascii=False),
+            "existing_context": existing_context,
+        }
+        system_instruction, user_prompt = apply_prompt_override(
+            prompt_key,
+            str(default_template.get("system_instruction") or ""),
+            str(default_template.get("prompt_text") or ""),
+            variables,
+        )
+        effective_prompt = f"{system_instruction}\n\n{user_prompt}"
         return {
             "target_chars": target_chars,
             "system_instruction": system_instruction,
             "user_prompt": user_prompt,
-            "prompt": f"{system_instruction}\n\n{user_prompt}",
+            "prompt": effective_prompt,
             "schema": build_audio_briefing_script_schema(
                 conversation_mode=conversation_mode,
                 include_opening=include_opening,
@@ -1331,120 +1280,79 @@ articles:
             "item_profile": item_profile,
         }
 
-    system_instruction = f"""# Role
-あなたは Sifto の音声ブリーフィング番組を担当する、単独話者のAIナビゲーターです。
-番組の尺と流れを組み立てる構成感覚も持ちますが、構成作家のような説明調・台本調には寄せません。
-
-キャラクター:
-- persona: {persona_key}
-- display_name: {briefing_profile["name"]}
-- 性別: {briefing_profile["gender"]}
-- 年代感: {briefing_profile["age_vibe"]}
-- 一人称: {briefing_profile["first_person"]}
-- 話し方: {briefing_profile["speech_style"]}
-- 職業: {briefing_profile["occupation"]}
-- 経験: {briefing_profile["experience"]}
-- 性格: {briefing_profile["personality"]}
-- 価値観: {briefing_profile["values"]}
-- 関心: {briefing_profile["interests"]}
-- 嫌いなもの: {briefing_profile["dislikes"]}
-- tone: {briefing_profile["voice"]}
-- intro_style: {briefing_profile["intro_style"]}
-- briefing_comment_range: {briefing_profile["comment_range"]}
-- item_style_hint: {item_profile["style"]}
-
-# Rules
-- 出力は必ず有効なJSONオブジェクト1つのみにしてください。
-- 前置き・後置き・コードフェンスは不要です。
-- articles にない item_id を作らない
-- 文字数制約は努力目標ではなく必須条件として扱う
-- 今回与えられた target_chars と記事数から逆算した尺配分を守り、特定のセクションや特定の記事だけを必要以上に長くしない
-- 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
-- 各セクションは指定された最低文字数を下回ってはいけない
-- 短く安全にまとめるより、必要な厚みを保つことを優先する
-- 長さが不足する場合は article_segments の commentary を優先して厚くする
-- 1文は {sentence_length_spec} を目安にする
-- 各文は内容を切り詰めすぎず、自然な話し言葉として十分な情報量と厚みを持たせる
-- 各記事では、headline でこれから扱う記事をリスナーに詳細に紹介し、summary_intro で記事の中身を置いたうえで、このペルソナなら何に反応するかを話す
-- 尺配分や流れは意識するが、整えすぎた台本調ではなく、あくまでこのペルソナ本人が自然に話しているように聞こえることを優先する
-- 第一印象、良いと感じる点、引っかかる点、今読む理由のうち2〜3個が自然ににじむようにする
-- 客観的な無味乾燥レビューではなく、このペルソナの主観で語る
-- 各記事の commentary では、必ずこのペルソナの口癖・温度感・価値観がにじむようにし、他のペルソナでも成立する無個性な書き方をしない
-- headline は短い導入見出しとして使い、何の記事かを一息でわかる形で置く
-- summary_intro は記事内容の短い本編として使い、何が起きたか、どこを見る記事かを置く
-- 記事の commentary は「summary_intro の続き」として、このペルソナならどう受け取るかを話す
-- commentary は反応を中心に書く。summary_intro で置いた事実を土台にしてよい
-- commentary では「つまり」「要するに」「背景として」「ポイントは」など、解説調に見えやすい運びを避ける
-- opening は番組の導入トークとして扱い、記事本編とは役割を分ける
-- opening では挨拶、時候や時間帯の話、軽い日常雑談、聞き方のガイドを優先する
-- opening では個別記事の内容、固有名詞、具体的な出来事、記事の解説や要約を書かない
-- opening では、今回の回がどんな空気感やテーマ帯の回かを抽象的に予告してよい
-- 他のキャラクター名を名乗らない。別ペルソナの名前・肩書き・口調を混ぜない
-- 自分を名乗るなら、必ず {briefing_profile["name"]} とだけ名乗る
-- 一人称は {briefing_profile["first_person"]} を基本にし、別の一人称へぶれない
-- 話し方は {briefing_profile["speech_style"]} と {briefing_profile["voice"]} に寄せる
-- 事実を捏造しない。articles から読めることだけを使う
-- 記事ごとに観点を少しずつ変える。同じテンプレを繰り返さない
-- 全セクションで1文ごとに改行する
-- article commentary でも1文ごとに改行する
-- 段落間に空行は入れない
-- snark でも不快・攻撃的・見下し表現は禁止
-- snark では軽い皮肉、ツッコミ、呆れ気味の言い回しは許可する
-- snark でも読者個人をいじらない。人ではなく話題や状況に対して毒づく
-{chr(10).join(supplement_rules)}
-"""
-
-    user_prompt = f"""タスク:
-- 与えられた記事だけを根拠に、日本語の音声ブリーフィング台本を作る
-- 今回返すべきセクションだけを返す
-
-文字量の目安:
-- 目標尺: 約 {target_duration_minutes} 分
-- 換算レート: 1分あたり {chars_per_minute} 文字
-- 今回返すセクションの目標文字数: 約 {target_chars} 文字
-{chr(10).join(single_target_lines)}
-- 全体の本文合計は必ず {target_chars_min}文字以上 {target_chars_max}文字以下にする
-- 全体は目標文字数の前後10%程度に収める意識で書く
-- 目標文字数を大きく下回らない。特に長尺回では 85% 未満まで縮めない意識で書く
-- article_segments は各記事の持ち分を使い切る意識で、記事数に対して不自然に長くしない
-
-追加ルール:
-- JSONのみを返す
-- 出力後、内部的に文字数不足がないか確認し、不足があれば自分で補ってから返す
-{chr(10).join(common_section_rules)}
-{chr(10).join(single_article_section_rules)}
-
-導入トークの文脈:
-- now_jst: {intro_context.get("now_jst", "")}
-- date_jst: {intro_context.get("date_jst", "")}
-- weekday_jst: {intro_context.get("weekday_jst", "")}
-- time_of_day: {intro_context.get("time_of_day", "")}
-- season_hint: {intro_context.get("season_hint", "")}
-
-返却形式:
-{response_example}
-- headline でこれから扱う記事をリスナーに詳細に紹介し、commentary でそのペルソナの反応を書く
-
-articles:
-{json.dumps(trimmed_articles, ensure_ascii=False)}
-"""
-    if supplement_rules:
-        user_prompt += f"""
-
-既存の {generation_section}:
-{existing_section_text}
-"""
+    existing_context = "なし"
+    if generation_mode == "supplement" and generation_section in {"opening", "overall_summary", "ending"} and existing_section_text:
+        existing_context = f"既存の {generation_section}:\n{existing_section_text}"
     if generation_mode == "supplement" and generation_section == "article_segments" and include_article_segments and existing_article_segments:
-        user_prompt += f"""
-
-既存の article_segments:
-{json.dumps(existing_article_segments, ensure_ascii=False)}
-"""
+        existing_context = f"既存の article_segments:\n{json.dumps(existing_article_segments, ensure_ascii=False)}"
+    supplement_note = _join_non_empty_lines(supplement_rules) or "通常生成です。既存台本への追記ではありません。"
+    variables = {
+        "persona_key": persona_key,
+        "display_name": briefing_profile["name"],
+        "gender": briefing_profile["gender"],
+        "age_vibe": briefing_profile["age_vibe"],
+        "first_person": briefing_profile["first_person"],
+        "speech_style": briefing_profile["speech_style"],
+        "occupation": briefing_profile["occupation"],
+        "experience": briefing_profile["experience"],
+        "personality": briefing_profile["personality"],
+        "values": briefing_profile["values"],
+        "interests": briefing_profile["interests"],
+        "dislikes": briefing_profile["dislikes"],
+        "voice": briefing_profile["voice"],
+        "intro_style": briefing_profile["intro_style"],
+        "comment_range": briefing_profile["comment_range"],
+        "item_style": item_profile["style"],
+        "include_opening": "true" if include_opening else "false",
+        "include_overall_summary": "true" if include_overall_summary else "false",
+        "include_article_segments": "true" if include_article_segments else "false",
+        "include_ending": "true" if include_ending else "false",
+        "target_duration_minutes": target_duration_minutes,
+        "chars_per_minute": chars_per_minute,
+        "target_chars": target_chars,
+        "target_chars_min": target_chars_min,
+        "target_chars_max": target_chars_max,
+        "sentence_length_spec": sentence_length_spec,
+        "opening_sentence_range": f"{opening_min_sentences}〜{opening_max_sentences}文",
+        "opening_char_range": f"{opening_min_chars}〜{opening_max_chars}文字",
+        "summary_sentence_range": f"{summary_min_sentences}〜{summary_max_sentences}文",
+        "summary_char_range": f"{summary_min_chars}〜{summary_max_chars}文字",
+        "ending_sentence_range": f"{ending_min_sentences}〜{ending_max_sentences}文",
+        "ending_char_range": f"{ending_min_chars}〜{ending_max_chars}文字",
+        "article_char_range": f"{article_min_chars}〜{article_max_chars}文字",
+        "headline_sentence_range": f"{article_headline_min_sentences}〜{article_headline_max_sentences}文",
+        "headline_char_range": f"{article_headline_min_chars}〜{article_headline_max_chars}文字",
+        "summary_intro_sentence_range": f"{article_summary_intro_min_sentences}〜{article_summary_intro_max_sentences}文",
+        "summary_intro_char_range": f"{article_summary_intro_min_chars}〜{article_summary_intro_max_chars}文字",
+        "commentary_sentence_range": f"{article_commentary_min_sentences}〜{article_commentary_max_sentences}文",
+        "commentary_char_range": f"{article_commentary_min_chars}〜{article_commentary_max_chars}文字",
+        "generation_mode": generation_mode or "full",
+        "generation_section": generation_section or "all",
+        "program_position": program_position or "full_episode",
+        "total_articles": total_articles,
+        "article_batch_range": f'{article_batch_start_index or "-"} - {article_batch_end_index or "-"}',
+        "supplement_note": supplement_note,
+        "now_jst": intro_context.get("now_jst", ""),
+        "date_jst": intro_context.get("date_jst", ""),
+        "weekday_jst": intro_context.get("weekday_jst", ""),
+        "time_of_day": intro_context.get("time_of_day", ""),
+        "season_hint": intro_context.get("season_hint", ""),
+        "response_example": f'{response_example}\n- headline でこれから扱う記事をリスナーに詳細に紹介し、commentary でそのペルソナの反応を書く',
+        "articles_json": json.dumps(trimmed_articles, ensure_ascii=False),
+        "existing_context": existing_context,
+    }
+    system_instruction, user_prompt = apply_prompt_override(
+        prompt_key,
+        str(default_template.get("system_instruction") or ""),
+        str(default_template.get("prompt_text") or ""),
+        variables,
+    )
+    effective_prompt = f"{system_instruction}\n\n{user_prompt}"
     return {
         "target_chars": target_chars,
         "system_instruction": system_instruction,
         "user_prompt": user_prompt,
-        "prompt": f"{system_instruction}\n\n{user_prompt}",
+        "prompt": effective_prompt,
         "schema": build_audio_briefing_script_schema(
             conversation_mode=conversation_mode,
             include_opening=include_opening,

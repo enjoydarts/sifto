@@ -7,6 +7,7 @@ import { Send } from "lucide-react";
 import { PageTransition } from "@/components/page-transition";
 import { useI18n } from "@/components/i18n-provider";
 import { api, DigestDetail } from "@/lib/api";
+import { formatModelDisplayName } from "@/lib/model-display";
 
 function digestStatusBadge(d: DigestDetail, t: (key: string, fallback?: string) => string) {
   if (d.sent_at) {
@@ -46,6 +47,42 @@ function formatDateTime(value: string | null | undefined, locale: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(d);
+}
+
+function llmPromptSourceLabel(source: string | null | undefined, version: number | null | undefined, t: (key: string, fallback?: string) => string) {
+  const normalized = (source ?? "").trim();
+  if (normalized === "default_code") return t("itemDetail.execution.prompt.defaultCode");
+  if (normalized === "template_version" && version != null) {
+    return t("itemDetail.execution.prompt.templateVersion").replace("{{version}}", String(version));
+  }
+  if (normalized === "template_version") return t("itemDetail.execution.prompt.template");
+  return normalized || null;
+}
+
+function PromptMetaInline({
+  llm,
+  t,
+}: {
+  llm: NonNullable<DigestDetail["digest_llm"]>;
+  t: (key: string, fallback?: string) => string;
+}) {
+  const sourceLabel = llmPromptSourceLabel(llm.prompt_source, llm.prompt_version_number, t);
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--color-editorial-ink-soft)]">
+      <span>{llm.provider} / {formatModelDisplayName(llm.model)}</span>
+      {sourceLabel ? (
+        <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-1">
+          {sourceLabel}
+        </span>
+      ) : null}
+      {llm.prompt_experiment_id ? (
+        <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">
+          {t("itemDetail.execution.prompt.experiment")}
+        </span>
+      ) : null}
+      {llm.prompt_key ? <span>{t("itemDetail.execution.prompt.key").replace("{{key}}", llm.prompt_key)}</span> : null}
+    </div>
+  );
 }
 
 export default function DigestDetailPage() {
@@ -111,8 +148,8 @@ export default function DigestDetailPage() {
               {t("digestDetail.emailBody")}
             </div>
             {digest.digest_llm ? (
-              <div className="mt-3 text-xs text-[var(--color-editorial-ink-soft)]" title={t("digestDetail.digestModelTitle")}>
-                {digest.digest_llm.provider} / {digest.digest_llm.model}
+              <div title={t("digestDetail.digestModelTitle")}>
+                <PromptMetaInline llm={digest.digest_llm} t={t} />
               </div>
             ) : null}
             <div className="mt-4 whitespace-pre-wrap break-words font-serif text-[18px] leading-[1.95] text-[var(--color-editorial-ink)]">
@@ -132,8 +169,8 @@ export default function DigestDetailPage() {
               </div>
             </div>
             {digest.cluster_draft_llm ? (
-              <div className="mt-3 text-xs text-[var(--color-editorial-ink-soft)]" title={t("digestDetail.clusterDraftModelTitle")}>
-                {digest.cluster_draft_llm.provider} / {digest.cluster_draft_llm.model}
+              <div title={t("digestDetail.clusterDraftModelTitle")}>
+                <PromptMetaInline llm={digest.cluster_draft_llm} t={t} />
               </div>
             ) : null}
             <div className="mt-4 grid gap-3">

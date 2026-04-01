@@ -347,6 +347,17 @@ func digestClusterDraftValidationReason(text string) string {
 		bullets = append(bullets, line)
 	}
 	if len(bullets) < 2 {
+		if len(bullets) == 1 {
+			last := bullets[0]
+			if strings.HasPrefix(last, "-") || strings.HasPrefix(last, "・") || strings.HasPrefix(last, "•") {
+				trimmed := strings.TrimSpace(strings.TrimLeft(last, "-・• "))
+				if len([]rune(trimmed)) >= 20 && digestTextLooksComplete(trimmed, 20) {
+					return ""
+				}
+			} else if digestTextLooksComplete(last, 20) {
+				return ""
+			}
+		}
 		return "too_few_lines"
 	}
 	last := bullets[len(bullets)-1]

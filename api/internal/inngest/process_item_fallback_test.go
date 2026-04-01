@@ -243,6 +243,11 @@ func TestDigestClusterDraftValidationReason(t *testing.T) {
 			text: "- 1行目は十分な情報量で言い切る文章です。\n- 2行目も十分な長さがあり、文末まで自然に閉じます。",
 			want: "",
 		},
+		{
+			name: "single complete bullet is allowed",
+			text: "- AlibabaのQwenチームが2026年3月30日にオムニモーダルAI「Qwen3.5-Omni」を発表し、テキスト・画像・音声・動画の理解と文章・音声生成が可能。",
+			want: "",
+		},
 	}
 
 	for _, tt := range tests {

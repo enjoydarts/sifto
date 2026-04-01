@@ -3,6 +3,7 @@ import unittest
 from app.services.llm_text_utils import (
     audio_briefing_script_max_tokens,
     facts_need_japanese_localization,
+    summary_max_tokens,
 )
 
 
@@ -29,6 +30,14 @@ class FactsLocalizationDetectionTests(unittest.TestCase):
     def test_audio_briefing_script_max_tokens_boosts_duo_mode(self):
         self.assertGreater(audio_briefing_script_max_tokens(600, "duo"), audio_briefing_script_max_tokens(600, "single"))
         self.assertEqual(audio_briefing_script_max_tokens(14000, "duo"), 30000)
+
+    def test_summary_max_tokens_increases_by_about_fifteen_percent(self):
+        self.assertEqual(summary_max_tokens(500), 700)
+        self.assertEqual(summary_max_tokens(600), 828)
+
+    def test_summary_max_tokens_keeps_existing_bounds(self):
+        self.assertEqual(summary_max_tokens(100), 700)
+        self.assertEqual(summary_max_tokens(3000), 2600)
 
 
 if __name__ == "__main__":

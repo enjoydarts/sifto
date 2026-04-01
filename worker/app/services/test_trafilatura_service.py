@@ -115,6 +115,37 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "高橋慎一監督の新作映画『ハバナの奇跡』")
         self.assertEqual(result["content"], "社会主義国でのジャズクラブ誕生を追う")
 
+    def test_extract_body_refetches_when_utf8_page_is_decoded_as_legacy_japanese_encoding(self):
+        html = "<html><head><meta charset=\"utf-8\"><title>涼宮ハルヒの憂鬱「DEATH NOTE」の放送20周年アニメ7作品、ABEMAで一挙無料配信</title></head><body>ABEMAが周年アニメ特集を始める。</body></html>"
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.headers = {"content-type": "text/html; charset=utf-8"}
+        response.content = html.encode("utf-8")
+        response.url = "https://example.com/final"
+        response.text = html
+        captured = {}
+        fetched = "<html><head>" + ("a" * 3900) + '<meta charset="utf-8" />' + "w—ء‹{ƒnƒ‹ƒq‚ج—JںT" + "</head></html>"
+
+        def fake_bare_extraction(downloaded, **kwargs):
+            captured["downloaded"] = downloaded
+            return {
+                "title": "涼宮ハルヒの憂鬱「DEATH NOTE」の放送20周年アニメ7作品、ABEMAで一挙無料配信",
+                "text": "ABEMAが周年アニメ特集を始める。",
+                "date": None,
+            }
+
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=fetched), patch(
+            "app.services.trafilatura_service.httpx.get", return_value=response
+        ), patch(
+            "app.services.trafilatura_service.trafilatura.bare_extraction",
+            side_effect=fake_bare_extraction,
+        ):
+            result = extract_body("https://example.com/start")
+
+        self.assertIn("涼宮ハルヒの憂鬱", captured["downloaded"])
+        self.assertEqual(result["title"], "涼宮ハルヒの憂鬱「DEATH NOTE」の放送20周年アニメ7作品、ABEMAで一挙無料配信")
+        self.assertEqual(result["content"], "ABEMAが周年アニメ特集を始める。")
+
 
 if __name__ == "__main__":
     unittest.main()

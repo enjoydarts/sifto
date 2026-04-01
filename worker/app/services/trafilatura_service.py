@@ -27,6 +27,7 @@ _META_CHARSET_TEXT_PATTERNS = [
     re.compile(r'(?is)<meta[^>]+charset=["\']?\s*([a-zA-Z0-9._\-]+)'),
     re.compile(r'(?is)<meta[^>]+content=["\'][^"\']*charset=\s*([a-zA-Z0-9._\-]+)[^"\']*["\']'),
 ]
+_UTF8_MOJIBAKE_CHARS = set("ƒ‚„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™›œžŸپںژگچءإابجىْ؟")
 
 
 def _looks_mojibake(text: str) -> bool:
@@ -35,6 +36,19 @@ def _looks_mojibake(text: str) -> bool:
         return False
     replacement_count = sample.count("\ufffd")
     return replacement_count >= 3 and replacement_count * 20 >= len(sample)
+
+
+def _looks_utf8_legacy_mojibake(text: str) -> bool:
+    sample = (text or "")[:8192]
+    if not sample:
+        return False
+    suspicious = sum(1 for ch in sample if ch in _UTF8_MOJIBAKE_CHARS)
+    if suspicious < 4:
+        return False
+    non_ascii = sum(1 for ch in sample if ord(ch) > 127)
+    if non_ascii == 0:
+        return False
+    return suspicious * 3 >= non_ascii * 2
 
 
 def _declared_charset_in_text(text: str) -> str | None:
@@ -55,7 +69,11 @@ def _needs_refetch(downloaded: str | None) -> bool:
     if _looks_mojibake(downloaded):
         return True
     declared = (_declared_charset_in_text(downloaded) or "").strip().lower()
+    if declared in {"utf-8", "utf8"} and _looks_utf8_legacy_mojibake(downloaded):
+        return True
     if declared in {"shift_jis", "shift-jis", "sjis", "cp932", "ms932", "windows-31j"} and "\ufffd" in downloaded:
+        return True
+    if _looks_utf8_legacy_mojibake(downloaded):
         return True
     return False
 

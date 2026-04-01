@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -253,42 +254,61 @@ func (r *PromptTemplateRepo) GetTemplateDetail(ctx context.Context, templateID s
 }
 
 func (r *PromptTemplateRepo) CreateVersion(ctx context.Context, in PromptTemplateVersionInput) (*PromptTemplateVersion, error) {
-	var nextVersion int
-	if err := r.db.QueryRow(ctx, `
-		SELECT COALESCE(MAX(version), 0) + 1
-		FROM prompt_template_versions
-		WHERE template_id = $1
-	`, in.TemplateID).Scan(&nextVersion); err != nil {
-		return nil, err
-	}
 	if len(in.VariablesSchema) == 0 {
 		in.VariablesSchema = json.RawMessage(`{}`)
 	}
 	var out PromptTemplateVersion
 	err := r.db.QueryRow(ctx, `
+		WITH template_lock AS (
+			SELECT id
+			FROM prompt_templates
+			WHERE id = $1
+			FOR UPDATE
+		), next_version AS (
+			SELECT COALESCE(MAX(v.version), 0) + 1 AS version
+			FROM prompt_template_versions v
+			WHERE v.template_id = $1
+		)
 		INSERT INTO prompt_template_versions (
 			template_id, version, label, system_instruction, prompt_text, fallback_prompt_text,
 			variables_schema, notes, created_by_user_id, created_by_email
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+		)
+		SELECT $1, next_version.version, $2, $3, $4, $5, $6, $7, $8, $9
+		FROM template_lock, next_version
 		RETURNING id, template_id, version, label, system_instruction, prompt_text, fallback_prompt_text, variables_schema, notes, created_by_user_id, created_by_email, created_at
-	`, in.TemplateID, nextVersion, in.Label, in.SystemInstruction, in.PromptText, in.FallbackPromptText, in.VariablesSchema, in.Notes, in.CreatedByUserID, in.CreatedByEmail).Scan(
+	`, in.TemplateID, in.Label, in.SystemInstruction, in.PromptText, in.FallbackPromptText, in.VariablesSchema, in.Notes, in.CreatedByUserID, in.CreatedByEmail).Scan(
 		&out.ID, &out.TemplateID, &out.Version, &out.Label, &out.SystemInstruction, &out.PromptText, &out.FallbackPromptText,
 		&out.VariablesSchema, &out.Notes, &out.CreatedByUserID, &out.CreatedByEmail, &out.CreatedAt,
 	)
 	if err != nil {
+		if mappedErr := mapPromptTemplateVersionWriteError(err); mappedErr != nil {
+			return nil, mappedErr
+		}
 		return nil, err
 	}
 	return &out, nil
 }
 
 func (r *PromptTemplateRepo) ActivateVersion(ctx context.Context, templateID, versionID string) error {
-	_, err := r.db.Exec(ctx, `
+	tag, err := r.db.Exec(ctx, `
 		UPDATE prompt_templates
 		SET active_version_id = $2,
 		    updated_at = NOW()
 		WHERE id = $1
+		  AND EXISTS (
+		  	SELECT 1
+		  	FROM prompt_template_versions v
+		  	WHERE v.id = $2
+		  	  AND v.template_id = $1
+		  )
 	`, templateID, versionID)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrInvalidState
+	}
+	return nil
 }
 
 func (r *PromptTemplateRepo) ClearActiveVersion(ctx context.Context, templateID string) error {
@@ -365,7 +385,7 @@ func (r *PromptTemplateRepo) UpdateExperiment(ctx context.Context, experimentID,
 		}
 		return nil, nil, err
 	}
-	if len(arms) > 0 {
+	if shouldReplacePromptExperimentArms(arms) {
 		if _, err := tx.Exec(ctx, `DELETE FROM prompt_experiment_arms WHERE experiment_id = $1`, experimentID); err != nil {
 			return nil, nil, err
 		}
@@ -419,4 +439,21 @@ func (r *PromptTemplateRepo) GetActiveVersionByKey(ctx context.Context, key stri
 		return nil, err
 	}
 	return &out, nil
+}
+
+func mapPromptTemplateVersionWriteError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if err == pgx.ErrNoRows {
+		return ErrInvalidState
+	}
+	if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {
+		return ErrConflict
+	}
+	return nil
+}
+
+func shouldReplacePromptExperimentArms(arms []PromptExperimentArmInput) bool {
+	return arms != nil
 }

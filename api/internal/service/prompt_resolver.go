@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log"
 	"strconv"
 	"strings"
 
@@ -33,6 +34,7 @@ func (r *PromptResolver) Resolve(ctx context.Context, promptKey string) (*Prompt
 	}
 	active, err := r.repo.GetActiveVersionByKey(ctx, promptKey)
 	if err != nil {
+		log.Printf("prompt resolver fallback to default_code prompt_key=%s err=%v", promptKey, err)
 		return &PromptResolution{PromptKey: promptKey, PromptSource: "default_code"}, nil
 	}
 	if active == nil {

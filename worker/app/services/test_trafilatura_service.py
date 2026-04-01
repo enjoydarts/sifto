@@ -62,6 +62,32 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "50歳独身男性のインシデント対応を分析")
         self.assertEqual(result["content"], "GoogleがM-Trends 2026公開")
 
+    def test_extract_body_refetches_when_fetch_url_result_is_mojibake(self):
+        html = "<html><head><title>映画『CUBA JAZZ』始動</title></head><body>キューバの音楽文化を追う</body></html>"
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.headers = {"content-type": "text/html"}
+        response.content = html.encode("cp932")
+        response.url = "https://example.com/final"
+        response.text = response.content.decode("utf-8", errors="replace")
+        captured = {}
+
+        def fake_bare_extraction(downloaded, **kwargs):
+            captured["downloaded"] = downloaded
+            return {"title": "映画『CUBA JAZZ』始動", "text": "キューバの音楽文化を追う", "date": None}
+
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value="�����T��ē̐V"), patch(
+            "app.services.trafilatura_service.httpx.get", return_value=response
+        ), patch(
+            "app.services.trafilatura_service.trafilatura.bare_extraction",
+            side_effect=fake_bare_extraction,
+        ):
+            result = extract_body("https://example.com/start")
+
+        self.assertIn("映画『CUBA JAZZ』始動", captured["downloaded"])
+        self.assertEqual(result["title"], "映画『CUBA JAZZ』始動")
+        self.assertEqual(result["content"], "キューバの音楽文化を追う")
+
 
 if __name__ == "__main__":
     unittest.main()

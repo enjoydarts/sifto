@@ -25,6 +25,14 @@ _META_CHARSET_PATTERNS = [
 ]
 
 
+def _looks_mojibake(text: str) -> bool:
+    sample = (text or "")[:4096]
+    if not sample:
+        return False
+    replacement_count = sample.count("\ufffd")
+    return replacement_count >= 3 and replacement_count * 20 >= len(sample)
+
+
 def _decode_html_response(resp: httpx.Response) -> str:
     content = resp.content or b""
     if not content:
@@ -47,6 +55,14 @@ def _decode_html_response(resp: httpx.Response) -> str:
         except Exception:
             continue
     return content.decode("utf-8", errors="replace")
+
+
+def _refetch_html(url: str) -> tuple[str | None, httpx.Response | None]:
+    resp = httpx.get(url, timeout=30.0, follow_redirects=True)
+    resp.raise_for_status()
+    if is_pdf_response(str(resp.url), resp.headers.get("content-type"), resp.content):
+        return None, resp
+    return _decode_html_response(resp), resp
 
 
 def _declared_response_encoding(content_type: str | None, content: bytes) -> str | None:
@@ -126,13 +142,11 @@ def extract_body(url: str) -> dict | None:
         config.set("DEFAULT", "EXTRACTION_TIMEOUT", "30")
 
         downloaded = trafilatura.fetch_url(url)
-        if downloaded is None:
+        if downloaded is None or _looks_mojibake(downloaded):
             try:
-                resp = httpx.get(url, timeout=30.0, follow_redirects=True)
-                resp.raise_for_status()
-                if is_pdf_response(str(resp.url), resp.headers.get("content-type"), resp.content):
+                downloaded, resp = _refetch_html(url)
+                if resp is not None and downloaded is None:
                     return extract_pdf_body_from_bytes(resp.content, str(resp.url))
-                downloaded = _decode_html_response(resp)
             except Exception as e:
                 _log.warning("extract fetch failed url=%s err=%s", url, e)
                 if os.getenv("ALLOW_DEV_EXTRACT_PLACEHOLDER") == "true":

@@ -222,6 +222,36 @@ func TestInvalidExtractReason(t *testing.T) {
 	}
 }
 
+func TestDigestClusterDraftValidationReason(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{
+			name: "too short",
+			text: "- 短い。",
+			want: "too_short",
+		},
+		{
+			name: "last bullet ends with particle",
+			text: "- 1行目は十分な情報量で最後まで言い切る文章です。\n- 2行目も長さはあるものの最後の語尾が助詞の",
+			want: "last_bullet_ends_with_particle",
+		},
+		{
+			name: "complete",
+			text: "- 1行目は十分な情報量で言い切る文章です。\n- 2行目も十分な長さがあり、文末まで自然に閉じます。",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		if got := digestClusterDraftValidationReason(tt.text); got != tt.want {
+			t.Fatalf("%s: digestClusterDraftValidationReason() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
 func assertErr(msg string) error { return transientErr(msg) }
 
 func strptr(v string) *string { return &v }

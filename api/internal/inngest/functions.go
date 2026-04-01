@@ -329,13 +329,13 @@ func digestTextLooksComplete(text string, minLen int) bool {
 	}
 }
 
-func validateDigestClusterDraftCompletion(text string) error {
+func digestClusterDraftValidationReason(text string) string {
 	s := strings.TrimSpace(text)
 	if len([]rune(s)) < 40 {
-		return fmt.Errorf("cluster draft looks truncated")
+		return "too_short"
 	}
 	if strings.Count(s, "```")%2 != 0 {
-		return fmt.Errorf("cluster draft looks truncated")
+		return "unclosed_code_fence"
 	}
 	lines := strings.Split(s, "\n")
 	bullets := make([]string, 0, len(lines))
@@ -347,13 +347,13 @@ func validateDigestClusterDraftCompletion(text string) error {
 		bullets = append(bullets, line)
 	}
 	if len(bullets) < 2 {
-		return fmt.Errorf("cluster draft looks truncated")
+		return "too_few_lines"
 	}
 	last := bullets[len(bullets)-1]
 	if strings.HasPrefix(last, "-") || strings.HasPrefix(last, "・") || strings.HasPrefix(last, "•") {
 		trimmed := strings.TrimSpace(strings.TrimLeft(last, "-・• "))
 		if len([]rune(trimmed)) < 8 {
-			return fmt.Errorf("cluster draft looks truncated")
+			return "last_bullet_too_short"
 		}
 		if strings.HasSuffix(trimmed, "、") ||
 			strings.HasSuffix(trimmed, ",") ||
@@ -369,11 +369,18 @@ func validateDigestClusterDraftCompletion(text string) error {
 			strings.HasSuffix(trimmed, "も") ||
 			strings.HasSuffix(trimmed, "より") ||
 			strings.HasSuffix(trimmed, "から") {
-			return fmt.Errorf("cluster draft looks truncated")
+			return "last_bullet_ends_with_particle"
 		}
-		return nil
+		return ""
 	}
 	if !digestTextLooksComplete(s, 80) {
+		return "text_looks_incomplete"
+	}
+	return ""
+}
+
+func validateDigestClusterDraftCompletion(text string) error {
+	if digestClusterDraftValidationReason(text) != "" {
 		return fmt.Errorf("cluster draft looks truncated")
 	}
 	return nil

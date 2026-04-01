@@ -100,8 +100,46 @@ func composeDigestEmailCopy(
 				recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", clusterDraftRuntime.Model, attempt, &data.UserID, nil, nil, &data.DigestID, err)
 				return fmt.Errorf("compose digest cluster draft rank=%d incomplete after %d retries: %w", drafts[i].Rank, attempt, err)
 			} else {
+				reason := digestClusterDraftValidationReason(candidate)
+				lastLine := ""
+				trimmed := strings.TrimSpace(candidate)
+				if trimmed != "" {
+					lines := strings.Split(trimmed, "\n")
+					lastLine = strings.TrimSpace(lines[len(lines)-1])
+				}
+				lineCount := 0
+				if trimmed != "" {
+					for _, line := range strings.Split(trimmed, "\n") {
+						if strings.TrimSpace(line) != "" {
+							lineCount++
+						}
+					}
+				}
+				inputTokens, outputTokens := 0, 0
+				modelName := ""
+				if resp != nil && resp.LLM != nil {
+					inputTokens = resp.LLM.InputTokens
+					outputTokens = resp.LLM.OutputTokens
+					modelName = strings.TrimSpace(resp.LLM.ResolvedModel)
+					if modelName == "" {
+						modelName = strings.TrimSpace(resp.LLM.Model)
+					}
+				}
 				recordLLMExecutionFailure(ctx, llmExecutionRepo, "digest_cluster_draft", clusterDraftRuntime.Model, attempt, &data.UserID, nil, nil, &data.DigestID, err)
-				log.Printf("compose-digest-copy cluster-draft retry digest_id=%s rank=%d attempt=%d err=%v", data.DigestID, drafts[i].Rank, attempt+1, err)
+				log.Printf(
+					"compose-digest-copy cluster-draft retry digest_id=%s rank=%d attempt=%d reason=%s model=%s input_tokens=%d output_tokens=%d candidate_chars=%d line_count=%d last_line=%q err=%v",
+					data.DigestID,
+					drafts[i].Rank,
+					attempt+1,
+					reason,
+					modelName,
+					inputTokens,
+					outputTokens,
+					len([]rune(trimmed)),
+					lineCount,
+					lastLine,
+					err,
+				)
 			}
 		}
 		if !valid {

@@ -1,0 +1,49 @@
+# Task
+与えられた記事だけを根拠に、日本語の音声ブリーフィング台本を作成してください。
+今回有効なセクションは opening={{include_opening}}, overall_summary={{include_overall_summary}}, article_segments={{include_article_segments}}, ending={{include_ending}} です。
+JSON schema と有効フラグに従い、今回返すべきセクションだけを返してください。
+
+# Length Constraints
+- 目標尺: 約 {{target_duration_minutes}} 分
+- 換算レート: 1分あたり {{chars_per_minute}} 文字
+- 今回返すセクション全体の目標文字数: 約 {{target_chars}} 文字
+- 全体の本文合計は必ず {{target_chars_min}}文字以上 {{target_chars_max}}文字以下にしてください。
+- 1文は {{sentence_length_spec}} を目安にしつつ、短く逃げず十分な情報量を持たせてください。
+
+# Section Rules
+- opening 有効時は {{opening_sentence_range}} / {{opening_char_range}} で書いてください。
+- opening は番組の導入トークです。挨拶、時間帯や季節感、軽い日常雑談、今回の回の空気感を入れてください。個別記事の固有名詞や細かなニュース説明には入らないでください。
+- overall_summary 有効時は {{summary_sentence_range}} / {{summary_char_range}} で書いてください。
+- overall_summary は回全体の俯瞰です。記事順の読み上げではなく、共通テーマ、温度差、いま追う意味、記事群のつながりを整理してください。
+- article_segments 有効時は入力 articles と同じ順番・同じ件数で返してください。
+- 各 article segment の合計は {{article_char_range}} に収めてください。
+- headline は {{headline_sentence_range}} / {{headline_char_range}} で、これから扱う記事をリスナーに自然に紹介してください。
+- summary_intro は {{summary_intro_sentence_range}} / {{summary_intro_char_range}} で、何が起きたか・どこを見る記事かを置いてください。
+- commentary は {{commentary_sentence_range}} / {{commentary_char_range}} で、そのペルソナならではの反応、理由、比較、引っかかり、今後の見方を広げてください。
+- commentary では headline や summary_intro の言い換えで終わらず、第一印象、良い点、気になる点、今読む理由のうち2〜3個が自然ににじむようにしてください。
+- ending 有効時は {{ending_sentence_range}} / {{ending_char_range}} で書いてください。
+- ending は番組全体の締めです。新しい論点を足さず、今日残った感触を1〜2点だけ振り返り、聞いてくれたことへの一言と次の時間へ戻る感じを入れてください。
+
+# Program Context
+- generation_mode: {{generation_mode}}
+- generation_section: {{generation_section}}
+- program_position: {{program_position}}
+- total_articles: {{total_articles}}
+- article_batch_range: {{article_batch_range}}
+- supplement_note: {{supplement_note}}
+
+# Intro Context
+- now_jst: {{now_jst}}
+- date_jst: {{date_jst}}
+- weekday_jst: {{weekday_jst}}
+- time_of_day: {{time_of_day}}
+- season_hint: {{season_hint}}
+
+# Existing Context
+{{existing_context}}
+
+# Response Format
+{{response_example}}
+
+# Input Articles
+{{articles_json}}

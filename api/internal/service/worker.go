@@ -457,6 +457,15 @@ type LLMExecutionFailure struct {
 	Reason string `json:"reason"`
 }
 
+type PromptConfig struct {
+	PromptKey         string  `json:"prompt_key,omitempty"`
+	PromptSource      string  `json:"prompt_source,omitempty"`
+	PromptText        string  `json:"prompt_text,omitempty"`
+	SystemInstruction string  `json:"system_instruction,omitempty"`
+	PromptVersionID   *string `json:"prompt_version_id,omitempty"`
+	PromptVersion     *int    `json:"prompt_version_number,omitempty"`
+}
+
 func (w *WorkerClient) ExtractBody(ctx context.Context, url string) (*ExtractBodyResponse, error) {
 	return postWithHeaders[ExtractBodyResponse](ctx, w, "/extract-body", map[string]any{"url": url}, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret))
 }
@@ -492,11 +501,12 @@ func (w *WorkerClient) ExtractFacts(ctx context.Context, title *string, content 
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, w.internalSecret))
 }
 
-func (w *WorkerClient) ExtractFactsWithModel(ctx context.Context, title *string, content string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, model *string) (*ExtractFactsResponse, error) {
+func (w *WorkerClient) ExtractFactsWithModel(ctx context.Context, title *string, content string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, model *string, prompt *PromptConfig) (*ExtractFactsResponse, error) {
 	return postWithHeaders[ExtractFactsResponse](ctx, w, "/extract-facts", map[string]any{
 		"title":   title,
 		"content": content,
 		"model":   model,
+		"prompt":  prompt,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, w.internalSecret))
 }
 
@@ -509,12 +519,13 @@ func (w *WorkerClient) Summarize(ctx context.Context, title *string, facts []str
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, w.internalSecret))
 }
 
-func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, facts []string, sourceTextChars *int, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, model *string) (*SummarizeResponse, error) {
+func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, facts []string, sourceTextChars *int, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, model *string, prompt *PromptConfig) (*SummarizeResponse, error) {
 	return postWithHeaders[SummarizeResponse](ctx, w, "/summarize", map[string]any{
 		"title":             title,
 		"facts":             facts,
 		"model":             model,
 		"source_text_chars": sourceTextChars,
+		"prompt":            prompt,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, w.internalSecret))
 }
 
@@ -556,7 +567,7 @@ func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, ite
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, w.internalSecret))
 }
 
-func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, model *string) (*ComposeDigestResponse, error) {
+func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, model *string, prompt *PromptConfig) (*ComposeDigestResponse, error) {
 	if _, ok := ctx.Deadline(); !ok && w.composeDigestTimeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, w.composeDigestTimeout)
@@ -566,6 +577,7 @@ func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate st
 		"digest_date": digestDate,
 		"items":       items,
 		"model":       model,
+		"prompt":      prompt,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, w.internalSecret))
 }
 
@@ -912,6 +924,7 @@ func (w *WorkerClient) GenerateAudioBriefingScriptWithModel(
 	includeOverallSummary bool,
 	includeArticleSegments bool,
 	includeEnding bool,
+	prompt *PromptConfig,
 ) (*AudioBriefingScriptResponse, error) {
 	return postWithHeaders[AudioBriefingScriptResponse](ctx, w, "/audio-briefing-script", map[string]any{
 		"persona":                  persona,
@@ -928,6 +941,7 @@ func (w *WorkerClient) GenerateAudioBriefingScriptWithModel(
 		"include_overall_summary":  includeOverallSummary,
 		"include_article_segments": includeArticleSegments,
 		"include_ending":           includeEnding,
+		"prompt":                   prompt,
 	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, w.internalSecret))
 }
 

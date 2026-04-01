@@ -1,5 +1,7 @@
 import re
 from app.services.langfuse_client import get_prompt_text
+from app.services.prompt_template_defaults import get_default_prompt_template
+from app.services.runtime_prompt_overrides import apply_prompt_override
 
 from app.services.llm_text_utils import (
     decode_json_string_fragment,
@@ -55,40 +57,29 @@ facts:
 
 
 def build_facts_task(title: str | None, content: str, *, output_mode: str = "object", fact_range: str = "8〜18個") -> dict:
+    default_template = get_default_prompt_template("facts.default")
     output_rule = (
         '- 出力は必ず {"facts": ["...", "..."]} のJSONオブジェクト1つのみにしてください。'
         if output_mode == "object"
         else '- 出力は必ず ["事実1", "事実2", ...] のJSON形式の配列のみとしてください。'
     )
-    system_instruction_fallback = f"""# Role
-あなたは正確かつ客観的なニュース要約の専門家です。
-
-# Task
-提供される記事から重要な事実を{fact_range}の箇条書きで抽出してください。
-
-# Rules
-{output_rule}
-- 余計な挨拶や解説は一切不要です。
-- 事実は客観的かつ具体的に記述してください。
-- 記事が英語の場合も、出力は自然な日本語にしてください。
-- 各 fact は必ず日本語の文字を1文字以上含めてください。
-- 固有名詞は原文を尊重し、適宜英字を維持してください。"""
-    prompt_fallback = f"""# Input
-タイトル: {title or '（不明）'}
-
-本文:
-{content}
-"""
+    variables = {
+        "title": title or "（不明）",
+        "content": content,
+        "fact_range": fact_range,
+        "output_rule": output_rule,
+    }
     system_instruction = get_prompt_text(
         "facts.system",
-        system_instruction_fallback,
-        variables={"fact_range": fact_range, "output_rule": output_rule},
+        str(default_template.get("system_instruction") or ""),
+        variables=variables,
     )
     prompt = get_prompt_text(
         "facts.primary",
-        prompt_fallback,
-        variables={"title": title or "（不明）", "content": content, "fact_range": fact_range},
+        str(default_template.get("prompt_text") or ""),
+        variables=variables,
     )
+    system_instruction, prompt = apply_prompt_override("facts.default", system_instruction, prompt, variables)
     return {
         "system_instruction": system_instruction,
         "prompt": prompt,

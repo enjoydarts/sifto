@@ -26,14 +26,15 @@ const (
 )
 
 type AudioBriefingOrchestrator struct {
-	repo          *repository.AudioBriefingRepo
-	settingsRepo  *repository.UserSettingsRepo
-	llmUsageRepo  *repository.LLMUsageLogRepo
-	cipher        *SecretCipher
-	worker        *WorkerClient
-	cache         JSONCache
-	voiceRunner   *AudioBriefingVoiceRunner
-	concatStarter *AudioBriefingConcatStarter
+	repo           *repository.AudioBriefingRepo
+	settingsRepo   *repository.UserSettingsRepo
+	llmUsageRepo   *repository.LLMUsageLogRepo
+	promptResolver *PromptResolver
+	cipher         *SecretCipher
+	worker         *WorkerClient
+	cache          JSONCache
+	voiceRunner    *AudioBriefingVoiceRunner
+	concatStarter  *AudioBriefingConcatStarter
 }
 
 type audioBriefingRecoveredFailure struct {
@@ -57,6 +58,7 @@ func NewAudioBriefingOrchestrator(
 	repo *repository.AudioBriefingRepo,
 	settingsRepo *repository.UserSettingsRepo,
 	llmUsageRepo *repository.LLMUsageLogRepo,
+	promptResolver *PromptResolver,
 	cipher *SecretCipher,
 	worker *WorkerClient,
 	cache JSONCache,
@@ -64,14 +66,15 @@ func NewAudioBriefingOrchestrator(
 	concatStarter *AudioBriefingConcatStarter,
 ) *AudioBriefingOrchestrator {
 	return &AudioBriefingOrchestrator{
-		repo:          repo,
-		settingsRepo:  settingsRepo,
-		llmUsageRepo:  llmUsageRepo,
-		cipher:        cipher,
-		worker:        worker,
-		cache:         cache,
-		voiceRunner:   voiceRunner,
-		concatStarter: concatStarter,
+		repo:           repo,
+		settingsRepo:   settingsRepo,
+		llmUsageRepo:   llmUsageRepo,
+		promptResolver: promptResolver,
+		cipher:         cipher,
+		worker:         worker,
+		cache:          cache,
+		voiceRunner:    voiceRunner,
+		concatStarter:  concatStarter,
 	}
 }
 
@@ -296,6 +299,14 @@ func (o *AudioBriefingOrchestrator) runScriptingStage(ctx context.Context, job *
 		&draft.Title,
 		draft.ScriptCharCount,
 		audioBriefingScriptModelsValue(draft.ScriptLLMModels),
+		repository.AudioBriefingPromptMetadata{
+			PromptKey:             draft.PromptKey,
+			PromptSource:          draft.PromptSource,
+			PromptVersionID:       draft.PromptVersionID,
+			PromptVersionNumber:   draft.PromptVersionNumber,
+			PromptExperimentID:    draft.PromptExperimentID,
+			PromptExperimentArmID: draft.PromptExperimentArmID,
+		},
 		draft.Items,
 		draft.Chunks,
 	)
@@ -449,6 +460,8 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 		Articles: make(map[string]AudioBriefingNarrationArticle, len(items)),
 	}
 	scriptLLMModels := make([]string, 0, 2)
+	promptResolution := ResolvePromptResolution(ctx, o.promptResolver, "audio_briefing_script.single")
+	promptConfig := WorkerPromptConfigFromResolution(promptResolution)
 	if len(workerArticles) > 0 {
 		workerCtx := WithWorkerTraceMetadata(ctx, "audio_briefing_script", &userID, nil, nil, nil)
 		callScriptWorker := func(batch []AudioBriefingScriptArticle, introContext map[string]any, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error) {
@@ -493,10 +506,11 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 						includeOverallSummary,
 						includeArticleSegments,
 						includeEnding,
+						promptConfig,
 					)
 				})
 				if err == nil {
-					recordAudioBriefingLLMUsage(ctx, o.llmUsageRepo, o.cache, "audio_briefing_script", resp.LLM, &userID)
+					recordAudioBriefingLLMUsage(ctx, o.llmUsageRepo, o.cache, "audio_briefing_script", resp.LLM, &userID, promptResolution)
 					return resp, nil
 				}
 				errs = append(errs, fmt.Sprintf("%s: %v", modelValue, err))
@@ -575,6 +589,16 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 
 	draft := BuildAudioBriefingDraftFromNarration(slotStartedAt, normalizedPersona, items, voice, narration, targetChars)
 	draft.ScriptLLMModels = scriptLLMModels
+	if promptResolution.PromptKey != "" {
+		draft.PromptKey = &promptResolution.PromptKey
+	}
+	if promptResolution.PromptSource != "" {
+		draft.PromptSource = &promptResolution.PromptSource
+	}
+	draft.PromptVersionID = promptResolution.PromptVersionID
+	draft.PromptVersionNumber = promptResolution.PromptVersionNumber
+	draft.PromptExperimentID = promptResolution.PromptExperimentID
+	draft.PromptExperimentArmID = promptResolution.PromptExperimentArmID
 	return draft, nil
 }
 
@@ -648,6 +672,8 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	}
 
 	workerCtx := WithWorkerTraceMetadata(ctx, "audio_briefing_duo_script", &job.UserID, nil, nil, nil)
+	promptResolution := ResolvePromptResolution(ctx, o.promptResolver, "audio_briefing_script.duo")
+	promptConfig := WorkerPromptConfigFromResolution(promptResolution)
 	callScriptWorker := func(batch []AudioBriefingScriptArticle, introContext map[string]any, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error) {
 		var errs []string
 		for idx, modelName := range modelNames {
@@ -690,10 +716,11 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 					includeOverallSummary,
 					includeArticleSegments,
 					includeEnding,
+					promptConfig,
 				)
 			})
 			if err == nil {
-				recordAudioBriefingLLMUsage(ctx, o.llmUsageRepo, o.cache, "audio_briefing_script", resp.LLM, &job.UserID)
+				recordAudioBriefingLLMUsage(ctx, o.llmUsageRepo, o.cache, "audio_briefing_script", resp.LLM, &job.UserID, promptResolution)
 				return resp, nil
 			}
 			errs = append(errs, fmt.Sprintf("%s: %v", modelValue, err))
@@ -769,6 +796,16 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 
 	draft := BuildAudioBriefingDraftFromTurns(job.SlotStartedAtJST, hostPersona, items, hostVoice, partnerVoice, allTurns, targetChars)
 	draft.ScriptLLMModels = scriptLLMModels
+	if promptResolution.PromptKey != "" {
+		draft.PromptKey = &promptResolution.PromptKey
+	}
+	if promptResolution.PromptSource != "" {
+		draft.PromptSource = &promptResolution.PromptSource
+	}
+	draft.PromptVersionID = promptResolution.PromptVersionID
+	draft.PromptVersionNumber = promptResolution.PromptVersionNumber
+	draft.PromptExperimentID = promptResolution.PromptExperimentID
+	draft.PromptExperimentArmID = promptResolution.PromptExperimentArmID
 	return draft, nil
 }
 
@@ -1940,12 +1977,12 @@ func loadAndDecryptAudioBriefingUserSecret(
 	return &plain, nil
 }
 
-func recordAudioBriefingLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, cache JSONCache, purpose string, usage *LLMUsage, userID *string) {
+func recordAudioBriefingLLMUsage(ctx context.Context, repo *repository.LLMUsageLogRepo, cache JSONCache, purpose string, usage *LLMUsage, userID *string, prompt *PromptResolution) {
 	usage = NormalizeCatalogPricedUsage(purpose, usage)
 	if repo == nil || usage == nil || userID == nil || *userID == "" {
 		return
 	}
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%s|%s|%d|%d|%d|%d", purpose, usage.Provider, usage.Model, *userID, usage.InputTokens, usage.OutputTokens, usage.CacheCreationInputTokens, usage.CacheReadInputTokens)))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%d|%d|%d|%d", purpose, usage.Provider, usage.Model, *userID, promptKey(prompt), promptSource(prompt), toVal(promptVersionID(prompt)), toIntVal(promptVersionNumber(prompt)), usage.InputTokens, usage.OutputTokens, usage.CacheCreationInputTokens, usage.CacheReadInputTokens)))
 	key := hex.EncodeToString(sum[:])
 	pricingSource := usage.PricingSource
 	if pricingSource == "" {
@@ -1954,6 +1991,12 @@ func recordAudioBriefingLLMUsage(ctx context.Context, repo *repository.LLMUsageL
 	if err := repo.Insert(ctx, repository.LLMUsageLogInput{
 		IdempotencyKey:           &key,
 		UserID:                   userID,
+		PromptKey:                promptKey(prompt),
+		PromptSource:             promptSource(prompt),
+		PromptVersionID:          promptVersionID(prompt),
+		PromptVersionNumber:      promptVersionNumber(prompt),
+		PromptExperimentID:       promptExperimentID(prompt),
+		PromptExperimentArmID:    promptExperimentArmID(prompt),
 		Provider:                 usage.Provider,
 		Model:                    usage.Model,
 		RequestedModel:           usage.RequestedModel,

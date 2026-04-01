@@ -21,6 +21,8 @@ from app.services.feed_task_common import (
     build_source_navigator_task,
     parse_audio_briefing_script_result,
 )
+from app.services.prompt_template_defaults import get_default_prompt_template
+from app.services.runtime_prompt_overrides import bind_prompt_override
 
 
 class FeedTaskCommonTests(unittest.TestCase):
@@ -310,7 +312,7 @@ class FeedTaskCommonTests(unittest.TestCase):
         prompt = task["prompt"]
         self.assertIn("単独話者のAIナビゲーター", prompt)
         self.assertIn("音声ブリーフィング台本", prompt)
-        self.assertIn("article_segments は入力 articles と同じ順番・同じ件数", prompt)
+        self.assertIn("article_segments 有効時は入力 articles と同じ順番・同じ件数で返してください", prompt)
         self.assertIn("職業", prompt)
         self.assertIn("経験", prompt)
         self.assertIn("性別", prompt)
@@ -324,63 +326,20 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("客観的な無味乾燥レビューではなく", prompt)
         self.assertIn("別ペルソナの名前・肩書き・口調", prompt)
         self.assertIn("目標尺: 約 20 分", prompt)
-        self.assertIn("今回返すセクションの目標文字数: 約 14000 文字", prompt)
+        self.assertIn("今回返すセクション全体の目標文字数: 約 14000 文字", prompt)
         self.assertIn(f"1分あたり {AUDIO_BRIEFING_CHARS_PER_MINUTE} 文字", prompt)
-        self.assertIn("文字数制約は努力目標ではなく必須条件として扱う", prompt)
-        self.assertIn("全体の本文合計は必ず 12600文字以上 15400文字以下にする", prompt)
-        self.assertIn("各セクションは指定された最低文字数を下回ってはいけない", prompt)
-        self.assertIn("短く安全にまとめるより、必要な厚みを保つことを優先する", prompt)
-        self.assertIn("長さが不足する場合は article_segments の commentary を優先して厚くする", prompt)
-        self.assertIn("opening は 10文以上 12文以下", prompt)
-        self.assertIn("必ず 630文字以上 805文字以下で書く", prompt)
-        self.assertIn("opening は番組のオープニングトークとして書く。リスナーに向かって語りかけ", prompt)
-        self.assertIn("挨拶、時間帯や季節感、軽い日常雑談", prompt)
-        self.assertIn("opening では個別記事の紹介を始めない", prompt)
-        self.assertIn("企業名、製品名、出来事、具体的ニュース内容に触れない", prompt)
-        self.assertIn("overall_summary は総括であり、13文以上 14文以下", prompt)
-        self.assertIn("必ず 882文字以上 1127文字以下で書く", prompt)
-        self.assertIn("ending は番組を終わらせる締めの言葉として 10文以上 12文以下", prompt)
-        self.assertIn("必ず 630文字以上 805文字以下で書く", prompt)
-        self.assertIn("overall_summary は総括", prompt)
-        self.assertIn("記事の順番紹介", prompt)
-        self.assertNotIn("記事の1行要約を機械的に並べない", prompt)
-        self.assertIn("共通テーマ、対立軸、温度感、いま追う意味、記事間のつながりを広く語ってよい", prompt)
-        self.assertIn("共通点、流れ、温度差、見方の違い、別の話に見える記事どうしのつながりまで具体的にしてよい", prompt)
-        self.assertIn("前半から後半へどう流れが変わるか、どこで話題の重心が移るかまで具体的にしてよい", prompt)
-        self.assertIn("別々の話に見える記事どうしがどの点でつながっているか、同じ根っこを持っているかをはっきり述べてよい", prompt)
-        self.assertIn("この回で何が続いていて何が切り替わっているのかを具体的に語る", prompt)
-        self.assertIn("headline は 3文以上 5文以下", prompt)
-        self.assertIn("summary_intro は 9文以上 10文以下", prompt)
-        self.assertIn("commentary は 13文以上 14文以下", prompt)
-        self.assertIn("1記事あたりの headline と summary_intro と commentary の合計は必ず 10368文字以上 13248文字以下で収める", prompt)
-        self.assertIn("headline の個別制約: 144文字以上 184文字以下", prompt)
-        self.assertIn("summary_intro の個別制約: 414文字以上 529文字以下", prompt)
-        self.assertIn("commentary の個別制約: 9810文字以上 12535文字以下", prompt)
-        self.assertIn("各記事にほぼ均等に尺を配る", prompt)
-        self.assertIn("target_chars と記事数から逆算した尺配分を守り", prompt)
-        self.assertIn("1文は 60〜110文字 を目安にする", prompt)
-        self.assertIn("無個性な書き方をしない", prompt)
-        self.assertIn("このペルソナならどう受け取るか", prompt)
-        self.assertIn("headline では、その記事をリスナーに詳細に紹介するつもりで話す。何の記事で、何が起きていて、どこが気になるのかが自然に伝わるようにする", prompt)
-        self.assertIn("headline は短い導入見出しとして使い", prompt)
-        self.assertIn("summary_intro では、記事の要点、何が起きたか、何が新しいか、どこがポイントか、なぜ今見る記事かをやや詳しく要約してよい。", prompt)
-        self.assertIn("反応の理由、比較、背景、引っかかり、今後の見方、今追う意味のうち少なくとも3つを必ず入れる", prompt)
-        self.assertIn("要点を置いたら、反応、理由、比較に進む", prompt)
-        self.assertIn("解説調に見えやすい運びを避ける", prompt)
-        self.assertIn("headline でこれから扱う記事をリスナーに詳細に紹介し、summary_intro で記事の中身を置いたうえで、このペルソナなら何に反応するかを話す", prompt)
-        self.assertIn("ending は番組を終わらせる締めの言葉", prompt)
-        self.assertIn("今日の回で残った感触や温度感を1〜2点だけ軽く振り返る", prompt)
-        self.assertIn("最後に残った印象や引っかかりを必ず言葉にする", prompt)
-        self.assertIn("聞いてくれたことへの一言と、次の時間へ戻っていく感じを必ず入れる", prompt)
-        self.assertIn("85% 未満まで縮めない", prompt)
-        self.assertIn("出力後、内部的に文字数不足がないか確認し、不足があれば自分で補ってから返す", prompt)
-        self.assertIn("article_segments は各記事の持ち分を使い切る意識", prompt)
+        self.assertIn("全体の本文合計は必ず 12600文字以上 15400文字以下にしてください", prompt)
+        self.assertIn("opening 有効時は 10〜12文 / 630〜805文字", prompt)
+        self.assertIn("overall_summary 有効時は 13〜14文 / 882〜1127文字", prompt)
+        self.assertIn("ending 有効時は 10〜12文 / 630〜805文字", prompt)
+        self.assertIn("headline は 3〜5文 / 144〜184文字", prompt)
+        self.assertIn("summary_intro は 9〜10文 / 414〜529文字", prompt)
+        self.assertIn("commentary は 13〜14文 / 9810〜12535文字", prompt)
+        self.assertIn("1文は 60〜110文字 を目安にしつつ", prompt)
+        self.assertIn("commentary では headline や summary_intro の言い換えで終わらず", prompt)
+        self.assertIn("headline でこれから扱う記事をリスナーに詳細に紹介し、commentary でそのペルソナの反応を書く", prompt)
         self.assertIn("全セクションで1文ごとに改行", prompt)
-        self.assertIn("article commentary でも1文ごとに改行", prompt)
-        self.assertNotIn("冗長な前置きや言い換えを避け", prompt)
-        self.assertNotIn("必要以上に長く引き延ばさず", prompt)
-        self.assertNotIn("長い前置きや言い換えを避け", prompt)
-        self.assertNotIn("長い背景解説、論点整理、一般論への展開は禁止", prompt)
+        self.assertNotIn("{{task_block}}", prompt)
 
     def test_build_audio_briefing_script_task_omits_unrequested_sections(self):
         task = build_audio_briefing_script_task(
@@ -402,7 +361,7 @@ class FeedTaskCommonTests(unittest.TestCase):
         )
 
         prompt = task["prompt"]
-        self.assertIn("article_segments は入力 articles と同じ順番・同じ件数", prompt)
+        self.assertIn("article_segments 有効時は入力 articles と同じ順番・同じ件数で返してください", prompt)
         self.assertNotIn('"opening": "導入"', prompt)
         self.assertNotIn('"overall_summary": "全体サマリー"', prompt)
         self.assertNotIn('"ending": "締め"', prompt)
@@ -421,11 +380,10 @@ class FeedTaskCommonTests(unittest.TestCase):
         )
 
         prompt = task["prompt"]
-        self.assertIn("headline は 2文以上 3文以下", prompt)
-        self.assertIn("summary_intro は 4文以上 6文以下", prompt)
-        self.assertIn("commentary は 5文以上 7文以下", prompt)
+        self.assertIn("headline は 2〜3文 / 53〜73文字", prompt)
+        self.assertIn("summary_intro は 4〜6文 / 191〜244文字", prompt)
+        self.assertIn("commentary は 5〜7文 / 200〜255文字", prompt)
         self.assertIn("1文は 50〜95文字 を目安", prompt)
-        self.assertIn("commentary の個別制約: 200文字以上 255文字以下", prompt)
 
     def test_build_audio_briefing_script_task_adds_supplement_instructions_for_existing_section(self):
         task = build_audio_briefing_script_task(
@@ -509,25 +467,13 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("speaker", prompt)
         self.assertIn("section", prompt)
         self.assertIn("host と partner が会話しながら番組を進めます", prompt)
-        self.assertIn("opening は `host -> partner -> host -> partner -> host` の5手で必ず書く", prompt)
-        self.assertIn("overall_summary は `host -> partner -> host -> partner -> host` の5手で必ず書く", prompt)
-        self.assertIn("article は今回 `host -> partner -> host -> partner -> host` の5手で進める", prompt)
-        self.assertIn("ending は `host -> partner -> host -> partner -> host` の5手で必ず書く", prompt)
-        self.assertIn("partner は毎回、直前の host を受けて会話を横に広げる", prompt)
-        self.assertIn("partner の各 turn は、直前の host turn", prompt)
-        self.assertIn("host の各 turn は、直前の partner turn を軽く受けてから", prompt)
-        self.assertIn("必要に応じて接続詞や相づちを使って", prompt)
-        self.assertIn("partner の発話は以下のどれか1つを必ず含む", prompt)
-        self.assertIn("理由（なぜか）", prompt)
-        self.assertIn("比較（他と比べてどうか）", prompt)
-        self.assertIn("違和感（どこが引っかかるか）", prompt)
-        self.assertIn("今後（これからどうなるか）", prompt)
-        self.assertIn("section ごとの上限文字数と全体上限文字数を超えた出力は不正解", prompt)
-        self.assertIn("文字数超過は許容しない", prompt)
-        self.assertIn("article の 5手は `host(setup) -> partner(reaction) -> host(deepen) -> partner(contrast) -> host(close)`", prompt)
-        self.assertIn("overall_summary: 二人で回全体の流れや注目点を整理する", prompt)
-        self.assertIn("各記事の最後は完全に閉じすぎず、次の話題へ滑らかにつながる余地を残す", prompt)
-        self.assertIn("batch の最後のやり取りは、ここで番組全体を締めず", prompt)
+        self.assertIn("opening / overall_summary / ending はそれぞれ 5手で書いてください", prompt)
+        self.assertIn("article は今回 5手、並びは host -> partner -> host -> partner -> host です", prompt)
+        self.assertIn("article の役割分担は host(setup) -> partner(reaction) -> host(deepen) -> partner(contrast) -> host(close) です", prompt)
+        self.assertIn("partner は毎回、直前の host を受けて会話を横に広げてください", prompt)
+        self.assertIn("partner の各 turn は、直前の host turn を受けて始めてください", prompt)
+        self.assertIn("host の各 turn は、直前の partner turn を軽く受けてから話を前へ進めてください", prompt)
+        self.assertIn("今回の対象 section は article", prompt)
         self.assertIn("now_jst: 2026-03-31T18:30:00+09:00", prompt)
         self.assertIn("time_of_day: evening", prompt)
         self.assertNotIn("単独話者のAIナビゲーター", prompt)
@@ -562,9 +508,9 @@ class FeedTaskCommonTests(unittest.TestCase):
         )
 
         prompt = task["prompt"]
-        self.assertIn("article は今回 `host -> partner -> host` の3手で進める", prompt)
-        self.assertIn("article の 3手は `host(setup) -> partner(reaction/contrast) -> host(close)`", prompt)
-        self.assertIn("article は各記事をこの手数の中で必ず収める", prompt)
+        self.assertIn("article は今回 3手、並びは host -> partner -> host です", prompt)
+        self.assertIn("article の役割分担は host(setup) -> partner(reaction/contrast) -> host(close) です", prompt)
+        self.assertIn("article は各記事を 3手 の中で完結させ", prompt)
         self.assertEqual(task["schema"]["properties"]["turns"]["minItems"], 60)
         self.assertNotIn("article_segments の各 headline", prompt)
 
@@ -597,7 +543,7 @@ class FeedTaskCommonTests(unittest.TestCase):
 
         prompt = task["prompt"]
         self.assertIn("今回は番組の article パートだけを書く", prompt)
-        self.assertIn("current_section: article_segments", prompt)
+        self.assertIn("今回の対象 section は article", prompt)
         self.assertIn("program_position: article_midstream", prompt)
         self.assertIn("article_batch_range: 4 - 6", prompt)
         self.assertIn("今回の batch は全20本中の 4本目から6本目までを担当する", prompt)
@@ -989,6 +935,49 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("客観的レポートではなく", prompt)
         self.assertIn("数字をそのまま列挙するだけで終わらせず", prompt)
         self.assertIn("同じ source_id を複数カテゴリに重複させない", prompt)
+
+    def test_default_template_override_matches_code_default_rendering_for_audio_briefing(self):
+        articles = [
+            {
+                "item_id": "item-1",
+                "title": "Example title",
+                "translated_title": "翻訳タイトル",
+                "source_title": "Source",
+                "summary": "Summary text",
+                "published_at": "2026-04-01T08:00:00Z",
+            }
+        ]
+        intro_context = {
+            "now_jst": "2026-04-01T19:30:00+09:00",
+            "date_jst": "2026-04-01",
+            "weekday_jst": "Wednesday",
+            "time_of_day": "evening",
+            "season_hint": "spring",
+        }
+        expected = build_audio_briefing_script_task(
+            persona="editor",
+            articles=articles,
+            intro_context=intro_context,
+            target_duration_minutes=10,
+            target_chars=4000,
+        )
+        default_template = get_default_prompt_template("audio_briefing_script.single")
+
+        with bind_prompt_override(
+            "audio_briefing_script.single",
+            default_template["prompt_text"],
+            default_template["system_instruction"],
+        ):
+            actual = build_audio_briefing_script_task(
+                persona="editor",
+                articles=articles,
+                intro_context=intro_context,
+                target_duration_minutes=10,
+                target_chars=4000,
+            )
+
+        self.assertEqual(actual["system_instruction"], expected["system_instruction"])
+        self.assertEqual(actual["prompt"], expected["prompt"])
 
 
 if __name__ == "__main__":

@@ -58,6 +58,30 @@ function executionPurposeLabel(attempt: ItemLLMExecutionAttempt, t: (key: string
   return null;
 }
 
+function executionPromptSourceLabel(attempt: ItemLLMExecutionAttempt, t: (key: string, fallback?: string) => string) {
+  return llmPromptSourceLabel(attempt.prompt_source, attempt.prompt_version_number, t);
+}
+
+function executionPromptKeyLabel(attempt: ItemLLMExecutionAttempt, t: (key: string, fallback?: string) => string) {
+  const key = (attempt.prompt_key ?? "").trim();
+  if (!key) return null;
+  return t("itemDetail.execution.prompt.key").replace("{{key}}", key);
+}
+
+function llmPromptSourceLabel(
+  source: string | null | undefined,
+  version: number | null | undefined,
+  t: (key: string, fallback?: string) => string
+) {
+  const normalized = (source ?? "").trim();
+  if (normalized === "default_code") return t("itemDetail.execution.prompt.defaultCode");
+  if (normalized === "template_version" && version != null) {
+    return t("itemDetail.execution.prompt.templateVersion").replace("{{version}}", String(version));
+  }
+  if (normalized === "template_version") return t("itemDetail.execution.prompt.template");
+  return normalized || null;
+}
+
 function hasRequestedResolvedPair(requested?: string | null, resolved?: string | null) {
   const req = (requested ?? "").trim();
   const res = (resolved ?? "").trim();
@@ -182,6 +206,19 @@ function ExecutionTimeline({
               <span className="text-[var(--color-editorial-ink-faint)]">
                 {new Date(attempt.created_at).toLocaleString(dateLocale)}
               </span>
+              {executionPromptSourceLabel(attempt, t) ? (
+                <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-1">
+                  {executionPromptSourceLabel(attempt, t)}
+                </span>
+              ) : null}
+              {attempt.prompt_experiment_id ? (
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">
+                  {t("itemDetail.execution.prompt.experiment")}
+                </span>
+              ) : null}
+              {executionPromptKeyLabel(attempt, t) ? (
+                <span>{executionPromptKeyLabel(attempt, t)}</span>
+              ) : null}
             </div>
             {attempt.error_message ? (
               <p className="mt-2 break-words text-xs leading-5 text-[var(--color-editorial-ink-soft)]">{attempt.error_message}</p>

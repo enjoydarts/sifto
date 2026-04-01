@@ -10,13 +10,28 @@ import (
 func loadLatestItemLLMUsage(ctx context.Context, db *pgxpool.Pool, itemID, purpose string) (*model.ItemSummaryLLM, error) {
 	var llm model.ItemSummaryLLM
 	err := db.QueryRow(ctx, `
-		SELECT provider, model, requested_model, resolved_model, pricing_source, created_at
+		SELECT provider, model, requested_model, resolved_model, pricing_source,
+		       prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+		       created_at
 		FROM llm_usage_logs
 		WHERE item_id = $1
 		  AND purpose = $2
 		ORDER BY created_at DESC
 		LIMIT 1`, itemID, purpose,
-	).Scan(&llm.Provider, &llm.Model, &llm.RequestedModel, &llm.ResolvedModel, &llm.PricingSource, &llm.CreatedAt)
+	).Scan(
+		&llm.Provider,
+		&llm.Model,
+		&llm.RequestedModel,
+		&llm.ResolvedModel,
+		&llm.PricingSource,
+		&llm.PromptKey,
+		&llm.PromptSource,
+		&llm.PromptVersionID,
+		&llm.PromptVersionNumber,
+		&llm.PromptExperimentID,
+		&llm.PromptExperimentArmID,
+		&llm.CreatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -26,13 +41,28 @@ func loadLatestItemLLMUsage(ctx context.Context, db *pgxpool.Pool, itemID, purpo
 func loadLatestDigestLLMUsage(ctx context.Context, db *pgxpool.Pool, digestID, purpose string) (*model.ItemSummaryLLM, error) {
 	var llm model.ItemSummaryLLM
 	err := db.QueryRow(ctx, `
-		SELECT provider, model, requested_model, resolved_model, pricing_source, created_at
+		SELECT provider, model, requested_model, resolved_model, pricing_source,
+		       prompt_key, prompt_source, prompt_version_id, prompt_version_number, prompt_experiment_id, prompt_experiment_arm_id,
+		       created_at
 		FROM llm_usage_logs
 		WHERE digest_id = $1
 		  AND purpose = $2
 		ORDER BY created_at DESC
 		LIMIT 1`, digestID, purpose,
-	).Scan(&llm.Provider, &llm.Model, &llm.RequestedModel, &llm.ResolvedModel, &llm.PricingSource, &llm.CreatedAt)
+	).Scan(
+		&llm.Provider,
+		&llm.Model,
+		&llm.RequestedModel,
+		&llm.ResolvedModel,
+		&llm.PricingSource,
+		&llm.PromptKey,
+		&llm.PromptSource,
+		&llm.PromptVersionID,
+		&llm.PromptVersionNumber,
+		&llm.PromptExperimentID,
+		&llm.PromptExperimentArmID,
+		&llm.CreatedAt,
+	)
 	if err != nil {
 		return nil, err
 	}

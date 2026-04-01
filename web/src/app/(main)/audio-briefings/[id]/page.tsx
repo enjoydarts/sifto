@@ -64,6 +64,16 @@ function formatConversationMode(mode: string | null | undefined, t: (key: string
   return t(`audioBriefing.conversationMode.${normalized}`, normalized);
 }
 
+function llmPromptSourceLabel(source: string | null | undefined, version: number | null | undefined, t: (key: string, fallback?: string) => string) {
+  const normalized = (source ?? "").trim();
+  if (normalized === "default_code") return t("itemDetail.execution.prompt.defaultCode");
+  if (normalized === "template_version" && version != null) {
+    return t("itemDetail.execution.prompt.templateVersion").replace("{{version}}", String(version));
+  }
+  if (normalized === "template_version") return t("itemDetail.execution.prompt.template");
+  return normalized || null;
+}
+
 function formatChunkSpeaker(
   speaker: string | null | undefined,
   personaDefinitions: Record<string, { name: string }> | undefined,
@@ -460,8 +470,21 @@ export default function AudioBriefingDetailPage() {
             <span>{t("audioBriefing.itemsCount", "Items")}: {detail.job.source_item_count}</span>
           </div>
           {detail.job.script_llm_models ? (
-            <div className="mt-3 text-[13px] text-[var(--color-editorial-ink-soft)]">
-              {t("audioBriefing.scriptModel", "Script model")}: {formatScriptModels(detail.job.script_llm_models)}
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-[var(--color-editorial-ink-soft)]">
+              <span>{t("audioBriefing.scriptModel", "Script model")}: {formatScriptModels(detail.job.script_llm_models)}</span>
+              {llmPromptSourceLabel(detail.job.prompt_source, detail.job.prompt_version_number, t) ? (
+                <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-1 text-xs">
+                  {llmPromptSourceLabel(detail.job.prompt_source, detail.job.prompt_version_number, t)}
+                </span>
+              ) : null}
+              {detail.job.prompt_experiment_id ? (
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+                  {t("itemDetail.execution.prompt.experiment")}
+                </span>
+              ) : null}
+              {detail.job.prompt_key ? (
+                <span className="text-xs">{t("itemDetail.execution.prompt.key").replace("{{key}}", detail.job.prompt_key)}</span>
+              ) : null}
             </div>
           ) : null}
           {detail.job.bgm_object_key ? (

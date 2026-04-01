@@ -27,7 +27,14 @@ func loadLatestItemLLMExecutionAttempts(ctx context.Context, r *ItemRepo, itemID
 		return nil, nil
 	}
 	query := `
-		SELECT provider, model, purpose, status, attempt_index, error_kind, error_message, created_at
+		SELECT provider, model, purpose,
+		       COALESCE(prompt_key, ''),
+		       COALESCE(prompt_source, ''),
+		       prompt_version_id,
+		       prompt_version_number,
+		       prompt_experiment_id,
+		       prompt_experiment_arm_id,
+		       status, attempt_index, error_kind, error_message, created_at
 		FROM llm_execution_events
 		WHERE item_id = $1 AND purpose = ANY($2)
 		ORDER BY created_at DESC`
@@ -53,6 +60,12 @@ func loadLatestItemLLMExecutionAttempts(ctx context.Context, r *ItemRepo, itemID
 			&attempt.Provider,
 			&attempt.Model,
 			&attempt.Purpose,
+			&attempt.PromptKey,
+			&attempt.PromptSource,
+			&attempt.PromptVersionID,
+			&attempt.PromptVersionNumber,
+			&attempt.PromptExperimentID,
+			&attempt.PromptExperimentArmID,
 			&attempt.Status,
 			&attempt.AttemptIndex,
 			&attempt.ErrorKind,

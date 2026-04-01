@@ -56,6 +56,11 @@ func TestAudioBriefingJobScanReadsStorageBucket(t *testing.T) {
 	manifestKey := "audio-briefings/user-1/job-1/manifest.json"
 	providerJobID := "provider-job-1"
 	idempotencyKey := "manual-user-1"
+	promptKey := "audio_briefing_script.single"
+	promptSource := "template_version"
+	promptVersionID := "prompt-version-1"
+	promptExperimentID := "experiment-1"
+	promptExperimentArmID := "arm-1"
 
 	job, err := scanAudioBriefingJob(stubAudioBriefingScanner{values: []any{
 		"job-1",
@@ -72,6 +77,12 @@ func TestAudioBriefingJobScanReadsStorageBucket(t *testing.T) {
 		0,
 		12000,
 		"claude-sonnet-4-20250514",
+		promptKey,
+		promptSource,
+		promptVersionID,
+		3,
+		promptExperimentID,
+		promptExperimentArmID,
 		1800,
 		"夕方の音声ブリーフィング",
 		audioKey,
@@ -95,6 +106,12 @@ func TestAudioBriefingJobScanReadsStorageBucket(t *testing.T) {
 	}
 	if job.R2StorageBucket != "briefings-ia" {
 		t.Fatalf("job.R2StorageBucket = %q, want briefings-ia", job.R2StorageBucket)
+	}
+	if job.PromptVersionNumber == nil || *job.PromptVersionNumber != 3 {
+		t.Fatalf("job.PromptVersionNumber = %v, want 3", job.PromptVersionNumber)
+	}
+	if job.PromptSource == nil || *job.PromptSource != promptSource {
+		t.Fatalf("job.PromptSource = %v, want %q", job.PromptSource, promptSource)
 	}
 }
 

@@ -152,6 +152,12 @@ type AudioBriefingJob struct {
 	ReusedItemCount        int        `json:"reused_item_count"`
 	ScriptCharCount        int        `json:"script_char_count"`
 	ScriptLLMModels        *string    `json:"script_llm_models,omitempty"`
+	PromptKey              *string    `json:"prompt_key,omitempty"`
+	PromptSource           *string    `json:"prompt_source,omitempty"`
+	PromptVersionID        *string    `json:"prompt_version_id,omitempty"`
+	PromptVersionNumber    *int       `json:"prompt_version_number,omitempty"`
+	PromptExperimentID     *string    `json:"prompt_experiment_id,omitempty"`
+	PromptExperimentArmID  *string    `json:"prompt_experiment_arm_id,omitempty"`
 	AudioDurationSec       *int       `json:"audio_duration_sec,omitempty"`
 	Title                  *string    `json:"title,omitempty"`
 	R2AudioObjectKey       *string    `json:"r2_audio_object_key,omitempty"`
@@ -483,23 +489,35 @@ type ItemSummary struct {
 }
 
 type ItemSummaryLLM struct {
-	Provider       string    `json:"provider"`
-	Model          string    `json:"model"`
-	RequestedModel *string   `json:"requested_model,omitempty"`
-	ResolvedModel  *string   `json:"resolved_model,omitempty"`
-	PricingSource  string    `json:"pricing_source"`
-	CreatedAt      time.Time `json:"created_at"`
+	Provider              string    `json:"provider"`
+	Model                 string    `json:"model"`
+	RequestedModel        *string   `json:"requested_model,omitempty"`
+	ResolvedModel         *string   `json:"resolved_model,omitempty"`
+	PricingSource         string    `json:"pricing_source"`
+	PromptKey             *string   `json:"prompt_key,omitempty"`
+	PromptSource          *string   `json:"prompt_source,omitempty"`
+	PromptVersionID       *string   `json:"prompt_version_id,omitempty"`
+	PromptVersionNumber   *int      `json:"prompt_version_number,omitempty"`
+	PromptExperimentID    *string   `json:"prompt_experiment_id,omitempty"`
+	PromptExperimentArmID *string   `json:"prompt_experiment_arm_id,omitempty"`
+	CreatedAt             time.Time `json:"created_at"`
 }
 
 type ItemLLMExecutionAttempt struct {
-	Provider     string    `json:"provider"`
-	Model        string    `json:"model"`
-	Purpose      string    `json:"purpose"`
-	Status       string    `json:"status"`
-	AttemptIndex int       `json:"attempt_index"`
-	ErrorKind    *string   `json:"error_kind,omitempty"`
-	ErrorMessage *string   `json:"error_message,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
+	Provider              string    `json:"provider"`
+	Model                 string    `json:"model"`
+	Purpose               string    `json:"purpose"`
+	PromptKey             string    `json:"prompt_key,omitempty"`
+	PromptSource          string    `json:"prompt_source,omitempty"`
+	PromptVersionID       *string   `json:"prompt_version_id,omitempty"`
+	PromptVersionNumber   *int      `json:"prompt_version_number,omitempty"`
+	PromptExperimentID    *string   `json:"prompt_experiment_id,omitempty"`
+	PromptExperimentArmID *string   `json:"prompt_experiment_arm_id,omitempty"`
+	Status                string    `json:"status"`
+	AttemptIndex          int       `json:"attempt_index"`
+	ErrorKind             *string   `json:"error_kind,omitempty"`
+	ErrorMessage          *string   `json:"error_message,omitempty"`
+	CreatedAt             time.Time `json:"created_at"`
 }
 
 type SummaryFaithfulnessCheck struct {

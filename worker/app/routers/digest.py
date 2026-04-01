@@ -23,6 +23,7 @@ from app.services.openrouter_service import compose_digest as compose_digest_ope
 from app.services.openrouter_service import compose_digest_cluster_draft as compose_digest_cluster_draft_openrouter
 from app.services.poe_service import compose_digest as compose_digest_poe
 from app.services.poe_service import compose_digest_cluster_draft as compose_digest_cluster_draft_poe
+from app.services.runtime_prompt_overrides import bind_prompt_override
 from app.services.siliconflow_service import compose_digest as compose_digest_siliconflow
 from app.services.siliconflow_service import compose_digest_cluster_draft as compose_digest_cluster_draft_siliconflow
 from app.services.xai_service import compose_digest as compose_digest_xai
@@ -47,6 +48,7 @@ class ComposeDigestRequest(BaseModel):
     digest_date: str
     items: list[DigestItem]
     model: str | None = None
+    prompt: dict | None = None
 
 
 class ComposeDigestResponse(BaseModel):
@@ -82,14 +84,15 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
             }
             for i in req.items
         ]
-        result = run_observed_request(
-            request,
-            metadata={"model": req.model or "", "digest_date": req.digest_date, "items_count": len(req.items or [])},
-            input_payload={"digest_date": req.digest_date, "items_count": len(req.items or []), "model": req.model},
-            call=lambda: dispatch_by_model(
+        with bind_prompt_override((req.prompt or {}).get("prompt_key"), (req.prompt or {}).get("prompt_text"), (req.prompt or {}).get("system_instruction")):
+            result = run_observed_request(
                 request,
-                req.model,
-                handlers={
+                metadata={"model": req.model or "", "digest_date": req.digest_date, "items_count": len(req.items or [])},
+                input_payload={"digest_date": req.digest_date, "items_count": len(req.items or []), "model": req.model},
+                call=lambda: dispatch_by_model(
+                    request,
+                    req.model,
+                    handlers={
                     "anthropic": lambda api_key: compose_digest(
                         req.digest_date,
                         items,
@@ -109,14 +112,14 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
                     "poe": lambda api_key: compose_digest_poe(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "siliconflow": lambda api_key: compose_digest_siliconflow(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: compose_digest_openai(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
+                    },
+                ),
+                output_builder=lambda result: {
+                    "subject_chars": len(result.get("subject") or ""),
+                    "body_chars": len(result.get("body") or ""),
+                    **llm_usage_summary(result),
                 },
-            ),
-            output_builder=lambda result: {
-                "subject_chars": len(result.get("subject") or ""),
-                "body_chars": len(result.get("body") or ""),
-                **llm_usage_summary(result),
-            },
-        )
+            )
         return ComposeDigestResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"compose_digest failed: {e}")

@@ -11,6 +11,7 @@ from app.services.mistral_service import extract_facts as extract_facts_mistral
 from app.services.openai_service import extract_facts as extract_facts_openai
 from app.services.openrouter_service import extract_facts as extract_facts_openrouter
 from app.services.poe_service import extract_facts as extract_facts_poe
+from app.services.runtime_prompt_overrides import bind_prompt_override
 from app.services.siliconflow_service import extract_facts as extract_facts_siliconflow
 from app.services.moonshot_service import extract_facts as extract_facts_moonshot
 from app.services.xai_service import extract_facts as extract_facts_xai
@@ -24,6 +25,7 @@ class FactsRequest(BaseModel):
     title: str | None
     content: str
     model: str | None = None
+    prompt: dict | None = None
 
 
 class FactsResponse(BaseModel):
@@ -35,14 +37,15 @@ class FactsResponse(BaseModel):
 @router.post("/extract-facts", response_model=FactsResponse)
 def extract_facts_endpoint(req: FactsRequest, request: Request):
     try:
-        result = run_observed_request(
-            request,
-            metadata={"model": req.model or "", "title_present": bool(req.title), "content_chars": len(req.content or "")},
-            input_payload={"title": req.title, "content_chars": len(req.content or ""), "model": req.model},
-            call=lambda: dispatch_by_model(
+        with bind_prompt_override((req.prompt or {}).get("prompt_key"), (req.prompt or {}).get("prompt_text"), (req.prompt or {}).get("system_instruction")):
+            result = run_observed_request(
                 request,
-                req.model,
-                handlers={
+                metadata={"model": req.model or "", "title_present": bool(req.title), "content_chars": len(req.content or "")},
+                input_payload={"title": req.title, "content_chars": len(req.content or ""), "model": req.model},
+                call=lambda: dispatch_by_model(
+                    request,
+                    req.model,
+                    handlers={
                     "anthropic": lambda api_key: extract_facts(req.title, req.content, api_key=api_key, model=req.model),
                     "google": lambda api_key: extract_facts_gemini(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "fireworks": lambda api_key: extract_facts_fireworks(req.title, req.content, model=str(req.model), api_key=api_key or ""),
@@ -57,10 +60,10 @@ def extract_facts_endpoint(req: FactsRequest, request: Request):
                     "poe": lambda api_key: extract_facts_poe(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "siliconflow": lambda api_key: extract_facts_siliconflow(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "openai": lambda api_key: extract_facts_openai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
-                },
-            ),
-            output_builder=lambda result: {"facts_count": len(result.get("facts") or []), **llm_usage_summary(result)},
-        )
+                    },
+                ),
+                output_builder=lambda result: {"facts_count": len(result.get("facts") or []), **llm_usage_summary(result)},
+            )
         return FactsResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"extract_facts failed: {e}")

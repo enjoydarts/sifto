@@ -14,6 +14,7 @@ from app.services.moonshot_service import generate_audio_briefing_script as gene
 from app.services.openai_service import generate_audio_briefing_script as generate_audio_briefing_script_openai
 from app.services.openrouter_service import generate_audio_briefing_script as generate_audio_briefing_script_openrouter
 from app.services.poe_service import generate_audio_briefing_script as generate_audio_briefing_script_poe
+from app.services.runtime_prompt_overrides import bind_prompt_override
 from app.services.siliconflow_service import generate_audio_briefing_script as generate_audio_briefing_script_siliconflow
 from app.services.router_observe import llm_usage_summary, run_observed_request
 from app.services.xai_service import generate_audio_briefing_script as generate_audio_briefing_script_xai
@@ -46,6 +47,7 @@ class AudioBriefingScriptRequest(BaseModel):
     include_overall_summary: bool = True
     include_article_segments: bool = True
     include_ending: bool = True
+    prompt: dict | None = None
 
 
 class AudioBriefingScriptSegment(BaseModel):
@@ -91,14 +93,15 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
         for article in req.articles
     ]
     try:
-        result = run_observed_request(
-            request,
-            metadata={"model": req.model or "", "persona": req.persona, "conversation_mode": req.conversation_mode, "articles_count": len(articles)},
-            input_payload={"persona": req.persona, "conversation_mode": req.conversation_mode, "articles_count": len(articles), "model": req.model, "target_chars": req.target_chars},
-            call=lambda: dispatch_by_model(
+        with bind_prompt_override((req.prompt or {}).get("prompt_key"), (req.prompt or {}).get("prompt_text"), (req.prompt or {}).get("system_instruction")):
+            result = run_observed_request(
                 request,
-                req.model,
-                handlers={
+                metadata={"model": req.model or "", "persona": req.persona, "conversation_mode": req.conversation_mode, "articles_count": len(articles)},
+                input_payload={"persona": req.persona, "conversation_mode": req.conversation_mode, "articles_count": len(articles), "model": req.model, "target_chars": req.target_chars},
+                call=lambda: dispatch_by_model(
+                    request,
+                    req.model,
+                    handlers={
                 "anthropic": lambda api_key: generate_audio_briefing_script(
                     persona=req.persona,
                     articles=articles,
@@ -295,10 +298,10 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                     model=str(req.model),
                     api_key=api_key or "",
                 ),
-                },
-            ),
-            output_builder=lambda result: {"items_count": len(result.get("article_segments") or []), **llm_usage_summary(result)},
-        )
+                    },
+                ),
+                output_builder=lambda result: {"items_count": len(result.get("article_segments") or []), **llm_usage_summary(result)},
+            )
     except ValueError as exc:
         if is_audio_briefing_script_retryable_validation_error(exc):
             raise HTTPException(status_code=422, detail=str(exc))

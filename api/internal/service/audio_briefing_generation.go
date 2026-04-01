@@ -12,12 +12,18 @@ import (
 )
 
 type AudioBriefingDraft struct {
-	Title           string
-	Status          string
-	ScriptCharCount int
-	ScriptLLMModels []string
-	Items           []model.AudioBriefingJobItem
-	Chunks          []model.AudioBriefingScriptChunk
+	Title                 string
+	Status                string
+	ScriptCharCount       int
+	ScriptLLMModels       []string
+	PromptKey             *string
+	PromptSource          *string
+	PromptVersionID       *string
+	PromptVersionNumber   *int
+	PromptExperimentID    *string
+	PromptExperimentArmID *string
+	Items                 []model.AudioBriefingJobItem
+	Chunks                []model.AudioBriefingScriptChunk
 }
 
 type AudioBriefingNarration struct {

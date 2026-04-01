@@ -10,8 +10,10 @@ _prompt_override_var = contextvars.ContextVar("runtime_prompt_override", default
 def bind_prompt_override(prompt_key: str | None, prompt_text: str | None, system_instruction: str | None):
     payload = {
         "prompt_key": str(prompt_key or "").strip(),
-        "prompt_text": str(prompt_text or "").strip(),
-        "system_instruction": str(system_instruction or "").strip(),
+        "has_prompt_text": prompt_text is not None,
+        "has_system_instruction": system_instruction is not None,
+        "prompt_text": "" if prompt_text is None else str(prompt_text).strip(),
+        "system_instruction": "" if system_instruction is None else str(system_instruction).strip(),
     }
     token = _prompt_override_var.set(payload)
     try:
@@ -38,8 +40,14 @@ class OverridePromptStrategy(PromptStrategy):
         self.payload = payload
 
     def render(self, default_system_instruction: str, default_prompt_text: str, variables: dict[str, object] | None = None) -> tuple[str, str]:
-        next_system_template = str(self.payload.get("system_instruction") or "").strip() or default_system_instruction
-        next_prompt_template = str(self.payload.get("prompt_text") or "").strip() or default_prompt_text
+        if self.payload.get("has_system_instruction"):
+            next_system_template = str(self.payload.get("system_instruction", "")).strip()
+        else:
+            next_system_template = default_system_instruction
+        if self.payload.get("has_prompt_text"):
+            next_prompt_template = str(self.payload.get("prompt_text", "")).strip()
+        else:
+            next_prompt_template = default_prompt_text
         return (
             render_prompt_template(next_system_template, variables).strip(),
             render_prompt_template(next_prompt_template, variables).strip(),

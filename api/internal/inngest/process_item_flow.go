@@ -351,7 +351,11 @@ func extractAndPersistFacts(
 	currentModelOverride := primaryModelOverride
 	usingFallback := false
 	sameModelRetried := false
-	factsPromptResolution := service.ResolvePromptResolution(ctx, deps.promptResolver, "facts.default")
+	factsPromptResolution := service.ResolvePromptResolution(ctx, deps.promptResolver, service.PromptResolveInput{
+		PromptKey:      "facts.default",
+		AssignmentUnit: "item_id",
+		AssignmentKey:  itemID,
+	})
 	factsPromptConfig := service.WorkerPromptConfigFromResolution(factsPromptResolution)
 
 	for attempt := 0; attempt < maxFactsAttempts; attempt++ {
@@ -546,7 +550,11 @@ func summarizeAndPersistItem(
 	var summary *service.SummarizeResponse
 	var finalFaithfulness *service.SummaryFaithfulnessResponse
 	var summaryRetryCount int
-	summaryPromptResolution := service.ResolvePromptResolution(ctx, deps.promptResolver, "summary.default")
+	summaryPromptResolution := service.ResolvePromptResolution(ctx, deps.promptResolver, service.PromptResolveInput{
+		PromptKey:      "summary.default",
+		AssignmentUnit: "item_id",
+		AssignmentKey:  itemID,
+	})
 	summaryPromptConfig := service.WorkerPromptConfigFromResolution(summaryPromptResolution)
 
 	for attempt := 0; attempt <= maxSummaryFaithfulnessRetries; attempt++ {

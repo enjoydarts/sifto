@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"hash/fnv"
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/repository"
 )
@@ -24,11 +26,19 @@ type PromptResolver struct {
 	repo *repository.PromptTemplateRepo
 }
 
+type PromptResolveInput struct {
+	PromptKey      string
+	AssignmentUnit string
+	AssignmentKey  string
+	AssignmentTime time.Time
+}
+
 func NewPromptResolver(repo *repository.PromptTemplateRepo) *PromptResolver {
 	return &PromptResolver{repo: repo}
 }
 
-func (r *PromptResolver) Resolve(ctx context.Context, promptKey string) (*PromptResolution, error) {
+func (r *PromptResolver) Resolve(ctx context.Context, input PromptResolveInput) (*PromptResolution, error) {
+	promptKey := strings.TrimSpace(input.PromptKey)
 	if r == nil || r.repo == nil || promptKey == "" {
 		return &PromptResolution{PromptKey: promptKey, PromptSource: "default_code"}, nil
 	}
@@ -39,6 +49,32 @@ func (r *PromptResolver) Resolve(ctx context.Context, promptKey string) (*Prompt
 	}
 	if active == nil {
 		return &PromptResolution{PromptKey: promptKey, PromptSource: "default_code"}, nil
+	}
+	if activeExperiment, err := r.repo.GetActiveExperimentByKey(ctx, promptKey, strings.TrimSpace(input.AssignmentUnit), promptAssignmentTime(input.AssignmentTime)); err != nil {
+		log.Printf("prompt resolver experiment lookup fallback prompt_key=%s assignment_unit=%s err=%v", promptKey, input.AssignmentUnit, err)
+	} else if activeExperiment != nil {
+		chosenArm := choosePromptExperimentArm(activeExperiment.Arms, input.AssignmentKey, activeExperiment.Experiment.ID)
+		if chosenArm != nil {
+			chosenVersion, err := r.repo.GetVersionByID(ctx, chosenArm.VersionID)
+			if err != nil {
+				log.Printf("prompt resolver experiment version fallback prompt_key=%s version_id=%s err=%v", promptKey, chosenArm.VersionID, err)
+			} else if chosenVersion != nil {
+				experimentID := activeExperiment.Experiment.ID
+				armID := chosenArm.ID
+				versionID := chosenVersion.VersionID
+				versionNumber := chosenVersion.VersionNumber
+				return &PromptResolution{
+					PromptKey:             chosenVersion.TemplateKey,
+					PromptSource:          "template_version",
+					PromptText:            chosenVersion.PromptText,
+					SystemInstruction:     chosenVersion.SystemInstruction,
+					PromptVersionID:       &versionID,
+					PromptVersionNumber:   &versionNumber,
+					PromptExperimentID:    &experimentID,
+					PromptExperimentArmID: &armID,
+				}, nil
+			}
+		}
 	}
 	versionID := active.VersionID
 	versionNumber := active.VersionNumber
@@ -66,18 +102,56 @@ func WorkerPromptConfigFromResolution(resolution *PromptResolution) *PromptConfi
 	}
 }
 
-func ResolvePromptResolution(ctx context.Context, resolver *PromptResolver, promptKey string) *PromptResolution {
+func ResolvePromptResolution(ctx context.Context, resolver *PromptResolver, input PromptResolveInput) *PromptResolution {
 	if resolver == nil {
-		return &PromptResolution{PromptKey: promptKey, PromptSource: "default_code"}
+		return &PromptResolution{PromptKey: input.PromptKey, PromptSource: "default_code"}
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	resolution, err := resolver.Resolve(ctx, promptKey)
+	resolution, err := resolver.Resolve(ctx, input)
 	if err != nil || resolution == nil {
-		return &PromptResolution{PromptKey: promptKey, PromptSource: "default_code"}
+		return &PromptResolution{PromptKey: input.PromptKey, PromptSource: "default_code"}
 	}
 	return resolution
+}
+
+func promptAssignmentTime(now time.Time) time.Time {
+	if now.IsZero() {
+		return time.Now()
+	}
+	return now
+}
+
+func choosePromptExperimentArm(arms []repository.PromptExperimentArm, assignmentKey, experimentID string) *repository.PromptExperimentArm {
+	if len(arms) == 0 || strings.TrimSpace(assignmentKey) == "" || strings.TrimSpace(experimentID) == "" {
+		return nil
+	}
+	totalWeight := 0
+	for _, arm := range arms {
+		if arm.Weight > 0 {
+			totalWeight += arm.Weight
+		}
+	}
+	if totalWeight <= 0 {
+		return nil
+	}
+	hasher := fnv.New64a()
+	_, _ = hasher.Write([]byte(experimentID))
+	_, _ = hasher.Write([]byte(":"))
+	_, _ = hasher.Write([]byte(assignmentKey))
+	bucket := int(hasher.Sum64() % uint64(totalWeight))
+	running := 0
+	for i := range arms {
+		if arms[i].Weight <= 0 {
+			continue
+		}
+		running += arms[i].Weight
+		if bucket < running {
+			return &arms[i]
+		}
+	}
+	return nil
 }
 
 func promptKey(prompt *PromptResolution) string {

@@ -460,7 +460,12 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 		Articles: make(map[string]AudioBriefingNarrationArticle, len(items)),
 	}
 	scriptLLMModels := make([]string, 0, 2)
-	promptResolution := ResolvePromptResolution(ctx, o.promptResolver, "audio_briefing_script.single")
+	promptResolution := ResolvePromptResolution(ctx, o.promptResolver, PromptResolveInput{
+		PromptKey:      "audio_briefing_script.single",
+		AssignmentUnit: "user_id",
+		AssignmentKey:  userID,
+		AssignmentTime: slotStartedAt,
+	})
 	promptConfig := WorkerPromptConfigFromResolution(promptResolution)
 	if len(workerArticles) > 0 {
 		workerCtx := WithWorkerTraceMetadata(ctx, "audio_briefing_script", &userID, nil, nil, nil)
@@ -672,7 +677,12 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	}
 
 	workerCtx := WithWorkerTraceMetadata(ctx, "audio_briefing_duo_script", &job.UserID, nil, nil, nil)
-	promptResolution := ResolvePromptResolution(ctx, o.promptResolver, "audio_briefing_script.duo")
+	promptResolution := ResolvePromptResolution(ctx, o.promptResolver, PromptResolveInput{
+		PromptKey:      "audio_briefing_script.duo",
+		AssignmentUnit: "job_id",
+		AssignmentKey:  job.ID,
+		AssignmentTime: job.SlotStartedAtJST,
+	})
 	promptConfig := WorkerPromptConfigFromResolution(promptResolution)
 	callScriptWorker := func(batch []AudioBriefingScriptArticle, introContext map[string]any, batchTargetChars int, includeOpening, includeOverallSummary, includeArticleSegments, includeEnding bool) (*AudioBriefingScriptResponse, error) {
 		var errs []string

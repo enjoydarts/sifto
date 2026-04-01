@@ -95,12 +95,17 @@ func (h *PromptAdminHandler) GetTemplateDetail(w http.ResponseWriter, r *http.Re
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	defaultTemplate, err := service.LookupPromptTemplateDefault(detail.Template.Key)
+	if err != nil {
+		http.Error(w, "failed to load default template", http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, promptTemplateDetailResponse{
 		Template:        detail.Template,
 		Versions:        detail.Versions,
 		Experiments:     detail.Experiments,
 		Arms:            detail.Arms,
-		DefaultTemplate: service.LookupPromptTemplateDefault(detail.Template.Key),
+		DefaultTemplate: defaultTemplate,
 	})
 }
 
@@ -142,14 +147,17 @@ func (h *PromptAdminHandler) CreateVersion(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	templateID := chi.URLParam(r, "id")
-	_ = h.repo.InsertAuditLog(r.Context(), repository.PromptAdminAuditLogInput{
+	if err := h.repo.InsertAuditLog(r.Context(), repository.PromptAdminAuditLogInput{
 		UserID:     &actor.userID,
 		UserEmail:  actor.email,
 		Action:     "create_version",
 		TemplateID: &templateID,
 		VersionID:  &version.ID,
 		Metadata:   json.RawMessage(`{}`),
-	})
+	}); err != nil {
+		http.Error(w, "failed to write audit log", http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, version)
 }
 
@@ -178,14 +186,17 @@ func (h *PromptAdminHandler) ActivateTemplateVersion(w http.ResponseWriter, r *h
 		return
 	}
 	versionID := body.VersionID
-	_ = h.repo.InsertAuditLog(r.Context(), repository.PromptAdminAuditLogInput{
+	if err := h.repo.InsertAuditLog(r.Context(), repository.PromptAdminAuditLogInput{
 		UserID:     &actor.userID,
 		UserEmail:  actor.email,
 		Action:     "activate_version",
 		TemplateID: &templateID,
 		VersionID:  versionID,
 		Metadata:   json.RawMessage(`{}`),
-	})
+	}); err != nil {
+		http.Error(w, "failed to write audit log", http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -226,14 +237,17 @@ func (h *PromptAdminHandler) CreateExperiment(w http.ResponseWriter, r *http.Req
 		writeRepoError(w, err)
 		return
 	}
-	_ = h.repo.InsertAuditLog(r.Context(), repository.PromptAdminAuditLogInput{
+	if err := h.repo.InsertAuditLog(r.Context(), repository.PromptAdminAuditLogInput{
 		UserID:       &actor.userID,
 		UserEmail:    actor.email,
 		Action:       "create_experiment",
 		TemplateID:   &exp.TemplateID,
 		ExperimentID: &exp.ID,
 		Metadata:     json.RawMessage(`{}`),
-	})
+	}); err != nil {
+		http.Error(w, "failed to write audit log", http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, map[string]any{"experiment": exp, "arms": arms})
 }
 
@@ -262,14 +276,17 @@ func (h *PromptAdminHandler) UpdateExperiment(w http.ResponseWriter, r *http.Req
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	_ = h.repo.InsertAuditLog(r.Context(), repository.PromptAdminAuditLogInput{
+	if err := h.repo.InsertAuditLog(r.Context(), repository.PromptAdminAuditLogInput{
 		UserID:       &actor.userID,
 		UserEmail:    actor.email,
 		Action:       "update_experiment",
 		TemplateID:   &exp.TemplateID,
 		ExperimentID: &exp.ID,
 		Metadata:     json.RawMessage(`{}`),
-	})
+	}); err != nil {
+		http.Error(w, "failed to write audit log", http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, map[string]any{"experiment": exp, "arms": arms})
 }
 

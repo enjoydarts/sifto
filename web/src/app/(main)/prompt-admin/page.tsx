@@ -70,13 +70,11 @@ function normalizePreviewVariables(value: PromptTemplateDefault["preview_variabl
 }
 
 function renderPromptTemplate(text: string, variables: Record<string, unknown>) {
-  let rendered = text ?? "";
-  for (const [key, value] of Object.entries(variables)) {
-    const renderedValue = String(value ?? "");
-    rendered = rendered.replaceAll(`{{${key}}}`, renderedValue);
-    rendered = rendered.replaceAll(`{${key}}`, renderedValue);
-  }
-  return rendered;
+  return (text ?? "").replace(/\{\{([a-zA-Z0-9_]+)\}\}|\{([a-zA-Z0-9_]+)\}/g, (match, doubleKey, singleKey) => {
+    const key = String(doubleKey ?? singleKey ?? "");
+    if (!(key in variables)) return match;
+    return String(variables[key] ?? "");
+  });
 }
 
 export default function PromptAdminPage() {
@@ -91,6 +89,7 @@ export default function PromptAdminPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [detail, setDetail] = useState<PromptTemplateDetailResponse | null>(null);
   const lastInitializedTemplateIdRef = useRef<string>("");
+  const detailRequestIdRef = useRef(0);
   const [form, setForm] = useState({
     label: "",
     system_instruction: "",
@@ -125,8 +124,12 @@ export default function PromptAdminPage() {
       setDetail(null);
       return null;
     }
+    const requestId = ++detailRequestIdRef.current;
     const next = await api.getPromptTemplateDetail(templateId);
     const normalized = normalizePromptTemplateDetail(next);
+    if (requestId !== detailRequestIdRef.current) {
+      return normalized;
+    }
     setDetail(normalized);
     return normalized;
   }, []);
@@ -159,7 +162,8 @@ export default function PromptAdminPage() {
   }, [loadDetail, selectedTemplateId]);
 
   useEffect(() => {
-    const templateId = detail?.template.id ?? "";
+    if (!detail) return;
+    const templateId = detail.template.id;
     if (!templateId || lastInitializedTemplateIdRef.current === templateId) return;
     lastInitializedTemplateIdRef.current = templateId;
     setForm(formFromDefaultTemplate(detail.default_template));
@@ -181,6 +185,8 @@ export default function PromptAdminPage() {
     [form.system_instruction, previewVariables]
   );
   const renderedPromptText = useMemo(() => renderPromptTemplate(form.prompt_text, previewVariables), [form.prompt_text, previewVariables]);
+  const experimentStatusLabel = useCallback((status: string) => t(`promptAdmin.status.${status}`), [t]);
+  const assignmentUnitLabel = useCallback((unit: string) => t(`promptAdmin.assignmentUnit.${unit}`), [t]);
 
   const handleCreateVersion = useCallback(async () => {
     if (!detail?.template.id) return;
@@ -344,7 +350,7 @@ export default function PromptAdminPage() {
                               <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">
                                 v{version.version} {version.label ? `- ${version.label}` : ""}
                               </div>
-                              <div className="text-xs text-[var(--color-editorial-ink-soft)]">{version.created_by_email || "system"}</div>
+                              <div className="text-xs text-[var(--color-editorial-ink-soft)]">{version.created_by_email || t("promptAdmin.createdBy.system")}</div>
                             </div>
                             <button
                               type="button"
@@ -421,9 +427,9 @@ export default function PromptAdminPage() {
                     <label className="space-y-1.5">
                       <span className="block text-sm font-medium text-[var(--color-editorial-ink)]">{t("promptAdmin.status")}</span>
                       <select className="w-full rounded-2xl border border-[var(--color-editorial-line)] px-4 py-3 text-sm" value={experimentForm.status} onChange={(e) => setExperimentForm((cur) => ({ ...cur, status: e.target.value }))}>
-                        <option value="draft">draft</option>
-                        <option value="active">active</option>
-                        <option value="paused">paused</option>
+                        <option value="draft">{experimentStatusLabel("draft")}</option>
+                        <option value="active">{experimentStatusLabel("active")}</option>
+                        <option value="paused">{experimentStatusLabel("paused")}</option>
                       </select>
                     </label>
                     <label className="space-y-1.5">
@@ -454,7 +460,7 @@ export default function PromptAdminPage() {
                             <div>
                               <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{experiment.name}</div>
                               <div className="text-xs text-[var(--color-editorial-ink-soft)]">
-                                {experiment.status} / {experiment.assignment_unit}
+                                {experimentStatusLabel(experiment.status)} / {assignmentUnitLabel(experiment.assignment_unit)}
                               </div>
                             </div>
                             <div className="flex gap-2">

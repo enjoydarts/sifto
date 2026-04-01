@@ -165,7 +165,11 @@ func composeDigestEmailCopy(
 	if keyErr != nil {
 		return keyErr
 	}
-	digestPromptResolution := service.ResolvePromptResolution(ctx, workerDeps.promptResolver, "digest.default")
+	digestPromptResolution := service.ResolvePromptResolution(ctx, workerDeps.promptResolver, service.PromptResolveInput{
+		PromptKey:      "digest.default",
+		AssignmentUnit: "digest_id",
+		AssignmentKey:  data.DigestID,
+	})
 	digestPromptConfig := service.WorkerPromptConfigFromResolution(digestPromptResolution)
 
 	var resp *service.ComposeDigestResponse

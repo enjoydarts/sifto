@@ -22,4 +22,5 @@
 {{section_rules}}
 
 # Input Articles
-{{articles_json}}{{existing_context}}
+{{articles_json}}
+{{existing_context}}

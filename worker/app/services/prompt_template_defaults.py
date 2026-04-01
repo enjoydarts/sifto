@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+import re
+
+
+_PLACEHOLDER_RE = re.compile(r"\{\{([a-zA-Z0-9_]+)\}\}|\{([a-zA-Z0-9_]+)\}")
 
 
 def _prompt_templates_dir() -> Path:
@@ -21,11 +25,13 @@ def _prompt_templates_dir() -> Path:
 
 def render_prompt_template(text: str, variables: dict[str, object] | None = None) -> str:
     rendered = str(text or "")
-    for key, value in (variables or {}).items():
-        rendered_value = str(value)
-        rendered = rendered.replace("{{" + key + "}}", rendered_value)
-        rendered = rendered.replace("{" + key + "}", rendered_value)
-    return rendered
+    values = {key: str(value) for key, value in (variables or {}).items()}
+
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1) or match.group(2) or ""
+        return values.get(key, match.group(0))
+
+    return _PLACEHOLDER_RE.sub(replace, rendered)
 
 
 @lru_cache(maxsize=None)

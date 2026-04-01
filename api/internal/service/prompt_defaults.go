@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -16,26 +17,34 @@ type PromptTemplateDefault struct {
 	Notes              string          `json:"notes"`
 }
 
-func LookupPromptTemplateDefault(promptKey string) PromptTemplateDefault {
+func LookupPromptTemplateDefault(promptKey string) (PromptTemplateDefault, error) {
+	systemInstruction, err := readPromptTemplate(promptKey, "system")
+	if err != nil {
+		return PromptTemplateDefault{}, err
+	}
+	promptText, err := readPromptTemplate(promptKey, "prompt")
+	if err != nil {
+		return PromptTemplateDefault{}, err
+	}
 	return PromptTemplateDefault{
-		SystemInstruction: mustReadPromptTemplate(promptKey, "system"),
-		PromptText:        mustReadPromptTemplate(promptKey, "prompt"),
+		SystemInstruction: systemInstruction,
+		PromptText:        promptText,
 		VariablesSchema:   defaultPromptVariablesSchema(promptKey),
 		PreviewVariables:  defaultPromptPreviewVariables(promptKey),
 		Notes:             defaultPromptNotes(promptKey),
-	}
+	}, nil
 }
 
-func mustReadPromptTemplate(promptKey string, part string) string {
+func readPromptTemplate(promptKey string, part string) (string, error) {
 	baseDir, err := resolvePromptTemplatesDir()
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("resolve prompt templates dir: %w", err)
 	}
 	raw, err := os.ReadFile(filepath.Join(baseDir, promptKey+"."+part+".txt"))
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("read prompt template %s/%s: %w", promptKey, part, err)
 	}
-	return string(raw)
+	return string(raw), nil
 }
 
 func resolvePromptTemplatesDir() (string, error) {

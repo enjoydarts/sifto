@@ -18,7 +18,10 @@ func TestLookupPromptTemplateDefault(t *testing.T) {
 		t.Run(key, func(t *testing.T) {
 			t.Parallel()
 
-			out := LookupPromptTemplateDefault(key)
+			out, err := LookupPromptTemplateDefault(key)
+			if err != nil {
+				t.Fatalf("LookupPromptTemplateDefault(%s) error = %v", key, err)
+			}
 			if out.PromptText == "" {
 				t.Fatalf("prompt text is empty for %s", key)
 			}
@@ -29,5 +32,13 @@ func TestLookupPromptTemplateDefault(t *testing.T) {
 				t.Fatalf("preview variables are empty for %s", key)
 			}
 		})
+	}
+}
+
+func TestLookupPromptTemplateDefaultUnknownKeyReturnsError(t *testing.T) {
+	t.Parallel()
+
+	if _, err := LookupPromptTemplateDefault("unknown.prompt"); err == nil {
+		t.Fatal("expected error for unknown prompt key")
 	}
 }

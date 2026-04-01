@@ -81,6 +81,11 @@ type PromptActiveVersion struct {
 	FallbackPromptText string
 }
 
+type PromptExperimentWithArms struct {
+	Experiment PromptExperiment
+	Arms       []PromptExperimentArm
+}
+
 type PromptTemplateUpsertInput struct {
 	Key         string
 	Purpose     string
@@ -344,10 +349,10 @@ func (r *PromptTemplateRepo) CreateExperiment(ctx context.Context, in PromptExpe
 	for _, arm := range arms {
 		var created PromptExperimentArm
 		if err := tx.QueryRow(ctx, `
-			INSERT INTO prompt_experiment_arms (experiment_id, version_id, weight)
-			VALUES ($1,$2,$3)
+			INSERT INTO prompt_experiment_arms (experiment_id, template_id, version_id, weight)
+			VALUES ($1,$2,$3,$4)
 			RETURNING id, experiment_id, version_id, weight, created_at, updated_at
-		`, exp.ID, arm.VersionID, arm.Weight).Scan(
+		`, exp.ID, exp.TemplateID, arm.VersionID, arm.Weight).Scan(
 			&created.ID, &created.ExperimentID, &created.VersionID, &created.Weight, &created.CreatedAt, &created.UpdatedAt,
 		); err != nil {
 			return nil, nil, err
@@ -370,8 +375,8 @@ func (r *PromptTemplateRepo) UpdateExperiment(ctx context.Context, experimentID,
 	err = tx.QueryRow(ctx, `
 		UPDATE prompt_experiments
 		SET status = COALESCE(NULLIF($2, ''), status),
-		    started_at = $3,
-		    ended_at = $4,
+		    started_at = COALESCE($3, started_at),
+		    ended_at = COALESCE($4, ended_at),
 		    updated_at = NOW()
 		WHERE id = $1
 		RETURNING id, template_id, name, status, assignment_unit, started_at, ended_at, created_by_user_id, created_by_email, created_at, updated_at
@@ -391,18 +396,25 @@ func (r *PromptTemplateRepo) UpdateExperiment(ctx context.Context, experimentID,
 		}
 	}
 	outArms := make([]PromptExperimentArm, 0, len(arms))
-	for _, arm := range arms {
-		var created PromptExperimentArm
-		if err := tx.QueryRow(ctx, `
-			INSERT INTO prompt_experiment_arms (experiment_id, version_id, weight)
-			VALUES ($1,$2,$3)
-			RETURNING id, experiment_id, version_id, weight, created_at, updated_at
-		`, experimentID, arm.VersionID, arm.Weight).Scan(
-			&created.ID, &created.ExperimentID, &created.VersionID, &created.Weight, &created.CreatedAt, &created.UpdatedAt,
-		); err != nil {
+	if shouldReplacePromptExperimentArms(arms) {
+		for _, arm := range arms {
+			var created PromptExperimentArm
+			if err := tx.QueryRow(ctx, `
+				INSERT INTO prompt_experiment_arms (experiment_id, template_id, version_id, weight)
+				VALUES ($1, $2, $3, $4)
+				RETURNING id, experiment_id, version_id, weight, created_at, updated_at
+			`, experimentID, exp.TemplateID, arm.VersionID, arm.Weight).Scan(
+				&created.ID, &created.ExperimentID, &created.VersionID, &created.Weight, &created.CreatedAt, &created.UpdatedAt,
+			); err != nil {
+				return nil, nil, err
+			}
+			outArms = append(outArms, created)
+		}
+	} else {
+		outArms, err = listPromptExperimentArms(ctx, tx, experimentID)
+		if err != nil {
 			return nil, nil, err
 		}
-		outArms = append(outArms, created)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, nil, err
@@ -441,6 +453,58 @@ func (r *PromptTemplateRepo) GetActiveVersionByKey(ctx context.Context, key stri
 	return &out, nil
 }
 
+func (r *PromptTemplateRepo) GetVersionByID(ctx context.Context, versionID string) (*PromptActiveVersion, error) {
+	var out PromptActiveVersion
+	err := r.db.QueryRow(ctx, `
+		SELECT t.id, t.key, t.purpose, v.id, v.version, v.system_instruction, v.prompt_text, v.fallback_prompt_text
+		FROM prompt_template_versions v
+		INNER JOIN prompt_templates t ON t.id = v.template_id
+		WHERE v.id = $1
+	`, versionID).Scan(
+		&out.TemplateID, &out.TemplateKey, &out.Purpose, &out.VersionID, &out.VersionNumber, &out.SystemInstruction, &out.PromptText, &out.FallbackPromptText,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (r *PromptTemplateRepo) GetActiveExperimentByKey(ctx context.Context, key, assignmentUnit string, now time.Time) (*PromptExperimentWithArms, error) {
+	if key == "" || assignmentUnit == "" {
+		return nil, nil
+	}
+	var exp PromptExperiment
+	err := r.db.QueryRow(ctx, `
+		SELECT e.id, e.template_id, e.name, e.status, e.assignment_unit, e.started_at, e.ended_at, e.created_by_user_id, e.created_by_email, e.created_at, e.updated_at
+		FROM prompt_experiments e
+		INNER JOIN prompt_templates t ON t.id = e.template_id
+		WHERE t.key = $1
+		  AND e.status = 'active'
+		  AND e.assignment_unit = $2
+		  AND (e.started_at IS NULL OR e.started_at <= $3)
+		  AND (e.ended_at IS NULL OR e.ended_at >= $3)
+		ORDER BY COALESCE(e.started_at, e.created_at) DESC, e.created_at DESC
+		LIMIT 1
+	`, key, assignmentUnit, now).Scan(
+		&exp.ID, &exp.TemplateID, &exp.Name, &exp.Status, &exp.AssignmentUnit, &exp.StartedAt, &exp.EndedAt,
+		&exp.CreatedByUserID, &exp.CreatedByEmail, &exp.CreatedAt, &exp.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	arms, err := listPromptExperimentArms(ctx, r.db, exp.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &PromptExperimentWithArms{Experiment: exp, Arms: arms}, nil
+}
+
 func mapPromptTemplateVersionWriteError(err error) error {
 	if err == nil {
 		return nil
@@ -456,4 +520,30 @@ func mapPromptTemplateVersionWriteError(err error) error {
 
 func shouldReplacePromptExperimentArms(arms []PromptExperimentArmInput) bool {
 	return arms != nil
+}
+
+type promptArmQueryer interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func listPromptExperimentArms(ctx context.Context, q promptArmQueryer, experimentID string) ([]PromptExperimentArm, error) {
+	rows, err := q.Query(ctx, `
+		SELECT id, experiment_id, version_id, weight, created_at, updated_at
+		FROM prompt_experiment_arms
+		WHERE experiment_id = $1
+		ORDER BY created_at ASC
+	`, experimentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]PromptExperimentArm, 0)
+	for rows.Next() {
+		var arm PromptExperimentArm
+		if err := rows.Scan(&arm.ID, &arm.ExperimentID, &arm.VersionID, &arm.Weight, &arm.CreatedAt, &arm.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, arm)
+	}
+	return out, rows.Err()
 }

@@ -37,6 +37,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507"); got == nil {
 		t.Fatal("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507 not found in catalog")
 	}
+	if got := findModelCatalog("grok-4.20-0309-non-reasoning"); got == nil {
+		t.Fatal("grok-4.20-0309-non-reasoning not found in catalog")
+	}
+	if got := findModelCatalog("grok-4.20-0309-reasoning"); got == nil {
+		t.Fatal("grok-4.20-0309-reasoning not found in catalog")
+	}
 }
 
 func TestCatalogProviderAndDefaults(t *testing.T) {
@@ -51,6 +57,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "qwen3.5-plus", provider: "alibaba"},
 		{model: "mistral-small-2506", provider: "mistral"},
 		{model: "grok-4-fast-non-reasoning", provider: "xai"},
+		{model: "grok-4.20-0309-non-reasoning", provider: "xai"},
+		{model: "grok-4.20-0309-reasoning", provider: "xai"},
 		{model: "glm-4.7-flash", provider: "zai"},
 		{model: "fireworks/gpt-oss-20b", provider: "fireworks"},
 		{model: "kimi-k2.5", provider: "moonshot"},

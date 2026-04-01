@@ -124,7 +124,8 @@
         "grok-4-fast-non-reasoning",
         "grok-4-1-fast-reasoning",
         "grok-4-1-fast-non-reasoning",
-        "grok-4.20-beta-latest-non-reasoning"
+        "grok-4.20-0309-non-reasoning",
+        "grok-4.20-0309-reasoning"
       ],
       "default_models": {
         "facts": "grok-4-fast-non-reasoning",
@@ -1264,13 +1265,13 @@
       }
     },
     {
-      "id": "grok-4.20-beta-latest-non-reasoning",
+      "id": "grok-4.20-0309-non-reasoning",
       "provider": "xai",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
       "recommendation": "experimental",
       "best_for": "summary",
       "highlights": [],
-      "comment": "Grok 4.20 Beta の比較枠。experimental 扱いで、既定用途には使わない前提。",
+      "comment": "Grok 4.20 0309 の非 reasoning 枠。比較用の experimental モデルとして明示的に残す。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -1280,7 +1281,29 @@
         "supports_cache_write_pricing": false
       },
       "pricing": {
-        "pricing_source": "xai_static_2026_03",
+        "pricing_source": "xai_docs_2026_04",
+        "input_per_mtok_usd": 2.0,
+        "output_per_mtok_usd": 6.0
+      }
+    },
+    {
+      "id": "grok-4.20-0309-reasoning",
+      "provider": "xai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "reasoning",
+      "highlights": [],
+      "comment": "Grok 4.20 0309 の reasoning 枠。より重い比較検討の見比べ用として experimental 扱いで追加する。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "xai_docs_2026_04",
         "input_per_mtok_usd": 2.0,
         "output_per_mtok_usd": 6.0
       }

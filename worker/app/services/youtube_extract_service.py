@@ -23,6 +23,7 @@ _LANGUAGE_PREFERENCE = [
 ]
 
 _FORMAT_PREFERENCE = ["json3", "vtt", "srv3", "srv2", "srv1", "ttml"]
+_YTDLP_ERROR_LIMIT = 500
 
 
 def is_youtube_url(url: str) -> bool:
@@ -60,11 +61,24 @@ def extract_body(url: str) -> dict | None:
 
 def _load_video_metadata(url: str) -> dict:
     cmd = ["yt-dlp", "--dump-single-json", "--no-warnings", "--skip-download", url]
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as exc:
+        detail = _truncate_error_detail(exc.stderr or exc.stdout or str(exc))
+        raise RuntimeError(f"yt-dlp metadata fetch failed: {detail}") from exc
     payload = json.loads(proc.stdout or "{}")
     if not isinstance(payload, dict):
         raise RuntimeError("youtube metadata unavailable")
     return payload
+
+
+def _truncate_error_detail(detail: str) -> str:
+    value = re.sub(r"\s+", " ", (detail or "").strip())
+    if not value:
+        return "unknown error"
+    if len(value) > _YTDLP_ERROR_LIMIT:
+        return value[:_YTDLP_ERROR_LIMIT] + "..."
+    return value
 
 
 def _extract_transcript(metadata: dict) -> str:

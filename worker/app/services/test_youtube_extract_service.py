@@ -1,4 +1,5 @@
 import unittest
+import subprocess
 from unittest.mock import Mock, patch
 
 from app.services.youtube_extract_service import extract_body, is_youtube_url
@@ -69,4 +70,15 @@ class YoutubeExtractServiceTests(unittest.TestCase):
             "app.services.youtube_extract_service.json.loads", return_value=metadata
         ):
             with self.assertRaisesRegex(RuntimeError, "youtube transcript unavailable"):
+                extract_body("https://www.youtube.com/watch?v=abc123")
+
+    def test_extract_body_includes_ytdlp_stderr_on_metadata_failure(self):
+        err = subprocess.CalledProcessError(
+            1,
+            ["yt-dlp", "--dump-single-json"],
+            stderr="ERROR: Sign in to confirm you’re not a bot. This helps protect our community.",
+        )
+
+        with patch("app.services.youtube_extract_service.subprocess.run", side_effect=err):
+            with self.assertRaisesRegex(RuntimeError, "yt-dlp metadata fetch failed: ERROR: Sign in to confirm you’re not a bot"):
                 extract_body("https://www.youtube.com/watch?v=abc123")

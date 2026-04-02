@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import re
 import subprocess
@@ -9,6 +10,8 @@ import tempfile
 from urllib.parse import parse_qs, urlparse
 
 import httpx
+
+_log = logging.getLogger(__name__)
 
 _YOUTUBE_HOSTS = {
     "youtube.com",
@@ -65,6 +68,7 @@ def extract_body(url: str) -> dict | None:
 def _load_video_metadata(url: str) -> dict:
     cmd = ["yt-dlp", "--dump-single-json", "--no-warnings", "--skip-download"]
     cookies_path = _write_ytdlp_cookies_file()
+    _log.info("youtube metadata fetch url=%s cookies_present=%s", url, bool(cookies_path))
     if cookies_path:
         cmd.extend(["--cookies", cookies_path])
     cmd.append(url)

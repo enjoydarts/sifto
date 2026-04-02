@@ -67,6 +67,7 @@ def is_youtube_url(url: str) -> bool:
 def extract_body(url: str) -> dict | None:
     extractor_args = (os.getenv("YTDLP_EXTRACTOR_ARGS") or "").strip()
     cookies_present = bool((os.getenv("YTDLP_COOKIES_B64") or "").strip())
+    pot_provider_present = bool((os.getenv("YTDLP_POT_PROVIDER_BASE_URL") or "").strip())
     metadata = _load_video_metadata(url)
     title = str(metadata.get("title") or "").strip()
     if not title:
@@ -83,6 +84,7 @@ def extract_body(url: str) -> dict | None:
             diagnostics=(
                 f"cookies_present={cookies_present} "
                 f"extractor_args_present={bool(extractor_args)} "
+                f"pot_provider_present={pot_provider_present} "
                 f"{_describe_available_transcripts(metadata)}"
             ).strip(),
         )
@@ -98,15 +100,19 @@ def extract_body(url: str) -> dict | None:
 def _load_video_metadata(url: str) -> dict:
     cmd = ["yt-dlp", "--dump-single-json", "--no-warnings", "--skip-download", "--ignore-no-formats-error"]
     extractor_args = (os.getenv("YTDLP_EXTRACTOR_ARGS") or "").strip()
+    pot_provider_args = _build_pot_provider_extractor_args()
     cookies_path = _write_ytdlp_cookies_file()
     _log.info(
-        "youtube metadata fetch url=%s cookies_present=%s extractor_args_present=%s",
+        "youtube metadata fetch url=%s cookies_present=%s extractor_args_present=%s pot_provider_present=%s",
         url,
         bool(cookies_path),
         bool(extractor_args),
+        bool(pot_provider_args),
     )
     if extractor_args:
         cmd.extend(["--extractor-args", extractor_args])
+    if pot_provider_args:
+        cmd.extend(["--extractor-args", pot_provider_args])
     if cookies_path:
         cmd.extend(["--cookies", cookies_path])
     cmd.append(url)
@@ -117,7 +123,8 @@ def _load_video_metadata(url: str) -> dict:
             detail = _truncate_error_detail(exc.stderr or exc.stdout or str(exc))
             raise RuntimeError(
                 f"yt-dlp metadata fetch failed: cookies_present={bool(cookies_path)} "
-                f"extractor_args_present={bool(extractor_args)} {detail}"
+                f"extractor_args_present={bool(extractor_args)} "
+                f"pot_provider_present={bool(pot_provider_args)} {detail}"
             ) from exc
     finally:
         if cookies_path:
@@ -151,6 +158,21 @@ def _write_ytdlp_cookies_file() -> str | None:
             pass
         raise
     return path
+
+
+def _build_pot_provider_extractor_args() -> str:
+    base_url = (os.getenv("YTDLP_POT_PROVIDER_BASE_URL") or "").strip()
+    if not base_url:
+        return ""
+    parts = [f"base_url={base_url}"]
+    if _env_truthy("YTDLP_POT_PROVIDER_DISABLE_INNERTUBE"):
+        parts.append("disable_innertube=1")
+    return "youtubepot-bgutilhttp:" + ";".join(parts)
+
+
+def _env_truthy(name: str) -> bool:
+    value = (os.getenv(name) or "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def _truncate_error_detail(detail: str) -> str:

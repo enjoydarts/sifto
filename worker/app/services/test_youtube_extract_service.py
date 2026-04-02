@@ -95,7 +95,7 @@ class YoutubeExtractServiceTests(unittest.TestCase):
         ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
             with self.assertRaisesRegex(
                 YouTubeTranscriptUnavailableError,
-                r"youtube transcript unavailable: .*cookies_present=False.*extractor_args_present=False.*manual_langs=\['fr'\].*auto_langs=\['en-US'\].*auto_exts=\['srv3'\]",
+                r"youtube transcript unavailable: .*cookies_present=False.*extractor_args_present=False.*pot_provider_present=False.*manual_langs=\['fr'\].*auto_langs=\['en-US'\].*auto_exts=\['srv3'\]",
             ) as ctx:
                 extract_body("https://www.youtube.com/watch?v=abc123")
         self.assertEqual(ctx.exception.title, "Video Title")
@@ -110,7 +110,7 @@ class YoutubeExtractServiceTests(unittest.TestCase):
         with patch("app.services.youtube_extract_service.subprocess.run", side_effect=err):
             with self.assertRaisesRegex(
                 RuntimeError,
-                "yt-dlp metadata fetch failed: cookies_present=False extractor_args_present=False ERROR: Sign in to confirm you’re not a bot",
+                "yt-dlp metadata fetch failed: cookies_present=False extractor_args_present=False pot_provider_present=False ERROR: Sign in to confirm you’re not a bot",
             ):
                 extract_body("https://www.youtube.com/watch?v=abc123")
 
@@ -175,3 +175,37 @@ class YoutubeExtractServiceTests(unittest.TestCase):
         self.assertEqual(result["content"], "English line")
         self.assertIn("--extractor-args", captured["cmd"])
         self.assertIn("youtube:player_client=mweb,android", captured["cmd"])
+
+    def test_extract_body_passes_pot_provider_extractor_args_when_env_is_set(self):
+        metadata = {
+            "title": "Video Title",
+            "subtitles": {},
+            "automatic_captions": {"en": [{"ext": "vtt", "url": "https://subs.example/en.vtt"}]},
+        }
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.text = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nEnglish line"
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return Mock(stdout='{"ignored": true}')
+
+        with patch.dict(
+            os.environ,
+            {
+                "YTDLP_POT_PROVIDER_BASE_URL": "http://pot-provider.internal:4416",
+                "YTDLP_POT_PROVIDER_DISABLE_INNERTUBE": "1",
+            },
+            clear=False,
+        ), patch("app.services.youtube_extract_service.subprocess.run", side_effect=fake_run), patch(
+            "app.services.youtube_extract_service.json.loads", return_value=metadata
+        ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
+            result = extract_body("https://youtu.be/abc123")
+
+        self.assertEqual(result["content"], "English line")
+        self.assertEqual(captured["cmd"].count("--extractor-args"), 1)
+        self.assertIn(
+            "youtubepot-bgutilhttp:base_url=http://pot-provider.internal:4416;disable_innertube=1",
+            captured["cmd"],
+        )

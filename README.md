@@ -368,6 +368,10 @@ make migrate-version
 | `ONESIGNAL_APP_ID` / `ONESIGNAL_REST_API_KEY` | Push 通知送信 |
 | `NEXT_PUBLIC_ONESIGNAL_APP_ID` | Web Push 初期化 |
 | `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY` / `GITHUB_APP_INSTALL_URL` | Obsidian GitHub エクスポート |
+| `YTDLP_COOKIES_B64` | YouTube 抽出用 cookies.txt を base64 で渡す |
+| `YTDLP_EXTRACTOR_ARGS` | `yt-dlp --extractor-args` をそのまま渡す |
+| `YTDLP_POT_PROVIDER_BASE_URL` | bgutil PO Token provider HTTP server の base URL |
+| `YTDLP_POT_PROVIDER_DISABLE_INNERTUBE` | provider plugin に `disable_innertube=1` を渡す |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth / Inoreader 周辺 |
 | `LANGFUSE_SECRET_KEY` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_HOST` | LLM observability |
 | `SENTRY_DSN` | API / Worker Sentry |

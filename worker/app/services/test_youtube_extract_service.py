@@ -59,6 +59,26 @@ class YoutubeExtractServiceTests(unittest.TestCase):
 
         self.assertEqual(result["content"], "English line")
 
+    def test_extract_body_parses_srv3_auto_captions(self):
+        metadata = {
+            "title": "Video Title",
+            "subtitles": {},
+            "automatic_captions": {
+                "ja": [{"ext": "srv3", "url": "https://subs.example/ja.srv3"}],
+            },
+        }
+        proc = Mock(stdout='{"ignored": true}')
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.text = """<?xml version="1.0" encoding="utf-8" ?><timedtext><body><p t="0" d="1000"><s>字幕</s><s>あります</s></p></body></timedtext>"""
+
+        with patch("app.services.youtube_extract_service.subprocess.run", return_value=proc), patch(
+            "app.services.youtube_extract_service.json.loads", return_value=metadata
+        ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
+            result = extract_body("https://youtu.be/abc123")
+
+        self.assertEqual(result["content"], "字幕あります")
+
     def test_extract_body_raises_when_transcript_unavailable(self):
         metadata = {
             "title": "Video Title",

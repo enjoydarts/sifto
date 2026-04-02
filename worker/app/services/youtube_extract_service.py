@@ -7,6 +7,7 @@ import os
 import re
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -192,6 +193,10 @@ def _parse_transcript_text(ext: str, body: str) -> str:
     parser = {
         "json3": _parse_json3_transcript,
         "vtt": _parse_vtt_transcript,
+        "srv3": _parse_xml_transcript,
+        "srv2": _parse_xml_transcript,
+        "srv1": _parse_xml_transcript,
+        "ttml": _parse_xml_transcript,
     }.get((ext or "").strip().lower())
     if parser is None:
         return ""
@@ -232,6 +237,24 @@ def _parse_vtt_transcript(body: str) -> str:
         cleaned = re.sub(r"\s+", " ", cleaned).strip()
         if cleaned:
             lines.append(cleaned)
+    return "\n".join(lines).strip()
+
+
+def _parse_xml_transcript(body: str) -> str:
+    try:
+        root = ET.fromstring(body or "")
+    except ET.ParseError:
+        return ""
+
+    paragraph_nodes = [node for node in root.iter() if node.tag.rsplit("}", 1)[-1].lower() == "p"]
+    candidate_nodes = paragraph_nodes if paragraph_nodes else [node for node in root.iter() if node.tag.rsplit("}", 1)[-1].lower() in {"s", "span"}]
+
+    lines: list[str] = []
+    for node in candidate_nodes:
+        text = "".join(node.itertext())
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            lines.append(text)
     return "\n".join(lines).strip()
 
 

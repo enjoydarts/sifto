@@ -184,7 +184,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		aivisAPIKey,
 	)
 	if err != nil {
-		return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
+		return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", annotateAudioBriefingChunkError(chunk, err))
 	}
 	if err := r.repo.MarkChunkGenerated(ctx, chunk.ID, resp.AudioObjectKey, resp.DurationSec); err != nil {
 		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
@@ -268,6 +268,32 @@ func (r *AudioBriefingVoiceRunner) handleChunkGenerationFailure(ctx context.Cont
 		return nil, markErr
 	}
 	return &AudioBriefingVoiceRunResult{ProcessedChunk: true}, nil
+}
+
+func annotateAudioBriefingChunkError(chunk *model.AudioBriefingScriptChunk, err error) error {
+	if chunk == nil || err == nil {
+		return err
+	}
+	return fmt.Errorf(
+		"chunk_id=%s seq=%d part=%s text_preview=%q: %w",
+		strings.TrimSpace(chunk.ID),
+		chunk.Seq,
+		strings.TrimSpace(chunk.PartType),
+		audioBriefingChunkTextPreview(chunk.Text),
+		err,
+	)
+}
+
+func audioBriefingChunkTextPreview(text string) string {
+	preview := strings.TrimSpace(text)
+	if preview == "" {
+		return ""
+	}
+	runes := []rune(preview)
+	if len(runes) > 120 {
+		preview = string(runes[:120])
+	}
+	return preview
 }
 
 func (r *AudioBriefingVoiceRunner) bestEffortFailVoicing(jobID string, errorCode string, errorMessage string) {

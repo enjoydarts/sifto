@@ -28,6 +28,7 @@ _META_CHARSET_TEXT_PATTERNS = [
     re.compile(r'(?is)<meta[^>]+content=["\'][^"\']*charset=\s*([a-zA-Z0-9._\-]+)[^"\']*["\']'),
 ]
 _UTF8_MOJIBAKE_CHARS = set("ƒ‚„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™›œžŸپںژگچءإابجىْ؟")
+_CJK_UTF8_MOJIBAKE_CHARS = set("丂丄丅乕乮乯乽乿仐仜偁偄偆偉偊偍偐偑偒偓偔偖偗偘偙偛偝偞偟偠偡偣偨偪偫偮偯偰偱偲偳偵偺偼偽偻偼偾傀傚傔傕傫傮傯傰傱傲傴債傶傸傺傼傽傿僀僁僂僃僄僅僆僉僋僌働僐僑僒僓僔僖僗僘僙僚僛僜僝僞僟僠僡僢僣僤僥僦僨僩僪僫僭儊儌儍儎儏儐儑儓儔儕儗儘儞劅惉惗")
 
 
 def _looks_mojibake(text: str) -> bool:
@@ -51,6 +52,19 @@ def _looks_utf8_legacy_mojibake(text: str) -> bool:
     return suspicious * 3 >= non_ascii * 2
 
 
+def _looks_cjk_utf8_mojibake(text: str) -> bool:
+    sample = (text or "")[:8192]
+    if not sample:
+        return False
+    suspicious = sum(1 for ch in sample if ch in _CJK_UTF8_MOJIBAKE_CHARS)
+    if suspicious < 6:
+        return False
+    non_ascii = sum(1 for ch in sample if ord(ch) > 127)
+    if non_ascii == 0:
+        return False
+    return suspicious * 2 >= non_ascii
+
+
 def _declared_charset_in_text(text: str) -> str | None:
     head = (text or "")[:8192]
     for pattern in _META_CHARSET_TEXT_PATTERNS:
@@ -71,9 +85,13 @@ def _needs_refetch(downloaded: str | None) -> bool:
     declared = (_declared_charset_in_text(downloaded) or "").strip().lower()
     if declared in {"utf-8", "utf8"} and _looks_utf8_legacy_mojibake(downloaded):
         return True
+    if declared in {"utf-8", "utf8"} and _looks_cjk_utf8_mojibake(downloaded):
+        return True
     if declared in {"shift_jis", "shift-jis", "sjis", "cp932", "ms932", "windows-31j"} and "\ufffd" in downloaded:
         return True
     if _looks_utf8_legacy_mojibake(downloaded):
+        return True
+    if _looks_cjk_utf8_mojibake(downloaded):
         return True
     return False
 

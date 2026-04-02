@@ -146,6 +146,43 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "涼宮ハルヒの憂鬱「DEATH NOTE」の放送20周年アニメ7作品、ABEMAで一挙無料配信")
         self.assertEqual(result["content"], "ABEMAが周年アニメ特集を始める。")
 
+    def test_extract_body_refetches_when_utf8_page_is_decoded_as_cjk_mojibake(self):
+        html = "<html><head><meta charset=\"utf-8\"><title>「なんか記事文字化けする」入力からAIが2ちゃんねる風UIでレス生成するシミュレーターが登場</title></head><body>スレタイと最初のコメントを入力するとAIがレスを生成する。</body></html>"
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.headers = {"content-type": "text/html; charset=utf-8"}
+        response.content = html.encode("utf-8")
+        response.url = "https://example.com/final"
+        response.text = html
+        captured = {}
+        fetched = (
+            "<html><head>"
+            + ("a" * 3900)
+            + '<meta charset="utf-8" />'
+            + "丂乽仜仜偩偗偳幙栤偁傞丠乿乽仜仜偟偨傗偮偑桪彑乿偲偄偭偨僗儗僞僀乮尒弌偟乯偲丄嵟弶偺僐儊儞僩"
+            + "</head></html>"
+        )
+
+        def fake_bare_extraction(downloaded, **kwargs):
+            captured["downloaded"] = downloaded
+            return {
+                "title": "「なんか記事文字化けする」入力からAIが2ちゃんねる風UIでレス生成するシミュレーターが登場",
+                "text": "スレタイと最初のコメントを入力するとAIがレスを生成する。",
+                "date": None,
+            }
+
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=fetched), patch(
+            "app.services.trafilatura_service.httpx.get", return_value=response
+        ), patch(
+            "app.services.trafilatura_service.trafilatura.bare_extraction",
+            side_effect=fake_bare_extraction,
+        ):
+            result = extract_body("https://example.com/start")
+
+        self.assertIn("なんか記事文字化けする", captured["downloaded"])
+        self.assertEqual(result["title"], "「なんか記事文字化けする」入力からAIが2ちゃんねる風UIでレス生成するシミュレーターが登場")
+        self.assertEqual(result["content"], "スレタイと最初のコメントを入力するとAIがレスを生成する。")
+
 
 if __name__ == "__main__":
     unittest.main()

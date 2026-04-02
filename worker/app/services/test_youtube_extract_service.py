@@ -81,7 +81,7 @@ class YoutubeExtractServiceTests(unittest.TestCase):
         )
 
         with patch("app.services.youtube_extract_service.subprocess.run", side_effect=err):
-            with self.assertRaisesRegex(RuntimeError, "yt-dlp metadata fetch failed: ERROR: Sign in to confirm you’re not a bot"):
+            with self.assertRaisesRegex(RuntimeError, "yt-dlp metadata fetch failed: cookies_present=False ERROR: Sign in to confirm you’re not a bot"):
                 extract_body("https://www.youtube.com/watch?v=abc123")
 
     def test_extract_body_passes_temp_cookie_file_when_env_is_set(self):

@@ -77,7 +77,7 @@ def _load_video_metadata(url: str) -> dict:
             proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as exc:
             detail = _truncate_error_detail(exc.stderr or exc.stdout or str(exc))
-            raise RuntimeError(f"yt-dlp metadata fetch failed: {detail}") from exc
+            raise RuntimeError(f"yt-dlp metadata fetch failed: cookies_present={bool(cookies_path)} {detail}") from exc
     finally:
         if cookies_path:
             try:

@@ -51,8 +51,8 @@ func (r *ItemSearchDocumentRepo) CountSummarized(ctx context.Context) (int, erro
 	return count, err
 }
 
-func (r *ItemSearchDocumentRepo) load(ctx context.Context, suffix string, args ...any) ([]model.ItemSearchDocument, error) {
-	rows, err := r.db.Query(ctx, `
+func itemSearchDocumentsQuery(suffix string) string {
+	return `
 		SELECT i.id,
 		       s.user_id::text,
 		       i.source_id::text,
@@ -84,20 +84,22 @@ func (r *ItemSearchDocumentRepo) load(ctx context.Context, suffix string, args .
 		JOIN sources s ON s.id = i.source_id
 		JOIN item_summaries sm ON sm.item_id = i.id
 		LEFT JOIN item_facts f ON f.item_id = i.id
-		LEFT JOIN item_notes n ON n.user_id = s.user_id AND n.item_id = i.id
+		LEFT JOIN item_notes n ON n.user_id = s.user_id::text AND n.item_id = i.id
 		LEFT JOIN LATERAL (
 			SELECT STRING_AGG(quote_text, E'\n' ORDER BY created_at DESC) AS highlight_text
 			FROM (
 				SELECT NULLIF(TRIM(ih.quote_text), '') AS quote_text, ih.created_at
 				FROM item_highlights ih
-				WHERE ih.user_id = s.user_id AND ih.item_id = i.id
+				WHERE ih.user_id = s.user_id::text AND ih.item_id = i.id
 			) filtered
 			WHERE quote_text IS NOT NULL
 		) h ON true
 		WHERE i.status = 'summarized'
-		`+suffix,
-		args...,
-	)
+		` + suffix
+}
+
+func (r *ItemSearchDocumentRepo) load(ctx context.Context, suffix string, args ...any) ([]model.ItemSearchDocument, error) {
+	rows, err := r.db.Query(ctx, itemSearchDocumentsQuery(suffix), args...)
 	if err != nil {
 		return nil, err
 	}

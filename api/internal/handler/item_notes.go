@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -54,10 +55,14 @@ func (h *ItemNotesHandler) UpsertNote(w http.ResponseWriter, r *http.Request, it
 		return
 	}
 	if h.queueRepo != nil && strings.TrimSpace(note.Content) != "" {
-		_ = h.queueRepo.EnqueueDefault(r.Context(), userID, itemID, "note", time.Now())
+		if err := h.queueRepo.EnqueueDefault(r.Context(), userID, itemID, "note", time.Now()); err != nil {
+			log.Printf("item notes enqueue review queue failed user_id=%s item_id=%s err=%v", userID, itemID, err)
+		}
 	}
 	if h.publisher != nil {
-		_ = h.publisher.SendItemSearchUpsertE(r.Context(), itemID)
+		if err := h.publisher.SendItemSearchUpsertE(r.Context(), itemID); err != nil {
+			log.Printf("item notes search upsert enqueue failed item_id=%s err=%v", itemID, err)
+		}
 	}
 	writeJSON(w, note)
 }
@@ -95,7 +100,9 @@ func (h *ItemNotesHandler) CreateHighlight(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if h.publisher != nil {
-		_ = h.publisher.SendItemSearchUpsertE(r.Context(), itemID)
+		if err := h.publisher.SendItemSearchUpsertE(r.Context(), itemID); err != nil {
+			log.Printf("item highlight search upsert enqueue failed item_id=%s err=%v", itemID, err)
+		}
 	}
 	writeJSON(w, highlight)
 }
@@ -107,7 +114,9 @@ func (h *ItemNotesHandler) DeleteHighlight(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if h.publisher != nil {
-		_ = h.publisher.SendItemSearchUpsertE(r.Context(), itemID)
+		if err := h.publisher.SendItemSearchUpsertE(r.Context(), itemID); err != nil {
+			log.Printf("item highlight delete search upsert enqueue failed item_id=%s highlight_id=%s err=%v", itemID, highlightID, err)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

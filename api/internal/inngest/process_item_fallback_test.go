@@ -183,6 +183,9 @@ func TestShouldRetryExtractBody(t *testing.T) {
 	if !shouldRetryExtractBody(0, assertErr("worker /extract-body: status 422 detail=Failed to extract body")) {
 		t.Fatal("first extract-body failure should retry")
 	}
+	if shouldRetryExtractBody(0, assertErr("worker /extract-body: status 422 detail=youtube transcript unavailable")) {
+		t.Fatal("youtube transcript unavailable should not retry")
+	}
 	if !shouldRetryExtractBody(1, assertErr("worker /extract-body: status 422 detail=Failed to extract body")) {
 		t.Fatal("second extract-body failure should retry")
 	}

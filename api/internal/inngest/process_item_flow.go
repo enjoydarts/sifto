@@ -73,6 +73,9 @@ func shouldRetryExtractBody(attempt int, err error) bool {
 	if err == nil {
 		return false
 	}
+	if strings.Contains(strings.ToLower(err.Error()), "youtube transcript unavailable") {
+		return false
+	}
 	return attempt < 2
 }
 

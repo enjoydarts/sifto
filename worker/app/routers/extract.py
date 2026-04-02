@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from app.services.trafilatura_service import extract_body
+from app.services.youtube_extract_service import extract_body as extract_youtube_body, is_youtube_url
 from app.services.router_observe import run_observed_request
 
 router = APIRouter()
@@ -19,11 +20,17 @@ class ExtractResponse(BaseModel):
 
 @router.post("/extract-body", response_model=ExtractResponse)
 def extract_body_endpoint(req: ExtractRequest, request: Request):
+    call_error: Exception | None = None
+
     def call():
+        nonlocal call_error
         try:
-            result = extract_body(req.url)
-        except Exception:
-            # Service already tries to degrade gracefully; keep router from returning noisy 500s.
+            if is_youtube_url(req.url):
+                result = extract_youtube_body(req.url)
+            else:
+                result = extract_body(req.url)
+        except Exception as exc:
+            call_error = exc
             result = None
         return result
     result = run_observed_request(
@@ -38,5 +45,7 @@ def extract_body_endpoint(req: ExtractRequest, request: Request):
         include_llm_result=False,
     )
     if result is None:
+        if call_error is not None:
+            raise HTTPException(status_code=422, detail=str(call_error))
         raise HTTPException(status_code=422, detail="Failed to extract body")
     return result

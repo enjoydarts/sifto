@@ -37,6 +37,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507"); got == nil {
 		t.Fatal("siliconflow::Qwen/Qwen3-30B-A3B-Instruct-2507 not found in catalog")
 	}
+	if got := findModelCatalog("qwen3.6-plus"); got == nil {
+		t.Fatal("qwen3.6-plus not found in catalog")
+	}
 	if got := findModelCatalog("grok-4.20-0309-non-reasoning"); got == nil {
 		t.Fatal("grok-4.20-0309-non-reasoning not found in catalog")
 	}
@@ -55,6 +58,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "openai/gpt-oss-20b", provider: "groq"},
 		{model: "deepseek-chat", provider: "deepseek"},
 		{model: "qwen3.5-plus", provider: "alibaba"},
+		{model: "qwen3.6-plus", provider: "alibaba"},
 		{model: "mistral-small-2506", provider: "mistral"},
 		{model: "grok-4-fast-non-reasoning", provider: "xai"},
 		{model: "grok-4.20-0309-non-reasoning", provider: "xai"},

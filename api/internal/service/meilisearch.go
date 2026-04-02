@@ -100,6 +100,8 @@ func (s *MeilisearchService) ensureItemsIndex(ctx context.Context) error {
 			"translated_title",
 			"summary",
 			"facts_text",
+			"note_text",
+			"highlight_text",
 			"content_text",
 			"topics",
 		},
@@ -361,11 +363,15 @@ func (s *MeilisearchService) searchItemsPage(ctx context.Context, params Meilise
 			"translated_title",
 			"summary",
 			"facts_text",
+			"note_text",
+			"highlight_text",
 			"content_text",
 		},
 		"attributesToCrop": []string{
 			"summary",
 			"facts_text",
+			"note_text",
+			"highlight_text",
 			"content_text",
 		},
 		"cropLength":          params.CropLength,
@@ -483,6 +489,8 @@ func buildSearchSnippets(formatted map[string]any) []model.ItemSearchSnippet {
 		{Input: "title", Label: "title"},
 		{Input: "summary", Label: "summary"},
 		{Input: "facts_text", Label: "facts"},
+		{Input: "note_text", Label: "note"},
+		{Input: "highlight_text", Label: "highlight"},
 		{Input: "content_text", Label: "content"},
 	}
 

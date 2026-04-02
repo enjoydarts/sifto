@@ -31,6 +31,10 @@ function searchSnippetLabel(field: string, t: (key: string) => string) {
       return t("items.search.snippet.summary");
     case "facts":
       return t("items.search.snippet.facts");
+    case "note":
+      return t("items.search.snippet.note");
+    case "highlight":
+      return t("items.search.snippet.highlight");
     case "content":
       return t("items.search.snippet.content");
     default:

@@ -99,6 +99,70 @@ func TestBuildSearchSnippetsForQueryPreservesNonCompactQueries(t *testing.T) {
 	}
 }
 
+func TestBuildSearchSnippetsForQueryIncludesNoteAndHighlightFields(t *testing.T) {
+	formatted := map[string]any{
+		"note_text":      "Personal note about <mark>fallback</mark> strategy",
+		"highlight_text": "Quoted line mentioning <mark>reliability</mark>",
+	}
+
+	got := buildSearchSnippetsForQuery("fallback reliability", formatted)
+	if len(got) != 2 {
+		t.Fatalf("buildSearchSnippetsForQuery returned %d snippets, want 2", len(got))
+	}
+	if got[0].Field != "note" {
+		t.Fatalf("got[0].Field = %q, want %q", got[0].Field, "note")
+	}
+	if got[1].Field != "highlight" {
+		t.Fatalf("got[1].Field = %q, want %q", got[1].Field, "highlight")
+	}
+}
+
+func TestEnsureItemsIndexIncludesNoteAndHighlightSettings(t *testing.T) {
+	var patchBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/indexes":
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"taskUid":1}`))
+		case r.Method == http.MethodPatch && r.URL.Path == "/indexes/items/settings":
+			if err := json.NewDecoder(r.Body).Decode(&patchBody); err != nil {
+				t.Fatalf("decode settings: %v", err)
+			}
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"taskUid":2}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	svc := &MeilisearchService{
+		baseURL:    server.URL,
+		itemsIndex: "items",
+		client:     server.Client(),
+	}
+	if err := svc.ensureItemsIndex(context.Background()); err != nil {
+		t.Fatalf("ensureItemsIndex returned error: %v", err)
+	}
+
+	searchable, ok := patchBody["searchableAttributes"].([]any)
+	if !ok {
+		t.Fatalf("searchableAttributes type = %T", patchBody["searchableAttributes"])
+	}
+	var foundNote, foundHighlight bool
+	for _, raw := range searchable {
+		if raw == "note_text" {
+			foundNote = true
+		}
+		if raw == "highlight_text" {
+			foundHighlight = true
+		}
+	}
+	if !foundNote || !foundHighlight {
+		t.Fatalf("searchableAttributes = %#v, want note_text and highlight_text", searchable)
+	}
+}
+
 func TestSearchItemsStrictJapaneseMatchRepaginatesFilteredResults(t *testing.T) {
 	var offsets []int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

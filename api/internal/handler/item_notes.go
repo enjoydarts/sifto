@@ -22,10 +22,15 @@ type itemNotesStore interface {
 type ItemNotesHandler struct {
 	store     itemNotesStore
 	queueRepo *repository.ReviewQueueRepo
+	publisher itemSearchPublisher
 }
 
-func NewItemNotesHandler(store itemNotesStore, queueRepo *repository.ReviewQueueRepo) *ItemNotesHandler {
-	return &ItemNotesHandler{store: store, queueRepo: queueRepo}
+type itemSearchPublisher interface {
+	SendItemSearchUpsertE(ctx context.Context, itemID string) error
+}
+
+func NewItemNotesHandler(store itemNotesStore, queueRepo *repository.ReviewQueueRepo, publisher itemSearchPublisher) *ItemNotesHandler {
+	return &ItemNotesHandler{store: store, queueRepo: queueRepo, publisher: publisher}
 }
 
 func (h *ItemNotesHandler) UpsertNote(w http.ResponseWriter, r *http.Request, itemID string) {
@@ -50,6 +55,9 @@ func (h *ItemNotesHandler) UpsertNote(w http.ResponseWriter, r *http.Request, it
 	}
 	if h.queueRepo != nil && strings.TrimSpace(note.Content) != "" {
 		_ = h.queueRepo.EnqueueDefault(r.Context(), userID, itemID, "note", time.Now())
+	}
+	if h.publisher != nil {
+		_ = h.publisher.SendItemSearchUpsertE(r.Context(), itemID)
 	}
 	writeJSON(w, note)
 }
@@ -86,6 +94,9 @@ func (h *ItemNotesHandler) CreateHighlight(w http.ResponseWriter, r *http.Reques
 		writeRepoError(w, err)
 		return
 	}
+	if h.publisher != nil {
+		_ = h.publisher.SendItemSearchUpsertE(r.Context(), itemID)
+	}
 	writeJSON(w, highlight)
 }
 
@@ -94,6 +105,9 @@ func (h *ItemNotesHandler) DeleteHighlight(w http.ResponseWriter, r *http.Reques
 	if err := h.store.DeleteHighlight(r.Context(), userID, itemID, highlightID); err != nil {
 		writeRepoError(w, err)
 		return
+	}
+	if h.publisher != nil {
+		_ = h.publisher.SendItemSearchUpsertE(r.Context(), itemID)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

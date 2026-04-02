@@ -74,6 +74,8 @@ func (r *ItemSearchDocumentRepo) load(ctx context.Context, suffix string, args .
 		       COALESCE(sm.translated_title, '') AS translated_title,
 		       COALESCE(sm.summary, '') AS summary,
 		       COALESCE(f.facts, '[]'::jsonb) AS facts,
+		       COALESCE(n.content, '') AS note_text,
+		       COALESCE(h.highlight_text, '') AS highlight_text,
 		       COALESCE(i.content_text, '') AS content_text,
 		       COALESCE(sm.topics, '{}'::text[]) AS topics,
 		       i.published_at,
@@ -82,6 +84,16 @@ func (r *ItemSearchDocumentRepo) load(ctx context.Context, suffix string, args .
 		JOIN sources s ON s.id = i.source_id
 		JOIN item_summaries sm ON sm.item_id = i.id
 		LEFT JOIN item_facts f ON f.item_id = i.id
+		LEFT JOIN item_notes n ON n.user_id = s.user_id AND n.item_id = i.id
+		LEFT JOIN LATERAL (
+			SELECT STRING_AGG(quote_text, E'\n' ORDER BY created_at DESC) AS highlight_text
+			FROM (
+				SELECT NULLIF(TRIM(ih.quote_text), '') AS quote_text, ih.created_at
+				FROM item_highlights ih
+				WHERE ih.user_id = s.user_id AND ih.item_id = i.id
+			) filtered
+			WHERE quote_text IS NOT NULL
+		) h ON true
 		WHERE i.status = 'summarized'
 		`+suffix,
 		args...,
@@ -108,6 +120,8 @@ func (r *ItemSearchDocumentRepo) load(ctx context.Context, suffix string, args .
 			&doc.TranslatedTitle,
 			&doc.Summary,
 			jsonStringArrayScanner{dst: &facts},
+			&doc.NoteText,
+			&doc.HighlightText,
 			&doc.ContentText,
 			&doc.Topics,
 			&doc.PublishedAt,

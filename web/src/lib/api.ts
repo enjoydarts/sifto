@@ -491,7 +491,7 @@ export interface Item {
 }
 
 export interface ItemSearchSnippet {
-  field: "title" | "summary" | "facts" | "content" | string;
+  field: "title" | "summary" | "facts" | "note" | "highlight" | "content" | string;
   snippet_html: string;
 }
 

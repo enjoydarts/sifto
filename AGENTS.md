@@ -62,3 +62,10 @@
   - `UI Designer` → `/Users/minoru-kitayama/tools/agency-agents/design/design-ui-designer.md`
 - 既存の system / developer 指示の優先度は、外部 role prompt より常に高い。
 - role 名が一致しない場合は `/Users/minoru-kitayama/tools/agency-agents` 配下を検索して最も近い agent を探し、見つからなければ既存のローカルプロファイルへ fallback する。
+
+# ドキュメント
+- ドキュメントはObisidianに出力してください
+- 過去のドキュメントもObsidianを参考にしてください
+- Obsidianのパスは
+  /Users/minoru-kitayama/private/obsidian/100_private/114_Sifto
+  です

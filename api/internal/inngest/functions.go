@@ -2298,6 +2298,7 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				if err == nil {
 					break
 				}
+				persistPartialExtractMetadata(ctx, deps.itemRepo, deps.cache, itemID, service.ExtractBodyPartial(err))
 				log.Printf("process-item extract-body failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
 				if !shouldRetryExtractBody(attempt, err) {
 					if shouldDeleteOnExtractBodyFailure(err) {

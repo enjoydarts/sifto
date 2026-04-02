@@ -1084,10 +1084,10 @@ export default function ItemDetailPage() {
               </button>
             </div>
 
-            {item.status === "failed" && item.processing_error && (
+            {item.processing_error && (item.status === "failed" || item.status === "deleted") && (
               <div className="mt-4 rounded-[18px] border border-[var(--color-editorial-error-line)] bg-[var(--color-editorial-error-soft)] px-4 py-3">
                 <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--color-editorial-error)]">
-                  {t("itemDetail.failureReason")}
+                  {t(item.status === "deleted" ? "itemDetail.processingMessage" : "itemDetail.failureReason")}
                 </div>
                 <p className="whitespace-pre-wrap break-words text-sm text-[var(--color-editorial-error)]">{item.processing_error}</p>
               </div>

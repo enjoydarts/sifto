@@ -3,7 +3,7 @@ import subprocess
 import os
 from unittest.mock import Mock, patch
 
-from app.services.youtube_extract_service import extract_body, is_youtube_url
+from app.services.youtube_extract_service import YouTubeTranscriptUnavailableError, extract_body, is_youtube_url
 
 
 class YoutubeExtractServiceTests(unittest.TestCase):
@@ -82,16 +82,23 @@ class YoutubeExtractServiceTests(unittest.TestCase):
     def test_extract_body_raises_when_transcript_unavailable(self):
         metadata = {
             "title": "Video Title",
-            "subtitles": {},
-            "automatic_captions": {},
+            "subtitles": {"fr": [{"ext": "vtt", "url": "https://subs.example/fr.vtt"}]},
+            "automatic_captions": {"en-US": [{"ext": "srv3", "url": "https://subs.example/en.srv3"}]},
         }
         proc = Mock(stdout='{"ignored": true}')
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.text = ""
 
         with patch("app.services.youtube_extract_service.subprocess.run", return_value=proc), patch(
             "app.services.youtube_extract_service.json.loads", return_value=metadata
-        ):
-            with self.assertRaisesRegex(RuntimeError, "youtube transcript unavailable"):
+        ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
+            with self.assertRaisesRegex(
+                YouTubeTranscriptUnavailableError,
+                r"youtube transcript unavailable: .*manual_langs=\['fr'\].*auto_langs=\['en-US'\].*auto_exts=\['srv3'\]",
+            ) as ctx:
                 extract_body("https://www.youtube.com/watch?v=abc123")
+        self.assertEqual(ctx.exception.title, "Video Title")
 
     def test_extract_body_includes_ytdlp_stderr_on_metadata_failure(self):
         err = subprocess.CalledProcessError(

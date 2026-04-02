@@ -311,6 +311,26 @@ func bumpProcessItemDetailCacheVersion(ctx context.Context, cache service.JSONCa
 	}
 }
 
+func persistPartialExtractMetadata(ctx context.Context, itemRepo *repository.ItemInngestRepo, cache service.JSONCache, itemID string, partial *service.ExtractBodyResponse) {
+	if itemRepo == nil || partial == nil {
+		return
+	}
+	if partial.Title == nil && partial.ImageURL == nil && partial.PublishedAt == nil {
+		return
+	}
+	var publishedAt *time.Time
+	if partial.PublishedAt != nil {
+		if ts, err := time.Parse("2006-01-02", strings.TrimSpace(*partial.PublishedAt)); err == nil {
+			publishedAt = &ts
+		}
+	}
+	if err := itemRepo.UpdateExtractMetadata(ctx, itemID, partial.Title, partial.ImageURL, publishedAt); err != nil {
+		log.Printf("process-item partial-extract metadata save failed item_id=%s err=%v", itemID, err)
+		return
+	}
+	bumpProcessItemDetailCacheVersion(ctx, cache, itemID)
+}
+
 func markProcessItemFailed(ctx context.Context, itemRepo *repository.ItemInngestRepo, cache service.JSONCache, itemID, stage string, err error) error {
 	msg := fmt.Sprintf("%s: %v", stage, err)
 	_ = itemRepo.MarkFailed(ctx, itemID, &msg)

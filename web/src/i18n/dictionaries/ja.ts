@@ -1836,6 +1836,7 @@ export const jaDict: Dict = {
   "itemDetail.restore.button": "削除を取り消す",
   "itemDetail.restore.restoring": "復元中...",
   "itemDetail.failureReason": "失敗理由",
+  "itemDetail.processingMessage": "処理メッセージ",
   "itemDetail.execution.summary": "要約の実行履歴",
   "itemDetail.execution.facts": "事実抽出の実行履歴",
   "itemDetail.execution.success": "成功",

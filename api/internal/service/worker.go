@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -136,6 +137,26 @@ type ExtractBodyResponse struct {
 	Content     string  `json:"content"`
 	PublishedAt *string `json:"published_at"`
 	ImageURL    *string `json:"image_url"`
+}
+
+type ExtractBodyError struct {
+	Message string
+	Partial *ExtractBodyResponse
+}
+
+func (e *ExtractBodyError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
+}
+
+func ExtractBodyPartial(err error) *ExtractBodyResponse {
+	var extractErr *ExtractBodyError
+	if !errors.As(err, &extractErr) || extractErr == nil {
+		return nil
+	}
+	return extractErr.Partial
 }
 
 type ExtractFactsResponse struct {
@@ -467,7 +488,46 @@ type PromptConfig struct {
 }
 
 func (w *WorkerClient) ExtractBody(ctx context.Context, url string) (*ExtractBodyResponse, error) {
-	return postWithHeaders[ExtractBodyResponse](ctx, w, "/extract-body", map[string]any{"url": url}, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret))
+	b, err := json.Marshal(map[string]any{"url": url})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, w.baseURL+"/extract-body", bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range applyWorkerTraceHeaders(ctx, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret)) {
+		if v != "" {
+			req.Header.Set(k, v)
+		}
+	}
+
+	resp, err := w.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if len(body) > 0 {
+			if detail := extractWorkerErrorDetail(body); detail != "" {
+				return nil, &ExtractBodyError{
+					Message: fmt.Sprintf("worker /extract-body: status %d detail=%s", resp.StatusCode, detail),
+					Partial: extractBodyPartialFromError(body),
+				}
+			}
+			return nil, &ExtractBodyError{Message: fmt.Sprintf("worker /extract-body: status %d body=%s", resp.StatusCode, string(body))}
+		}
+		return nil, &ExtractBodyError{Message: fmt.Sprintf("worker /extract-body: status %d", resp.StatusCode)}
+	}
+
+	var result ExtractBodyResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 func (w *WorkerClient) Health(ctx context.Context) error {
@@ -1214,6 +1274,13 @@ func extractWorkerErrorDetail(body []byte) string {
 		switch v := payload.Detail.(type) {
 		case string:
 			return strings.TrimSpace(v)
+		case map[string]any:
+			if msg := strings.TrimSpace(fmt.Sprint(v["message"])); msg != "" && msg != "<nil>" {
+				return msg
+			}
+			if b, err := json.Marshal(v); err == nil {
+				return strings.TrimSpace(string(b))
+			}
 		default:
 			if b, err := json.Marshal(v); err == nil {
 				return strings.TrimSpace(string(b))
@@ -1225,4 +1292,33 @@ func extractWorkerErrorDetail(body []byte) string {
 		return ""
 	}
 	return raw
+}
+
+func extractBodyPartialFromError(body []byte) *ExtractBodyResponse {
+	var payload workerErrorDetailPayload
+	if err := json.Unmarshal(body, &payload); err != nil || payload.Detail == nil {
+		return nil
+	}
+	detailMap, ok := payload.Detail.(map[string]any)
+	if !ok {
+		return nil
+	}
+	code := strings.TrimSpace(fmt.Sprint(detailMap["code"]))
+	if code != "youtube_transcript_unavailable" {
+		return nil
+	}
+	var result ExtractBodyResponse
+	if title := strings.TrimSpace(fmt.Sprint(detailMap["title"])); title != "" && title != "<nil>" {
+		result.Title = &title
+	}
+	if publishedAt := strings.TrimSpace(fmt.Sprint(detailMap["published_at"])); publishedAt != "" && publishedAt != "<nil>" {
+		result.PublishedAt = &publishedAt
+	}
+	if imageURL := strings.TrimSpace(fmt.Sprint(detailMap["image_url"])); imageURL != "" && imageURL != "<nil>" {
+		result.ImageURL = &imageURL
+	}
+	if result.Title == nil && result.PublishedAt == nil && result.ImageURL == nil {
+		return nil
+	}
+	return &result
 }

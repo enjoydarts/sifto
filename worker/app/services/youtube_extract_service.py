@@ -33,6 +33,24 @@ _FORMAT_PREFERENCE = ["json3", "vtt", "srv3", "srv2", "srv1", "ttml"]
 _YTDLP_ERROR_LIMIT = 500
 
 
+class YouTubeTranscriptUnavailableError(RuntimeError):
+    def __init__(
+        self,
+        *,
+        title: str,
+        published_at: str | None,
+        image_url: str | None,
+        diagnostics: str,
+    ):
+        message = "youtube transcript unavailable"
+        if diagnostics:
+            message = f"{message}: {diagnostics}"
+        super().__init__(message)
+        self.title = title
+        self.published_at = published_at
+        self.image_url = image_url
+
+
 def is_youtube_url(url: str) -> bool:
     parsed = urlparse((url or "").strip())
     host = (parsed.netloc or "").strip().lower()
@@ -52,12 +70,17 @@ def extract_body(url: str) -> dict | None:
     if not title:
         raise RuntimeError("youtube metadata unavailable")
 
-    transcript = _extract_transcript(metadata)
-    if not transcript:
-        raise RuntimeError("youtube transcript unavailable")
-
     published_at = _normalize_upload_date(str(metadata.get("upload_date") or "").strip())
     image_url = str(metadata.get("thumbnail") or "").strip() or None
+    transcript = _extract_transcript(metadata)
+    if not transcript:
+        raise YouTubeTranscriptUnavailableError(
+            title=title,
+            published_at=published_at,
+            image_url=image_url,
+            diagnostics=_describe_available_transcripts(metadata),
+        )
+
     return {
         "title": title,
         "content": transcript,
@@ -135,6 +158,40 @@ def _extract_transcript(metadata: dict) -> str:
         if text:
             return text
     return ""
+
+
+def _describe_available_transcripts(metadata: dict) -> str:
+    subtitles = metadata.get("subtitles") or {}
+    automatic = metadata.get("automatic_captions") or {}
+    return " ".join(
+        [
+            _describe_track_set("manual_langs", subtitles),
+            _describe_track_exts("manual_exts", subtitles),
+            _describe_track_set("auto_langs", automatic),
+            _describe_track_exts("auto_exts", automatic),
+        ]
+    ).strip()
+
+
+def _describe_track_set(label: str, tracks: dict) -> str:
+    if not isinstance(tracks, dict) or not tracks:
+        return f"{label}=[]"
+    langs = sorted(str(lang) for lang, entries in tracks.items() if isinstance(entries, list) and entries)
+    return f"{label}={langs}"
+
+
+def _describe_track_exts(label: str, tracks: dict) -> str:
+    if not isinstance(tracks, dict) or not tracks:
+        return f"{label}=[]"
+    exts: set[str] = set()
+    for entries in tracks.values():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            ext = str((entry or {}).get("ext") or "").strip().lower()
+            if ext:
+                exts.add(ext)
+    return f"{label}={sorted(exts)}"
 
 
 def _select_track(tracks: dict) -> tuple[str, list[dict]] | None:

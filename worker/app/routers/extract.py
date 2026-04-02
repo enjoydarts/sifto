@@ -1,7 +1,11 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from app.services.trafilatura_service import extract_body
-from app.services.youtube_extract_service import extract_body as extract_youtube_body, is_youtube_url
+from app.services.youtube_extract_service import (
+    YouTubeTranscriptUnavailableError,
+    extract_body as extract_youtube_body,
+    is_youtube_url,
+)
 from app.services.router_observe import run_observed_request
 
 router = APIRouter()
@@ -46,6 +50,17 @@ def extract_body_endpoint(req: ExtractRequest, request: Request):
     )
     if result is None:
         if call_error is not None:
+            if isinstance(call_error, YouTubeTranscriptUnavailableError):
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "youtube_transcript_unavailable",
+                        "message": str(call_error),
+                        "title": call_error.title,
+                        "published_at": call_error.published_at,
+                        "image_url": call_error.image_url,
+                    },
+                )
             raise HTTPException(status_code=422, detail=str(call_error))
         raise HTTPException(status_code=422, detail="Failed to extract body")
     return result

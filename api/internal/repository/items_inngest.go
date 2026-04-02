@@ -48,6 +48,18 @@ func (r *ItemInngestRepo) UpdateAfterExtract(ctx context.Context, id, contentTex
 	return err
 }
 
+func (r *ItemInngestRepo) UpdateExtractMetadata(ctx context.Context, id string, title, thumbnailURL *string, publishedAt *time.Time) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE items
+		SET title = COALESCE($2, title),
+		    thumbnail_url = COALESCE($3, thumbnail_url),
+		    published_at = COALESCE($4, published_at),
+		    updated_at = NOW()
+		WHERE id = $1`,
+		id, title, thumbnailURL, publishedAt)
+	return err
+}
+
 func (r *ItemInngestRepo) InsertFacts(ctx context.Context, itemID string, facts []string) error {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO item_facts (item_id, facts)

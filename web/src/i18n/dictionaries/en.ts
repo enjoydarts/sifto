@@ -1835,6 +1835,7 @@ export const enDict: Dict = {
   "itemDetail.restore.button": "Restore item",
   "itemDetail.restore.restoring": "Restoring...",
   "itemDetail.failureReason": "Failure Reason",
+  "itemDetail.processingMessage": "Processing Message",
   "itemDetail.execution.summary": "Summary execution history",
   "itemDetail.execution.facts": "Facts extraction history",
   "itemDetail.execution.success": "Success",

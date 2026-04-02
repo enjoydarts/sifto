@@ -95,7 +95,7 @@ class YoutubeExtractServiceTests(unittest.TestCase):
         ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
             with self.assertRaisesRegex(
                 YouTubeTranscriptUnavailableError,
-                r"youtube transcript unavailable: .*manual_langs=\['fr'\].*auto_langs=\['en-US'\].*auto_exts=\['srv3'\]",
+                r"youtube transcript unavailable: .*cookies_present=False.*extractor_args_present=False.*manual_langs=\['fr'\].*auto_langs=\['en-US'\].*auto_exts=\['srv3'\]",
             ) as ctx:
                 extract_body("https://www.youtube.com/watch?v=abc123")
         self.assertEqual(ctx.exception.title, "Video Title")

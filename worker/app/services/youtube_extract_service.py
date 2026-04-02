@@ -65,6 +65,8 @@ def is_youtube_url(url: str) -> bool:
 
 
 def extract_body(url: str) -> dict | None:
+    extractor_args = (os.getenv("YTDLP_EXTRACTOR_ARGS") or "").strip()
+    cookies_present = bool((os.getenv("YTDLP_COOKIES_B64") or "").strip())
     metadata = _load_video_metadata(url)
     title = str(metadata.get("title") or "").strip()
     if not title:
@@ -78,7 +80,11 @@ def extract_body(url: str) -> dict | None:
             title=title,
             published_at=published_at,
             image_url=image_url,
-            diagnostics=_describe_available_transcripts(metadata),
+            diagnostics=(
+                f"cookies_present={cookies_present} "
+                f"extractor_args_present={bool(extractor_args)} "
+                f"{_describe_available_transcripts(metadata)}"
+            ).strip(),
         )
 
     return {

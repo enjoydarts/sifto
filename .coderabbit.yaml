@@ -1,14 +1,5 @@
 reviews:
   auto_review: true
-
-  # PR作成時に自動レビュー
   pull_request_opened: true
-
-  # コミット追加時にもレビュー
   pull_request_synchronize: true
-
   language: ja
-
-  instructions: |
-    すべてのレビューコメントは日本語で記述してください。
-    指摘は簡潔かつ実用的にしてください。

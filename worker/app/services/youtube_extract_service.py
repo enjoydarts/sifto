@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
 import json
+import os
 import re
 import subprocess
+import tempfile
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -60,16 +63,49 @@ def extract_body(url: str) -> dict | None:
 
 
 def _load_video_metadata(url: str) -> dict:
-    cmd = ["yt-dlp", "--dump-single-json", "--no-warnings", "--skip-download", url]
+    cmd = ["yt-dlp", "--dump-single-json", "--no-warnings", "--skip-download"]
+    cookies_path = _write_ytdlp_cookies_file()
+    if cookies_path:
+        cmd.extend(["--cookies", cookies_path])
+    cmd.append(url)
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    except subprocess.CalledProcessError as exc:
-        detail = _truncate_error_detail(exc.stderr or exc.stdout or str(exc))
-        raise RuntimeError(f"yt-dlp metadata fetch failed: {detail}") from exc
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        except subprocess.CalledProcessError as exc:
+            detail = _truncate_error_detail(exc.stderr or exc.stdout or str(exc))
+            raise RuntimeError(f"yt-dlp metadata fetch failed: {detail}") from exc
+    finally:
+        if cookies_path:
+            try:
+                os.unlink(cookies_path)
+            except FileNotFoundError:
+                pass
     payload = json.loads(proc.stdout or "{}")
     if not isinstance(payload, dict):
         raise RuntimeError("youtube metadata unavailable")
     return payload
+
+
+def _write_ytdlp_cookies_file() -> str | None:
+    raw = (os.getenv("YTDLP_COOKIES_B64") or "").strip()
+    if not raw:
+        return None
+    try:
+        content = base64.b64decode(raw.encode("ascii"), validate=True).decode("utf-8")
+    except Exception as exc:
+        raise RuntimeError("invalid YTDLP_COOKIES_B64") from exc
+
+    fd, path = tempfile.mkstemp(prefix="yt-dlp-cookies-", suffix=".txt")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+    except Exception:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+        raise
+    return path
 
 
 def _truncate_error_detail(detail: str) -> str:

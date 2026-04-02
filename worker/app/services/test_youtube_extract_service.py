@@ -1,5 +1,6 @@
 import unittest
 import subprocess
+import os
 from unittest.mock import Mock, patch
 
 from app.services.youtube_extract_service import extract_body, is_youtube_url
@@ -82,3 +83,36 @@ class YoutubeExtractServiceTests(unittest.TestCase):
         with patch("app.services.youtube_extract_service.subprocess.run", side_effect=err):
             with self.assertRaisesRegex(RuntimeError, "yt-dlp metadata fetch failed: ERROR: Sign in to confirm you’re not a bot"):
                 extract_body("https://www.youtube.com/watch?v=abc123")
+
+    def test_extract_body_passes_temp_cookie_file_when_env_is_set(self):
+        metadata = {
+            "title": "Video Title",
+            "subtitles": {},
+            "automatic_captions": {"en": [{"ext": "vtt", "url": "https://subs.example/en.vtt"}]},
+        }
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.text = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nEnglish line"
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            cookies_path = cmd[cmd.index("--cookies") + 1]
+            captured["cookies_path"] = cookies_path
+            with open(cookies_path, "r", encoding="utf-8") as f:
+                captured["cookies_content"] = f.read()
+            return Mock(stdout='{"ignored": true}')
+
+        with patch.dict(
+            os.environ,
+            {"YTDLP_COOKIES_B64": "I0hUVFAgQ29va2llIEZpbGUKLnlvdXR1YmUuY29tCVRSVUUJLwlGQUxTRQkwCVNJRAl2YWx1ZQo="},
+            clear=False,
+        ), patch("app.services.youtube_extract_service.subprocess.run", side_effect=fake_run), patch(
+            "app.services.youtube_extract_service.json.loads", return_value=metadata
+        ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
+            result = extract_body("https://youtu.be/abc123")
+
+        self.assertEqual(result["content"], "English line")
+        self.assertIn("--cookies", captured["cmd"])
+        self.assertIn("#HTTP Cookie File", captured["cookies_content"])
+        self.assertFalse(os.path.exists(captured["cookies_path"]))

@@ -1003,6 +1003,7 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 	emotionalIntensity float64,
 	tempoDynamics float64,
 	lineBreakSilenceSeconds float64,
+	chunkTrailingSilenceSeconds float64,
 	pitch float64,
 	volumeGain float64,
 	aivisUserDictionaryUUID *string,
@@ -1022,6 +1023,7 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 		"emotional_intensity":        emotionalIntensity,
 		"tempo_dynamics":             tempoDynamics,
 		"line_break_silence_seconds": lineBreakSilenceSeconds,
+		"chunk_trailing_silence_seconds": chunkTrailingSilenceSeconds,
 		"pitch":                      pitch,
 		"volume_gain":                volumeGain,
 	}

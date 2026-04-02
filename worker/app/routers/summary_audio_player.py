@@ -15,6 +15,7 @@ class SummaryAudioSynthesizeRequest(BaseModel):
     emotional_intensity: float = 1.0
     tempo_dynamics: float = 1.0
     line_break_silence_seconds: float = 0.4
+    chunk_trailing_silence_seconds: float = 1.0
     pitch: float = 0.0
     volume_gain: float = 0.0
     user_dictionary_uuid: str | None = None
@@ -41,6 +42,7 @@ def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Reques
             emotional_intensity=req.emotional_intensity,
             tempo_dynamics=req.tempo_dynamics,
             line_break_silence_seconds=req.line_break_silence_seconds,
+            chunk_trailing_silence_seconds=req.chunk_trailing_silence_seconds,
             pitch=req.pitch,
             volume_gain=req.volume_gain,
             user_dictionary_uuid=req.user_dictionary_uuid,

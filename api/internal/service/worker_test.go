@@ -136,6 +136,9 @@ func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
 		if got := body["text"]; got != "邦題タイトル\n\n要約本文" {
 			t.Fatalf("text = %v, want narration body", got)
 		}
+		if got := body["chunk_trailing_silence_seconds"]; got != float64(1.0) {
+			t.Fatalf("chunk_trailing_silence_seconds = %v, want 1.0", got)
+		}
 		respBody, _ := json.Marshal(map[string]any{
 			"audio_base64":  "Zm9v",
 			"content_type":  "audio/mpeg",
@@ -159,6 +162,7 @@ func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
 		1.0,
 		1.0,
 		0.4,
+		1.0,
 		0,
 		0,
 		strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),

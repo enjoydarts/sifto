@@ -109,6 +109,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		voice.EmotionalIntensity,
 		voice.TempoDynamics,
 		voice.LineBreakSilenceSeconds,
+		settings.ChunkTrailingSilenceSeconds,
 		voice.Pitch,
 		voice.VolumeGain,
 		aivisUserDictionaryUUID,

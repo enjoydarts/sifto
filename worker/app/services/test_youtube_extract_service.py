@@ -114,5 +114,6 @@ class YoutubeExtractServiceTests(unittest.TestCase):
 
         self.assertEqual(result["content"], "English line")
         self.assertIn("--cookies", captured["cmd"])
+        self.assertIn("--ignore-no-formats-error", captured["cmd"])
         self.assertIn("#HTTP Cookie File", captured["cookies_content"])
         self.assertFalse(os.path.exists(captured["cookies_path"]))

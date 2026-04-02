@@ -66,7 +66,7 @@ def extract_body(url: str) -> dict | None:
 
 
 def _load_video_metadata(url: str) -> dict:
-    cmd = ["yt-dlp", "--dump-single-json", "--no-warnings", "--skip-download"]
+    cmd = ["yt-dlp", "--dump-single-json", "--no-warnings", "--skip-download", "--ignore-no-formats-error"]
     cookies_path = _write_ytdlp_cookies_file()
     _log.info("youtube metadata fetch url=%s cookies_present=%s", url, bool(cookies_path))
     if cookies_path:

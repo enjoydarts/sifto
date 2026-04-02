@@ -125,7 +125,7 @@ func main() {
 	podcastFeedSvc := service.NewPodcastFeedService(userSettingsRepo, audioBriefingRepo, worker)
 	podcastsH := handler.NewPodcastsHandler(podcastFeedSvc, cache)
 	readingGoalsH := handler.NewReadingGoalsHandler(readingGoalRepo)
-	itemNotesH := handler.NewItemNotesHandler(itemRepo, reviewQueueRepo)
+	itemNotesH := handler.NewItemNotesHandler(itemRepo, reviewQueueRepo, eventPublisher)
 	reviewsH := handler.NewReviewsHandler(reviewQueueRepo, weeklyReviewRepo)
 	askInsightsH := handler.NewAskInsightsHandler(askInsightRepo)
 	providerModelUpdateH := handler.NewProviderModelUpdateHandler(providerModelUpdateRepo, providerModelSnapshotSyncSvc)

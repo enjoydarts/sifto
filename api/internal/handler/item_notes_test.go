@@ -20,6 +20,19 @@ type fakeItemNoteStore struct {
 	err        error
 }
 
+type fakeItemSearchPublisher struct {
+	itemIDs []string
+	err     error
+}
+
+func (f *fakeItemSearchPublisher) SendItemSearchUpsertE(_ context.Context, itemID string) error {
+	if f.err != nil {
+		return f.err
+	}
+	f.itemIDs = append(f.itemIDs, itemID)
+	return nil
+}
+
 func (f *fakeItemNoteStore) GetByItem(_ context.Context, userID, itemID string) (*model.ItemNote, []model.ItemHighlight, error) {
 	if f.err != nil {
 		return nil, nil, f.err
@@ -69,7 +82,8 @@ func (f *fakeItemNoteStore) DeleteHighlight(_ context.Context, userID, itemID, h
 
 func TestItemNotesHandlerSaveNote(t *testing.T) {
 	store := &fakeItemNoteStore{}
-	h := NewItemNotesHandler(store, nil)
+	publisher := &fakeItemSearchPublisher{}
+	h := NewItemNotesHandler(store, nil, publisher)
 	body := bytes.NewBufferString(`{"content":"watch this trend","tags":["ai","agents"]}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/items/item-1/note", body)
 	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, "u1"))
@@ -83,11 +97,15 @@ func TestItemNotesHandlerSaveNote(t *testing.T) {
 	if store.note == nil || store.note.Content != "watch this trend" {
 		t.Fatalf("note = %+v", store.note)
 	}
+	if len(publisher.itemIDs) != 1 || publisher.itemIDs[0] != "item-1" {
+		t.Fatalf("publisher.itemIDs = %#v", publisher.itemIDs)
+	}
 }
 
 func TestItemNotesHandlerCreateHighlight(t *testing.T) {
 	store := &fakeItemNoteStore{}
-	h := NewItemNotesHandler(store, nil)
+	publisher := &fakeItemSearchPublisher{}
+	h := NewItemNotesHandler(store, nil, publisher)
 	body := bytes.NewBufferString(`{"quote_text":"important sentence","anchor_text":"important","section":"summary"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/items/item-1/highlights", body)
 	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, "u1"))
@@ -101,13 +119,16 @@ func TestItemNotesHandlerCreateHighlight(t *testing.T) {
 	if len(store.highlights) != 1 || store.highlights[0].QuoteText != "important sentence" {
 		t.Fatalf("highlights = %+v", store.highlights)
 	}
+	if len(publisher.itemIDs) != 1 || publisher.itemIDs[0] != "item-1" {
+		t.Fatalf("publisher.itemIDs = %#v", publisher.itemIDs)
+	}
 }
 
 func TestItemNotesHandlerListHighlights(t *testing.T) {
 	store := &fakeItemNoteStore{
 		highlights: []model.ItemHighlight{{ID: "h1", UserID: "u1", ItemID: "item-1", QuoteText: "q"}},
 	}
-	h := NewItemNotesHandler(store, nil)
+	h := NewItemNotesHandler(store, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/items/item-1/highlights", nil)
 	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, "u1"))
 	rr := httptest.NewRecorder()
@@ -130,7 +151,7 @@ func TestItemNotesHandlerListHighlights(t *testing.T) {
 
 func TestItemNotesHandlerSaveNoteConflict(t *testing.T) {
 	store := &fakeItemNoteStore{err: repository.ErrConflict}
-	h := NewItemNotesHandler(store, nil)
+	h := NewItemNotesHandler(store, nil, nil)
 	body := bytes.NewBufferString(`{"content":"watch this trend"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/items/item-1/note", body)
 	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, "u1"))
@@ -140,5 +161,25 @@ func TestItemNotesHandlerSaveNoteConflict(t *testing.T) {
 
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", rr.Code)
+	}
+}
+
+func TestItemNotesHandlerDeleteHighlightEnqueuesSearchUpsert(t *testing.T) {
+	store := &fakeItemNoteStore{
+		highlights: []model.ItemHighlight{{ID: "h1", UserID: "u1", ItemID: "item-1", QuoteText: "q"}},
+	}
+	publisher := &fakeItemSearchPublisher{}
+	h := NewItemNotesHandler(store, nil, publisher)
+	req := httptest.NewRequest(http.MethodDelete, "/api/items/item-1/highlights/h1", nil)
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, "u1"))
+	rr := httptest.NewRecorder()
+
+	h.DeleteHighlight(rr, req, "item-1", "h1")
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rr.Code)
+	}
+	if len(publisher.itemIDs) != 1 || publisher.itemIDs[0] != "item-1" {
+		t.Fatalf("publisher.itemIDs = %#v", publisher.itemIDs)
 	}
 }

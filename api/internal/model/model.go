@@ -435,6 +435,8 @@ type ItemSearchDocument struct {
 	TranslatedTitle string     `json:"translated_title"`
 	Summary         string     `json:"summary"`
 	FactsText       string     `json:"facts_text"`
+	NoteText        string     `json:"note_text"`
+	HighlightText   string     `json:"highlight_text"`
 	ContentText     string     `json:"content_text"`
 	Topics          []string   `json:"topics"`
 	PublishedAt     *time.Time `json:"published_at,omitempty"`

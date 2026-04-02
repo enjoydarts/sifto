@@ -1946,15 +1946,9 @@ func (h *ItemHandler) SetFeedback(w http.ResponseWriter, r *http.Request) {
 func (h *ItemHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	id := chi.URLParam(r, "id")
-	item, err := h.repo.GetForRetry(r.Context(), id, userID)
+	item, err := h.repo.ResetForExtractRetry(r.Context(), id, userID)
 	if err != nil {
 		writeRepoError(w, err)
-		return
-	}
-	summaryEmpty := item.Summary == nil || strings.TrimSpace(*item.Summary) == ""
-	retryable := item.Status == "failed" || item.Status == "fetched" || item.Status == "facts_extracted" || item.Status == "summarized"
-	if !retryable && !(item.Status == "summarized" && summaryEmpty) {
-		http.Error(w, "item is not retryable", http.StatusConflict)
 		return
 	}
 	if h.publisher == nil {

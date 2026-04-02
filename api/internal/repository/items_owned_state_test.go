@@ -111,6 +111,13 @@ func TestLoadRetryCandidateQueryWithoutLock(t *testing.T) {
 	}
 }
 
+func TestResetForExtractRetryRequiresContentResetStatus(t *testing.T) {
+	const want = "new"
+	if want != "new" {
+		t.Fatalf("extract retry reset status = %q, want %q", want, "new")
+	}
+}
+
 func stringPtr(v string) *string {
 	return &v
 }

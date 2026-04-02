@@ -1964,6 +1964,58 @@ func (r *ItemRepo) GetForRetry(ctx context.Context, id, userID string) (*model.I
 	return &candidate.item, nil
 }
 
+func (r *ItemRepo) ResetForExtractRetry(ctx context.Context, id, userID string) (*model.Item, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	candidate, err := r.loadRetryCandidate(ctx, tx, id, userID, true)
+	if err != nil {
+		return nil, err
+	}
+	it := candidate.item
+
+	if _, err := tx.Exec(ctx, `DELETE FROM item_embeddings WHERE item_id = $1`, id); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM summary_faithfulness_checks WHERE item_id = $1`, id); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM item_summaries WHERE item_id = $1`, id); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM item_facts_checks WHERE item_id = $1`, id); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM item_facts WHERE item_id = $1`, id); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE items
+		SET status = 'new',
+		    title = NULL,
+		    thumbnail_url = NULL,
+		    content_text = NULL,
+		    fetched_at = NULL,
+		    processing_error = NULL,
+		    updated_at = NOW()
+		WHERE id = $1`, id); err != nil {
+		return nil, err
+	}
+	it.Status = "new"
+	it.Title = nil
+	it.ThumbnailURL = nil
+	it.ContentText = nil
+	it.Summary = nil
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return &it, nil
+}
+
 func (r *ItemRepo) ResetForFactsRetry(ctx context.Context, id, userID string) (*model.Item, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {

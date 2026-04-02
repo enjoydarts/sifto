@@ -796,6 +796,25 @@ export default function ItemDetailPage() {
     setRetryUpdating(true);
     try {
       await api.retryItem(item.id);
+      const nextItem = (prev: ItemDetail): ItemDetail => ({
+        ...prev,
+        status: "new" as const,
+        processing_error: null,
+        title: null,
+        thumbnail_url: null,
+        content_text: null,
+        facts: null,
+        facts_llm: null,
+        facts_check: null,
+        facts_check_llm: null,
+        summary: null,
+        summary_llm: null,
+        faithfulness: null,
+        faithfulness_llm: null,
+      });
+      setItem((prev) => (prev ? nextItem(prev) : prev));
+      queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) => (prev ? nextItem(prev) : prev));
+      await refreshItemQueries(item.id);
       setActionError(null);
       showToast(t("itemDetail.toast.retryQueued"), "success");
     } catch (e) {

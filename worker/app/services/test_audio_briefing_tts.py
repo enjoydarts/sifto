@@ -183,6 +183,23 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
         self.assertEqual(payload["user_dictionary_uuid"], "5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861")
         self.assertEqual(payload["trailing_silence_seconds"], 1.0)
 
+    def test_build_aivis_payload_wraps_and_escapes_plain_text_for_ssml(self):
+        payload = audio_briefing_tts.build_aivis_payload(
+            voice_model="model-uuid",
+            voice_style="speaker-uuid:1",
+            text="A & B < C > D",
+            speech_rate=1.0,
+            emotional_intensity=1.0,
+            tempo_dynamics=1.0,
+            line_break_silence_seconds=0.4,
+            chunk_trailing_silence_seconds=1.0,
+            pitch=0.0,
+            volume_gain=0.0,
+        )
+
+        self.assertEqual(payload["text"], "<speak>A &amp; B &lt; C &gt; D</speak>")
+        self.assertTrue(payload["use_ssml"])
+
     def test_init_reads_aivis_timeout_from_env(self):
         with patch.dict("os.environ", {"AIVIS_TTS_TIMEOUT_SEC": "420"}, clear=False):
             service = AudioBriefingTTSService()

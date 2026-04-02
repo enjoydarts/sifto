@@ -6,6 +6,7 @@ import threading
 import time
 import uuid
 import wave
+from xml.sax.saxutils import escape
 
 import httpx
 from mutagen.mp3 import MP3
@@ -272,11 +273,12 @@ def build_aivis_payload(
     speaker_uuid, style_id = parse_aivis_voice_style(voice_style)
     if not model_uuid:
         raise RuntimeError("Aivis model_uuid is empty")
+    normalized_text = build_aivis_ssml_text(text)
     payload = {
         "model_uuid": model_uuid,
         "speaker_uuid": speaker_uuid,
         "style_id": style_id,
-        "text": text,
+        "text": normalized_text,
         "use_ssml": True,
         "use_volume_normalizer": True,
         "speaking_rate": speech_rate if speech_rate > 0 else 1.0,
@@ -292,6 +294,15 @@ def build_aivis_payload(
     if normalized_dictionary_uuid:
         payload["user_dictionary_uuid"] = normalized_dictionary_uuid
     return payload
+
+
+def build_aivis_ssml_text(text: str) -> str:
+    raw = (text or "").strip()
+    if not raw:
+        return "<speak></speak>"
+    if raw.startswith("<speak") and raw.endswith("</speak>"):
+        return raw
+    return f"<speak>{escape(raw)}</speak>"
 
 
 def probe_duration_seconds(audio_bytes: bytes, suffix: str) -> int:
@@ -366,7 +377,12 @@ class AivisSpeechService:
                         last_exc = exc
                         status_code = exc.response.status_code if exc.response is not None else 0
                         if status_code not in _AIVIS_RETRYABLE_STATUS_CODES or attempt >= self.aivis_retry_attempts - 1:
-                            raise
+                            detail = ""
+                            if exc.response is not None:
+                                body = (exc.response.text or "").strip()
+                                if body:
+                                    detail = f" body={body[:500]}"
+                            raise RuntimeError(f"Aivis TTS status={status_code}{detail}") from exc
                         retry_after_sec = parse_retry_after_seconds(
                             exc.response.headers.get("Retry-After") if exc.response is not None else None,
                             self.aivis_retry_fallback_sec,

@@ -459,6 +459,7 @@ export default function SettingsPage() {
   const [audioBriefingArticlesPerEpisode, setAudioBriefingArticlesPerEpisode] = useState("5");
   const [audioBriefingTargetDurationMinutes, setAudioBriefingTargetDurationMinutes] = useState("20");
   const [audioBriefingChunkTrailingSilenceSeconds, setAudioBriefingChunkTrailingSilenceSeconds] = useState("1.0");
+  const [audioBriefingProgramName, setAudioBriefingProgramName] = useState("");
   const [audioBriefingDefaultPersonaMode, setAudioBriefingDefaultPersonaMode] = useState<"fixed" | "random">("fixed");
   const [audioBriefingDefaultPersona, setAudioBriefingDefaultPersona] = useState("editor");
   const [audioBriefingConversationMode, setAudioBriefingConversationMode] = useState<"single" | "duo">("single");
@@ -549,6 +550,7 @@ export default function SettingsPage() {
       setAudioBriefingArticlesPerEpisode(String(audioBriefing?.articles_per_episode ?? 5));
       setAudioBriefingTargetDurationMinutes(String(audioBriefing?.target_duration_minutes ?? 20));
       setAudioBriefingChunkTrailingSilenceSeconds(formatAudioBriefingDecimalInput(audioBriefing?.chunk_trailing_silence_seconds ?? 1.0));
+      setAudioBriefingProgramName(audioBriefing?.program_name ?? "");
       setAudioBriefingDefaultPersonaMode(audioBriefing?.default_persona_mode === "random" ? "random" : "fixed");
       setAudioBriefingDefaultPersona(audioBriefing?.default_persona ?? "editor");
       setAudioBriefingConversationMode(audioBriefing?.conversation_mode === "duo" ? "duo" : "single");
@@ -2145,6 +2147,7 @@ export default function SettingsPage() {
         articles_per_episode: Number(audioBriefingArticlesPerEpisode),
         target_duration_minutes: Number(audioBriefingTargetDurationMinutes),
         chunk_trailing_silence_seconds: Number(audioBriefingChunkTrailingSilenceSeconds),
+        program_name: audioBriefingProgramName.trim() || null,
         default_persona_mode: audioBriefingDefaultPersonaMode,
         default_persona: audioBriefingDefaultPersona,
         conversation_mode: audioBriefingConversationMode,
@@ -2661,6 +2664,21 @@ export default function SettingsPage() {
                           className="size-4 rounded border-[var(--color-editorial-line-strong)]"
                         />
                       </div>
+                    </label>
+
+                    <label className="flex min-w-[260px] flex-[1.5] flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.audioBriefing.programName")}
+                      </div>
+                      <input
+                        type="text"
+                        value={audioBriefingProgramName}
+                        onChange={(e) => setAudioBriefingProgramName(e.target.value)}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                      <p className="mt-2 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.audioBriefing.programNameHelp")}
+                      </p>
                     </label>
 
                     <label className="flex min-w-[180px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">

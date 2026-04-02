@@ -110,6 +110,7 @@ type UpdateAudioBriefingSettingsInput struct {
 	ArticlesPerEpisode          int
 	TargetDurationMinutes       int
 	ChunkTrailingSilenceSeconds float64
+	ProgramName                 *string
 	DefaultPersonaMode          *string
 	DefaultPersona              *string
 	ConversationMode            *string
@@ -269,6 +270,7 @@ func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) map[str
 			"articles_per_episode":           5,
 			"target_duration_minutes":        20,
 			"chunk_trailing_silence_seconds": 1.0,
+			"program_name":                   nil,
 			"default_persona_mode":           PersonaModeFixed,
 			"default_persona":                "editor",
 			"conversation_mode":              "single",
@@ -282,6 +284,7 @@ func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) map[str
 		"articles_per_episode":           settings.ArticlesPerEpisode,
 		"target_duration_minutes":        settings.TargetDurationMinutes,
 		"chunk_trailing_silence_seconds": settings.ChunkTrailingSilenceSeconds,
+		"program_name":                   settings.ProgramName,
 		"default_persona_mode":           NormalizePersonaMode(&settings.DefaultPersonaMode),
 		"default_persona":                settings.DefaultPersona,
 		"conversation_mode":              normalizeAudioBriefingConversationMode(&settings.ConversationMode),
@@ -782,6 +785,10 @@ func (s *SettingsService) UpdateAudioBriefingSettings(ctx context.Context, userI
 	if in.ChunkTrailingSilenceSeconds < 0 || in.ChunkTrailingSilenceSeconds > 5 {
 		return nil, fmt.Errorf("invalid chunk_trailing_silence_seconds")
 	}
+	programName := normalizeAudioBriefingProgramName(in.ProgramName)
+	if programName != nil && len([]rune(*programName)) > 120 {
+		return nil, fmt.Errorf("invalid program_name")
+	}
 	bgmPrefix := normalizeOptionalString(in.BGMR2Prefix)
 	if in.BGMEnabled && bgmPrefix == nil {
 		return nil, fmt.Errorf("invalid bgm_r2_prefix")
@@ -794,6 +801,7 @@ func (s *SettingsService) UpdateAudioBriefingSettings(ctx context.Context, userI
 		in.ArticlesPerEpisode,
 		in.TargetDurationMinutes,
 		in.ChunkTrailingSilenceSeconds,
+		programName,
 		NormalizePersonaMode(in.DefaultPersonaMode),
 		normalizeAudioBriefingDefaultPersona(in.DefaultPersona),
 		normalizeAudioBriefingConversationMode(in.ConversationMode),
@@ -812,6 +820,17 @@ func normalizeAudioBriefingConversationMode(v *string) string {
 	default:
 		return "single"
 	}
+}
+
+func normalizeAudioBriefingProgramName(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*v)
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func (s *SettingsService) UpdateAudioBriefingPersonaVoices(ctx context.Context, userID string, rows []UpdateAudioBriefingPersonaVoiceInput) ([]model.AudioBriefingPersonaVoice, error) {

@@ -228,6 +228,7 @@ func TestAudioBriefingSettingsPayload(t *testing.T) {
 		ArticlesPerEpisode:    6,
 		TargetDurationMinutes: 20,
 		DefaultPersona:        "editor",
+		ProgramName:           strptr("Morning Sifto"),
 		BGMEnabled:            true,
 		BGMR2Prefix:           strptr("audio/bgm"),
 	}
@@ -242,6 +243,9 @@ func TestAudioBriefingSettingsPayload(t *testing.T) {
 	}
 	if persona, _ := got["default_persona"].(string); persona != "editor" {
 		t.Fatalf("default_persona = %v, want editor", got["default_persona"])
+	}
+	if programName, _ := got["program_name"].(*string); programName == nil || *programName != "Morning Sifto" {
+		t.Fatalf("program_name = %v, want Morning Sifto", got["program_name"])
 	}
 	if bgmEnabled, _ := got["bgm_enabled"].(bool); !bgmEnabled {
 		t.Fatalf("bgm_enabled = %v, want true", got["bgm_enabled"])
@@ -318,6 +322,18 @@ func TestAudioBriefingSettingsPayloadIncludesConversationMode(t *testing.T) {
 
 	if gotMode, _ := got["conversation_mode"].(string); gotMode != "duo" {
 		t.Fatalf("conversation_mode = %v, want %q", got["conversation_mode"], "duo")
+	}
+}
+
+func TestNormalizeAudioBriefingProgramName(t *testing.T) {
+	if got := normalizeAudioBriefingProgramName(nil); got != nil {
+		t.Fatalf("normalizeAudioBriefingProgramName(nil) = %v, want nil", got)
+	}
+	if got := normalizeAudioBriefingProgramName(strptr("   ")); got != nil {
+		t.Fatalf("normalizeAudioBriefingProgramName(blank) = %v, want nil", got)
+	}
+	if got := normalizeAudioBriefingProgramName(strptr("  Morning Sifto  ")); got == nil || *got != "Morning Sifto" {
+		t.Fatalf("normalizeAudioBriefingProgramName(trim) = %v, want Morning Sifto", got)
 	}
 }
 

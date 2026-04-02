@@ -225,6 +225,14 @@ func TestAudioBriefingTurnSectionIntroContext(t *testing.T) {
 	}
 }
 
+func TestBuildAudioBriefingIntroContextIncludesProgramName(t *testing.T) {
+	got := buildAudioBriefingIntroContext(time.Date(2026, 4, 2, 7, 0, 0, 0, timeutil.JST), strptr("Morning Sifto"))
+
+	if got["program_name"] != "Morning Sifto" {
+		t.Fatalf("program_name = %#v, want Morning Sifto", got["program_name"])
+	}
+}
+
 func TestAudioBriefingTurnArticleIntroContext(t *testing.T) {
 	base := map[string]any{"time_of_day": "morning"}
 

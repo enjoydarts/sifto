@@ -51,6 +51,7 @@ func BuildAudioBriefingDraft(
 	persona string,
 	items []model.AudioBriefingJobItem,
 	voice *model.AudioBriefingPersonaVoice,
+	programName string,
 	targetChars int,
 ) AudioBriefingDraft {
 	slotStartedAt = slotStartedAt.In(timeutil.JST)
@@ -66,7 +67,7 @@ func BuildAudioBriefingDraft(
 	title := fmt.Sprintf("%sの音声ブリーフィング", slotLabel)
 	chunks := make([]model.AudioBriefingScriptChunk, 0, len(items)+3)
 	ttsProvider, voiceModel, voiceStyle := audioBriefingVoiceRefs(voice)
-	opening := fmt.Sprintf("%sです。%sのSifto音声ブリーフィングをお届けします。今回は直近の注目記事を%d本まとめて見ていきます。", audioBriefingSpeakerName(persona), slotLabel, len(items))
+	opening := fmt.Sprintf("%sです。%sの%sをお届けします。今回は直近の注目記事を%d本まとめて見ていきます。", audioBriefingSpeakerName(persona), slotLabel, resolvedAudioBriefingProgramName(programName), len(items))
 	for _, part := range audioBriefingSectionParts(opening, 1200, true) {
 		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "opening", nil, part, ttsProvider, voiceModel, voiceStyle))
 	}
@@ -109,6 +110,7 @@ func BuildAudioBriefingDraftFromNarration(
 	items []model.AudioBriefingJobItem,
 	voice *model.AudioBriefingPersonaVoice,
 	narration AudioBriefingNarration,
+	programName string,
 	targetChars int,
 ) AudioBriefingDraft {
 	slotStartedAt = slotStartedAt.In(timeutil.JST)
@@ -127,7 +129,7 @@ func BuildAudioBriefingDraftFromNarration(
 
 	opening := strings.TrimSpace(narration.Opening)
 	if opening == "" {
-		opening = fmt.Sprintf("%sです。%sのSifto音声ブリーフィングをお届けします。今回は直近の注目記事を%d本まとめて見ていきます。", audioBriefingSpeakerName(persona), slotLabel, len(items))
+		opening = fmt.Sprintf("%sです。%sの%sをお届けします。今回は直近の注目記事を%d本まとめて見ていきます。", audioBriefingSpeakerName(persona), slotLabel, resolvedAudioBriefingProgramName(programName), len(items))
 	}
 	for _, part := range audioBriefingSectionParts(opening, 1200, true) {
 		chunks = append(chunks, newAudioBriefingChunk(len(chunks)+1, "opening", nil, part, ttsProvider, voiceModel, voiceStyle))
@@ -186,6 +188,13 @@ func BuildAudioBriefingDraftFromNarration(
 		Items:           items,
 		Chunks:          chunks,
 	}
+}
+
+func resolvedAudioBriefingProgramName(programName string) string {
+	if strings.TrimSpace(programName) == "" {
+		return "Sifto音声ブリーフィング"
+	}
+	return strings.TrimSpace(programName)
 }
 
 func BuildAudioBriefingDraftFromTurns(

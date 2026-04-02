@@ -10,7 +10,7 @@ import (
 )
 
 func TestBuildAudioBriefingDraftSkippedWhenNoItems(t *testing.T) {
-	draft := BuildAudioBriefingDraft(time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST), "editor", nil, nil, 0)
+	draft := BuildAudioBriefingDraft(time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST), "editor", nil, nil, "", 0)
 	if draft.Status != "skipped" {
 		t.Fatalf("draft.Status = %q, want skipped", draft.Status)
 	}
@@ -42,6 +42,7 @@ func TestBuildAudioBriefingDraftBuildsChunks(t *testing.T) {
 			SummarySnapshot: &summary,
 		}},
 		voice,
+		"",
 		0,
 	)
 	if draft.Status != "scripted" {
@@ -55,6 +56,37 @@ func TestBuildAudioBriefingDraftBuildsChunks(t *testing.T) {
 	}
 	if draft.Chunks[2].TTSProvider == nil || *draft.Chunks[2].TTSProvider != "aivis" {
 		t.Fatalf("draft.Chunks[2].TTSProvider = %v, want aivis", draft.Chunks[2].TTSProvider)
+	}
+}
+
+func TestBuildAudioBriefingDraftUsesProgramNameInFallbackOpening(t *testing.T) {
+	title := "原題"
+	translated := "翻訳題"
+	source := "Tech"
+	summary := "要約本文です。"
+	voice := &model.AudioBriefingPersonaVoice{
+		Persona:     "editor",
+		TTSProvider: "aivis",
+		VoiceModel:  "speaker-a",
+		VoiceStyle:  "calm",
+	}
+	draft := BuildAudioBriefingDraft(
+		time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST),
+		"editor",
+		[]model.AudioBriefingJobItem{{
+			ItemID:          "item-1",
+			Rank:            1,
+			Title:           &title,
+			TranslatedTitle: &translated,
+			SourceTitle:     &source,
+			SummarySnapshot: &summary,
+		}},
+		voice,
+		"Morning Sifto",
+		0,
+	)
+	if !strings.Contains(draft.Chunks[0].Text, "Morning Sifto") {
+		t.Fatalf("opening = %q, want program name included", draft.Chunks[0].Text)
 	}
 }
 
@@ -93,6 +125,7 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 			},
 			Ending: "続きはSiftoで確認してください。",
 		},
+		"",
 		0,
 	)
 	if draft.Status != "scripted" {
@@ -115,6 +148,48 @@ func TestBuildAudioBriefingDraftFromNarrationUsesNarration(t *testing.T) {
 	}
 	if got := draft.Chunks[3].Text; got != "続きはSiftoで確認してください。" {
 		t.Fatalf("ending = %q", got)
+	}
+}
+
+func TestBuildAudioBriefingDraftFromNarrationUsesProgramNameWhenOpeningMissing(t *testing.T) {
+	title := "原題"
+	translated := "翻訳題"
+	source := "Tech"
+	summary := "要約本文です。"
+	voice := &model.AudioBriefingPersonaVoice{
+		Persona:     "editor",
+		TTSProvider: "aivis",
+		VoiceModel:  "speaker-a",
+		VoiceStyle:  "calm",
+	}
+	draft := BuildAudioBriefingDraftFromNarration(
+		time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST),
+		"editor",
+		[]model.AudioBriefingJobItem{{
+			ItemID:          "item-1",
+			Rank:            1,
+			Title:           &title,
+			TranslatedTitle: &translated,
+			SourceTitle:     &source,
+			SummarySnapshot: &summary,
+		}},
+		voice,
+		AudioBriefingNarration{
+			OverallSummary: "全体像です。",
+			Articles: map[string]AudioBriefingNarrationArticle{
+				"item-1": {
+					Headline:     "見出しです",
+					SummaryIntro: "導入です",
+					Commentary:   "コメントです",
+				},
+			},
+			Ending: "締めです。",
+		},
+		"Morning Sifto",
+		0,
+	)
+	if !strings.Contains(draft.Chunks[0].Text, "Morning Sifto") {
+		t.Fatalf("opening = %q, want program name included", draft.Chunks[0].Text)
 	}
 }
 
@@ -272,6 +347,7 @@ func TestBuildAudioBriefingDraftDoesNotAddBlankLineBetweenSections(t *testing.T)
 			SummarySnapshot: &summary,
 		}},
 		nil,
+		"",
 		0,
 	)
 
@@ -302,6 +378,7 @@ func TestBuildAudioBriefingDraftUsesClosingEndingFallback(t *testing.T) {
 			SummarySnapshot: &summary,
 		}},
 		nil,
+		"",
 		0,
 	)
 
@@ -365,6 +442,7 @@ func TestBuildAudioBriefingDraftFromNarrationPreservesGeneratedSectionText(t *te
 			},
 			Ending: longEnding,
 		},
+		"",
 		1200,
 	)
 
@@ -408,6 +486,7 @@ func TestBuildAudioBriefingDraftFromNarrationDoesNotSplitSingleArticleIntoMultip
 			},
 			Ending: "締めです。",
 		},
+		"",
 		1200,
 	)
 

@@ -859,6 +859,8 @@ export const enDict: Dict = {
   "settings.audioBriefing.interval": "Generation interval",
   "settings.audioBriefing.interval3h": "Every 3 hours",
   "settings.audioBriefing.interval6h": "Every 6 hours",
+  "settings.audioBriefing.programName": "Program name",
+  "settings.audioBriefing.programNameHelp": "The Audio Briefing-specific show name. It is passed into both the LLM system prompt and prompt variables, and can shape the opening wording and overall show tone.",
   "settings.audioBriefing.articlesPerEpisode": "Items per episode",
   "settings.audioBriefing.targetDuration": "Target duration (min)",
   "settings.audioBriefing.chunkTrailingSilenceSeconds": "Chunk trailing silence (sec)",

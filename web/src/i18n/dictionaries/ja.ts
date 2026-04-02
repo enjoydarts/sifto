@@ -859,6 +859,8 @@ export const jaDict: Dict = {
   "settings.audioBriefing.interval": "生成間隔",
   "settings.audioBriefing.interval3h": "3時間ごと",
   "settings.audioBriefing.interval6h": "6時間ごと",
+  "settings.audioBriefing.programName": "番組名",
+  "settings.audioBriefing.programNameHelp": "Audio Briefing 専用の番組名です。LLM の system / prompt 両方に渡され、導入の呼称や番組全体のトーンに使われます。",
   "settings.audioBriefing.articlesPerEpisode": "1エピソードの記事本数",
   "settings.audioBriefing.targetDuration": "目標再生時間（分）",
   "settings.audioBriefing.chunkTrailingSilenceSeconds": "チャンク間の無音（秒）",

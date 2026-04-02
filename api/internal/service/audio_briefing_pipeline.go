@@ -406,8 +406,12 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 	if voice == nil {
 		return AudioBriefingDraft{}, fmt.Errorf("audio briefing voice is not configured")
 	}
+	briefingSettings, err := o.repo.EnsureSettingsDefaults(ctx, userID)
+	if err != nil {
+		return AudioBriefingDraft{}, err
+	}
 	if len(items) == 0 {
-		return BuildAudioBriefingDraft(slotStartedAt, persona, items, voice, targetChars), nil
+		return BuildAudioBriefingDraft(slotStartedAt, persona, items, voice, stringValue(briefingSettings.ProgramName), targetChars), nil
 	}
 	if o.settingsRepo == nil || o.worker == nil || o.cipher == nil {
 		return AudioBriefingDraft{}, fmt.Errorf("audio briefing script dependencies are unavailable")
@@ -438,7 +442,7 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenAIAPIKeyEncrypted, o.cipher, userID, "")
 
 	normalizedPersona := normalizeAudioBriefingPersona(persona)
-	introContext := buildAudioBriefingIntroContext(slotStartedAt)
+	introContext := buildAudioBriefingIntroContext(slotStartedAt, briefingSettings.ProgramName)
 	workerArticles := make([]AudioBriefingScriptArticle, 0, len(items))
 	for _, item := range items {
 		var publishedAt *string
@@ -592,7 +596,7 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 		}
 	}
 
-	draft := BuildAudioBriefingDraftFromNarration(slotStartedAt, normalizedPersona, items, voice, narration, targetChars)
+	draft := BuildAudioBriefingDraftFromNarration(slotStartedAt, normalizedPersona, items, voice, narration, stringValue(briefingSettings.ProgramName), targetChars)
 	draft.ScriptLLMModels = scriptLLMModels
 	if promptResolution.PromptKey != "" {
 		draft.PromptKey = &promptResolution.PromptKey
@@ -621,8 +625,12 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	if hostVoice == nil {
 		return AudioBriefingDraft{}, fmt.Errorf("audio briefing host voice is not configured")
 	}
+	briefingSettings, err := o.repo.EnsureSettingsDefaults(ctx, job.UserID)
+	if err != nil {
+		return AudioBriefingDraft{}, err
+	}
 	if len(items) == 0 {
-		return BuildAudioBriefingDraft(job.SlotStartedAtJST, job.Persona, items, hostVoice, targetChars), nil
+		return BuildAudioBriefingDraft(job.SlotStartedAtJST, job.Persona, items, hostVoice, stringValue(briefingSettings.ProgramName), targetChars), nil
 	}
 	if o.settingsRepo == nil || o.worker == nil || o.cipher == nil || o.repo == nil {
 		return AudioBriefingDraft{}, fmt.Errorf("audio briefing duo script dependencies are unavailable")
@@ -658,7 +666,7 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetSiliconFlowAPIKeyEncrypted, o.cipher, job.UserID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenAIAPIKeyEncrypted, o.cipher, job.UserID, "")
 
-	introContext := buildAudioBriefingIntroContext(job.SlotStartedAtJST)
+	introContext := buildAudioBriefingIntroContext(job.SlotStartedAtJST, briefingSettings.ProgramName)
 	workerArticles := make([]AudioBriefingScriptArticle, 0, len(items))
 	for _, item := range items {
 		var publishedAt *string
@@ -1891,15 +1899,19 @@ func hasAudioBriefingProviderKey(settings *model.UserSettings, provider string) 
 	}
 }
 
-func buildAudioBriefingIntroContext(now time.Time) map[string]any {
+func buildAudioBriefingIntroContext(now time.Time, programName *string) map[string]any {
 	now = now.In(timeutil.JST)
-	return map[string]any{
+	out := map[string]any{
 		"now_jst":     now.Format(time.RFC3339),
 		"date_jst":    now.Format("2006-01-02"),
 		"weekday_jst": now.Weekday().String(),
 		"time_of_day": audioBriefingTimeOfDay(now.Hour()),
 		"season_hint": audioBriefingSeasonHint(now),
 	}
+	if programName != nil && strings.TrimSpace(*programName) != "" {
+		out["program_name"] = strings.TrimSpace(*programName)
+	}
+	return out
 }
 
 func audioBriefingTimeOfDay(hour int) string {

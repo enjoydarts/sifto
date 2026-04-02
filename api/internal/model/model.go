@@ -111,6 +111,7 @@ type AudioBriefingSettings struct {
 	ArticlesPerEpisode          int       `json:"articles_per_episode"`
 	TargetDurationMinutes       int       `json:"target_duration_minutes"`
 	ChunkTrailingSilenceSeconds float64   `json:"chunk_trailing_silence_seconds"`
+	ProgramName                 *string   `json:"program_name,omitempty"`
 	DefaultPersonaMode          string    `json:"default_persona_mode"`
 	DefaultPersona              string    `json:"default_persona"`
 	ConversationMode            string    `json:"conversation_mode"`

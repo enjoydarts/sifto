@@ -361,6 +361,7 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 		ArticlesPerEpisode          int     `json:"articles_per_episode"`
 		TargetDurationMinutes       int     `json:"target_duration_minutes"`
 		ChunkTrailingSilenceSeconds float64 `json:"chunk_trailing_silence_seconds"`
+		ProgramName                 *string `json:"program_name"`
 		DefaultPersonaMode          *string `json:"default_persona_mode"`
 		DefaultPersona              *string `json:"default_persona"`
 		ConversationMode            *string `json:"conversation_mode"`
@@ -377,6 +378,7 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 		ArticlesPerEpisode:          body.ArticlesPerEpisode,
 		TargetDurationMinutes:       body.TargetDurationMinutes,
 		ChunkTrailingSilenceSeconds: body.ChunkTrailingSilenceSeconds,
+		ProgramName:                 body.ProgramName,
 		DefaultPersonaMode:          body.DefaultPersonaMode,
 		DefaultPersona:              body.DefaultPersona,
 		ConversationMode:            body.ConversationMode,
@@ -385,7 +387,7 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 	})
 	if err != nil {
 		switch err.Error() {
-		case "invalid interval_hours", "invalid articles_per_episode", "invalid target_duration_minutes", "invalid chunk_trailing_silence_seconds", "invalid bgm_r2_prefix":
+		case "invalid interval_hours", "invalid articles_per_episode", "invalid target_duration_minutes", "invalid chunk_trailing_silence_seconds", "invalid program_name", "invalid bgm_r2_prefix":
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

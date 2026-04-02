@@ -39,7 +39,7 @@ func (r *AudioBriefingRepo) EnsureSettingsDefaults(ctx context.Context, userID s
 func (r *AudioBriefingRepo) GetSettings(ctx context.Context, userID string) (*model.AudioBriefingSettings, error) {
 	var v model.AudioBriefingSettings
 	err := r.db.QueryRow(ctx, `
-		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix, created_at, updated_at
+		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, program_name, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix, created_at, updated_at
 		FROM audio_briefing_settings
 		WHERE user_id = $1
 	`, userID).Scan(
@@ -49,6 +49,7 @@ func (r *AudioBriefingRepo) GetSettings(ctx context.Context, userID string) (*mo
 		&v.ArticlesPerEpisode,
 		&v.TargetDurationMinutes,
 		&v.ChunkTrailingSilenceSeconds,
+		&v.ProgramName,
 		&v.DefaultPersonaMode,
 		&v.DefaultPersona,
 		&v.ConversationMode,
@@ -65,7 +66,7 @@ func (r *AudioBriefingRepo) GetSettings(ctx context.Context, userID string) (*mo
 
 func (r *AudioBriefingRepo) ListEnabledSettings(ctx context.Context) ([]model.AudioBriefingSettings, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix, created_at, updated_at
+		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, program_name, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix, created_at, updated_at
 		FROM audio_briefing_settings
 		WHERE enabled = TRUE
 		ORDER BY updated_at ASC, user_id ASC
@@ -85,6 +86,7 @@ func (r *AudioBriefingRepo) ListEnabledSettings(ctx context.Context) ([]model.Au
 			&row.ArticlesPerEpisode,
 			&row.TargetDurationMinutes,
 			&row.ChunkTrailingSilenceSeconds,
+			&row.ProgramName,
 			&row.DefaultPersonaMode,
 			&row.DefaultPersona,
 			&row.ConversationMode,
@@ -100,7 +102,7 @@ func (r *AudioBriefingRepo) ListEnabledSettings(ctx context.Context) ([]model.Au
 	return out, rows.Err()
 }
 
-func (r *AudioBriefingRepo) UpsertSettings(ctx context.Context, userID string, enabled bool, intervalHours, articlesPerEpisode, targetDurationMinutes int, chunkTrailingSilenceSeconds float64, defaultPersonaMode string, defaultPersona string, conversationMode string, bgmEnabled bool, bgmR2Prefix *string) (*model.AudioBriefingSettings, error) {
+func (r *AudioBriefingRepo) UpsertSettings(ctx context.Context, userID string, enabled bool, intervalHours, articlesPerEpisode, targetDurationMinutes int, chunkTrailingSilenceSeconds float64, programName *string, defaultPersonaMode string, defaultPersona string, conversationMode string, bgmEnabled bool, bgmR2Prefix *string) (*model.AudioBriefingSettings, error) {
 	if strings.TrimSpace(defaultPersona) == "" {
 		defaultPersona = "editor"
 	}
@@ -112,21 +114,22 @@ func (r *AudioBriefingRepo) UpsertSettings(ctx context.Context, userID string, e
 	}
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO audio_briefing_settings (
-			user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, program_name, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (user_id) DO UPDATE
 		SET enabled = EXCLUDED.enabled,
 		    interval_hours = EXCLUDED.interval_hours,
 		    articles_per_episode = EXCLUDED.articles_per_episode,
 		    target_duration_minutes = EXCLUDED.target_duration_minutes,
 		    chunk_trailing_silence_seconds = EXCLUDED.chunk_trailing_silence_seconds,
+		    program_name = EXCLUDED.program_name,
 		    default_persona_mode = EXCLUDED.default_persona_mode,
 		    default_persona = EXCLUDED.default_persona,
 		    conversation_mode = EXCLUDED.conversation_mode,
 		    bgm_enabled = EXCLUDED.bgm_enabled,
 		    bgm_r2_prefix = EXCLUDED.bgm_r2_prefix,
 		    updated_at = NOW()
-	`, userID, enabled, intervalHours, articlesPerEpisode, targetDurationMinutes, chunkTrailingSilenceSeconds, defaultPersonaMode, defaultPersona, conversationMode, bgmEnabled, bgmR2Prefix)
+	`, userID, enabled, intervalHours, articlesPerEpisode, targetDurationMinutes, chunkTrailingSilenceSeconds, programName, defaultPersonaMode, defaultPersona, conversationMode, bgmEnabled, bgmR2Prefix)
 	if err != nil {
 		return nil, err
 	}

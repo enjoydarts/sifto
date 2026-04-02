@@ -65,6 +65,20 @@ def _looks_cjk_utf8_mojibake(text: str) -> bool:
     return suspicious * 2 >= non_ascii
 
 
+def _looks_latin_box_utf8_mojibake(text: str) -> bool:
+    sample = (text or "")[:8192]
+    if not sample:
+        return False
+    latin_suspicious = sum(1 for ch in sample if 0x00C0 <= ord(ch) <= 0x024F)
+    box_suspicious = sum(1 for ch in sample if 0x2500 <= ord(ch) <= 0x259F)
+    if latin_suspicious < 8 or box_suspicious < 2:
+        return False
+    non_ascii = sum(1 for ch in sample if ord(ch) > 127)
+    if non_ascii == 0:
+        return False
+    return (latin_suspicious + box_suspicious) * 4 >= non_ascii * 3
+
+
 def _declared_charset_in_text(text: str) -> str | None:
     head = (text or "")[:8192]
     for pattern in _META_CHARSET_TEXT_PATTERNS:
@@ -87,11 +101,15 @@ def _needs_refetch(downloaded: str | None) -> bool:
         return True
     if declared in {"utf-8", "utf8"} and _looks_cjk_utf8_mojibake(downloaded):
         return True
+    if declared in {"utf-8", "utf8"} and _looks_latin_box_utf8_mojibake(downloaded):
+        return True
     if declared in {"shift_jis", "shift-jis", "sjis", "cp932", "ms932", "windows-31j"} and "\ufffd" in downloaded:
         return True
     if _looks_utf8_legacy_mojibake(downloaded):
         return True
     if _looks_cjk_utf8_mojibake(downloaded):
+        return True
+    if _looks_latin_box_utf8_mojibake(downloaded):
         return True
     return False
 

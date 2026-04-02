@@ -183,6 +183,43 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "「なんか記事文字化けする」入力からAIが2ちゃんねる風UIでレス生成するシミュレーターが登場")
         self.assertEqual(result["content"], "スレタイと最初のコメントを入力するとAIがレスを生成する。")
 
+    def test_extract_body_refetches_when_utf8_page_is_decoded_as_latin_box_mojibake(self):
+        html = "<html><head><meta charset=\"utf-8\"><title>NASAは4年1か月ぶりに有人月探査へ向けたロケット『SLS』の打ち上げを目指す。</title></head><body>アルテミス計画の進捗をまとめる。</body></html>"
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.headers = {"content-type": "text/html; charset=utf-8"}
+        response.content = html.encode("utf-8")
+        response.url = "https://example.com/final"
+        response.text = html
+        captured = {}
+        fetched = (
+            "<html><head>"
+            + ("a" * 3900)
+            + '<meta charset="utf-8" />'
+            + "ü@Ľ─NASAé═4îÄ1ô˙üiî╗ĺnÄ×ŐďüjüAŚLÉlëFĺłĹDüuâIâŐâIâôüvéôőŹ┌éÁéŻĹňî^âŹâPâbâgüuSLSüvé╠Ĺ┼é┐ĆŃé░é╔ÉČî¸éÁéŻüB"
+            + "</head></html>"
+        )
+
+        def fake_bare_extraction(downloaded, **kwargs):
+            captured["downloaded"] = downloaded
+            return {
+                "title": "NASAは4年1か月ぶりに有人月探査へ向けたロケット『SLS』の打ち上げを目指す。",
+                "text": "アルテミス計画の進捗をまとめる。",
+                "date": None,
+            }
+
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=fetched), patch(
+            "app.services.trafilatura_service.httpx.get", return_value=response
+        ), patch(
+            "app.services.trafilatura_service.trafilatura.bare_extraction",
+            side_effect=fake_bare_extraction,
+        ):
+            result = extract_body("https://example.com/start")
+
+        self.assertIn("NASAは4年1か月ぶり", captured["downloaded"])
+        self.assertEqual(result["title"], "NASAは4年1か月ぶりに有人月探査へ向けたロケット『SLS』の打ち上げを目指す。")
+        self.assertEqual(result["content"], "アルテミス計画の進捗をまとめる。")
+
 
 if __name__ == "__main__":
     unittest.main()

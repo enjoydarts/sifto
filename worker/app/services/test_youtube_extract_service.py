@@ -106,11 +106,17 @@ class YoutubeExtractServiceTests(unittest.TestCase):
             ["yt-dlp", "--dump-single-json"],
             stderr="ERROR: Sign in to confirm you’re not a bot. This helps protect our community.",
         )
+        verbose_result = subprocess.CompletedProcess(
+            ["yt-dlp", "-v", "--dump-single-json"],
+            1,
+            stdout="",
+            stderr="[debug] [youtube] [pot] PO Token Providers: bgutil:http-1.3.1 (external)",
+        )
 
-        with patch("app.services.youtube_extract_service.subprocess.run", side_effect=err):
+        with patch("app.services.youtube_extract_service.subprocess.run", side_effect=[err, verbose_result]):
             with self.assertRaisesRegex(
                 RuntimeError,
-                "yt-dlp metadata fetch failed: cookies_present=False extractor_args_present=False pot_provider_present=False ERROR: Sign in to confirm you’re not a bot",
+                r"yt-dlp metadata fetch failed: cookies_present=False extractor_args_present=False pot_provider_present=False .*debug=\[debug\] \[youtube\] \[pot\] PO Token Providers: bgutil:http-1.3.1 \(external\)",
             ):
                 extract_body("https://www.youtube.com/watch?v=abc123")
 

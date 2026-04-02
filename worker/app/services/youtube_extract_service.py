@@ -31,6 +31,7 @@ _LANGUAGE_PREFERENCE = [
 
 _FORMAT_PREFERENCE = ["json3", "vtt", "srv3", "srv2", "srv1", "ttml"]
 _YTDLP_ERROR_LIMIT = 500
+_YTDLP_DEBUG_SNIPPET_LIMIT = 800
 
 
 class YouTubeTranscriptUnavailableError(RuntimeError):
@@ -98,7 +99,7 @@ def extract_body(url: str) -> dict | None:
 
 
 def _load_video_metadata(url: str) -> dict:
-    cmd = ["yt-dlp", "--dump-single-json", "--no-warnings", "--skip-download", "--ignore-no-formats-error"]
+    cmd = _build_ytdlp_metadata_command(verbose=False)
     extractor_args = (os.getenv("YTDLP_EXTRACTOR_ARGS") or "").strip()
     pot_provider_args = _build_pot_provider_extractor_args()
     cookies_path = _write_ytdlp_cookies_file()
@@ -121,6 +122,9 @@ def _load_video_metadata(url: str) -> dict:
             proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as exc:
             detail = _truncate_error_detail(exc.stderr or exc.stdout or str(exc))
+            debug_detail = _collect_ytdlp_debug_details(url, extractor_args, pot_provider_args, cookies_path)
+            if debug_detail:
+                detail = f"{detail} debug={debug_detail}"
             raise RuntimeError(
                 f"yt-dlp metadata fetch failed: cookies_present={bool(cookies_path)} "
                 f"extractor_args_present={bool(extractor_args)} "
@@ -168,6 +172,50 @@ def _build_pot_provider_extractor_args() -> str:
     if _env_truthy("YTDLP_POT_PROVIDER_DISABLE_INNERTUBE"):
         parts.append("disable_innertube=1")
     return "youtubepot-bgutilhttp:" + ";".join(parts)
+
+
+def _build_ytdlp_metadata_command(*, verbose: bool) -> list[str]:
+    cmd = ["yt-dlp"]
+    if verbose:
+        cmd.append("-v")
+    cmd.extend(["--dump-single-json", "--no-warnings", "--skip-download", "--ignore-no-formats-error"])
+    return cmd
+
+
+def _collect_ytdlp_debug_details(
+    url: str,
+    extractor_args: str,
+    pot_provider_args: str,
+    cookies_path: str | None,
+) -> str:
+    debug_cmd = _build_ytdlp_metadata_command(verbose=True)
+    if extractor_args:
+        debug_cmd.extend(["--extractor-args", extractor_args])
+    if pot_provider_args:
+        debug_cmd.extend(["--extractor-args", pot_provider_args])
+    if cookies_path:
+        debug_cmd.extend(["--cookies", cookies_path])
+    debug_cmd.append(url)
+    try:
+        proc = subprocess.run(debug_cmd, capture_output=True, text=True, check=False)
+    except Exception as exc:
+        return f"verbose_run_failed={type(exc).__name__}"
+    merged = "\n".join(part for part in [proc.stderr or "", proc.stdout or ""] if part).strip()
+    if not merged:
+        return ""
+    focus_lines: list[str] = []
+    for raw_line in merged.splitlines():
+        line = raw_line.strip()
+        lower = line.lower()
+        if "po token providers" in lower or "youtubepot" in lower or "bgutil" in lower or "plugin" in lower:
+            focus_lines.append(line)
+    if not focus_lines:
+        focus_lines = [line.strip() for line in merged.splitlines()[:8] if line.strip()]
+    snippet = " | ".join(focus_lines)
+    snippet = re.sub(r"\s+", " ", snippet).strip()
+    if len(snippet) > _YTDLP_DEBUG_SNIPPET_LIMIT:
+        snippet = snippet[:_YTDLP_DEBUG_SNIPPET_LIMIT] + "..."
+    return snippet
 
 
 def _env_truthy(name: str) -> bool:

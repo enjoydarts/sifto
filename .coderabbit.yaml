@@ -3,3 +3,6 @@ reviews:
   pull_request_opened: true
   pull_request_synchronize: true
   language: ja
+sequence_diagrams: true
+high_level_summary: true
+high_level_summary_in_walkthrough: true

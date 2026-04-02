@@ -108,7 +108,10 @@ class YoutubeExtractServiceTests(unittest.TestCase):
         )
 
         with patch("app.services.youtube_extract_service.subprocess.run", side_effect=err):
-            with self.assertRaisesRegex(RuntimeError, "yt-dlp metadata fetch failed: cookies_present=False ERROR: Sign in to confirm you’re not a bot"):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "yt-dlp metadata fetch failed: cookies_present=False extractor_args_present=False ERROR: Sign in to confirm you’re not a bot",
+            ):
                 extract_body("https://www.youtube.com/watch?v=abc123")
 
     def test_extract_body_passes_temp_cookie_file_when_env_is_set(self):
@@ -144,3 +147,31 @@ class YoutubeExtractServiceTests(unittest.TestCase):
         self.assertIn("--ignore-no-formats-error", captured["cmd"])
         self.assertIn("#HTTP Cookie File", captured["cookies_content"])
         self.assertFalse(os.path.exists(captured["cookies_path"]))
+
+    def test_extract_body_passes_extractor_args_when_env_is_set(self):
+        metadata = {
+            "title": "Video Title",
+            "subtitles": {},
+            "automatic_captions": {"en": [{"ext": "vtt", "url": "https://subs.example/en.vtt"}]},
+        }
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.text = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nEnglish line"
+        captured = {}
+
+        def fake_run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return Mock(stdout='{"ignored": true}')
+
+        with patch.dict(
+            os.environ,
+            {"YTDLP_EXTRACTOR_ARGS": "youtube:player_client=mweb,android"},
+            clear=False,
+        ), patch("app.services.youtube_extract_service.subprocess.run", side_effect=fake_run), patch(
+            "app.services.youtube_extract_service.json.loads", return_value=metadata
+        ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
+            result = extract_body("https://youtu.be/abc123")
+
+        self.assertEqual(result["content"], "English line")
+        self.assertIn("--extractor-args", captured["cmd"])
+        self.assertIn("youtube:player_client=mweb,android", captured["cmd"])

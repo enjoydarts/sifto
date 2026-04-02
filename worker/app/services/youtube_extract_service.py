@@ -91,8 +91,16 @@ def extract_body(url: str) -> dict | None:
 
 def _load_video_metadata(url: str) -> dict:
     cmd = ["yt-dlp", "--dump-single-json", "--no-warnings", "--skip-download", "--ignore-no-formats-error"]
+    extractor_args = (os.getenv("YTDLP_EXTRACTOR_ARGS") or "").strip()
     cookies_path = _write_ytdlp_cookies_file()
-    _log.info("youtube metadata fetch url=%s cookies_present=%s", url, bool(cookies_path))
+    _log.info(
+        "youtube metadata fetch url=%s cookies_present=%s extractor_args_present=%s",
+        url,
+        bool(cookies_path),
+        bool(extractor_args),
+    )
+    if extractor_args:
+        cmd.extend(["--extractor-args", extractor_args])
     if cookies_path:
         cmd.extend(["--cookies", cookies_path])
     cmd.append(url)
@@ -101,7 +109,10 @@ def _load_video_metadata(url: str) -> dict:
             proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as exc:
             detail = _truncate_error_detail(exc.stderr or exc.stdout or str(exc))
-            raise RuntimeError(f"yt-dlp metadata fetch failed: cookies_present={bool(cookies_path)} {detail}") from exc
+            raise RuntimeError(
+                f"yt-dlp metadata fetch failed: cookies_present={bool(cookies_path)} "
+                f"extractor_args_present={bool(extractor_args)} {detail}"
+            ) from exc
     finally:
         if cookies_path:
             try:

@@ -89,13 +89,19 @@ class YoutubeExtractServiceTests(unittest.TestCase):
         response = Mock()
         response.raise_for_status.return_value = None
         response.text = ""
+        verbose_result = subprocess.CompletedProcess(
+            ["yt-dlp", "-v", "--dump-single-json"],
+            0,
+            stdout="",
+            stderr="[debug] [youtube] [pot] PO Token Providers: bgutil:http-1.3.1 (external)",
+        )
 
-        with patch("app.services.youtube_extract_service.subprocess.run", return_value=proc), patch(
+        with patch("app.services.youtube_extract_service.subprocess.run", side_effect=[proc, verbose_result]), patch(
             "app.services.youtube_extract_service.json.loads", return_value=metadata
         ), patch("app.services.youtube_extract_service.httpx.get", return_value=response):
             with self.assertRaisesRegex(
                 YouTubeTranscriptUnavailableError,
-                r"youtube transcript unavailable: .*cookies_present=False.*extractor_args_present=False.*pot_provider_present=False.*manual_langs=\['fr'\].*auto_langs=\['en-US'\].*auto_exts=\['srv3'\]",
+                r"youtube transcript unavailable: .*cookies_present=False.*extractor_args_present=False.*pot_provider_present=False.*manual_langs=\['fr'\].*auto_langs=\['en-US'\].*auto_exts=\['srv3'\].*debug=\[debug\] \[youtube\] \[pot\] PO Token Providers: bgutil:http-1.3.1 \(external\)",
             ) as ctx:
                 extract_body("https://www.youtube.com/watch?v=abc123")
         self.assertEqual(ctx.exception.title, "Video Title")

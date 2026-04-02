@@ -69,33 +69,46 @@ def extract_body(url: str) -> dict | None:
     extractor_args = (os.getenv("YTDLP_EXTRACTOR_ARGS") or "").strip()
     cookies_present = bool((os.getenv("YTDLP_COOKIES_B64") or "").strip())
     pot_provider_present = bool((os.getenv("YTDLP_POT_PROVIDER_BASE_URL") or "").strip())
-    metadata = _load_video_metadata(url)
-    title = str(metadata.get("title") or "").strip()
-    if not title:
-        raise RuntimeError("youtube metadata unavailable")
+    pot_provider_args = _build_pot_provider_extractor_args()
+    cookies_path = _write_ytdlp_cookies_file()
+    try:
+        metadata = _load_video_metadata(url)
+        title = str(metadata.get("title") or "").strip()
+        if not title:
+            raise RuntimeError("youtube metadata unavailable")
 
-    published_at = _normalize_upload_date(str(metadata.get("upload_date") or "").strip())
-    image_url = str(metadata.get("thumbnail") or "").strip() or None
-    transcript = _extract_transcript(metadata)
-    if not transcript:
-        raise YouTubeTranscriptUnavailableError(
-            title=title,
-            published_at=published_at,
-            image_url=image_url,
-            diagnostics=(
+        published_at = _normalize_upload_date(str(metadata.get("upload_date") or "").strip())
+        image_url = str(metadata.get("thumbnail") or "").strip() or None
+        transcript = _extract_transcript(metadata)
+        if not transcript:
+            debug_detail = _collect_ytdlp_debug_details(url, extractor_args, pot_provider_args, cookies_path)
+            diagnostics = (
                 f"cookies_present={cookies_present} "
                 f"extractor_args_present={bool(extractor_args)} "
                 f"pot_provider_present={pot_provider_present} "
                 f"{_describe_available_transcripts(metadata)}"
-            ).strip(),
-        )
+            ).strip()
+            if debug_detail:
+                diagnostics = f"{diagnostics} debug={debug_detail}"
+            raise YouTubeTranscriptUnavailableError(
+                title=title,
+                published_at=published_at,
+                image_url=image_url,
+                diagnostics=diagnostics,
+            )
 
-    return {
-        "title": title,
-        "content": transcript,
-        "published_at": published_at,
-        "image_url": image_url,
-    }
+        return {
+            "title": title,
+            "content": transcript,
+            "published_at": published_at,
+            "image_url": image_url,
+        }
+    finally:
+        if cookies_path:
+            try:
+                os.unlink(cookies_path)
+            except FileNotFoundError:
+                pass
 
 
 def _load_video_metadata(url: str) -> dict:

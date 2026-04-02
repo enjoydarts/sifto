@@ -994,9 +994,7 @@ export default function ItemDetailPage() {
                 type="button"
                 onClick={retryItem}
                 disabled={retryUpdating || disableMutations}
-                  className={`w-full rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-2.5 text-[13px] font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${
-                    item.status === "new" ? "hidden" : ""
-                  }`}
+                className="w-full rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-2.5 text-[13px] font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
                 {retryUpdating ? t("common.saving") : t("itemDetail.retrySummary")}
               </button>

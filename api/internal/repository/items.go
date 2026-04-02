@@ -1995,8 +1995,6 @@ func (r *ItemRepo) ResetForExtractRetry(ctx context.Context, id, userID string) 
 	if _, err := tx.Exec(ctx, `
 		UPDATE items
 		SET status = 'new',
-		    title = NULL,
-		    thumbnail_url = NULL,
 		    content_text = NULL,
 		    fetched_at = NULL,
 		    processing_error = NULL,
@@ -2005,8 +2003,6 @@ func (r *ItemRepo) ResetForExtractRetry(ctx context.Context, id, userID string) 
 		return nil, err
 	}
 	it.Status = "new"
-	it.Title = nil
-	it.ThumbnailURL = nil
 	it.ContentText = nil
 	it.Summary = nil
 

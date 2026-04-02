@@ -800,8 +800,6 @@ export default function ItemDetailPage() {
         ...prev,
         status: "new" as const,
         processing_error: null,
-        title: null,
-        thumbnail_url: null,
         content_text: null,
         facts: null,
         facts_llm: null,

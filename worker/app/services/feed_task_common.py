@@ -1404,8 +1404,10 @@ def parse_audio_briefing_script_result(
     include_article_segments: bool = True,
     include_ending: bool = True,
 ) -> dict:
-    data = extract_first_json_object(text) or {}
     normalized_conversation_mode = str(conversation_mode or "single").strip().lower()
+    if normalized_conversation_mode == "duo":
+        _raise_if_audio_briefing_turn_text_embeds_turns_payload(text)
+    data = extract_first_json_object(text) or {}
     turns_value = data.get("turns") if isinstance(data, dict) else None
     raw_turns = turns_value if isinstance(turns_value, list) else []
     if normalized_conversation_mode == "duo" and raw_turns:
@@ -1423,6 +1425,9 @@ def parse_audio_briefing_script_result(
             text_value = _normalize_audio_briefing_generated_text(str(raw.get("text") or "").strip())
             if not text_value:
                 raise ValueError(f"audio briefing script missing text for turn index: {index}")
+            embedded = extract_first_json_object(text_value)
+            if isinstance(embedded, dict) and isinstance(embedded.get("turns"), list):
+                raise ValueError(f"audio briefing script embedded turns payload for turn index: {index}")
             if section == "article":
                 if not item_id:
                     raise ValueError(f"audio briefing script missing item_id for article turn index: {index}")
@@ -1512,6 +1517,18 @@ def parse_audio_briefing_script_result(
     }
 
 
+def _raise_if_audio_briefing_turn_text_embeds_turns_payload(text: str) -> None:
+    snippet = strip_code_fence(text)
+    if not snippet:
+        return
+    text_field_pattern = re.compile(r'"text"\s*:\s*"', re.S)
+    embedded_turns_head_pattern = re.compile(r'\{\s*(?:\\)?"turns(?:\\)?"\s*:', re.S)
+    for index, match in enumerate(text_field_pattern.finditer(snippet), start=1):
+        tail = snippet[match.end() : match.end() + 240]
+        if embedded_turns_head_pattern.match(tail):
+            raise ValueError(f"audio briefing script embedded turns payload for turn index: {index}")
+
+
 _AUDIO_BRIEFING_SCRIPT_RETRYABLE_ERROR_MARKERS = (
     "audio briefing script missing opening",
     "audio briefing script missing overall_summary",
@@ -1523,6 +1540,7 @@ _AUDIO_BRIEFING_SCRIPT_RETRYABLE_ERROR_MARKERS = (
     "audio briefing script missing speaker for turn index:",
     "audio briefing script missing section for turn index:",
     "audio briefing script missing text for turn index:",
+    "audio briefing script embedded turns payload for turn index:",
     "audio briefing script missing item_id for article turn index:",
     "audio briefing script missing headline for item_id:",
     "audio briefing script missing summary_intro for item_id:",

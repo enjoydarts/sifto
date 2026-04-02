@@ -630,6 +630,33 @@ class FeedTaskCommonTests(unittest.TestCase):
                 conversation_mode="duo",
             )
 
+    def test_parse_audio_briefing_script_result_rejects_embedded_turns_payload_in_turn_text(self):
+        with self.assertRaisesRegex(ValueError, "audio briefing script embedded turns payload for turn index: 1"):
+            parse_audio_briefing_script_result(
+                """
+                {
+                  "turns": [
+                    {
+                      "speaker": "host",
+                      "section": "article",
+                      "item_id": "item-1",
+                      "text": "{\"turns\":[{\"speaker\":\"host\",\"section\":\"article\",\"item_id\":\"item-1\",\"text\":\"まずはこの記事です。\"}]}"
+                    }
+                  ]
+                }
+                """,
+                [
+                    {
+                        "item_id": "item-1",
+                        "title": "Example title",
+                        "translated_title": "翻訳タイトル",
+                        "summary": "Summary text",
+                    }
+                ],
+                "editor",
+                conversation_mode="duo",
+            )
+
     def test_parse_audio_briefing_script_result_single_rejects_turns_only_payload(self):
         with self.assertRaisesRegex(ValueError, "audio briefing script missing opening"):
             parse_audio_briefing_script_result(

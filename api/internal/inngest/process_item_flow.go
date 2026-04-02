@@ -79,6 +79,13 @@ func shouldRetryExtractBody(attempt int, err error) bool {
 	return attempt < 2
 }
 
+func shouldDeleteOnExtractBodyFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "youtube transcript unavailable")
+}
+
 var extractComparablePunctuation = regexp.MustCompile(`[[:punct:]\p{P}\p{S}]+`)
 
 func invalidExtractReason(title *string, content string) string {

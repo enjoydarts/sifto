@@ -2300,7 +2300,10 @@ func processItemFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.Wo
 				}
 				log.Printf("process-item extract-body failed item_id=%s attempt=%d err=%v", itemID, attempt+1, err)
 				if !shouldRetryExtractBody(attempt, err) {
-					return nil, markProcessItemDeleted(ctx, deps.itemRepo, deps.cache, itemID, "extract body retried and deleted", err)
+					if shouldDeleteOnExtractBodyFailure(err) {
+						return nil, markProcessItemDeleted(ctx, deps.itemRepo, deps.cache, itemID, "extract body retried and deleted", err)
+					}
+					return nil, markProcessItemFailed(ctx, deps.itemRepo, deps.cache, itemID, "extract body retried and failed", err)
 				}
 			}
 			log.Printf("process-item extract-body done item_id=%s content_len=%d", itemID, len(extracted.Content))

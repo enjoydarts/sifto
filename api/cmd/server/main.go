@@ -136,6 +136,9 @@ func main() {
 	poeModelsH := handler.NewPoeModelsHandler(poeModelRepo, userSettingsRepo, secretCipher, providerModelUpdateRepo, poeCatalogSvc, poeUsageSvc)
 	aivisCatalogSvc := service.NewAivisCatalogService()
 	aivisModelsH := handler.NewAivisModelsHandler(aivisModelRepo, providerModelUpdateRepo, aivisCatalogSvc)
+	xaiVoiceRepo := repository.NewXAIVoiceRepo(db)
+	xaiVoiceCatalogSvc := service.NewXAIVoiceCatalogService()
+	xaiVoicesH := handler.NewXAIVoicesHandler(xaiVoiceRepo, userSettingsRepo, providerModelUpdateRepo, secretCipher, xaiVoiceCatalogSvc)
 
 	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp, search)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, sourceOptimizationRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher, cache)
@@ -314,6 +317,11 @@ func main() {
 			r.Get("/", aivisModelsH.List)
 			r.Get("/status", aivisModelsH.Status)
 			r.Post("/sync", aivisModelsH.Sync)
+		})
+		r.Route("/xai-voices", func(r chi.Router) {
+			r.Get("/", xaiVoicesH.List)
+			r.Get("/status", xaiVoicesH.Status)
+			r.Post("/sync", xaiVoicesH.Sync)
 		})
 
 		r.Get("/briefing/today", briefingH.Today)

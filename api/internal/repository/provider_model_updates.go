@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ func (r *ProviderModelUpdateRepo) GetSnapshot(ctx context.Context, provider stri
 }
 
 func (r *ProviderModelUpdateRepo) UpsertSnapshot(ctx context.Context, provider string, models []string, status string, errText *string) error {
+	models = normalizeProviderSnapshotModelIDs(models)
 	raw, err := json.Marshal(models)
 	if err != nil {
 		return err
@@ -57,6 +59,27 @@ func (r *ProviderModelUpdateRepo) UpsertSnapshot(ctx context.Context, provider s
 		provider, string(raw), status, errText,
 	)
 	return err
+}
+
+func normalizeProviderSnapshotModelIDs(models []string) []string {
+	if len(models) == 0 {
+		return []string{}
+	}
+	seen := make(map[string]struct{}, len(models))
+	out := make([]string, 0, len(models))
+	for _, modelID := range models {
+		modelID = strings.TrimSpace(modelID)
+		if modelID == "" {
+			continue
+		}
+		if _, ok := seen[modelID]; ok {
+			continue
+		}
+		seen[modelID] = struct{}{}
+		out = append(out, modelID)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (r *ProviderModelUpdateRepo) InsertChangeEvents(ctx context.Context, events []model.ProviderModelChangeEvent) error {

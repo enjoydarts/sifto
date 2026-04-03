@@ -311,6 +311,8 @@ class FeedTaskCommonTests(unittest.TestCase):
 
         prompt = task["prompt"]
         self.assertIn("単独話者のAIナビゲーター", prompt)
+        self.assertIn("あなたは音声ブリーフィング番組を担当する、単独話者のAIナビゲーターです。", prompt)
+        self.assertNotIn("あなたは Sifto の音声ブリーフィング番組を担当する、単独話者のAIナビゲーターです。", prompt)
         self.assertIn("音声ブリーフィング台本", prompt)
         self.assertIn("article_segments 有効時は入力 articles と同じ順番・同じ件数で返してください", prompt)
         self.assertIn("職業", prompt)
@@ -385,6 +387,21 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("commentary は 5〜7文 / 200〜255文字", prompt)
         self.assertIn("1文は 50〜95文字 を目安", prompt)
 
+    def test_build_audio_briefing_script_task_binds_program_name_for_single(self):
+        task = build_audio_briefing_script_task(
+            persona="editor",
+            articles=[
+                {"item_id": "item-1", "title": "Title 1", "translated_title": "翻訳1", "summary": "Summary text"}
+            ],
+            intro_context={
+                "program_name": "Morning Sifto",
+            },
+        )
+
+        self.assertIn("program_name: Morning Sifto", task["prompt"])
+        self.assertIn("この番組の名前は Morning Sifto です。", task["prompt"])
+        self.assertNotIn("{{program_name}}", task["prompt"])
+
     def test_build_audio_briefing_script_task_adds_supplement_instructions_for_existing_section(self):
         task = build_audio_briefing_script_task(
             persona="editor",
@@ -448,6 +465,7 @@ class FeedTaskCommonTests(unittest.TestCase):
                 "audio_briefing_conversation_mode": "duo",
                 "audio_briefing_host_persona": "editor",
                 "audio_briefing_partner_persona": "analyst",
+                "program_name": "Morning Sifto",
                 "now_jst": "2026-03-31T18:30:00+09:00",
                 "date_jst": "2026-03-31",
                 "weekday_jst": "Tuesday",
@@ -461,6 +479,8 @@ class FeedTaskCommonTests(unittest.TestCase):
 
         prompt = task["prompt"]
         self.assertIn("二人組のAIナビゲーター", prompt)
+        self.assertIn("あなたは音声ブリーフィング番組を担当する、二人組のAIナビゲーターです。", prompt)
+        self.assertNotIn("あなたは Sifto の音声ブリーフィング番組を担当する、二人組のAIナビゲーターです。", prompt)
         self.assertIn("host は", prompt)
         self.assertIn("partner は", prompt)
         self.assertIn("turns", prompt)
@@ -476,6 +496,9 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertIn("今回の対象 section は article", prompt)
         self.assertIn("now_jst: 2026-03-31T18:30:00+09:00", prompt)
         self.assertIn("time_of_day: evening", prompt)
+        self.assertIn("program_name: Morning Sifto", prompt)
+        self.assertIn("この番組の名前は Morning Sifto です。", prompt)
+        self.assertNotIn("{{program_name}}", prompt)
         self.assertNotIn("単独話者のAIナビゲーター", prompt)
         self.assertNotIn("article_segments の各 headline", prompt)
         self.assertNotIn('"article_segments": [', prompt)

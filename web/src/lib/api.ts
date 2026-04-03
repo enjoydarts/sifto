@@ -311,6 +311,36 @@ export interface XAIVoicesResponse {
   voices: XAIVoiceSnapshot[];
 }
 
+export interface OpenAITTSVoiceSyncRun {
+  id: number;
+  started_at: string;
+  finished_at?: string | null;
+  last_progress_at?: string | null;
+  status: string;
+  trigger_type: string;
+  fetched_count: number;
+  saved_count: number;
+  error_message?: string | null;
+}
+
+export interface OpenAITTSVoiceSnapshot {
+  id: number;
+  sync_run_id: number;
+  voice_id: string;
+  name: string;
+  description: string;
+  language: string;
+  preview_url: string;
+  metadata_json?: string | null;
+  fetched_at: string;
+}
+
+export interface OpenAITTSVoicesResponse {
+  latest_run: OpenAITTSVoiceSyncRun | null;
+  latest_change_summary?: ProviderModelChangeSummary | null;
+  voices: OpenAITTSVoiceSnapshot[];
+}
+
 export interface ProviderModelSnapshotEntry {
   provider: string;
   model_id: string;
@@ -1490,6 +1520,7 @@ export interface PodcastSettings {
 export interface AudioBriefingPersonaVoice {
   persona: string;
   tts_provider: string;
+  tts_model: string;
   voice_model: string;
   voice_style: string;
   speech_rate: number;
@@ -2729,6 +2760,12 @@ export const api = {
     apiFetch<{ run: XAIVoiceSyncRun | null }>("/xai-voices/status"),
   syncXAIVoices: () =>
     apiFetch<XAIVoicesResponse>("/xai-voices/sync", { method: "POST" }),
+  getOpenAITTSVoices: () =>
+    apiFetch<OpenAITTSVoicesResponse>("/openai-tts-voices"),
+  getOpenAITTSSyncStatus: () =>
+    apiFetch<{ run: OpenAITTSVoiceSyncRun | null }>("/openai-tts-voices/status"),
+  syncOpenAITTSVoices: () =>
+    apiFetch<OpenAITTSVoicesResponse>("/openai-tts-voices/sync", { method: "POST" }),
   deleteInoreaderOAuth: () =>
     apiFetch<{ user_id: string; has_inoreader_oauth: boolean; inoreader_token_expires: string | null }>(
       "/settings/inoreader-oauth",

@@ -125,6 +125,7 @@ type AudioBriefingPersonaVoice struct {
 	UserID                  string     `json:"user_id"`
 	Persona                 string     `json:"persona"`
 	TTSProvider             string     `json:"tts_provider"`
+	TTSModel                string     `json:"tts_model"`
 	VoiceModel              string     `json:"voice_model"`
 	VoiceStyle              string     `json:"voice_style"`
 	SpeechRate              float64    `json:"speech_rate"`

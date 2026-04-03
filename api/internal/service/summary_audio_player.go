@@ -90,6 +90,8 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	var aivisAPIKey *string
 	var aivisUserDictionaryUUID *string
 	var xaiAPIKey *string
+	var openAIAPIKey *string
+	ttsModel := strings.TrimSpace(voice.TTSModel)
 	if strings.EqualFold(strings.TrimSpace(voice.TTSProvider), "aivis") {
 		aivisAPIKey, err = s.loadAivisAPIKey(ctx, userID)
 		if err != nil {
@@ -104,12 +106,21 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		if err != nil {
 			return nil, err
 		}
+	} else if strings.EqualFold(strings.TrimSpace(voice.TTSProvider), "openai") {
+		if ttsModel == "" {
+			return nil, errors.New("openai tts model is not configured")
+		}
+		openAIAPIKey, err = loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetOpenAIAPIKeyEncrypted, s.cipher, userID, "openai api key is not configured")
+		if err != nil {
+			return nil, err
+		}
 	}
 	resp, err := s.worker.SynthesizeSummaryAudio(
 		ctx,
 		voice.TTSProvider,
 		voice.VoiceModel,
 		voice.VoiceStyle,
+		ttsModel,
 		narration,
 		voice.SpeechRate,
 		voice.EmotionalIntensity,
@@ -121,6 +132,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		aivisUserDictionaryUUID,
 		aivisAPIKey,
 		xaiAPIKey,
+		openAIAPIKey,
 	)
 	if err != nil {
 		return nil, err

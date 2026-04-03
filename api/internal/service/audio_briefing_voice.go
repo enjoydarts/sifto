@@ -46,7 +46,7 @@ func audioBriefingVoiceConfigComplete(provider, voiceModel, voiceStyle string) b
 	if provider == "" || voiceModel == "" {
 		return false
 	}
-	return voiceStyle != "" || strings.EqualFold(provider, "xai") || strings.EqualFold(provider, "mock")
+	return voiceStyle != "" || strings.EqualFold(provider, "xai") || strings.EqualFold(provider, "mock") || strings.EqualFold(provider, "openai")
 }
 
 func NewAudioBriefingVoiceRunner(repo *repository.AudioBriefingRepo, userSettings *repository.UserSettingsRepo, cipher *SecretCipher, worker *WorkerClient) *AudioBriefingVoiceRunner {
@@ -160,9 +160,11 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		err := fmt.Errorf("chunk tts config is incomplete")
 		return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
 	}
+	ttsModel := strings.TrimSpace(voice.TTSModel)
 	var aivisAPIKey *string
 	var aivisUserDictionaryUUID *string
 	var xaiAPIKey *string
+	var openAIAPIKey *string
 	if provider == "aivis" {
 		aivisAPIKey, err = r.loadAivisAPIKey(ctx, userID)
 		if err != nil {
@@ -177,6 +179,15 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		if err != nil {
 			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
 		}
+	} else if provider == "openai" {
+		if ttsModel == "" {
+			err := fmt.Errorf("openai tts model is not configured")
+			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
+		}
+		openAIAPIKey, err = loadAndDecryptAudioBriefingUserSecret(ctx, r.userSettings.GetOpenAIAPIKeyEncrypted, r.cipher, userID, "openai api key is not configured")
+		if err != nil {
+			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
+		}
 	}
 	speechParams := audioBriefingSpeechParamsForChunk(chunk, voice, partnerVoice, settings)
 	resp, err := r.worker.SynthesizeAudioBriefingUpload(
@@ -184,6 +195,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		provider,
 		voiceModel,
 		voiceStyle,
+		ttsModel,
 		chunk.Text,
 		speechParams.SpeechRate,
 		speechParams.EmotionalIntensity,
@@ -199,6 +211,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		aivisUserDictionaryUUID,
 		aivisAPIKey,
 		xaiAPIKey,
+		openAIAPIKey,
 	)
 	if err != nil {
 		return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", annotateAudioBriefingChunkError(chunk, err))

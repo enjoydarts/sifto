@@ -138,6 +138,12 @@ func TestAudioBriefingVoiceConfigCompleteRequiresVoiceStyleForAivis(t *testing.T
 	}
 }
 
+func TestAudioBriefingVoiceConfigCompleteAllowsOpenAIWithoutVoiceStyle(t *testing.T) {
+	if !audioBriefingVoiceConfigComplete("openai", "alloy", "") {
+		t.Fatal("audioBriefingVoiceConfigComplete(openai) = false, want true")
+	}
+}
+
 func ptrTime(v time.Time) *time.Time {
 	return &v
 }

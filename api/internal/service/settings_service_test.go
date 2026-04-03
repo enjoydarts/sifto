@@ -135,6 +135,28 @@ func TestUpdateAudioBriefingPersonaVoicesAllowsXAI(t *testing.T) {
 	}
 }
 
+func TestUpdateAudioBriefingPersonaVoicesRequiresTTSModelForOpenAI(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	_, err := svc.UpdateAudioBriefingPersonaVoices(context.Background(), "00000000-0000-4000-8000-000000000021", []UpdateAudioBriefingPersonaVoiceInput{
+		{
+			Persona:                 "editor",
+			TTSProvider:             "openai",
+			TTSModel:                "",
+			VoiceModel:              "alloy",
+			VoiceStyle:              "",
+			SpeechRate:              0,
+			EmotionalIntensity:      0,
+			TempoDynamics:           0,
+			LineBreakSilenceSeconds: 0,
+			Pitch:                   0,
+			VolumeGain:              0,
+		},
+	})
+	if err == nil || err.Error() != "invalid tts_model for editor" {
+		t.Fatalf("UpdateAudioBriefingPersonaVoices() error = %v, want invalid tts_model for editor", err)
+	}
+}
+
 func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 	settings := &model.UserSettings{
 		FactsModel:                       strptr("gpt-5.4-mini"),
@@ -385,6 +407,9 @@ func TestAudioBriefingPersonaVoicesPayload(t *testing.T) {
 	if got[0]["tts_provider"] != "aivis" {
 		t.Fatalf("tts_provider = %v, want aivis", got[0]["tts_provider"])
 	}
+	if got[0]["tts_model"] != "" {
+		t.Fatalf("tts_model = %v, want empty", got[0]["tts_model"])
+	}
 }
 
 func TestNormalizeAudioBriefingDefaultPersona(t *testing.T) {
@@ -495,6 +520,36 @@ func TestValidateAudioBriefingPersonaVoiceInputs(t *testing.T) {
 		}
 	})
 
+	t.Run("allows openai rows with tts model", func(t *testing.T) {
+		rows, err := validateAudioBriefingPersonaVoiceInputs([]UpdateAudioBriefingPersonaVoiceInput{
+			{
+				Persona:                 "editor",
+				TTSProvider:             "openai",
+				TTSModel:                "gpt-4o-mini-tts",
+				VoiceModel:              "alloy",
+				VoiceStyle:              "",
+				SpeechRate:              0,
+				EmotionalIntensity:      0,
+				TempoDynamics:           0,
+				LineBreakSilenceSeconds: 0,
+				Pitch:                   0,
+				VolumeGain:              0,
+			},
+		})
+		if err != nil {
+			t.Fatalf("validateAudioBriefingPersonaVoiceInputs(openai) err=%v", err)
+		}
+		if len(rows) != 1 {
+			t.Fatalf("len(rows) = %d, want 1", len(rows))
+		}
+		if rows[0].TTSModel != "gpt-4o-mini-tts" {
+			t.Fatalf("rows[0].TTSModel = %q, want gpt-4o-mini-tts", rows[0].TTSModel)
+		}
+		if rows[0].TTSProvider != "openai" {
+			t.Fatalf("rows[0].TTSProvider = %q, want openai", rows[0].TTSProvider)
+		}
+	})
+
 	_, err = validateAudioBriefingPersonaVoiceInputs([]UpdateAudioBriefingPersonaVoiceInput{
 		{
 			Persona:                 "editor",
@@ -509,6 +564,23 @@ func TestValidateAudioBriefingPersonaVoiceInputs(t *testing.T) {
 	})
 	if err == nil || err.Error() != "invalid tts_provider for editor" {
 		t.Fatalf("missing provider err = %v, want invalid tts_provider for editor", err)
+	}
+
+	_, err = validateAudioBriefingPersonaVoiceInputs([]UpdateAudioBriefingPersonaVoiceInput{
+		{
+			Persona:                 "editor",
+			TTSProvider:             "openai",
+			TTSModel:                "",
+			VoiceModel:              "alloy",
+			VoiceStyle:              "",
+			SpeechRate:              0,
+			EmotionalIntensity:      0,
+			TempoDynamics:           0,
+			LineBreakSilenceSeconds: 0,
+		},
+	})
+	if err == nil || err.Error() != "invalid tts_model for editor" {
+		t.Fatalf("missing tts_model err = %v, want invalid tts_model for editor", err)
 	}
 
 	_, err = validateAudioBriefingPersonaVoiceInputs([]UpdateAudioBriefingPersonaVoiceInput{

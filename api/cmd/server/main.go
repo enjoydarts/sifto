@@ -139,6 +139,9 @@ func main() {
 	xaiVoiceRepo := repository.NewXAIVoiceRepo(db)
 	xaiVoiceCatalogSvc := service.NewXAIVoiceCatalogService()
 	xaiVoicesH := handler.NewXAIVoicesHandler(xaiVoiceRepo, userSettingsRepo, providerModelUpdateRepo, secretCipher, xaiVoiceCatalogSvc)
+	openAITTSVoiceRepo := repository.NewOpenAITTSVoiceRepo(db)
+	openAITTSVoiceCatalogSvc := service.NewOpenAITTSVoiceCatalogService()
+	openAITTSVoicesH := handler.NewOpenAITTSVoicesHandler(openAITTSVoiceRepo, providerModelUpdateRepo, openAITTSVoiceCatalogSvc)
 
 	internalH := handler.NewInternalHandler(userRepo, userIdentityRepo, obsidianExportRepo, itemInngestRepo, digestInngestRepo, userSettingsRepo, secretCipher, eventPublisher, db, cache, worker, oneSignal, githubApp, search)
 	sourceH := handler.NewSourceHandler(sourceRepo, itemRepo, sourceOptimizationRepo, userSettingsRepo, llmUsageRepo, worker, secretCipher, eventPublisher, cache)
@@ -322,6 +325,11 @@ func main() {
 			r.Get("/", xaiVoicesH.List)
 			r.Get("/status", xaiVoicesH.Status)
 			r.Post("/sync", xaiVoicesH.Sync)
+		})
+		r.Route("/openai-tts-voices", func(r chi.Router) {
+			r.Get("/", openAITTSVoicesH.List)
+			r.Get("/status", openAITTSVoicesH.Status)
+			r.Post("/sync", openAITTSVoicesH.Sync)
 		})
 
 		r.Get("/briefing/today", briefingH.Today)

@@ -139,6 +139,7 @@ func ErrInvalidPodcastCategory() error {
 type UpdateAudioBriefingPersonaVoiceInput struct {
 	Persona                 string
 	TTSProvider             string
+	TTSModel                string
 	VoiceModel              string
 	VoiceStyle              string
 	SpeechRate              float64
@@ -299,6 +300,7 @@ func AudioBriefingPersonaVoicesPayload(rows []model.AudioBriefingPersonaVoice) [
 		out = append(out, map[string]any{
 			"persona":                    row.Persona,
 			"tts_provider":               row.TTSProvider,
+			"tts_model":                  row.TTSModel,
 			"voice_model":                row.VoiceModel,
 			"voice_style":                row.VoiceStyle,
 			"speech_rate":                row.SpeechRate,
@@ -526,47 +528,53 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 		}
 		seen[persona] = struct{}{}
 		provider := strings.TrimSpace(strings.ToLower(row.TTSProvider))
+		caps := LookupTTSProviderCapabilities(provider)
 		switch provider {
-		case "aivis", "mock", "xai":
+		case "aivis", "mock", "xai", "openai":
 		default:
 			return nil, fmt.Errorf("invalid tts_provider for %s", persona)
 		}
 		voiceModel := strings.TrimSpace(row.VoiceModel)
 		voiceStyle := strings.TrimSpace(row.VoiceStyle)
+		ttsModel := strings.TrimSpace(row.TTSModel)
 		// Allow incomplete persona rows to remain unset in the UI without persisting
 		// placeholder records. Only partially configured rows are rejected.
-		if voiceModel == "" && voiceStyle == "" {
+		if voiceModel == "" && voiceStyle == "" && ttsModel == "" {
 			continue
 		}
 		if voiceModel == "" {
 			return nil, fmt.Errorf("invalid voice_model for %s", persona)
 		}
-		if voiceStyle == "" && provider != "xai" && provider != "mock" {
+		if caps.SupportsSeparateTTSModel && ttsModel == "" {
+			return nil, fmt.Errorf("invalid tts_model for %s", persona)
+		}
+		if caps.RequiresVoiceStyle && voiceStyle == "" {
 			return nil, fmt.Errorf("invalid voice_style for %s", persona)
 		}
-		if row.SpeechRate != 0 || (provider != "xai" && provider != "mock") {
+		if caps.SupportsSpeechTuning && (row.SpeechRate != 0 || provider == "aivis") {
 			if row.SpeechRate < 0.5 || row.SpeechRate > 2.0 {
 				return nil, fmt.Errorf("invalid speech_rate for %s", persona)
 			}
-		}
-		if row.EmotionalIntensity < 0 || row.EmotionalIntensity > 2.0 {
-			return nil, fmt.Errorf("invalid emotional_intensity for %s", persona)
-		}
-		if row.TempoDynamics < 0 || row.TempoDynamics > 2.0 {
-			return nil, fmt.Errorf("invalid tempo_dynamics for %s", persona)
-		}
-		if row.LineBreakSilenceSeconds < 0 || row.LineBreakSilenceSeconds > 5.0 {
-			return nil, fmt.Errorf("invalid line_break_silence_seconds for %s", persona)
-		}
-		if row.Pitch < -12 || row.Pitch > 12 {
-			return nil, fmt.Errorf("invalid pitch for %s", persona)
-		}
-		if row.VolumeGain < -24 || row.VolumeGain > 24 {
-			return nil, fmt.Errorf("invalid volume_gain for %s", persona)
+			if row.EmotionalIntensity < 0 || row.EmotionalIntensity > 2.0 {
+				return nil, fmt.Errorf("invalid emotional_intensity for %s", persona)
+			}
+			if row.TempoDynamics < 0 || row.TempoDynamics > 2.0 {
+				return nil, fmt.Errorf("invalid tempo_dynamics for %s", persona)
+			}
+			if row.LineBreakSilenceSeconds < 0 || row.LineBreakSilenceSeconds > 5.0 {
+				return nil, fmt.Errorf("invalid line_break_silence_seconds for %s", persona)
+			}
+			if row.Pitch < -12 || row.Pitch > 12 {
+				return nil, fmt.Errorf("invalid pitch for %s", persona)
+			}
+			if row.VolumeGain < -24 || row.VolumeGain > 24 {
+				return nil, fmt.Errorf("invalid volume_gain for %s", persona)
+			}
 		}
 		out = append(out, model.AudioBriefingPersonaVoice{
 			Persona:                 persona,
 			TTSProvider:             provider,
+			TTSModel:                ttsModel,
 			VoiceModel:              voiceModel,
 			VoiceStyle:              voiceStyle,
 			SpeechRate:              row.SpeechRate,

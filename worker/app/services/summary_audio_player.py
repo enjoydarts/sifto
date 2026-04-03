@@ -4,7 +4,7 @@ import os
 from app.services.audio_briefing_tts import _env_float
 from app.services.audio_briefing_tts import synthesize_mock_audio
 from app.services.aivis_speech import AivisSpeechService
-from app.services.xai_tts import synthesize_xai_tts
+from app.services.tts_provider_registry import synthesize_catalog_tts
 
 
 def build_summary_audio_text(translated_title: str | None, original_title: str | None, summary: str) -> str:
@@ -22,6 +22,8 @@ class SummaryAudioPlayerService:
         self.aivis = AivisSpeechService()
         self.xai_tts_endpoint = (os.getenv("XAI_TTS_ENDPOINT", "https://api.x.ai").strip() or "https://api.x.ai").rstrip("/")
         self.xai_timeout_sec = max(_env_float("XAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
+        self.openai_tts_endpoint = (os.getenv("OPENAI_TTS_ENDPOINT", "https://api.openai.com").strip() or "https://api.openai.com").rstrip("/")
+        self.openai_timeout_sec = max(_env_float("OPENAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
 
     def synthesize(
         self,
@@ -37,9 +39,11 @@ class SummaryAudioPlayerService:
         chunk_trailing_silence_seconds: float,
         pitch: float,
         volume_gain: float,
+        tts_model: str = "",
         user_dictionary_uuid: str | None = None,
         aivis_api_key: str | None = None,
         xai_api_key: str | None = None,
+        openai_api_key: str | None = None,
     ) -> tuple[str, str, int, str]:
         normalized_provider = (provider or "").strip().lower()
         if normalized_provider == "mock":
@@ -60,13 +64,26 @@ class SummaryAudioPlayerService:
                 api_key_override=aivis_api_key,
             )
         elif normalized_provider == "xai":
-            audio_bytes, content_type, _, duration_sec = synthesize_xai_tts(
+            audio_bytes, content_type, _, duration_sec = synthesize_catalog_tts(
+                "xai",
                 endpoint=self.xai_tts_endpoint,
                 api_key=xai_api_key or "",
                 voice_id=voice_model,
+                tts_model="",
                 text=text,
                 speech_rate=speech_rate,
                 timeout_sec=self.xai_timeout_sec,
+            )
+        elif normalized_provider == "openai":
+            audio_bytes, content_type, _, duration_sec = synthesize_catalog_tts(
+                "openai",
+                endpoint=self.openai_tts_endpoint,
+                api_key=openai_api_key or "",
+                voice_id=voice_model,
+                tts_model=tts_model,
+                text=text,
+                speech_rate=speech_rate,
+                timeout_sec=self.openai_timeout_sec,
             )
         else:
             raise RuntimeError(f"unsupported summary audio provider: {provider}")

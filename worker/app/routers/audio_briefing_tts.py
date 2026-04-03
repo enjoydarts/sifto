@@ -10,6 +10,7 @@ class AudioBriefingSynthesizeRequest(BaseModel):
     provider: str
     voice_model: str
     voice_style: str
+    tts_model: str = ""
     text: str
     speech_rate: float = 1.0
     emotional_intensity: float = 1.0
@@ -89,6 +90,7 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
             provider=req.provider,
             voice_model=req.voice_model,
             voice_style=req.voice_style,
+            tts_model=req.tts_model,
             text=req.text,
             speech_rate=req.speech_rate,
             emotional_intensity=req.emotional_intensity,
@@ -104,6 +106,7 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
             user_dictionary_uuid=req.user_dictionary_uuid,
             aivis_api_key=aivis_api_key,
             xai_api_key=xai_api_key,
+            openai_api_key=request.headers.get("x-openai-api-key", "").strip() or None,
         )
         return AudioBriefingSynthesizeResponse(
             audio_object_key=audio_object_key,

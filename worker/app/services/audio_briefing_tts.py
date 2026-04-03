@@ -8,7 +8,7 @@ import wave
 import boto3
 import httpx
 from app.services.aivis_speech import AIVIS_RATE_LIMITER, AivisRateLimiter, AivisRedisRateLimiter, AivisSpeechService, build_aivis_payload
-from app.services.xai_tts import synthesize_xai_tts
+from app.services.tts_provider_registry import synthesize_catalog_tts
 
 
 def _env_float(name: str, default: float) -> float:
@@ -93,6 +93,9 @@ class AudioBriefingTTSService:
         self.xai_tts_endpoint = (os.getenv("XAI_TTS_ENDPOINT", "https://api.x.ai").strip() or "https://api.x.ai").rstrip("/")
         self.xai_api_key = os.getenv("XAI_API_KEY", "").strip()
         self.xai_timeout_sec = max(_env_float("XAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
+        self.openai_tts_endpoint = (os.getenv("OPENAI_TTS_ENDPOINT", "https://api.openai.com").strip() or "https://api.openai.com").rstrip("/")
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
+        self.openai_timeout_sec = max(_env_float("OPENAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
         self.heartbeat_interval_sec = max(_env_float("AUDIO_BRIEFING_HEARTBEAT_INTERVAL_SEC", 20.0), 1.0)
         self.heartbeat_timeout_sec = max(_env_float("AUDIO_BRIEFING_HEARTBEAT_TIMEOUT_SEC", 10.0), 1.0)
         self.aivis = AivisSpeechService()
@@ -111,12 +114,14 @@ class AudioBriefingTTSService:
         pitch: float,
         volume_gain: float,
         output_object_key: str,
+        tts_model: str = "",
         chunk_id: str | None = None,
         heartbeat_url: str | None = None,
         heartbeat_token: str | None = None,
         user_dictionary_uuid: str | None = None,
         aivis_api_key: str | None = None,
         xai_api_key: str | None = None,
+        openai_api_key: str | None = None,
     ) -> tuple[str, int]:
         _ = (chunk_id or "").strip()
         heartbeat = AudioBriefingHeartbeatLoop(
@@ -151,6 +156,14 @@ class AudioBriefingTTSService:
                     text=text,
                     speech_rate=speech_rate,
                     api_key_override=xai_api_key,
+                )
+            elif provider == "openai":
+                payload, content_type, suffix, duration_sec = self.synthesize_openai_audio(
+                    voice_id=voice_model,
+                    tts_model=tts_model,
+                    text=text,
+                    speech_rate=speech_rate,
+                    api_key_override=openai_api_key,
                 )
             else:
                 raise RuntimeError(f"unsupported tts provider: {provider}")
@@ -316,13 +329,38 @@ class AudioBriefingTTSService:
         speech_rate: float,
         api_key_override: str | None = None,
     ) -> tuple[bytes, str, str, int]:
-        return synthesize_xai_tts(
+        return synthesize_catalog_tts(
+            "xai",
             endpoint=self.xai_tts_endpoint,
             api_key=(api_key_override or "").strip() or self.xai_api_key,
             voice_id=voice_id,
+            tts_model="",
             text=text,
             speech_rate=speech_rate,
             timeout_sec=self.xai_timeout_sec,
+        )
+
+    def synthesize_openai_audio(
+        self,
+        *,
+        voice_id: str,
+        tts_model: str,
+        text: str,
+        speech_rate: float,
+        api_key_override: str | None = None,
+    ) -> tuple[bytes, str, str, int]:
+        normalized_tts_model = (tts_model or "").strip()
+        if not normalized_tts_model:
+            raise RuntimeError("openai tts model is required")
+        return synthesize_catalog_tts(
+            "openai",
+            endpoint=self.openai_tts_endpoint,
+            api_key=(api_key_override or "").strip() or self.openai_api_key,
+            voice_id=voice_id,
+            tts_model=normalized_tts_model,
+            text=text,
+            speech_rate=speech_rate,
+            timeout_sec=self.openai_timeout_sec,
         )
 
 

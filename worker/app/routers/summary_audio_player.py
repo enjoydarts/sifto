@@ -10,6 +10,7 @@ class SummaryAudioSynthesizeRequest(BaseModel):
     provider: str
     voice_model: str
     voice_style: str
+    tts_model: str = ""
     text: str
     speech_rate: float = 1.0
     emotional_intensity: float = 1.0
@@ -38,6 +39,7 @@ def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Reques
             provider=req.provider,
             voice_model=req.voice_model,
             voice_style=req.voice_style,
+            tts_model=req.tts_model,
             text=req.text,
             speech_rate=req.speech_rate,
             emotional_intensity=req.emotional_intensity,
@@ -49,6 +51,7 @@ def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Reques
             user_dictionary_uuid=req.user_dictionary_uuid,
             aivis_api_key=aivis_api_key,
             xai_api_key=xai_api_key,
+            openai_api_key=request.headers.get("x-openai-api-key", "").strip() or None,
         )
         return SummaryAudioSynthesizeResponse(
             audio_base64=audio_base64,

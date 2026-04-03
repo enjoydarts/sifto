@@ -327,6 +327,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
                     provider="xai",
                     voice_model="voice-1",
                     voice_style="",
+                    tts_model="",
                     text="hello",
                     speech_rate=1.0,
                     emotional_intensity=1.0,
@@ -342,6 +343,71 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
         upload.assert_called_once()
         self.assertEqual(duration_sec, 12)
         self.assertTrue(object_key.endswith(".mp3"))
+
+    def test_synthesize_and_upload_uses_openai_provider(self):
+        service = AudioBriefingTTSService()
+
+        with patch.object(service, "synthesize_openai_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 12)) as synth:
+            with patch.object(service, "upload_bytes") as upload:
+                object_key, duration_sec = service.synthesize_and_upload(
+                    provider="openai",
+                    voice_model="alloy",
+                    voice_style="",
+                    tts_model="gpt-4o-mini-tts",
+                    text="hello",
+                    speech_rate=1.0,
+                    emotional_intensity=1.0,
+                    tempo_dynamics=1.0,
+                    line_break_silence_seconds=0.0,
+                    chunk_trailing_silence_seconds=0.0,
+                    pitch=0.0,
+                    volume_gain=0.0,
+                    output_object_key="audio/test",
+                    openai_api_key="openai-key",
+                )
+
+        synth.assert_called_once()
+        upload.assert_called_once()
+        self.assertEqual(duration_sec, 12)
+        self.assertTrue(object_key.endswith(".mp3"))
+
+    def test_synthesize_openai_audio_uses_current_openai_payload_shape(self):
+        captured: dict[str, object] = {}
+        service = AudioBriefingTTSService()
+
+        def fake_post(url, headers=None, json=None, timeout=None):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            captured["timeout"] = timeout
+            request = httpx.Request("POST", url)
+            return httpx.Response(200, content=b"audio", request=request)
+
+        with patch("app.services.openai_tts.httpx.post", side_effect=fake_post):
+            audio_bytes, content_type, suffix, duration_sec = service.synthesize_openai_audio(
+                voice_id="alloy",
+                tts_model="gpt-4o-mini-tts",
+                text="summary text",
+                speech_rate=1.0,
+                api_key_override="openai-key",
+            )
+
+        self.assertEqual(audio_bytes, b"audio")
+        self.assertEqual(content_type, "audio/mpeg")
+        self.assertEqual(suffix, ".mp3")
+        self.assertEqual(duration_sec, 1)
+        self.assertEqual(captured["url"], "https://api.openai.com/v1/audio/speech")
+        self.assertEqual(captured["headers"], {"Authorization": "Bearer openai-key"})
+        self.assertEqual(
+            captured["json"],
+            {
+                "model": "gpt-4o-mini-tts",
+                "voice": "alloy",
+                "input": "summary text",
+                "language": "ja",
+                "response_format": "mp3",
+            },
+        )
 
     def test_synthesize_aivis_audio_uses_exponential_backoff_after_429(self):
         service = AudioBriefingTTSService()

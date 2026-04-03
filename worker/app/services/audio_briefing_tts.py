@@ -8,6 +8,7 @@ import wave
 import boto3
 import httpx
 from app.services.aivis_speech import AIVIS_RATE_LIMITER, AivisRateLimiter, AivisRedisRateLimiter, AivisSpeechService, build_aivis_payload
+from app.services.xai_tts import synthesize_xai_tts
 
 
 def _env_float(name: str, default: float) -> float:
@@ -89,6 +90,9 @@ class AudioBriefingTTSService:
         self.aivis_retry_attempts = max(_env_int("AIVIS_TTS_RETRY_ATTEMPTS", 2), 1)
         self.aivis_retry_fallback_sec = max(_env_float("AIVIS_TTS_RETRY_FALLBACK_SEC", 9.0), 0.0)
         self.aivis_timeout_sec = max(_env_float("AIVIS_TTS_TIMEOUT_SEC", 300.0), 1.0)
+        self.xai_tts_endpoint = (os.getenv("XAI_TTS_ENDPOINT", "https://api.x.ai").strip() or "https://api.x.ai").rstrip("/")
+        self.xai_api_key = os.getenv("XAI_API_KEY", "").strip()
+        self.xai_timeout_sec = max(_env_float("XAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
         self.heartbeat_interval_sec = max(_env_float("AUDIO_BRIEFING_HEARTBEAT_INTERVAL_SEC", 20.0), 1.0)
         self.heartbeat_timeout_sec = max(_env_float("AUDIO_BRIEFING_HEARTBEAT_TIMEOUT_SEC", 10.0), 1.0)
         self.aivis = AivisSpeechService()
@@ -139,6 +143,12 @@ class AudioBriefingTTSService:
                     volume_gain=volume_gain,
                     user_dictionary_uuid=user_dictionary_uuid,
                     api_key_override=aivis_api_key,
+                )
+            elif provider == "xai":
+                payload, content_type, suffix, duration_sec = self.synthesize_xai_audio(
+                    voice_id=voice_model,
+                    text=text,
+                    speech_rate=speech_rate,
                 )
             else:
                 raise RuntimeError(f"unsupported tts provider: {provider}")
@@ -294,6 +304,16 @@ class AudioBriefingTTSService:
             volume_gain=volume_gain,
             user_dictionary_uuid=user_dictionary_uuid,
             api_key_override=api_key_override,
+        )
+
+    def synthesize_xai_audio(self, *, voice_id: str, text: str, speech_rate: float) -> tuple[bytes, str, str, int]:
+        return synthesize_xai_tts(
+            endpoint=self.xai_tts_endpoint,
+            api_key=self.xai_api_key,
+            voice_id=voice_id,
+            text=text,
+            speech_rate=speech_rate,
+            timeout_sec=self.xai_timeout_sec,
         )
 
 

@@ -318,6 +318,31 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
             ],
         )
 
+    def test_synthesize_and_upload_uses_xai_provider(self):
+        service = AudioBriefingTTSService()
+
+        with patch.object(service, "synthesize_xai_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 12)) as synth:
+            with patch.object(service, "upload_bytes") as upload:
+                object_key, duration_sec = service.synthesize_and_upload(
+                    provider="xai",
+                    voice_model="voice-1",
+                    voice_style="",
+                    text="hello",
+                    speech_rate=1.0,
+                    emotional_intensity=1.0,
+                    tempo_dynamics=1.0,
+                    line_break_silence_seconds=0.0,
+                    chunk_trailing_silence_seconds=0.0,
+                    pitch=0.0,
+                    volume_gain=0.0,
+                    output_object_key="audio/test",
+                )
+
+        synth.assert_called_once()
+        upload.assert_called_once()
+        self.assertEqual(duration_sec, 12)
+        self.assertTrue(object_key.endswith(".mp3"))
+
     def test_synthesize_aivis_audio_uses_exponential_backoff_after_429(self):
         service = AudioBriefingTTSService()
         service.aivis_tts_endpoint = "https://example.test/v1/tts/synthesize"

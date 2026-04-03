@@ -165,7 +165,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
             ],
         )
 
-    def test_build_aivis_payload_includes_user_dictionary_uuid_and_trailing_silence(self):
+    def test_build_aivis_payload_includes_user_dictionary_uuid_without_trailing_silence(self):
         payload = audio_briefing_tts.build_aivis_payload(
             voice_model="model-uuid",
             voice_style="speaker-uuid:1",
@@ -181,7 +181,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(payload["user_dictionary_uuid"], "5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861")
-        self.assertEqual(payload["trailing_silence_seconds"], 1.0)
+        self.assertEqual(payload["trailing_silence_seconds"], 0.0)
 
     def test_build_aivis_payload_wraps_and_escapes_plain_text_for_ssml(self):
         payload = audio_briefing_tts.build_aivis_payload(

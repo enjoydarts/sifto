@@ -171,10 +171,16 @@ def concat_audio(segment_files: list[Path], output_path: Path) -> None:
     concat_inputs: list[str] = []
     for index, path in enumerate(segment_files):
         command.extend(["-i", str(path)])
+        normalized_label = f"n{index}"
         filter_parts.append(
-            f"[{index}:a]aresample={_OUTPUT_SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo[a{index}]"
+            f"[{index}:a]aresample={_OUTPUT_SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo[{normalized_label}]"
         )
-        concat_inputs.append(f"[a{index}]")
+        if index < len(segment_files)-1:
+            padded_label = f"a{index}"
+            filter_parts.append(f"[{normalized_label}]apad=pad_dur=1[{padded_label}]")
+            concat_inputs.append(f"[{padded_label}]")
+        else:
+            concat_inputs.append(f"[{normalized_label}]")
     filter_parts.append(f"{''.join(concat_inputs)}concat=n={len(segment_files)}:v=0:a=1[out]")
     command.extend(
         [

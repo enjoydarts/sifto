@@ -132,7 +132,7 @@ class DownloadDirectTests(unittest.TestCase):
 
 
 class TestConcatAudio(unittest.TestCase):
-    def test_concat_audio_normalizes_all_inputs_to_48k_stereo_before_concat(self):
+    def test_concat_audio_normalizes_inputs_and_inserts_one_second_gap_between_chunks(self):
         captured = {}
 
         def fake_run_command(command):
@@ -157,6 +157,7 @@ class TestConcatAudio(unittest.TestCase):
         filter_graph = command[filter_index]
         self.assertIn("aresample=48000", filter_graph)
         self.assertIn("aformat=sample_fmts=fltp:channel_layouts=stereo", filter_graph)
+        self.assertIn("apad=pad_dur=1", filter_graph)
         self.assertIn("concat=n=2:v=0:a=1", filter_graph)
         self.assertIn("-ar", command)
         self.assertIn("48000", command)

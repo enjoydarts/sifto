@@ -286,7 +286,7 @@ def build_aivis_payload(
         "tempo_dynamics": max(0.0, tempo_dynamics),
         "volume": max(0.0, 1.0 + volume_gain),
         "leading_silence_seconds": 0,
-        "trailing_silence_seconds": max(0.0, chunk_trailing_silence_seconds),
+        "trailing_silence_seconds": 0,
         "line_break_silence_seconds": max(0.0, line_break_silence_seconds),
         "output_format": "mp3",
     }

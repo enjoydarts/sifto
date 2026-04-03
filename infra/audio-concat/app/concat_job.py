@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import random
-import shlex
 import shutil
 import subprocess
 import tempfile
@@ -21,6 +20,7 @@ _LOUDNORM_TARGET_I = "-16"
 _LOUDNORM_TARGET_TP = "-1.5"
 _BGM_VOLUME_FILTER = "volume=0.05"
 _OUTPUT_CHANNELS = "2"
+_OUTPUT_SAMPLE_RATE = "48000"
 
 
 def run_from_env() -> int:
@@ -161,39 +161,39 @@ def download_direct(url: str, destination: Path) -> None:
 
 
 def concat_audio(segment_files: list[Path], output_path: Path) -> None:
-    list_path = output_path.parent / "concat.txt"
-    list_path.write_text("".join(f"file {shlex.quote(str(path))}\n" for path in segment_files), encoding="utf-8")
-    first_try = [
+    if not segment_files:
+        raise RuntimeError("segment files are empty")
+    command = [
         "ffmpeg",
         "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        str(list_path),
-        "-c",
-        "copy",
-        str(output_path),
     ]
-    if run_command(first_try):
-        return
-    second_try = [
-        "ffmpeg",
-        "-y",
-        "-f",
-        "concat",
-        "-safe",
-        "0",
-        "-i",
-        str(list_path),
-        "-c:a",
-        "libmp3lame",
-        "-q:a",
-        "2",
-        str(output_path),
-    ]
-    if run_command(second_try):
+    filter_parts: list[str] = []
+    concat_inputs: list[str] = []
+    for index, path in enumerate(segment_files):
+        command.extend(["-i", str(path)])
+        filter_parts.append(
+            f"[{index}:a]aresample={_OUTPUT_SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo[a{index}]"
+        )
+        concat_inputs.append(f"[a{index}]")
+    filter_parts.append(f"{''.join(concat_inputs)}concat=n={len(segment_files)}:v=0:a=1[out]")
+    command.extend(
+        [
+            "-filter_complex",
+            ";".join(filter_parts),
+            "-map",
+            "[out]",
+            "-ar",
+            _OUTPUT_SAMPLE_RATE,
+            "-ac",
+            _OUTPUT_CHANNELS,
+            "-c:a",
+            "libmp3lame",
+            "-q:a",
+            "2",
+            str(output_path),
+        ]
+    )
+    if run_command(command):
         return
     raise RuntimeError("ffmpeg concat failed")
 
@@ -237,6 +237,8 @@ def mix_bgm_with_normalize(main_audio_path: Path, tmp_path: Path, r2: R2Client, 
         ),
         "-map",
         "[out]",
+        "-ar",
+        _OUTPUT_SAMPLE_RATE,
         "-ac",
         _OUTPUT_CHANNELS,
         "-c:a",
@@ -258,6 +260,8 @@ def normalize_audio(input_path: Path, output_path: Path) -> Path:
         str(input_path),
         "-af",
         f"loudnorm=I={_LOUDNORM_TARGET_I}:TP={_LOUDNORM_TARGET_TP}:LRA=11",
+        "-ar",
+        _OUTPUT_SAMPLE_RATE,
         "-ac",
         _OUTPUT_CHANNELS,
         "-c:a",

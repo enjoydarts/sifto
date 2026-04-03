@@ -486,6 +486,7 @@ func (h *SettingsHandler) UpdateAudioBriefingPersonaVoices(w http.ResponseWriter
 		Voices []struct {
 			Persona                 string  `json:"persona"`
 			TTSProvider             string  `json:"tts_provider"`
+			TTSModel                string  `json:"tts_model"`
 			VoiceModel              string  `json:"voice_model"`
 			VoiceStyle              string  `json:"voice_style"`
 			SpeechRate              float64 `json:"speech_rate"`
@@ -505,6 +506,7 @@ func (h *SettingsHandler) UpdateAudioBriefingPersonaVoices(w http.ResponseWriter
 		inputs = append(inputs, service.UpdateAudioBriefingPersonaVoiceInput{
 			Persona:                 voice.Persona,
 			TTSProvider:             voice.TTSProvider,
+			TTSModel:                voice.TTSModel,
 			VoiceModel:              voice.VoiceModel,
 			VoiceStyle:              voice.VoiceStyle,
 			SpeechRate:              voice.SpeechRate,

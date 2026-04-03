@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.concat_job import download_direct, run_job
+from app.concat_job import concat_audio, download_direct, run_job
 
 
 class DownloadDirectTests(unittest.TestCase):
@@ -129,6 +129,41 @@ class DownloadDirectTests(unittest.TestCase):
         self.assertEqual(normalize_mock.call_count, 1)
         payload = post_callback_mock.call_args.args[2]
         self.assertIsNone(payload.get("bgm_object_key"))
+
+
+class TestConcatAudio(unittest.TestCase):
+    def test_concat_audio_normalizes_all_inputs_to_48k_stereo_before_concat(self):
+        captured = {}
+
+        def fake_run_command(command):
+            captured["command"] = command
+            return True
+
+        with tempfile.TemporaryDirectory(prefix="concat-audio-test-") as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            segment_files = [
+                tmp_path / "segment-001.mp3",
+                tmp_path / "segment-002.wav",
+            ]
+            output_path = tmp_path / "episode-concat.mp3"
+
+            with patch("app.concat_job.run_command", side_effect=fake_run_command):
+                concat_audio(segment_files, output_path)
+
+        command = captured["command"]
+        self.assertEqual(command[:2], ["ffmpeg", "-y"])
+        self.assertIn("-filter_complex", command)
+        filter_index = command.index("-filter_complex") + 1
+        filter_graph = command[filter_index]
+        self.assertIn("aresample=48000", filter_graph)
+        self.assertIn("aformat=sample_fmts=fltp:channel_layouts=stereo", filter_graph)
+        self.assertIn("concat=n=2:v=0:a=1", filter_graph)
+        self.assertIn("-ar", command)
+        self.assertIn("48000", command)
+        self.assertIn("-ac", command)
+        self.assertIn("2", command)
+        self.assertIn("-q:a", command)
+        self.assertIn("2", command)
 
 
 if __name__ == "__main__":

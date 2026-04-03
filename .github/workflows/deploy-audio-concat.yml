@@ -61,6 +61,6 @@ jobs:
             --memory=1Gi \
             --cpu=1 \
             --max-retries=1 \
-            --task-timeout=1800s \
+            --task-timeout=3600s \
             --set-env-vars=AUDIO_BRIEFING_R2_ENDPOINT=${{ secrets.AUDIO_BRIEFING_R2_ENDPOINT }},AUDIO_BRIEFING_R2_STANDARD_BUCKET=${{ secrets.AUDIO_BRIEFING_R2_STANDARD_BUCKET }},AUDIO_BRIEFING_R2_BUCKET=${{ secrets.AUDIO_BRIEFING_R2_BUCKET }},AUDIO_BRIEFING_R2_REGION=${{ secrets.AUDIO_BRIEFING_R2_REGION }} \
             --set-secrets=AUDIO_BRIEFING_R2_ACCESS_KEY_ID=${{ secrets.AUDIO_BRIEFING_R2_ACCESS_KEY_SECRET_NAME }}:latest,AUDIO_BRIEFING_R2_SECRET_ACCESS_KEY=${{ secrets.AUDIO_BRIEFING_R2_SECRET_KEY_SECRET_NAME }}:latest

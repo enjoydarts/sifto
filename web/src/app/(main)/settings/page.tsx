@@ -4218,7 +4218,7 @@ export default function SettingsPage() {
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        void syncOpenAITTSVoices();
+                                        void syncOpenAITTSVoices().catch(() => undefined);
                                       }}
                                       disabled={openAITTSVoicesSyncing}
                                       className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-60"
@@ -5260,7 +5260,7 @@ export default function SettingsPage() {
         currentVoiceID={activeOpenAITTSVoice?.voice_model ?? ""}
         onClose={() => setOpenAITTPickerPersona(null)}
         onSync={() => {
-          void syncOpenAITTSVoices();
+          void syncOpenAITTSVoices().catch(() => undefined);
         }}
         onSelect={(selection) => {
           if (!openAITTPickerPersona) return;

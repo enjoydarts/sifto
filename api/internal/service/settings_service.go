@@ -533,12 +533,6 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 		}
 		voiceModel := strings.TrimSpace(row.VoiceModel)
 		voiceStyle := strings.TrimSpace(row.VoiceStyle)
-		speechRate := row.SpeechRate
-		emotionalIntensity := row.EmotionalIntensity
-		tempoDynamics := row.TempoDynamics
-		lineBreakSilenceSeconds := row.LineBreakSilenceSeconds
-		pitch := row.Pitch
-		volumeGain := row.VolumeGain
 		// Allow incomplete persona rows to remain unset in the UI without persisting
 		// placeholder records. Only partially configured rows are rejected.
 		if voiceModel == "" && voiceStyle == "" {
@@ -550,35 +544,24 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 		if voiceStyle == "" && provider != "xai" && provider != "mock" {
 			return nil, fmt.Errorf("invalid voice_style for %s", persona)
 		}
-		if (provider == "xai" || provider == "mock") &&
-			voiceStyle == "" &&
-			speechRate == 0 &&
-			emotionalIntensity == 0 &&
-			tempoDynamics == 0 &&
-			lineBreakSilenceSeconds == 0 &&
-			pitch == 0 &&
-			volumeGain == 0 {
-			speechRate = 1
-			emotionalIntensity = 1
-			tempoDynamics = 1
-			lineBreakSilenceSeconds = 0.4
+		if row.SpeechRate != 0 || (provider != "xai" && provider != "mock") {
+			if row.SpeechRate < 0.5 || row.SpeechRate > 2.0 {
+				return nil, fmt.Errorf("invalid speech_rate for %s", persona)
+			}
 		}
-		if speechRate < 0.5 || speechRate > 2.0 {
-			return nil, fmt.Errorf("invalid speech_rate for %s", persona)
-		}
-		if emotionalIntensity < 0 || emotionalIntensity > 2.0 {
+		if row.EmotionalIntensity < 0 || row.EmotionalIntensity > 2.0 {
 			return nil, fmt.Errorf("invalid emotional_intensity for %s", persona)
 		}
-		if tempoDynamics < 0 || tempoDynamics > 2.0 {
+		if row.TempoDynamics < 0 || row.TempoDynamics > 2.0 {
 			return nil, fmt.Errorf("invalid tempo_dynamics for %s", persona)
 		}
-		if lineBreakSilenceSeconds < 0 || lineBreakSilenceSeconds > 5.0 {
+		if row.LineBreakSilenceSeconds < 0 || row.LineBreakSilenceSeconds > 5.0 {
 			return nil, fmt.Errorf("invalid line_break_silence_seconds for %s", persona)
 		}
-		if pitch < -12 || pitch > 12 {
+		if row.Pitch < -12 || row.Pitch > 12 {
 			return nil, fmt.Errorf("invalid pitch for %s", persona)
 		}
-		if volumeGain < -24 || volumeGain > 24 {
+		if row.VolumeGain < -24 || row.VolumeGain > 24 {
 			return nil, fmt.Errorf("invalid volume_gain for %s", persona)
 		}
 		out = append(out, model.AudioBriefingPersonaVoice{
@@ -586,12 +569,12 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 			TTSProvider:             provider,
 			VoiceModel:              voiceModel,
 			VoiceStyle:              voiceStyle,
-			SpeechRate:              speechRate,
-			EmotionalIntensity:      emotionalIntensity,
-			TempoDynamics:           tempoDynamics,
-			LineBreakSilenceSeconds: lineBreakSilenceSeconds,
-			Pitch:                   pitch,
-			VolumeGain:              volumeGain,
+			SpeechRate:              row.SpeechRate,
+			EmotionalIntensity:      row.EmotionalIntensity,
+			TempoDynamics:           row.TempoDynamics,
+			LineBreakSilenceSeconds: row.LineBreakSilenceSeconds,
+			Pitch:                   row.Pitch,
+			VolumeGain:              row.VolumeGain,
 		})
 	}
 	return out, nil

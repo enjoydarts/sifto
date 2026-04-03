@@ -84,13 +84,54 @@ func TestValidateCatalogModelForPurpose(t *testing.T) {
 func TestUpdateAudioBriefingPersonaVoicesAllowsXAI(t *testing.T) {
 	svc := newSettingsServiceForTest(t)
 	rows, err := svc.UpdateAudioBriefingPersonaVoices(context.Background(), "00000000-0000-4000-8000-000000000021", []UpdateAudioBriefingPersonaVoiceInput{
-		{Persona: "editor", TTSProvider: "xai", VoiceModel: "voice-1", VoiceStyle: ""},
+		{
+			Persona:                 "editor",
+			TTSProvider:             "xai",
+			VoiceModel:              "voice-1",
+			VoiceStyle:              "",
+			SpeechRate:              0,
+			EmotionalIntensity:      0,
+			TempoDynamics:           0,
+			LineBreakSilenceSeconds: 0,
+			Pitch:                   0,
+			VolumeGain:              0,
+		},
 	})
 	if err != nil {
 		t.Fatalf("UpdateAudioBriefingPersonaVoices() error = %v", err)
 	}
-	if len(rows) != 1 || rows[0].TTSProvider != "xai" {
-		t.Fatalf("rows = %#v, want xai", rows)
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if rows[0].Persona != "editor" {
+		t.Fatalf("rows[0].Persona = %q, want editor", rows[0].Persona)
+	}
+	if rows[0].TTSProvider != "xai" {
+		t.Fatalf("rows[0].TTSProvider = %q, want xai", rows[0].TTSProvider)
+	}
+	if rows[0].VoiceModel != "voice-1" {
+		t.Fatalf("rows[0].VoiceModel = %q, want voice-1", rows[0].VoiceModel)
+	}
+	if rows[0].VoiceStyle != "" {
+		t.Fatalf("rows[0].VoiceStyle = %q, want empty", rows[0].VoiceStyle)
+	}
+	if rows[0].SpeechRate != 0 {
+		t.Fatalf("rows[0].SpeechRate = %v, want 0", rows[0].SpeechRate)
+	}
+	if rows[0].EmotionalIntensity != 0 {
+		t.Fatalf("rows[0].EmotionalIntensity = %v, want 0", rows[0].EmotionalIntensity)
+	}
+	if rows[0].TempoDynamics != 0 {
+		t.Fatalf("rows[0].TempoDynamics = %v, want 0", rows[0].TempoDynamics)
+	}
+	if rows[0].LineBreakSilenceSeconds != 0 {
+		t.Fatalf("rows[0].LineBreakSilenceSeconds = %v, want 0", rows[0].LineBreakSilenceSeconds)
+	}
+	if rows[0].Pitch != 0 {
+		t.Fatalf("rows[0].Pitch = %v, want 0", rows[0].Pitch)
+	}
+	if rows[0].VolumeGain != 0 {
+		t.Fatalf("rows[0].VolumeGain = %v, want 0", rows[0].VolumeGain)
 	}
 }
 

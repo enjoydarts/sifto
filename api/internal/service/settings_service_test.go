@@ -1,14 +1,65 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func strptr(v string) *string { return &v }
+
+func newSettingsServiceForTest(t *testing.T) *SettingsService {
+	t.Helper()
+
+	db, err := repository.NewPool(context.Background())
+	if err != nil {
+		t.Fatalf("NewPool() error = %v", err)
+	}
+	t.Cleanup(db.Close)
+	lockSettingsServiceTestDB(t, db)
+
+	const userID = "00000000-0000-4000-8000-000000000021"
+	if _, err := db.Exec(context.Background(), `DELETE FROM audio_briefing_persona_voices WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset persona voices: %v", err)
+	}
+	if _, err := db.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("reset settings service test tables: %v", err)
+	}
+	if _, err := db.Exec(context.Background(), `
+		INSERT INTO users (id, email, name) VALUES ($1, $2, $3)
+	`, userID, "settings-service@example.com", "Settings Service"); err != nil {
+		t.Fatalf("insert test user: %v", err)
+	}
+
+	return NewSettingsService(
+		nil,
+		repository.NewAudioBriefingRepo(db),
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+}
+
+func lockSettingsServiceTestDB(t *testing.T, db *pgxpool.Pool) {
+	t.Helper()
+
+	const key int64 = 74231002
+	if _, err := db.Exec(context.Background(), `SELECT pg_advisory_lock($1)`, key); err != nil {
+		t.Fatalf("pg_advisory_lock() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := db.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, key); err != nil {
+			t.Fatalf("pg_advisory_unlock() error = %v", err)
+		}
+	})
+}
 
 func TestValidateCatalogModelForPurpose(t *testing.T) {
 	tests := []struct {
@@ -27,6 +78,19 @@ func TestValidateCatalogModelForPurpose(t *testing.T) {
 		if (err != nil) != tt.wantErr {
 			t.Fatalf("%s: validateCatalogModelForPurpose(%v, %q) err=%v, wantErr=%v", tt.name, tt.model, tt.purpose, err, tt.wantErr)
 		}
+	}
+}
+
+func TestUpdateAudioBriefingPersonaVoicesAllowsXAI(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	rows, err := svc.UpdateAudioBriefingPersonaVoices(context.Background(), "00000000-0000-4000-8000-000000000021", []UpdateAudioBriefingPersonaVoiceInput{
+		{Persona: "editor", TTSProvider: "xai", VoiceModel: "voice-1", VoiceStyle: ""},
+	})
+	if err != nil {
+		t.Fatalf("UpdateAudioBriefingPersonaVoices() error = %v", err)
+	}
+	if len(rows) != 1 || rows[0].TTSProvider != "xai" {
+		t.Fatalf("rows = %#v, want xai", rows)
 	}
 }
 

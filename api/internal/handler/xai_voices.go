@@ -29,7 +29,7 @@ type XAIVoicesHandler struct {
 	service            xaiVoiceCatalogFetcher
 }
 
-func NewXAIVoicesHandler(repo *repository.XAIVoiceRepo, settingsRepo *repository.UserSettingsRepo, providerUpdateRepo *repository.ProviderModelUpdateRepo, cipher *service.SecretCipher, svc xaiVoiceCatalogFetcher) *XAIVoicesHandler {
+func NewXAIVoicesHandler(repo *repository.XAIVoiceRepo, settingsRepo xaiVoiceSettingsRepo, providerUpdateRepo *repository.ProviderModelUpdateRepo, cipher *service.SecretCipher, svc xaiVoiceCatalogFetcher) *XAIVoicesHandler {
 	return &XAIVoicesHandler{
 		repo:               repo,
 		settingsRepo:       settingsRepo,
@@ -102,8 +102,12 @@ func (h *XAIVoicesHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := middleware.GetUserID(r)
-	apiKey, err := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "xai api key is not configured")
+	apiKey, err := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
 	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	if apiKey == nil || strings.TrimSpace(*apiKey) == "" {
 		http.Error(w, "xai api key is not configured", http.StatusBadRequest)
 		return
 	}
@@ -123,9 +127,6 @@ func (h *XAIVoicesHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	if fetchErr != nil {
 		msg := fetchErr.Error()
 		_ = h.repo.FinishSyncRun(r.Context(), syncRunID, 0, 0, &msg)
-		if h.providerUpdateRepo != nil {
-			_ = h.providerUpdateRepo.UpsertSnapshot(r.Context(), "xai", []string{}, "failed", &msg)
-		}
 		http.Error(w, fetchErr.Error(), http.StatusBadGateway)
 		return
 	}

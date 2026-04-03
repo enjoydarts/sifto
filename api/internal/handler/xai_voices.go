@@ -40,7 +40,12 @@ func NewXAIVoicesHandler(repo *repository.XAIVoiceRepo, settingsRepo xaiVoiceSet
 }
 
 func (h *XAIVoicesHandler) List(w http.ResponseWriter, r *http.Request) {
-	voices, latestRun, err := h.repo.ListLatestSnapshots(r.Context())
+	latestRun, err := h.repo.GetLatestRun(r.Context())
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	voices, _, err := h.repo.ListLatestSuccessfulSnapshots(r.Context())
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -65,7 +70,7 @@ func (h *XAIVoicesHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *XAIVoicesHandler) Status(w http.ResponseWriter, r *http.Request) {
-	_, latestRun, err := h.repo.ListLatestSnapshots(r.Context())
+	latestRun, err := h.repo.GetLatestRun(r.Context())
 	if err != nil {
 		writeRepoError(w, err)
 		return
@@ -84,7 +89,7 @@ func (h *XAIVoicesHandler) Status(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *XAIVoicesHandler) Sync(w http.ResponseWriter, r *http.Request) {
-	_, latestRun, err := h.repo.ListLatestSnapshots(r.Context())
+	latestRun, err := h.repo.GetLatestRun(r.Context())
 	if err != nil {
 		writeRepoError(w, err)
 		return

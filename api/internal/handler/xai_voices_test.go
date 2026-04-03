@@ -13,6 +13,7 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/middleware"
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type fakeXAIVoiceFetcher struct {
@@ -39,17 +40,58 @@ func (f *fakeXAISettingsRepo) GetXAIAPIKeyEncrypted(_ context.Context, _ string)
 	return f.encryptedKey, nil
 }
 
-func TestXAIVoicesHandlerSync(t *testing.T) {
-	const userID = "00000000-0000-4000-8000-000000000001"
+func testXAIVoicesPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
 
 	db, err := repository.NewPool(context.Background())
 	if err != nil {
 		t.Fatalf("NewPool() error = %v", err)
 	}
 	t.Cleanup(db.Close)
-	if _, err := db.Exec(context.Background(), `TRUNCATE xai_voice_snapshots, xai_voice_sync_runs, provider_model_change_events, provider_model_snapshots, user_settings RESTART IDENTITY CASCADE`); err != nil {
-		t.Fatalf("truncate test tables: %v", err)
+	lockXAIVoicesHandlerDB(t, db)
+	if _, err := db.Exec(context.Background(), `
+		DELETE FROM provider_model_change_events WHERE provider = 'xai';
+		DELETE FROM provider_model_snapshots WHERE provider = 'xai';
+		DELETE FROM xai_voice_snapshots;
+		DELETE FROM xai_voice_sync_runs;
+		DELETE FROM user_settings WHERE user_id IN (
+			'00000000-0000-4000-8000-000000000001',
+			'00000000-0000-4000-8000-000000000002',
+			'00000000-0000-4000-8000-000000000003',
+			'00000000-0000-4000-8000-000000000004',
+			'00000000-0000-4000-8000-000000000005'
+		);
+		DELETE FROM users WHERE id IN (
+			'00000000-0000-4000-8000-000000000001',
+			'00000000-0000-4000-8000-000000000002',
+			'00000000-0000-4000-8000-000000000003',
+			'00000000-0000-4000-8000-000000000004',
+			'00000000-0000-4000-8000-000000000005'
+		);
+	`); err != nil {
+		t.Fatalf("reset xai handler test tables: %v", err)
 	}
+	return db
+}
+
+func lockXAIVoicesHandlerDB(t *testing.T, db *pgxpool.Pool) {
+	t.Helper()
+
+	const key int64 = 74231001
+	if _, err := db.Exec(context.Background(), `SELECT pg_advisory_lock($1)`, key); err != nil {
+		t.Fatalf("pg_advisory_lock() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := db.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, key); err != nil {
+			t.Fatalf("pg_advisory_unlock() error = %v", err)
+		}
+	})
+}
+
+func TestXAIVoicesHandlerSync(t *testing.T) {
+	const userID = "00000000-0000-4000-8000-000000000001"
+
+	db := testXAIVoicesPool(t)
 	if _, err := db.Exec(context.Background(), `INSERT INTO users (id, email, name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`, userID, "xai-sync@example.com", "xAI Sync"); err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
@@ -131,14 +173,7 @@ func TestXAIVoicesHandlerSync(t *testing.T) {
 func TestXAIVoicesHandlerSyncRequiresAPIKey(t *testing.T) {
 	const userID = "00000000-0000-4000-8000-000000000002"
 
-	db, err := repository.NewPool(context.Background())
-	if err != nil {
-		t.Fatalf("NewPool() error = %v", err)
-	}
-	t.Cleanup(db.Close)
-	if _, err := db.Exec(context.Background(), `TRUNCATE xai_voice_snapshots, xai_voice_sync_runs, provider_model_change_events, provider_model_snapshots, user_settings RESTART IDENTITY CASCADE`); err != nil {
-		t.Fatalf("truncate test tables: %v", err)
-	}
+	db := testXAIVoicesPool(t)
 	if _, err := db.Exec(context.Background(), `INSERT INTO users (id, email, name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`, userID, "xai-no-key@example.com", "xAI No Key"); err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
@@ -170,14 +205,7 @@ func TestXAIVoicesHandlerSyncRequiresAPIKey(t *testing.T) {
 func TestXAIVoicesHandlerSyncFailedFetchPreservesExistingXAIBaseline(t *testing.T) {
 	const userID = "00000000-0000-4000-8000-000000000003"
 
-	db, err := repository.NewPool(context.Background())
-	if err != nil {
-		t.Fatalf("NewPool() error = %v", err)
-	}
-	t.Cleanup(db.Close)
-	if _, err := db.Exec(context.Background(), `TRUNCATE xai_voice_snapshots, xai_voice_sync_runs, provider_model_change_events, provider_model_snapshots, user_settings RESTART IDENTITY CASCADE`); err != nil {
-		t.Fatalf("truncate test tables: %v", err)
-	}
+	db := testXAIVoicesPool(t)
 	if _, err := db.Exec(context.Background(), `INSERT INTO users (id, email, name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`, userID, "xai-fetch-fail@example.com", "xAI Fetch Fail"); err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
@@ -228,15 +256,59 @@ func TestXAIVoicesHandlerSyncFailedFetchPreservesExistingXAIBaseline(t *testing.
 	}
 }
 
-func TestXAIVoicesHandlerSyncSecretLoadInternalFailureIsNotReportedAsMissingKey(t *testing.T) {
-	db, err := repository.NewPool(context.Background())
+func TestXAIVoicesHandlerListUsesLastSuccessfulBaselineAfterFailedLatestRun(t *testing.T) {
+	db := testXAIVoicesPool(t)
+	repo := repository.NewXAIVoiceRepo(db)
+
+	successRunID, err := repo.StartSyncRun(context.Background(), "manual")
 	if err != nil {
-		t.Fatalf("NewPool() error = %v", err)
+		t.Fatalf("StartSyncRun(success) error = %v", err)
 	}
-	t.Cleanup(db.Close)
-	if _, err := db.Exec(context.Background(), `TRUNCATE xai_voice_snapshots, xai_voice_sync_runs, provider_model_change_events, provider_model_snapshots, user_settings RESTART IDENTITY CASCADE`); err != nil {
-		t.Fatalf("truncate test tables: %v", err)
+	fetchedAt := time.Date(2026, 4, 3, 10, 0, 0, 0, time.UTC)
+	if err := repo.InsertSnapshots(context.Background(), successRunID, fetchedAt, []repository.XAIVoiceSnapshot{
+		{VoiceID: "voice-1", Name: "Baseline Voice", Description: "Warm", Language: "en"},
+	}); err != nil {
+		t.Fatalf("InsertSnapshots(success) error = %v", err)
 	}
+	if err := repo.FinishSyncRun(context.Background(), successRunID, 1, 1, nil); err != nil {
+		t.Fatalf("FinishSyncRun(success) error = %v", err)
+	}
+
+	failedRunID, err := repo.StartSyncRun(context.Background(), "manual")
+	if err != nil {
+		t.Fatalf("StartSyncRun(failed) error = %v", err)
+	}
+	errMsg := "upstream failed"
+	if err := repo.FinishSyncRun(context.Background(), failedRunID, 0, 0, &errMsg); err != nil {
+		t.Fatalf("FinishSyncRun(failed) error = %v", err)
+	}
+
+	handler := &XAIVoicesHandler{repo: repo}
+	req := httptest.NewRequest(http.MethodGet, "/api/xai-voices", nil)
+	rec := httptest.NewRecorder()
+
+	handler.List(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		LatestRun *repository.XAIVoiceSyncRun   `json:"latest_run"`
+		Voices    []repository.XAIVoiceSnapshot `json:"voices"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.LatestRun == nil || resp.LatestRun.ID != failedRunID || resp.LatestRun.Status != "failed" {
+		t.Fatalf("latest_run = %#v, want failed latest run %d", resp.LatestRun, failedRunID)
+	}
+	if len(resp.Voices) != 1 || resp.Voices[0].VoiceID != "voice-1" {
+		t.Fatalf("voices = %#v, want preserved successful baseline", resp.Voices)
+	}
+}
+
+func TestXAIVoicesHandlerSyncSecretLoadInternalFailureIsNotReportedAsMissingKey(t *testing.T) {
+	db := testXAIVoicesPool(t)
 
 	handler := NewXAIVoicesHandler(
 		repository.NewXAIVoiceRepo(db),
@@ -261,14 +333,7 @@ func TestXAIVoicesHandlerSyncSecretLoadInternalFailureIsNotReportedAsMissingKey(
 }
 
 func TestXAIVoicesHandlerStatusReturnsRunningRun(t *testing.T) {
-	db, err := repository.NewPool(context.Background())
-	if err != nil {
-		t.Fatalf("NewPool() error = %v", err)
-	}
-	t.Cleanup(db.Close)
-	if _, err := db.Exec(context.Background(), `TRUNCATE xai_voice_snapshots, xai_voice_sync_runs, provider_model_change_events, provider_model_snapshots, user_settings RESTART IDENTITY CASCADE`); err != nil {
-		t.Fatalf("truncate test tables: %v", err)
-	}
+	db := testXAIVoicesPool(t)
 
 	repo := repository.NewXAIVoiceRepo(db)
 	runID, err := repo.StartSyncRun(context.Background(), "manual")
@@ -297,14 +362,7 @@ func TestXAIVoicesHandlerStatusReturnsRunningRun(t *testing.T) {
 }
 
 func TestXAIVoicesHandlerStatusMarksStaleRunFailed(t *testing.T) {
-	db, err := repository.NewPool(context.Background())
-	if err != nil {
-		t.Fatalf("NewPool() error = %v", err)
-	}
-	t.Cleanup(db.Close)
-	if _, err := db.Exec(context.Background(), `TRUNCATE xai_voice_snapshots, xai_voice_sync_runs, provider_model_change_events, provider_model_snapshots, user_settings RESTART IDENTITY CASCADE`); err != nil {
-		t.Fatalf("truncate test tables: %v", err)
-	}
+	db := testXAIVoicesPool(t)
 
 	repo := repository.NewXAIVoiceRepo(db)
 	runID, err := repo.StartSyncRun(context.Background(), "manual")

@@ -38,6 +38,23 @@ type XAIVoiceSnapshot struct {
 	FetchedAt    time.Time `json:"fetched_at"`
 }
 
+func (r *XAIVoiceRepo) GetLatestRun(ctx context.Context) (*XAIVoiceSyncRun, error) {
+	var run XAIVoiceSyncRun
+	err := r.db.QueryRow(ctx, `
+		SELECT id, started_at, finished_at, last_progress_at, status, trigger_type, fetched_count, saved_count, error_message
+		FROM xai_voice_sync_runs
+		ORDER BY started_at DESC
+		LIMIT 1
+	`).Scan(&run.ID, &run.StartedAt, &run.FinishedAt, &run.LastProgressAt, &run.Status, &run.TriggerType, &run.FetchedCount, &run.SavedCount, &run.ErrorMessage)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &run, nil
+}
+
 func (r *XAIVoiceRepo) StartSyncRun(ctx context.Context, triggerType string) (int64, error) {
 	var id int64
 	err := r.db.QueryRow(ctx, `
@@ -106,11 +123,35 @@ func (r *XAIVoiceRepo) InsertSnapshots(ctx context.Context, syncRunID int64, fet
 	return tx.Commit(ctx)
 }
 
-func (r *XAIVoiceRepo) ListLatestSnapshots(ctx context.Context) ([]XAIVoiceSnapshot, *XAIVoiceSyncRun, error) {
+func (r *XAIVoiceRepo) ListSnapshotsForRun(ctx context.Context, runID int64) ([]XAIVoiceSnapshot, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, sync_run_id, voice_id, name, description, language, preview_url, metadata_json, fetched_at
+		FROM xai_voice_snapshots
+		WHERE sync_run_id = $1
+		ORDER BY voice_id ASC, name ASC
+	`, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]XAIVoiceSnapshot, 0)
+	for rows.Next() {
+		var v XAIVoiceSnapshot
+		if err := rows.Scan(&v.ID, &v.SyncRunID, &v.VoiceID, &v.Name, &v.Description, &v.Language, &v.PreviewURL, &v.MetadataJSON, &v.FetchedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+func (r *XAIVoiceRepo) ListLatestSuccessfulSnapshots(ctx context.Context) ([]XAIVoiceSnapshot, *XAIVoiceSyncRun, error) {
 	var run XAIVoiceSyncRun
 	err := r.db.QueryRow(ctx, `
 		SELECT id, started_at, finished_at, last_progress_at, status, trigger_type, fetched_count, saved_count, error_message
 		FROM xai_voice_sync_runs
+		WHERE status = 'success' AND saved_count > 0
 		ORDER BY started_at DESC
 		LIMIT 1
 	`).Scan(&run.ID, &run.StartedAt, &run.FinishedAt, &run.LastProgressAt, &run.Status, &run.TriggerType, &run.FetchedCount, &run.SavedCount, &run.ErrorMessage)
@@ -120,25 +161,21 @@ func (r *XAIVoiceRepo) ListLatestSnapshots(ctx context.Context) ([]XAIVoiceSnaps
 		}
 		return nil, nil, err
 	}
-
-	rows, err := r.db.Query(ctx, `
-		SELECT id, sync_run_id, voice_id, name, description, language, preview_url, metadata_json, fetched_at
-		FROM xai_voice_snapshots
-		WHERE sync_run_id = $1
-		ORDER BY voice_id ASC, name ASC
-	`, run.ID)
+	rows, err := r.ListSnapshotsForRun(ctx, run.ID)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer rows.Close()
+	return rows, &run, nil
+}
 
-	out := make([]XAIVoiceSnapshot, 0)
-	for rows.Next() {
-		var v XAIVoiceSnapshot
-		if err := rows.Scan(&v.ID, &v.SyncRunID, &v.VoiceID, &v.Name, &v.Description, &v.Language, &v.PreviewURL, &v.MetadataJSON, &v.FetchedAt); err != nil {
-			return nil, nil, err
-		}
-		out = append(out, v)
+func (r *XAIVoiceRepo) ListLatestSnapshots(ctx context.Context) ([]XAIVoiceSnapshot, *XAIVoiceSyncRun, error) {
+	run, err := r.GetLatestRun(ctx)
+	if err != nil || run == nil {
+		return nil, run, err
 	}
-	return out, &run, rows.Err()
+	rows, err := r.ListSnapshotsForRun(ctx, run.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return rows, run, nil
 }

@@ -11,28 +11,27 @@ Audio Briefing に Gemini TTS を追加し、以下を実現する。
 
 ## 前提
 
-- Google Cloud Text-to-Speech の Gemini-TTS を使う
+- Google AI Studio / Gemini API の speech generation を使う
 - 使用モデル候補は少なくとも以下を対象にする
-  - `gemini-2.5-flash-tts`
-  - `gemini-2.5-pro-tts`
-  - 必要なら `gemini-2.5-flash-lite-preview-tts`
-- Gemini-TTS は single / multi-speaker の両方をサポートする
+  - `gemini-2.5-flash-preview-tts`
+  - `gemini-2.5-pro-preview-tts`
+  - 必要なら軽量 preview 系
+- Gemini API の TTS は single / multi-speaker の両方をサポートする
 - multi-speaker では speaker alias は英数字のみで、prompt / dialogue はサイズ上限がある
 
 参考:
-- https://cloud.google.com/text-to-speech/docs/gemini-tts
-- https://docs.cloud.google.com/text-to-speech/docs/create-dialogue-with-multispeakers
+- https://ai.google.dev/gemini-api/docs/speech-generation
 
 ## 制約
 
-Gemini-TTS は既存 provider より制約が強い。
+Gemini API の TTS は既存 provider より制約が強い。
 
 - single speaker:
   - `text` と `prompt` は各 4,000 bytes まで
   - 合計 8,000 bytes まで
-  - 出力音声は約 655 秒を超えると truncate されうる
+  - 長い出力では truncate されうる
 - multi-speaker:
-  - prompt と dialogue の各 field が 4,000 bytes まで
+  - prompt と dialogue field がサイズ上限を持つ
   - 合計 8,000 bytes まで
   - speaker alias は英数字のみ、空白不可
 
@@ -225,7 +224,7 @@ Gemini 選択時に表示する項目:
 - Gemini TTS model
 - Gemini TTS voice
 
-voice picker は xAI / OpenAI と同様に catalog ページへつなぐ。
+voice picker は xAI / OpenAI と同様の UX にするが、取得元は Gemini API sync ではなく Sifto の curated catalog とする。
 
 ### 2. duo synthesis mode
 
@@ -273,12 +272,15 @@ Gemini TTS では `model` と `voice` の両方を扱う。
 
 ### voice
 
-voice は catalog sync 対応が望ましいが、Gemini の voice 一覧 API の扱いが限定的なら初期は固定カタログでもよい。
+Gemini API では docs 上、voice 一覧を外部から同期する公式 catalog endpoint が確認できない。
+このため Gemini voice は API sync ではなく curated catalog として管理する。
 
 推奨:
 
-- 初期は curated voice catalog を shared asset or DB snapshot で管理
-- 後で自動同期に拡張
+- `shared/gemini_tts_voices.json` などの shared asset で curated voice catalog を持つ
+- Web では xAI / OpenAI に近い picker 体験を出す
+- 「sync」ボタンは持たない
+- 追加や更新は repo の catalog 更新として扱う
 
 ## concat / postprocess
 
@@ -308,7 +310,7 @@ Gemini multi-speaker section も既存の audio-concat に流す。
 - single speaker request で Gemini prompt が組み立つ
 - duo で section 単位の multi-speaker request に変換される
 - host / partner の Gemini readiness validation
-- settings UI で Gemini provider 選択時に model + voice picker が出る
+- settings UI で Gemini provider 選択時に model + curated voice picker が出る
 
 ## 段階導入
 
@@ -326,7 +328,7 @@ Gemini multi-speaker section も既存の audio-concat に流す。
 
 ### Phase 3
 
-- Gemini voice catalog の改善
+- curated Gemini voice catalog の改善
 - per-user persona prompt override の検討
 
 ## 推奨実装方針

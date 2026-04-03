@@ -259,6 +259,66 @@ func TestXAIVoicesHandlerSyncFailedFetchPreservesExistingXAIBaseline(t *testing.
 	}
 }
 
+func TestXAIVoicesHandlerSyncInsertFailurePreservesExistingXAIBaselineAndMarksFailed(t *testing.T) {
+	const userID = "00000000-0000-4000-8000-000000000005"
+
+	db := testXAIVoicesPool(t)
+	if _, err := db.Exec(context.Background(), `INSERT INTO users (id, email, name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`, userID, "xai-insert-fail@example.com", "xAI Insert Fail"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "test-secret")
+	cipher := service.NewSecretCipher()
+	encryptedKey, err := cipher.EncryptString("xai-test-key")
+	if err != nil {
+		t.Fatalf("EncryptString() error = %v", err)
+	}
+	settingsRepo := repository.NewUserSettingsRepo(db)
+	if _, err := settingsRepo.SetXAIAPIKey(context.Background(), userID, encryptedKey, "key"); err != nil {
+		t.Fatalf("SetXAIAPIKey() error = %v", err)
+	}
+
+	updateRepo := repository.NewProviderModelUpdateRepo(db)
+	if err := updateRepo.UpsertSnapshot(context.Background(), "xai", []string{"voice-existing"}, "ok", nil); err != nil {
+		t.Fatalf("UpsertSnapshot() error = %v", err)
+	}
+
+	handler := NewXAIVoicesHandler(
+		repository.NewXAIVoiceRepo(db),
+		settingsRepo,
+		updateRepo,
+		cipher,
+		&fakeXAIVoiceFetcher{voices: []repository.XAIVoiceSnapshot{
+			{VoiceID: "dup-voice", Name: "One", Description: "Warm", Language: "en"},
+			{VoiceID: "dup-voice", Name: "Two", Description: "Bright", Language: "en"},
+		}},
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/xai-voices/sync", nil)
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, userID))
+	rec := httptest.NewRecorder()
+
+	handler.Sync(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500 body=%s", rec.Code, rec.Body.String())
+	}
+
+	snapshot, err := updateRepo.GetSnapshot(context.Background(), "xai")
+	if err != nil {
+		t.Fatalf("GetSnapshot() error = %v", err)
+	}
+	if snapshot == nil || len(snapshot.Models) != 1 || snapshot.Models[0] != "voice-existing" {
+		t.Fatalf("snapshot = %#v, want preserved voice-existing baseline", snapshot)
+	}
+	if snapshot.Status != "failed" {
+		t.Fatalf("snapshot.Status = %q, want failed", snapshot.Status)
+	}
+	if snapshot.Error == nil || !strings.Contains(*snapshot.Error, "duplicate key value") {
+		t.Fatalf("snapshot.Error = %v, want duplicate key error", snapshot.Error)
+	}
+}
+
 func TestXAIVoicesHandlerListUsesLastSuccessfulBaselineAfterFailedLatestRun(t *testing.T) {
 	db := testXAIVoicesPool(t)
 	repo := repository.NewXAIVoiceRepo(db)
@@ -307,6 +367,85 @@ func TestXAIVoicesHandlerListUsesLastSuccessfulBaselineAfterFailedLatestRun(t *t
 	}
 	if len(resp.Voices) != 1 || resp.Voices[0].VoiceID != "voice-1" {
 		t.Fatalf("voices = %#v, want preserved successful baseline", resp.Voices)
+	}
+}
+
+func TestXAIVoicesHandlerSyncExposesLatestChangeSummary(t *testing.T) {
+	const userID = "00000000-0000-4000-8000-000000000001"
+
+	db := testXAIVoicesPool(t)
+	if _, err := db.Exec(context.Background(), `INSERT INTO users (id, email, name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`, userID, "xai-changes@example.com", "xAI Changes"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "test-secret")
+	cipher := service.NewSecretCipher()
+	encryptedKey, err := cipher.EncryptString("xai-test-key")
+	if err != nil {
+		t.Fatalf("EncryptString() error = %v", err)
+	}
+	settingsRepo := repository.NewUserSettingsRepo(db)
+	if _, err := settingsRepo.SetXAIAPIKey(context.Background(), userID, encryptedKey, "key"); err != nil {
+		t.Fatalf("SetXAIAPIKey() error = %v", err)
+	}
+
+	updateRepo := repository.NewProviderModelUpdateRepo(db)
+	if err := updateRepo.UpsertSnapshot(context.Background(), "xai", []string{"voice-old"}, "ok", nil); err != nil {
+		t.Fatalf("UpsertSnapshot() error = %v", err)
+	}
+
+	handler := NewXAIVoicesHandler(
+		repository.NewXAIVoiceRepo(db),
+		settingsRepo,
+		updateRepo,
+		cipher,
+		&fakeXAIVoiceFetcher{voices: []repository.XAIVoiceSnapshot{
+			{VoiceID: "voice-new", Name: "New Voice", Description: "Warm", Language: "en"},
+		}},
+	)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/xai-voices/sync", nil)
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, userID))
+	rec := httptest.NewRecorder()
+
+	handler.Sync(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		LatestRun           *repository.XAIVoiceSyncRun `json:"latest_run"`
+		LatestChangeSummary *struct {
+			Provider string `json:"provider"`
+			Trigger  string `json:"trigger"`
+			Added    []struct {
+				ModelID string `json:"model_id"`
+			} `json:"added"`
+			Removed []struct {
+				ModelID string `json:"model_id"`
+			} `json:"removed"`
+		} `json:"latest_change_summary"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.LatestRun == nil || resp.LatestRun.Status != "success" {
+		t.Fatalf("latest_run = %#v, want success", resp.LatestRun)
+	}
+	if resp.LatestChangeSummary == nil {
+		t.Fatal("latest_change_summary = nil, want summary")
+	}
+	if resp.LatestChangeSummary.Provider != "xai" {
+		t.Fatalf("summary.Provider = %q, want xai", resp.LatestChangeSummary.Provider)
+	}
+	if resp.LatestChangeSummary.Trigger != "manual" {
+		t.Fatalf("summary.Trigger = %q, want manual", resp.LatestChangeSummary.Trigger)
+	}
+	if len(resp.LatestChangeSummary.Added) != 1 || resp.LatestChangeSummary.Added[0].ModelID != "voice-new" {
+		t.Fatalf("summary.Added = %#v, want voice-new", resp.LatestChangeSummary.Added)
+	}
+	if len(resp.LatestChangeSummary.Removed) != 1 || resp.LatestChangeSummary.Removed[0].ModelID != "voice-old" {
+		t.Fatalf("summary.Removed = %#v, want voice-old", resp.LatestChangeSummary.Removed)
 	}
 }
 

@@ -143,10 +143,7 @@ func (h *XAIVoicesHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.InsertSnapshots(r.Context(), syncRunID, fetchedAt, voices); err != nil {
 		msg := err.Error()
 		_ = h.repo.FinishSyncRun(r.Context(), syncRunID, len(voices), 0, &msg)
-		writeRepoError(w, err)
-		return
-	}
-	if err := h.repo.FinishSyncRun(r.Context(), syncRunID, len(voices), len(voices), nil); err != nil {
+		h.markProviderSnapshotFailed(r.Context(), previousModelIDs, msg)
 		writeRepoError(w, err)
 		return
 	}
@@ -154,13 +151,25 @@ func (h *XAIVoicesHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	if h.providerUpdateRepo != nil {
 		latestModelIDs := xaiVoiceIDs(voices)
 		if err := h.providerUpdateRepo.UpsertSnapshot(r.Context(), "xai", latestModelIDs, "ok", nil); err != nil {
+			msg := err.Error()
+			_ = h.repo.FinishSyncRun(r.Context(), syncRunID, len(voices), len(voices), &msg)
+			h.markProviderSnapshotFailed(r.Context(), previousModelIDs, msg)
 			writeRepoError(w, err)
 			return
 		}
 		if err := h.insertXAIVoiceChangeEvents(r.Context(), "manual", previousModelIDs, voices); err != nil {
+			msg := err.Error()
+			_ = h.repo.FinishSyncRun(r.Context(), syncRunID, len(voices), len(voices), &msg)
+			h.markProviderSnapshotFailed(r.Context(), previousModelIDs, msg)
 			writeRepoError(w, err)
 			return
 		}
+	}
+	if err := h.repo.FinishSyncRun(r.Context(), syncRunID, len(voices), len(voices), nil); err != nil {
+		msg := err.Error()
+		h.markProviderSnapshotFailed(r.Context(), previousModelIDs, msg)
+		writeRepoError(w, err)
+		return
 	}
 
 	h.List(w, r)
@@ -253,6 +262,17 @@ func (h *XAIVoicesHandler) insertXAIVoiceChangeEvents(ctx context.Context, trigg
 		return events[i].ChangeType < events[j].ChangeType
 	})
 	return h.providerUpdateRepo.InsertChangeEvents(ctx, events)
+}
+
+func (h *XAIVoicesHandler) markProviderSnapshotFailed(ctx context.Context, previousModelIDs []string, errMsg string) {
+	if h.providerUpdateRepo == nil {
+		return
+	}
+	if errMsg == "" {
+		return
+	}
+	msg := errMsg
+	_ = h.providerUpdateRepo.UpsertSnapshot(ctx, "xai", previousModelIDs, "failed", &msg)
 }
 
 func xaiVoiceSyncRunIsStale(run *repository.XAIVoiceSyncRun, now time.Time) bool {

@@ -1024,6 +1024,7 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 	heartbeatToken string,
 	aivisUserDictionaryUUID *string,
 	aivisAPIKey *string,
+	xaiAPIKey *string,
 ) (*AudioBriefingSynthesizeUploadResponse, error) {
 	if _, ok := ctx.Deadline(); !ok && w.audioBriefingTimeout > 0 {
 		var cancel context.CancelFunc
@@ -1050,7 +1051,7 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 	if uuid := strings.TrimSpace(derefString(aivisUserDictionaryUUID)); uuid != "" {
 		requestBody["user_dictionary_uuid"] = uuid
 	}
-	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload", requestBody, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, aivisAPIKey, w.internalSecret))
+	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload", requestBody, workerHeaders(nil, nil, nil, nil, nil, nil, xaiAPIKey, nil, nil, nil, aivisAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) SynthesizeSummaryAudio(
@@ -1068,6 +1069,7 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 	volumeGain float64,
 	aivisUserDictionaryUUID *string,
 	aivisAPIKey *string,
+	xaiAPIKey *string,
 ) (*SummaryAudioSynthesizeResponse, error) {
 	if _, ok := ctx.Deadline(); !ok && w.audioBriefingTimeout > 0 {
 		var cancel context.CancelFunc
@@ -1090,7 +1092,7 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 	if uuid := strings.TrimSpace(derefString(aivisUserDictionaryUUID)); uuid != "" {
 		requestBody["user_dictionary_uuid"] = uuid
 	}
-	return postWithHeaders[SummaryAudioSynthesizeResponse](ctx, w, "/summary-audio/synthesize", requestBody, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, aivisAPIKey, w.internalSecret))
+	return postWithHeaders[SummaryAudioSynthesizeResponse](ctx, w, "/summary-audio/synthesize", requestBody, workerHeaders(nil, nil, nil, nil, nil, nil, xaiAPIKey, nil, nil, nil, aivisAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) PresignAudioBriefingObject(ctx context.Context, objectKey string, expiresSec int) (*AudioBriefingPresignResponse, error) {

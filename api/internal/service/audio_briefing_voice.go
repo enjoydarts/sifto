@@ -39,6 +39,16 @@ type audioBriefingSpeechParams struct {
 	VolumeGain                 float64
 }
 
+func audioBriefingVoiceConfigComplete(provider, voiceModel, voiceStyle string) bool {
+	provider = strings.TrimSpace(provider)
+	voiceModel = strings.TrimSpace(voiceModel)
+	voiceStyle = strings.TrimSpace(voiceStyle)
+	if provider == "" || voiceModel == "" {
+		return false
+	}
+	return voiceStyle != "" || strings.EqualFold(provider, "xai") || strings.EqualFold(provider, "mock")
+}
+
 func NewAudioBriefingVoiceRunner(repo *repository.AudioBriefingRepo, userSettings *repository.UserSettingsRepo, cipher *SecretCipher, worker *WorkerClient) *AudioBriefingVoiceRunner {
 	return &AudioBriefingVoiceRunner{repo: repo, userSettings: userSettings, cipher: cipher, worker: worker}
 }
@@ -146,18 +156,24 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 	provider := strings.TrimSpace(derefString(chunk.TTSProvider))
 	voiceModel := strings.TrimSpace(derefString(chunk.VoiceModel))
 	voiceStyle := strings.TrimSpace(derefString(chunk.VoiceStyle))
-	if provider == "" || voiceModel == "" || voiceStyle == "" {
+	if !audioBriefingVoiceConfigComplete(provider, voiceModel, voiceStyle) {
 		err := fmt.Errorf("chunk tts config is incomplete")
 		return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
 	}
 	var aivisAPIKey *string
 	var aivisUserDictionaryUUID *string
+	var xaiAPIKey *string
 	if provider == "aivis" {
 		aivisAPIKey, err = r.loadAivisAPIKey(ctx, userID)
 		if err != nil {
 			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
 		}
 		aivisUserDictionaryUUID, err = r.userSettings.GetAivisUserDictionaryUUID(ctx, userID)
+		if err != nil {
+			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
+		}
+	} else if provider == "xai" {
+		xaiAPIKey, err = r.loadXAIAPIKey(ctx, userID)
 		if err != nil {
 			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
 		}
@@ -182,6 +198,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		rawHeartbeatToken,
 		aivisUserDictionaryUUID,
 		aivisAPIKey,
+		xaiAPIKey,
 	)
 	if err != nil {
 		return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", annotateAudioBriefingChunkError(chunk, err))
@@ -197,6 +214,28 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		return nil, err
 	}
 	return &AudioBriefingVoiceRunResult{ProcessedChunk: true}, nil
+}
+
+func (r *AudioBriefingVoiceRunner) loadXAIAPIKey(ctx context.Context, userID string) (*string, error) {
+	if r == nil || r.userSettings == nil || r.cipher == nil {
+		return nil, errors.New("audio briefing xai key loader is not configured")
+	}
+	enc, err := r.userSettings.GetXAIAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || strings.TrimSpace(*enc) == "" {
+		return nil, errors.New("xai api key is not configured")
+	}
+	plain, err := r.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	plain = strings.TrimSpace(plain)
+	if plain == "" {
+		return nil, errors.New("xai api key is empty")
+	}
+	return &plain, nil
 }
 
 func audioBriefingSpeechParamsForChunk(

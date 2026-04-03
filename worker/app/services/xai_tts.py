@@ -1,4 +1,5 @@
 import math
+import json
 
 import httpx
 
@@ -27,8 +28,30 @@ def synthesize_xai_tts(
     response = httpx.post(
         f"{normalized_endpoint}/v1/tts",
         headers={"Authorization": f"Bearer {normalized_api_key}"},
-        json={"input": text, "voice_id": voice_id, "format": "mp3"},
+        json={
+            "text": text,
+            "voice_id": voice_id,
+            "language": "ja",
+            "output_format": {
+                "codec": "mp3",
+                "sample_rate": 44100,
+                "bit_rate": 192000,
+            },
+        },
         timeout=timeout_sec,
     )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = ""
+        body = response.text.strip()
+        if body:
+            try:
+                parsed = response.json()
+                detail = json.dumps(parsed, ensure_ascii=True)
+            except ValueError:
+                detail = body[:1000]
+        if detail:
+            raise RuntimeError(f"xai tts request failed: status={response.status_code} body={detail}") from exc
+        raise
     return response.content, "audio/mpeg", ".mp3", estimate_audio_duration_sec(text, speech_rate)

@@ -1,7 +1,10 @@
 import base64
+import os
 
+from app.services.audio_briefing_tts import _env_float
 from app.services.audio_briefing_tts import synthesize_mock_audio
 from app.services.aivis_speech import AivisSpeechService
+from app.services.xai_tts import synthesize_xai_tts
 
 
 def build_summary_audio_text(translated_title: str | None, original_title: str | None, summary: str) -> str:
@@ -17,6 +20,8 @@ def build_summary_audio_text(translated_title: str | None, original_title: str |
 class SummaryAudioPlayerService:
     def __init__(self) -> None:
         self.aivis = AivisSpeechService()
+        self.xai_tts_endpoint = (os.getenv("XAI_TTS_ENDPOINT", "https://api.x.ai").strip() or "https://api.x.ai").rstrip("/")
+        self.xai_timeout_sec = max(_env_float("XAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
 
     def synthesize(
         self,
@@ -34,6 +39,7 @@ class SummaryAudioPlayerService:
         volume_gain: float,
         user_dictionary_uuid: str | None = None,
         aivis_api_key: str | None = None,
+        xai_api_key: str | None = None,
     ) -> tuple[str, str, int, str]:
         normalized_provider = (provider or "").strip().lower()
         if normalized_provider == "mock":
@@ -52,6 +58,15 @@ class SummaryAudioPlayerService:
                 volume_gain=volume_gain,
                 user_dictionary_uuid=user_dictionary_uuid,
                 api_key_override=aivis_api_key,
+            )
+        elif normalized_provider == "xai":
+            audio_bytes, content_type, _, duration_sec = synthesize_xai_tts(
+                endpoint=self.xai_tts_endpoint,
+                api_key=xai_api_key or "",
+                voice_id=voice_model,
+                text=text,
+                speech_rate=speech_rate,
+                timeout_sec=self.xai_timeout_sec,
             )
         else:
             raise RuntimeError(f"unsupported summary audio provider: {provider}")

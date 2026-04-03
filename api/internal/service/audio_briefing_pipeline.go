@@ -854,7 +854,7 @@ func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context
 		if persona == "" || persona == hostPersona {
 			continue
 		}
-		if strings.TrimSpace(voice.TTSProvider) == "" || strings.TrimSpace(voice.VoiceModel) == "" || strings.TrimSpace(voice.VoiceStyle) == "" {
+		if !audioBriefingVoiceConfigComplete(voice.TTSProvider, voice.VoiceModel, voice.VoiceStyle) {
 			continue
 		}
 		candidates = append(candidates, persona)

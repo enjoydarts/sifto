@@ -281,6 +281,36 @@ export interface AivisModelsResponse {
   removed_models?: AivisModelSnapshot[];
 }
 
+export interface XAIVoiceSyncRun {
+  id: number;
+  started_at: string;
+  finished_at?: string | null;
+  last_progress_at?: string | null;
+  status: string;
+  trigger_type: string;
+  fetched_count: number;
+  saved_count: number;
+  error_message?: string | null;
+}
+
+export interface XAIVoiceSnapshot {
+  id: number;
+  sync_run_id: number;
+  voice_id: string;
+  name: string;
+  description: string;
+  language: string;
+  preview_url: string;
+  metadata_json?: string | null;
+  fetched_at: string;
+}
+
+export interface XAIVoicesResponse {
+  latest_run: XAIVoiceSyncRun | null;
+  latest_change_summary?: ProviderModelChangeSummary | null;
+  voices: XAIVoiceSnapshot[];
+}
+
 export interface ProviderModelSnapshotEntry {
   provider: string;
   model_id: string;
@@ -2693,6 +2723,12 @@ export const api = {
     apiFetch<AivisSyncStatusResponse>("/aivis-models/status"),
   syncAivisModels: () =>
     apiFetch<AivisModelsResponse>("/aivis-models/sync", { method: "POST" }),
+  getXAIVoices: () =>
+    apiFetch<XAIVoicesResponse>("/xai-voices"),
+  getXAIVoiceSyncStatus: () =>
+    apiFetch<{ run: XAIVoiceSyncRun | null }>("/xai-voices/status"),
+  syncXAIVoices: () =>
+    apiFetch<XAIVoicesResponse>("/xai-voices/sync", { method: "POST" }),
   deleteInoreaderOAuth: () =>
     apiFetch<{ user_id: string; has_inoreader_oauth: boolean; inoreader_token_expires: string | null }>(
       "/settings/inoreader-oauth",

@@ -126,6 +126,18 @@ func TestAudioBriefingSpeechParamsForChunkUsesPartnerVoiceForPartnerChunk(t *tes
 	}
 }
 
+func TestAudioBriefingVoiceConfigCompleteAllowsXAIWithoutVoiceStyle(t *testing.T) {
+	if !audioBriefingVoiceConfigComplete("xai", "voice-1", "") {
+		t.Fatal("audioBriefingVoiceConfigComplete(xai) = false, want true")
+	}
+}
+
+func TestAudioBriefingVoiceConfigCompleteRequiresVoiceStyleForAivis(t *testing.T) {
+	if audioBriefingVoiceConfigComplete("aivis", "voice-1", "") {
+		t.Fatal("audioBriefingVoiceConfigComplete(aivis) = true, want false")
+	}
+}
+
 func ptrTime(v time.Time) *time.Time {
 	return &v
 }

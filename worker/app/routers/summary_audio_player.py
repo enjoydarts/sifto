@@ -33,6 +33,7 @@ def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Reques
     try:
         service = SummaryAudioPlayerService()
         aivis_api_key = request.headers.get("x-aivis-api-key", "").strip() or None
+        xai_api_key = request.headers.get("x-xai-api-key", "").strip() or None
         audio_base64, content_type, duration_sec, resolved_text = service.synthesize(
             provider=req.provider,
             voice_model=req.voice_model,
@@ -47,6 +48,7 @@ def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Reques
             volume_gain=req.volume_gain,
             user_dictionary_uuid=req.user_dictionary_uuid,
             aivis_api_key=aivis_api_key,
+            xai_api_key=xai_api_key,
         )
         return SummaryAudioSynthesizeResponse(
             audio_base64=audio_base64,

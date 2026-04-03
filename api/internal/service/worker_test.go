@@ -69,6 +69,7 @@ func TestSynthesizeAudioBriefingUploadAppliesAudioBriefingTimeout(t *testing.T) 
 		"heartbeat-token",
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)
@@ -115,6 +116,7 @@ func TestSynthesizeAudioBriefingUploadIncludesUserDictionaryUUID(t *testing.T) {
 		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
 		"heartbeat-token",
 		strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),
+		nil,
 		nil,
 	)
 	if err != nil {
@@ -167,6 +169,96 @@ func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
 		0,
 		strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),
 		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("SynthesizeSummaryAudio(...) error = %v", err)
+	}
+	if resp == nil || resp.AudioBase64 != "Zm9v" {
+		t.Fatalf("AudioBase64 = %#v, want Zm9v", resp)
+	}
+}
+
+func TestSynthesizeAudioBriefingUploadIncludesXAIAPIKeyHeader(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.Header.Get("X-Xai-Api-Key"); got != "xai-key" {
+			t.Fatalf("X-Xai-Api-Key = %q, want xai-key", got)
+		}
+		body, _ := json.Marshal(map[string]any{
+			"audio_object_key": "foo.mp3",
+			"duration_sec":     12,
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(body)),
+		}, nil
+	})
+
+	_, err := client.SynthesizeAudioBriefingUpload(
+		context.Background(),
+		"xai",
+		"voice-1",
+		"",
+		"text",
+		1.0,
+		1.0,
+		1.0,
+		0.4,
+		1.0,
+		0,
+		0,
+		"foo",
+		"chunk-1",
+		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
+		"heartbeat-token",
+		nil,
+		nil,
+		strptr("xai-key"),
+	)
+	if err != nil {
+		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)
+	}
+}
+
+func TestSynthesizeSummaryAudioIncludesXAIAPIKeyHeader(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.Header.Get("X-Xai-Api-Key"); got != "xai-key" {
+			t.Fatalf("X-Xai-Api-Key = %q, want xai-key", got)
+		}
+		respBody, _ := json.Marshal(map[string]any{
+			"audio_base64":  "Zm9v",
+			"content_type":  "audio/mpeg",
+			"duration_sec":  12,
+			"resolved_text": "summary text",
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	})
+
+	resp, err := client.SynthesizeSummaryAudio(
+		context.Background(),
+		"xai",
+		"voice-1",
+		"",
+		"summary text",
+		1.0,
+		1.0,
+		1.0,
+		0.4,
+		1.0,
+		0,
+		0,
+		nil,
+		nil,
+		strptr("xai-key"),
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeSummaryAudio(...) error = %v", err)

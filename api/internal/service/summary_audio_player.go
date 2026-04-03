@@ -89,12 +89,18 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	narration := BuildSummaryAudioNarration(derefString(item.TranslatedTitle), derefString(item.Title), summaryText)
 	var aivisAPIKey *string
 	var aivisUserDictionaryUUID *string
+	var xaiAPIKey *string
 	if strings.EqualFold(strings.TrimSpace(voice.TTSProvider), "aivis") {
 		aivisAPIKey, err = s.loadAivisAPIKey(ctx, userID)
 		if err != nil {
 			return nil, err
 		}
 		aivisUserDictionaryUUID, err = s.userSettings.GetAivisUserDictionaryUUID(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+	} else if strings.EqualFold(strings.TrimSpace(voice.TTSProvider), "xai") {
+		xaiAPIKey, err = s.loadXAIAPIKey(ctx, userID)
 		if err != nil {
 			return nil, err
 		}
@@ -114,6 +120,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		voice.VolumeGain,
 		aivisUserDictionaryUUID,
 		aivisAPIKey,
+		xaiAPIKey,
 	)
 	if err != nil {
 		return nil, err
@@ -126,6 +133,28 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		DurationSec:  resp.DurationSec,
 		ResolvedText: resp.ResolvedText,
 	}, nil
+}
+
+func (s *SummaryAudioPlayerService) loadXAIAPIKey(ctx context.Context, userID string) (*string, error) {
+	if s == nil || s.userSettings == nil || s.cipher == nil {
+		return nil, errors.New("summary audio xai key loader is not configured")
+	}
+	enc, err := s.userSettings.GetXAIAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || strings.TrimSpace(*enc) == "" {
+		return nil, errors.New("xai api key is not configured")
+	}
+	plain, err := s.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	plain = strings.TrimSpace(plain)
+	if plain == "" {
+		return nil, errors.New("xai api key is empty")
+	}
+	return &plain, nil
 }
 
 func (s *SummaryAudioPlayerService) loadAivisAPIKey(ctx context.Context, userID string) (*string, error) {

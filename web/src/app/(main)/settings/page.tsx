@@ -2,8 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Brain, ChevronDown, KeyRound, Settings as SettingsIcon } from "lucide-react";
-import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, UserSettings } from "@/lib/api";
+import { Brain, ChevronDown, KeyRound, RefreshCw, Search, Settings as SettingsIcon, X } from "lucide-react";
+import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -313,13 +313,27 @@ function resolveAivisVoiceSelection(models: AivisModelSnapshot[], voice: AudioBr
   return { model, speaker, style };
 }
 
+function resolveXAIVoiceSelection(voices: XAIVoiceSnapshot[], voice: AudioBriefingPersonaVoice) {
+  return voices.find((item) => item.voice_id === voice.voice_model) ?? null;
+}
+
+function isAudioBriefingVoiceConfigured(voice: AudioBriefingPersonaVoice) {
+  const provider = voice.tts_provider.trim().toLowerCase();
+  if (!voice.voice_model.trim()) return false;
+  if (provider === "xai" || provider === "mock") return true;
+  return voice.voice_style.trim().length > 0;
+}
+
 function getAudioBriefingVoiceStatus(
   voice: AudioBriefingPersonaVoice,
   models: AivisModelSnapshot[],
+  xaiVoices: XAIVoiceSnapshot[],
   hasAivisAPIKey: boolean,
+  hasXAIAPIKey: boolean,
   t: (key: string, fallback?: string) => string
 ) {
-  if (!voice.voice_model.trim() || !voice.voice_style.trim()) {
+  const provider = voice.tts_provider.trim().toLowerCase();
+  if (!isAudioBriefingVoiceConfigured(voice)) {
     return {
       tone: "warn" as const,
       label: t("settings.audioBriefing.status.unconfigured"),
@@ -327,7 +341,32 @@ function getAudioBriefingVoiceStatus(
       configured: false,
     };
   }
-  if (voice.tts_provider !== "aivis") {
+  if (provider === "xai") {
+    const resolved = resolveXAIVoiceSelection(xaiVoices, voice);
+    if (!hasXAIAPIKey) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.audioBriefing.status.xaiApiKeyMissing"),
+        detail: t("settings.audioBriefing.status.xaiApiKeyMissingDetail"),
+        configured: true,
+      };
+    }
+    if (!resolved) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.audioBriefing.status.xaiVoiceMissing"),
+        detail: t("settings.audioBriefing.status.xaiVoiceMissingDetail"),
+        configured: true,
+      };
+    }
+    return {
+      tone: "ok" as const,
+      label: t("settings.audioBriefing.status.xaiReady"),
+      detail: t("settings.audioBriefing.status.xaiReadyDetail"),
+      configured: true,
+    };
+  }
+  if (provider !== "aivis") {
     return {
       tone: "muted" as const,
       label: t("settings.audioBriefing.status.customProvider"),
@@ -366,6 +405,199 @@ function getAudioBriefingVoiceStatus(
     detail: t("settings.audioBriefing.status.readyDetail"),
     configured: true,
   };
+}
+
+type XAIVoicePickerModalProps = {
+  open: boolean;
+  loading: boolean;
+  syncing: boolean;
+  error: string | null;
+  voices: XAIVoiceSnapshot[];
+  currentVoiceID: string;
+  onClose: () => void;
+  onSync: () => Promise<void> | void;
+  onSelect: (selection: { voice_id: string }) => void;
+};
+
+function XAIVoicePickerModal({
+  open,
+  loading,
+  syncing,
+  error,
+  voices,
+  currentVoiceID,
+  onClose,
+  onSync,
+  onSelect,
+}: XAIVoicePickerModalProps) {
+  const { t } = useI18n();
+  const [query, setQuery] = useState("");
+  const [selectedVoiceID, setSelectedVoiceID] = useState<string | null>(null);
+
+  const filteredVoices = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return voices;
+    return voices.filter((voice) =>
+      [voice.voice_id, voice.name, voice.description, voice.language]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [query, voices]);
+
+  const selectedVoice = useMemo(() => {
+    const activeVoiceID = selectedVoiceID ?? currentVoiceID;
+    return (
+      filteredVoices.find((voice) => voice.voice_id === activeVoiceID) ??
+      voices.find((voice) => voice.voice_id === activeVoiceID) ??
+      null
+    );
+  }, [currentVoiceID, filteredVoices, selectedVoiceID, voices]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 py-6" onClick={onClose}>
+      <div
+        className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] shadow-[0_30px_80px_rgba(35,24,12,0.24)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--color-editorial-line)] px-5 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--color-editorial-ink)]">{t("settings.audioBriefing.xaiPickerTitle")}</h2>
+            <p className="mt-1 text-sm text-[var(--color-editorial-ink-soft)]">{t("settings.audioBriefing.xaiPickerSubtitle")}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void onSync()}
+              disabled={syncing}
+              className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+            >
+              <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? t("common.saving") : t("settings.audioBriefing.refreshXaiCatalog")}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex size-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-white text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+              aria-label={t("common.close")}
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="border-b border-[var(--color-editorial-line)] px-5 py-4">
+          <div className="flex items-center gap-3 rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-3">
+            <Search className="size-4 text-[var(--color-editorial-ink-soft)]" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("settings.audioBriefing.xaiPickerSearch")}
+              className="w-full bg-transparent text-sm text-[var(--color-editorial-ink)] outline-none placeholder:text-[var(--color-editorial-ink-faint)]"
+            />
+          </div>
+          {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        </div>
+
+        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]">
+          <div className="min-h-0 overflow-auto border-b border-[var(--color-editorial-line)] lg:border-b-0 lg:border-r">
+            <div className="overflow-x-auto">
+              <table className="min-w-[760px] divide-y divide-[var(--color-editorial-line)] text-sm">
+                <thead className="bg-[var(--color-editorial-panel-strong)]">
+                  <tr className="text-left text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">
+                    <th className="px-4 py-3">{t("settings.audioBriefing.xaiTable.voice")}</th>
+                    <th className="px-4 py-3">{t("settings.audioBriefing.xaiTable.language")}</th>
+                    <th className="px-4 py-3">{t("settings.audioBriefing.xaiTable.description")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-editorial-line)] bg-white">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-8 text-center text-sm text-[var(--color-editorial-ink-soft)]">
+                        {t("common.loading")}
+                      </td>
+                    </tr>
+                  ) : filteredVoices.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-8 text-center text-sm text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.audioBriefing.xaiPickerNoResults")}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredVoices.map((voice) => (
+                      <tr
+                        key={voice.voice_id}
+                        className={`cursor-pointer transition hover:bg-[var(--color-editorial-panel)] ${selectedVoice?.voice_id === voice.voice_id ? "bg-[var(--color-editorial-panel)]" : ""}`}
+                        onClick={() => setSelectedVoiceID(voice.voice_id)}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-[var(--color-editorial-ink)]">{voice.name || voice.voice_id}</div>
+                          <div className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">{voice.voice_id}</div>
+                        </td>
+                        <td className="px-4 py-3 text-[var(--color-editorial-ink)]">{voice.language || "—"}</td>
+                        <td className="px-4 py-3 text-[var(--color-editorial-ink-soft)]">{voice.description || "—"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="min-h-0 overflow-auto px-5 py-5">
+            {selectedVoice ? (
+              <div className="space-y-5">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.audioBriefing.xaiPickerSelected")}</div>
+                  <h3 className="mt-2 text-lg font-semibold text-[var(--color-editorial-ink)]">{selectedVoice.name || selectedVoice.voice_id}</h3>
+                  <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">{selectedVoice.description || t("settings.audioBriefing.xaiPickerNoDescription")}</p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.audioBriefing.xaiTable.language")}</div>
+                    <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">{selectedVoice.language || "—"}</div>
+                  </div>
+                  <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.audioBriefing.xaiTable.voice")}</div>
+                    <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">{selectedVoice.voice_id}</div>
+                  </div>
+                </div>
+
+                {selectedVoice.preview_url ? (
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.audioBriefing.xaiPreview")}</div>
+                    <div className="mt-3 rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+                      <audio controls preload="none" className="w-full" src={selectedVoice.preview_url} />
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelect({ voice_id: selectedVoice.voice_id });
+                      onClose();
+                    }}
+                    className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90"
+                  >
+                    {t("settings.audioBriefing.xaiPickerSelect")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-[22px] border border-dashed border-[var(--color-editorial-line)] bg-white/70 px-5 py-8 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                {t("settings.audioBriefing.xaiPickerEmptySelection")}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function SettingsPage() {
@@ -485,11 +717,16 @@ export default function SettingsPage() {
   const [aivisModelsLoading, setAivisModelsLoading] = useState(false);
   const [aivisModelsSyncing, setAivisModelsSyncing] = useState(false);
   const [aivisModelsError, setAivisModelsError] = useState<string | null>(null);
+  const [xaiVoicesData, setXAIVoicesData] = useState<XAIVoicesResponse | null>(null);
+  const [xaiVoicesLoading, setXAIVoicesLoading] = useState(false);
+  const [xaiVoicesSyncing, setXAIVoicesSyncing] = useState(false);
+  const [xaiVoicesError, setXAIVoicesError] = useState<string | null>(null);
   const [aivisUserDictionaries, setAivisUserDictionaries] = useState<AivisUserDictionary[]>([]);
   const [aivisUserDictionariesLoading, setAivisUserDictionariesLoading] = useState(false);
   const [aivisUserDictionariesLoaded, setAivisUserDictionariesLoaded] = useState(false);
   const [aivisUserDictionariesError, setAivisUserDictionariesError] = useState<string | null>(null);
   const [aivisPickerPersona, setAivisPickerPersona] = useState<string | null>(null);
+  const [xaiPickerPersona, setXAIPickerPersona] = useState<string | null>(null);
   const [expandedAudioBriefingPersonas, setExpandedAudioBriefingPersonas] = useState<string[]>(["editor"]);
   const [obsidianEnabled, setObsidianEnabled] = useState(false);
   const [notificationPriority, setNotificationPriority] = useState<NotificationPriorityRule>({
@@ -755,6 +992,22 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const loadXAIVoices = useCallback(async () => {
+    setXAIVoicesLoading(true);
+    try {
+      const next = await api.getXAIVoices();
+      setXAIVoicesData(next);
+      setXAIVoicesError(null);
+      return next;
+    } catch (e) {
+      const message = String(e);
+      setXAIVoicesError(message);
+      throw e;
+    } finally {
+      setXAIVoicesLoading(false);
+    }
+  }, []);
+
   const syncAivisModels = useCallback(async () => {
     setAivisModelsSyncing(true);
     try {
@@ -770,6 +1023,24 @@ export default function SettingsPage() {
       throw e;
     } finally {
       setAivisModelsSyncing(false);
+    }
+  }, [showToast, t]);
+
+  const syncXAIVoices = useCallback(async () => {
+    setXAIVoicesSyncing(true);
+    try {
+      const next = await api.syncXAIVoices();
+      setXAIVoicesData(next);
+      setXAIVoicesError(null);
+      showToast(t("settings.audioBriefing.xaiSyncCompleted"), "success");
+      return next;
+    } catch (e) {
+      const message = String(e);
+      setXAIVoicesError(message);
+      showToast(message, "error");
+      throw e;
+    } finally {
+      setXAIVoicesSyncing(false);
     }
   }, [showToast, t]);
 
@@ -820,6 +1091,10 @@ export default function SettingsPage() {
         setAivisUserDictionariesLoaded(false);
         setAivisUserDictionariesError(null);
       }
+      if (!data.has_xai_api_key) {
+        setXAIVoicesData(null);
+        setXAIVoicesError(null);
+      }
       setBudgetUSD(data.monthly_budget_usd == null ? "" : String(data.monthly_budget_usd));
       setAlertEnabled(Boolean(data.budget_alert_enabled));
       setThresholdPct(data.budget_alert_threshold_pct ?? 20);
@@ -858,6 +1133,13 @@ export default function SettingsPage() {
     if (activeSection !== "audio-briefing" || aivisModelsData != null || aivisModelsLoading) return;
     void loadAivisModels().catch(() => undefined);
   }, [activeSection, aivisModelsData, aivisModelsLoading, loadAivisModels]);
+
+  useEffect(() => {
+    if (activeSection !== "audio-briefing" || !settings?.has_xai_api_key || xaiVoicesData != null || xaiVoicesLoading) {
+      return;
+    }
+    void loadXAIVoices().catch(() => undefined);
+  }, [activeSection, loadXAIVoices, settings?.has_xai_api_key, xaiVoicesData, xaiVoicesLoading]);
 
   useEffect(() => {
     if (activeSection !== "audio-briefing" || !settings?.has_aivis_api_key || aivisUserDictionariesLoading || aivisUserDictionariesLoaded) {
@@ -1785,6 +2067,8 @@ export default function SettingsPage() {
       }
       await api.setXAIApiKey(xaiApiKeyInput.trim());
       setXaiApiKeyInput("");
+      setXAIVoicesData(null);
+      setXAIVoicesError(null);
       await load();
       showToast(t("settings.toast.xaiSaved"), "success");
     } catch (e) {
@@ -1806,6 +2090,8 @@ export default function SettingsPage() {
     setDeletingXAIKey(true);
     try {
       await api.deleteXAIApiKey();
+      setXAIVoicesData(null);
+      setXAIVoicesError(null);
       await load();
       showToast(t("settings.toast.xaiDeleted"), "success");
     } catch (e) {
@@ -2346,6 +2632,17 @@ export default function SettingsPage() {
     }
   }
 
+  async function openXAIPicker(persona: string) {
+    setXAIPickerPersona(persona);
+    if (xaiVoicesData == null) {
+      try {
+        await loadXAIVoices();
+      } catch {
+        return;
+      }
+    }
+  }
+
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!settings) return null;
@@ -2353,18 +2650,29 @@ export default function SettingsPage() {
   const activeAivisVoice = aivisPickerPersona
     ? audioBriefingVoices.find((voice) => voice.persona === aivisPickerPersona) ?? null
     : null;
+  const activeXAIVoice = xaiPickerPersona
+    ? audioBriefingVoices.find((voice) => voice.persona === xaiPickerPersona) ?? null
+    : null;
   const audioBriefingAivisModels = aivisModelsData?.models ?? [];
+  const audioBriefingXAIVoices = xaiVoicesData?.voices ?? [];
   const hasUserAivisAPIKey = Boolean(settings?.has_aivis_api_key);
+  const hasUserXAIAPIKey = Boolean(settings?.has_xai_api_key);
   const audioBriefingVoiceSummaries = audioBriefingVoices.map((voice) => ({
     voice,
-    resolved: voice.tts_provider === "aivis" ? resolveAivisVoiceSelection(audioBriefingAivisModels, voice) : null,
-    status: getAudioBriefingVoiceStatus(voice, audioBriefingAivisModels, hasUserAivisAPIKey, t),
+    resolved: voice.tts_provider === "aivis"
+      ? resolveAivisVoiceSelection(audioBriefingAivisModels, voice)
+      : voice.tts_provider === "xai"
+        ? resolveXAIVoiceSelection(audioBriefingXAIVoices, voice)
+        : null,
+    status: getAudioBriefingVoiceStatus(voice, audioBriefingAivisModels, audioBriefingXAIVoices, hasUserAivisAPIKey, hasUserXAIAPIKey, t),
   }));
   const configuredAudioBriefingVoiceCount = audioBriefingVoiceSummaries.filter((entry) => entry.status.configured).length;
   const audioBriefingVoiceAttentionCount = audioBriefingVoiceSummaries.filter((entry) => entry.status.tone === "warn").length;
   const audioBriefingVoiceReadyCount = audioBriefingVoiceSummaries.filter((entry) => entry.status.tone === "ok").length;
   const audioBriefingUsesAivisCloud = audioBriefingVoices.some((voice) => voice.tts_provider === "aivis");
   const audioBriefingNeedsAivisAPIKey = audioBriefingUsesAivisCloud && !hasUserAivisAPIKey;
+  const audioBriefingUsesXAI = audioBriefingVoices.some((voice) => voice.tts_provider === "xai");
+  const audioBriefingNeedsXAIAPIKey = audioBriefingUsesXAI && !hasUserXAIAPIKey;
 
   const sectionNavItems: Array<{
     id: SettingsSectionID;
@@ -3043,6 +3351,12 @@ export default function SettingsPage() {
                     </div>
                   ) : null}
 
+                  {xaiVoicesError ? (
+                    <div className="rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-3 text-sm text-[#b45309]">
+                      {xaiVoicesError}
+                    </div>
+                  ) : null}
+
                   {audioBriefingNeedsAivisAPIKey ? (
                     <div className="flex flex-col gap-3 rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-4 text-sm text-[#b45309] lg:flex-row lg:items-center lg:justify-between">
                       <div>
@@ -3059,10 +3373,42 @@ export default function SettingsPage() {
                     </div>
                   ) : null}
 
+                  {audioBriefingNeedsXAIAPIKey ? (
+                    <div className="flex flex-col gap-3 rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-4 text-sm text-[#b45309] lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <div className="font-semibold">{t("settings.audioBriefing.xaiApiKeyWarningTitle")}</div>
+                        <div className="mt-1 leading-6">{t("settings.audioBriefing.xaiApiKeyWarningDetail")}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSection("system")}
+                        className="inline-flex min-h-10 items-center justify-center rounded-full border border-[rgba(180,83,9,0.22)] bg-white px-4 py-2 text-sm font-medium text-[#92400e] hover:bg-[rgba(255,255,255,0.72)]"
+                      >
+                        {t("settings.audioBriefing.openApiKeys")}
+                      </button>
+                    </div>
+                  ) : null}
+
                   <div className="space-y-3">
-                    {audioBriefingVoiceSummaries.map(({ voice, resolved, status }) => {
+                    {audioBriefingVoiceSummaries.map(({ voice, status }) => {
                       const expanded = expandedAudioBriefingPersonas.includes(voice.persona);
                       const isDefaultPersona = voice.persona === audioBriefingDefaultPersona;
+                      const isAivisProvider = voice.tts_provider === "aivis";
+                      const isXAIProvider = voice.tts_provider === "xai";
+                      const aivisResolved = isAivisProvider ? resolveAivisVoiceSelection(audioBriefingAivisModels, voice) : null;
+                      const xaiResolved = isXAIProvider ? resolveXAIVoiceSelection(audioBriefingXAIVoices, voice) : null;
+                      const selectedVoiceLabel = isAivisProvider
+                        ? aivisResolved?.model?.name || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                        : isXAIProvider
+                          ? xaiResolved?.name || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                          : voice.voice_model || t("settings.audioBriefing.unsetShort");
+                      const selectedVoiceDetail = isAivisProvider
+                        ? (aivisResolved?.speaker && aivisResolved?.style
+                            ? `${aivisResolved.speaker.name} / ${aivisResolved.style.name}`
+                            : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort"))
+                        : isXAIProvider
+                          ? xaiResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                          : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort");
                       const toneClasses = status.tone === "ok"
                         ? "border-[rgba(34,197,94,0.28)] bg-[rgba(240,253,244,0.72)]"
                         : status.tone === "warn"
@@ -3106,12 +3452,10 @@ export default function SettingsPage() {
                                 {voice.tts_provider}
                               </span>
                               <span className="rounded-full border border-[var(--color-editorial-line)] bg-white px-2.5 py-1">
-                                {resolved?.model?.name || voice.voice_model || t("settings.audioBriefing.unsetShort")}
+                                {selectedVoiceLabel}
                               </span>
                               <span className="rounded-full border border-[var(--color-editorial-line)] bg-white px-2.5 py-1">
-                                {resolved?.speaker && resolved?.style
-                                  ? `${resolved.speaker.name} / ${resolved.style.name}`
-                                  : voice.voice_style || t("settings.audioBriefing.unsetShort")}
+                                {selectedVoiceDetail}
                               </span>
                             </div>
 
@@ -3132,10 +3476,16 @@ export default function SettingsPage() {
                                   </div>
                                   <select
                                     value={voice.tts_provider}
-                                    onChange={(e) => updateAudioBriefingVoice(voice.persona, { tts_provider: e.target.value })}
+                                    onChange={(e) => {
+                                      const nextProvider = e.target.value;
+                                      updateAudioBriefingVoice(voice.persona, {
+                                        tts_provider: nextProvider,
+                                        voice_style: nextProvider === "xai" || nextProvider === "mock" ? "" : voice.voice_style,
+                                      });
+                                    }}
                                     className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                                   >
-                                    {Array.from(new Set([voice.tts_provider, "aivis", "mock"])).map((provider) => (
+                                    {Array.from(new Set([voice.tts_provider, "aivis", hasUserXAIAPIKey || voice.tts_provider === "xai" ? "xai" : null, "mock"].filter(Boolean) as string[])).map((provider) => (
                                       <option key={`${voice.persona}-${provider}`} value={provider}>
                                         {provider}
                                       </option>
@@ -3151,15 +3501,23 @@ export default function SettingsPage() {
                                         {t("settings.audioBriefing.voiceModel")}
                                       </div>
                                       <div className="mt-3 text-sm font-semibold text-[var(--color-editorial-ink)]">
-                                        {resolved?.model?.name ?? t("settings.audioBriefing.aivisVoiceEmpty")}
+                                        {isAivisProvider
+                                          ? aivisResolved?.model?.name ?? t("settings.audioBriefing.aivisVoiceEmpty")
+                                          : isXAIProvider
+                                            ? xaiResolved?.name ?? t("settings.audioBriefing.xaiVoiceEmpty")
+                                            : voice.voice_model || t("settings.audioBriefing.unsetShort")}
                                       </div>
                                       <div className="mt-1 text-[12px] text-[var(--color-editorial-ink-soft)]">
-                                        {resolved?.speaker && resolved?.style
-                                          ? `${resolved.speaker.name} / ${resolved.style.name}`
-                                          : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort")}
+                                        {isAivisProvider
+                                          ? aivisResolved?.speaker && aivisResolved?.style
+                                            ? `${aivisResolved.speaker.name} / ${aivisResolved.style.name}`
+                                            : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                                          : isXAIProvider
+                                            ? xaiResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                                            : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort")}
                                       </div>
                                     </div>
-                                    {voice.tts_provider === "aivis" ? (
+                                    {isAivisProvider ? (
                                       <button
                                         type="button"
                                         onClick={() => void openAivisPicker(voice.persona)}
@@ -3167,13 +3525,27 @@ export default function SettingsPage() {
                                       >
                                         {t("settings.audioBriefing.pickAivisVoice")}
                                       </button>
+                                    ) : isXAIProvider ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => void openXAIPicker(voice.persona)}
+                                        disabled={!hasUserXAIAPIKey && !audioBriefingXAIVoices.length}
+                                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                                      >
+                                        {t("settings.audioBriefing.pickXaiVoice")}
+                                      </button>
                                     ) : null}
                                   </div>
 
-                                  {voice.tts_provider === "aivis" ? (
+                                  {isAivisProvider ? (
                                     <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-[var(--color-editorial-ink-faint)]">
                                       <span>{`${t("settings.audioBriefing.voiceModel")}: ${voice.voice_model || "—"}`}</span>
                                       <span>{`${t("settings.audioBriefing.voiceStyle")}: ${voice.voice_style || "—"}`}</span>
+                                    </div>
+                                  ) : isXAIProvider ? (
+                                    <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-[var(--color-editorial-ink-faint)]">
+                                      <span>{`${t("settings.audioBriefing.voiceModel")}: ${voice.voice_model || "—"}`}</span>
+                                      <span>{t("settings.audioBriefing.xaiVoiceStyleDisabled")}</span>
                                     </div>
                                   ) : (
                                     <div className="mt-4 flex flex-wrap gap-3">
@@ -3183,12 +3555,14 @@ export default function SettingsPage() {
                                         placeholder={t("settings.audioBriefing.voiceModel")}
                                         className="min-w-[180px] flex-1 rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                                       />
-                                      <input
-                                        value={voice.voice_style}
-                                        onChange={(e) => updateAudioBriefingVoice(voice.persona, { voice_style: e.target.value })}
-                                        placeholder={t("settings.audioBriefing.voiceStyle")}
-                                        className="min-w-[180px] flex-1 rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
-                                      />
+                                      {!isXAIProvider ? (
+                                        <input
+                                          value={voice.voice_style}
+                                          onChange={(e) => updateAudioBriefingVoice(voice.persona, { voice_style: e.target.value })}
+                                          placeholder={t("settings.audioBriefing.voiceStyle")}
+                                          className="min-w-[180px] flex-1 rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                                        />
+                                      ) : null}
                                     </div>
                                   )}
                                 </div>
@@ -3298,7 +3672,7 @@ export default function SettingsPage() {
                                   {t("settings.audioBriefing.inlineHelp")}
                                 </p>
                                 <div className="flex flex-wrap gap-2">
-                                  {voice.tts_provider === "aivis" ? (
+                                  {isAivisProvider ? (
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -3308,6 +3682,17 @@ export default function SettingsPage() {
                                       className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-60"
                                     >
                                       {aivisModelsSyncing ? t("aivisModels.syncing") : t("settings.audioBriefing.refreshCatalog")}
+                                    </button>
+                                  ) : isXAIProvider ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void syncXAIVoices();
+                                      }}
+                                      disabled={xaiVoicesSyncing}
+                                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                                    >
+                                      {xaiVoicesSyncing ? t("settings.audioBriefing.syncingXaiCatalog") : t("settings.audioBriefing.refreshXaiCatalog")}
                                     </button>
                                   ) : null}
                                   <button
@@ -4310,6 +4695,27 @@ export default function SettingsPage() {
             tts_provider: "aivis",
             voice_model: selection.voice_model,
             voice_style: selection.voice_style,
+          });
+        }}
+      />
+
+      <XAIVoicePickerModal
+        open={Boolean(xaiPickerPersona)}
+        loading={xaiVoicesLoading}
+        syncing={xaiVoicesSyncing}
+        error={xaiVoicesError}
+        voices={audioBriefingXAIVoices}
+        currentVoiceID={activeXAIVoice?.voice_model ?? ""}
+        onClose={() => setXAIPickerPersona(null)}
+        onSync={() => {
+          void syncXAIVoices();
+        }}
+        onSelect={(selection) => {
+          if (!xaiPickerPersona) return;
+          updateAudioBriefingVoice(xaiPickerPersona, {
+            tts_provider: "xai",
+            voice_model: selection.voice_id,
+            voice_style: "",
           });
         }}
       />

@@ -84,6 +84,7 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
     try:
         service = AudioBriefingTTSService()
         aivis_api_key = request.headers.get("x-aivis-api-key", "").strip() or None
+        xai_api_key = request.headers.get("x-xai-api-key", "").strip() or None
         audio_object_key, duration_sec = service.synthesize_and_upload(
             provider=req.provider,
             voice_model=req.voice_model,
@@ -102,6 +103,7 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
             heartbeat_token=req.heartbeat_token,
             user_dictionary_uuid=req.user_dictionary_uuid,
             aivis_api_key=aivis_api_key,
+            xai_api_key=xai_api_key,
         )
         return AudioBriefingSynthesizeResponse(
             audio_object_key=audio_object_key,

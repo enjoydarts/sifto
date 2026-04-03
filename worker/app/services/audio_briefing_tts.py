@@ -116,6 +116,7 @@ class AudioBriefingTTSService:
         heartbeat_token: str | None = None,
         user_dictionary_uuid: str | None = None,
         aivis_api_key: str | None = None,
+        xai_api_key: str | None = None,
     ) -> tuple[str, int]:
         _ = (chunk_id or "").strip()
         heartbeat = AudioBriefingHeartbeatLoop(
@@ -149,6 +150,7 @@ class AudioBriefingTTSService:
                     voice_id=voice_model,
                     text=text,
                     speech_rate=speech_rate,
+                    api_key_override=xai_api_key,
                 )
             else:
                 raise RuntimeError(f"unsupported tts provider: {provider}")
@@ -306,10 +308,17 @@ class AudioBriefingTTSService:
             api_key_override=api_key_override,
         )
 
-    def synthesize_xai_audio(self, *, voice_id: str, text: str, speech_rate: float) -> tuple[bytes, str, str, int]:
+    def synthesize_xai_audio(
+        self,
+        *,
+        voice_id: str,
+        text: str,
+        speech_rate: float,
+        api_key_override: str | None = None,
+    ) -> tuple[bytes, str, str, int]:
         return synthesize_xai_tts(
             endpoint=self.xai_tts_endpoint,
-            api_key=self.xai_api_key,
+            api_key=(api_key_override or "").strip() or self.xai_api_key,
             voice_id=voice_id,
             text=text,
             speech_rate=speech_rate,

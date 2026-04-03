@@ -251,8 +251,11 @@ func TestXAIVoicesHandlerSyncFailedFetchPreservesExistingXAIBaseline(t *testing.
 	if snapshot == nil || len(snapshot.Models) != 1 || snapshot.Models[0] != "voice-existing" {
 		t.Fatalf("snapshot = %#v, want preserved voice-existing baseline", snapshot)
 	}
-	if snapshot.Status != "ok" {
-		t.Fatalf("snapshot.Status = %q, want ok", snapshot.Status)
+	if snapshot.Status != "failed" {
+		t.Fatalf("snapshot.Status = %q, want failed", snapshot.Status)
+	}
+	if snapshot.Error == nil || *snapshot.Error != "upstream failed" {
+		t.Fatalf("snapshot.Error = %v, want upstream failed", snapshot.Error)
 	}
 }
 

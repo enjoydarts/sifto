@@ -132,6 +132,9 @@ func (h *XAIVoicesHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	if fetchErr != nil {
 		msg := fetchErr.Error()
 		_ = h.repo.FinishSyncRun(r.Context(), syncRunID, 0, 0, &msg)
+		if h.providerUpdateRepo != nil {
+			_ = h.providerUpdateRepo.UpsertSnapshot(r.Context(), "xai", previousModelIDs, "failed", &msg)
+		}
 		http.Error(w, fetchErr.Error(), http.StatusBadGateway)
 		return
 	}

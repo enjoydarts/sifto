@@ -13,11 +13,14 @@ func TestAudioBriefingCandidateItemsQueryPrioritizesRecentFetchedWindow(t *testi
 	if !strings.Contains(query, "COALESCE(i.fetched_at, i.created_at) >= $2") {
 		t.Fatalf("query must filter items from the fetched-time slot boundary: %s", query)
 	}
+	if !strings.Contains(query, "sm.score DESC NULLS LAST") {
+		t.Fatalf("query must prioritize higher scored summaries within the slot: %s", query)
+	}
 	if !strings.Contains(query, "COALESCE(i.fetched_at, i.created_at) DESC") {
-		t.Fatalf("query must sort recent fetched items first within the priority bucket: %s", query)
+		t.Fatalf("query must keep fetched recency as a secondary tiebreaker: %s", query)
 	}
 	if !strings.Contains(query, "COALESCE(i.published_at, i.created_at) DESC") {
-		t.Fatalf("query must retain published recency ordering after fetched priority: %s", query)
+		t.Fatalf("query must retain published recency ordering after score and fetched recency: %s", query)
 	}
 	if got, want := len(args), 3; got != want {
 		t.Fatalf("args len = %d, want %d", got, want)

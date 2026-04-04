@@ -672,9 +672,9 @@ func audioBriefingCandidateItemsQuery(userID string, windowStart time.Time, limi
 		           WHEN COALESCE(i.fetched_at, i.created_at) >= $2 THEN 0
 		           ELSE 1
 		         END,
+		         sm.score DESC NULLS LAST,
 		         COALESCE(i.fetched_at, i.created_at) DESC,
-		         COALESCE(i.published_at, i.created_at) DESC,
-		         sm.score DESC NULLS LAST
+		         COALESCE(i.published_at, i.created_at) DESC
 		LIMIT $3`
 	return query, []any{userID, windowStart, limit}
 }

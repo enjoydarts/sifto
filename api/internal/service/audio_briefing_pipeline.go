@@ -834,7 +834,6 @@ func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context
 	if job == nil {
 		return "", nil, repository.ErrNotFound
 	}
-	hostPersona := normalizeAudioBriefingPersona(job.Persona)
 	hostRequiresGemini := hostVoice != nil && strings.EqualFold(strings.TrimSpace(hostVoice.TTSProvider), "gemini_tts")
 	if existing := strings.TrimSpace(derefString(job.PartnerPersona)); existing != "" {
 		voice, err := o.repo.GetPersonaVoice(ctx, job.UserID, existing)
@@ -849,36 +848,10 @@ func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context
 		}
 		return normalizeAudioBriefingPersona(existing), voice, nil
 	}
-
-	voices, err := o.repo.ListPersonaVoicesByUser(ctx, job.UserID)
-	if err != nil {
-		return "", nil, err
+	if hostRequiresGemini {
+		return "", nil, fmt.Errorf("audio briefing duo partner persona must be explicitly configured for gemini_tts")
 	}
-	candidates := make([]string, 0, len(voices))
-	voiceByPersona := make(map[string]model.AudioBriefingPersonaVoice, len(voices))
-	for _, voice := range voices {
-		persona := normalizeAudioBriefingPersona(voice.Persona)
-		if persona == "" || persona == hostPersona {
-			continue
-		}
-		if !audioBriefingVoiceConfigComplete(voice.TTSProvider, voice.VoiceModel, voice.VoiceStyle) {
-			continue
-		}
-		if hostRequiresGemini && !audioBriefingGeminiDuoReady(hostVoice, &voice) {
-			continue
-		}
-		candidates = append(candidates, persona)
-		voiceByPersona[persona] = voice
-	}
-	picked, ok := randomPersonaFromCandidates(candidates)
-	if !ok {
-		return "", nil, fmt.Errorf("audio briefing duo partner voice is not configured")
-	}
-	if _, err := o.repo.SetPartnerPersona(ctx, job.ID, picked); err != nil {
-		return "", nil, err
-	}
-	voice := voiceByPersona[picked]
-	return picked, &voice, nil
+	return "", nil, fmt.Errorf("audio briefing duo partner persona must be explicitly configured")
 }
 
 func audioBriefingFrameTargetChars(targetChars int) int {

@@ -128,6 +128,55 @@ func TestAudioBriefingShouldContinue(t *testing.T) {
 	}
 }
 
+func TestResolveAudioBriefingPartnerVoiceRequiresExplicitPartnerPersona(t *testing.T) {
+	orchestrator := &AudioBriefingOrchestrator{}
+	job := &model.AudioBriefingJob{
+		ID:               "job-1",
+		UserID:           "user-1",
+		Persona:          "editor",
+		ConversationMode: "duo",
+	}
+
+	partnerPersona, partnerVoice, err := orchestrator.resolveAudioBriefingPartnerVoice(context.Background(), job, &model.AudioBriefingPersonaVoice{
+		TTSProvider: "xai",
+		VoiceModel:  "voice-host",
+	})
+	if err == nil {
+		t.Fatal("resolveAudioBriefingPartnerVoice(...) error = nil, want explicit configuration error")
+	}
+	if !strings.Contains(err.Error(), "must be explicitly configured") {
+		t.Fatalf("error = %v, want explicit configuration message", err)
+	}
+	if partnerPersona != "" {
+		t.Fatalf("partnerPersona = %q, want empty", partnerPersona)
+	}
+	if partnerVoice != nil {
+		t.Fatalf("partnerVoice = %#v, want nil", partnerVoice)
+	}
+}
+
+func TestResolveAudioBriefingPartnerVoiceRequiresExplicitPartnerPersonaForGemini(t *testing.T) {
+	orchestrator := &AudioBriefingOrchestrator{}
+	job := &model.AudioBriefingJob{
+		ID:               "job-1",
+		UserID:           "user-1",
+		Persona:          "editor",
+		ConversationMode: "duo",
+	}
+
+	_, _, err := orchestrator.resolveAudioBriefingPartnerVoice(context.Background(), job, &model.AudioBriefingPersonaVoice{
+		TTSProvider: "gemini_tts",
+		TTSModel:    "gemini-2.5-flash-tts",
+		VoiceModel:  "Kore",
+	})
+	if err == nil {
+		t.Fatal("resolveAudioBriefingPartnerVoice(...) error = nil, want explicit gemini configuration error")
+	}
+	if !strings.Contains(err.Error(), "must be explicitly configured for gemini_tts") {
+		t.Fatalf("error = %v, want gemini explicit configuration message", err)
+	}
+}
+
 func TestNormalizeAudioBriefingConversationModeValue(t *testing.T) {
 	if got := normalizeAudioBriefingConversationModeValue("duo"); got != "duo" {
 		t.Fatalf("normalizeAudioBriefingConversationModeValue(duo) = %q, want duo", got)

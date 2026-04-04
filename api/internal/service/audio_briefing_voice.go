@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -254,7 +255,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			ttsModel,
 			job.Persona,
 			derefString(job.PartnerPersona),
-			voiceModel,
+			strings.TrimSpace(voice.VoiceModel),
 			strings.TrimSpace(partnerVoice.VoiceModel),
 			group.PartType,
 			audioBriefingGeminiDuoTurns(group),
@@ -487,6 +488,15 @@ func audioBriefingChunkGroupForSelection(chunks []model.AudioBriefingScriptChunk
 	if len(group.Chunks) == 0 {
 		group.Chunks = append(group.Chunks, selected)
 	}
+	sort.SliceStable(group.Chunks, func(i, j int) bool {
+		if group.Chunks[i] == nil {
+			return false
+		}
+		if group.Chunks[j] == nil {
+			return true
+		}
+		return group.Chunks[i].Seq < group.Chunks[j].Seq
+	})
 	return group
 }
 

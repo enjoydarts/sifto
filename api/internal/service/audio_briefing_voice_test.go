@@ -187,6 +187,33 @@ func TestAudioBriefingGeminiDuoTurnsUsesGroupedChunkSpeakers(t *testing.T) {
 	}
 }
 
+func TestAudioBriefingChunkGroupForSelectionSortsBySeq(t *testing.T) {
+	chunks := []model.AudioBriefingScriptChunk{
+		{ID: "chunk-2", Seq: 2, PartType: "article", ItemID: stringPtr("item-1"), Speaker: stringPtr("partner"), Text: "p1"},
+		{ID: "chunk-1", Seq: 1, PartType: "article", ItemID: stringPtr("item-1"), Speaker: stringPtr("host"), Text: "h1"},
+	}
+
+	group := audioBriefingChunkGroupForSelection(chunks, &chunks[0])
+
+	if len(group.Chunks) != 2 {
+		t.Fatalf("len(group.Chunks) = %d, want 2", len(group.Chunks))
+	}
+	if group.Chunks[0] == nil || group.Chunks[0].Seq != 1 {
+		t.Fatalf("group.Chunks[0].Seq = %#v, want 1", group.Chunks[0])
+	}
+	if group.Chunks[1] == nil || group.Chunks[1].Seq != 2 {
+		t.Fatalf("group.Chunks[1].Seq = %#v, want 2", group.Chunks[1])
+	}
+
+	turns := audioBriefingGeminiDuoTurns(group)
+	if len(turns) != 2 {
+		t.Fatalf("len(turns) = %d, want 2", len(turns))
+	}
+	if turns[0].Speaker != "host" || turns[1].Speaker != "partner" {
+		t.Fatalf("turn speakers = %#v, want host/partner in seq order", turns)
+	}
+}
+
 func ptrTime(v time.Time) *time.Time {
 	return &v
 }

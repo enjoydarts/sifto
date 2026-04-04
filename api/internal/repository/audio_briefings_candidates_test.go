@@ -10,11 +10,8 @@ func TestAudioBriefingCandidateItemsQueryPrioritizesRecentFetchedWindow(t *testi
 	windowStart := time.Date(2026, 4, 3, 18, 0, 0, 0, time.UTC)
 	query, args := audioBriefingCandidateItemsQuery("user-1", windowStart, 8)
 
-	if !strings.Contains(query, "COALESCE(i.published_at, i.created_at) >= $2") {
-		t.Fatalf("query must filter items from the explicit slot boundary: %s", query)
-	}
 	if !strings.Contains(query, "COALESCE(i.fetched_at, i.created_at) >= $2") {
-		t.Fatalf("query must prioritize recently fetched items: %s", query)
+		t.Fatalf("query must filter items from the fetched-time slot boundary: %s", query)
 	}
 	if !strings.Contains(query, "COALESCE(i.fetched_at, i.created_at) DESC") {
 		t.Fatalf("query must sort recent fetched items first within the priority bucket: %s", query)

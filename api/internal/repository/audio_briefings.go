@@ -667,7 +667,7 @@ func audioBriefingCandidateItemsQuery(userID string, windowStart time.Time, limi
 		  AND i.deleted_at IS NULL
 		  AND i.status = 'summarized'
 		  AND NULLIF(BTRIM(sm.summary), '') IS NOT NULL
-		  AND COALESCE(i.published_at, i.created_at) >= $2
+		  AND COALESCE(i.fetched_at, i.created_at) >= $2
 		ORDER BY CASE
 		           WHEN COALESCE(i.fetched_at, i.created_at) >= $2 THEN 0
 		           ELSE 1

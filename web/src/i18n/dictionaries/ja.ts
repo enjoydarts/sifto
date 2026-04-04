@@ -1689,6 +1689,7 @@ export const jaDict: Dict = {
   "audioBriefing.scriptModel": "台本モデル",
   "audioBriefing.bgmTrack": "使用BGM",
   "audioBriefing.failureReason": "失敗理由",
+  "audioBriefing.skipReason": "スキップ理由",
   "audioBriefing.player": "Player",
   "audioBriefing.playerPending": "音声ファイルはまだ準備中です。台本と採用記事は先に確認できます。",
   "audioBriefing.playInSharedPlayer": "プレイヤーで再生",

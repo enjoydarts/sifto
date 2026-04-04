@@ -14,6 +14,7 @@ import (
 type AudioBriefingDraft struct {
 	Title                 string
 	Status                string
+	ErrorMessage          *string
 	ScriptCharCount       int
 	ScriptLLMModels       []string
 	PromptKey             *string
@@ -57,9 +58,11 @@ func BuildAudioBriefingDraft(
 	slotStartedAt = slotStartedAt.In(timeutil.JST)
 	if len(items) == 0 {
 		title := fmt.Sprintf("%02d:%02d便の音声ブリーフィング", slotStartedAt.Hour(), slotStartedAt.Minute())
+		reason := "この配信枠に含める記事が見つからなかったため、生成をスキップしました。"
 		return AudioBriefingDraft{
-			Title:  title,
-			Status: "skipped",
+			Title:        title,
+			Status:       "skipped",
+			ErrorMessage: &reason,
 		}
 	}
 
@@ -117,9 +120,11 @@ func BuildAudioBriefingDraftFromNarration(
 	slotStartedAt = slotStartedAt.In(timeutil.JST)
 	if len(items) == 0 {
 		title := fmt.Sprintf("%02d:%02d便の音声ブリーフィング", slotStartedAt.Hour(), slotStartedAt.Minute())
+		reason := "この配信枠に含める記事が見つからなかったため、生成をスキップしました。"
 		return AudioBriefingDraft{
-			Title:  title,
-			Status: "skipped",
+			Title:        title,
+			Status:       "skipped",
+			ErrorMessage: &reason,
 		}
 	}
 
@@ -211,9 +216,11 @@ func BuildAudioBriefingDraftFromTurns(
 	slotStartedAt = slotStartedAt.In(timeutil.JST)
 	if len(items) == 0 {
 		title := fmt.Sprintf("%02d:%02d便の音声ブリーフィング", slotStartedAt.Hour(), slotStartedAt.Minute())
+		reason := "この配信枠に含める記事が見つからなかったため、生成をスキップしました。"
 		return AudioBriefingDraft{
-			Title:  title,
-			Status: "skipped",
+			Title:        title,
+			Status:       "skipped",
+			ErrorMessage: &reason,
 		}
 	}
 

@@ -300,6 +300,7 @@ func (o *AudioBriefingOrchestrator) runScriptingStage(ctx context.Context, job *
 		job.ID,
 		draft.Status,
 		&draft.Title,
+		draft.ErrorMessage,
 		draft.ScriptCharCount,
 		audioBriefingScriptModelsValue(draft.ScriptLLMModels),
 		repository.AudioBriefingPromptMetadata{

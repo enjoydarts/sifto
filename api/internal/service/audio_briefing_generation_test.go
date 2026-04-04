@@ -14,6 +14,9 @@ func TestBuildAudioBriefingDraftSkippedWhenNoItems(t *testing.T) {
 	if draft.Status != "skipped" {
 		t.Fatalf("draft.Status = %q, want skipped", draft.Status)
 	}
+	if draft.ErrorMessage == nil || *draft.ErrorMessage == "" {
+		t.Fatalf("draft.ErrorMessage = %v, want skip reason", draft.ErrorMessage)
+	}
 	if len(draft.Chunks) != 0 {
 		t.Fatalf("len(draft.Chunks) = %d, want 0", len(draft.Chunks))
 	}

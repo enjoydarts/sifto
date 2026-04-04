@@ -1688,6 +1688,7 @@ export const enDict: Dict = {
   "audioBriefing.scriptModel": "Script model",
   "audioBriefing.bgmTrack": "BGM",
   "audioBriefing.failureReason": "Failure",
+  "audioBriefing.skipReason": "Skip reason",
   "audioBriefing.player": "Player",
   "audioBriefing.playerPending": "The audio file is not ready yet. You can review the script and selected items first.",
   "audioBriefing.playInSharedPlayer": "Play in player",

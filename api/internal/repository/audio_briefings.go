@@ -873,6 +873,7 @@ func (r *AudioBriefingRepo) CompleteScriptingJob(
 	jobID string,
 	status string,
 	title *string,
+	errorMessage *string,
 	scriptCharCount int,
 	scriptLLMModels *string,
 	prompt AudioBriefingPromptMetadata,
@@ -900,7 +901,7 @@ func (r *AudioBriefingRepo) CompleteScriptingJob(
 		    prompt_experiment_arm_id = $11,
 		    title = $12,
 		    error_code = NULL,
-		    error_message = NULL,
+		    error_message = NULLIF($13, ''),
 		    failed_at = NULL,
 		    updated_at = NOW()
 		WHERE id = $1
@@ -911,7 +912,7 @@ func (r *AudioBriefingRepo) CompleteScriptingJob(
                audio_duration_sec,
 		          title, r2_audio_object_key, r2_manifest_object_key, bgm_object_key, r2_storage_bucket, podcast_public_object_key, podcast_public_bucket, podcast_public_deleted_at, provider_job_id, idempotency_key,
 		          error_code, error_message, published_at, failed_at, created_at, updated_at
-	`, jobID, strings.TrimSpace(status), len(items), scriptCharCount, strings.TrimSpace(valueOrEmpty(scriptLLMModels)), strings.TrimSpace(valueOrEmpty(prompt.PromptKey)), strings.TrimSpace(valueOrEmpty(prompt.PromptSource)), prompt.PromptVersionID, prompt.PromptVersionNumber, prompt.PromptExperimentID, prompt.PromptExperimentArmID, title))
+	`, jobID, strings.TrimSpace(status), len(items), scriptCharCount, strings.TrimSpace(valueOrEmpty(scriptLLMModels)), strings.TrimSpace(valueOrEmpty(prompt.PromptKey)), strings.TrimSpace(valueOrEmpty(prompt.PromptSource)), prompt.PromptVersionID, prompt.PromptVersionNumber, prompt.PromptExperimentID, prompt.PromptExperimentArmID, title, strings.TrimSpace(valueOrEmpty(errorMessage))))
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrInvalidState

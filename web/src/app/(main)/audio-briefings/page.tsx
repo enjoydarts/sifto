@@ -68,6 +68,13 @@ function formatConversationMode(mode: string | null | undefined, t: (key: string
   return t(`audioBriefing.conversationMode.${normalized}`, normalized);
 }
 
+function audioBriefingMessageLabel(status: string | null | undefined, t: (key: string, fallback?: string) => string) {
+  if (status === "skipped") {
+    return t("audioBriefing.skipReason", "Skip reason");
+  }
+  return t("audioBriefing.failureReason", "Failure reason");
+}
+
 export default function AudioBriefingsPage() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
@@ -238,7 +245,7 @@ export default function AudioBriefingsPage() {
                   </div>
                   {item.error_message ? (
                     <p className="mt-3 text-sm leading-6 text-[#8a4f42]">
-                      {t("audioBriefing.failureReason", "Failure")}: {item.error_message}
+                      {audioBriefingMessageLabel(item.status, t)}: {item.error_message}
                     </p>
                   ) : null}
                 </Link>

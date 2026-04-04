@@ -149,6 +149,13 @@ function formatChunkPartType(partType: string, t: (key: string, fallback?: strin
   }
 }
 
+function audioBriefingMessageLabel(status: string | null | undefined, t: (key: string, fallback?: string) => string) {
+  if (status === "skipped") {
+    return t("audioBriefing.skipReason", "Skip reason");
+  }
+  return t("audioBriefing.failureReason", "Failure reason");
+}
+
 export default function AudioBriefingDetailPage() {
   const RESUME_POLL_WINDOW_MS = 60_000;
   const { t, locale } = useI18n();
@@ -494,7 +501,7 @@ export default function AudioBriefingDetailPage() {
           ) : null}
           {detail.job.error_message ? (
             <div className="mt-4 rounded-[18px] border border-[#e8cfc7] bg-[#fff4f0] px-4 py-4 text-sm leading-6 text-[#7a4337]">
-              {t("audioBriefing.failureReason", "Failure")}: {detail.job.error_message}
+              {audioBriefingMessageLabel(detail.job.status, t)}: {detail.job.error_message}
             </div>
           ) : null}
         </section>

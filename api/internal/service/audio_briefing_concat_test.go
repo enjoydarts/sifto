@@ -143,3 +143,43 @@ func TestAudioBriefingConcatStarterPassesBGMConfigToRunner(t *testing.T) {
 		t.Fatalf("runner.req.BGMR2Prefix = %q, want audio/bgm", runner.req.BGMR2Prefix)
 	}
 }
+
+func TestAudioBriefingConcatStarterDeduplicatesConsecutiveChunkAudioKeys(t *testing.T) {
+	t.Setenv("APP_BASE_URL", "https://api.example.com")
+
+	shared := "audio-briefings/user-1/job-1/opening.wav"
+	repo := &stubAudioBriefingConcatRepo{
+		job: &model.AudioBriefingJob{
+			ID:     "job-1",
+			UserID: "user-1",
+			Status: "voiced",
+		},
+		settings: &model.AudioBriefingSettings{},
+		chunks: []model.AudioBriefingScriptChunk{
+			{Seq: 1, R2AudioObjectKey: &shared},
+			{Seq: 2, R2AudioObjectKey: &shared},
+			{Seq: 3, R2AudioObjectKey: stringPtr("audio-briefings/user-1/job-1/article-1.wav")},
+		},
+	}
+	runner := &stubAudioConcatRunner{
+		resp: &AudioConcatRunResponse{ExecutionName: "projects/p/locations/nrt/jobs/j/executions/e"},
+	}
+	starter := &AudioBriefingConcatStarter{
+		repo:   repo,
+		runner: runner,
+		mode:   audioBriefingConcatModeCloudRun,
+	}
+
+	if err := starter.Start(context.Background(), "user-1", "job-1"); err != nil {
+		t.Fatalf("Start(...) error = %v", err)
+	}
+	if runner.req == nil {
+		t.Fatal("runner request was not captured")
+	}
+	if len(runner.req.AudioObjectKeys) != 2 {
+		t.Fatalf("len(runner.req.AudioObjectKeys) = %d, want 2", len(runner.req.AudioObjectKeys))
+	}
+	if runner.req.AudioObjectKeys[0] != shared {
+		t.Fatalf("AudioObjectKeys[0] = %q, want shared opening key", runner.req.AudioObjectKeys[0])
+	}
+}

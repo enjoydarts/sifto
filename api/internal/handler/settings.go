@@ -63,9 +63,9 @@ type navigatorPersonaDefinition struct {
 	Item            navigatorPersonaTaskHints       `json:"item"`
 }
 
-func NewSettingsHandler(repo *repository.UserSettingsRepo, audioBriefingRepo *repository.AudioBriefingRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, worker *service.WorkerClient, cache service.JSONCache) *SettingsHandler {
+func NewSettingsHandler(repo *repository.UserSettingsRepo, userRepo *repository.UserRepo, audioBriefingRepo *repository.AudioBriefingRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, worker *service.WorkerClient, cache service.JSONCache) *SettingsHandler {
 	return &SettingsHandler{
-		settings:          service.NewSettingsService(repo, audioBriefingRepo, aivisModelRepo, obsidianRepo, llmUsageRepo, openRouterOverrideRepo, cipher, github),
+		settings:          service.NewSettingsService(repo, userRepo, audioBriefingRepo, aivisModelRepo, obsidianRepo, llmUsageRepo, openRouterOverrideRepo, cipher, github),
 		podcastArtwork:    service.NewPodcastArtworkService(repo, worker),
 		aivisDictionaries: service.NewAivisUserDictionaryService(repo, cipher),
 		obsidianRepo:      obsidianRepo,
@@ -502,7 +502,11 @@ func (h *SettingsHandler) UpdateAudioBriefingPersonaVoices(w http.ResponseWriter
 		return
 	}
 	inputs := make([]service.UpdateAudioBriefingPersonaVoiceInput, 0, len(body.Voices))
+	usesGeminiTTS := false
 	for _, voice := range body.Voices {
+		if strings.EqualFold(strings.TrimSpace(voice.TTSProvider), "gemini_tts") {
+			usesGeminiTTS = true
+		}
 		inputs = append(inputs, service.UpdateAudioBriefingPersonaVoiceInput{
 			Persona:                 voice.Persona,
 			TTSProvider:             voice.TTSProvider,
@@ -516,6 +520,12 @@ func (h *SettingsHandler) UpdateAudioBriefingPersonaVoices(w http.ResponseWriter
 			Pitch:                   voice.Pitch,
 			VolumeGain:              voice.VolumeGain,
 		})
+	}
+	if usesGeminiTTS {
+		if err := service.EnsureGeminiTTSEnabledForUser(r.Context(), h.settings.UserRepo(), userID); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
 	}
 	rows, err := h.settings.UpdateAudioBriefingPersonaVoices(r.Context(), userID, inputs)
 	if err != nil {

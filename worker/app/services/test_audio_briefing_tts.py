@@ -1,10 +1,15 @@
+import base64
+import io
+import json as jsonlib
 import unittest
+import wave
 from unittest.mock import patch
 
 import httpx
 
 import app.services.aivis_speech as aivis_speech
 import app.services.audio_briefing_tts as audio_briefing_tts
+import app.services.gemini_tts as gemini_tts
 from app.services.audio_briefing_tts import (
     AivisRateLimiter,
     AivisRedisRateLimiter,
@@ -408,6 +413,105 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
                 "response_format": "mp3",
             },
         )
+
+    def test_synthesize_gemini_audio_uses_gemini_speech_generation_payload(self):
+        captured: dict[str, object] = {}
+        service = AudioBriefingTTSService()
+        with patch("app.services.gemini_tts.synthesize_gemini_cloud_tts", return_value=(b"mp3", "audio/mpeg", ".mp3", 1)) as synth:
+            audio_bytes, content_type, suffix, duration_sec = service.synthesize_gemini_audio(
+                persona="editor",
+                voice_id="Kore",
+                tts_model="gemini-2.5-flash-tts",
+                text="summary text",
+                speech_rate=0.95,
+                api_key_override=None,
+            )
+
+        synth.assert_called_once_with(
+            model="gemini-2.5-flash-tts",
+            voice_name="Kore",
+            persona="editor",
+            text="summary text",
+            speech_rate=0.95,
+        )
+        self.assertEqual(content_type, "audio/mpeg")
+        self.assertEqual(suffix, ".mp3")
+        self.assertEqual(duration_sec, 1)
+        self.assertEqual(audio_bytes, b"mp3")
+
+    def test_synthesize_and_upload_uses_gemini_provider_with_persona(self):
+        service = AudioBriefingTTSService()
+
+        with patch.object(service, "synthesize_gemini_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 12)) as synth:
+            with patch.object(service, "upload_bytes") as upload:
+                object_key, duration_sec = service.synthesize_and_upload(
+                    provider="gemini_tts",
+                    voice_model="Kore",
+                    voice_style="",
+                    persona="editor",
+                    tts_model="gemini-2.5-flash-tts",
+                    text="hello",
+                    speech_rate=1.0,
+                    emotional_intensity=1.0,
+                    tempo_dynamics=1.0,
+                    line_break_silence_seconds=0.0,
+                    chunk_trailing_silence_seconds=0.0,
+                    pitch=0.0,
+                    volume_gain=0.0,
+                    output_object_key="audio/test",
+                    google_api_key=None,
+                )
+
+        synth.assert_called_once_with(
+            persona="editor",
+            voice_id="Kore",
+            tts_model="gemini-2.5-flash-tts",
+            text="hello",
+            speech_rate=1.0,
+            api_key_override=None,
+        )
+        upload.assert_called_once()
+        self.assertEqual(duration_sec, 12)
+        self.assertTrue(object_key.endswith(".mp3"))
+
+    def test_synthesize_gemini_duo_and_upload_uses_multi_speaker_payload(self):
+        service = AudioBriefingTTSService()
+
+        with patch(
+            "app.services.audio_briefing_tts.synthesize_gemini_multi_speaker_tts",
+            return_value=(b"mp3", "audio/mpeg", ".mp3", 18),
+        ) as synth:
+            with patch.object(service, "upload_bytes") as upload:
+                object_key, duration_sec = service.synthesize_gemini_duo_and_upload(
+                    tts_model="gemini-2.5-flash-tts",
+                    host_persona="snark",
+                    partner_persona="analyst",
+                    host_voice_model="Kore",
+                    partner_voice_model="Fenrir",
+                    section_type="article",
+                    turns=[
+                        {"speaker": "host", "text": "冒頭です"},
+                        {"speaker": "partner", "text": "補足です"},
+                    ],
+                    output_object_key="audio/test",
+                    api_key_override=None,
+                )
+
+        synth.assert_called_once_with(
+            model="gemini-2.5-flash-tts",
+            host_voice_name="Kore",
+            partner_voice_name="Fenrir",
+            host_persona="snark",
+            partner_persona="analyst",
+            section_type="article",
+            turns=[
+                {"speaker": "host", "text": "冒頭です"},
+                {"speaker": "partner", "text": "補足です"},
+            ],
+        )
+        upload.assert_called_once()
+        self.assertEqual(duration_sec, 18)
+        self.assertTrue(object_key.endswith(".mp3"))
 
     def test_synthesize_aivis_audio_uses_exponential_backoff_after_429(self):
         service = AudioBriefingTTSService()

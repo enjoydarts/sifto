@@ -30,6 +30,12 @@ func LookupTTSProviderCapabilities(provider string) TTSProviderCapabilities {
 			SupportsSeparateTTSModel: true,
 			RequiresUserAPIKey:       true,
 		}
+	case "gemini_tts":
+		return TTSProviderCapabilities{
+			SupportsCatalogPicker:    true,
+			SupportsSeparateTTSModel: true,
+			RequiresUserAPIKey:       false,
+		}
 	case "mock":
 		return TTSProviderCapabilities{}
 	default:

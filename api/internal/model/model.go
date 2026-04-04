@@ -198,6 +198,7 @@ type AudioBriefingScriptChunk struct {
 	JobID            string     `json:"job_id"`
 	Seq              int        `json:"seq"`
 	PartType         string     `json:"part_type"`
+	ItemID           *string    `json:"item_id,omitempty"`
 	Speaker          *string    `json:"speaker,omitempty"`
 	Text             string     `json:"text"`
 	CharCount        int        `json:"char_count"`

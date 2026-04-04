@@ -56,6 +56,7 @@ func TestSynthesizeAudioBriefingUploadAppliesAudioBriefingTimeout(t *testing.T) 
 		"model",
 		"speaker:1",
 		"",
+		"editor",
 		"text",
 		1.0,
 		1.0,
@@ -68,6 +69,7 @@ func TestSynthesizeAudioBriefingUploadAppliesAudioBriefingTimeout(t *testing.T) 
 		"chunk-1",
 		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
 		"heartbeat-token",
+		nil,
 		nil,
 		nil,
 		nil,
@@ -106,6 +108,7 @@ func TestSynthesizeAudioBriefingUploadIncludesUserDictionaryUUID(t *testing.T) {
 		"model",
 		"speaker:1",
 		"",
+		"editor",
 		"text",
 		1.0,
 		1.0,
@@ -122,9 +125,65 @@ func TestSynthesizeAudioBriefingUploadIncludesUserDictionaryUUID(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)
+	}
+}
+
+func TestSynthesizeAudioBriefingGeminiDuoUploadIncludesTurnsAndGoogleHeader(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path != "/audio-briefing/synthesize-upload-gemini-duo" {
+			t.Fatalf("path = %q, want /audio-briefing/synthesize-upload-gemini-duo", req.URL.Path)
+		}
+		if got := req.Header.Get("X-Google-Api-Key"); got != "google-key" {
+			t.Fatalf("X-Google-Api-Key = %q, want google-key", got)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if got := body["host_voice_model"]; got != "Kore" {
+			t.Fatalf("host_voice_model = %v, want Kore", got)
+		}
+		turns, ok := body["turns"].([]any)
+		if !ok || len(turns) != 2 {
+			t.Fatalf("turns = %#v, want 2 items", body["turns"])
+		}
+		respBody, _ := json.Marshal(map[string]any{
+			"audio_object_key": "foo.wav",
+			"duration_sec":     18,
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	})
+
+	resp, err := client.SynthesizeAudioBriefingGeminiDuoUpload(
+		context.Background(),
+		"gemini-2.5-flash-tts",
+		"snark",
+		"analyst",
+		"Kore",
+		"Fenrir",
+		"article",
+		[]AudioBriefingGeminiDuoTurn{
+			{Speaker: "host", Text: "冒頭です"},
+			{Speaker: "partner", Text: "補足です"},
+		},
+		"foo",
+		strptr("google-key"),
+	)
+	if err != nil {
+		t.Fatalf("SynthesizeAudioBriefingGeminiDuoUpload(...) error = %v", err)
+	}
+	if resp == nil || resp.AudioObjectKey != "foo.wav" {
+		t.Fatalf("response = %#v, want foo.wav", resp)
 	}
 }
 
@@ -165,6 +224,7 @@ func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
 		"speaker:1",
 		"",
 		"邦題タイトル\n\n要約本文",
+		"editor",
 		1.0,
 		1.0,
 		1.0,
@@ -173,6 +233,7 @@ func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
 		0,
 		0,
 		strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),
+		nil,
 		nil,
 		nil,
 		nil,
@@ -209,6 +270,7 @@ func TestSynthesizeAudioBriefingUploadIncludesXAIAPIKeyHeader(t *testing.T) {
 		"voice-1",
 		"",
 		"",
+		"editor",
 		"text",
 		1.0,
 		1.0,
@@ -221,6 +283,7 @@ func TestSynthesizeAudioBriefingUploadIncludesXAIAPIKeyHeader(t *testing.T) {
 		"chunk-1",
 		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
 		"heartbeat-token",
+		nil,
 		nil,
 		nil,
 		strptr("xai-key"),
@@ -258,6 +321,7 @@ func TestSynthesizeSummaryAudioIncludesXAIAPIKeyHeader(t *testing.T) {
 		"",
 		"",
 		"summary text",
+		"editor",
 		1.0,
 		1.0,
 		1.0,
@@ -267,7 +331,67 @@ func TestSynthesizeSummaryAudioIncludesXAIAPIKeyHeader(t *testing.T) {
 		0,
 		nil,
 		nil,
+		nil,
 		strptr("xai-key"),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("SynthesizeSummaryAudio(...) error = %v", err)
+	}
+	if resp == nil || resp.AudioBase64 != "Zm9v" {
+		t.Fatalf("AudioBase64 = %#v, want Zm9v", resp)
+	}
+}
+
+func TestSynthesizeSummaryAudioDoesNotIncludeGoogleAPIKeyHeaderForGemini(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.Header.Get("X-Google-Api-Key"); got != "" {
+			t.Fatalf("X-Google-Api-Key = %q, want empty", got)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if got := body["persona"]; got != "snark" {
+			t.Fatalf("persona = %v, want snark", got)
+		}
+		if got := body["tts_model"]; got != "gemini-2.5-flash-tts" {
+			t.Fatalf("tts_model = %v, want gemini-2.5-flash-tts", got)
+		}
+		respBody, _ := json.Marshal(map[string]any{
+			"audio_base64":  "Zm9v",
+			"content_type":  "audio/mpeg",
+			"duration_sec":  12,
+			"resolved_text": "summary text",
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	})
+
+	resp, err := client.SynthesizeSummaryAudio(
+		context.Background(),
+		"gemini_tts",
+		"Kore",
+		"",
+		"gemini-2.5-flash-tts",
+		"summary text",
+		"snark",
+		1.0,
+		1.0,
+		1.0,
+		0.4,
+		1.0,
+		0,
+		0,
+		nil,
+		nil,
+		nil,
+		nil,
 		nil,
 	)
 	if err != nil {
@@ -309,6 +433,7 @@ func TestSynthesizeAudioBriefingUploadIncludesOpenAIAPIKeyHeaderAndTTSModel(t *t
 		"alloy",
 		"",
 		"gpt-4o-mini-tts",
+		"editor",
 		"text",
 		1.0,
 		1.0,
@@ -324,7 +449,66 @@ func TestSynthesizeAudioBriefingUploadIncludesOpenAIAPIKeyHeaderAndTTSModel(t *t
 		nil,
 		nil,
 		nil,
+		nil,
 		strptr("openai-key"),
+	)
+	if err != nil {
+		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)
+	}
+}
+
+func TestSynthesizeAudioBriefingUploadDoesNotIncludeGeminiAPIKeyHeaderAndIncludesPersonaAndTTSModel(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.Header.Get("X-Google-Api-Key"); got != "" {
+			t.Fatalf("X-Google-Api-Key = %q, want empty", got)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if got := body["tts_model"]; got != "gemini-2.5-flash-tts" {
+			t.Fatalf("tts_model = %v, want gemini-2.5-flash-tts", got)
+		}
+		if got := body["persona"]; got != "editor" {
+			t.Fatalf("persona = %v, want editor", got)
+		}
+		respBody, _ := json.Marshal(map[string]any{
+			"audio_object_key": "foo.mp3",
+			"duration_sec":     12,
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	})
+
+	_, err := client.SynthesizeAudioBriefingUpload(
+		context.Background(),
+		"gemini_tts",
+		"Kore",
+		"",
+		"gemini-2.5-flash-tts",
+		"editor",
+		"text",
+		1.0,
+		1.0,
+		1.0,
+		0.4,
+		1.0,
+		0,
+		0,
+		"foo",
+		"chunk-1",
+		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
+		"heartbeat-token",
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)
@@ -365,6 +549,7 @@ func TestSynthesizeSummaryAudioIncludesOpenAIAPIKeyHeaderAndTTSModel(t *testing.
 		"",
 		"gpt-4o-mini-tts",
 		"summary text",
+		"editor",
 		1.0,
 		1.0,
 		1.0,
@@ -372,6 +557,7 @@ func TestSynthesizeSummaryAudioIncludesOpenAIAPIKeyHeaderAndTTSModel(t *testing.
 		1.0,
 		0,
 		0,
+		nil,
 		nil,
 		nil,
 		nil,

@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Brain, ChevronDown, KeyRound, RefreshCw, Search, Settings as SettingsIcon, X } from "lucide-react";
-import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
+import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -51,6 +51,19 @@ function inferProviderLabelFromModelID(
     return t("settings.modelGuide.provider.siliconflow", "SiliconFlow");
   }
   return null;
+}
+
+function tWithVars(
+  t: (key: string, fallback?: string) => string,
+  key: string,
+  vars: Record<string, string | number>,
+  fallback?: string,
+): string {
+  let message = t(key, fallback);
+  for (const [name, value] of Object.entries(vars)) {
+    message = message.replaceAll(`{{${name}}}`, String(value));
+  }
+  return message;
 }
 
 function formatProviderModelLabel(
@@ -323,6 +336,12 @@ const TTS_PROVIDER_CAPABILITIES: Record<string, TTSProviderCapabilities> = {
     supportsSeparateTTSModel: true,
     supportsSpeechTuning: false,
   },
+  gemini_tts: {
+    requiresVoiceStyle: false,
+    supportsCatalogPicker: true,
+    supportsSeparateTTSModel: true,
+    supportsSpeechTuning: false,
+  },
   mock: {
     requiresVoiceStyle: false,
     supportsCatalogPicker: false,
@@ -355,6 +374,30 @@ const OPENAI_TTS_MODEL_OPTIONS: ModelOption[] = [
   },
 ];
 
+const GEMINI_TTS_MODEL_OPTIONS: ModelOption[] = [
+  {
+    value: "gemini-2.5-flash-tts",
+    label: "gemini-2.5-flash-tts",
+    selectedLabel: "Gemini TTS / gemini-2.5-flash-tts",
+    note: "Fast Gemini speech generation",
+    provider: "Gemini TTS",
+  },
+  {
+    value: "gemini-2.5-pro-tts",
+    label: "gemini-2.5-pro-tts",
+    selectedLabel: "Gemini TTS / gemini-2.5-pro-tts",
+    note: "Higher quality Gemini speech generation",
+    provider: "Gemini TTS",
+  },
+  {
+    value: "gemini-2.5-flash-lite-preview-tts",
+    label: "gemini-2.5-flash-lite-preview-tts",
+    selectedLabel: "Gemini TTS / gemini-2.5-flash-lite-preview-tts",
+    note: "Lowest latency Gemini speech generation",
+    provider: "Gemini TTS",
+  },
+];
+
 function buildOpenAITTSModelOptions(currentValue: string): ModelOption[] {
   const trimmed = currentValue.trim();
   if (!trimmed || OPENAI_TTS_MODEL_OPTIONS.some((option) => option.value === trimmed)) {
@@ -368,6 +411,22 @@ function buildOpenAITTSModelOptions(currentValue: string): ModelOption[] {
       provider: "OpenAI TTS",
     },
     ...OPENAI_TTS_MODEL_OPTIONS,
+  ];
+}
+
+function buildGeminiTTSModelOptions(currentValue: string): ModelOption[] {
+  const trimmed = currentValue.trim();
+  if (!trimmed || GEMINI_TTS_MODEL_OPTIONS.some((option) => option.value === trimmed)) {
+    return GEMINI_TTS_MODEL_OPTIONS;
+  }
+  return [
+    {
+      value: trimmed,
+      label: trimmed,
+      selectedLabel: `Gemini TTS / ${trimmed}`,
+      provider: "Gemini TTS",
+    },
+    ...GEMINI_TTS_MODEL_OPTIONS,
   ];
 }
 
@@ -395,6 +454,10 @@ function resolveOpenAITTSVoiceSelection(voices: OpenAITTSVoiceSnapshot[], voice:
   return voices.find((item) => item.voice_id === voice.voice_model) ?? null;
 }
 
+function resolveGeminiTTSVoiceSelection(voices: GeminiTTSVoiceCatalogEntry[], voice: AudioBriefingPersonaVoice) {
+  return voices.find((item) => item.voice_name === voice.voice_model) ?? null;
+}
+
 function getAudioBriefingProviderCapabilities(provider: string): TTSProviderCapabilities {
   return TTS_PROVIDER_CAPABILITIES[provider.trim().toLowerCase()] ?? {
     requiresVoiceStyle: true,
@@ -416,9 +479,11 @@ function getAudioBriefingVoiceStatus(
   models: AivisModelSnapshot[],
   xaiVoices: XAIVoiceSnapshot[],
   openAIVoices: OpenAITTSVoiceSnapshot[],
+  geminiVoices: GeminiTTSVoiceCatalogEntry[],
   hasAivisAPIKey: boolean,
   hasXAIAPIKey: boolean,
   hasOpenAIAPIKey: boolean,
+  geminiTTSEnabled: boolean,
   t: (key: string, fallback?: string) => string
 ) {
   const provider = voice.tts_provider.trim().toLowerCase();
@@ -460,6 +525,39 @@ function getAudioBriefingVoiceStatus(
       tone: "ok" as const,
       label: t("settings.audioBriefing.status.openaiReady"),
       detail: t("settings.audioBriefing.status.openaiReadyDetail"),
+      configured: true,
+    };
+  }
+  if (provider === "gemini_tts") {
+    const resolved = resolveGeminiTTSVoiceSelection(geminiVoices, voice);
+    if (!voice.tts_model.trim()) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.audioBriefing.status.geminiModelMissing"),
+        detail: t("settings.audioBriefing.status.geminiModelMissingDetail"),
+        configured: true,
+      };
+    }
+    if (!geminiTTSEnabled) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.audioBriefing.status.geminiNotAllowed"),
+        detail: t("settings.audioBriefing.status.geminiNotAllowedDetail"),
+        configured: true,
+      };
+    }
+    if (!resolved) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.audioBriefing.status.geminiVoiceMissing"),
+        detail: t("settings.audioBriefing.status.geminiVoiceMissingDetail"),
+        configured: true,
+      };
+    }
+    return {
+      tone: "ok" as const,
+      label: t("settings.audioBriefing.status.geminiReady"),
+      detail: t("settings.audioBriefing.status.geminiReadyDetail"),
       configured: true,
     };
   }
@@ -966,6 +1064,204 @@ function OpenAITTSVoicePickerModal({
   );
 }
 
+type GeminiTTSVoicePickerModalProps = {
+  open: boolean;
+  loading: boolean;
+  error: string | null;
+  voices: GeminiTTSVoiceCatalogEntry[];
+  currentVoiceName: string;
+  onClose: () => void;
+  onRefresh: () => Promise<void> | void;
+  onSelect: (selection: { voice_name: string }) => void;
+};
+
+function GeminiTTSVoicePickerModal({
+  open,
+  loading,
+  error,
+  voices,
+  currentVoiceName,
+  onClose,
+  onRefresh,
+  onSelect,
+}: GeminiTTSVoicePickerModalProps) {
+  const { t } = useI18n();
+  const [query, setQuery] = useState("");
+  const [selectedVoiceName, setSelectedVoiceName] = useState<string | null>(null);
+
+  const filteredVoices = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return voices;
+    return voices.filter((voice) =>
+      [voice.voice_name, voice.label, voice.tone, voice.description]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [query, voices]);
+
+  const selectedVoice = useMemo(() => {
+    const activeVoiceName = selectedVoiceName ?? currentVoiceName;
+    return (
+      filteredVoices.find((voice) => voice.voice_name === activeVoiceName) ??
+      voices.find((voice) => voice.voice_name === activeVoiceName) ??
+      null
+    );
+  }, [currentVoiceName, filteredVoices, selectedVoiceName, voices]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 py-6" onClick={onClose}>
+      <div
+        className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] shadow-[0_30px_80px_rgba(35,24,12,0.24)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--color-editorial-line)] px-5 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--color-editorial-ink)]">{t("settings.audioBriefing.geminiTTSPickerTitle")}</h2>
+            <p className="mt-1 text-sm text-[var(--color-editorial-ink-soft)]">{t("settings.audioBriefing.geminiTTSPickerSubtitle")}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/gemini-tts-voices"
+              className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+            >
+              {t("settings.audioBriefing.openGeminiTTSVoices")}
+            </Link>
+            <button
+              type="button"
+              onClick={() => void onRefresh()}
+              className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+            >
+              <RefreshCw className="size-4" />
+              {t("common.refresh")}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex size-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-white text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+              aria-label={t("common.close")}
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="border-b border-[var(--color-editorial-line)] px-5 py-4">
+          <div className="flex items-center gap-3 rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-3">
+            <Search className="size-4 text-[var(--color-editorial-ink-soft)]" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("settings.audioBriefing.geminiTTSPickerSearch")}
+              className="w-full bg-transparent text-sm text-[var(--color-editorial-ink)] outline-none placeholder:text-[var(--color-editorial-ink-faint)]"
+            />
+          </div>
+          {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        </div>
+
+        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]">
+          <div className="min-h-0 overflow-auto border-b border-[var(--color-editorial-line)] lg:border-b-0 lg:border-r">
+            <div className="overflow-x-auto">
+              <table className="min-w-[760px] divide-y divide-[var(--color-editorial-line)] text-sm">
+                <thead className="bg-[var(--color-editorial-panel-strong)]">
+                  <tr className="text-left text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">
+                    <th className="px-4 py-3">{t("settings.audioBriefing.geminiTTSVoiceTable.voice")}</th>
+                    <th className="px-4 py-3">{t("settings.audioBriefing.geminiTTSVoiceTable.tone")}</th>
+                    <th className="px-4 py-3">{t("settings.audioBriefing.geminiTTSVoiceTable.description")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-editorial-line)] bg-white">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-8 text-center text-sm text-[var(--color-editorial-ink-soft)]">
+                        {t("common.loading")}
+                      </td>
+                    </tr>
+                  ) : filteredVoices.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-8 text-center text-sm text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.audioBriefing.geminiTTSPickerNoResults")}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredVoices.map((voice) => (
+                      <tr
+                        key={voice.voice_name}
+                        className={`cursor-pointer transition hover:bg-[var(--color-editorial-panel)] ${selectedVoice?.voice_name === voice.voice_name ? "bg-[var(--color-editorial-panel)]" : ""}`}
+                        onClick={() => setSelectedVoiceName(voice.voice_name)}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-[var(--color-editorial-ink)]">{voice.label || voice.voice_name}</div>
+                          <div className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">{voice.voice_name}</div>
+                        </td>
+                        <td className="px-4 py-3 text-[var(--color-editorial-ink)]">{voice.tone || "—"}</td>
+                        <td className="px-4 py-3 text-[var(--color-editorial-ink-soft)]">{voice.description || "—"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="min-h-0 overflow-auto px-5 py-5">
+            {selectedVoice ? (
+              <div className="space-y-5">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.audioBriefing.geminiTTSPickerSelected")}</div>
+                  <h3 className="mt-2 text-lg font-semibold text-[var(--color-editorial-ink)]">{selectedVoice.label || selectedVoice.voice_name}</h3>
+                  <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                    {selectedVoice.description || t("settings.audioBriefing.geminiTTSPickerNoDescription")}
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.audioBriefing.geminiTTSVoiceTable.voice")}</div>
+                    <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">{selectedVoice.voice_name}</div>
+                  </div>
+                  <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.audioBriefing.geminiTTSVoiceTable.tone")}</div>
+                    <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">{selectedVoice.tone || "—"}</div>
+                  </div>
+                </div>
+
+                {selectedVoice.sample_audio_path ? (
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.audioBriefing.geminiTTSPreview")}</div>
+                    <div className="mt-3 rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+                      <audio controls preload="none" className="w-full" src={selectedVoice.sample_audio_path} />
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelect({ voice_name: selectedVoice.voice_name });
+                      onClose();
+                    }}
+                    className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90"
+                  >
+                    {t("settings.audioBriefing.geminiTTSPickerSelect")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-[22px] border border-dashed border-[var(--color-editorial-line)] bg-white/70 px-5 py-8 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                {t("settings.audioBriefing.geminiTTSPickerEmptySelection")}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
@@ -1091,6 +1387,9 @@ export default function SettingsPage() {
   const [openAITTSVoicesLoading, setOpenAITTSVoicesLoading] = useState(false);
   const [openAITTSVoicesSyncing, setOpenAITTSVoicesSyncing] = useState(false);
   const [openAITTSVoicesError, setOpenAITTSVoicesError] = useState<string | null>(null);
+  const [geminiTTSVoicesData, setGeminiTTSVoicesData] = useState<GeminiTTSVoicesResponse | null>(null);
+  const [geminiTTSVoicesLoading, setGeminiTTSVoicesLoading] = useState(false);
+  const [geminiTTSVoicesError, setGeminiTTSVoicesError] = useState<string | null>(null);
   const [aivisUserDictionaries, setAivisUserDictionaries] = useState<AivisUserDictionary[]>([]);
   const [aivisUserDictionariesLoading, setAivisUserDictionariesLoading] = useState(false);
   const [aivisUserDictionariesLoaded, setAivisUserDictionariesLoaded] = useState(false);
@@ -1098,6 +1397,7 @@ export default function SettingsPage() {
   const [aivisPickerPersona, setAivisPickerPersona] = useState<string | null>(null);
   const [xaiPickerPersona, setXAIPickerPersona] = useState<string | null>(null);
   const [openAITTPickerPersona, setOpenAITTPickerPersona] = useState<string | null>(null);
+  const [geminiTTSPickerPersona, setGeminiTTSPickerPersona] = useState<string | null>(null);
   const [expandedAudioBriefingPersonas, setExpandedAudioBriefingPersonas] = useState<string[]>(["editor"]);
   const [obsidianEnabled, setObsidianEnabled] = useState(false);
   const [notificationPriority, setNotificationPriority] = useState<NotificationPriorityRule>({
@@ -1395,6 +1695,22 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const loadGeminiTTSVoices = useCallback(async () => {
+    setGeminiTTSVoicesLoading(true);
+    try {
+      const next = await api.getGeminiTTSVoices();
+      setGeminiTTSVoicesData(next);
+      setGeminiTTSVoicesError(null);
+      return next;
+    } catch (e) {
+      const message = String(e);
+      setGeminiTTSVoicesError(message);
+      throw e;
+    } finally {
+      setGeminiTTSVoicesLoading(false);
+    }
+  }, []);
+
   const syncAivisModels = useCallback(async () => {
     setAivisModelsSyncing(true);
     try {
@@ -1552,6 +1868,13 @@ export default function SettingsPage() {
     }
     void loadOpenAITTSVoices().catch(() => undefined);
   }, [activeSection, loadOpenAITTSVoices, openAITTSVoicesData, openAITTSVoicesLoading, settings?.has_openai_api_key]);
+
+  useEffect(() => {
+    if (activeSection !== "audio-briefing" || geminiTTSVoicesData != null || geminiTTSVoicesLoading) {
+      return;
+    }
+    void loadGeminiTTSVoices().catch(() => undefined);
+  }, [activeSection, geminiTTSVoicesData, geminiTTSVoicesLoading, loadGeminiTTSVoices]);
 
   useEffect(() => {
     if (activeSection !== "audio-briefing" || !settings?.has_aivis_api_key || aivisUserDictionariesLoading || aivisUserDictionariesLoaded) {
@@ -2990,6 +3313,8 @@ export default function SettingsPage() {
             nextVoice.tts_model = "";
           } else if (nextProvider === "openai" && !nextVoice.tts_model.trim()) {
             nextVoice.tts_model = "gpt-4o-mini-tts";
+          } else if (nextProvider === "gemini_tts" && !nextVoice.tts_model.trim()) {
+            nextVoice.tts_model = "gemini-2.5-flash-tts";
           }
           if (!capabilities.requiresVoiceStyle) {
             nextVoice.voice_style = "";
@@ -3076,6 +3401,17 @@ export default function SettingsPage() {
     }
   }
 
+  async function openGeminiTTSPicker(persona: string) {
+    setGeminiTTSPickerPersona(persona);
+    if (geminiTTSVoicesData == null) {
+      try {
+        await loadGeminiTTSVoices();
+      } catch {
+        return;
+      }
+    }
+  }
+
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
   if (error) return <p className="text-sm text-red-500">{error}</p>;
   if (!settings) return null;
@@ -3089,12 +3425,17 @@ export default function SettingsPage() {
   const activeOpenAITTSVoice = openAITTPickerPersona
     ? audioBriefingVoices.find((voice) => voice.persona === openAITTPickerPersona) ?? null
     : null;
+  const activeGeminiTTSVoice = geminiTTSPickerPersona
+    ? audioBriefingVoices.find((voice) => voice.persona === geminiTTSPickerPersona) ?? null
+    : null;
   const audioBriefingAivisModels = aivisModelsData?.models ?? [];
   const audioBriefingXAIVoices = xaiVoicesData?.voices ?? [];
   const audioBriefingOpenAITTSVoices = openAITTSVoicesData?.voices ?? [];
+  const audioBriefingGeminiTTSVoices = geminiTTSVoicesData?.voices ?? [];
   const hasUserAivisAPIKey = Boolean(settings?.has_aivis_api_key);
   const hasUserXAIAPIKey = Boolean(settings?.has_xai_api_key);
   const hasUserOpenAIAPIKey = Boolean(settings?.has_openai_api_key);
+  const geminiTTSEnabled = Boolean(settings?.gemini_tts_enabled);
   const audioBriefingVoiceSummaries = audioBriefingVoices.map((voice) => ({
     voice,
     resolved: voice.tts_provider === "aivis"
@@ -3103,15 +3444,19 @@ export default function SettingsPage() {
         ? resolveXAIVoiceSelection(audioBriefingXAIVoices, voice)
         : voice.tts_provider === "openai"
           ? resolveOpenAITTSVoiceSelection(audioBriefingOpenAITTSVoices, voice)
+          : voice.tts_provider === "gemini_tts"
+            ? resolveGeminiTTSVoiceSelection(audioBriefingGeminiTTSVoices, voice)
         : null,
     status: getAudioBriefingVoiceStatus(
       voice,
       audioBriefingAivisModels,
       audioBriefingXAIVoices,
       audioBriefingOpenAITTSVoices,
+      audioBriefingGeminiTTSVoices,
       hasUserAivisAPIKey,
       hasUserXAIAPIKey,
       hasUserOpenAIAPIKey,
+      geminiTTSEnabled,
       t
     ),
   }));
@@ -3124,6 +3469,20 @@ export default function SettingsPage() {
   const audioBriefingNeedsXAIAPIKey = audioBriefingUsesXAI && !hasUserXAIAPIKey;
   const audioBriefingUsesOpenAI = audioBriefingVoices.some((voice) => voice.tts_provider === "openai");
   const audioBriefingNeedsOpenAIAPIKey = audioBriefingUsesOpenAI && !hasUserOpenAIAPIKey;
+  const audioBriefingUsesGeminiTTS = audioBriefingVoices.some((voice) => voice.tts_provider === "gemini_tts");
+  const audioBriefingNeedsGeminiAccess = audioBriefingUsesGeminiTTS && !geminiTTSEnabled;
+  const geminiDuoModelCounts = audioBriefingVoices.reduce((acc, voice) => {
+    if (voice.tts_provider !== "gemini_tts") return acc;
+    const model = voice.tts_model.trim();
+    const selectedVoice = voice.voice_model.trim();
+    if (!model || !selectedVoice) return acc;
+    acc.set(model, (acc.get(model) ?? 0) + 1);
+    return acc;
+  }, new Map<string, number>());
+  const geminiDuoBestModelEntry = Array.from(geminiDuoModelCounts.entries()).sort((a, b) => b[1] - a[1])[0] ?? null;
+  const geminiDuoCompatiblePersonaCount = geminiDuoBestModelEntry?.[1] ?? 0;
+  const geminiDuoCompatibleModel = geminiDuoBestModelEntry?.[0] ?? "";
+  const geminiDuoReady = geminiTTSEnabled && geminiDuoCompatiblePersonaCount >= 2;
 
   const sectionNavItems: Array<{
     id: SettingsSectionID;
@@ -3600,6 +3959,31 @@ export default function SettingsPage() {
                           {t("settings.audioBriefing.duoPartnerRuleBody", "The partner is picked from a different persona than the host. Make sure multiple persona voices are configured if you plan to use duo regularly.")}
                         </p>
                       </div>
+                      <div
+                        className={`rounded-[18px] border px-4 py-4 ${
+                          geminiDuoReady
+                            ? "border-[rgba(34,197,94,0.24)] bg-[rgba(240,253,244,0.82)]"
+                            : "border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)]"
+                        }`}
+                      >
+                        <div
+                          className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                            geminiDuoReady ? "text-[#166534]" : "text-[#b45309]"
+                          }`}
+                        >
+                          {geminiDuoReady
+                            ? t("settings.audioBriefing.geminiDuoReadyTitle")
+                            : t("settings.audioBriefing.geminiDuoNeedsSetupTitle")}
+                        </div>
+                        <p className={`mt-2 text-sm leading-6 ${geminiDuoReady ? "text-[#166534]" : "text-[#b45309]"}`}>
+                          {geminiDuoReady
+                            ? tWithVars(t, "settings.audioBriefing.geminiDuoReadyDetail", {
+                                count: geminiDuoCompatiblePersonaCount,
+                                model: geminiDuoCompatibleModel,
+                              })
+                            : t("settings.audioBriefing.geminiDuoNeedsSetupDetail")}
+                        </p>
+                      </div>
                     </div>
                   ) : null}
                 </form>
@@ -3752,6 +4136,9 @@ export default function SettingsPage() {
                         <Link href="/openai-tts-voices" className="font-medium text-[var(--color-editorial-accent)] underline-offset-4 hover:underline">
                           {t("settings.audioBriefing.openOpenAITTSVoices")}
                         </Link>
+                        <Link href="/gemini-tts-voices" className="font-medium text-[var(--color-editorial-accent)] underline-offset-4 hover:underline">
+                          {t("settings.audioBriefing.openGeminiTTSVoices")}
+                        </Link>
                         {aivisModelsData?.latest_run?.finished_at ? (
                           <span>{`${t("aivisModels.lastSynced")}: ${new Date(aivisModelsData.latest_run.finished_at).toLocaleString()}`}</span>
                         ) : null}
@@ -3814,6 +4201,12 @@ export default function SettingsPage() {
                     </div>
                   ) : null}
 
+                  {geminiTTSVoicesError ? (
+                    <div className="rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-3 text-sm text-[#b45309]">
+                      {geminiTTSVoicesError}
+                    </div>
+                  ) : null}
+
                   {audioBriefingNeedsAivisAPIKey ? (
                     <div className="flex flex-col gap-3 rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-4 text-sm text-[#b45309] lg:flex-row lg:items-center lg:justify-between">
                       <div>
@@ -3862,6 +4255,15 @@ export default function SettingsPage() {
                     </div>
                   ) : null}
 
+                  {audioBriefingNeedsGeminiAccess ? (
+                    <div className="flex flex-col gap-3 rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-4 text-sm text-[#b45309] lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <div className="font-semibold">{t("settings.audioBriefing.geminiAccessWarningTitle")}</div>
+                        <div className="mt-1 leading-6">{t("settings.audioBriefing.geminiAccessWarningDetail")}</div>
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="space-y-3">
                     {audioBriefingVoiceSummaries.map(({ voice, status }) => {
                       const expanded = expandedAudioBriefingPersonas.includes(voice.persona);
@@ -3870,15 +4272,19 @@ export default function SettingsPage() {
                       const isAivisProvider = voice.tts_provider === "aivis";
                       const isXAIProvider = voice.tts_provider === "xai";
                       const isOpenAIProvider = voice.tts_provider === "openai";
+                      const isGeminiProvider = voice.tts_provider === "gemini_tts";
                       const aivisResolved = isAivisProvider ? resolveAivisVoiceSelection(audioBriefingAivisModels, voice) : null;
                       const xaiResolved = isXAIProvider ? resolveXAIVoiceSelection(audioBriefingXAIVoices, voice) : null;
                       const openAIResolved = isOpenAIProvider ? resolveOpenAITTSVoiceSelection(audioBriefingOpenAITTSVoices, voice) : null;
+                      const geminiResolved = isGeminiProvider ? resolveGeminiTTSVoiceSelection(audioBriefingGeminiTTSVoices, voice) : null;
                       const selectedVoiceLabel = isAivisProvider
                         ? aivisResolved?.model?.name || voice.voice_model || t("settings.audioBriefing.unsetShort")
                         : isXAIProvider
                           ? xaiResolved?.name || voice.voice_model || t("settings.audioBriefing.unsetShort")
                           : isOpenAIProvider
                             ? openAIResolved?.name || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                            : isGeminiProvider
+                              ? geminiResolved?.label || voice.voice_model || t("settings.audioBriefing.unsetShort")
                             : voice.voice_model || t("settings.audioBriefing.unsetShort");
                       const selectedVoiceDetail = isAivisProvider
                         ? (aivisResolved?.speaker && aivisResolved?.style
@@ -3888,6 +4294,8 @@ export default function SettingsPage() {
                           ? xaiResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
                           : isOpenAIProvider
                             ? openAIResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                            : isGeminiProvider
+                              ? geminiResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
                             : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort");
                       const toneClasses = status.tone === "ok"
                         ? "border-[rgba(34,197,94,0.28)] bg-[rgba(240,253,244,0.72)]"
@@ -3964,7 +4372,7 @@ export default function SettingsPage() {
                                       }}
                                       className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                                     >
-                                    {Array.from(new Set([voice.tts_provider, "aivis", hasUserXAIAPIKey || voice.tts_provider === "xai" ? "xai" : null, hasUserOpenAIAPIKey || voice.tts_provider === "openai" ? "openai" : null, "mock"].filter(Boolean) as string[])).map((provider) => (
+                                    {Array.from(new Set([voice.tts_provider, "aivis", hasUserXAIAPIKey || voice.tts_provider === "xai" ? "xai" : null, hasUserOpenAIAPIKey || voice.tts_provider === "openai" ? "openai" : null, geminiTTSEnabled || voice.tts_provider === "gemini_tts" ? "gemini_tts" : null, "mock"].filter(Boolean) as string[])).map((provider) => (
                                       <option key={`${voice.persona}-${provider}`} value={provider}>
                                         {provider}
                                       </option>
@@ -3986,6 +4394,8 @@ export default function SettingsPage() {
                                             ? xaiResolved?.name ?? t("settings.audioBriefing.xaiVoiceEmpty")
                                             : isOpenAIProvider
                                               ? openAIResolved?.name ?? t("settings.audioBriefing.openAITTSVoiceEmpty")
+                                              : isGeminiProvider
+                                                ? geminiResolved?.label ?? t("settings.audioBriefing.geminiTTSVoiceEmpty")
                                               : voice.voice_model || t("settings.audioBriefing.unsetShort")}
                                       </div>
                                       <div className="mt-1 text-[12px] text-[var(--color-editorial-ink-soft)]">
@@ -3995,8 +4405,10 @@ export default function SettingsPage() {
                                             : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort")
                                           : isXAIProvider
                                             ? xaiResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
-                                            : isOpenAIProvider
+                                          : isOpenAIProvider
                                               ? openAIResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                                            : isGeminiProvider
+                                              ? geminiResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
                                               : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort")}
                                     </div>
                                   </div>
@@ -4026,6 +4438,15 @@ export default function SettingsPage() {
                                     >
                                       {t("settings.audioBriefing.pickOpenAITTSVoice")}
                                     </button>
+                                  ) : providerCapabilities.supportsCatalogPicker && isGeminiProvider ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => void openGeminiTTSPicker(voice.persona)}
+                                      disabled={geminiTTSVoicesLoading && !audioBriefingGeminiTTSVoices.length}
+                                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      {t("settings.audioBriefing.pickGeminiTTSVoice")}
+                                    </button>
                                   ) : null}
                                 </div>
 
@@ -4042,6 +4463,11 @@ export default function SettingsPage() {
                                   ) : isOpenAIProvider ? (
                                     <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-[var(--color-editorial-ink-faint)]">
                                       <span>{`${t("settings.audioBriefing.openAITTSModel")}: ${voice.tts_model || "—"}`}</span>
+                                      <span>{`${t("settings.audioBriefing.voiceModel")}: ${voice.voice_model || "—"}`}</span>
+                                    </div>
+                                  ) : isGeminiProvider ? (
+                                    <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-[var(--color-editorial-ink-faint)]">
+                                      <span>{`${t("settings.audioBriefing.geminiTTSModel")}: ${voice.tts_model || "—"}`}</span>
                                       <span>{`${t("settings.audioBriefing.voiceModel")}: ${voice.voice_model || "—"}`}</span>
                                     </div>
                                   ) : (
@@ -4081,6 +4507,28 @@ export default function SettingsPage() {
                                         </div>
                                         <div className="mt-1 text-[12px] text-[var(--color-editorial-ink-soft)]">
                                           {openAIResolved?.description || voice.voice_model || t("settings.audioBriefing.openAITTSVoiceEmpty")}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : isGeminiProvider ? (
+                                    <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.85fr)]">
+                                      <ModelSelect
+                                        label={t("settings.audioBriefing.geminiTTSModel")}
+                                        value={voice.tts_model}
+                                        onChange={(value) => updateAudioBriefingVoice(voice.persona, { tts_model: value })}
+                                        options={buildGeminiTTSModelOptions(voice.tts_model)}
+                                        labels={modelSelectLabels}
+                                        variant="modal"
+                                      />
+                                      <div className="rounded-[16px] border border-[var(--color-editorial-line)] bg-white p-4">
+                                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                                          {t("settings.audioBriefing.geminiTTSVoice")}
+                                        </div>
+                                        <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">
+                                          {geminiResolved?.label || t("settings.audioBriefing.geminiTTSVoiceEmpty")}
+                                        </div>
+                                        <div className="mt-1 text-[12px] text-[var(--color-editorial-ink-soft)]">
+                                          {geminiResolved?.description || voice.voice_model || t("settings.audioBriefing.geminiTTSVoiceEmpty")}
                                         </div>
                                       </div>
                                     </div>
@@ -4224,6 +4672,17 @@ export default function SettingsPage() {
                                       className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-60"
                                     >
                                       {openAITTSVoicesSyncing ? t("settings.audioBriefing.syncingOpenAITTSCatalog") : t("settings.audioBriefing.refreshOpenAITTSCatalog")}
+                                    </button>
+                                  ) : isGeminiProvider ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void loadGeminiTTSVoices().catch(() => undefined);
+                                      }}
+                                      disabled={geminiTTSVoicesLoading}
+                                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:opacity-60"
+                                    >
+                                      {geminiTTSVoicesLoading ? t("common.loading") : t("settings.audioBriefing.refreshGeminiTTSCatalog")}
                                     </button>
                                   ) : null}
                                   <button
@@ -5268,6 +5727,27 @@ export default function SettingsPage() {
             tts_provider: "openai",
             tts_model: activeOpenAITTSVoice?.tts_model || "gpt-4o-mini-tts",
             voice_model: selection.voice_id,
+            voice_style: "",
+          });
+        }}
+      />
+
+      <GeminiTTSVoicePickerModal
+        open={Boolean(geminiTTSPickerPersona)}
+        loading={geminiTTSVoicesLoading}
+        error={geminiTTSVoicesError}
+        voices={audioBriefingGeminiTTSVoices}
+        currentVoiceName={activeGeminiTTSVoice?.voice_model ?? ""}
+        onClose={() => setGeminiTTSPickerPersona(null)}
+        onRefresh={() => {
+          void loadGeminiTTSVoices().catch(() => undefined);
+        }}
+        onSelect={(selection) => {
+          if (!geminiTTSPickerPersona) return;
+          updateAudioBriefingVoice(geminiTTSPickerPersona, {
+            tts_provider: "gemini_tts",
+            tts_model: activeGeminiTTSVoice?.tts_model || "gemini-2.5-flash-tts",
+            voice_model: selection.voice_name,
             voice_style: "",
           });
         }}

@@ -8,6 +8,7 @@ import wave
 import boto3
 import httpx
 from app.services.aivis_speech import AIVIS_RATE_LIMITER, AivisRateLimiter, AivisRedisRateLimiter, AivisSpeechService, build_aivis_payload
+from app.services.gemini_tts import synthesize_gemini_multi_speaker_tts, synthesize_gemini_tts
 from app.services.tts_provider_registry import synthesize_catalog_tts
 
 
@@ -93,6 +94,9 @@ class AudioBriefingTTSService:
         self.xai_tts_endpoint = (os.getenv("XAI_TTS_ENDPOINT", "https://api.x.ai").strip() or "https://api.x.ai").rstrip("/")
         self.xai_api_key = os.getenv("XAI_API_KEY", "").strip()
         self.xai_timeout_sec = max(_env_float("XAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
+        self.gemini_tts_endpoint = (os.getenv("GEMINI_TTS_ENDPOINT", "https://generativelanguage.googleapis.com").strip() or "https://generativelanguage.googleapis.com").rstrip("/")
+        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        self.gemini_timeout_sec = max(_env_float("GEMINI_TTS_TIMEOUT_SEC", 300.0), 1.0)
         self.openai_tts_endpoint = (os.getenv("OPENAI_TTS_ENDPOINT", "https://api.openai.com").strip() or "https://api.openai.com").rstrip("/")
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
         self.openai_timeout_sec = max(_env_float("OPENAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
@@ -114,12 +118,14 @@ class AudioBriefingTTSService:
         pitch: float,
         volume_gain: float,
         output_object_key: str,
+        persona: str = "",
         tts_model: str = "",
         chunk_id: str | None = None,
         heartbeat_url: str | None = None,
         heartbeat_token: str | None = None,
         user_dictionary_uuid: str | None = None,
         aivis_api_key: str | None = None,
+        google_api_key: str | None = None,
         xai_api_key: str | None = None,
         openai_api_key: str | None = None,
     ) -> tuple[str, int]:
@@ -157,6 +163,15 @@ class AudioBriefingTTSService:
                     speech_rate=speech_rate,
                     api_key_override=xai_api_key,
                 )
+            elif provider == "gemini_tts":
+                payload, content_type, suffix, duration_sec = self.synthesize_gemini_audio(
+                    persona=persona,
+                    voice_id=voice_model,
+                    tts_model=tts_model,
+                    text=text,
+                    speech_rate=speech_rate,
+                    api_key_override=google_api_key,
+                )
             elif provider == "openai":
                 payload, content_type, suffix, duration_sec = self.synthesize_openai_audio(
                     voice_id=voice_model,
@@ -174,6 +189,33 @@ class AudioBriefingTTSService:
             return output_object_key, duration_sec
         finally:
             heartbeat.stop()
+
+    def synthesize_gemini_duo_and_upload(
+        self,
+        *,
+        tts_model: str,
+        host_persona: str,
+        partner_persona: str,
+        host_voice_model: str,
+        partner_voice_model: str,
+        section_type: str,
+        turns: list[dict[str, str]],
+        output_object_key: str,
+        api_key_override: str | None = None,
+    ) -> tuple[str, int]:
+        payload, content_type, suffix, duration_sec = synthesize_gemini_multi_speaker_tts(
+            model=tts_model,
+            host_voice_name=host_voice_model,
+            partner_voice_name=partner_voice_model,
+            host_persona=host_persona,
+            partner_persona=partner_persona,
+            section_type=section_type,
+            turns=turns,
+        )
+        if not output_object_key.endswith(suffix):
+            output_object_key = output_object_key + suffix
+        self.upload_bytes(output_object_key, payload, content_type)
+        return output_object_key, duration_sec
 
     def standard_bucket(self) -> str:
         return (self.r2_bucket or self.r2_standard_bucket or "").strip()
@@ -338,6 +380,27 @@ class AudioBriefingTTSService:
             text=text,
             speech_rate=speech_rate,
             timeout_sec=self.xai_timeout_sec,
+        )
+
+    def synthesize_gemini_audio(
+        self,
+        *,
+        persona: str,
+        voice_id: str,
+        tts_model: str,
+        text: str,
+        speech_rate: float,
+        api_key_override: str | None = None,
+    ) -> tuple[bytes, str, str, int]:
+        normalized_tts_model = (tts_model or "").strip()
+        if not normalized_tts_model:
+            raise RuntimeError("gemini tts model is required")
+        return synthesize_gemini_tts(
+            model=normalized_tts_model,
+            voice_name=voice_id,
+            persona=persona,
+            text=text,
+            speech_rate=speech_rate,
         )
 
     def synthesize_openai_audio(

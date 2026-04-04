@@ -1,4 +1,6 @@
 import unittest
+import json
+from pathlib import Path
 from unittest.mock import patch
 
 from app.services.feed_task_common import (
@@ -129,6 +131,17 @@ class FeedTaskCommonTests(unittest.TestCase):
         with patch.dict("os.environ", {"NAVIGATOR_PERSONAS_PATH": "", "LLM_CATALOG_PATH": "/app/shared/llm_catalog.json"}, clear=False):
             path = _resolve_persona_file()
         self.assertEqual(path.as_posix(), "/app/shared/ai_navigator_personas.json")
+
+    def test_shared_navigator_persona_definitions_include_audio_briefing_prompts(self):
+        path = Path(__file__).resolve().parents[3] / "shared" / "ai_navigator_personas.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+
+        self.assertGreater(len(payload), 0)
+        for persona_key, persona in payload.items():
+            audio_briefing = persona.get("audio_briefing", {})
+            self.assertTrue(audio_briefing.get("tone_prompt", "").strip(), msg=persona_key)
+            self.assertTrue(audio_briefing.get("speaking_style_prompt", "").strip(), msg=persona_key)
+            self.assertTrue(audio_briefing.get("duo_conversation_prompt", "").strip(), msg=persona_key)
 
     def test_briefing_navigator_schema_requires_all_pick_fields_for_strict_json_schema(self):
         pick_schema = BRIEFING_NAVIGATOR_SCHEMA["properties"]["picks"]["items"]
@@ -605,6 +618,38 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertEqual(len(result["turns"]), 5)
         self.assertEqual(result["turns"][0]["speaker"], "host")
         self.assertEqual(result["turns"][2]["item_id"], "item-1")
+
+    def test_parse_audio_briefing_script_result_normalizes_duo_article_speakers_per_item(self):
+        result = parse_audio_briefing_script_result(
+            """
+            {
+              "turns": [
+                {"speaker": "host", "section": "opening", "text": "おはようございます。"},
+                {"speaker": "partner", "section": "article", "item_id": "item-1", "text": "一本目です。"},
+                {"speaker": "host", "section": "article", "item_id": "item-1", "text": "補足します。"},
+                {"speaker": "partner", "section": "article", "item_id": "item-2", "text": "二本目です。"},
+                {"speaker": "partner", "section": "article", "item_id": "item-2", "text": "さらに続けます。"},
+                {"speaker": "host", "section": "ending", "text": "では今日はこのへんで。"}
+              ]
+            }
+            """,
+            [
+                {"item_id": "item-1", "title": "A", "translated_title": "A", "summary": "A"},
+                {"item_id": "item-2", "title": "B", "translated_title": "B", "summary": "B"},
+            ],
+            "editor",
+            conversation_mode="duo",
+        )
+        article_turns = [turn for turn in result["turns"] if turn["section"] == "article"]
+        self.assertEqual(
+            [(turn["item_id"], turn["speaker"]) for turn in article_turns],
+            [
+                ("item-1", "host"),
+                ("item-1", "partner"),
+                ("item-2", "host"),
+                ("item-2", "partner"),
+            ],
+        )
 
     def test_parse_audio_briefing_script_result_rejects_empty_payload(self):
         with self.assertRaises(ValueError):

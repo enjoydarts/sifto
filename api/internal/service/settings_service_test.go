@@ -37,6 +37,7 @@ func newSettingsServiceForTest(t *testing.T) *SettingsService {
 
 	return NewSettingsService(
 		nil,
+		repository.NewUserRepo(db),
 		repository.NewAudioBriefingRepo(db),
 		nil,
 		nil,
@@ -154,6 +155,43 @@ func TestUpdateAudioBriefingPersonaVoicesRequiresTTSModelForOpenAI(t *testing.T)
 	})
 	if err == nil || err.Error() != "invalid tts_model for editor" {
 		t.Fatalf("UpdateAudioBriefingPersonaVoices() error = %v, want invalid tts_model for editor", err)
+	}
+}
+
+func TestUpdateAudioBriefingPersonaVoicesAllowsGeminiTTS(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	rows, err := svc.UpdateAudioBriefingPersonaVoices(context.Background(), "00000000-0000-4000-8000-000000000021", []UpdateAudioBriefingPersonaVoiceInput{
+		{
+			Persona:                 "editor",
+			TTSProvider:             "gemini_tts",
+			TTSModel:                "gemini-2.5-flash-tts",
+			VoiceModel:              "Kore",
+			VoiceStyle:              "",
+			SpeechRate:              0,
+			EmotionalIntensity:      0,
+			TempoDynamics:           0,
+			LineBreakSilenceSeconds: 0,
+			Pitch:                   0,
+			VolumeGain:              0,
+		},
+	})
+	if err != nil {
+		t.Fatalf("UpdateAudioBriefingPersonaVoices() error = %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if rows[0].TTSProvider != "gemini_tts" {
+		t.Fatalf("rows[0].TTSProvider = %q, want gemini_tts", rows[0].TTSProvider)
+	}
+	if rows[0].TTSModel != "gemini-2.5-flash-tts" {
+		t.Fatalf("rows[0].TTSModel = %q, want gemini-2.5-flash-tts", rows[0].TTSModel)
+	}
+	if rows[0].VoiceModel != "Kore" {
+		t.Fatalf("rows[0].VoiceModel = %q, want Kore", rows[0].VoiceModel)
+	}
+	if rows[0].VoiceStyle != "" {
+		t.Fatalf("rows[0].VoiceStyle = %q, want empty", rows[0].VoiceStyle)
 	}
 }
 
@@ -395,11 +433,19 @@ func TestAudioBriefingPersonaVoicesPayload(t *testing.T) {
 			TempoDynamics:           1.0,
 			LineBreakSilenceSeconds: 0.4,
 		},
+		{
+			UserID:      "u2",
+			Persona:     "snark",
+			TTSProvider: "gemini_tts",
+			TTSModel:    "gemini-2.5-flash-tts",
+			VoiceModel:  "Kore",
+			VoiceStyle:  "",
+		},
 	}
 
 	got := AudioBriefingPersonaVoicesPayload(rows)
-	if len(got) != 1 {
-		t.Fatalf("len(AudioBriefingPersonaVoicesPayload) = %d, want 1", len(got))
+	if len(got) != 2 {
+		t.Fatalf("len(AudioBriefingPersonaVoicesPayload) = %d, want 2", len(got))
 	}
 	if got[0]["persona"] != "editor" {
 		t.Fatalf("persona = %v, want editor", got[0]["persona"])
@@ -409,6 +455,18 @@ func TestAudioBriefingPersonaVoicesPayload(t *testing.T) {
 	}
 	if got[0]["tts_model"] != "" {
 		t.Fatalf("tts_model = %v, want empty", got[0]["tts_model"])
+	}
+	if got[1]["persona"] != "snark" {
+		t.Fatalf("persona = %v, want snark", got[1]["persona"])
+	}
+	if got[1]["tts_provider"] != "gemini_tts" {
+		t.Fatalf("tts_provider = %v, want gemini_tts", got[1]["tts_provider"])
+	}
+	if got[1]["tts_model"] != "gemini-2.5-flash-tts" {
+		t.Fatalf("tts_model = %v, want gemini-2.5-flash-tts", got[1]["tts_model"])
+	}
+	if got[1]["voice_model"] != "Kore" {
+		t.Fatalf("voice_model = %v, want Kore", got[1]["voice_model"])
 	}
 }
 
@@ -547,6 +605,60 @@ func TestValidateAudioBriefingPersonaVoiceInputs(t *testing.T) {
 		}
 		if rows[0].TTSProvider != "openai" {
 			t.Fatalf("rows[0].TTSProvider = %q, want openai", rows[0].TTSProvider)
+		}
+	})
+
+	t.Run("allows gemini rows with tts model", func(t *testing.T) {
+		rows, err := validateAudioBriefingPersonaVoiceInputs([]UpdateAudioBriefingPersonaVoiceInput{
+			{
+				Persona:                 "editor",
+				TTSProvider:             "gemini_tts",
+				TTSModel:                "gemini-2.5-flash-tts",
+				VoiceModel:              "Kore",
+				VoiceStyle:              "",
+				SpeechRate:              0,
+				EmotionalIntensity:      0,
+				TempoDynamics:           0,
+				LineBreakSilenceSeconds: 0,
+				Pitch:                   0,
+				VolumeGain:              0,
+			},
+		})
+		if err != nil {
+			t.Fatalf("validateAudioBriefingPersonaVoiceInputs(gemini) err=%v", err)
+		}
+		if len(rows) != 1 {
+			t.Fatalf("len(rows) = %d, want 1", len(rows))
+		}
+		if rows[0].TTSProvider != "gemini_tts" {
+			t.Fatalf("rows[0].TTSProvider = %q, want gemini_tts", rows[0].TTSProvider)
+		}
+		if rows[0].TTSModel != "gemini-2.5-flash-tts" {
+			t.Fatalf("rows[0].TTSModel = %q, want gemini-2.5-flash-tts", rows[0].TTSModel)
+		}
+		if rows[0].VoiceStyle != "" {
+			t.Fatalf("rows[0].VoiceStyle = %q, want empty", rows[0].VoiceStyle)
+		}
+	})
+
+	t.Run("requires tts model for gemini", func(t *testing.T) {
+		_, err := validateAudioBriefingPersonaVoiceInputs([]UpdateAudioBriefingPersonaVoiceInput{
+			{
+				Persona:                 "editor",
+				TTSProvider:             "gemini_tts",
+				TTSModel:                "",
+				VoiceModel:              "Kore",
+				VoiceStyle:              "",
+				SpeechRate:              0,
+				EmotionalIntensity:      0,
+				TempoDynamics:           0,
+				LineBreakSilenceSeconds: 0,
+				Pitch:                   0,
+				VolumeGain:              0,
+			},
+		})
+		if err == nil || err.Error() != "invalid tts_model for editor" {
+			t.Fatalf("validateAudioBriefingPersonaVoiceInputs(gemini missing tts model) err=%v, want invalid tts_model for editor", err)
 		}
 	})
 

@@ -10,6 +10,7 @@ class AudioBriefingSynthesizeRequest(BaseModel):
     provider: str
     voice_model: str
     voice_style: str
+    persona: str = ""
     tts_model: str = ""
     text: str
     speech_rate: float = 1.0
@@ -29,6 +30,22 @@ class AudioBriefingSynthesizeRequest(BaseModel):
 class AudioBriefingSynthesizeResponse(BaseModel):
     audio_object_key: str
     duration_sec: int
+
+
+class AudioBriefingGeminiDuoTurn(BaseModel):
+    speaker: str
+    text: str
+
+
+class AudioBriefingGeminiDuoSynthesizeRequest(BaseModel):
+    tts_model: str
+    host_persona: str
+    partner_persona: str
+    host_voice_model: str
+    partner_voice_model: str
+    section_type: str
+    turns: list[AudioBriefingGeminiDuoTurn]
+    output_object_key: str
 
 
 class AudioBriefingPresignRequest(BaseModel):
@@ -85,11 +102,13 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
     try:
         service = AudioBriefingTTSService()
         aivis_api_key = request.headers.get("x-aivis-api-key", "").strip() or None
+        google_api_key = request.headers.get("x-google-api-key", "").strip() or None
         xai_api_key = request.headers.get("x-xai-api-key", "").strip() or None
         audio_object_key, duration_sec = service.synthesize_and_upload(
             provider=req.provider,
             voice_model=req.voice_model,
             voice_style=req.voice_style,
+            persona=req.persona,
             tts_model=req.tts_model,
             text=req.text,
             speech_rate=req.speech_rate,
@@ -105,6 +124,7 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
             heartbeat_token=req.heartbeat_token,
             user_dictionary_uuid=req.user_dictionary_uuid,
             aivis_api_key=aivis_api_key,
+            google_api_key=google_api_key,
             xai_api_key=xai_api_key,
             openai_api_key=request.headers.get("x-openai-api-key", "").strip() or None,
         )
@@ -114,6 +134,29 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"audio briefing synth failed: {exc}")
+
+
+@router.post("/audio-briefing/synthesize-upload-gemini-duo", response_model=AudioBriefingSynthesizeResponse)
+def synthesize_audio_briefing_gemini_duo(req: AudioBriefingGeminiDuoSynthesizeRequest, request: Request):
+    try:
+        service = AudioBriefingTTSService()
+        audio_object_key, duration_sec = service.synthesize_gemini_duo_and_upload(
+            tts_model=req.tts_model,
+            host_persona=req.host_persona,
+            partner_persona=req.partner_persona,
+            host_voice_model=req.host_voice_model,
+            partner_voice_model=req.partner_voice_model,
+            section_type=req.section_type,
+            turns=[turn.model_dump() for turn in req.turns],
+            output_object_key=req.output_object_key,
+            api_key_override=request.headers.get("x-google-api-key", "").strip() or None,
+        )
+        return AudioBriefingSynthesizeResponse(
+            audio_object_key=audio_object_key,
+            duration_sec=duration_sec,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"audio briefing gemini duo synth failed: {exc}")
 
 
 @router.post("/audio-briefing/presign", response_model=AudioBriefingPresignResponse)

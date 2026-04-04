@@ -54,6 +54,9 @@ func TestBuildAudioBriefingDraftBuildsChunks(t *testing.T) {
 	if draft.Chunks[2].PartType != "article" {
 		t.Fatalf("draft.Chunks[2].PartType = %q, want article", draft.Chunks[2].PartType)
 	}
+	if got := derefString(draft.Chunks[2].ItemID); got != "item-1" {
+		t.Fatalf("draft.Chunks[2].ItemID = %q, want item-1", got)
+	}
 	if draft.Chunks[2].TTSProvider == nil || *draft.Chunks[2].TTSProvider != "aivis" {
 		t.Fatalf("draft.Chunks[2].TTSProvider = %v, want aivis", draft.Chunks[2].TTSProvider)
 	}
@@ -247,6 +250,9 @@ func TestBuildAudioBriefingDraftFromTurnsUsesSpeakerVoices(t *testing.T) {
 	}
 	if got := draft.Chunks[1].PartType; got != "article" {
 		t.Fatalf("partner part type = %q, want article", got)
+	}
+	if got := derefString(draft.Chunks[1].ItemID); got != "item-1" {
+		t.Fatalf("partner item_id = %q, want item-1", got)
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 
 type SettingsService struct {
 	repo                   *repository.UserSettingsRepo
+	userRepo               *repository.UserRepo
 	audioBriefingRepo      *repository.AudioBriefingRepo
 	aivisModelRepo         *repository.AivisModelRepo
 	obsidianRepo           *repository.ObsidianExportRepo
@@ -60,6 +61,7 @@ type SettingsGetPayload struct {
 	HasAivisAPIKey          bool             `json:"has_aivis_api_key"`
 	AivisAPIKeyLast4        *string          `json:"aivis_api_key_last4,omitempty"`
 	AivisUserDictionaryUUID *string          `json:"aivis_user_dictionary_uuid,omitempty"`
+	GeminiTTSEnabled        bool             `json:"gemini_tts_enabled"`
 	Podcast                 map[string]any   `json:"podcast"`
 	HasInoreaderOAuth       bool             `json:"has_inoreader_oauth"`
 	InoreaderTokenExpiresAt *time.Time       `json:"inoreader_token_expires_at,omitempty"`
@@ -192,9 +194,10 @@ var modelSettingRequiredCapabilities = map[string][]string{
 	"audio_briefing_script_fallback": {"structured_output"},
 }
 
-func NewSettingsService(repo *repository.UserSettingsRepo, audioBriefingRepo *repository.AudioBriefingRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *SecretCipher, githubApp *GitHubAppClient) *SettingsService {
+func NewSettingsService(repo *repository.UserSettingsRepo, userRepo *repository.UserRepo, audioBriefingRepo *repository.AudioBriefingRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *SecretCipher, githubApp *GitHubAppClient) *SettingsService {
 	return &SettingsService{
 		repo:                   repo,
+		userRepo:               userRepo,
 		audioBriefingRepo:      audioBriefingRepo,
 		aivisModelRepo:         aivisModelRepo,
 		obsidianRepo:           obsidianRepo,
@@ -203,6 +206,13 @@ func NewSettingsService(repo *repository.UserSettingsRepo, audioBriefingRepo *re
 		cipher:                 cipher,
 		githubApp:              githubApp,
 	}
+}
+
+func (s *SettingsService) UserRepo() *repository.UserRepo {
+	if s == nil {
+		return nil
+	}
+	return s.userRepo
 }
 
 func obsidianExportPayload(settings *model.ObsidianExportSettings, githubApp *GitHubAppClient) map[string]any {
@@ -452,6 +462,7 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		HasAivisAPIKey:          settings.HasAivisAPIKey,
 		AivisAPIKeyLast4:        settings.AivisAPIKeyLast4,
 		AivisUserDictionaryUUID: settings.AivisUserDictionaryUUID,
+		GeminiTTSEnabled:        GeminiTTSEnabledForUser(ctx, s.userRepo, userID),
 		Podcast:                 PodcastSettingsPayload(settings),
 		HasInoreaderOAuth:       settings.HasInoreaderOAuth,
 		InoreaderTokenExpiresAt: settings.InoreaderTokenExpiresAt,
@@ -530,7 +541,7 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 		provider := strings.TrimSpace(strings.ToLower(row.TTSProvider))
 		caps := LookupTTSProviderCapabilities(provider)
 		switch provider {
-		case "aivis", "mock", "xai", "openai":
+		case "aivis", "mock", "xai", "openai", "gemini_tts":
 		default:
 			return nil, fmt.Errorf("invalid tts_provider for %s", persona)
 		}

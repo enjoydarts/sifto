@@ -42,6 +42,7 @@ class SummaryAudioPlayerTests(unittest.TestCase):
             voice_model="model",
             voice_style="speaker:1",
             text="summary text",
+            persona="editor",
             speech_rate=1.0,
             emotional_intensity=1.0,
             tempo_dynamics=1.0,
@@ -68,6 +69,7 @@ class SummaryAudioPlayerTests(unittest.TestCase):
                 voice_style="",
                 tts_model="",
                 text="summary text",
+                persona="editor",
                 speech_rate=1.0,
                 emotional_intensity=1.0,
                 tempo_dynamics=1.0,
@@ -96,6 +98,7 @@ class SummaryAudioPlayerTests(unittest.TestCase):
                 voice_style="",
                 tts_model="gpt-4o-mini-tts",
                 text="summary text",
+                persona="editor",
                 speech_rate=1.0,
                 emotional_intensity=1.0,
                 tempo_dynamics=1.0,
@@ -110,6 +113,43 @@ class SummaryAudioPlayerTests(unittest.TestCase):
             )
 
         synth.assert_called_once()
+        self.assertEqual(audio_base64, "YXVkaW8=")
+        self.assertEqual(content_type, "audio/mpeg")
+        self.assertEqual(duration_sec, 5)
+        self.assertEqual(resolved_text, "summary text")
+
+    def test_synthesize_uses_gemini_provider(self):
+        service = summary_audio_player.SummaryAudioPlayerService()
+
+        with patch("app.services.summary_audio_player.synthesize_gemini_tts", return_value=(b"audio", "audio/mpeg", ".mp3", 5)) as synth:
+            audio_base64, content_type, duration_sec, resolved_text = service.synthesize(
+                provider="gemini_tts",
+                voice_model="Kore",
+                voice_style="",
+                tts_model="gemini-2.5-flash-tts",
+                text="summary text",
+                persona="snark",
+                speech_rate=1.0,
+                emotional_intensity=1.0,
+                tempo_dynamics=1.0,
+                line_break_silence_seconds=0.4,
+                chunk_trailing_silence_seconds=1.25,
+                pitch=0.0,
+                volume_gain=0.0,
+                user_dictionary_uuid=None,
+                aivis_api_key=None,
+                google_api_key=None,
+                xai_api_key=None,
+                openai_api_key=None,
+            )
+
+        synth.assert_called_once_with(
+            model="gemini-2.5-flash-tts",
+            voice_name="Kore",
+            persona="snark",
+            text="summary text",
+            speech_rate=1.0,
+        )
         self.assertEqual(audio_base64, "YXVkaW8=")
         self.assertEqual(content_type, "audio/mpeg")
         self.assertEqual(duration_sec, 5)

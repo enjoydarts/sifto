@@ -646,7 +646,7 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	}
 
 	hostPersona := normalizeAudioBriefingPersona(job.Persona)
-	partnerPersona, partnerVoice, err := o.resolveAudioBriefingPartnerVoice(ctx, job)
+	partnerPersona, partnerVoice, err := o.resolveAudioBriefingPartnerVoice(ctx, job, hostVoice)
 	if err != nil {
 		return AudioBriefingDraft{}, err
 	}
@@ -827,11 +827,12 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	return draft, nil
 }
 
-func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context.Context, job *model.AudioBriefingJob) (string, *model.AudioBriefingPersonaVoice, error) {
+func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context.Context, job *model.AudioBriefingJob, hostVoice *model.AudioBriefingPersonaVoice) (string, *model.AudioBriefingPersonaVoice, error) {
 	if job == nil {
 		return "", nil, repository.ErrNotFound
 	}
 	hostPersona := normalizeAudioBriefingPersona(job.Persona)
+	hostRequiresGemini := hostVoice != nil && strings.EqualFold(strings.TrimSpace(hostVoice.TTSProvider), "gemini_tts")
 	if existing := strings.TrimSpace(derefString(job.PartnerPersona)); existing != "" {
 		voice, err := o.repo.GetPersonaVoice(ctx, job.UserID, existing)
 		if err != nil {
@@ -839,6 +840,9 @@ func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context
 		}
 		if voice == nil {
 			return "", nil, fmt.Errorf("audio briefing duo partner voice is not configured")
+		}
+		if hostRequiresGemini && !audioBriefingGeminiDuoReady(hostVoice, voice) {
+			return "", nil, fmt.Errorf("audio briefing duo partner must use gemini_tts with the same tts model as host")
 		}
 		return normalizeAudioBriefingPersona(existing), voice, nil
 	}
@@ -855,6 +859,9 @@ func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context
 			continue
 		}
 		if !audioBriefingVoiceConfigComplete(voice.TTSProvider, voice.VoiceModel, voice.VoiceStyle) {
+			continue
+		}
+		if hostRequiresGemini && !audioBriefingGeminiDuoReady(hostVoice, &voice) {
 			continue
 		}
 		candidates = append(candidates, persona)

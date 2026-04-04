@@ -1443,6 +1443,7 @@ def parse_audio_briefing_script_result(
                     "text": text_value,
                 }
             )
+        turns = _normalize_audio_briefing_duo_turn_speakers(turns)
         return {
             "opening": "",
             "overall_summary": "",
@@ -1568,6 +1569,21 @@ def _normalize_audio_briefing_turn_section(value: str) -> str:
     if normalized in {"opening", "overall_summary", "article", "ending"}:
         return normalized
     return ""
+
+
+def _normalize_audio_briefing_duo_turn_speakers(turns: list[dict]) -> list[dict]:
+    normalized_turns: list[dict] = []
+    article_turn_index_by_item: dict[str, int] = {}
+    for turn in turns:
+        copied = dict(turn)
+        if copied.get("section") == "article":
+            item_id = str(copied.get("item_id") or "").strip()
+            if item_id:
+                article_turn_index = article_turn_index_by_item.get(item_id, 0)
+                copied["speaker"] = "host" if article_turn_index % 2 == 0 else "partner"
+                article_turn_index_by_item[item_id] = article_turn_index + 1
+        normalized_turns.append(copied)
+    return normalized_turns
 
 
 def is_audio_briefing_script_retryable_validation_error(exc: Exception) -> bool:

@@ -434,6 +434,11 @@ type AudioBriefingSynthesizeUploadResponse struct {
 	DurationSec    int    `json:"duration_sec"`
 }
 
+type AudioBriefingGeminiDuoTurn struct {
+	Speaker string `json:"speaker"`
+	Text    string `json:"text"`
+}
+
 type SummaryAudioSynthesizeResponse struct {
 	AudioBase64  string `json:"audio_base64"`
 	ContentType  string `json:"content_type"`
@@ -1011,6 +1016,7 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 	voiceModel string,
 	voiceStyle string,
 	ttsModel string,
+	persona string,
 	text string,
 	speechRate float64,
 	emotionalIntensity float64,
@@ -1025,6 +1031,7 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 	heartbeatToken string,
 	aivisUserDictionaryUUID *string,
 	aivisAPIKey *string,
+	googleAPIKey *string,
 	xaiAPIKey *string,
 	openAIAPIKey *string,
 ) (*AudioBriefingSynthesizeUploadResponse, error) {
@@ -1038,6 +1045,7 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 		"voice_model":                    voiceModel,
 		"voice_style":                    voiceStyle,
 		"tts_model":                      ttsModel,
+		"persona":                        persona,
 		"text":                           text,
 		"speech_rate":                    speechRate,
 		"emotional_intensity":            emotionalIntensity,
@@ -1054,7 +1062,37 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 	if uuid := strings.TrimSpace(derefString(aivisUserDictionaryUUID)); uuid != "" {
 		requestBody["user_dictionary_uuid"] = uuid
 	}
-	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload", requestBody, workerHeaders(nil, nil, nil, nil, nil, nil, xaiAPIKey, nil, nil, openAIAPIKey, aivisAPIKey, w.internalSecret))
+	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload", requestBody, workerHeaders(nil, googleAPIKey, nil, nil, nil, nil, xaiAPIKey, nil, nil, openAIAPIKey, aivisAPIKey, w.internalSecret))
+}
+
+func (w *WorkerClient) SynthesizeAudioBriefingGeminiDuoUpload(
+	ctx context.Context,
+	ttsModel string,
+	hostPersona string,
+	partnerPersona string,
+	hostVoiceModel string,
+	partnerVoiceModel string,
+	sectionType string,
+	turns []AudioBriefingGeminiDuoTurn,
+	outputObjectKey string,
+	googleAPIKey *string,
+) (*AudioBriefingSynthesizeUploadResponse, error) {
+	if _, ok := ctx.Deadline(); !ok && w.audioBriefingTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.audioBriefingTimeout)
+		defer cancel()
+	}
+	requestBody := map[string]any{
+		"tts_model":           strings.TrimSpace(ttsModel),
+		"host_persona":        strings.TrimSpace(hostPersona),
+		"partner_persona":     strings.TrimSpace(partnerPersona),
+		"host_voice_model":    strings.TrimSpace(hostVoiceModel),
+		"partner_voice_model": strings.TrimSpace(partnerVoiceModel),
+		"section_type":        strings.TrimSpace(sectionType),
+		"turns":               turns,
+		"output_object_key":   outputObjectKey,
+	}
+	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload-gemini-duo", requestBody, workerHeaders(nil, googleAPIKey, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) SynthesizeSummaryAudio(
@@ -1064,6 +1102,7 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 	voiceStyle string,
 	ttsModel string,
 	text string,
+	persona string,
 	speechRate float64,
 	emotionalIntensity float64,
 	tempoDynamics float64,
@@ -1073,6 +1112,7 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 	volumeGain float64,
 	aivisUserDictionaryUUID *string,
 	aivisAPIKey *string,
+	googleAPIKey *string,
 	xaiAPIKey *string,
 	openAIAPIKey *string,
 ) (*SummaryAudioSynthesizeResponse, error) {
@@ -1087,6 +1127,7 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 		"voice_style":                    voiceStyle,
 		"tts_model":                      ttsModel,
 		"text":                           text,
+		"persona":                        persona,
 		"speech_rate":                    speechRate,
 		"emotional_intensity":            emotionalIntensity,
 		"tempo_dynamics":                 tempoDynamics,
@@ -1098,7 +1139,7 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 	if uuid := strings.TrimSpace(derefString(aivisUserDictionaryUUID)); uuid != "" {
 		requestBody["user_dictionary_uuid"] = uuid
 	}
-	return postWithHeaders[SummaryAudioSynthesizeResponse](ctx, w, "/summary-audio/synthesize", requestBody, workerHeaders(nil, nil, nil, nil, nil, nil, xaiAPIKey, nil, nil, openAIAPIKey, aivisAPIKey, w.internalSecret))
+	return postWithHeaders[SummaryAudioSynthesizeResponse](ctx, w, "/summary-audio/synthesize", requestBody, workerHeaders(nil, googleAPIKey, nil, nil, nil, nil, xaiAPIKey, nil, nil, openAIAPIKey, aivisAPIKey, w.internalSecret))
 }
 
 func (w *WorkerClient) PresignAudioBriefingObject(ctx context.Context, objectKey string, expiresSec int) (*AudioBriefingPresignResponse, error) {

@@ -144,6 +144,49 @@ func TestAudioBriefingVoiceConfigCompleteAllowsOpenAIWithoutVoiceStyle(t *testin
 	}
 }
 
+func TestAudioBriefingVoiceConfigCompleteAllowsGeminiWithoutVoiceStyle(t *testing.T) {
+	if !audioBriefingVoiceConfigComplete("gemini_tts", "Kore", "") {
+		t.Fatal("audioBriefingVoiceConfigComplete(gemini_tts) = false, want true")
+	}
+}
+
+func TestAudioBriefingChunkGroupForSelectionUsesArticleItemID(t *testing.T) {
+	chunks := []model.AudioBriefingScriptChunk{
+		{ID: "chunk-1", Seq: 1, PartType: "article", ItemID: stringPtr("item-1"), Speaker: stringPtr("host"), Text: "h1"},
+		{ID: "chunk-2", Seq: 2, PartType: "article", ItemID: stringPtr("item-1"), Speaker: stringPtr("partner"), Text: "p1"},
+		{ID: "chunk-3", Seq: 3, PartType: "article", ItemID: stringPtr("item-2"), Speaker: stringPtr("host"), Text: "h2"},
+	}
+
+	group := audioBriefingChunkGroupForSelection(chunks, &chunks[1])
+
+	if group.ItemID != "item-1" {
+		t.Fatalf("group.ItemID = %q, want item-1", group.ItemID)
+	}
+	if len(group.Chunks) != 2 {
+		t.Fatalf("len(group.Chunks) = %d, want 2", len(group.Chunks))
+	}
+}
+
+func TestAudioBriefingGeminiDuoTurnsUsesGroupedChunkSpeakers(t *testing.T) {
+	group := audioBriefingChunkGroup{
+		PartType: "article",
+		ItemID:   "item-1",
+		Chunks: []*model.AudioBriefingScriptChunk{
+			{Speaker: stringPtr("host"), Text: "最初の発話"},
+			{Speaker: stringPtr("partner"), Text: "次の発話"},
+		},
+	}
+
+	turns := audioBriefingGeminiDuoTurns(group)
+
+	if len(turns) != 2 {
+		t.Fatalf("len(turns) = %d, want 2", len(turns))
+	}
+	if turns[0].Speaker != "host" || turns[1].Speaker != "partner" {
+		t.Fatalf("turn speakers = %#v, want host/partner", turns)
+	}
+}
+
 func ptrTime(v time.Time) *time.Time {
 	return &v
 }

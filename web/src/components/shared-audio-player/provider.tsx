@@ -105,6 +105,24 @@ async function waitForLoadedMetadata(audio: HTMLAudioElement): Promise<void> {
   });
 }
 
+function resolvedAudioDuration(audio: HTMLAudioElement): number {
+  return Number.isFinite(audio.duration) ? audio.duration : 0;
+}
+
+function isNaturalEndingPause(audio: HTMLAudioElement | null): boolean {
+  if (!audio) {
+    return false;
+  }
+  const duration = resolvedAudioDuration(audio);
+  if (audio.ended) {
+    return true;
+  }
+  if (duration <= 0) {
+    return false;
+  }
+  return audio.currentTime >= Math.max(0, duration - 0.35);
+}
+
 export function SharedAudioPlayerProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -147,26 +165,29 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     return summaryQueue.queue[0] ?? null;
   }, [summaryQueue.queue]);
 
+  const currentSummaryItemID = currentSummaryItem?.id ?? null;
+
   const currentSummaryDetailQuery = useQuery({
-    queryKey: ["shared-summary-audio-item", currentSummaryItem?.id],
+    queryKey: ["shared-summary-audio-item", currentSummaryItemID],
     queryFn: async () => {
-      if (!currentSummaryItem?.id) {
+      if (!currentSummaryItemID) {
         throw new Error("missing item id");
       }
-      return api.getItem(currentSummaryItem.id);
+      return api.getItem(currentSummaryItemID);
     },
-    enabled: mode === "summary_queue" && Boolean(currentSummaryItem?.id),
+    enabled: mode === "summary_queue" && Boolean(currentSummaryItemID),
   });
 
   useEffect(() => {
     if (mode !== "summary_queue") {
       return;
     }
+    const detail = currentSummaryDetailQuery.data ?? null;
     setSummaryQueue((prev) => ({
       ...prev,
-      currentItemDetail: currentSummaryDetailQuery.data ?? null,
+      currentItemDetail: detail && detail.id === currentSummaryItemID ? detail : null,
     }));
-  }, [currentSummaryDetailQuery.data, mode]);
+  }, [currentSummaryDetailQuery.data, currentSummaryItemID, mode]);
 
   useEffect(() => {
     if (mode !== "summary_queue") {
@@ -534,18 +555,24 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       }
       currentAudioRef.current = prepared;
       setSummaryPersonaKey(prepared.response.persona || null);
+      const immediateDetail =
+        prepared.response.item && prepared.response.item.id === prepared.itemID
+          ? prepared.response.item
+          : null;
       setSummaryQueue((prev) => ({
         ...prev,
         currentItemID: prepared.itemID,
+        currentItemDetail: immediateDetail,
         prefetchedItemID: prefetchedAudioRef.current?.itemID ?? null,
       }));
       audio.src = prepared.objectURL;
       audio.load();
       await waitForLoadedMetadata(audio);
-      const offsetSec = Math.min(Math.max(startOffsetSec, 0), Number.isFinite(audio.duration) ? audio.duration || startOffsetSec : startOffsetSec);
+      const duration = resolvedAudioDuration(audio);
+      const offsetSec = Math.min(Math.max(startOffsetSec, 0), duration || startOffsetSec);
       audio.currentTime = offsetSec;
       setCurrentTimeSec(offsetSec);
-      setDurationSec(0);
+      setDurationSec(duration);
       if (autoplay) {
         try {
           await audio.play();
@@ -569,6 +596,21 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       setErrorMessage(err instanceof Error ? err.message : String(err));
       return false;
     }
+  }
+
+  async function replenishSummaryQueueAfterCurrent(queueState: SharedSummaryQueueState): Promise<Item[]> {
+    const queueKind = queueState.queueKind;
+    if (!queueKind || queueKind === "brief") {
+      return [];
+    }
+    const consumedIDs = new Set([
+      ...queueState.excludedItemIDs,
+      ...queueState.queue.map((item) => item.id),
+    ]);
+    const incoming = await fetchSummaryQueue(queueKind);
+    return incoming
+      .filter((item) => !consumedIDs.has(item.id))
+      .slice(0, PLAYBACK_QUEUE_BUFFER_SIZE);
   }
 
   async function stopPlaybackInternal() {
@@ -670,10 +712,11 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       audio.src = payload.audioURL;
       audio.load();
       await waitForLoadedMetadata(audio);
-      const offsetSec = Math.min(Math.max(startOffsetSec, 0), Number.isFinite(audio.duration) ? audio.duration || startOffsetSec : startOffsetSec);
+      const duration = resolvedAudioDuration(audio);
+      const offsetSec = Math.min(Math.max(startOffsetSec, 0), duration || startOffsetSec);
       audio.currentTime = offsetSec;
       setCurrentTimeSec(offsetSec);
-      setDurationSec(0);
+      setDurationSec(duration);
       try {
         await audio.play();
       } catch (err) {
@@ -704,20 +747,10 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       return;
     }
     await flushReadProgress(summaryQueue.currentItemID);
-    setSummaryQueue((prev) => ({
-      ...prev,
-      queue: nextQueue,
-      currentIndex: prev.currentIndex + index,
-      currentItemID: null,
-      currentItemDetail: null,
-      excludedItemIDs: [...prev.excludedItemIDs, ...prev.queue.slice(0, index).map((item) => item.id)],
-      prefetchedItemID: null,
-      prefetchingItemID: null,
-    }));
     const nextState: SharedSummaryQueueState = {
       queueKind: summaryQueue.queueKind,
       queue: nextQueue,
-      currentItemID: null,
+      currentItemID: nextQueue[0]?.id ?? null,
       currentItemDetail: null,
       currentIndex: summaryQueue.currentIndex + index,
       excludedItemIDs: [...summaryQueue.excludedItemIDs, ...summaryQueue.queue.slice(0, index).map((item) => item.id)],
@@ -726,6 +759,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     };
     const started = await playSummaryQueue(nextQueue, true);
     if (started) {
+      setSummaryQueue(nextState);
       await persistRemoteSession("update", { summaryQueueState: nextState, positionSec: 0, durationSec: 0 });
     }
   }
@@ -737,6 +771,26 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     }
     const queue = summaryQueue.queue;
     if (queue.length <= 1) {
+      const replenishedQueue = await replenishSummaryQueueAfterCurrent(summaryQueue);
+      if (replenishedQueue.length > 0) {
+        resetReadProgressForItem(summaryQueue.currentItemID);
+        const nextState: SharedSummaryQueueState = {
+          queueKind: summaryQueue.queueKind,
+          queue: replenishedQueue,
+          currentItemID: replenishedQueue[0]?.id ?? null,
+          currentItemDetail: null,
+          currentIndex: summaryQueue.currentIndex + queue.length,
+          excludedItemIDs: [...summaryQueue.excludedItemIDs, ...queue.map((item) => item.id)],
+          prefetchedItemID: null,
+          prefetchingItemID: null,
+        };
+        const started = await playSummaryQueue(replenishedQueue, true);
+        if (started) {
+          setSummaryQueue(nextState);
+          await persistRemoteSession("update", { summaryQueueState: nextState, positionSec: 0, durationSec: 0 });
+        }
+        return;
+      }
       const finalState = summaryQueue;
       const finalPosition = durationSec > 0 ? durationSec : currentTimeSec;
       await persistRemoteSession("complete", {
@@ -761,20 +815,10 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     }
     const nextQueue = queue.slice(1);
     resetReadProgressForItem(summaryQueue.currentItemID);
-    setSummaryQueue((prev) => ({
-      ...prev,
-      queue: nextQueue,
-      currentIndex: prev.currentIndex + 1,
-      currentItemID: null,
-      currentItemDetail: null,
-      excludedItemIDs: prev.queue[0] ? [...prev.excludedItemIDs, prev.queue[0].id] : prev.excludedItemIDs,
-      prefetchedItemID: null,
-      prefetchingItemID: null,
-    }));
     const nextState: SharedSummaryQueueState = {
       queueKind: summaryQueue.queueKind,
       queue: nextQueue,
-      currentItemID: null,
+      currentItemID: nextQueue[0]?.id ?? null,
       currentItemDetail: null,
       currentIndex: summaryQueue.currentIndex + 1,
       excludedItemIDs: summaryQueue.queue[0] ? [...summaryQueue.excludedItemIDs, summaryQueue.queue[0].id] : summaryQueue.excludedItemIDs,
@@ -783,6 +827,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     };
     const started = await playSummaryQueue(nextQueue, true);
     if (started) {
+      setSummaryQueue(nextState);
       await persistRemoteSession("update", { summaryQueueState: nextState, positionSec: 0, durationSec: 0 });
     }
   }
@@ -883,6 +928,10 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   });
 
   const handleAudioPause = useEffectEvent(() => {
+    const audio = audioRef.current;
+    if (isNaturalEndingPause(audio)) {
+      return;
+    }
     if (playbackState !== "idle" && playbackState !== "finished") {
       setPlaybackState("paused");
     }
@@ -898,11 +947,11 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       return;
     }
     setCurrentTimeSec(audio.currentTime || 0);
-    setDurationSec(Number.isFinite(audio.duration) ? audio.duration : 0);
+    setDurationSec(resolvedAudioDuration(audio));
     if (remoteSessionIDRef.current && Math.abs((audio.currentTime || 0) - lastPersistedPositionSecRef.current) >= 15) {
       void persistRemoteSession("update", {
         positionSec: audio.currentTime || 0,
-        durationSec: Number.isFinite(audio.duration) ? audio.duration : 0,
+        durationSec: resolvedAudioDuration(audio),
       });
     }
   });

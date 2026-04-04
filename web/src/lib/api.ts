@@ -341,6 +341,21 @@ export interface OpenAITTSVoicesResponse {
   voices: OpenAITTSVoiceSnapshot[];
 }
 
+export interface GeminiTTSVoiceCatalogEntry {
+  voice_name: string;
+  label: string;
+  tone: string;
+  description: string;
+  sample_audio_path: string;
+}
+
+export interface GeminiTTSVoicesResponse {
+  catalog_name: string;
+  provider: string;
+  source: string;
+  voices: GeminiTTSVoiceCatalogEntry[];
+}
+
 export interface ProviderModelSnapshotEntry {
   provider: string;
   model_id: string;
@@ -1429,6 +1444,7 @@ export interface UserSettings {
   has_aivis_api_key: boolean;
   aivis_api_key_last4: string | null;
   aivis_user_dictionary_uuid?: string | null;
+  gemini_tts_enabled?: boolean;
   podcast?: PodcastSettings;
   has_inoreader_oauth?: boolean;
   inoreader_token_expires_at?: string | null;
@@ -2766,6 +2782,8 @@ export const api = {
     apiFetch<{ run: OpenAITTSVoiceSyncRun | null }>("/openai-tts-voices/status"),
   syncOpenAITTSVoices: () =>
     apiFetch<OpenAITTSVoicesResponse>("/openai-tts-voices/sync", { method: "POST" }),
+  getGeminiTTSVoices: () =>
+    apiFetch<GeminiTTSVoicesResponse>("/gemini-tts-voices"),
   deleteInoreaderOAuth: () =>
     apiFetch<{ user_id: string; has_inoreader_oauth: boolean; inoreader_token_expires: string | null }>(
       "/settings/inoreader-oauth",

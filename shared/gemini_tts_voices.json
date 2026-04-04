@@ -1,0 +1,217 @@
+{
+  "catalog_name": "gemini_tts_voices",
+  "provider": "gemini",
+  "source": "Gemini API speech generation voice options",
+  "voices": [
+    {
+      "voice_name": "Zephyr",
+      "label": "Zephyr",
+      "tone": "Bright",
+      "description": "明るく軽やかで、導入や案内に向く声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Zephyr.mp3"
+    },
+    {
+      "voice_name": "Puck",
+      "label": "Puck",
+      "tone": "Upbeat",
+      "description": "前向きで軽快、テンポのよい案内に向く声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Puck.mp3"
+    },
+    {
+      "voice_name": "Charon",
+      "label": "Charon",
+      "tone": "Informative",
+      "description": "情報を落ち着いて伝えやすい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Charon.mp3"
+    },
+    {
+      "voice_name": "Kore",
+      "label": "Kore",
+      "tone": "Firm",
+      "description": "芯があり、断定をはっきり置きやすい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Kore.mp3"
+    },
+    {
+      "voice_name": "Fenrir",
+      "label": "Fenrir",
+      "tone": "Excitable",
+      "description": "感情の起伏を少し強めに出しやすい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Fenrir.mp3"
+    },
+    {
+      "voice_name": "Leda",
+      "label": "Leda",
+      "tone": "Youthful",
+      "description": "若々しく、軽やかで親しみのある声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Leda.mp3"
+    },
+    {
+      "voice_name": "Orus",
+      "label": "Orus",
+      "tone": "Firm",
+      "description": "落ち着きと強さを両立しやすい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Orus.mp3"
+    },
+    {
+      "voice_name": "Aoede",
+      "label": "Aoede",
+      "tone": "Breezy",
+      "description": "風通しがよく、軽く流れるような声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Aoede.mp3"
+    },
+    {
+      "voice_name": "Callirrhoe",
+      "label": "Callirrhoe",
+      "tone": "Easy-going",
+      "description": "おおらかで、圧をかけすぎない声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Callirrhoe.mp3"
+    },
+    {
+      "voice_name": "Autonoe",
+      "label": "Autonoe",
+      "tone": "Bright",
+      "description": "明るくはっきりしていて、聞き取りやすい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Autonoe.mp3"
+    },
+    {
+      "voice_name": "Enceladus",
+      "label": "Enceladus",
+      "tone": "Breathy",
+      "description": "息づかいを感じる、少し柔らかな声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Enceladus.mp3"
+    },
+    {
+      "voice_name": "Iapetus",
+      "label": "Iapetus",
+      "tone": "Clear",
+      "description": "明瞭で、輪郭のはっきりした声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Iapetus.mp3"
+    },
+    {
+      "voice_name": "Umbriel",
+      "label": "Umbriel",
+      "tone": "Easy-going",
+      "description": "自然体で、肩の力が抜けた声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Umbriel.mp3"
+    },
+    {
+      "voice_name": "Algieba",
+      "label": "Algieba",
+      "tone": "Smooth",
+      "description": "滑らかで、耳あたりのよい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Algieba.mp3"
+    },
+    {
+      "voice_name": "Despina",
+      "label": "Despina",
+      "tone": "Smooth",
+      "description": "やわらかく、流れが自然な声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Despina.mp3"
+    },
+    {
+      "voice_name": "Erinome",
+      "label": "Erinome",
+      "tone": "Clear",
+      "description": "雑味が少なく、すっきり伝わる声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Erinome.mp3"
+    },
+    {
+      "voice_name": "Algenib",
+      "label": "Algenib",
+      "tone": "Gravelly",
+      "description": "少しかすれた質感で、存在感のある声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Algenib.mp3"
+    },
+    {
+      "voice_name": "Rasalgethi",
+      "label": "Rasalgethi",
+      "tone": "Informative",
+      "description": "説明や案内を落ち着いて伝えやすい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Rasalgethi.mp3"
+    },
+    {
+      "voice_name": "Laomedeia",
+      "label": "Laomedeia",
+      "tone": "Upbeat",
+      "description": "軽快で、リズムよく進めやすい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Laomedeia.mp3"
+    },
+    {
+      "voice_name": "Achernar",
+      "label": "Achernar",
+      "tone": "Soft",
+      "description": "やわらかく、角の立ちにくい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Achernar.mp3"
+    },
+    {
+      "voice_name": "Alnilam",
+      "label": "Alnilam",
+      "tone": "Firm",
+      "description": "落ち着きがあり、芯を出しやすい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Alnilam.mp3"
+    },
+    {
+      "voice_name": "Schedar",
+      "label": "Schedar",
+      "tone": "Even",
+      "description": "平坦すぎず、安定して聞かせやすい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Schedar.mp3"
+    },
+    {
+      "voice_name": "Gacrux",
+      "label": "Gacrux",
+      "tone": "Mature",
+      "description": "大人っぽく、年輪を感じる声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Gacrux.mp3"
+    },
+    {
+      "voice_name": "Pulcherrima",
+      "label": "Pulcherrima",
+      "tone": "Forward",
+      "description": "前へ出る勢いがあり、話を進めやすい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Pulcherrima.mp3"
+    },
+    {
+      "voice_name": "Achird",
+      "label": "Achird",
+      "tone": "Friendly",
+      "description": "親しみやすく、距離を縮めやすい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Achird.mp3"
+    },
+    {
+      "voice_name": "Zubenelgenubi",
+      "label": "Zubenelgenubi",
+      "tone": "Casual",
+      "description": "くだけすぎず、自然体で話しやすい声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Zubenelgenubi.mp3"
+    },
+    {
+      "voice_name": "Vindemiatrix",
+      "label": "Vindemiatrix",
+      "tone": "Gentle",
+      "description": "穏やかで、やさしく響く声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Vindemiatrix.mp3"
+    },
+    {
+      "voice_name": "Sadachbia",
+      "label": "Sadachbia",
+      "tone": "Lively",
+      "description": "生き生きとして、動きのある声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Sadachbia.mp3"
+    },
+    {
+      "voice_name": "Sadaltager",
+      "label": "Sadaltager",
+      "tone": "Knowledgeable",
+      "description": "知識量を感じさせる、落ち着いた声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Sadaltager.mp3"
+    },
+    {
+      "voice_name": "Sulafat",
+      "label": "Sulafat",
+      "tone": "Warm",
+      "description": "あたたかく、親しみのある声",
+      "sample_audio_path": "/audio/gemini-tts-voices/output_Sulafat.mp3"
+    }
+  ]
+}

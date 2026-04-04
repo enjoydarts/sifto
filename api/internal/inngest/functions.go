@@ -1296,13 +1296,14 @@ func NewHandler(db *pgxpool.Pool, worker *service.WorkerClient, resend *service.
 
 func generateAudioBriefingsFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, cache service.JSONCache) (inngestgo.ServableFunction, error) {
 	audioBriefingRepo := repository.NewAudioBriefingRepo(db)
+	userRepo := repository.NewUserRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
 	promptTemplateRepo := repository.NewPromptTemplateRepo(db)
 	promptResolver := service.NewPromptResolver(promptTemplateRepo)
 	secretCipher := service.NewSecretCipher()
 	audioConcatRunner := service.NewAudioConcatRunnerFromEnv()
-	audioBriefingVoiceRunner := service.NewAudioBriefingVoiceRunner(audioBriefingRepo, userSettingsRepo, secretCipher, worker)
+	audioBriefingVoiceRunner := service.NewAudioBriefingVoiceRunner(audioBriefingRepo, userRepo, userSettingsRepo, secretCipher, worker)
 	audioBriefingConcatStarter := service.NewAudioBriefingConcatStarter(audioBriefingRepo, audioConcatRunner)
 	orchestrator := service.NewAudioBriefingOrchestrator(audioBriefingRepo, userSettingsRepo, llmUsageRepo, promptResolver, secretCipher, worker, cache, audioBriefingVoiceRunner, audioBriefingConcatStarter)
 
@@ -1511,13 +1512,14 @@ type audioBriefingRunEventData struct {
 
 func runAudioBriefingPipelineFn(client inngestgo.Client, db *pgxpool.Pool, worker *service.WorkerClient, cache service.JSONCache) (inngestgo.ServableFunction, error) {
 	audioBriefingRepo := repository.NewAudioBriefingRepo(db)
+	userRepo := repository.NewUserRepo(db)
 	userSettingsRepo := repository.NewUserSettingsRepo(db)
 	llmUsageRepo := repository.NewLLMUsageLogRepo(db)
 	promptTemplateRepo := repository.NewPromptTemplateRepo(db)
 	promptResolver := service.NewPromptResolver(promptTemplateRepo)
 	secretCipher := service.NewSecretCipher()
 	audioConcatRunner := service.NewAudioConcatRunnerFromEnv()
-	audioBriefingVoiceRunner := service.NewAudioBriefingVoiceRunner(audioBriefingRepo, userSettingsRepo, secretCipher, worker)
+	audioBriefingVoiceRunner := service.NewAudioBriefingVoiceRunner(audioBriefingRepo, userRepo, userSettingsRepo, secretCipher, worker)
 	audioBriefingConcatStarter := service.NewAudioBriefingConcatStarter(audioBriefingRepo, audioConcatRunner)
 	orchestrator := service.NewAudioBriefingOrchestrator(audioBriefingRepo, userSettingsRepo, llmUsageRepo, promptResolver, secretCipher, worker, cache, audioBriefingVoiceRunner, audioBriefingConcatStarter)
 

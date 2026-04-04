@@ -56,11 +56,17 @@ func (s *AudioBriefingConcatStarter) Start(ctx context.Context, userID string, j
 		return err
 	}
 	audioObjectKeys := make([]string, 0, len(chunks))
+	var previousKey string
 	for _, chunk := range chunks {
 		if chunk.R2AudioObjectKey == nil || strings.TrimSpace(*chunk.R2AudioObjectKey) == "" {
 			return repository.ErrInvalidState
 		}
-		audioObjectKeys = append(audioObjectKeys, strings.TrimSpace(*chunk.R2AudioObjectKey))
+		key := strings.TrimSpace(*chunk.R2AudioObjectKey)
+		if key == previousKey {
+			continue
+		}
+		audioObjectKeys = append(audioObjectKeys, key)
+		previousKey = key
 	}
 	if len(audioObjectKeys) == 0 {
 		return repository.ErrInvalidState

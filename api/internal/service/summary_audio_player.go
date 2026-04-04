@@ -26,6 +26,7 @@ type SummaryAudioSynthesis struct {
 type SummaryAudioPlayerService struct {
 	items        *repository.ItemRepo
 	audio        *repository.AudioBriefingRepo
+	userRepo     *repository.UserRepo
 	userSettings *repository.UserSettingsRepo
 	cipher       *SecretCipher
 	worker       *WorkerClient
@@ -34,6 +35,7 @@ type SummaryAudioPlayerService struct {
 func NewSummaryAudioPlayerService(
 	items *repository.ItemRepo,
 	audio *repository.AudioBriefingRepo,
+	userRepo *repository.UserRepo,
 	userSettings *repository.UserSettingsRepo,
 	cipher *SecretCipher,
 	worker *WorkerClient,
@@ -41,6 +43,7 @@ func NewSummaryAudioPlayerService(
 	return &SummaryAudioPlayerService{
 		items:        items,
 		audio:        audio,
+		userRepo:     userRepo,
 		userSettings: userSettings,
 		cipher:       cipher,
 		worker:       worker,
@@ -89,6 +92,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	narration := BuildSummaryAudioNarration(derefString(item.TranslatedTitle), derefString(item.Title), summaryText)
 	var aivisAPIKey *string
 	var aivisUserDictionaryUUID *string
+	var googleAPIKey *string
 	var xaiAPIKey *string
 	var openAIAPIKey *string
 	ttsModel := strings.TrimSpace(voice.TTSModel)
@@ -104,6 +108,13 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	} else if strings.EqualFold(strings.TrimSpace(voice.TTSProvider), "xai") {
 		xaiAPIKey, err = s.loadXAIAPIKey(ctx, userID)
 		if err != nil {
+			return nil, err
+		}
+	} else if strings.EqualFold(strings.TrimSpace(voice.TTSProvider), "gemini_tts") {
+		if ttsModel == "" {
+			return nil, errors.New("gemini tts model is not configured")
+		}
+		if err := EnsureGeminiTTSEnabledForUser(ctx, s.userRepo, userID); err != nil {
 			return nil, err
 		}
 	} else if strings.EqualFold(strings.TrimSpace(voice.TTSProvider), "openai") {
@@ -122,6 +133,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		voice.VoiceStyle,
 		ttsModel,
 		narration,
+		persona,
 		voice.SpeechRate,
 		voice.EmotionalIntensity,
 		voice.TempoDynamics,
@@ -131,6 +143,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		voice.VolumeGain,
 		aivisUserDictionaryUUID,
 		aivisAPIKey,
+		googleAPIKey,
 		xaiAPIKey,
 		openAIAPIKey,
 	)

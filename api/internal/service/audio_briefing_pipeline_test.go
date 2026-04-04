@@ -140,7 +140,7 @@ func TestResolveAudioBriefingPartnerVoiceRequiresExplicitPartnerPersona(t *testi
 	partnerPersona, partnerVoice, err := orchestrator.resolveAudioBriefingPartnerVoice(context.Background(), job, &model.AudioBriefingPersonaVoice{
 		TTSProvider: "xai",
 		VoiceModel:  "voice-host",
-	})
+	}, false)
 	if err == nil {
 		t.Fatal("resolveAudioBriefingPartnerVoice(...) error = nil, want explicit configuration error")
 	}
@@ -168,12 +168,65 @@ func TestResolveAudioBriefingPartnerVoiceRequiresExplicitPartnerPersonaForGemini
 		TTSProvider: "gemini_tts",
 		TTSModel:    "gemini-2.5-flash-tts",
 		VoiceModel:  "Kore",
-	})
+	}, false)
 	if err == nil {
 		t.Fatal("resolveAudioBriefingPartnerVoice(...) error = nil, want explicit gemini configuration error")
 	}
 	if !strings.Contains(err.Error(), "must be explicitly configured for gemini_tts") {
 		t.Fatalf("error = %v, want gemini explicit configuration message", err)
+	}
+}
+
+func TestResolveRandomAudioBriefingPartnerCandidate(t *testing.T) {
+	voices := []model.AudioBriefingPersonaVoice{
+		{Persona: "editor", TTSProvider: "xai", VoiceModel: "host"},
+		{Persona: "hype", TTSProvider: "xai", VoiceModel: "partner-1"},
+		{Persona: "analyst", TTSProvider: "xai", VoiceModel: "partner-2"},
+	}
+
+	gotPersona, gotVoice, ok := resolveRandomAudioBriefingPartnerCandidate("editor", false, &model.AudioBriefingPersonaVoice{
+		TTSProvider: "xai",
+		VoiceModel:  "host",
+	}, voices, func(candidates []string) (string, bool) {
+		if len(candidates) != 2 {
+			t.Fatalf("candidate count = %d, want 2", len(candidates))
+		}
+		return "analyst", true
+	})
+	if !ok {
+		t.Fatal("resolveRandomAudioBriefingPartnerCandidate(...) ok = false, want true")
+	}
+	if gotPersona != "analyst" {
+		t.Fatalf("partner persona = %q, want analyst", gotPersona)
+	}
+	if gotVoice == nil || gotVoice.VoiceModel != "partner-2" {
+		t.Fatalf("partner voice = %#v, want analyst voice", gotVoice)
+	}
+}
+
+func TestResolveRandomAudioBriefingPartnerCandidateSkipsHostAndGeminiMismatch(t *testing.T) {
+	voices := []model.AudioBriefingPersonaVoice{
+		{Persona: "editor", TTSProvider: "gemini_tts", TTSModel: "gemini-2.5-flash-tts", VoiceModel: "Kore"},
+		{Persona: "hype", TTSProvider: "xai", VoiceModel: "Different"},
+		{Persona: "analyst", TTSProvider: "gemini_tts", TTSModel: "gemini-2.5-pro-tts", VoiceModel: "Mismatched"},
+	}
+
+	gotPersona, gotVoice, ok := resolveRandomAudioBriefingPartnerCandidate("editor", true, &model.AudioBriefingPersonaVoice{
+		TTSProvider: "gemini_tts",
+		TTSModel:    "gemini-2.5-flash-tts",
+		VoiceModel:  "Kore",
+	}, voices, func(candidates []string) (string, bool) {
+		t.Fatalf("picker should not be called when no valid candidates, got %#v", candidates)
+		return "", false
+	})
+	if ok {
+		t.Fatal("resolveRandomAudioBriefingPartnerCandidate(...) ok = true, want false")
+	}
+	if gotPersona != "" {
+		t.Fatalf("partner persona = %q, want empty", gotPersona)
+	}
+	if gotVoice != nil {
+		t.Fatalf("partner voice = %#v, want nil", gotVoice)
 	}
 }
 

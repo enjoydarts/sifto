@@ -649,7 +649,12 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	}
 
 	hostPersona := normalizeAudioBriefingPersona(job.Persona)
-	partnerPersona, partnerVoice, err := o.resolveAudioBriefingPartnerVoice(ctx, job, hostVoice)
+	partnerPersona, partnerVoice, err := o.resolveAudioBriefingPartnerVoice(
+		ctx,
+		job,
+		hostVoice,
+		NormalizePersonaMode(&briefingSettings.DefaultPersonaMode) == PersonaModeRandom,
+	)
 	if err != nil {
 		return AudioBriefingDraft{}, err
 	}
@@ -830,7 +835,7 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	return draft, nil
 }
 
-func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context.Context, job *model.AudioBriefingJob, hostVoice *model.AudioBriefingPersonaVoice) (string, *model.AudioBriefingPersonaVoice, error) {
+func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context.Context, job *model.AudioBriefingJob, hostVoice *model.AudioBriefingPersonaVoice, randomPartnerAllowed bool) (string, *model.AudioBriefingPersonaVoice, error) {
 	if job == nil {
 		return "", nil, repository.ErrNotFound
 	}
@@ -847,6 +852,32 @@ func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context
 			return "", nil, fmt.Errorf("audio briefing duo partner must use gemini_tts with the same tts model as host")
 		}
 		return normalizeAudioBriefingPersona(existing), voice, nil
+	}
+	if randomPartnerAllowed {
+		if o == nil || o.repo == nil {
+			return "", nil, fmt.Errorf("audio briefing repo unavailable")
+		}
+		voices, err := o.repo.ListPersonaVoicesByUser(ctx, job.UserID)
+		if err != nil {
+			return "", nil, err
+		}
+		partnerPersona, partnerVoice, ok := resolveRandomAudioBriefingPartnerCandidate(
+			job.Persona,
+			hostRequiresGemini,
+			hostVoice,
+			voices,
+			randomPersonaFromCandidates,
+		)
+		if !ok {
+			if hostRequiresGemini {
+				return "", nil, fmt.Errorf("audio briefing duo random partner persona requires another gemini_tts voice with the same tts model")
+			}
+			return "", nil, fmt.Errorf("audio briefing duo random partner persona requires another configured persona voice")
+		}
+		if _, err := o.repo.SetPartnerPersona(ctx, job.ID, partnerPersona); err != nil {
+			return "", nil, err
+		}
+		return partnerPersona, partnerVoice, nil
 	}
 	if hostRequiresGemini {
 		return "", nil, fmt.Errorf("audio briefing duo partner persona must be explicitly configured for gemini_tts")
@@ -1749,6 +1780,51 @@ func normalizeAudioBriefingPersona(v string) string {
 	default:
 		return "editor"
 	}
+}
+
+func resolveRandomAudioBriefingPartnerCandidate(
+	hostPersona string,
+	hostRequiresGemini bool,
+	hostVoice *model.AudioBriefingPersonaVoice,
+	voices []model.AudioBriefingPersonaVoice,
+	picker func([]string) (string, bool),
+) (string, *model.AudioBriefingPersonaVoice, bool) {
+	normalizedHost := normalizeAudioBriefingPersona(hostPersona)
+	if picker == nil {
+		picker = randomPersonaFromCandidates
+	}
+	candidateVoices := make(map[string]model.AudioBriefingPersonaVoice, len(voices))
+	candidates := make([]string, 0, len(voices))
+	for _, voice := range voices {
+		persona := normalizeAudioBriefingPersona(voice.Persona)
+		if persona == normalizedHost {
+			continue
+		}
+		if strings.TrimSpace(voice.TTSProvider) == "" || strings.TrimSpace(voice.VoiceModel) == "" {
+			continue
+		}
+		if hostRequiresGemini && !audioBriefingGeminiDuoReady(hostVoice, &voice) {
+			continue
+		}
+		if _, exists := candidateVoices[persona]; exists {
+			continue
+		}
+		candidateVoices[persona] = voice
+		candidates = append(candidates, persona)
+	}
+	if len(candidates) == 0 {
+		return "", nil, false
+	}
+	picked, ok := picker(candidates)
+	if !ok {
+		return "", nil, false
+	}
+	partnerPersona := normalizeAudioBriefingPersona(picked)
+	voice, exists := candidateVoices[partnerPersona]
+	if !exists {
+		return "", nil, false
+	}
+	return partnerPersona, &voice, true
 }
 
 func resolveAudioBriefingScriptModels(settings *model.UserSettings) []string {

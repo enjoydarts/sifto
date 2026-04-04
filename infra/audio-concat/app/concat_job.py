@@ -30,6 +30,8 @@ def run_from_env() -> int:
     callback_token = required_env("AUDIO_BRIEFING_CALLBACK_TOKEN")
     output_object_key = required_env("AUDIO_BRIEFING_OUTPUT_OBJECT_KEY")
     audio_object_keys = json.loads(required_env("AUDIO_BRIEFING_AUDIO_OBJECT_KEYS_JSON"))
+    segments_raw = os.getenv("AUDIO_BRIEFING_SEGMENTS_JSON", "").strip()
+    segments = json.loads(segments_raw) if segments_raw else []
     bgm_enabled = env_bool("AUDIO_BRIEFING_BGM_ENABLED")
     bgm_r2_prefix = os.getenv("AUDIO_BRIEFING_BGM_R2_PREFIX", "").strip() or None
     provider_job_id = os.getenv("CLOUD_RUN_EXECUTION", "").strip() or None
@@ -40,6 +42,7 @@ def run_from_env() -> int:
         callback_token=callback_token,
         output_object_key=output_object_key,
         audio_object_keys=audio_object_keys,
+        segments=segments,
         provider_job_id=provider_job_id,
         bgm_enabled=bgm_enabled,
         bgm_r2_prefix=bgm_r2_prefix,
@@ -54,6 +57,7 @@ def run_job(
     callback_token: str,
     output_object_key: str,
     audio_object_keys: list[str],
+    segments: list[dict] | None = None,
     provider_job_id: str | None = None,
     bgm_enabled: bool = False,
     bgm_r2_prefix: str | None = None,
@@ -62,9 +66,10 @@ def run_job(
         with tempfile.TemporaryDirectory(prefix="audio-concat-") as tmp_dir:
             tmp_path = Path(tmp_dir)
             r2 = R2Client()
-            segment_files = download_segments(tmp_path, r2, audio_object_keys)
+            segment_specs = normalize_segment_specs(audio_object_keys, segments)
+            segment_files = download_segments(tmp_path, r2, [spec["audio_object_key"] for spec in segment_specs])
             concat_path = tmp_path / "episode-concat.mp3"
-            concat_audio(segment_files, concat_path)
+            concat_audio(segment_files, concat_path, segment_specs)
             bgm_object_key = None
             try:
                 if bgm_enabled and bgm_r2_prefix:
@@ -153,6 +158,38 @@ def download_segments(tmp_path: Path, r2: R2Client, audio_object_keys: list[str]
     return downloaded
 
 
+def normalize_segment_specs(audio_object_keys: list[str], segments: list[dict] | None) -> list[dict]:
+    normalized: list[dict] = []
+    if segments is None:
+        segments = []
+    if segments and not isinstance(segments, list):
+        raise RuntimeError("segments must be an array when provided")
+    if isinstance(segments, list):
+        for raw in segments:
+            if not isinstance(raw, dict):
+                raise RuntimeError("segments must contain objects")
+            key = str(raw.get("audio_object_key") or "").strip()
+            if not key:
+                raise RuntimeError("segments must include audio_object_key")
+            normalized.append({
+                "audio_object_key": key,
+                "gap_after": bool(raw.get("gap_after", True)),
+            })
+    if normalized:
+        normalized_keys = [segment["audio_object_key"] for segment in normalized]
+        fallback_keys = [str(object_key).strip() for object_key in audio_object_keys]
+        if normalized_keys != fallback_keys:
+            raise RuntimeError("segments must match audio_object_keys exactly")
+        return normalized
+    fallback = []
+    for index, object_key in enumerate(audio_object_keys):
+        fallback.append({
+            "audio_object_key": str(object_key).strip(),
+            "gap_after": index < len(audio_object_keys) - 1,
+        })
+    return fallback
+
+
 def download_direct(url: str, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with urllib.request.urlopen(url, timeout=60) as response:
@@ -160,9 +197,10 @@ def download_direct(url: str, destination: Path) -> None:
             shutil.copyfileobj(response, stream)
 
 
-def concat_audio(segment_files: list[Path], output_path: Path) -> None:
+def concat_audio(segment_files: list[Path], output_path: Path, segment_specs: list[dict] | None = None) -> None:
     if not segment_files:
         raise RuntimeError("segment files are empty")
+    segment_specs = segment_specs or []
     command = [
         "ffmpeg",
         "-y",
@@ -175,7 +213,10 @@ def concat_audio(segment_files: list[Path], output_path: Path) -> None:
         filter_parts.append(
             f"[{index}:a]aresample={_OUTPUT_SAMPLE_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo[{normalized_label}]"
         )
-        if index < len(segment_files)-1:
+        gap_after = True
+        if index < len(segment_specs):
+            gap_after = bool(segment_specs[index].get("gap_after", True))
+        if index < len(segment_files)-1 and gap_after:
             padded_label = f"a{index}"
             filter_parts.append(f"[{normalized_label}]apad=pad_dur=1[{padded_label}]")
             concat_inputs.append(f"[{padded_label}]")

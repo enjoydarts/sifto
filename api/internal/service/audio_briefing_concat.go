@@ -55,18 +55,13 @@ func (s *AudioBriefingConcatStarter) Start(ctx context.Context, userID string, j
 	if err != nil {
 		return err
 	}
-	audioObjectKeys := make([]string, 0, len(chunks))
-	var previousKey string
-	for _, chunk := range chunks {
-		if chunk.R2AudioObjectKey == nil || strings.TrimSpace(*chunk.R2AudioObjectKey) == "" {
-			return repository.ErrInvalidState
-		}
-		key := strings.TrimSpace(*chunk.R2AudioObjectKey)
-		if key == previousKey {
-			continue
-		}
-		audioObjectKeys = append(audioObjectKeys, key)
-		previousKey = key
+	segments, err := audioBriefingConcatSegments(chunks)
+	if err != nil {
+		return err
+	}
+	audioObjectKeys := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		audioObjectKeys = append(audioObjectKeys, segment.AudioObjectKey)
 	}
 	if len(audioObjectKeys) == 0 {
 		return repository.ErrInvalidState
@@ -93,6 +88,7 @@ func (s *AudioBriefingConcatStarter) Start(ctx context.Context, userID string, j
 		CallbackURL:     callbackURL,
 		CallbackToken:   callbackToken,
 		AudioObjectKeys: audioObjectKeys,
+		Segments:        segments,
 		OutputObjectKey: outputObjectKey,
 		BGMEnabled:      settings != nil && settings.BGMEnabled,
 		BGMR2Prefix:     strings.TrimSpace(derefString(settings.BGMR2Prefix)),
@@ -112,4 +108,51 @@ func (s *AudioBriefingConcatStarter) Start(ctx context.Context, userID string, j
 
 func audioBriefingEpisodeObjectKey(userID string, jobID string) string {
 	return path.Join("audio-briefings", userID, jobID, "episode.mp3")
+}
+
+func audioBriefingConcatSegments(chunks []model.AudioBriefingScriptChunk) ([]AudioConcatSegment, error) {
+	segments := make([]AudioConcatSegment, 0, len(chunks))
+	for _, chunk := range chunks {
+		if chunk.R2AudioObjectKey == nil || strings.TrimSpace(*chunk.R2AudioObjectKey) == "" {
+			return nil, repository.ErrInvalidState
+		}
+		key := strings.TrimSpace(*chunk.R2AudioObjectKey)
+		if len(segments) > 0 && segments[len(segments)-1].AudioObjectKey == key {
+			continue
+		}
+		segments = append(segments, AudioConcatSegment{
+			AudioObjectKey: key,
+			GapAfter:       true,
+		})
+	}
+	for i := 0; i < len(segments)-1; i++ {
+		left := audioBriefingChunkForObjectKey(chunks, segments[i].AudioObjectKey)
+		right := audioBriefingChunkForObjectKey(chunks, segments[i+1].AudioObjectKey)
+		if left == nil || right == nil {
+			continue
+		}
+		if strings.TrimSpace(left.PartType) == "article" &&
+			strings.TrimSpace(right.PartType) == "article" &&
+			strings.TrimSpace(derefString(left.ItemID)) != "" &&
+			strings.TrimSpace(derefString(left.ItemID)) == strings.TrimSpace(derefString(right.ItemID)) {
+			segments[i].GapAfter = false
+		}
+	}
+	return segments, nil
+}
+
+func audioBriefingChunkForObjectKey(chunks []model.AudioBriefingScriptChunk, objectKey string) *model.AudioBriefingScriptChunk {
+	target := strings.TrimSpace(objectKey)
+	if target == "" {
+		return nil
+	}
+	for i := range chunks {
+		if chunks[i].R2AudioObjectKey == nil {
+			continue
+		}
+		if strings.TrimSpace(*chunks[i].R2AudioObjectKey) == target {
+			return &chunks[i]
+		}
+	}
+	return nil
 }

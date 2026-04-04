@@ -109,14 +109,6 @@ def build_gemini_duo_audio_briefing_prompt(
         "article": "記事セクション",
         "ending": "エンディング",
     }.get(str(section_type or "").strip(), "会話セクション")
-    dialogue_lines: list[str] = []
-    for turn in turns:
-        speaker = "HOST" if str(turn.get("speaker") or "").strip() == "host" else "PARTNER"
-        text = str(turn.get("text") or "").strip()
-        if not text:
-            continue
-        dialogue_lines.append(f"{speaker}: {text}")
-
     prompt_lines: list[str] = [
         "あなたは音声ブリーフィング番組の二人会話を音声化するAIです。",
         f"以下は {section_label} の台本です。会話の本文は改変せず、日本語の自然な掛け合いとして読み上げてください。",
@@ -137,11 +129,57 @@ def build_gemini_duo_audio_briefing_prompt(
     prompt_lines.extend(
         [
             "追加の説明や要約は入れないでください。",
-            "",
-            *dialogue_lines,
         ]
     )
     return "\n".join(line for line in prompt_lines if line is not None)
+
+
+def estimate_gemini_duo_request_bytes(
+    *,
+    model: str,
+    host_voice_name: str,
+    partner_voice_name: str,
+    host_persona: str,
+    partner_persona: str,
+    section_type: str,
+    turns: list[dict[str, str]],
+) -> int:
+    prompt = build_gemini_duo_audio_briefing_prompt(host_persona, partner_persona, turns, section_type)
+    body = {
+        "input": {
+            "prompt": prompt,
+            "multiSpeakerMarkup": {
+                "turns": [
+                    {
+                        "speaker": "HOST" if str((turn or {}).get("speaker") or "").strip() == "host" else "PARTNER",
+                        "text": str((turn or {}).get("text") or "").strip(),
+                    }
+                    for turn in turns or []
+                ]
+            },
+        },
+        "voice": {
+            "languageCode": "ja-JP",
+            "modelName": str(model or "").strip(),
+            "multiSpeakerVoiceConfig": {
+                "speakerVoiceConfigs": [
+                    {
+                        "speakerAlias": "HOST",
+                        "speakerId": str(host_voice_name or "").strip(),
+                    },
+                    {
+                        "speakerAlias": "PARTNER",
+                        "speakerId": str(partner_voice_name or "").strip(),
+                    },
+                ]
+            },
+        },
+        "audioConfig": {
+            "audioEncoding": "MP3",
+            "sampleRateHertz": _GEMINI_TTS_SAMPLE_RATE,
+        },
+    }
+    return len(json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
 def _resolve_gemini_tts_endpoint() -> str:

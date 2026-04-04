@@ -63,6 +63,7 @@ func (c *CloudRunJobsClient) RunAudioConcat(ctx context.Context, req AudioConcat
 					{Name: "AUDIO_BRIEFING_CALLBACK_URL", Value: req.CallbackURL},
 					{Name: "AUDIO_BRIEFING_CALLBACK_TOKEN", Value: req.CallbackToken},
 					{Name: "AUDIO_BRIEFING_AUDIO_OBJECT_KEYS_JSON", Value: marshalAudioObjectKeysForEnv(req.AudioObjectKeys)},
+					{Name: "AUDIO_BRIEFING_SEGMENTS_JSON", Value: marshalAudioConcatSegmentsForEnv(req.Segments)},
 					{Name: "AUDIO_BRIEFING_OUTPUT_OBJECT_KEY", Value: req.OutputObjectKey},
 					{Name: "AUDIO_BRIEFING_BGM_ENABLED", Value: boolEnvValue(req.BGMEnabled)},
 					{Name: "AUDIO_BRIEFING_BGM_R2_PREFIX", Value: req.BGMR2Prefix},
@@ -103,6 +104,14 @@ func (c *CloudRunJobsClient) RunAudioConcat(ctx context.Context, req AudioConcat
 
 func marshalAudioObjectKeysForEnv(keys []string) string {
 	raw, err := json.Marshal(keys)
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}
+
+func marshalAudioConcatSegmentsForEnv(segments []AudioConcatSegment) string {
+	raw, err := json.Marshal(segments)
 	if err != nil {
 		return "[]"
 	}

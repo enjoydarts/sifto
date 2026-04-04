@@ -31,6 +31,19 @@ class LocalConcatHandler(BaseHTTPRequestHandler):
             audio_object_keys = payload.get("audio_object_keys")
             if not isinstance(audio_object_keys, list) or not audio_object_keys:
                 raise ValueError("audio_object_keys must be a non-empty array")
+            segments = payload.get("segments")
+            normalized_segments = []
+            if isinstance(segments, list):
+                for raw_segment in segments:
+                    if not isinstance(raw_segment, dict):
+                        continue
+                    key = str(raw_segment.get("audio_object_key") or "").strip()
+                    if not key:
+                        continue
+                    normalized_segments.append({
+                        "audio_object_key": key,
+                        "gap_after": bool(raw_segment.get("gap_after", True)),
+                    })
             bgm_enabled = bool(payload.get("bgm_enabled"))
             bgm_r2_prefix = str(payload.get("bgm_r2_prefix") or "").strip() or None
             execution_name = f"local-{request_id}"
@@ -43,6 +56,7 @@ class LocalConcatHandler(BaseHTTPRequestHandler):
                     "callback_token": callback_token,
                     "output_object_key": output_object_key,
                     "audio_object_keys": [str(value).strip() for value in audio_object_keys],
+                    "segments": normalized_segments,
                     "provider_job_id": execution_name,
                     "bgm_enabled": bgm_enabled,
                     "bgm_r2_prefix": bgm_r2_prefix,

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -211,6 +212,96 @@ func TestAudioBriefingChunkGroupForSelectionSortsBySeq(t *testing.T) {
 	}
 	if turns[0].Speaker != "host" || turns[1].Speaker != "partner" {
 		t.Fatalf("turn speakers = %#v, want host/partner in seq order", turns)
+	}
+}
+
+func TestAudioBriefingChunkGroupForSelectionSkipsGeneratedChunks(t *testing.T) {
+	objectKey := "audio-briefings/user/job/chunk-001.mp3"
+	chunks := []model.AudioBriefingScriptChunk{
+		{ID: "chunk-1", Seq: 1, PartType: "article", ItemID: stringPtr("item-1"), TTSStatus: "generated", R2AudioObjectKey: &objectKey, Text: "done"},
+		{ID: "chunk-2", Seq: 2, PartType: "article", ItemID: stringPtr("item-1"), TTSStatus: "pending", Text: "pending"},
+		{ID: "chunk-3", Seq: 3, PartType: "article", ItemID: stringPtr("item-1"), TTSStatus: "pending", Text: "pending2"},
+	}
+
+	group := audioBriefingChunkGroupForSelection(chunks, &chunks[1])
+
+	if len(group.Chunks) != 2 {
+		t.Fatalf("len(group.Chunks) = %d, want 2", len(group.Chunks))
+	}
+	if group.Chunks[0].ID != "chunk-2" || group.Chunks[1].ID != "chunk-3" {
+		t.Fatalf("group chunk ids = %s, %s; want chunk-2, chunk-3", group.Chunks[0].ID, group.Chunks[1].ID)
+	}
+}
+
+func TestAudioBriefingGeminiDuoSplitGroupsKeepsSmallArticleAsSingleGroup(t *testing.T) {
+	group := audioBriefingChunkGroup{
+		PartType: "article",
+		ItemID:   "item-1",
+		Chunks: []*model.AudioBriefingScriptChunk{
+			{ID: "chunk-1", Seq: 1, Speaker: stringPtr("host"), Text: "短い本文1"},
+			{ID: "chunk-2", Seq: 2, Speaker: stringPtr("partner"), Text: "短い本文2"},
+		},
+	}
+
+	split := audioBriefingGeminiDuoSplitGroups(group, 4096)
+
+	if len(split) != 1 {
+		t.Fatalf("len(split) = %d, want 1", len(split))
+	}
+	if len(split[0].Chunks) != 2 {
+		t.Fatalf("len(split[0].Chunks) = %d, want 2", len(split[0].Chunks))
+	}
+}
+
+func TestAudioBriefingGeminiDuoSplitGroupsSplitsLargeArticleByTurnBoundary(t *testing.T) {
+	longText := strings.Repeat("あ", 700)
+	group := audioBriefingChunkGroup{
+		PartType: "article",
+		ItemID:   "item-1",
+		Chunks: []*model.AudioBriefingScriptChunk{
+			{ID: "chunk-1", Seq: 1, Speaker: stringPtr("host"), Text: longText},
+			{ID: "chunk-2", Seq: 2, Speaker: stringPtr("partner"), Text: longText},
+			{ID: "chunk-3", Seq: 3, Speaker: stringPtr("host"), Text: "最後の短い発話"},
+		},
+	}
+
+	split := audioBriefingGeminiDuoSplitGroups(group, 3200)
+
+	if len(split) != 2 {
+		t.Fatalf("len(split) = %d, want 2", len(split))
+	}
+	if len(split[0].Chunks) != 1 || split[0].Chunks[0].Seq != 1 {
+		t.Fatalf("split[0] = %#v, want only seq 1", split[0].Chunks)
+	}
+	if len(split[1].Chunks) != 2 {
+		t.Fatalf("len(split[1].Chunks) = %d, want 2", len(split[1].Chunks))
+	}
+	if split[1].Chunks[0].Seq != 2 || split[1].Chunks[1].Seq != 3 {
+		t.Fatalf("split[1] seqs = %d,%d want 2,3", split[1].Chunks[0].Seq, split[1].Chunks[1].Seq)
+	}
+}
+
+func TestAudioBriefingGeminiDuoSplitGroupsIsolatesOversizedSingleTurn(t *testing.T) {
+	longText := strings.Repeat("あ", 1800)
+	group := audioBriefingChunkGroup{
+		PartType: "article",
+		ItemID:   "item-1",
+		Chunks: []*model.AudioBriefingScriptChunk{
+			{ID: "chunk-1", Seq: 1, Speaker: stringPtr("host"), Text: longText},
+			{ID: "chunk-2", Seq: 2, Speaker: stringPtr("partner"), Text: "後続の短い発話"},
+		},
+	}
+
+	split := audioBriefingGeminiDuoSplitGroups(group, 3200)
+
+	if len(split) != 2 {
+		t.Fatalf("len(split) = %d, want 2", len(split))
+	}
+	if len(split[0].Chunks) != 1 || split[0].Chunks[0].Seq != 1 {
+		t.Fatalf("split[0] = %#v, want only oversized seq 1", split[0].Chunks)
+	}
+	if len(split[1].Chunks) != 1 || split[1].Chunks[0].Seq != 2 {
+		t.Fatalf("split[1] = %#v, want only seq 2", split[1].Chunks)
 	}
 }
 

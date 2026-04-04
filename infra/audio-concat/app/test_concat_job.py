@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.concat_job import concat_audio, download_direct, run_job
+from app.concat_job import concat_audio, download_direct, normalize_segment_specs, run_job
 
 
 class DownloadDirectTests(unittest.TestCase):
@@ -165,6 +165,50 @@ class TestConcatAudio(unittest.TestCase):
         self.assertIn("2", command)
         self.assertIn("-q:a", command)
         self.assertIn("2", command)
+
+    def test_concat_audio_skips_gap_when_segment_spec_disables_gap_after(self):
+        captured = {}
+
+        def fake_run_command(command):
+            captured["command"] = command
+            return True
+
+        with tempfile.TemporaryDirectory(prefix="concat-audio-test-") as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            segment_files = [
+                tmp_path / "segment-001.mp3",
+                tmp_path / "segment-002.mp3",
+                tmp_path / "segment-003.mp3",
+            ]
+            output_path = tmp_path / "episode-concat.mp3"
+            segment_specs = [
+                {"audio_object_key": "chunk-1.mp3", "gap_after": False},
+                {"audio_object_key": "chunk-2.mp3", "gap_after": True},
+                {"audio_object_key": "chunk-3.mp3", "gap_after": False},
+            ]
+
+            with patch("app.concat_job.run_command", side_effect=fake_run_command):
+                concat_audio(segment_files, output_path, segment_specs)
+
+        filter_graph = captured["command"][captured["command"].index("-filter_complex") + 1]
+        self.assertEqual(filter_graph.count("apad=pad_dur=1"), 1)
+        self.assertIn("[n0][a1][n2]concat=n=3:v=0:a=1[out]", filter_graph)
+
+
+class TestNormalizeSegmentSpecs(unittest.TestCase):
+    def test_normalize_segment_specs_rejects_mismatched_keys(self):
+        with self.assertRaisesRegex(RuntimeError, "segments must match audio_object_keys exactly"):
+            normalize_segment_specs(
+                ["chunk-1.mp3", "chunk-2.mp3"],
+                [{"audio_object_key": "chunk-1.mp3", "gap_after": False}],
+            )
+
+    def test_normalize_segment_specs_rejects_missing_audio_object_key(self):
+        with self.assertRaisesRegex(RuntimeError, "segments must include audio_object_key"):
+            normalize_segment_specs(
+                ["chunk-1.mp3"],
+                [{"gap_after": False}],
+            )
 
 
 if __name__ == "__main__":

@@ -18,15 +18,21 @@ const (
 )
 
 type AudioConcatRunRequest struct {
-	JobID           string   `json:"job_id"`
-	UserID          string   `json:"user_id"`
-	RequestID       string   `json:"request_id"`
-	CallbackURL     string   `json:"callback_url"`
-	CallbackToken   string   `json:"callback_token"`
-	AudioObjectKeys []string `json:"audio_object_keys"`
-	OutputObjectKey string   `json:"output_object_key"`
-	BGMEnabled      bool     `json:"bgm_enabled"`
-	BGMR2Prefix     string   `json:"bgm_r2_prefix"`
+	JobID           string               `json:"job_id"`
+	UserID          string               `json:"user_id"`
+	RequestID       string               `json:"request_id"`
+	CallbackURL     string               `json:"callback_url"`
+	CallbackToken   string               `json:"callback_token"`
+	AudioObjectKeys []string             `json:"audio_object_keys"`
+	Segments        []AudioConcatSegment `json:"segments,omitempty"`
+	OutputObjectKey string               `json:"output_object_key"`
+	BGMEnabled      bool                 `json:"bgm_enabled"`
+	BGMR2Prefix     string               `json:"bgm_r2_prefix"`
+}
+
+type AudioConcatSegment struct {
+	AudioObjectKey string `json:"audio_object_key"`
+	GapAfter       bool   `json:"gap_after"`
 }
 
 type AudioConcatRunResponse struct {

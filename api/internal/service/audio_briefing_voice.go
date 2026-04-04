@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -30,6 +31,7 @@ type AudioBriefingVoiceRunner struct {
 }
 
 const audioBriefingChunkMaxAttempts = 3
+const audioBriefingGeminiDuoSoftByteLimitDefault = 3200
 
 type audioBriefingSpeechParams struct {
 	SpeechRate                 float64
@@ -147,9 +149,13 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		return &AudioBriefingVoiceRunResult{Waiting: true}, nil
 	}
 	group := audioBriefingChunkGroupForSelection(chunks, chunk)
-	groupChunkIDs := audioBriefingChunkGroupIDs(group)
 	provider := strings.TrimSpace(derefString(chunk.TTSProvider))
-	useGeminiDuoGroup := len(groupChunkIDs) > 1 && provider == "gemini_tts" && strings.TrimSpace(job.ConversationMode) == "duo"
+	useGeminiDuoGroup := len(group.Chunks) > 1 && provider == "gemini_tts" && strings.TrimSpace(job.ConversationMode) == "duo"
+	if useGeminiDuoGroup {
+		group = audioBriefingGeminiDuoSplitGroups(group, audioBriefingGeminiDuoSoftByteLimit())[0]
+	}
+	groupChunkIDs := audioBriefingChunkGroupIDs(group)
+	useGeminiDuoGroup = len(groupChunkIDs) > 1 && provider == "gemini_tts" && strings.TrimSpace(job.ConversationMode) == "duo"
 	if resetGenerating {
 		if chunk.AttemptCount >= audioBriefingChunkMaxAttempts {
 			message := "stale generating chunk exceeded retry limit"
@@ -244,6 +250,9 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 	}
 	speechParams := audioBriefingSpeechParamsForChunk(chunk, voice, partnerVoice, settings)
 	audioObjectKey := audioBriefingChunkObjectKey(userID, jobID, chunk.Seq)
+	if leadChunk := audioBriefingChunkGroupLeadChunk(group); leadChunk != nil {
+		audioObjectKey = audioBriefingChunkObjectKey(userID, jobID, leadChunk.Seq)
+	}
 	var resp *AudioBriefingSynthesizeUploadResponse
 	if useGeminiDuoGroup {
 		if !audioBriefingGeminiDuoReady(voice, partnerVoice) {
@@ -475,6 +484,9 @@ func audioBriefingChunkGroupForSelection(chunks []model.AudioBriefingScriptChunk
 	}
 	for i := range chunks {
 		chunk := &chunks[i]
+		if chunk.R2AudioObjectKey != nil && strings.TrimSpace(*chunk.R2AudioObjectKey) != "" && strings.TrimSpace(chunk.TTSStatus) == "generated" {
+			continue
+		}
 		if strings.TrimSpace(chunk.PartType) != selectedPartType {
 			continue
 		}
@@ -498,6 +510,15 @@ func audioBriefingChunkGroupForSelection(chunks []model.AudioBriefingScriptChunk
 		return group.Chunks[i].Seq < group.Chunks[j].Seq
 	})
 	return group
+}
+
+func audioBriefingChunkGroupLeadChunk(group audioBriefingChunkGroup) *model.AudioBriefingScriptChunk {
+	for _, chunk := range group.Chunks {
+		if chunk != nil {
+			return chunk
+		}
+	}
+	return nil
 }
 
 func audioBriefingChunkGroupIDs(group audioBriefingChunkGroup) []string {
@@ -533,6 +554,139 @@ func audioBriefingGeminiDuoTurns(group audioBriefingChunkGroup) []AudioBriefingG
 		})
 	}
 	return turns
+}
+
+func audioBriefingGeminiDuoSplitGroups(group audioBriefingChunkGroup, maxBytes int) []audioBriefingChunkGroup {
+	if len(group.Chunks) <= 1 || strings.TrimSpace(group.PartType) != "article" {
+		return []audioBriefingChunkGroup{group}
+	}
+	if maxBytes <= 0 {
+		maxBytes = audioBriefingGeminiDuoSoftByteLimitDefault
+	}
+	split := make([]audioBriefingChunkGroup, 0, 2)
+	current := audioBriefingChunkGroup{
+		PartType: group.PartType,
+		ItemID:   group.ItemID,
+		Chunks:   make([]*model.AudioBriefingScriptChunk, 0, len(group.Chunks)),
+	}
+	for _, chunk := range group.Chunks {
+		if chunk == nil {
+			continue
+		}
+		next := audioBriefingChunkGroup{
+			PartType: group.PartType,
+			ItemID:   group.ItemID,
+			Chunks:   append(append([]*model.AudioBriefingScriptChunk{}, current.Chunks...), chunk),
+		}
+		nextBytes := audioBriefingGeminiDuoRequestEstimatedBytes(next)
+		if len(current.Chunks) > 0 && nextBytes > maxBytes {
+			split = append(split, current)
+			current = audioBriefingChunkGroup{
+				PartType: group.PartType,
+				ItemID:   group.ItemID,
+				Chunks:   make([]*model.AudioBriefingScriptChunk, 0, len(group.Chunks)),
+			}
+			next = audioBriefingChunkGroup{
+				PartType: group.PartType,
+				ItemID:   group.ItemID,
+				Chunks:   []*model.AudioBriefingScriptChunk{chunk},
+			}
+			nextBytes = audioBriefingGeminiDuoRequestEstimatedBytes(next)
+		}
+		current.Chunks = append(current.Chunks, chunk)
+	}
+	if len(current.Chunks) > 0 {
+		split = append(split, current)
+	}
+	if len(split) == 0 {
+		return []audioBriefingChunkGroup{group}
+	}
+	return split
+}
+
+func audioBriefingGeminiDuoRequestEstimatedBytes(group audioBriefingChunkGroup) int {
+	body := map[string]any{
+		"input": map[string]any{
+			"prompt": buildGeminiDuoAudioBriefingPrompt(group.PartType),
+			"multiSpeakerMarkup": map[string]any{
+				"turns": audioBriefingGeminiDuoRequestTurns(group),
+			},
+		},
+		"voice": map[string]any{
+			"languageCode": "ja-JP",
+			"modelName":    "gemini-2.5-flash-tts",
+			"multiSpeakerVoiceConfig": map[string]any{
+				"speakerVoiceConfigs": []map[string]any{
+					{
+						"speakerAlias": "HOST",
+						"speakerId":    "host",
+					},
+					{
+						"speakerAlias": "PARTNER",
+						"speakerId":    "partner",
+					},
+				},
+			},
+		},
+		"audioConfig": map[string]any{
+			"audioEncoding":   "MP3",
+			"sampleRateHertz": 48000,
+		},
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return 0
+	}
+	return len(raw)
+}
+
+func audioBriefingGeminiDuoRequestTurns(group audioBriefingChunkGroup) []map[string]any {
+	turns := make([]map[string]any, 0, len(group.Chunks))
+	for _, turn := range audioBriefingGeminiDuoTurns(group) {
+		speaker := "PARTNER"
+		if strings.TrimSpace(turn.Speaker) == "host" {
+			speaker = "HOST"
+		}
+		turns = append(turns, map[string]any{
+			"speaker": speaker,
+			"text":    strings.TrimSpace(turn.Text),
+		})
+	}
+	return turns
+}
+
+func buildGeminiDuoAudioBriefingPrompt(sectionType string) string {
+	sectionLabel := map[string]string{
+		"opening": "オープニング",
+		"summary": "総括セクション",
+		"article": "記事セクション",
+		"ending":  "エンディング",
+	}[strings.TrimSpace(sectionType)]
+	if sectionLabel == "" {
+		sectionLabel = "会話セクション"
+	}
+	lines := []string{
+		"あなたは音声ブリーフィング番組の二人会話を音声化するAIです。",
+		fmt.Sprintf("以下は %s の台本です。会話の本文は改変せず、日本語の自然な掛け合いとして読み上げてください。", sectionLabel),
+		"",
+		"HOST は briefing host persona、PARTNER は briefing partner persona として演じてください。",
+		"各 speaker の voice は別途指定されています。voice の割り当ては変えないでください。",
+		"テキストに書かれていない補足、要約、言い換え、締めコメントは追加しないでください。",
+		"追加の説明や要約は入れないでください。",
+	}
+	return strings.Join(lines, "\n")
+}
+
+func audioBriefingGeminiDuoSoftByteLimit() int {
+	raw := strings.TrimSpace(os.Getenv("AUDIO_BRIEFING_GEMINI_DUO_SOFT_BYTE_LIMIT"))
+	if raw == "" {
+		return audioBriefingGeminiDuoSoftByteLimitDefault
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 512 {
+		return audioBriefingGeminiDuoSoftByteLimitDefault
+	}
+	return value
 }
 
 func (r *AudioBriefingVoiceRunner) bestEffortFailVoicing(jobID string, errorCode string, errorMessage string) {

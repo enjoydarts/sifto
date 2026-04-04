@@ -183,3 +183,26 @@ func TestAudioBriefingConcatStarterDeduplicatesConsecutiveChunkAudioKeys(t *test
 		t.Fatalf("AudioObjectKeys[0] = %q, want shared opening key", runner.req.AudioObjectKeys[0])
 	}
 }
+
+func TestAudioBriefingConcatSegmentsDisablesGapBetweenSplitArticleSegments(t *testing.T) {
+	chunks := []model.AudioBriefingScriptChunk{
+		{Seq: 1, PartType: "article", ItemID: stringPtr("item-1"), R2AudioObjectKey: stringPtr("audio-briefings/user-1/job-1/article-1-part-1.mp3")},
+		{Seq: 2, PartType: "article", ItemID: stringPtr("item-1"), R2AudioObjectKey: stringPtr("audio-briefings/user-1/job-1/article-1-part-1.mp3")},
+		{Seq: 3, PartType: "article", ItemID: stringPtr("item-1"), R2AudioObjectKey: stringPtr("audio-briefings/user-1/job-1/article-1-part-2.mp3")},
+		{Seq: 4, PartType: "article", ItemID: stringPtr("item-2"), R2AudioObjectKey: stringPtr("audio-briefings/user-1/job-1/article-2.mp3")},
+	}
+
+	segments, err := audioBriefingConcatSegments(chunks)
+	if err != nil {
+		t.Fatalf("audioBriefingConcatSegments(...) error = %v", err)
+	}
+	if len(segments) != 3 {
+		t.Fatalf("len(segments) = %d, want 3", len(segments))
+	}
+	if segments[0].GapAfter {
+		t.Fatalf("segments[0].GapAfter = %v, want false for split article boundary", segments[0].GapAfter)
+	}
+	if !segments[1].GapAfter {
+		t.Fatalf("segments[1].GapAfter = %v, want true before next article", segments[1].GapAfter)
+	}
+}

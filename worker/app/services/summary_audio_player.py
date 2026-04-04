@@ -35,7 +35,6 @@ class SummaryAudioPlayerService:
         voice_model: str,
         voice_style: str,
         text: str,
-        persona: str,
         speech_rate: float,
         emotional_intensity: float,
         tempo_dynamics: float,
@@ -83,7 +82,6 @@ class SummaryAudioPlayerService:
             audio_bytes, content_type, _, duration_sec = synthesize_gemini_tts(
                 model=tts_model,
                 voice_name=voice_model,
-                persona=persona,
                 text=text,
                 speech_rate=speech_rate,
             )

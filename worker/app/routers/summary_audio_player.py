@@ -12,7 +12,6 @@ class SummaryAudioSynthesizeRequest(BaseModel):
     voice_style: str
     tts_model: str = ""
     text: str
-    persona: str = ""
     speech_rate: float = 1.0
     emotional_intensity: float = 1.0
     tempo_dynamics: float = 1.0
@@ -43,7 +42,6 @@ def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Reques
             voice_style=req.voice_style,
             tts_model=req.tts_model,
             text=req.text,
-            persona=req.persona,
             speech_rate=req.speech_rate,
             emotional_intensity=req.emotional_intensity,
             tempo_dynamics=req.tempo_dynamics,

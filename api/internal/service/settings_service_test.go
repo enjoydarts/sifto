@@ -26,6 +26,9 @@ func newSettingsServiceForTest(t *testing.T) *SettingsService {
 	if _, err := db.Exec(context.Background(), `DELETE FROM audio_briefing_persona_voices WHERE user_id = $1`, userID); err != nil {
 		t.Fatalf("reset persona voices: %v", err)
 	}
+	if _, err := db.Exec(context.Background(), `DELETE FROM summary_audio_voice_settings WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset summary audio voice settings: %v", err)
+	}
 	if _, err := db.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID); err != nil {
 		t.Fatalf("reset settings service test tables: %v", err)
 	}
@@ -36,12 +39,13 @@ func newSettingsServiceForTest(t *testing.T) *SettingsService {
 	}
 
 	return NewSettingsService(
-		nil,
+		repository.NewUserSettingsRepo(db),
 		repository.NewUserRepo(db),
 		repository.NewAudioBriefingRepo(db),
+		repository.NewSummaryAudioVoiceSettingsRepo(db),
 		nil,
-		nil,
-		nil,
+		repository.NewObsidianExportRepo(db),
+		repository.NewLLMUsageLogRepo(db),
 		nil,
 		nil,
 		nil,
@@ -326,6 +330,84 @@ func TestSettingsGetPayloadSupportsAivisFields(t *testing.T) {
 	}
 	if payload.AivisUserDictionaryUUID == nil || *payload.AivisUserDictionaryUUID != "5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861" {
 		t.Fatalf("AivisUserDictionaryUUID = %v, want expected uuid", payload.AivisUserDictionaryUUID)
+	}
+}
+
+func TestSummaryAudioVoiceSettingsPayloadDefaults(t *testing.T) {
+	got := SummaryAudioVoiceSettingsPayload(nil)
+
+	if got == nil {
+		t.Fatal("SummaryAudioVoiceSettingsPayload(nil) = nil, want map")
+	}
+	if provider, _ := got["tts_provider"].(string); provider != "" {
+		t.Fatalf("tts_provider = %v, want empty", got["tts_provider"])
+	}
+	if model, _ := got["tts_model"].(string); model != "" {
+		t.Fatalf("tts_model = %v, want empty", got["tts_model"])
+	}
+	if voice, _ := got["voice_model"].(string); voice != "" {
+		t.Fatalf("voice_model = %v, want empty", got["voice_model"])
+	}
+	if dict, ok := got["aivis_user_dictionary_uuid"]; ok && dict != nil {
+		t.Fatalf("aivis_user_dictionary_uuid = %v, want nil", dict)
+	}
+}
+
+func TestSettingsGetIncludesSummaryAudio(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+
+	payload, err := svc.Get(context.Background(), "00000000-0000-4000-8000-000000000021")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if payload.SummaryAudio == nil {
+		t.Fatal("SummaryAudio should not be nil")
+	}
+	if provider, _ := payload.SummaryAudio["tts_provider"].(string); provider != "" {
+		t.Fatalf("tts_provider = %v, want empty", payload.SummaryAudio["tts_provider"])
+	}
+}
+
+func TestUpdateSummaryAudioVoiceSettingsAllowsGeminiTTS(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	row, err := svc.UpdateSummaryAudioVoiceSettings(context.Background(), "00000000-0000-4000-8000-000000000021", UpdateSummaryAudioVoiceSettingsInput{
+		TTSProvider:             "gemini_tts",
+		TTSModel:                "gemini-2.5-flash-tts",
+		VoiceModel:              "Kore",
+		VoiceStyle:              "",
+		SpeechRate:              1.0,
+		EmotionalIntensity:      1.0,
+		TempoDynamics:           1.0,
+		LineBreakSilenceSeconds: 0.4,
+		Pitch:                   0.0,
+		VolumeGain:              0.0,
+		AivisUserDictionaryUUID: nil,
+	})
+	if err != nil {
+		t.Fatalf("UpdateSummaryAudioVoiceSettings() error = %v", err)
+	}
+	if row == nil {
+		t.Fatal("UpdateSummaryAudioVoiceSettings() = nil, want row")
+	}
+	if row.TTSProvider != "gemini_tts" {
+		t.Fatalf("TTSProvider = %q, want gemini_tts", row.TTSProvider)
+	}
+	if row.TTSModel != "gemini-2.5-flash-tts" {
+		t.Fatalf("TTSModel = %q, want gemini-2.5-flash-tts", row.TTSModel)
+	}
+	if row.VoiceModel != "Kore" {
+		t.Fatalf("VoiceModel = %q, want Kore", row.VoiceModel)
+	}
+}
+
+func TestUpdateSummaryAudioVoiceSettingsRequiresTTSModelForGeminiTTS(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	_, err := svc.UpdateSummaryAudioVoiceSettings(context.Background(), "00000000-0000-4000-8000-000000000021", UpdateSummaryAudioVoiceSettingsInput{
+		TTSProvider: "gemini_tts",
+		VoiceModel:  "Kore",
+	})
+	if err == nil {
+		t.Fatal("UpdateSummaryAudioVoiceSettings() error = nil, want validation error")
 	}
 }
 

@@ -224,7 +224,6 @@ func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
 		"speaker:1",
 		"",
 		"邦題タイトル\n\n要約本文",
-		"editor",
 		1.0,
 		1.0,
 		1.0,
@@ -321,7 +320,6 @@ func TestSynthesizeSummaryAudioIncludesXAIAPIKeyHeader(t *testing.T) {
 		"",
 		"",
 		"summary text",
-		"editor",
 		1.0,
 		1.0,
 		1.0,
@@ -354,9 +352,6 @@ func TestSynthesizeSummaryAudioDoesNotIncludeGoogleAPIKeyHeaderForGemini(t *test
 		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
 			t.Fatalf("decode request body: %v", err)
 		}
-		if got := body["persona"]; got != "snark" {
-			t.Fatalf("persona = %v, want snark", got)
-		}
 		if got := body["tts_model"]; got != "gemini-2.5-flash-tts" {
 			t.Fatalf("tts_model = %v, want gemini-2.5-flash-tts", got)
 		}
@@ -380,7 +375,6 @@ func TestSynthesizeSummaryAudioDoesNotIncludeGoogleAPIKeyHeaderForGemini(t *test
 		"",
 		"gemini-2.5-flash-tts",
 		"summary text",
-		"snark",
 		1.0,
 		1.0,
 		1.0,
@@ -549,7 +543,6 @@ func TestSynthesizeSummaryAudioIncludesOpenAIAPIKeyHeaderAndTTSModel(t *testing.
 		"",
 		"gpt-4o-mini-tts",
 		"summary text",
-		"editor",
 		1.0,
 		1.0,
 		1.0,

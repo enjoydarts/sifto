@@ -59,6 +59,8 @@ export type SharedAudioPlayerContextValue = {
   playbackState: SharedPlaybackState;
   expanded: boolean;
   errorMessage: string | null;
+  summaryAudioSettingsLoaded: boolean;
+  summaryAudioConfigured: boolean;
   currentTimeSec: number;
   durationSec: number;
   isPlaying: boolean;

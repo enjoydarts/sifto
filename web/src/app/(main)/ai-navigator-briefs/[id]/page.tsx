@@ -10,6 +10,7 @@ import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider"
 import { useToast } from "@/components/toast-provider";
 import { Tag } from "@/components/ui/tag";
 import { api } from "@/lib/api";
+import { getSummaryAudioReadiness } from "@/lib/summary-audio-readiness";
 
 function formatDateTime(value: string | null | undefined, locale: string) {
   if (!value) return "—";
@@ -56,9 +57,15 @@ export default function AINavigatorBriefDetailPage() {
     enabled: briefID.length > 0,
   });
   const brief = detailQuery.data?.brief ?? null;
+  const settingsQuery = useQuery({
+    queryKey: ["settings", "summary-audio-readiness"],
+    queryFn: () => api.getSettings(),
+  });
+  const summaryAudioReadiness = getSummaryAudioReadiness(settingsQuery.data ?? null);
 
   async function handlePlayAll() {
     if (!briefID) return;
+    if (!summaryAudioReadiness.ready) return;
     const queue = await api.appendAINavigatorBriefToSummaryAudioQueue(briefID);
     await player.startSummaryQueuePlayback("brief", queue.items);
     router.push("/audio-player?queue=brief");
@@ -128,12 +135,27 @@ export default function AINavigatorBriefDetailPage() {
                 <button
                   type="button"
                   onClick={() => void handlePlayAll()}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90"
+                  disabled={!summaryAudioReadiness.ready}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Play className="size-4" aria-hidden="true" />
                   {t("aiNavigatorBriefs.playAll")}
                 </button>
+                {!summaryAudioReadiness.ready ? (
+                  <Link
+                    href="/settings?section=summary-audio"
+                    className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                  >
+                    {t("summaryAudio.playbackBlocked.openSettings")}
+                  </Link>
+                ) : null}
               </div>
+              {!summaryAudioReadiness.ready ? (
+                <div className="mt-4 rounded-[18px] border border-[rgba(245,158,11,0.35)] bg-[rgba(255,251,235,0.82)] px-4 py-4 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">
+                  <div className="font-semibold text-[#b45309]">{t("summaryAudio.playbackBlocked.title")}</div>
+                  <p className="mt-2">{t(summaryAudioReadiness.reasonKey || "summaryAudio.playbackBlocked.notConfigured")}</p>
+                </div>
+              ) : null}
               {brief.error_message ? (
                 <div className="mt-5 border-t border-[var(--color-editorial-line)] pt-4 text-sm leading-7 text-[#7a4337]">
                   {brief.error_message}
@@ -152,7 +174,8 @@ export default function AINavigatorBriefDetailPage() {
                 <button
                   type="button"
                   onClick={() => void handlePlayAll()}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                  disabled={!summaryAudioReadiness.ready}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Play className="size-4" aria-hidden="true" />
                   {t("aiNavigatorBriefs.playAll")}

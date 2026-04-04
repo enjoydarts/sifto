@@ -63,9 +63,9 @@ type navigatorPersonaDefinition struct {
 	Item            navigatorPersonaTaskHints       `json:"item"`
 }
 
-func NewSettingsHandler(repo *repository.UserSettingsRepo, userRepo *repository.UserRepo, audioBriefingRepo *repository.AudioBriefingRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, worker *service.WorkerClient, cache service.JSONCache) *SettingsHandler {
+func NewSettingsHandler(repo *repository.UserSettingsRepo, userRepo *repository.UserRepo, audioBriefingRepo *repository.AudioBriefingRepo, summaryAudioRepo *repository.SummaryAudioVoiceSettingsRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, worker *service.WorkerClient, cache service.JSONCache) *SettingsHandler {
 	return &SettingsHandler{
-		settings:          service.NewSettingsService(repo, userRepo, audioBriefingRepo, aivisModelRepo, obsidianRepo, llmUsageRepo, openRouterOverrideRepo, cipher, github),
+		settings:          service.NewSettingsService(repo, userRepo, audioBriefingRepo, summaryAudioRepo, aivisModelRepo, obsidianRepo, llmUsageRepo, openRouterOverrideRepo, cipher, github),
 		podcastArtwork:    service.NewPodcastArtworkService(repo, worker),
 		aivisDictionaries: service.NewAivisUserDictionaryService(repo, cipher),
 		obsidianRepo:      obsidianRepo,
@@ -544,6 +544,74 @@ func (h *SettingsHandler) UpdateAudioBriefingPersonaVoices(w http.ResponseWriter
 	writeJSON(w, map[string]any{
 		"user_id":                       userID,
 		"audio_briefing_persona_voices": service.AudioBriefingPersonaVoicesPayload(rows),
+	})
+}
+
+func (h *SettingsHandler) GetSummaryAudioVoiceSettings(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	settings, err := h.settings.GetSummaryAudioVoiceSettings(r.Context(), userID)
+	if err != nil {
+		writeRepoError(w, err)
+		return
+	}
+	writeJSON(w, map[string]any{
+		"user_id":       userID,
+		"summary_audio": service.SummaryAudioVoiceSettingsPayload(settings),
+	})
+}
+
+func (h *SettingsHandler) UpdateSummaryAudioVoiceSettings(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		TTSProvider             string  `json:"tts_provider"`
+		TTSModel                string  `json:"tts_model"`
+		VoiceModel              string  `json:"voice_model"`
+		VoiceStyle              string  `json:"voice_style"`
+		SpeechRate              float64 `json:"speech_rate"`
+		EmotionalIntensity      float64 `json:"emotional_intensity"`
+		TempoDynamics           float64 `json:"tempo_dynamics"`
+		LineBreakSilenceSeconds float64 `json:"line_break_silence_seconds"`
+		Pitch                   float64 `json:"pitch"`
+		VolumeGain              float64 `json:"volume_gain"`
+		AivisUserDictionaryUUID *string `json:"aivis_user_dictionary_uuid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if strings.EqualFold(strings.TrimSpace(body.TTSProvider), "gemini_tts") {
+		if err := service.EnsureGeminiTTSEnabledForUser(r.Context(), h.settings.UserRepo(), userID); err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+	}
+	settings, err := h.settings.UpdateSummaryAudioVoiceSettings(r.Context(), userID, service.UpdateSummaryAudioVoiceSettingsInput{
+		TTSProvider:             body.TTSProvider,
+		TTSModel:                body.TTSModel,
+		VoiceModel:              body.VoiceModel,
+		VoiceStyle:              body.VoiceStyle,
+		SpeechRate:              body.SpeechRate,
+		EmotionalIntensity:      body.EmotionalIntensity,
+		TempoDynamics:           body.TempoDynamics,
+		LineBreakSilenceSeconds: body.LineBreakSilenceSeconds,
+		Pitch:                   body.Pitch,
+		VolumeGain:              body.VolumeGain,
+		AivisUserDictionaryUUID: body.AivisUserDictionaryUUID,
+	})
+	if err != nil {
+		if strings.HasPrefix(err.Error(), "invalid ") || strings.HasPrefix(err.Error(), "aivis models are not synced") {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeRepoError(w, err)
+		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
+	writeJSON(w, map[string]any{
+		"user_id":       userID,
+		"summary_audio": service.SummaryAudioVoiceSettingsPayload(settings),
 	})
 }
 

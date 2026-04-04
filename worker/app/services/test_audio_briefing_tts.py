@@ -430,9 +430,8 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
         synth.assert_called_once_with(
             model="gemini-2.5-flash-tts",
             voice_name="Kore",
-            persona="editor",
+            prompt="あなたは音声ブリーフィング番組を担当するAIナビゲーターです。\n以下のペルソナ指示を反映しつつ、日本語で自然に読み上げてください。\nトーン指示: 落ち着いた編集者として、重要度と意味合いを端正に語る。\n話し方指示: 静かで端正な語り口。言い切りは落ち着いていて、余計に煽らない。\n読み上げ速度は通常の約0.95倍を目安に、自然さを保ってください。\n原稿は改変しないでください。追加説明や要約は入れないでください。\n\nsummary text",
             text="summary text",
-            speech_rate=0.95,
         )
         self.assertEqual(content_type, "audio/mpeg")
         self.assertEqual(suffix, ".mp3")

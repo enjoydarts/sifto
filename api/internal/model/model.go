@@ -140,6 +140,23 @@ type AudioBriefingPersonaVoice struct {
 	DeletedAt               *time.Time `json:"deleted_at,omitempty"`
 }
 
+type SummaryAudioVoiceSettings struct {
+	UserID                  string    `json:"user_id"`
+	TTSProvider             string    `json:"tts_provider"`
+	TTSModel                string    `json:"tts_model"`
+	VoiceModel              string    `json:"voice_model"`
+	VoiceStyle              string    `json:"voice_style"`
+	SpeechRate              float64   `json:"speech_rate"`
+	EmotionalIntensity      float64   `json:"emotional_intensity"`
+	TempoDynamics           float64   `json:"tempo_dynamics"`
+	LineBreakSilenceSeconds float64   `json:"line_break_silence_seconds"`
+	Pitch                   float64   `json:"pitch"`
+	VolumeGain              float64   `json:"volume_gain"`
+	AivisUserDictionaryUUID *string   `json:"aivis_user_dictionary_uuid,omitempty"`
+	CreatedAt               time.Time `json:"created_at"`
+	UpdatedAt               time.Time `json:"updated_at"`
+}
+
 type AudioBriefingJob struct {
 	ID                     string     `json:"id"`
 	UserID                 string     `json:"user_id"`

@@ -42,7 +42,7 @@ func (h *SummaryAudioPlayerHandler) Synthesize(w http.ResponseWriter, r *http.Re
 			http.Error(w, "not found", http.StatusNotFound)
 		case errors.Is(err, service.ErrGeminiTTSNotAllowed):
 			http.Error(w, err.Error(), http.StatusForbidden)
-		case errors.Is(err, service.ErrSummaryAudioMissingSummary), errors.Is(err, service.ErrSummaryAudioMissingVoice):
+		case errors.Is(err, service.ErrSummaryAudioMissingSummary), errors.Is(err, service.ErrSummaryAudioMissingVoice), errors.Is(err, service.ErrSummaryAudioMissingModel):
 			http.Error(w, err.Error(), http.StatusConflict)
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)

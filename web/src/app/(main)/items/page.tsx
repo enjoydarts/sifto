@@ -10,6 +10,7 @@ import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
 import { InlineReader } from "@/components/inline-reader";
 import { PageTransition } from "@/components/page-transition";
+import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
 import { FiltersBar } from "@/components/items/filters-bar";
 import { ItemCard } from "@/components/items/item-card";
 import { FeedTabs, type FeedMode, type SortMode } from "@/components/items/feed-tabs";
@@ -125,6 +126,7 @@ function ItemsPageContent() {
   const { t, locale } = useI18n();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
+  const player = useSharedAudioPlayer();
   const queryClient = useQueryClient();
   const router = useRouter();
   const pathname = usePathname();
@@ -137,6 +139,7 @@ function ItemsPageContent() {
   const pendingMode = feedMode === "pending";
   const deletedMode = feedMode === "deleted";
   const summaryAudioQueueKind = favoriteOnly ? "favorite" : laterMode ? "later" : "unread";
+  const summaryAudioPlaybackBlocked = player.summaryAudioSettingsLoaded && !player.summaryAudioConfigured;
   const pageSize = 20;
   const [error, setError] = useState<string | null>(null);
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
@@ -748,8 +751,14 @@ function ItemsPageContent() {
                 {!pendingMode && !deletedMode && (
                   <button
                     type="button"
-                    onClick={() => router.push(`/audio-player?queue=${summaryAudioQueueKind}`)}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] press focus-ring"
+                    onClick={() => {
+                      if (summaryAudioPlaybackBlocked) {
+                        return;
+                      }
+                      router.push(`/audio-player?queue=${summaryAudioQueueKind}`);
+                    }}
+                    disabled={summaryAudioPlaybackBlocked}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:cursor-not-allowed disabled:opacity-50 press focus-ring"
                   >
                     <Volume2 className="size-4" aria-hidden="true" />
                     <span>{t("items.openAudioPlayer")}</span>
@@ -813,8 +822,14 @@ function ItemsPageContent() {
                   {!pendingMode && !deletedMode && (
                     <button
                       type="button"
-                      onClick={() => router.push(`/audio-player?queue=${summaryAudioQueueKind}`)}
-                      className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] press focus-ring"
+                      onClick={() => {
+                        if (summaryAudioPlaybackBlocked) {
+                          return;
+                        }
+                        router.push(`/audio-player?queue=${summaryAudioQueueKind}`);
+                      }}
+                      disabled={summaryAudioPlaybackBlocked}
+                      className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50 press focus-ring"
                     >
                       <Volume2 className="size-4" aria-hidden="true" />
                       <span>{t("items.openAudioPlayer")}</span>

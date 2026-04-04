@@ -11,7 +11,8 @@ import (
 
 var (
 	ErrSummaryAudioMissingSummary = errors.New("summary audio summary is not available")
-	ErrSummaryAudioMissingVoice   = errors.New("summary audio persona voice is not configured")
+	ErrSummaryAudioMissingVoice   = errors.New("summary audio voice is not configured")
+	ErrSummaryAudioMissingModel   = errors.New("summary audio model is not configured")
 )
 
 type SummaryAudioSynthesis struct {
@@ -25,24 +26,47 @@ type SummaryAudioSynthesis struct {
 
 type SummaryAudioPlayerService struct {
 	items        *repository.ItemRepo
-	audio        *repository.AudioBriefingRepo
+	summaryAudio *repository.SummaryAudioVoiceSettingsRepo
 	userRepo     *repository.UserRepo
 	userSettings *repository.UserSettingsRepo
 	cipher       *SecretCipher
-	worker       *WorkerClient
+	worker       summaryAudioSynthesizer
+}
+
+type summaryAudioSynthesizer interface {
+	SynthesizeSummaryAudio(
+		ctx context.Context,
+		provider string,
+		voiceModel string,
+		voiceStyle string,
+		ttsModel string,
+		text string,
+		speechRate float64,
+		emotionalIntensity float64,
+		tempoDynamics float64,
+		lineBreakSilenceSeconds float64,
+		chunkTrailingSilenceSeconds float64,
+		pitch float64,
+		volumeGain float64,
+		aivisUserDictionaryUUID *string,
+		aivisAPIKey *string,
+		googleAPIKey *string,
+		xaiAPIKey *string,
+		openAIAPIKey *string,
+	) (*SummaryAudioSynthesizeResponse, error)
 }
 
 func NewSummaryAudioPlayerService(
 	items *repository.ItemRepo,
-	audio *repository.AudioBriefingRepo,
+	summaryAudio *repository.SummaryAudioVoiceSettingsRepo,
 	userRepo *repository.UserRepo,
 	userSettings *repository.UserSettingsRepo,
 	cipher *SecretCipher,
-	worker *WorkerClient,
+	worker summaryAudioSynthesizer,
 ) *SummaryAudioPlayerService {
 	return &SummaryAudioPlayerService{
 		items:        items,
-		audio:        audio,
+		summaryAudio: summaryAudio,
 		userRepo:     userRepo,
 		userSettings: userSettings,
 		cipher:       cipher,
@@ -66,7 +90,7 @@ func SummaryAudioRequestContext(parent context.Context) context.Context {
 }
 
 func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, itemID string) (*SummaryAudioSynthesis, error) {
-	if s == nil || s.items == nil || s.audio == nil || s.userSettings == nil || s.worker == nil {
+	if s == nil || s.items == nil || s.summaryAudio == nil || s.userSettings == nil || s.worker == nil {
 		return nil, errors.New("summary audio service is not configured")
 	}
 	item, err := s.items.GetDetail(ctx, strings.TrimSpace(itemID), strings.TrimSpace(userID))
@@ -77,16 +101,15 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	if summaryText == "" {
 		return nil, ErrSummaryAudioMissingSummary
 	}
-	settings, err := s.audio.EnsureSettingsDefaults(ctx, userID)
+	settings, err := s.summaryAudio.EnsureDefaults(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	persona := ResolvePersona(settings.DefaultPersonaMode, settings.DefaultPersona)
-	voice, err := s.audio.GetPersonaVoice(ctx, userID, persona)
-	if err != nil {
-		return nil, err
-	}
-	if voice == nil {
+	provider := strings.TrimSpace(settings.TTSProvider)
+	voiceModel := strings.TrimSpace(settings.VoiceModel)
+	voiceStyle := strings.TrimSpace(settings.VoiceStyle)
+	ttsModel := strings.TrimSpace(settings.TTSModel)
+	if provider == "" || voiceModel == "" {
 		return nil, ErrSummaryAudioMissingVoice
 	}
 	narration := BuildSummaryAudioNarration(derefString(item.TranslatedTitle), derefString(item.Title), summaryText)
@@ -95,31 +118,27 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	var googleAPIKey *string
 	var xaiAPIKey *string
 	var openAIAPIKey *string
-	ttsModel := strings.TrimSpace(voice.TTSModel)
-	if strings.EqualFold(strings.TrimSpace(voice.TTSProvider), "aivis") {
+	if strings.EqualFold(provider, "aivis") {
 		aivisAPIKey, err = s.loadAivisAPIKey(ctx, userID)
 		if err != nil {
 			return nil, err
 		}
-		aivisUserDictionaryUUID, err = s.userSettings.GetAivisUserDictionaryUUID(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
-	} else if strings.EqualFold(strings.TrimSpace(voice.TTSProvider), "xai") {
+		aivisUserDictionaryUUID = settings.AivisUserDictionaryUUID
+	} else if strings.EqualFold(provider, "xai") {
 		xaiAPIKey, err = s.loadXAIAPIKey(ctx, userID)
 		if err != nil {
 			return nil, err
 		}
-	} else if strings.EqualFold(strings.TrimSpace(voice.TTSProvider), "gemini_tts") {
+	} else if strings.EqualFold(provider, "gemini_tts") {
 		if ttsModel == "" {
-			return nil, errors.New("gemini tts model is not configured")
+			return nil, ErrSummaryAudioMissingModel
 		}
 		if err := EnsureGeminiTTSEnabledForUser(ctx, s.userRepo, userID); err != nil {
 			return nil, err
 		}
-	} else if strings.EqualFold(strings.TrimSpace(voice.TTSProvider), "openai") {
+	} else if strings.EqualFold(provider, "openai") {
 		if ttsModel == "" {
-			return nil, errors.New("openai tts model is not configured")
+			return nil, ErrSummaryAudioMissingModel
 		}
 		openAIAPIKey, err = loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetOpenAIAPIKeyEncrypted, s.cipher, userID, "openai api key is not configured")
 		if err != nil {
@@ -128,19 +147,18 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	}
 	resp, err := s.worker.SynthesizeSummaryAudio(
 		ctx,
-		voice.TTSProvider,
-		voice.VoiceModel,
-		voice.VoiceStyle,
+		provider,
+		voiceModel,
+		voiceStyle,
 		ttsModel,
 		narration,
-		persona,
-		voice.SpeechRate,
-		voice.EmotionalIntensity,
-		voice.TempoDynamics,
-		voice.LineBreakSilenceSeconds,
-		settings.ChunkTrailingSilenceSeconds,
-		voice.Pitch,
-		voice.VolumeGain,
+		settings.SpeechRate,
+		settings.EmotionalIntensity,
+		settings.TempoDynamics,
+		settings.LineBreakSilenceSeconds,
+		1.0,
+		settings.Pitch,
+		settings.VolumeGain,
 		aivisUserDictionaryUUID,
 		aivisAPIKey,
 		googleAPIKey,
@@ -152,7 +170,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	}
 	return &SummaryAudioSynthesis{
 		Item:         item,
-		Persona:      persona,
+		Persona:      "",
 		AudioBase64:  resp.AudioBase64,
 		ContentType:  resp.ContentType,
 		DurationSec:  resp.DurationSec,

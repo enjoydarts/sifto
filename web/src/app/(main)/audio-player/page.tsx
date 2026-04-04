@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useEffectEvent } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { LoaderCircle, Play, Volume2 } from "lucide-react";
-import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
+import { api } from "@/lib/api";
+import { getSummaryAudioReadiness } from "@/lib/summary-audio-readiness";
 import type { SummaryAudioQueueKind } from "@/components/shared-audio-player/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
@@ -28,24 +30,45 @@ export default function SummaryAudioPlayerPage() {
   const searchParams = useSearchParams();
   const player = useSharedAudioPlayer();
   const queueKind = parseQueueKind(searchParams.get("queue"));
+  const autoStartedQueueKindRef = useRef<SummaryAudioQueueKind | null>(null);
+  const settingsQuery = useQuery({
+    queryKey: ["settings", "summary-audio-readiness"],
+    queryFn: () => api.getSettings(),
+  });
+  const summaryAudioReadiness = getSummaryAudioReadiness(settingsQuery.data ?? null);
+  const summaryAudioSettingsLoaded = settingsQuery.isSuccess;
+  const summaryAudioPlaybackBlocked = summaryAudioSettingsLoaded && !summaryAudioReadiness.ready;
 
   const requestQueueStart = useEffectEvent(async () => {
+    if (!summaryAudioSettingsLoaded) {
+      return;
+    }
     if (queueKind === "brief") {
+      return;
+    }
+    if (summaryAudioPlaybackBlocked) {
+      return;
+    }
+    if (autoStartedQueueKindRef.current === queueKind) {
       return;
     }
     if (
       player.mode === "summary_queue" &&
-      player.summaryQueue.queueKind === queueKind &&
-      player.summaryQueue.queue.length > 0
+      player.summaryQueue.queueKind === queueKind
     ) {
       return;
     }
+    autoStartedQueueKindRef.current = queueKind;
     await player.startSummaryQueuePlayback(queueKind);
   });
 
   useEffect(() => {
-    void requestQueueStart();
+    autoStartedQueueKindRef.current = null;
   }, [queueKind]);
+
+  useEffect(() => {
+    void requestQueueStart();
+  }, [queueKind, requestQueueStart, summaryAudioSettingsLoaded, summaryAudioReadiness.ready]);
 
   const detail = player.summaryQueue.currentItemDetail;
   const hasQueuedItem = player.summaryQueue.queue.length > 0 || Boolean(player.summaryQueue.currentItemID);
@@ -59,7 +82,6 @@ export default function SummaryAudioPlayerPage() {
   const queueCountLabel = `${player.display.queueCount.toLocaleString(locale)} ${t("summaryAudio.queueCount")}`;
   const queueButtons =
     queueKind === "brief" ? [...queueKinds, "brief" as SummaryAudioQueueKind] : queueKinds;
-
   return (
     <PageTransition>
       <div className="space-y-4">
@@ -121,13 +143,6 @@ export default function SummaryAudioPlayerPage() {
                 <p className="text-sm text-editorial-muted">{originalTitle}</p>
                 <div className="flex flex-wrap items-center gap-2 text-sm text-editorial-muted">
                   <span>{sourceTitle}</span>
-                  {player.display.personaKey ? (
-                    <span className="inline-flex items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3 py-1 text-xs font-medium text-[var(--color-editorial-ink-soft)]">
-                      <AINavigatorAvatar persona={player.display.personaKey} className="size-5" />
-                      <span>{t("sharedAudio.persona", locale === "ja" ? "話者" : "Voice")}</span>
-                      <span>{player.display.personaName || t(`settings.navigator.persona.${player.display.personaKey}`, player.display.personaKey)}</span>
-                    </span>
-                  ) : null}
                   {detail?.url ? (
                     <a
                       href={detail.url}
@@ -154,15 +169,17 @@ export default function SummaryAudioPlayerPage() {
               <div className="flex flex-wrap items-center gap-2">
                 {queueButtons.map((kind) => {
                   const active = queueKind === kind;
+                  const disabled = summaryAudioPlaybackBlocked || (kind === "brief" && player.summaryQueue.queueKind !== "brief");
                   return (
                     <button
                       key={kind}
                       type="button"
                       onClick={() => {
+                        if (disabled) return;
                         if (kind === "brief" && player.summaryQueue.queueKind !== "brief") return;
                         router.replace(`/audio-player?queue=${kind}`);
                       }}
-                      disabled={kind === "brief" && player.summaryQueue.queueKind !== "brief"}
+                      disabled={disabled}
                       className={`inline-flex min-h-10 items-center justify-center rounded-full border px-4 py-2 text-sm font-medium ${
                         active
                           ? "border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] text-[var(--color-editorial-panel-strong)]"
@@ -177,6 +194,22 @@ export default function SummaryAudioPlayerPage() {
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
                 {t("summaryAudio.queueTitle")}
               </div>
+              {summaryAudioPlaybackBlocked ? (
+                <div className="rounded-[18px] border border-[rgba(245,158,11,0.35)] bg-[rgba(255,251,235,0.82)] p-4">
+                  <div className="text-sm font-semibold text-[#b45309]">{t("summaryAudio.playbackBlocked.title")}</div>
+                  <p className="mt-2 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">
+                    {t(summaryAudioReadiness.reasonKey || "summaryAudio.playbackBlocked.notConfigured")}
+                  </p>
+                  <div className="mt-3">
+                    <Link
+                      href="/settings?section=summary-audio"
+                      className="inline-flex min-h-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink)] hover:bg-[var(--color-editorial-panel-strong)]"
+                    >
+                      {t("summaryAudio.playbackBlocked.openSettings")}
+                    </Link>
+                  </div>
+                </div>
+              ) : null}
               {player.summaryQueue.queue.length === 0 ? (
                 <p className="text-sm text-editorial-muted">{t("summaryAudio.empty")}</p>
               ) : (
@@ -184,15 +217,20 @@ export default function SummaryAudioPlayerPage() {
                   {player.summaryQueue.queue.slice(0, 12).map((item, index) => {
                     const isActive = player.summaryQueue.currentItemID === item.id;
                     const queueSourceTitle = item.source_title || t("summaryAudio.sourceUnknown");
+                    const disabled = summaryAudioPlaybackBlocked;
                     return (
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => void player.selectSummaryQueueItem(index)}
+                        onClick={() => {
+                          if (disabled) return;
+                          void player.selectSummaryQueueItem(index);
+                        }}
+                        disabled={disabled}
                         className={`group flex w-full items-start justify-between gap-3 rounded-[var(--radius-card)] border px-4 py-3 text-left transition hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.08)] focus:outline-none focus:ring-2 focus:ring-[var(--color-editorial-accent)] ${
                           isActive
                             ? "border-[var(--color-editorial-ink)] bg-[var(--color-editorial-accent-soft)]"
-                            : "cursor-pointer border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] hover:border-[var(--color-editorial-ink-faint)] hover:bg-[var(--color-editorial-panel-strong)]"
+                            : "cursor-pointer border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] hover:border-[var(--color-editorial-ink-faint)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50"
                         }`}
                       >
                         <div className="flex min-w-0 flex-1 flex-col items-start">

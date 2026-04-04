@@ -10,7 +10,8 @@ import {
   useState,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type Item, type ItemDetail, type PlaybackSession } from "@/lib/api";
+import { api, type Item, type ItemDetail, type PlaybackSession, type UserSettings } from "@/lib/api";
+import { getSummaryAudioReadiness } from "@/lib/summary-audio-readiness";
 import type {
   SharedAudioBriefingPayload,
   SharedAudioDisplayMeta,
@@ -27,6 +28,11 @@ const PLAYBACK_QUEUE_BUFFER_SIZE = 24;
 const PLAYBACK_QUEUE_VISIBLE_COUNT = 12;
 
 const SharedAudioPlayerContext = createContext<SharedAudioPlayerContextValue | null>(null);
+
+function hasSummaryAudioPlaybackAccess(settings: UserSettings | null | undefined): boolean {
+  const readiness = getSummaryAudioReadiness(settings ?? null);
+  return readiness.ready;
+}
 
 function base64ToBlob(base64: string, contentType: string): Blob {
   const binary = atob(base64);
@@ -129,12 +135,18 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   const currentAudioRef = useRef<SummaryAudioPrepared | null>(null);
   const prefetchedAudioRef = useRef<SummaryAudioPrepared | null>(null);
   const pendingPrefetchRef = useRef<SummaryAudioPendingPrefetch | null>(null);
+  const summaryQueueRef = useRef<SharedSummaryQueueState>(createEmptySummaryQueue());
+  const summaryPlaybackRequestSeqRef = useRef(0);
+  const summaryPlaybackPreparingRef = useRef(false);
+  const stoppingPlaybackRef = useRef(false);
   const markedReadIDsRef = useRef<Set<string>>(new Set());
   const readProgressSecRef = useRef<Map<string, number>>(new Map());
   const readProgressLastStartedAtRef = useRef<number | null>(null);
   const readProgressActiveItemIDRef = useRef<string | null>(null);
   const remoteSessionIDRef = useRef<string | null>(null);
   const lastPersistedPositionSecRef = useRef<number>(0);
+  const lastUiCurrentTimeSecRef = useRef<number>(0);
+  const lastUiDurationSecRef = useRef<number>(0);
   const [mode, setMode] = useState<SharedAudioMode>(null);
   const [playbackState, setPlaybackState] = useState<SharedPlaybackState>("idle");
   const [expanded, setExpanded] = useState(false);
@@ -144,6 +156,10 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   const [summaryPersonaKey, setSummaryPersonaKey] = useState<string | null>(null);
   const [summaryQueue, setSummaryQueue] = useState<SharedSummaryQueueState>(() => createEmptySummaryQueue());
   const [audioBriefing, setAudioBriefing] = useState<SharedAudioBriefingPayload | null>(null);
+
+  useEffect(() => {
+    summaryQueueRef.current = summaryQueue;
+  }, [summaryQueue]);
 
   const summaryQueueQuery = useQuery({
     queryKey: ["shared-summary-audio-queue", summaryQueue.queueKind],
@@ -161,11 +177,22 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     queryFn: () => api.getNavigatorPersonas(),
   });
 
-  const currentSummaryItem = useMemo(() => {
-    return summaryQueue.queue[0] ?? null;
-  }, [summaryQueue.queue]);
+  const settingsQuery = useQuery({
+    queryKey: ["shared-audio-player-settings"],
+    queryFn: () => api.getSettings(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const summaryAudioSettingsLoaded = settingsQuery.isSuccess;
+  const summaryAudioConfigured = hasSummaryAudioPlaybackAccess(settingsQuery.data ?? null);
 
-  const currentSummaryItemID = currentSummaryItem?.id ?? null;
+  const currentSummaryItem = useMemo(() => {
+    if (!summaryQueue.currentItemID) {
+      return summaryQueue.queue[0] ?? null;
+    }
+    return summaryQueue.queue.find((item) => item.id === summaryQueue.currentItemID) ?? summaryQueue.queue[0] ?? null;
+  }, [summaryQueue.currentItemID, summaryQueue.queue]);
+
+  const currentSummaryItemID = currentSummaryItem?.id ?? summaryQueue.currentItemID ?? null;
 
   const currentSummaryDetailQuery = useQuery({
     queryKey: ["shared-summary-audio-item", currentSummaryItemID],
@@ -183,10 +210,22 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       return;
     }
     const detail = currentSummaryDetailQuery.data ?? null;
-    setSummaryQueue((prev) => ({
-      ...prev,
-      currentItemDetail: detail && detail.id === currentSummaryItemID ? detail : null,
-    }));
+    setSummaryQueue((prev) => {
+      const nextDetail = detail && detail.id === currentSummaryItemID ? detail : null;
+      if (!nextDetail) {
+        return prev;
+      }
+      if (prev.currentItemID !== currentSummaryItemID) {
+        return prev;
+      }
+      if (prev.currentItemDetail?.id === nextDetail.id) {
+        return prev;
+      }
+      return {
+        ...prev,
+        currentItemDetail: nextDetail,
+      };
+    });
   }, [currentSummaryDetailQuery.data, currentSummaryItemID, mode]);
 
   useEffect(() => {
@@ -229,6 +268,9 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
 
   const requestSummaryAutoPlay = useEffectEvent(() => {
     void (async () => {
+      if (summaryAudioSettingsLoaded && !summaryAudioConfigured) {
+        return;
+      }
       const started = await playSummaryQueue(summaryQueue.queue, true);
       if (!started || !summaryQueue.queueKind) {
         return;
@@ -247,11 +289,19 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     if (mode !== "summary_queue") {
       return;
     }
-    if (summaryQueue.queue.length === 0 || summaryQueue.currentItemID || playbackState !== "idle") {
+    if (summaryAudioSettingsLoaded && !summaryAudioConfigured) {
+      return;
+    }
+    if (
+      summaryQueue.queue.length === 0 ||
+      summaryQueue.currentItemID ||
+      playbackState !== "idle" ||
+      summaryPlaybackPreparingRef.current
+    ) {
       return;
     }
     requestSummaryAutoPlay();
-  }, [mode, playbackState, summaryQueue.currentItemID, summaryQueue.queue]);
+  }, [mode, playbackState, requestSummaryAutoPlay, summaryAudioConfigured, summaryAudioSettingsLoaded, summaryQueue.currentItemID, summaryQueue.queue]);
 
   useEffect(() => {
     return () => {
@@ -475,6 +525,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     if (!item) {
       return;
     }
+    const requestSeq = summaryPlaybackRequestSeqRef.current;
     if (
       prefetchedAudioRef.current?.itemID === item.id ||
       pendingPrefetchRef.current?.itemID === item.id ||
@@ -490,6 +541,10 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     pendingPrefetchRef.current = { itemID: item.id, promise };
     try {
       const prepared = await promise;
+      if (requestSeq != summaryPlaybackRequestSeqRef.current) {
+        URL.revokeObjectURL(prepared.objectURL);
+        return;
+      }
       if (prefetchedAudioRef.current) {
         URL.revokeObjectURL(prefetchedAudioRef.current.objectURL);
       }
@@ -508,6 +563,12 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         prefetchedAudioRef.current = null;
       }
     } finally {
+      if (requestSeq != summaryPlaybackRequestSeqRef.current) {
+        if (pendingPrefetchRef.current?.itemID === item.id) {
+          pendingPrefetchRef.current = null;
+        }
+        return;
+      }
       if (pendingPrefetchRef.current?.itemID === item.id) {
         pendingPrefetchRef.current = null;
       }
@@ -525,10 +586,17 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     if (!item || !audio) {
       return false;
     }
+    if (summaryAudioSettingsLoaded && !summaryAudioConfigured) {
+      return false;
+    }
+    const requestSeq = summaryPlaybackRequestSeqRef.current + 1;
+    summaryPlaybackRequestSeqRef.current = requestSeq;
+    summaryPlaybackPreparingRef.current = true;
     setErrorMessage(null);
     setPlaybackState("preparing");
     let prepared: SummaryAudioPrepared;
     try {
+      audio.pause();
       if (prefetchedAudioRef.current?.itemID === item.id) {
         prepared = prefetchedAudioRef.current;
         prefetchedAudioRef.current = null;
@@ -550,6 +618,12 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         }
         prepared = await synthesizeSummaryItem(item.id);
       }
+      if (requestSeq != summaryPlaybackRequestSeqRef.current) {
+        if (prefetchedAudioRef.current?.itemID !== prepared.itemID) {
+          URL.revokeObjectURL(prepared.objectURL);
+        }
+        return false;
+      }
       if (currentAudioRef.current && currentAudioRef.current.itemID !== prepared.itemID) {
         URL.revokeObjectURL(currentAudioRef.current.objectURL);
       }
@@ -561,6 +635,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
           : null;
       setSummaryQueue((prev) => ({
         ...prev,
+        queue,
         currentItemID: prepared.itemID,
         currentItemDetail: immediateDetail,
         prefetchedItemID: prefetchedAudioRef.current?.itemID ?? null,
@@ -592,9 +667,16 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       }
       return true;
     } catch (err) {
+      if (requestSeq != summaryPlaybackRequestSeqRef.current) {
+        return false;
+      }
       setPlaybackState("error");
       setErrorMessage(err instanceof Error ? err.message : String(err));
       return false;
+    } finally {
+      if (requestSeq === summaryPlaybackRequestSeqRef.current) {
+        summaryPlaybackPreparingRef.current = false;
+      }
     }
   }
 
@@ -614,6 +696,9 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   }
 
   async function stopPlaybackInternal() {
+    stoppingPlaybackRef.current = true;
+    summaryPlaybackRequestSeqRef.current += 1;
+    summaryPlaybackPreparingRef.current = false;
     await flushReadProgress(summaryQueue.currentItemID);
     const audio = audioRef.current;
     if (audio) {
@@ -638,6 +723,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     setErrorMessage(null);
     setPlaybackState("idle");
     setSummaryPersonaKey(null);
+    stoppingPlaybackRef.current = false;
   }
 
   async function startSummaryQueuePlaybackInternal(
@@ -649,6 +735,9 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       startOffsetSec?: number;
     },
   ) {
+    if (summaryAudioSettingsLoaded && !summaryAudioConfigured) {
+      return;
+    }
     const seededQueue = (initialItems ?? []).slice(0, PLAYBACK_QUEUE_BUFFER_SIZE);
     await interruptRemoteSessionIfNeeded();
     await stopPlaybackInternal();
@@ -739,21 +828,22 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   }
 
   async function selectSummaryQueueItem(index: number) {
+    const currentState = summaryQueueRef.current;
     if (mode !== "summary_queue") {
       return;
     }
-    const nextQueue = summaryQueue.queue.slice(index);
+    const nextQueue = currentState.queue.slice(index);
     if (nextQueue.length === 0) {
       return;
     }
-    await flushReadProgress(summaryQueue.currentItemID);
+    await flushReadProgress(currentState.currentItemID);
     const nextState: SharedSummaryQueueState = {
-      queueKind: summaryQueue.queueKind,
+      queueKind: currentState.queueKind,
       queue: nextQueue,
       currentItemID: nextQueue[0]?.id ?? null,
       currentItemDetail: null,
-      currentIndex: summaryQueue.currentIndex + index,
-      excludedItemIDs: [...summaryQueue.excludedItemIDs, ...summaryQueue.queue.slice(0, index).map((item) => item.id)],
+      currentIndex: currentState.currentIndex + index,
+      excludedItemIDs: [...currentState.excludedItemIDs, ...currentState.queue.slice(0, index).map((item) => item.id)],
       prefetchedItemID: null,
       prefetchingItemID: null,
     };
@@ -765,22 +855,23 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   }
 
   async function skipToNext() {
+    const currentState = summaryQueueRef.current;
     if (mode !== "summary_queue") {
       await stopPlaybackInternal();
       return;
     }
-    const queue = summaryQueue.queue;
+    const queue = currentState.queue;
     if (queue.length <= 1) {
-      const replenishedQueue = await replenishSummaryQueueAfterCurrent(summaryQueue);
+      const replenishedQueue = await replenishSummaryQueueAfterCurrent(currentState);
       if (replenishedQueue.length > 0) {
-        resetReadProgressForItem(summaryQueue.currentItemID);
+        resetReadProgressForItem(currentState.currentItemID);
         const nextState: SharedSummaryQueueState = {
-          queueKind: summaryQueue.queueKind,
+          queueKind: currentState.queueKind,
           queue: replenishedQueue,
           currentItemID: replenishedQueue[0]?.id ?? null,
           currentItemDetail: null,
-          currentIndex: summaryQueue.currentIndex + queue.length,
-          excludedItemIDs: [...summaryQueue.excludedItemIDs, ...queue.map((item) => item.id)],
+          currentIndex: currentState.currentIndex + queue.length,
+          excludedItemIDs: [...currentState.excludedItemIDs, ...queue.map((item) => item.id)],
           prefetchedItemID: null,
           prefetchingItemID: null,
         };
@@ -791,7 +882,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         }
         return;
       }
-      const finalState = summaryQueue;
+      const finalState = currentState;
       const finalPosition = durationSec > 0 ? durationSec : currentTimeSec;
       await persistRemoteSession("complete", {
         summaryQueueState: finalState,
@@ -799,7 +890,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         durationSec: durationSec || finalPosition,
       });
       await stopPlaybackInternal();
-      resetReadProgressForItem(summaryQueue.currentItemID);
+      resetReadProgressForItem(currentState.currentItemID);
       setSummaryQueue((prev) => ({
         ...prev,
         queue: [],
@@ -814,14 +905,14 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       return;
     }
     const nextQueue = queue.slice(1);
-    resetReadProgressForItem(summaryQueue.currentItemID);
+    resetReadProgressForItem(currentState.currentItemID);
     const nextState: SharedSummaryQueueState = {
-      queueKind: summaryQueue.queueKind,
+      queueKind: currentState.queueKind,
       queue: nextQueue,
       currentItemID: nextQueue[0]?.id ?? null,
       currentItemDetail: null,
-      currentIndex: summaryQueue.currentIndex + 1,
-      excludedItemIDs: summaryQueue.queue[0] ? [...summaryQueue.excludedItemIDs, summaryQueue.queue[0].id] : summaryQueue.excludedItemIDs,
+      currentIndex: currentState.currentIndex + 1,
+      excludedItemIDs: currentState.queue[0] ? [...currentState.excludedItemIDs, currentState.queue[0].id] : currentState.excludedItemIDs,
       prefetchedItemID: null,
       prefetchingItemID: null,
     };
@@ -928,6 +1019,9 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   });
 
   const handleAudioPause = useEffectEvent(() => {
+    if (stoppingPlaybackRef.current) {
+      return;
+    }
     const audio = audioRef.current;
     if (isNaturalEndingPause(audio)) {
       return;
@@ -942,6 +1036,9 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   });
 
   const handleAudioTimeUpdate = useEffectEvent(() => {
+    if (stoppingPlaybackRef.current) {
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) {
       return;
@@ -957,7 +1054,14 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   });
 
   const handleAudioEnded = useEffectEvent(() => {
+    if (stoppingPlaybackRef.current) {
+      return;
+    }
     if (mode === "summary_queue") {
+      const activeItemID = currentAudioRef.current?.itemID ?? null;
+      if (activeItemID && summaryQueue.currentItemID && activeItemID !== summaryQueue.currentItemID) {
+        return;
+      }
       void flushReadProgress(summaryQueue.currentItemID);
       void skipToNext();
       return;
@@ -1053,6 +1157,8 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     playbackState,
     expanded,
     errorMessage,
+    summaryAudioSettingsLoaded,
+    summaryAudioConfigured,
     currentTimeSec,
     durationSec,
     isPlaying: playbackState === "playing",

@@ -2,11 +2,14 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Brain, ChevronDown, KeyRound, RefreshCw, Search, Settings as SettingsIcon, X } from "lucide-react";
-import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
+import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, SummaryAudioVoiceSettings, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
+import { getSummaryAudioReadiness } from "@/lib/summary-audio-readiness";
 import OneSignalSettings from "@/components/onesignal-settings";
 import ApiKeyCard from "@/components/settings/api-key-card";
 import AivisVoicePickerModal from "@/components/settings/aivis-voice-picker-modal";
@@ -222,6 +225,7 @@ function isUnavailableOpenRouterModel(item: LLMCatalogModel): boolean {
 
 type SettingsSectionID =
   | "audio-briefing"
+  | "summary-audio"
   | "reading-plan"
   | "personalization"
   | "digest"
@@ -259,6 +263,14 @@ type AudioBriefingNumericInputField =
   | "pitch"
   | "volume_gain";
 type AudioBriefingVoiceInputDrafts = Record<string, Record<AudioBriefingNumericInputField, string>>;
+type SummaryAudioNumericInputField =
+  | "speech_rate"
+  | "tempo_dynamics"
+  | "emotional_intensity"
+  | "line_break_silence_seconds"
+  | "pitch"
+  | "volume_gain";
+type SummaryAudioVoiceInputDrafts = Record<SummaryAudioNumericInputField, string>;
 type TTSProviderCapabilities = {
   requiresVoiceStyle: boolean;
   supportsCatalogPicker: boolean;
@@ -317,6 +329,41 @@ function buildAudioBriefingVoiceInputDrafts(voices: AudioBriefingPersonaVoice[])
     ])
   );
 }
+
+function buildDefaultSummaryAudioVoiceSettings(): SummaryAudioVoiceSettings {
+  return {
+    tts_provider: "aivis",
+    tts_model: "",
+    voice_model: "",
+    voice_style: "",
+    speech_rate: 1,
+    emotional_intensity: 1,
+    tempo_dynamics: 1,
+    line_break_silence_seconds: 0.4,
+    pitch: 0,
+    volume_gain: 0,
+    aivis_user_dictionary_uuid: null,
+  };
+}
+
+function buildSummaryAudioVoiceInputDrafts(settings: SummaryAudioVoiceSettings): SummaryAudioVoiceInputDrafts {
+  return {
+    speech_rate: formatAudioBriefingDecimalInput(settings.speech_rate),
+    tempo_dynamics: formatAudioBriefingDecimalInput(settings.tempo_dynamics),
+    emotional_intensity: formatAudioBriefingDecimalInput(settings.emotional_intensity),
+    line_break_silence_seconds: formatAudioBriefingDecimalInput(settings.line_break_silence_seconds),
+    pitch: formatAudioBriefingDecimalInput(settings.pitch),
+    volume_gain: formatAudioBriefingDecimalInput(settings.volume_gain),
+  };
+}
+
+type VoiceModelSelection = {
+  voice_model: string;
+};
+
+type VoiceStyleSelection = VoiceModelSelection & {
+  voice_style: string;
+};
 
 function resolveAudioBriefingScheduleSelection(
   audioBriefing?: UserSettings["audio_briefing"] | null,
@@ -477,7 +524,21 @@ function isCompleteDecimalInput(raw: string): boolean {
   return /^-?(?:\d+\.?\d*|\.\d+)$/.test(raw);
 }
 
-function resolveAivisVoiceSelection(models: AivisModelSnapshot[], voice: AudioBriefingPersonaVoice) {
+function isSettingsSectionID(section: string | null): section is SettingsSectionID {
+  return section === "summary-audio"
+    || section === "audio-briefing"
+    || section === "models"
+    || section === "reading-plan"
+    || section === "navigator"
+    || section === "personalization"
+    || section === "digest"
+    || section === "notifications"
+    || section === "integrations"
+    || section === "budget"
+    || section === "system";
+}
+
+function resolveAivisVoiceSelection(models: AivisModelSnapshot[], voice: VoiceStyleSelection) {
   const model = models.find((item) => item.aivm_model_uuid === voice.voice_model);
   if (!model) {
     return { model: null, speaker: null, style: null };
@@ -489,15 +550,30 @@ function resolveAivisVoiceSelection(models: AivisModelSnapshot[], voice: AudioBr
   return { model, speaker, style };
 }
 
-function resolveXAIVoiceSelection(voices: XAIVoiceSnapshot[], voice: AudioBriefingPersonaVoice) {
+function formatAivisVoiceStyleLabel(
+  voiceStyle: string,
+  t: (key: string, fallback?: string) => string
+): string {
+  const trimmed = voiceStyle.trim();
+  if (!trimmed) {
+    return t("settings.summaryAudio.unsetShort");
+  }
+  const [, styleIDRaw] = trimmed.split(":");
+  if (styleIDRaw && /^\d+$/.test(styleIDRaw)) {
+    return t("settings.aivisStyleLocalId").replace("{{id}}", styleIDRaw);
+  }
+  return trimmed;
+}
+
+function resolveXAIVoiceSelection(voices: XAIVoiceSnapshot[], voice: VoiceModelSelection) {
   return voices.find((item) => item.voice_id === voice.voice_model) ?? null;
 }
 
-function resolveOpenAITTSVoiceSelection(voices: OpenAITTSVoiceSnapshot[], voice: AudioBriefingPersonaVoice) {
+function resolveOpenAITTSVoiceSelection(voices: OpenAITTSVoiceSnapshot[], voice: VoiceModelSelection) {
   return voices.find((item) => item.voice_id === voice.voice_model) ?? null;
 }
 
-function resolveGeminiTTSVoiceSelection(voices: GeminiTTSVoiceCatalogEntry[], voice: AudioBriefingPersonaVoice) {
+function resolveGeminiTTSVoiceSelection(voices: GeminiTTSVoiceCatalogEntry[], voice: VoiceModelSelection) {
   return voices.find((item) => item.voice_name === voice.voice_model) ?? null;
 }
 
@@ -666,6 +742,181 @@ function getAudioBriefingVoiceStatus(
     tone: "ok" as const,
     label: t("settings.audioBriefing.status.ready"),
     detail: t("settings.audioBriefing.status.readyDetail"),
+    configured: true,
+  };
+}
+
+function isSummaryAudioVoiceConfigured(voice: SummaryAudioVoiceSettings) {
+  const capabilities = getAudioBriefingProviderCapabilities(voice.tts_provider);
+  if (!voice.voice_model.trim()) {
+    return false;
+  }
+  if (capabilities.supportsSeparateTTSModel && !voice.tts_model.trim()) {
+    return false;
+  }
+  if (capabilities.requiresVoiceStyle && !voice.voice_style.trim()) {
+    return false;
+  }
+  return true;
+}
+
+function getSummaryAudioVoiceStatus(
+  voice: SummaryAudioVoiceSettings,
+  models: AivisModelSnapshot[],
+  xaiVoices: XAIVoiceSnapshot[],
+  openAIVoices: OpenAITTSVoiceSnapshot[],
+  geminiVoices: GeminiTTSVoiceCatalogEntry[],
+  hasAivisAPIKey: boolean,
+  hasXAIAPIKey: boolean,
+  hasOpenAIAPIKey: boolean,
+  geminiTTSEnabled: boolean,
+  t: (key: string, fallback?: string) => string
+) {
+  const provider = voice.tts_provider.trim().toLowerCase();
+  if (!isSummaryAudioVoiceConfigured(voice)) {
+    return {
+      tone: "warn" as const,
+      label: t("settings.summaryAudio.status.unconfigured"),
+      detail: t("settings.summaryAudio.status.unconfiguredDetail"),
+      configured: false,
+    };
+  }
+  if (provider === "openai") {
+    const resolved = resolveOpenAITTSVoiceSelection(openAIVoices, voice);
+    if (!voice.tts_model.trim()) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.summaryAudio.status.openaiModelMissing"),
+        detail: t("settings.summaryAudio.status.openaiModelMissingDetail"),
+        configured: true,
+      };
+    }
+    if (!hasOpenAIAPIKey) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.summaryAudio.status.openaiApiKeyMissing"),
+        detail: t("settings.summaryAudio.status.openaiApiKeyMissingDetail"),
+        configured: true,
+      };
+    }
+    if (!resolved) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.summaryAudio.status.openaiVoiceMissing"),
+        detail: t("settings.summaryAudio.status.openaiVoiceMissingDetail"),
+        configured: true,
+      };
+    }
+    return {
+      tone: "ok" as const,
+      label: t("settings.summaryAudio.status.openaiReady"),
+      detail: t("settings.summaryAudio.status.openaiReadyDetail"),
+      configured: true,
+    };
+  }
+  if (provider === "gemini_tts") {
+    const resolved = resolveGeminiTTSVoiceSelection(geminiVoices, voice);
+    if (!voice.tts_model.trim()) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.summaryAudio.status.geminiModelMissing"),
+        detail: t("settings.summaryAudio.status.geminiModelMissingDetail"),
+        configured: true,
+      };
+    }
+    if (!geminiTTSEnabled) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.summaryAudio.status.geminiNotAllowed"),
+        detail: t("settings.summaryAudio.status.geminiNotAllowedDetail"),
+        configured: true,
+      };
+    }
+    if (!resolved) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.summaryAudio.status.geminiVoiceMissing"),
+        detail: t("settings.summaryAudio.status.geminiVoiceMissingDetail"),
+        configured: true,
+      };
+    }
+    return {
+      tone: "ok" as const,
+      label: t("settings.summaryAudio.status.geminiReady"),
+      detail: t("settings.summaryAudio.status.geminiReadyDetail"),
+      configured: true,
+    };
+  }
+  if (provider === "xai") {
+    const resolved = resolveXAIVoiceSelection(xaiVoices, voice);
+    if (!hasXAIAPIKey) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.summaryAudio.status.xaiApiKeyMissing"),
+        detail: t("settings.summaryAudio.status.xaiApiKeyMissingDetail"),
+        configured: true,
+      };
+    }
+    if (!resolved) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.summaryAudio.status.xaiVoiceMissing"),
+        detail: t("settings.summaryAudio.status.xaiVoiceMissingDetail"),
+        configured: true,
+      };
+    }
+    return {
+      tone: "ok" as const,
+      label: t("settings.summaryAudio.status.xaiReady"),
+      detail: t("settings.summaryAudio.status.xaiReadyDetail"),
+      configured: true,
+    };
+  }
+  if (provider !== "aivis") {
+    return {
+      tone: "muted" as const,
+      label: t("settings.summaryAudio.status.customProvider"),
+      detail: t("settings.summaryAudio.status.customProviderDetail").replace("{{provider}}", voice.tts_provider),
+      configured: true,
+    };
+  }
+  const resolved = resolveAivisVoiceSelection(models, voice);
+  if (!resolved.model) {
+    return {
+      tone: "warn" as const,
+      label: t("settings.summaryAudio.status.modelMissing"),
+      detail: t("settings.summaryAudio.status.modelMissingDetail"),
+      configured: true,
+    };
+  }
+  if (!resolved.speaker || !resolved.style) {
+    return {
+      tone: "warn" as const,
+      label: t("settings.summaryAudio.status.styleMissing"),
+      detail: t("settings.summaryAudio.status.styleMissingDetail"),
+      configured: true,
+    };
+  }
+  if (!hasAivisAPIKey) {
+    return {
+      tone: "warn" as const,
+      label: t("settings.summaryAudio.status.apiKeyMissing"),
+      detail: t("settings.summaryAudio.status.apiKeyMissingDetail"),
+      configured: true,
+    };
+  }
+  if (!voice.aivis_user_dictionary_uuid?.trim()) {
+    return {
+      tone: "warn" as const,
+      label: t("settings.summaryAudio.status.aivisDictionaryMissing"),
+      detail: t("settings.summaryAudio.status.aivisDictionaryMissingDetail"),
+      configured: true,
+    };
+  }
+  return {
+    tone: "ok" as const,
+    label: t("settings.summaryAudio.status.ready"),
+    detail: t("settings.summaryAudio.status.readyDetail"),
     configured: true,
   };
 }
@@ -1306,9 +1557,11 @@ function GeminiTTSVoicePickerModal({
 }
 
 export default function SettingsPage() {
+  const queryClient = useQueryClient();
   const { t } = useI18n();
   const { showToast } = useToast();
   const { confirm } = useConfirm();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [savingAudioBriefing, setSavingAudioBriefing] = useState(false);
   const [savingPodcast, setSavingPodcast] = useState(false);
@@ -1402,6 +1655,21 @@ export default function SettingsPage() {
   const [audioBriefingConversationMode, setAudioBriefingConversationMode] = useState<"single" | "duo">("single");
   const [audioBriefingBGMEnabled, setAudioBriefingBGMEnabled] = useState(false);
   const [audioBriefingBGMR2Prefix, setAudioBriefingBGMR2Prefix] = useState("");
+  const [summaryAudioProvider, setSummaryAudioProvider] = useState("aivis");
+  const [summaryAudioTTSModel, setSummaryAudioTTSModel] = useState("");
+  const [summaryAudioVoiceModel, setSummaryAudioVoiceModel] = useState("");
+  const [summaryAudioVoiceStyle, setSummaryAudioVoiceStyle] = useState("");
+  const [summaryAudioSpeechRate, setSummaryAudioSpeechRate] = useState("1");
+  const [summaryAudioEmotionalIntensity, setSummaryAudioEmotionalIntensity] = useState("1");
+  const [summaryAudioTempoDynamics, setSummaryAudioTempoDynamics] = useState("1");
+  const [summaryAudioLineBreakSilenceSeconds, setSummaryAudioLineBreakSilenceSeconds] = useState("0.4");
+  const [summaryAudioPitch, setSummaryAudioPitch] = useState("0");
+  const [summaryAudioVolumeGain, setSummaryAudioVolumeGain] = useState("0");
+  const [summaryAudioAivisUserDictionaryUUID, setSummaryAudioAivisUserDictionaryUUID] = useState("");
+  const [summaryAudioVoiceInputDrafts, setSummaryAudioVoiceInputDrafts] = useState<SummaryAudioVoiceInputDrafts>(() =>
+    buildSummaryAudioVoiceInputDrafts(buildDefaultSummaryAudioVoiceSettings())
+  );
+  const [summaryAudioSaving, setSummaryAudioSaving] = useState(false);
   const [podcastEnabled, setPodcastEnabled] = useState(false);
   const [podcastFeedSlug, setPodcastFeedSlug] = useState("");
   const [podcastRSSURL, setPodcastRSSURL] = useState("");
@@ -1441,6 +1709,10 @@ export default function SettingsPage() {
   const [xaiPickerPersona, setXAIPickerPersona] = useState<string | null>(null);
   const [openAITTPickerPersona, setOpenAITTPickerPersona] = useState<string | null>(null);
   const [geminiTTSPickerPersona, setGeminiTTSPickerPersona] = useState<string | null>(null);
+  const [summaryAudioAivisPickerOpen, setSummaryAudioAivisPickerOpen] = useState(false);
+  const [summaryAudioXAIPickerOpen, setSummaryAudioXAIPickerOpen] = useState(false);
+  const [summaryAudioOpenAITTPickerOpen, setSummaryAudioOpenAITTPickerOpen] = useState(false);
+  const [summaryAudioGeminiTTSPickerOpen, setSummaryAudioGeminiTTSPickerOpen] = useState(false);
   const [expandedAudioBriefingPersonas, setExpandedAudioBriefingPersonas] = useState<string[]>(["editor"]);
   const [obsidianEnabled, setObsidianEnabled] = useState(false);
   const [notificationPriority, setNotificationPriority] = useState<NotificationPriorityRule>({
@@ -1485,6 +1757,54 @@ export default function SettingsPage() {
   const loadSeqRef = useRef(0);
   const llmModelsDirtyRef = useRef(false);
   const llmExtrasRef = useRef<HTMLDivElement | null>(null);
+  const summaryAudioVoiceStatus = useMemo(() => {
+    return getSummaryAudioVoiceStatus(
+      {
+        tts_provider: summaryAudioProvider,
+        tts_model: summaryAudioTTSModel,
+        voice_model: summaryAudioVoiceModel,
+        voice_style: summaryAudioVoiceStyle,
+        speech_rate: Number(summaryAudioSpeechRate),
+        emotional_intensity: Number(summaryAudioEmotionalIntensity),
+        tempo_dynamics: Number(summaryAudioTempoDynamics),
+        line_break_silence_seconds: Number(summaryAudioLineBreakSilenceSeconds),
+        pitch: Number(summaryAudioPitch),
+        volume_gain: Number(summaryAudioVolumeGain),
+        aivis_user_dictionary_uuid: summaryAudioAivisUserDictionaryUUID || null,
+      },
+      aivisModelsData?.models ?? [],
+      xaiVoicesData?.voices ?? [],
+      openAITTSVoicesData?.voices ?? [],
+      geminiTTSVoicesData?.voices ?? [],
+      Boolean(settings?.has_aivis_api_key),
+      Boolean(settings?.has_xai_api_key),
+        Boolean(settings?.has_openai_api_key),
+        Boolean(settings?.gemini_tts_enabled),
+        t
+    );
+  }, [
+    aivisModelsData?.models,
+    geminiTTSVoicesData?.voices,
+    openAITTSVoicesData?.voices,
+    settings?.gemini_tts_enabled,
+    settings?.has_aivis_api_key,
+    settings?.has_openai_api_key,
+    settings?.has_xai_api_key,
+    summaryAudioAivisUserDictionaryUUID,
+    summaryAudioEmotionalIntensity,
+    summaryAudioLineBreakSilenceSeconds,
+    summaryAudioPitch,
+    summaryAudioProvider,
+    summaryAudioSpeechRate,
+    summaryAudioTempoDynamics,
+    summaryAudioTTSModel,
+    summaryAudioVoiceModel,
+    summaryAudioVoiceStyle,
+    summaryAudioVolumeGain,
+    t,
+    xaiVoicesData?.voices,
+  ]);
+  const summaryAudioConfigured = getSummaryAudioReadiness(settings).ready;
   const navigatorPersonaCards = useMemo(
     () =>
       NAVIGATOR_PERSONA_KEYS.map((key) => ({
@@ -1515,6 +1835,29 @@ export default function SettingsPage() {
     },
     []
   );
+
+  const syncSummaryAudioForm = useCallback((summaryAudio?: UserSettings["summary_audio"] | null) => {
+    const next = summaryAudio ?? buildDefaultSummaryAudioVoiceSettings();
+    setSummaryAudioProvider(next.tts_provider || "aivis");
+    setSummaryAudioTTSModel(next.tts_model ?? "");
+    setSummaryAudioVoiceModel(next.voice_model ?? "");
+    setSummaryAudioVoiceStyle(next.voice_style ?? "");
+    setSummaryAudioSpeechRate(formatAudioBriefingDecimalInput(next.speech_rate ?? 1));
+    setSummaryAudioEmotionalIntensity(formatAudioBriefingDecimalInput(next.emotional_intensity ?? 1));
+    setSummaryAudioTempoDynamics(formatAudioBriefingDecimalInput(next.tempo_dynamics ?? 1));
+    setSummaryAudioLineBreakSilenceSeconds(formatAudioBriefingDecimalInput(next.line_break_silence_seconds ?? 0.4));
+    setSummaryAudioPitch(formatAudioBriefingDecimalInput(next.pitch ?? 0));
+    setSummaryAudioVolumeGain(formatAudioBriefingDecimalInput(next.volume_gain ?? 0));
+    setSummaryAudioAivisUserDictionaryUUID(next.aivis_user_dictionary_uuid ?? "");
+    setSummaryAudioVoiceInputDrafts(buildSummaryAudioVoiceInputDrafts(next));
+  }, []);
+
+  useEffect(() => {
+    const section = searchParams.get("section");
+    if (isSettingsSectionID(section)) {
+      setActiveSection(section);
+    }
+  }, [searchParams]);
 
   const syncPodcastForm = useCallback((podcast?: UserSettings["podcast"] | null) => {
     setPodcastEnabled(Boolean(podcast?.enabled));
@@ -1875,6 +2218,7 @@ export default function SettingsPage() {
       setObsidianRepoName(data.obsidian_export?.github_repo_name ?? "");
       setObsidianRepoBranch(data.obsidian_export?.github_repo_branch ?? "main");
       setObsidianRootPath(data.obsidian_export?.vault_root_path ?? "Sifto/Favorites");
+      syncSummaryAudioForm(data.summary_audio ?? null);
       if (!llmModelsDirtyRef.current) {
         syncLLMModelForm(data.llm_models);
       }
@@ -1887,40 +2231,40 @@ export default function SettingsPage() {
         setLoading(false);
       }
     }
-  }, [syncAudioBriefingForm, syncLLMModelForm, syncPodcastForm, t]);
+  }, [syncAudioBriefingForm, syncLLMModelForm, syncPodcastForm, syncSummaryAudioForm, t]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   useEffect(() => {
-    if (activeSection !== "audio-briefing" || aivisModelsData != null || aivisModelsLoading) return;
+    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || aivisModelsData != null || aivisModelsLoading) return;
     void loadAivisModels().catch(() => undefined);
   }, [activeSection, aivisModelsData, aivisModelsLoading, loadAivisModels]);
 
   useEffect(() => {
-    if (activeSection !== "audio-briefing" || !settings?.has_xai_api_key || xaiVoicesData != null || xaiVoicesLoading) {
+    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || !settings?.has_xai_api_key || xaiVoicesData != null || xaiVoicesLoading) {
       return;
     }
     void loadXAIVoices().catch(() => undefined);
   }, [activeSection, loadXAIVoices, settings?.has_xai_api_key, xaiVoicesData, xaiVoicesLoading]);
 
   useEffect(() => {
-    if (activeSection !== "audio-briefing" || !settings?.has_openai_api_key || openAITTSVoicesData != null || openAITTSVoicesLoading) {
+    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || !settings?.has_openai_api_key || openAITTSVoicesData != null || openAITTSVoicesLoading) {
       return;
     }
     void loadOpenAITTSVoices().catch(() => undefined);
   }, [activeSection, loadOpenAITTSVoices, openAITTSVoicesData, openAITTSVoicesLoading, settings?.has_openai_api_key]);
 
   useEffect(() => {
-    if (activeSection !== "audio-briefing" || geminiTTSVoicesData != null || geminiTTSVoicesLoading) {
+    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || geminiTTSVoicesData != null || geminiTTSVoicesLoading) {
       return;
     }
     void loadGeminiTTSVoices().catch(() => undefined);
   }, [activeSection, geminiTTSVoicesData, geminiTTSVoicesLoading, loadGeminiTTSVoices]);
 
   useEffect(() => {
-    if (activeSection !== "audio-briefing" || !settings?.has_aivis_api_key || aivisUserDictionariesLoading || aivisUserDictionariesLoaded) {
+    if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || !settings?.has_aivis_api_key || aivisUserDictionariesLoading || aivisUserDictionariesLoaded) {
       return;
     }
     void loadAivisUserDictionaries().catch(() => undefined);
@@ -3345,6 +3689,99 @@ export default function SettingsPage() {
     await persistAudioBriefingVoices();
   }
 
+  async function persistSummaryAudioSettings() {
+    setSummaryAudioSaving(true);
+    try {
+      const payload: SummaryAudioVoiceSettings = {
+        tts_provider: summaryAudioProvider.trim() || "aivis",
+        tts_model: summaryAudioTTSModel.trim(),
+        voice_model: summaryAudioVoiceModel.trim(),
+        voice_style: summaryAudioVoiceStyle.trim(),
+        speech_rate: Number(summaryAudioSpeechRate),
+        emotional_intensity: Number(summaryAudioEmotionalIntensity),
+        tempo_dynamics: Number(summaryAudioTempoDynamics),
+        line_break_silence_seconds: Number(summaryAudioLineBreakSilenceSeconds),
+        pitch: Number(summaryAudioPitch),
+        volume_gain: Number(summaryAudioVolumeGain),
+        aivis_user_dictionary_uuid: summaryAudioAivisUserDictionaryUUID.trim() || null,
+      };
+      const resp = await api.updateSummaryAudioSettings(payload);
+      const nextSettings = settings ? { ...settings, summary_audio: resp.summary_audio } : null;
+      setSettings(nextSettings);
+      if (nextSettings) {
+        queryClient.setQueryData(["shared-audio-player-settings"], nextSettings);
+        queryClient.setQueryData(["settings", "summary-audio-readiness"], nextSettings);
+      }
+      syncSummaryAudioForm(resp.summary_audio ?? null);
+      void queryClient.invalidateQueries({ queryKey: ["shared-audio-player-settings"] });
+      void queryClient.invalidateQueries({ queryKey: ["settings", "summary-audio-readiness"] });
+      showToast(t("settings.toast.summaryAudioSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSummaryAudioSaving(false);
+    }
+  }
+
+  async function submitSummaryAudioSettings(e: FormEvent) {
+    e.preventDefault();
+    await persistSummaryAudioSettings();
+  }
+
+  function updateSummaryAudioProvider(nextProvider: string) {
+    const normalized = nextProvider.trim().toLowerCase();
+    const capabilities = getAudioBriefingProviderCapabilities(normalized);
+    setSummaryAudioProvider(normalized);
+    setSummaryAudioVoiceModel("");
+    setSummaryAudioVoiceStyle("");
+    if (!capabilities.supportsSeparateTTSModel) {
+      setSummaryAudioTTSModel("");
+    } else if (normalized === "openai") {
+      setSummaryAudioTTSModel("tts-1");
+    } else if (normalized === "gemini_tts") {
+      setSummaryAudioTTSModel("gemini-2.5-flash-tts");
+    } else {
+      setSummaryAudioTTSModel("");
+    }
+    if (!capabilities.requiresVoiceStyle) {
+      setSummaryAudioVoiceStyle("");
+    }
+  }
+
+  function updateSummaryAudioVoiceNumberInput(
+    field: SummaryAudioNumericInputField,
+    raw: string,
+    applyParsedValue: (value: number) => void
+  ) {
+    setSummaryAudioVoiceInputDrafts((prev) => ({
+      ...prev,
+      [field]: raw,
+    }));
+    if (!raw || !isCompleteDecimalInput(raw)) return;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
+    applyParsedValue(parsed);
+  }
+
+  function resetSummaryAudioVoiceNumberInput(field: SummaryAudioNumericInputField) {
+    setSummaryAudioVoiceInputDrafts((prev) => ({
+      ...prev,
+      [field]: buildSummaryAudioVoiceInputDrafts({
+        tts_provider: summaryAudioProvider,
+        tts_model: summaryAudioTTSModel,
+        voice_model: summaryAudioVoiceModel,
+        voice_style: summaryAudioVoiceStyle,
+        speech_rate: Number(summaryAudioSpeechRate),
+        emotional_intensity: Number(summaryAudioEmotionalIntensity),
+        tempo_dynamics: Number(summaryAudioTempoDynamics),
+        line_break_silence_seconds: Number(summaryAudioLineBreakSilenceSeconds),
+        pitch: Number(summaryAudioPitch),
+        volume_gain: Number(summaryAudioVolumeGain),
+        aivis_user_dictionary_uuid: summaryAudioAivisUserDictionaryUUID || null,
+      })[field],
+    }));
+  }
+
   function updateAudioBriefingVoice(persona: string, patch: Partial<AudioBriefingPersonaVoice>) {
     setAudioBriefingVoices((prev) =>
       prev.map((voice) => {
@@ -3355,10 +3792,12 @@ export default function SettingsPage() {
           const capabilities = getAudioBriefingProviderCapabilities(nextProvider);
           if (!capabilities.supportsSeparateTTSModel) {
             nextVoice.tts_model = "";
-          } else if (nextProvider === "openai" && !nextVoice.tts_model.trim()) {
+          } else if (nextProvider === "openai") {
             nextVoice.tts_model = "gpt-4o-mini-tts";
-          } else if (nextProvider === "gemini_tts" && !nextVoice.tts_model.trim()) {
+          } else if (nextProvider === "gemini_tts") {
             nextVoice.tts_model = "gemini-2.5-flash-tts";
+          } else {
+            nextVoice.tts_model = "";
           }
           if (!capabilities.requiresVoiceStyle) {
             nextVoice.voice_style = "";
@@ -3476,10 +3915,39 @@ export default function SettingsPage() {
   const audioBriefingXAIVoices = xaiVoicesData?.voices ?? [];
   const audioBriefingOpenAITTSVoices = openAITTSVoicesData?.voices ?? [];
   const audioBriefingGeminiTTSVoices = geminiTTSVoicesData?.voices ?? [];
+  const summaryAudioAivisModels = audioBriefingAivisModels;
+  const summaryAudioXAIVoices = audioBriefingXAIVoices;
+  const summaryAudioOpenAITTSVoices = audioBriefingOpenAITTSVoices;
+  const summaryAudioGeminiTTSVoices = audioBriefingGeminiTTSVoices;
   const hasUserAivisAPIKey = Boolean(settings?.has_aivis_api_key);
   const hasUserXAIAPIKey = Boolean(settings?.has_xai_api_key);
   const hasUserOpenAIAPIKey = Boolean(settings?.has_openai_api_key);
   const geminiTTSEnabled = Boolean(settings?.gemini_tts_enabled);
+  const summaryAudioProviderCapabilities = getAudioBriefingProviderCapabilities(summaryAudioProvider);
+  const summaryAudioResolvedVoice = summaryAudioProvider === "aivis"
+    ? resolveAivisVoiceSelection(summaryAudioAivisModels, {
+        voice_model: summaryAudioVoiceModel,
+        voice_style: summaryAudioVoiceStyle,
+      })
+    : summaryAudioProvider === "xai"
+      ? resolveXAIVoiceSelection(summaryAudioXAIVoices, { voice_model: summaryAudioVoiceModel })
+      : summaryAudioProvider === "openai"
+        ? resolveOpenAITTSVoiceSelection(summaryAudioOpenAITTSVoices, { voice_model: summaryAudioVoiceModel })
+        : summaryAudioProvider === "gemini_tts"
+          ? resolveGeminiTTSVoiceSelection(summaryAudioGeminiTTSVoices, { voice_model: summaryAudioVoiceModel })
+          : null;
+  const summaryAudioResolvedAivisVoice = summaryAudioProvider === "aivis"
+    ? (summaryAudioResolvedVoice as ReturnType<typeof resolveAivisVoiceSelection> | null)
+    : null;
+  const summaryAudioResolvedXAIVoice = summaryAudioProvider === "xai"
+    ? (summaryAudioResolvedVoice as XAIVoiceSnapshot | null)
+    : null;
+  const summaryAudioResolvedOpenAIVoice = summaryAudioProvider === "openai"
+    ? (summaryAudioResolvedVoice as OpenAITTSVoiceSnapshot | null)
+    : null;
+  const summaryAudioResolvedGeminiVoice = summaryAudioProvider === "gemini_tts"
+    ? (summaryAudioResolvedVoice as GeminiTTSVoiceCatalogEntry | null)
+    : null;
   const audioBriefingVoiceSummaries = audioBriefingVoices.map((voice) => ({
     voice,
     resolved: voice.tts_provider === "aivis"
@@ -3507,6 +3975,28 @@ export default function SettingsPage() {
   const configuredAudioBriefingVoiceCount = audioBriefingVoiceSummaries.filter((entry) => entry.status.configured).length;
   const audioBriefingVoiceAttentionCount = audioBriefingVoiceSummaries.filter((entry) => entry.status.tone === "warn").length;
   const audioBriefingVoiceReadyCount = audioBriefingVoiceSummaries.filter((entry) => entry.status.tone === "ok").length;
+  const summaryAudioResolvedVoiceLabel =
+    summaryAudioProvider === "aivis"
+      ? summaryAudioResolvedAivisVoice?.model?.name || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
+      : summaryAudioProvider === "xai"
+        ? summaryAudioResolvedXAIVoice?.name || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
+        : summaryAudioProvider === "openai"
+          ? summaryAudioResolvedOpenAIVoice?.name || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
+          : summaryAudioProvider === "gemini_tts"
+            ? summaryAudioResolvedGeminiVoice?.label || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
+            : summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort");
+  const summaryAudioResolvedVoiceDetail =
+    summaryAudioProvider === "aivis"
+      ? summaryAudioResolvedAivisVoice?.speaker && summaryAudioResolvedAivisVoice?.style
+        ? `${summaryAudioResolvedAivisVoice.speaker.name} / ${summaryAudioResolvedAivisVoice.style.name}`
+        : formatAivisVoiceStyleLabel(summaryAudioVoiceStyle || summaryAudioVoiceModel, t)
+      : summaryAudioProvider === "xai"
+        ? summaryAudioResolvedXAIVoice?.description || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
+        : summaryAudioProvider === "openai"
+          ? summaryAudioResolvedOpenAIVoice?.description || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
+          : summaryAudioProvider === "gemini_tts"
+            ? summaryAudioResolvedGeminiVoice?.description || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
+            : summaryAudioVoiceStyle || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort");
   const audioBriefingUsesAivisCloud = audioBriefingVoices.some((voice) => voice.tts_provider === "aivis");
   const audioBriefingNeedsAivisAPIKey = audioBriefingUsesAivisCloud && !hasUserAivisAPIKey;
   const audioBriefingUsesXAI = audioBriefingVoices.some((voice) => voice.tts_provider === "xai");
@@ -3555,6 +4045,13 @@ export default function SettingsPage() {
       title: t("settings.section.audioBriefing"),
       summary: audioBriefingEnabled
         ? `${formatAudioBriefingScheduleSelection(audioBriefingScheduleSelection, t)} / ${audioBriefingArticlesPerEpisode}${t("settings.audioBriefing.articlesSuffix")}`
+        : t("settings.off"),
+    },
+    {
+      id: "summary-audio",
+      title: t("settings.section.summaryAudio"),
+      summary: summaryAudioProvider
+        ? `${t(`settings.summaryAudio.provider.${summaryAudioProvider}`, summaryAudioProvider)} / ${summaryAudioVoiceModel || t("settings.summaryAudio.unconfiguredShort")}`
         : t("settings.off"),
     },
     {
@@ -3622,6 +4119,11 @@ export default function SettingsPage() {
       kicker: t("settings.section.audioBriefing"),
       title: t("settings.controlRoom.audioBriefingTitle"),
       description: t("settings.controlRoom.audioBriefingDescription"),
+    },
+    "summary-audio": {
+      kicker: t("settings.section.summaryAudio"),
+      title: t("settings.summaryAudio.title"),
+      description: t("settings.summaryAudio.description"),
     },
     "reading-plan": {
       kicker: t("settings.recommendedTitle"),
@@ -4337,7 +4839,7 @@ export default function SettingsPage() {
                       const selectedVoiceDetail = isAivisProvider
                         ? (aivisResolved?.speaker && aivisResolved?.style
                             ? `${aivisResolved.speaker.name} / ${aivisResolved.style.name}`
-                            : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort"))
+                            : formatAivisVoiceStyleLabel(voice.voice_style || voice.voice_model, t))
                         : isXAIProvider
                           ? xaiResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
                           : isOpenAIProvider
@@ -4501,7 +5003,7 @@ export default function SettingsPage() {
                                 {providerCapabilities.supportsSpeechTuning ? (
                                   <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-[var(--color-editorial-ink-faint)]">
                                       <span>{`${t("settings.audioBriefing.voiceModel")}: ${voice.voice_model || "—"}`}</span>
-                                      <span>{`${t("settings.audioBriefing.voiceStyle")}: ${voice.voice_style || "—"}`}</span>
+                                      <span>{`${t("settings.audioBriefing.voiceStyle")}: ${formatAivisVoiceStyleLabel(voice.voice_style, t)}`}</span>
                                     </div>
                                   ) : isXAIProvider ? (
                                     <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-[var(--color-editorial-ink-faint)]">
@@ -4539,6 +5041,7 @@ export default function SettingsPage() {
                                   {isOpenAIProvider ? (
                                     <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.85fr)]">
                                       <ModelSelect
+                                        key={`audio-briefing-openai-tts-model-${voice.persona}-${voice.tts_provider}`}
                                         label={t("settings.audioBriefing.openAITTSModel")}
                                         value={voice.tts_model}
                                         onChange={(value) => updateAudioBriefingVoice(voice.persona, { tts_model: value })}
@@ -4561,6 +5064,7 @@ export default function SettingsPage() {
                                   ) : isGeminiProvider ? (
                                     <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.85fr)]">
                                       <ModelSelect
+                                        key={`audio-briefing-gemini-tts-model-${voice.persona}-${voice.tts_provider}`}
                                         label={t("settings.audioBriefing.geminiTTSModel")}
                                         value={voice.tts_model}
                                         onChange={(value) => updateAudioBriefingVoice(voice.persona, { tts_model: value })}
@@ -4962,6 +5466,278 @@ export default function SettingsPage() {
                 </form>
               </SectionCard>
             </>
+          ) : null}
+
+          {activeSection === "summary-audio" ? (
+            <SectionCard>
+              <form onSubmit={submitSummaryAudioSettings} className="space-y-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.summaryAudio.summaryTitle")}</div>
+                    <p className="mt-1 max-w-3xl text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.summaryAudio.summaryHelp")}</p>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
+                    <button
+                      type="submit"
+                      disabled={summaryAudioSaving}
+                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {summaryAudioSaving ? t("common.saving") : t("settings.summaryAudio.saveSettings")}
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`rounded-[20px] border px-4 py-4 ${summaryAudioVoiceStatus.tone === "ok" ? "border-[rgba(34,197,94,0.28)] bg-[rgba(240,253,244,0.72)]" : summaryAudioVoiceStatus.tone === "warn" ? "border-[rgba(245,158,11,0.35)] bg-[rgba(255,251,235,0.82)]" : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)]"}`}>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className={`rounded-full border px-3 py-1 text-[11px] font-semibold ${
+                      summaryAudioVoiceStatus.tone === "ok"
+                        ? "border-[rgba(34,197,94,0.24)] bg-[rgba(220,252,231,0.85)] text-[#166534]"
+                        : summaryAudioVoiceStatus.tone === "warn"
+                          ? "border-[rgba(245,158,11,0.24)] bg-[rgba(254,243,199,0.88)] text-[#b45309]"
+                          : "border-[var(--color-editorial-line)] bg-white text-[var(--color-editorial-ink-soft)]"
+                    }`}>
+                      {summaryAudioVoiceStatus.label}
+                    </div>
+                    <div className="text-sm text-[var(--color-editorial-ink-soft)]">{summaryAudioVoiceStatus.detail}</div>
+                    <div className="ml-auto text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {summaryAudioConfigured ? t("settings.summaryAudio.playbackEnabled") : t("settings.summaryAudio.playbackDisabled")}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+                  <label className="flex min-w-[220px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.summaryAudio.provider")}
+                    </div>
+                    <select
+                      value={summaryAudioProvider}
+                      onChange={(e) => updateSummaryAudioProvider(e.target.value)}
+                      className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                    >
+                      <option value="aivis">{t("settings.summaryAudio.provider.aivis")}</option>
+                      <option value="xai">{t("settings.summaryAudio.provider.xai")}</option>
+                      <option value="openai">{t("settings.summaryAudio.provider.openai")}</option>
+                      <option value="gemini_tts">{t("settings.summaryAudio.provider.gemini_tts")}</option>
+                    </select>
+                  </label>
+
+                  {summaryAudioProviderCapabilities.supportsSeparateTTSModel ? (
+                    <ModelSelect
+                      key={`summary-audio-tts-model-${summaryAudioProvider}`}
+                      label={t("settings.summaryAudio.ttsModel")}
+                      value={summaryAudioTTSModel}
+                      onChange={(value) => setSummaryAudioTTSModel(value)}
+                      options={summaryAudioProvider === "openai" ? buildOpenAITTSModelOptions(summaryAudioTTSModel) : buildGeminiTTSModelOptions(summaryAudioTTSModel)}
+                      labels={modelSelectLabels}
+                      variant="modal"
+                    />
+                  ) : (
+                    <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                        {t("settings.summaryAudio.voiceModel")}
+                      </div>
+                      <div className="mt-2 text-sm text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.summaryAudio.voiceModelHelp")}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <label className="flex flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                    {t("settings.summaryAudio.voiceModel")}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <div className="rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]">
+                      {summaryAudioResolvedVoiceLabel}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (summaryAudioProvider === "aivis") {
+                          setSummaryAudioAivisPickerOpen(true);
+                          if (aivisModelsData == null) {
+                            void loadAivisModels().catch(() => undefined);
+                          }
+                        } else if (summaryAudioProvider === "xai") {
+                          setSummaryAudioXAIPickerOpen(true);
+                          if (xaiVoicesData == null) {
+                            void loadXAIVoices().catch(() => undefined);
+                          }
+                        } else if (summaryAudioProvider === "openai") {
+                          setSummaryAudioOpenAITTPickerOpen(true);
+                          if (openAITTSVoicesData == null) {
+                            void loadOpenAITTSVoices().catch(() => undefined);
+                          }
+                        } else if (summaryAudioProvider === "gemini_tts") {
+                          setSummaryAudioGeminiTTSPickerOpen(true);
+                          if (geminiTTSVoicesData == null) {
+                            void loadGeminiTTSVoices().catch(() => undefined);
+                          }
+                        }
+                      }}
+                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                    >
+                      {summaryAudioProvider === "aivis"
+                        ? t("settings.audioBriefing.pickAivisVoice")
+                        : summaryAudioProvider === "xai"
+                          ? t("settings.audioBriefing.pickXaiVoice")
+                          : summaryAudioProvider === "openai"
+                            ? t("settings.audioBriefing.pickOpenAITTSVoice")
+                            : t("settings.audioBriefing.pickGeminiTTSVoice")}
+                    </button>
+                  </div>
+                  <div className="mt-3 text-[12px] leading-5 text-[var(--color-editorial-ink-soft)]">{summaryAudioResolvedVoiceDetail}</div>
+                </label>
+
+                {summaryAudioProviderCapabilities.requiresVoiceStyle ? (
+                  <label className="block rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.summaryAudio.voiceStyle")}
+                    </div>
+                    {summaryAudioProvider === "aivis" ? (
+                      <div className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]">
+                        {formatAivisVoiceStyleLabel(summaryAudioVoiceStyle, t)}
+                      </div>
+                    ) : (
+                      <input
+                        value={summaryAudioVoiceStyle}
+                        onChange={(e) => setSummaryAudioVoiceStyle(e.target.value)}
+                        className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                      />
+                    )}
+                    <p className="mt-2 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
+                      {t("settings.summaryAudio.voiceStyleHelp")}
+                    </p>
+                  </label>
+                ) : null}
+
+                <div className="grid gap-3 lg:grid-cols-3">
+                  <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.summaryAudio.speechRate")}
+                    </div>
+                    <input
+                      value={summaryAudioVoiceInputDrafts.speech_rate}
+                      onChange={(e) => updateSummaryAudioVoiceNumberInput("speech_rate", e.target.value, (value) => setSummaryAudioSpeechRate(String(value)))}
+                      onBlur={() => resetSummaryAudioVoiceNumberInput("speech_rate")}
+                      inputMode="decimal"
+                      className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                    />
+                  </label>
+                  <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.summaryAudio.emotionalIntensity")}
+                    </div>
+                    <input
+                      value={summaryAudioVoiceInputDrafts.emotional_intensity}
+                      onChange={(e) => updateSummaryAudioVoiceNumberInput("emotional_intensity", e.target.value, (value) => setSummaryAudioEmotionalIntensity(String(value)))}
+                      onBlur={() => resetSummaryAudioVoiceNumberInput("emotional_intensity")}
+                      inputMode="decimal"
+                      className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                    />
+                  </label>
+                  <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.summaryAudio.tempoDynamics")}
+                    </div>
+                    <input
+                      value={summaryAudioVoiceInputDrafts.tempo_dynamics}
+                      onChange={(e) => updateSummaryAudioVoiceNumberInput("tempo_dynamics", e.target.value, (value) => setSummaryAudioTempoDynamics(String(value)))}
+                      onBlur={() => resetSummaryAudioVoiceNumberInput("tempo_dynamics")}
+                      inputMode="decimal"
+                      className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-3 lg:grid-cols-3">
+                  <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.summaryAudio.lineBreakSilenceSeconds")}
+                    </div>
+                    <input
+                      value={summaryAudioVoiceInputDrafts.line_break_silence_seconds}
+                      onChange={(e) => updateSummaryAudioVoiceNumberInput("line_break_silence_seconds", e.target.value, (value) => setSummaryAudioLineBreakSilenceSeconds(String(value)))}
+                      onBlur={() => resetSummaryAudioVoiceNumberInput("line_break_silence_seconds")}
+                      inputMode="decimal"
+                      className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                    />
+                  </label>
+                  <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.summaryAudio.pitch")}
+                    </div>
+                    <input
+                      value={summaryAudioVoiceInputDrafts.pitch}
+                      onChange={(e) => updateSummaryAudioVoiceNumberInput("pitch", e.target.value, (value) => setSummaryAudioPitch(String(value)))}
+                      onBlur={() => resetSummaryAudioVoiceNumberInput("pitch")}
+                      inputMode="decimal"
+                      className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                    />
+                  </label>
+                  <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.summaryAudio.volumeGain")}
+                    </div>
+                    <input
+                      value={summaryAudioVoiceInputDrafts.volume_gain}
+                      onChange={(e) => updateSummaryAudioVoiceNumberInput("volume_gain", e.target.value, (value) => setSummaryAudioVolumeGain(String(value)))}
+                      onBlur={() => resetSummaryAudioVoiceNumberInput("volume_gain")}
+                      inputMode="decimal"
+                      className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
+                    />
+                  </label>
+                </div>
+
+                {summaryAudioProvider === "aivis" ? (
+                  !settings?.has_aivis_api_key ? (
+                    <div className="flex flex-col gap-3 rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-4 text-sm text-[#b45309] lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <div className="font-semibold">{t("settings.summaryAudio.aivisApiKeyWarningTitle")}</div>
+                        <div className="mt-1 leading-6">{t("settings.summaryAudio.aivisApiKeyWarningDetail")}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSection("system")}
+                        className="inline-flex min-h-10 items-center justify-center rounded-full border border-[rgba(180,83,9,0.22)] bg-white px-4 py-2 text-sm font-medium text-[#92400e] hover:bg-[rgba(255,255,255,0.72)]"
+                      >
+                        {t("settings.summaryAudio.openApiKeys")}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+                      <label className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                          {t("settings.summaryAudio.aivisDictionary")}
+                        </div>
+                        <select
+                          value={summaryAudioAivisUserDictionaryUUID}
+                          onChange={(e) => setSummaryAudioAivisUserDictionaryUUID(e.target.value)}
+                          disabled={aivisUserDictionariesLoading || aivisUserDictionaries.length === 0}
+                          className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)] disabled:opacity-60"
+                        >
+                          <option value="">{t("settings.aivisDictionaryUnset")}</option>
+                          {aivisUserDictionaries.map((item) => (
+                            <option key={item.uuid} value={item.uuid}>
+                              {`${item.name} (${item.word_count})`}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-2 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
+                          {t("settings.summaryAudio.aivisDictionaryHelp")}
+                        </p>
+                      </label>
+                      <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">
+                        <div className="font-semibold text-[var(--color-editorial-ink)]">{t("settings.summaryAudio.aivisDictionaryTitle")}</div>
+                        <p className="mt-2">{t("settings.summaryAudio.aivisDictionaryDetail")}</p>
+                      </div>
+                    </div>
+                  )
+                ) : null}
+              </form>
+            </SectionCard>
           ) : null}
 
           {activeSection === "reading-plan" ? (
@@ -5798,6 +6574,80 @@ export default function SettingsPage() {
             voice_model: selection.voice_name,
             voice_style: "",
           });
+        }}
+      />
+
+      <AivisVoicePickerModal
+        open={summaryAudioAivisPickerOpen}
+        loading={aivisModelsLoading}
+        syncing={aivisModelsSyncing}
+        error={aivisModelsError}
+        models={aivisModelsData?.models ?? []}
+        currentVoiceModel={summaryAudioVoiceModel}
+        currentVoiceStyle={summaryAudioVoiceStyle}
+        onClose={() => setSummaryAudioAivisPickerOpen(false)}
+        onSync={() => {
+          void syncAivisModels();
+        }}
+        onSelect={(selection) => {
+          setSummaryAudioProvider("aivis");
+          setSummaryAudioVoiceModel(selection.voice_model);
+          setSummaryAudioVoiceStyle(selection.voice_style);
+        }}
+      />
+
+      <XAIVoicePickerModal
+        open={summaryAudioXAIPickerOpen}
+        loading={xaiVoicesLoading}
+        syncing={xaiVoicesSyncing}
+        error={xaiVoicesError}
+        voices={summaryAudioXAIVoices}
+        currentVoiceID={summaryAudioVoiceModel}
+        onClose={() => setSummaryAudioXAIPickerOpen(false)}
+        onSync={() => {
+          void syncXAIVoices();
+        }}
+        onSelect={(selection) => {
+          setSummaryAudioProvider("xai");
+          setSummaryAudioVoiceModel(selection.voice_id);
+          setSummaryAudioVoiceStyle("");
+        }}
+      />
+
+      <OpenAITTSVoicePickerModal
+        open={summaryAudioOpenAITTPickerOpen}
+        loading={openAITTSVoicesLoading}
+        syncing={openAITTSVoicesSyncing}
+        error={openAITTSVoicesError}
+        voices={summaryAudioOpenAITTSVoices}
+        currentVoiceID={summaryAudioVoiceModel}
+        onClose={() => setSummaryAudioOpenAITTPickerOpen(false)}
+        onSync={() => {
+          void syncOpenAITTSVoices().catch(() => undefined);
+        }}
+        onSelect={(selection) => {
+          setSummaryAudioProvider("openai");
+          setSummaryAudioTTSModel(summaryAudioTTSModel.trim() || "tts-1");
+          setSummaryAudioVoiceModel(selection.voice_id);
+          setSummaryAudioVoiceStyle("");
+        }}
+      />
+
+      <GeminiTTSVoicePickerModal
+        open={summaryAudioGeminiTTSPickerOpen}
+        loading={geminiTTSVoicesLoading}
+        error={geminiTTSVoicesError}
+        voices={summaryAudioGeminiTTSVoices}
+        currentVoiceName={summaryAudioVoiceModel}
+        onClose={() => setSummaryAudioGeminiTTSPickerOpen(false)}
+        onRefresh={() => {
+          void loadGeminiTTSVoices().catch(() => undefined);
+        }}
+        onSelect={(selection) => {
+          setSummaryAudioProvider("gemini_tts");
+          setSummaryAudioTTSModel(summaryAudioTTSModel.trim() || "gemini-2.5-flash-tts");
+          setSummaryAudioVoiceModel(selection.voice_name);
+          setSummaryAudioVoiceStyle("");
         }}
       />
 

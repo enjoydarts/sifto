@@ -1482,6 +1482,7 @@ export interface UserSettings {
   };
   audio_briefing?: AudioBriefingSettings;
   audio_briefing_persona_voices?: AudioBriefingPersonaVoice[];
+  summary_audio?: SummaryAudioVoiceSettings | null;
   obsidian_export?: {
     enabled: boolean;
     github_app_enabled?: boolean;
@@ -1546,6 +1547,20 @@ export interface AudioBriefingPersonaVoice {
   line_break_silence_seconds: number;
   pitch: number;
   volume_gain: number;
+}
+
+export interface SummaryAudioVoiceSettings {
+  tts_provider: string;
+  tts_model: string;
+  voice_model: string;
+  voice_style: string;
+  speech_rate: number;
+  emotional_intensity: number;
+  tempo_dynamics: number;
+  line_break_silence_seconds: number;
+  pitch: number;
+  volume_gain: number;
+  aivis_user_dictionary_uuid?: string | null;
 }
 
 export interface AudioBriefingJob {
@@ -2410,6 +2425,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+  getSummaryAudioSettings: () =>
+    apiFetch<{ user_id: string; summary_audio: SummaryAudioVoiceSettings | null }>("/settings/summary-audio"),
   updatePodcastSettings: (body: PodcastSettings) =>
     apiFetch<{ user_id: string; podcast: PodcastSettings }>("/settings/podcast", {
       method: "PATCH",
@@ -2424,6 +2441,11 @@ export const api = {
     apiFetch<{ user_id: string; audio_briefing_persona_voices: AudioBriefingPersonaVoice[] }>("/settings/audio-briefing/persona-voices", {
       method: "PATCH",
       body: JSON.stringify({ voices }),
+    }),
+  updateSummaryAudioSettings: (body: SummaryAudioVoiceSettings) =>
+    apiFetch<{ user_id: string; summary_audio: SummaryAudioVoiceSettings | null }>("/settings/summary-audio", {
+      method: "PUT",
+      body: JSON.stringify(body),
     }),
   updateNotificationPriority: (body: NotificationPriorityRule) =>
     apiFetch<{ user_id: string; notification_priority: NotificationPriorityRule }>("/settings/notification-priority", {

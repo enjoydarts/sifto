@@ -50,6 +50,25 @@ def resolve_audio_briefing_persona_prompts(persona: str) -> tuple[str, str, str]
     return tone_prompt, speaking_style_prompt, duo_conversation_prompt
 
 
+def build_gemini_tts_prompt(text: str, speech_rate: float) -> str:
+    prompt_lines: list[str] = [
+        "以下の本文を自然な日本語で読み上げてください。",
+    ]
+    if speech_rate > 0:
+        if abs(speech_rate - 1.0) >= 0.05:
+            prompt_lines.append(f"読み上げ速度は通常の約{speech_rate:.2f}倍を目安に、自然さを保ってください。")
+        else:
+            prompt_lines.append("読み上げ速度は自然な標準速度を維持してください。")
+    prompt_lines.extend(
+        [
+            "追加の説明や要約は入れないでください。",
+            "",
+            (text or "").strip(),
+        ]
+    )
+    return "\n".join(line for line in prompt_lines if line is not None)
+
+
 def build_gemini_audio_briefing_prompt(persona: str, text: str, speech_rate: float) -> str:
     tone_prompt, speaking_style_prompt, _duo_conversation_prompt = resolve_audio_briefing_persona_prompts(persona)
     prompt_lines: list[str] = [
@@ -184,9 +203,8 @@ def synthesize_gemini_cloud_tts(
     *,
     model: str,
     voice_name: str,
-    persona: str,
+    prompt: str,
     text: str,
-    speech_rate: float,
 ) -> tuple[bytes, str, str, int]:
     normalized_model = (model or "").strip()
     normalized_voice_name = (voice_name or "").strip()
@@ -197,7 +215,6 @@ def synthesize_gemini_cloud_tts(
         raise RuntimeError("gemini voice name is required")
     if not normalized_text:
         raise RuntimeError("gemini tts text is empty")
-    prompt = build_gemini_audio_briefing_prompt(persona, normalized_text, speech_rate)
     response = httpx.post(
         f"{_resolve_gemini_tts_endpoint()}/v1/text:synthesize",
         headers=_cloud_tts_headers(),
@@ -236,16 +253,19 @@ def synthesize_gemini_tts(
     *,
     model: str,
     voice_name: str,
-    persona: str,
+    persona: str = "",
     text: str,
     speech_rate: float,
 ) -> tuple[bytes, str, str, int]:
+    if str(persona or "").strip():
+        prompt = build_gemini_audio_briefing_prompt(persona, text, speech_rate)
+    else:
+        prompt = build_gemini_tts_prompt(text, speech_rate)
     return synthesize_gemini_cloud_tts(
         model=model,
         voice_name=voice_name,
-        persona=persona,
+        prompt=prompt,
         text=text,
-        speech_rate=speech_rate,
     )
 
 

@@ -20,6 +20,7 @@ type SettingsService struct {
 	repo                   *repository.UserSettingsRepo
 	userRepo               *repository.UserRepo
 	audioBriefingRepo      *repository.AudioBriefingRepo
+	summaryAudioRepo       *repository.SummaryAudioVoiceSettingsRepo
 	aivisModelRepo         *repository.AivisModelRepo
 	obsidianRepo           *repository.ObsidianExportRepo
 	llmUsageRepo           *repository.LLMUsageLogRepo
@@ -73,6 +74,7 @@ type SettingsGetPayload struct {
 	LLMModels               map[string]any   `json:"llm_models"`
 	AudioBriefing           map[string]any   `json:"audio_briefing"`
 	AudioBriefingVoices     []map[string]any `json:"audio_briefing_persona_voices"`
+	SummaryAudio            map[string]any   `json:"summary_audio"`
 	CurrentMonth            map[string]any   `json:"current_month"`
 	ObsidianExport          map[string]any   `json:"obsidian_export"`
 	NotificationPriority    map[string]any   `json:"notification_priority"`
@@ -153,6 +155,20 @@ type UpdateAudioBriefingPersonaVoiceInput struct {
 	VolumeGain              float64
 }
 
+type UpdateSummaryAudioVoiceSettingsInput struct {
+	TTSProvider             string
+	TTSModel                string
+	VoiceModel              string
+	VoiceStyle              string
+	SpeechRate              float64
+	EmotionalIntensity      float64
+	TempoDynamics           float64
+	LineBreakSilenceSeconds float64
+	Pitch                   float64
+	VolumeGain              float64
+	AivisUserDictionaryUUID *string
+}
+
 var modelSettingPurposes = map[string]string{
 	"facts":                          "facts",
 	"facts_secondary":                "facts",
@@ -195,11 +211,12 @@ var modelSettingRequiredCapabilities = map[string][]string{
 	"audio_briefing_script_fallback": {"structured_output"},
 }
 
-func NewSettingsService(repo *repository.UserSettingsRepo, userRepo *repository.UserRepo, audioBriefingRepo *repository.AudioBriefingRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *SecretCipher, githubApp *GitHubAppClient) *SettingsService {
+func NewSettingsService(repo *repository.UserSettingsRepo, userRepo *repository.UserRepo, audioBriefingRepo *repository.AudioBriefingRepo, summaryAudioRepo *repository.SummaryAudioVoiceSettingsRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *SecretCipher, githubApp *GitHubAppClient) *SettingsService {
 	return &SettingsService{
 		repo:                   repo,
 		userRepo:               userRepo,
 		audioBriefingRepo:      audioBriefingRepo,
+		summaryAudioRepo:       summaryAudioRepo,
 		aivisModelRepo:         aivisModelRepo,
 		obsidianRepo:           obsidianRepo,
 		llmUsageRepo:           llmUsageRepo,
@@ -327,6 +344,37 @@ func AudioBriefingPersonaVoicesPayload(rows []model.AudioBriefingPersonaVoice) [
 	return out
 }
 
+func SummaryAudioVoiceSettingsPayload(settings *model.SummaryAudioVoiceSettings) map[string]any {
+	if settings == nil {
+		return map[string]any{
+			"tts_provider":               "",
+			"tts_model":                  "",
+			"voice_model":                "",
+			"voice_style":                "",
+			"speech_rate":                0,
+			"emotional_intensity":        0,
+			"tempo_dynamics":             0,
+			"line_break_silence_seconds": 0,
+			"pitch":                      0,
+			"volume_gain":                0,
+			"aivis_user_dictionary_uuid": nil,
+		}
+	}
+	return map[string]any{
+		"tts_provider":               settings.TTSProvider,
+		"tts_model":                  settings.TTSModel,
+		"voice_model":                settings.VoiceModel,
+		"voice_style":                settings.VoiceStyle,
+		"speech_rate":                settings.SpeechRate,
+		"emotional_intensity":        settings.EmotionalIntensity,
+		"tempo_dynamics":             settings.TempoDynamics,
+		"line_break_silence_seconds": settings.LineBreakSilenceSeconds,
+		"pitch":                      settings.Pitch,
+		"volume_gain":                settings.VolumeGain,
+		"aivis_user_dictionary_uuid": settings.AivisUserDictionaryUUID,
+	}
+}
+
 func podcastFeedBaseURL() string {
 	if v := strings.TrimSpace(os.Getenv("PODCAST_FEED_BASE_URL")); v != "" {
 		return strings.TrimRight(v, "/")
@@ -413,6 +461,13 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 			return nil, err
 		}
 	}
+	var summaryAudioSettings *model.SummaryAudioVoiceSettings
+	if s.summaryAudioRepo != nil {
+		summaryAudioSettings, err = s.summaryAudioRepo.EnsureDefaults(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+	}
 	obsidianSettings, err := s.obsidianRepo.EnsureDefaults(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -477,6 +532,7 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		LLMModels:               LLMModelSettingsPayload(settings),
 		AudioBriefing:           AudioBriefingSettingsPayload(audioBriefingSettings),
 		AudioBriefingVoices:     AudioBriefingPersonaVoicesPayload(audioBriefingVoices),
+		SummaryAudio:            SummaryAudioVoiceSettingsPayload(summaryAudioSettings),
 		ObsidianExport:          obsidianExportPayload(obsidianSettings, s.githubApp),
 		CurrentMonth: map[string]any{
 			"month_jst":            monthStart.Format("2006-01"),
@@ -487,6 +543,49 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 			"remaining_budget_pct": remainingPct,
 		},
 	}, nil
+}
+
+func (s *SettingsService) GetSummaryAudioVoiceSettings(ctx context.Context, userID string) (*model.SummaryAudioVoiceSettings, error) {
+	if s.summaryAudioRepo == nil {
+		return nil, fmt.Errorf("summary audio unavailable")
+	}
+	return s.summaryAudioRepo.EnsureDefaults(ctx, userID)
+}
+
+func (s *SettingsService) UpdateSummaryAudioVoiceSettings(ctx context.Context, userID string, in UpdateSummaryAudioVoiceSettingsInput) (*model.SummaryAudioVoiceSettings, error) {
+	if s.summaryAudioRepo == nil {
+		return nil, fmt.Errorf("summary audio unavailable")
+	}
+	normalized, err := normalizeSummaryAudioVoiceSettingsInput(in)
+	if err != nil {
+		return nil, err
+	}
+	if s.aivisModelRepo != nil && strings.EqualFold(strings.TrimSpace(normalized.TTSProvider), "aivis") {
+		snapshots, latestRun, err := s.aivisModelRepo.ListLatestSnapshots(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if latestRun == nil || len(snapshots) == 0 {
+			return nil, fmt.Errorf("aivis models are not synced")
+		}
+		if err := validateAivisVoiceSelectionAgainstSnapshots(snapshots, normalized.VoiceModel, normalized.VoiceStyle); err != nil {
+			return nil, fmt.Errorf("invalid aivis voice for summary_audio: %w", err)
+		}
+	}
+	return s.summaryAudioRepo.Upsert(ctx, model.SummaryAudioVoiceSettings{
+		UserID:                  userID,
+		TTSProvider:             normalized.TTSProvider,
+		TTSModel:                normalized.TTSModel,
+		VoiceModel:              normalized.VoiceModel,
+		VoiceStyle:              normalized.VoiceStyle,
+		SpeechRate:              normalized.SpeechRate,
+		EmotionalIntensity:      normalized.EmotionalIntensity,
+		TempoDynamics:           normalized.TempoDynamics,
+		LineBreakSilenceSeconds: normalized.LineBreakSilenceSeconds,
+		Pitch:                   normalized.Pitch,
+		VolumeGain:              normalized.VolumeGain,
+		AivisUserDictionaryUUID: normalized.AivisUserDictionaryUUID,
+	})
 }
 
 func (s *SettingsService) SetAivisUserDictionaryUUID(ctx context.Context, userID, uuid string) (*model.UserSettings, error) {
@@ -600,6 +699,67 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 		})
 	}
 	return out, nil
+}
+
+func normalizeSummaryAudioVoiceSettingsInput(in UpdateSummaryAudioVoiceSettingsInput) (*model.SummaryAudioVoiceSettings, error) {
+	provider := strings.TrimSpace(strings.ToLower(in.TTSProvider))
+	voiceModel := strings.TrimSpace(in.VoiceModel)
+	voiceStyle := strings.TrimSpace(in.VoiceStyle)
+	ttsModel := strings.TrimSpace(in.TTSModel)
+	dictUUID := normalizeOptionalString(in.AivisUserDictionaryUUID)
+	if provider == "" && voiceModel == "" && voiceStyle == "" && ttsModel == "" && dictUUID == nil &&
+		in.SpeechRate == 0 && in.EmotionalIntensity == 0 && in.TempoDynamics == 0 && in.LineBreakSilenceSeconds == 0 &&
+		in.Pitch == 0 && in.VolumeGain == 0 {
+		return &model.SummaryAudioVoiceSettings{}, nil
+	}
+	switch provider {
+	case "aivis", "mock", "xai", "openai", "gemini_tts":
+	default:
+		return nil, fmt.Errorf("invalid tts_provider")
+	}
+	if voiceModel == "" {
+		return nil, fmt.Errorf("invalid voice_model")
+	}
+	caps := LookupTTSProviderCapabilities(provider)
+	if caps.SupportsSeparateTTSModel && ttsModel == "" {
+		return nil, fmt.Errorf("invalid tts_model")
+	}
+	if caps.RequiresVoiceStyle && voiceStyle == "" {
+		return nil, fmt.Errorf("invalid voice_style")
+	}
+	if caps.SupportsSpeechTuning && (in.SpeechRate != 0 || provider == "aivis") {
+		if in.SpeechRate < 0.5 || in.SpeechRate > 2.0 {
+			return nil, fmt.Errorf("invalid speech_rate")
+		}
+		if in.EmotionalIntensity < 0 || in.EmotionalIntensity > 2.0 {
+			return nil, fmt.Errorf("invalid emotional_intensity")
+		}
+		if in.TempoDynamics < 0 || in.TempoDynamics > 2.0 {
+			return nil, fmt.Errorf("invalid tempo_dynamics")
+		}
+		if in.LineBreakSilenceSeconds < 0 || in.LineBreakSilenceSeconds > 5.0 {
+			return nil, fmt.Errorf("invalid line_break_silence_seconds")
+		}
+		if in.Pitch < -12 || in.Pitch > 12 {
+			return nil, fmt.Errorf("invalid pitch")
+		}
+		if in.VolumeGain < -24 || in.VolumeGain > 24 {
+			return nil, fmt.Errorf("invalid volume_gain")
+		}
+	}
+	return &model.SummaryAudioVoiceSettings{
+		TTSProvider:             provider,
+		TTSModel:                ttsModel,
+		VoiceModel:              voiceModel,
+		VoiceStyle:              voiceStyle,
+		SpeechRate:              in.SpeechRate,
+		EmotionalIntensity:      in.EmotionalIntensity,
+		TempoDynamics:           in.TempoDynamics,
+		LineBreakSilenceSeconds: in.LineBreakSilenceSeconds,
+		Pitch:                   in.Pitch,
+		VolumeGain:              in.VolumeGain,
+		AivisUserDictionaryUUID: dictUUID,
+	}, nil
 }
 
 type aivisVoiceSelection struct {

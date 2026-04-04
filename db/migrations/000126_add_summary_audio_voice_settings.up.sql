@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS summary_audio_voice_settings (
+  user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  tts_provider TEXT NOT NULL DEFAULT '',
+  tts_model TEXT NOT NULL DEFAULT '',
+  voice_model TEXT NOT NULL DEFAULT '',
+  voice_style TEXT NOT NULL DEFAULT '',
+  speech_rate DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+  emotional_intensity DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+  tempo_dynamics DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+  line_break_silence_seconds DOUBLE PRECISION NOT NULL DEFAULT 0.4,
+  pitch DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+  volume_gain DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+  aivis_user_dictionary_uuid TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

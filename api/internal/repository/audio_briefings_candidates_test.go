@@ -3,12 +3,17 @@ package repository
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestAudioBriefingCandidateItemsQueryPrioritizesRecentFetchedWindow(t *testing.T) {
-	query, args := audioBriefingCandidateItemsQuery("user-1", 3, 8)
+	windowStart := time.Date(2026, 4, 3, 18, 0, 0, 0, time.UTC)
+	query, args := audioBriefingCandidateItemsQuery("user-1", windowStart, 8)
 
-	if !strings.Contains(query, "COALESCE(i.fetched_at, i.created_at) >= NOW() - make_interval(hours => $2::int)") {
+	if !strings.Contains(query, "COALESCE(i.published_at, i.created_at) >= $2") {
+		t.Fatalf("query must filter items from the explicit slot boundary: %s", query)
+	}
+	if !strings.Contains(query, "COALESCE(i.fetched_at, i.created_at) >= $2") {
 		t.Fatalf("query must prioritize recently fetched items: %s", query)
 	}
 	if !strings.Contains(query, "COALESCE(i.fetched_at, i.created_at) DESC") {
@@ -20,17 +25,17 @@ func TestAudioBriefingCandidateItemsQueryPrioritizesRecentFetchedWindow(t *testi
 	if got, want := len(args), 3; got != want {
 		t.Fatalf("args len = %d, want %d", got, want)
 	}
-	if got, want := args[1], 3; got != want {
-		t.Fatalf("interval arg = %v, want %d", got, want)
+	if got, ok := args[1].(time.Time); !ok || !got.Equal(windowStart) {
+		t.Fatalf("windowStart arg = %v, want %v", args[1], windowStart)
 	}
 	if got, want := args[2], 8; got != want {
 		t.Fatalf("limit arg = %v, want %d", got, want)
 	}
 }
 
-func TestAudioBriefingCandidateItemsQueryDefaultsIntervalHours(t *testing.T) {
-	_, args := audioBriefingCandidateItemsQuery("user-1", 0, 6)
-	if got, want := args[1], 6; got != want {
-		t.Fatalf("default interval arg = %v, want %d", got, want)
+func TestAudioBriefingCandidateItemsQueryDefaultsLookbackHours(t *testing.T) {
+	_, args := audioBriefingCandidateItemsQuery("user-1", time.Time{}, 6)
+	if got, ok := args[1].(time.Time); !ok || got.IsZero() {
+		t.Fatalf("default windowStart arg = %v, want non-zero time", args[1])
 	}
 }

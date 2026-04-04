@@ -1501,6 +1501,7 @@ export interface UserSettings {
 
 export interface AudioBriefingSettings {
   enabled: boolean;
+  schedule_mode?: "interval" | "fixed_slots_3x" | string | null;
   interval_hours: number;
   articles_per_episode: number;
   target_duration_minutes: number;

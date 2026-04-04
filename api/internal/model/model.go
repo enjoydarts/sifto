@@ -107,6 +107,7 @@ type UserSettings struct {
 type AudioBriefingSettings struct {
 	UserID                      string    `json:"user_id"`
 	Enabled                     bool      `json:"enabled"`
+	ScheduleMode                string    `json:"schedule_mode"`
 	IntervalHours               int       `json:"interval_hours"`
 	ArticlesPerEpisode          int       `json:"articles_per_episode"`
 	TargetDurationMinutes       int       `json:"target_duration_minutes"`

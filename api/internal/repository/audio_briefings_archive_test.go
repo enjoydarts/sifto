@@ -128,6 +128,7 @@ func TestAudioBriefingScriptChunkScanReadsStorageBucket(t *testing.T) {
 		"job-1",
 		1,
 		"opening",
+		nil,
 		speaker,
 		"本文です。",
 		12,

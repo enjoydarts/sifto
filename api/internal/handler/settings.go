@@ -357,6 +357,7 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 	userID := middleware.GetUserID(r)
 	var body struct {
 		Enabled                     bool    `json:"enabled"`
+		ScheduleMode                string  `json:"schedule_mode"`
 		IntervalHours               int     `json:"interval_hours"`
 		ArticlesPerEpisode          int     `json:"articles_per_episode"`
 		TargetDurationMinutes       int     `json:"target_duration_minutes"`
@@ -374,6 +375,7 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 	}
 	settings, err := h.settings.UpdateAudioBriefingSettings(r.Context(), userID, service.UpdateAudioBriefingSettingsInput{
 		Enabled:                     body.Enabled,
+		ScheduleMode:                body.ScheduleMode,
 		IntervalHours:               body.IntervalHours,
 		ArticlesPerEpisode:          body.ArticlesPerEpisode,
 		TargetDurationMinutes:       body.TargetDurationMinutes,
@@ -387,7 +389,7 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 	})
 	if err != nil {
 		switch err.Error() {
-		case "invalid interval_hours", "invalid articles_per_episode", "invalid target_duration_minutes", "invalid chunk_trailing_silence_seconds", "invalid program_name", "invalid bgm_r2_prefix":
+		case "invalid schedule_mode", "invalid interval_hours", "invalid articles_per_episode", "invalid target_duration_minutes", "invalid chunk_trailing_silence_seconds", "invalid program_name", "invalid bgm_r2_prefix":
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

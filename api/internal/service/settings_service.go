@@ -108,6 +108,7 @@ type UpdateLLMModelsInput struct {
 
 type UpdateAudioBriefingSettingsInput struct {
 	Enabled                     bool
+	ScheduleMode                string
 	IntervalHours               int
 	ArticlesPerEpisode          int
 	TargetDurationMinutes       int
@@ -277,6 +278,7 @@ func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) map[str
 	if settings == nil {
 		return map[string]any{
 			"enabled":                        false,
+			"schedule_mode":                  AudioBriefingScheduleModeInterval,
 			"interval_hours":                 6,
 			"articles_per_episode":           5,
 			"target_duration_minutes":        20,
@@ -291,6 +293,7 @@ func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) map[str
 	}
 	return map[string]any{
 		"enabled":                        settings.Enabled,
+		"schedule_mode":                  NormalizeAudioBriefingScheduleMode(settings.ScheduleMode),
 		"interval_hours":                 settings.IntervalHours,
 		"articles_per_episode":           settings.ArticlesPerEpisode,
 		"target_duration_minutes":        settings.TargetDurationMinutes,
@@ -796,9 +799,21 @@ func (s *SettingsService) UpdateAudioBriefingSettings(ctx context.Context, userI
 	if s.audioBriefingRepo == nil {
 		return nil, fmt.Errorf("audio briefing unavailable")
 	}
-	if in.IntervalHours != 3 && in.IntervalHours != 6 {
-		return nil, fmt.Errorf("invalid interval_hours")
+	rawScheduleMode := strings.TrimSpace(strings.ToLower(in.ScheduleMode))
+	switch rawScheduleMode {
+	case "", AudioBriefingScheduleModeInterval:
+		if in.IntervalHours != 3 && in.IntervalHours != 6 {
+			return nil, fmt.Errorf("invalid interval_hours")
+		}
+		rawScheduleMode = AudioBriefingScheduleModeInterval
+	case AudioBriefingScheduleModeFixedSlots3x:
+		if in.IntervalHours != 3 && in.IntervalHours != 6 {
+			in.IntervalHours = 6
+		}
+	default:
+		return nil, fmt.Errorf("invalid schedule_mode")
 	}
+	scheduleMode := NormalizeAudioBriefingScheduleMode(rawScheduleMode)
 	if in.ArticlesPerEpisode < 1 || in.ArticlesPerEpisode > 30 {
 		return nil, fmt.Errorf("invalid articles_per_episode")
 	}
@@ -820,6 +835,7 @@ func (s *SettingsService) UpdateAudioBriefingSettings(ctx context.Context, userI
 		ctx,
 		userID,
 		in.Enabled,
+		scheduleMode,
 		in.IntervalHours,
 		in.ArticlesPerEpisode,
 		in.TargetDurationMinutes,

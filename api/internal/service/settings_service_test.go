@@ -389,6 +389,7 @@ func TestAudioBriefingSettingsPayload(t *testing.T) {
 	settings := &model.AudioBriefingSettings{
 		UserID:                "u1",
 		Enabled:               true,
+		ScheduleMode:          "fixed_slots_3x",
 		IntervalHours:         3,
 		ArticlesPerEpisode:    6,
 		TargetDurationMinutes: 20,
@@ -402,6 +403,9 @@ func TestAudioBriefingSettingsPayload(t *testing.T) {
 
 	if enabled, _ := got["enabled"].(bool); !enabled {
 		t.Fatalf("enabled = %v, want true", got["enabled"])
+	}
+	if scheduleMode, _ := got["schedule_mode"].(string); scheduleMode != "fixed_slots_3x" {
+		t.Fatalf("schedule_mode = %v, want fixed_slots_3x", got["schedule_mode"])
 	}
 	if interval, _ := got["interval_hours"].(int); interval != 3 {
 		t.Fatalf("interval_hours = %v, want 3", got["interval_hours"])
@@ -417,6 +421,50 @@ func TestAudioBriefingSettingsPayload(t *testing.T) {
 	}
 	if bgmPrefix, _ := got["bgm_r2_prefix"].(*string); bgmPrefix == nil || *bgmPrefix != "audio/bgm" {
 		t.Fatalf("bgm_r2_prefix = %v, want audio/bgm", got["bgm_r2_prefix"])
+	}
+}
+
+func TestAudioBriefingSettingsPayloadDefaultsScheduleMode(t *testing.T) {
+	got := AudioBriefingSettingsPayload(nil)
+	if scheduleMode, _ := got["schedule_mode"].(string); scheduleMode != AudioBriefingScheduleModeInterval {
+		t.Fatalf("schedule_mode = %v, want %q", got["schedule_mode"], AudioBriefingScheduleModeInterval)
+	}
+}
+
+func TestUpdateAudioBriefingSettingsAllowsFixedSlots3x(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	row, err := svc.UpdateAudioBriefingSettings(context.Background(), "00000000-0000-4000-8000-000000000021", UpdateAudioBriefingSettingsInput{
+		Enabled:                     true,
+		ScheduleMode:                AudioBriefingScheduleModeFixedSlots3x,
+		IntervalHours:               6,
+		ArticlesPerEpisode:          5,
+		TargetDurationMinutes:       10,
+		ChunkTrailingSilenceSeconds: 1,
+		DefaultPersonaMode:          strptr("fixed"),
+		DefaultPersona:              strptr("editor"),
+	})
+	if err != nil {
+		t.Fatalf("UpdateAudioBriefingSettings() error = %v", err)
+	}
+	if row.ScheduleMode != AudioBriefingScheduleModeFixedSlots3x {
+		t.Fatalf("ScheduleMode = %q, want %q", row.ScheduleMode, AudioBriefingScheduleModeFixedSlots3x)
+	}
+}
+
+func TestUpdateAudioBriefingSettingsRejectsInvalidScheduleMode(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	_, err := svc.UpdateAudioBriefingSettings(context.Background(), "00000000-0000-4000-8000-000000000021", UpdateAudioBriefingSettingsInput{
+		Enabled:                     true,
+		ScheduleMode:                "weird",
+		IntervalHours:               6,
+		ArticlesPerEpisode:          5,
+		TargetDurationMinutes:       10,
+		ChunkTrailingSilenceSeconds: 1,
+		DefaultPersonaMode:          strptr("fixed"),
+		DefaultPersona:              strptr("editor"),
+	})
+	if err == nil || err.Error() != "invalid schedule_mode" {
+		t.Fatalf("err = %v, want invalid schedule_mode", err)
 	}
 }
 
@@ -510,6 +558,30 @@ func TestAudioBriefingSettingsPayloadIncludesConversationMode(t *testing.T) {
 
 	if gotMode, _ := got["conversation_mode"].(string); gotMode != "duo" {
 		t.Fatalf("conversation_mode = %v, want %q", got["conversation_mode"], "duo")
+	}
+}
+
+func TestUpdateAudioBriefingSettingsPersistsScheduleMode(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	got, err := svc.UpdateAudioBriefingSettings(context.Background(), "00000000-0000-4000-8000-000000000021", UpdateAudioBriefingSettingsInput{
+		Enabled:               true,
+		ScheduleMode:          "fixed_slots_3x",
+		IntervalHours:         3,
+		ArticlesPerEpisode:    5,
+		TargetDurationMinutes: 20,
+	})
+	if err != nil {
+		t.Fatalf("UpdateAudioBriefingSettings() error = %v", err)
+	}
+	if got == nil {
+		t.Fatal("UpdateAudioBriefingSettings() returned nil settings")
+	}
+	if got.ScheduleMode != "fixed_slots_3x" {
+		t.Fatalf("ScheduleMode = %q, want fixed_slots_3x", got.ScheduleMode)
+	}
+	payload := AudioBriefingSettingsPayload(got)
+	if scheduleMode, _ := payload["schedule_mode"].(string); scheduleMode != "fixed_slots_3x" {
+		t.Fatalf("payload schedule_mode = %v, want fixed_slots_3x", payload["schedule_mode"])
 	}
 }
 

@@ -249,6 +249,7 @@ function buildPodcastRSSURL(feedSlug: string | null | undefined, fallbackURL?: s
 
 type NavigatorPersonaKey = "editor" | "hype" | "analyst" | "concierge" | "snark" | "native" | "junior" | "urban";
 const NAVIGATOR_PERSONA_KEYS: NavigatorPersonaKey[] = ["editor", "hype", "analyst", "concierge", "snark", "native", "junior", "urban"];
+type AudioBriefingScheduleSelection = "interval3h" | "interval6h" | "fixed3x";
 type AudioBriefingNumericInputField =
   | "speech_rate"
   | "tempo_dynamics"
@@ -315,6 +316,48 @@ function buildAudioBriefingVoiceInputDrafts(voices: AudioBriefingPersonaVoice[])
       },
     ])
   );
+}
+
+function resolveAudioBriefingScheduleSelection(
+  audioBriefing?: UserSettings["audio_briefing"] | null,
+): AudioBriefingScheduleSelection {
+  if (audioBriefing?.schedule_mode === "fixed_slots_3x") {
+    return "fixed3x";
+  }
+  if (audioBriefing?.interval_hours === 3) {
+    return "interval3h";
+  }
+  return "interval6h";
+}
+
+function buildAudioBriefingSchedulePayload(selection: AudioBriefingScheduleSelection): {
+  schedule_mode: "interval" | "fixed_slots_3x";
+  interval_hours: 3 | 6;
+} {
+  switch (selection) {
+    case "interval3h":
+      return { schedule_mode: "interval", interval_hours: 3 };
+    case "fixed3x":
+      return { schedule_mode: "fixed_slots_3x", interval_hours: 6 };
+    case "interval6h":
+    default:
+      return { schedule_mode: "interval", interval_hours: 6 };
+  }
+}
+
+function formatAudioBriefingScheduleSelection(
+  selection: AudioBriefingScheduleSelection,
+  t: (key: string, fallback?: string) => string,
+): string {
+  switch (selection) {
+    case "interval3h":
+      return t("settings.audioBriefing.interval3h");
+    case "fixed3x":
+      return t("settings.audioBriefing.fixed3x");
+    case "interval6h":
+    default:
+      return t("settings.audioBriefing.interval6h");
+  }
 }
 
 const TTS_PROVIDER_CAPABILITIES: Record<string, TTSProviderCapabilities> = {
@@ -1349,7 +1392,7 @@ export default function SettingsPage() {
   const [readingPlanSize, setReadingPlanSize] = useState<string>("15");
   const [readingPlanDiversifyTopics, setReadingPlanDiversifyTopics] = useState(true);
   const [audioBriefingEnabled, setAudioBriefingEnabled] = useState(false);
-  const [audioBriefingIntervalHours, setAudioBriefingIntervalHours] = useState<3 | 6>(6);
+  const [audioBriefingScheduleSelection, setAudioBriefingScheduleSelection] = useState<AudioBriefingScheduleSelection>("interval6h");
   const [audioBriefingArticlesPerEpisode, setAudioBriefingArticlesPerEpisode] = useState("5");
   const [audioBriefingTargetDurationMinutes, setAudioBriefingTargetDurationMinutes] = useState("20");
   const [audioBriefingChunkTrailingSilenceSeconds, setAudioBriefingChunkTrailingSilenceSeconds] = useState("1.0");
@@ -1454,7 +1497,7 @@ export default function SettingsPage() {
   const syncAudioBriefingForm = useCallback(
     (audioBriefing?: UserSettings["audio_briefing"] | null, voices?: UserSettings["audio_briefing_persona_voices"] | null) => {
       setAudioBriefingEnabled(Boolean(audioBriefing?.enabled));
-      setAudioBriefingIntervalHours(audioBriefing?.interval_hours === 3 ? 3 : 6);
+      setAudioBriefingScheduleSelection(resolveAudioBriefingScheduleSelection(audioBriefing));
       setAudioBriefingArticlesPerEpisode(String(audioBriefing?.articles_per_episode ?? 5));
       setAudioBriefingTargetDurationMinutes(String(audioBriefing?.target_duration_minutes ?? 20));
       setAudioBriefingChunkTrailingSilenceSeconds(formatAudioBriefingDecimalInput(audioBriefing?.chunk_trailing_silence_seconds ?? 1.0));
@@ -3162,9 +3205,10 @@ export default function SettingsPage() {
     }
     setSavingAudioBriefing(true);
     try {
+      const schedulePayload = buildAudioBriefingSchedulePayload(audioBriefingScheduleSelection);
       const payload = {
         enabled: audioBriefingEnabled,
-        interval_hours: audioBriefingIntervalHours,
+        ...schedulePayload,
         articles_per_episode: Number(audioBriefingArticlesPerEpisode),
         target_duration_minutes: Number(audioBriefingTargetDurationMinutes),
         chunk_trailing_silence_seconds: Number(audioBriefingChunkTrailingSilenceSeconds),
@@ -3510,7 +3554,7 @@ export default function SettingsPage() {
       id: "audio-briefing",
       title: t("settings.section.audioBriefing"),
       summary: audioBriefingEnabled
-        ? `${audioBriefingIntervalHours}${t("settings.audioBriefing.hoursSuffix")} / ${audioBriefingArticlesPerEpisode}${t("settings.audioBriefing.articlesSuffix")}`
+        ? `${formatAudioBriefingScheduleSelection(audioBriefingScheduleSelection, t)} / ${audioBriefingArticlesPerEpisode}${t("settings.audioBriefing.articlesSuffix")}`
         : t("settings.off"),
     },
     {
@@ -3799,18 +3843,22 @@ export default function SettingsPage() {
                       </p>
                     </label>
 
-                    <label className="flex min-w-[180px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                    <label className="flex min-w-[240px] flex-[1.15] flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                        {t("settings.audioBriefing.interval")}
+                        {t("settings.audioBriefing.schedule")}
                       </div>
                       <select
-                        value={audioBriefingIntervalHours}
-                        onChange={(e) => setAudioBriefingIntervalHours(Number(e.target.value) === 3 ? 3 : 6)}
+                        value={audioBriefingScheduleSelection}
+                        onChange={(e) => setAudioBriefingScheduleSelection(e.target.value as AudioBriefingScheduleSelection)}
                         className="mt-3 w-full rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]"
                       >
-                        <option value={3}>{t("settings.audioBriefing.interval3h")}</option>
-                        <option value={6}>{t("settings.audioBriefing.interval6h")}</option>
+                        <option value="interval3h">{t("settings.audioBriefing.interval3h")}</option>
+                        <option value="interval6h">{t("settings.audioBriefing.interval6h")}</option>
+                        <option value="fixed3x">{t("settings.audioBriefing.fixed3x")}</option>
                       </select>
+                      <p className="mt-2 text-[11px] leading-5 text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.audioBriefing.scheduleHelp")}
+                      </p>
                     </label>
 
                     <label className="flex min-w-[180px] flex-1 flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">

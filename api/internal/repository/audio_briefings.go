@@ -39,12 +39,13 @@ func (r *AudioBriefingRepo) EnsureSettingsDefaults(ctx context.Context, userID s
 func (r *AudioBriefingRepo) GetSettings(ctx context.Context, userID string) (*model.AudioBriefingSettings, error) {
 	var v model.AudioBriefingSettings
 	err := r.db.QueryRow(ctx, `
-		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, program_name, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix, created_at, updated_at
+		SELECT user_id, enabled, schedule_mode, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, program_name, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix, created_at, updated_at
 		FROM audio_briefing_settings
 		WHERE user_id = $1
 	`, userID).Scan(
 		&v.UserID,
 		&v.Enabled,
+		&v.ScheduleMode,
 		&v.IntervalHours,
 		&v.ArticlesPerEpisode,
 		&v.TargetDurationMinutes,
@@ -66,7 +67,7 @@ func (r *AudioBriefingRepo) GetSettings(ctx context.Context, userID string) (*mo
 
 func (r *AudioBriefingRepo) ListEnabledSettings(ctx context.Context) ([]model.AudioBriefingSettings, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, program_name, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix, created_at, updated_at
+		SELECT user_id, enabled, schedule_mode, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, program_name, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix, created_at, updated_at
 		FROM audio_briefing_settings
 		WHERE enabled = TRUE
 		ORDER BY updated_at ASC, user_id ASC
@@ -82,6 +83,7 @@ func (r *AudioBriefingRepo) ListEnabledSettings(ctx context.Context) ([]model.Au
 		if err := rows.Scan(
 			&row.UserID,
 			&row.Enabled,
+			&row.ScheduleMode,
 			&row.IntervalHours,
 			&row.ArticlesPerEpisode,
 			&row.TargetDurationMinutes,
@@ -102,22 +104,29 @@ func (r *AudioBriefingRepo) ListEnabledSettings(ctx context.Context) ([]model.Au
 	return out, rows.Err()
 }
 
-func (r *AudioBriefingRepo) UpsertSettings(ctx context.Context, userID string, enabled bool, intervalHours, articlesPerEpisode, targetDurationMinutes int, chunkTrailingSilenceSeconds float64, programName *string, defaultPersonaMode string, defaultPersona string, conversationMode string, bgmEnabled bool, bgmR2Prefix *string) (*model.AudioBriefingSettings, error) {
+func (r *AudioBriefingRepo) UpsertSettings(ctx context.Context, userID string, enabled bool, scheduleMode string, intervalHours, articlesPerEpisode, targetDurationMinutes int, chunkTrailingSilenceSeconds float64, programName *string, defaultPersonaMode string, defaultPersona string, conversationMode string, bgmEnabled bool, bgmR2Prefix *string) (*model.AudioBriefingSettings, error) {
 	if strings.TrimSpace(defaultPersona) == "" {
 		defaultPersona = "editor"
 	}
 	if strings.TrimSpace(defaultPersonaMode) == "" {
 		defaultPersonaMode = "fixed"
 	}
+	switch strings.TrimSpace(strings.ToLower(scheduleMode)) {
+	case "fixed_slots_3x":
+		scheduleMode = "fixed_slots_3x"
+	default:
+		scheduleMode = "interval"
+	}
 	if strings.TrimSpace(conversationMode) == "" {
 		conversationMode = "single"
 	}
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO audio_briefing_settings (
-			user_id, enabled, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, program_name, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			user_id, enabled, schedule_mode, interval_hours, articles_per_episode, target_duration_minutes, chunk_trailing_silence_seconds, program_name, default_persona_mode, default_persona, conversation_mode, bgm_enabled, bgm_r2_prefix
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (user_id) DO UPDATE
 		SET enabled = EXCLUDED.enabled,
+		    schedule_mode = EXCLUDED.schedule_mode,
 		    interval_hours = EXCLUDED.interval_hours,
 		    articles_per_episode = EXCLUDED.articles_per_episode,
 		    target_duration_minutes = EXCLUDED.target_duration_minutes,
@@ -129,7 +138,7 @@ func (r *AudioBriefingRepo) UpsertSettings(ctx context.Context, userID string, e
 		    bgm_enabled = EXCLUDED.bgm_enabled,
 		    bgm_r2_prefix = EXCLUDED.bgm_r2_prefix,
 		    updated_at = NOW()
-	`, userID, enabled, intervalHours, articlesPerEpisode, targetDurationMinutes, chunkTrailingSilenceSeconds, programName, defaultPersonaMode, defaultPersona, conversationMode, bgmEnabled, bgmR2Prefix)
+	`, userID, enabled, scheduleMode, intervalHours, articlesPerEpisode, targetDurationMinutes, chunkTrailingSilenceSeconds, programName, defaultPersonaMode, defaultPersona, conversationMode, bgmEnabled, bgmR2Prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -640,9 +649,9 @@ func (r *AudioBriefingRepo) MarkPodcastPublicObjectDeleted(ctx context.Context, 
 	return &job, nil
 }
 
-func audioBriefingCandidateItemsQuery(userID string, intervalHours int, limit int) (string, []any) {
-	if intervalHours <= 0 {
-		intervalHours = 6
+func audioBriefingCandidateItemsQuery(userID string, windowStart time.Time, limit int) (string, []any) {
+	if windowStart.IsZero() {
+		windowStart = time.Now().Add(-6 * time.Hour)
 	}
 	query := `
 		SELECT i.id,
@@ -658,25 +667,26 @@ func audioBriefingCandidateItemsQuery(userID string, intervalHours int, limit in
 		  AND i.deleted_at IS NULL
 		  AND i.status = 'summarized'
 		  AND NULLIF(BTRIM(sm.summary), '') IS NOT NULL
+		  AND COALESCE(i.published_at, i.created_at) >= $2
 		ORDER BY CASE
-		           WHEN COALESCE(i.fetched_at, i.created_at) >= NOW() - make_interval(hours => $2::int) THEN 0
+		           WHEN COALESCE(i.fetched_at, i.created_at) >= $2 THEN 0
 		           ELSE 1
 		         END,
 		         COALESCE(i.fetched_at, i.created_at) DESC,
 		         COALESCE(i.published_at, i.created_at) DESC,
 		         sm.score DESC NULLS LAST
 		LIMIT $3`
-	return query, []any{userID, intervalHours, limit}
+	return query, []any{userID, windowStart, limit}
 }
 
-func (r *AudioBriefingRepo) ListCandidateItems(ctx context.Context, userID string, intervalHours int, limit int) ([]model.AudioBriefingJobItem, error) {
+func (r *AudioBriefingRepo) ListCandidateItems(ctx context.Context, userID string, windowStart time.Time, limit int) ([]model.AudioBriefingJobItem, error) {
 	if limit <= 0 {
 		limit = 6
 	}
 	if limit > 30 {
 		limit = 30
 	}
-	query, args := audioBriefingCandidateItemsQuery(userID, intervalHours, limit)
+	query, args := audioBriefingCandidateItemsQuery(userID, windowStart, limit)
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err

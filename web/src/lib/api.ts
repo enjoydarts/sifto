@@ -1122,7 +1122,7 @@ export interface BulkRetryFailedResult {
   failed_count: number;
 }
 
-export interface BulkRetryFromFactsResult {
+export interface BulkRetryItemsResult {
   status: "queued";
   item_ids: string[];
   queued_count: number;
@@ -2259,10 +2259,15 @@ export const api = {
     }),
   retryItem: (id: string) =>
     apiFetch<ItemRetryResult>(`/items/${id}/retry`, { method: "POST" }),
+  retryItemsBulk: (itemIds: string[]) =>
+    apiFetch<BulkRetryItemsResult>("/items/retry-bulk", {
+      method: "POST",
+      body: JSON.stringify({ item_ids: itemIds }),
+    }),
   retryItemFromFacts: (id: string) =>
     apiFetch<ItemRetryResult>(`/items/${id}/retry-from-facts`, { method: "POST" }),
   retryItemsFromFactsBulk: (itemIds: string[]) =>
-    apiFetch<BulkRetryFromFactsResult>("/items/retry-from-facts-bulk", {
+    apiFetch<BulkRetryItemsResult>("/items/retry-from-facts-bulk", {
       method: "POST",
       body: JSON.stringify({ item_ids: itemIds }),
     }),

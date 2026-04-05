@@ -146,9 +146,11 @@ function ItemsPageContent() {
   const [retryingIds, setRetryingIds] = useState<Record<string, boolean>>({});
   const [readUpdatingIds, setReadUpdatingIds] = useState<Record<string, boolean>>({});
   const [bulkMarkingRead, setBulkMarkingRead] = useState(false);
+  const [bulkRetrying, setBulkRetrying] = useState(false);
   const [bulkRetryingFromFacts, setBulkRetryingFromFacts] = useState(false);
   const [selectedItemIDs, setSelectedItemIDs] = useState<string[]>([]);
   const [toolbarAction, setToolbarAction] = useState<"" | "triage_all" | "bulk_filtered" | "bulk_older">("");
+  const [pendingBulkAction, setPendingBulkAction] = useState<"" | "retry" | "retry_from_facts">("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchDraft, setSearchDraft] = useState(searchQuery);
   const [searchModeDraft, setSearchModeDraft] = useState<"natural" | "and" | "or">(searchMode);
@@ -211,6 +213,7 @@ function ItemsPageContent() {
   useEffect(() => {
     if (!pendingMode) {
       setSelectedItemIDs([]);
+      setPendingBulkAction("");
       return;
     }
     const visibleIDs = new Set(items.map((item) => item.id));
@@ -510,6 +513,7 @@ function ItemsPageContent() {
         showToast(t("items.bulkRetryFromFacts.toastQueued").replace("{{count}}", String(result.queued_count)), "success");
       }
       setSelectedItemIDs([]);
+      setPendingBulkAction("");
       await queryClient.invalidateQueries({ queryKey: ["items-feed"] });
       await queryClient.invalidateQueries({ queryKey: ["focus-queue"] });
       await queryClient.invalidateQueries({ queryKey: ["briefing-today"] });
@@ -518,6 +522,42 @@ function ItemsPageContent() {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
       setBulkRetryingFromFacts(false);
+    }
+  }, [confirm, queryClient, selectedItemIDs, showToast, t]);
+
+  const bulkRetry = useCallback(async () => {
+    if (selectedItemIDs.length === 0) return;
+    const ok = await confirm({
+      title: t("items.bulkRetry.title").replace("{{count}}", String(selectedItemIDs.length)),
+      message: t("items.bulkRetry.message"),
+      confirmLabel: t("items.bulkRetry.confirm"),
+      tone: "danger",
+    });
+    if (!ok) return;
+
+    setBulkRetrying(true);
+    try {
+      const result = await api.retryItemsBulk(selectedItemIDs);
+      if (result.skipped_count > 0) {
+        showToast(
+          t("items.bulkRetry.toastQueuedAndSkipped")
+            .replace("{{queued}}", String(result.queued_count))
+            .replace("{{skipped}}", String(result.skipped_count)),
+          "info"
+        );
+      } else {
+        showToast(t("items.bulkRetry.toastQueued").replace("{{count}}", String(result.queued_count)), "success");
+      }
+      setSelectedItemIDs([]);
+      setPendingBulkAction("");
+      await queryClient.invalidateQueries({ queryKey: ["items-feed"] });
+      await queryClient.invalidateQueries({ queryKey: ["focus-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["briefing-today"] });
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setBulkRetrying(false);
     }
   }, [confirm, queryClient, selectedItemIDs, showToast, t]);
 
@@ -906,18 +946,39 @@ function ItemsPageContent() {
                         {t("items.bulkRetryFromFacts.selectedCountShort").replace("{{count}}", String(visibleSelectedCount))}
                       </span>
                     </div>
+                    <select
+                      value={pendingBulkAction}
+                      onChange={(e) => setPendingBulkAction(e.target.value as typeof pendingBulkAction)}
+                      className="min-h-10 min-w-0 flex-1 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink-soft)] focus-ring xl:w-[188px] xl:flex-none xl:px-2.5"
+                      aria-label={t("items.pendingActions.label")}
+                    >
+                      <option value="">{t("items.pendingActions.placeholder")}</option>
+                      <option value="retry">{t("items.bulkRetry.run")}</option>
+                      <option value="retry_from_facts">{t("items.bulkRetryFromFacts.run")}</option>
+                    </select>
                     <button
                       type="button"
-                      disabled={visibleSelectedCount === 0 || bulkRetryingFromFacts}
+                      disabled={
+                        visibleSelectedCount === 0 ||
+                        !pendingBulkAction ||
+                        bulkRetrying ||
+                        bulkRetryingFromFacts
+                      }
                       onClick={() => {
-                        void bulkRetryFromFacts();
+                        if (pendingBulkAction === "retry") {
+                          void bulkRetry();
+                          return;
+                        }
+                        if (pendingBulkAction === "retry_from_facts") {
+                          void bulkRetryFromFacts();
+                        }
                       }}
                       className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50 xl:px-2.5"
                     >
-                      {bulkRetryingFromFacts ? t("common.saving") : (
+                      {bulkRetrying || bulkRetryingFromFacts ? t("common.saving") : (
                         <>
-                          <span className="xl:hidden">{t("items.bulkRetryFromFacts.run")}</span>
-                          <span className="hidden xl:inline">{t("items.bulkRetryFromFacts.runShort")}</span>
+                          <span className="xl:hidden">{t("items.actions.run")}</span>
+                          <span className="hidden xl:inline">{t("items.actions.run")}</span>
                         </>
                       )}
                     </button>

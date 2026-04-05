@@ -22,23 +22,23 @@ func TestNormalizeBulkItemIDs(t *testing.T) {
 	}
 }
 
-func TestRunRetryFromFactsBulk(t *testing.T) {
-	result := runRetryFromFactsBulk(
+func TestRunRetryBulk(t *testing.T) {
+	result := runRetryBulk(
 		context.Background(),
 		[]string{"item-1", "item-2", "item-3", "item-4"},
-		func(_ context.Context, itemID string) (retryFromFactsBulkCandidate, error) {
+		func(_ context.Context, itemID string) (retryBulkCandidate, error) {
 			switch itemID {
 			case "item-1":
-				return retryFromFactsBulkCandidate{ID: "item-1", SourceID: "source-1", URL: "https://example.com/1"}, nil
+				return retryBulkCandidate{ID: "item-1", SourceID: "source-1", URL: "https://example.com/1"}, nil
 			case "item-2":
-				return retryFromFactsBulkCandidate{}, repository.ErrConflict
+				return retryBulkCandidate{}, repository.ErrConflict
 			case "item-3":
-				return retryFromFactsBulkCandidate{ID: "item-3", SourceID: "source-3", URL: "https://example.com/3"}, nil
+				return retryBulkCandidate{ID: "item-3", SourceID: "source-3", URL: "https://example.com/3"}, nil
 			default:
-				return retryFromFactsBulkCandidate{}, repository.ErrNotFound
+				return retryBulkCandidate{}, repository.ErrNotFound
 			}
 		},
-		func(_ context.Context, item retryFromFactsBulkCandidate) error {
+		func(_ context.Context, item retryBulkCandidate) error {
 			if item.ID == "item-3" {
 				return errors.New("publisher down")
 			}

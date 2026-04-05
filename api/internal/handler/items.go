@@ -46,17 +46,17 @@ const triageAllCacheTTL = 90 * time.Second
 const relatedItemsCacheTTL = 5 * time.Minute
 const itemDetailCacheTTL = 5 * time.Minute
 
-type retryFromFactsBulkRequest struct {
+type retryBulkRequest struct {
 	ItemIDs []string `json:"item_ids"`
 }
 
-type retryFromFactsBulkCandidate struct {
+type retryBulkCandidate struct {
 	ID       string
 	SourceID string
 	URL      string
 }
 
-type retryFromFactsBulkResult struct {
+type retryBulkResult struct {
 	Status        string   `json:"status"`
 	ItemIDs       []string `json:"item_ids"`
 	QueuedCount   int      `json:"queued_count"`
@@ -84,13 +84,13 @@ func normalizeBulkItemIDs(itemIDs []string) []string {
 	return out
 }
 
-func runRetryFromFactsBulk(
+func runRetryBulk(
 	ctx context.Context,
 	itemIDs []string,
-	reset func(context.Context, string) (retryFromFactsBulkCandidate, error),
-	enqueue func(context.Context, retryFromFactsBulkCandidate) error,
-) retryFromFactsBulkResult {
-	result := retryFromFactsBulkResult{
+	reset func(context.Context, string) (retryBulkCandidate, error),
+	enqueue func(context.Context, retryBulkCandidate) error,
+) retryBulkResult {
+	result := retryBulkResult{
 		Status:  "queued",
 		ItemIDs: append([]string(nil), itemIDs...),
 	}
@@ -98,13 +98,13 @@ func runRetryFromFactsBulk(
 		item, err := reset(ctx, itemID)
 		if err != nil {
 			if !errors.Is(err, repository.ErrConflict) && !errors.Is(err, repository.ErrNotFound) {
-				log.Printf("retry-from-facts bulk reset failed item_id=%s err=%v", itemID, err)
+				log.Printf("retry bulk reset failed item_id=%s err=%v", itemID, err)
 			}
 			result.SkippedCount++
 			continue
 		}
 		if err := enqueue(ctx, item); err != nil {
-			log.Printf("retry-from-facts bulk enqueue failed item_id=%s err=%v", item.ID, err)
+			log.Printf("retry bulk enqueue failed item_id=%s err=%v", item.ID, err)
 			result.SkippedCount++
 			continue
 		}
@@ -112,6 +112,57 @@ func runRetryFromFactsBulk(
 		result.queuedItemIDs = append(result.queuedItemIDs, item.ID)
 	}
 	return result
+}
+
+func (h *ItemHandler) RetryBulk(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body retryBulkRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	itemIDs := normalizeBulkItemIDs(body.ItemIDs)
+	if len(itemIDs) == 0 {
+		http.Error(w, "item_ids is required", http.StatusBadRequest)
+		return
+	}
+	if h.publisher == nil {
+		http.Error(w, "event publisher unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	result := runRetryBulk(
+		r.Context(),
+		itemIDs,
+		func(ctx context.Context, itemID string) (retryBulkCandidate, error) {
+			item, err := h.repo.ResetForExtractRetry(ctx, itemID, userID)
+			if err != nil {
+				return retryBulkCandidate{}, err
+			}
+			return retryBulkCandidate{
+				ID:       item.ID,
+				SourceID: item.SourceID,
+				URL:      item.URL,
+			}, nil
+		},
+		func(ctx context.Context, item retryBulkCandidate) error {
+			return h.publisher.SendItemCreatedWithReasonE(ctx, item.ID, item.SourceID, item.URL, nil, "retry")
+		},
+	)
+
+	if result.QueuedCount > 0 {
+		if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+			log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+		}
+		for _, itemID := range result.queuedItemIDs {
+			if err := h.bumpItemDetailVersion(r.Context(), itemID); err != nil {
+				log.Printf("item-detail version bump failed item_id=%s err=%v", itemID, err)
+			}
+		}
+	}
+	h.invalidateUserCaches(r.Context(), userID)
+	w.WriteHeader(http.StatusAccepted)
+	writeJSON(w, result)
 }
 
 func buildTriageQueueEntries(resp *model.ReadingPlanResponse) []model.TriageQueueEntry {
@@ -2008,7 +2059,7 @@ func (h *ItemHandler) RetryFromFacts(w http.ResponseWriter, r *http.Request) {
 
 func (h *ItemHandler) RetryFromFactsBulk(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
-	var body retryFromFactsBulkRequest
+	var body retryBulkRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
@@ -2023,21 +2074,21 @@ func (h *ItemHandler) RetryFromFactsBulk(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	result := runRetryFromFactsBulk(
+	result := runRetryBulk(
 		r.Context(),
 		itemIDs,
-		func(ctx context.Context, itemID string) (retryFromFactsBulkCandidate, error) {
+		func(ctx context.Context, itemID string) (retryBulkCandidate, error) {
 			item, err := h.repo.ResetForFactsRetry(ctx, itemID, userID)
 			if err != nil {
-				return retryFromFactsBulkCandidate{}, err
+				return retryBulkCandidate{}, err
 			}
-			return retryFromFactsBulkCandidate{
+			return retryBulkCandidate{
 				ID:       item.ID,
 				SourceID: item.SourceID,
 				URL:      item.URL,
 			}, nil
 		},
-		func(ctx context.Context, item retryFromFactsBulkCandidate) error {
+		func(ctx context.Context, item retryBulkCandidate) error {
 			return h.publisher.SendItemCreatedWithReasonE(ctx, item.ID, item.SourceID, item.URL, nil, "retry_from_facts")
 		},
 	)

@@ -236,6 +236,7 @@ func main() {
 			r.Get("/ux-metrics", itemH.UXMetrics)
 			r.Get("/topic-trends", itemH.TopicTrends)
 			r.Post("/retry-failed", itemH.RetryFailed)
+			r.Post("/retry-bulk", itemH.RetryBulk)
 			r.Post("/retry-from-facts-bulk", itemH.RetryFromFactsBulk)
 			r.Get("/reading-plan", itemH.ReadingPlan)
 			r.Get("/focus-queue", itemH.FocusQueue)

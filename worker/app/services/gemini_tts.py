@@ -50,6 +50,27 @@ def resolve_audio_briefing_persona_prompts(persona: str) -> tuple[str, str, str]
     return tone_prompt, speaking_style_prompt, duo_conversation_prompt
 
 
+def build_gemini_duo_speaker_aliases(host_persona: str, partner_persona: str) -> tuple[str, str]:
+    def sanitize(value: str, fallback: str) -> str:
+        raw = str(value or "").strip().upper()
+        chars = []
+        for ch in raw:
+            if ("A" <= ch <= "Z") or ("0" <= ch <= "9"):
+                chars.append(ch)
+            else:
+                chars.append("_")
+        alias = "".join(chars).strip("_")
+        while "__" in alias:
+            alias = alias.replace("__", "_")
+        return alias or fallback
+
+    host_alias = sanitize(host_persona, "HOST")
+    partner_alias = sanitize(partner_persona, "PARTNER")
+    if host_alias == partner_alias:
+        partner_alias = f"{partner_alias}_PARTNER"
+    return host_alias, partner_alias
+
+
 def build_gemini_tts_prompt(text: str, speech_rate: float) -> str:
     prompt_lines: list[str] = [
         "以下の本文を自然な日本語で読み上げてください。",
@@ -100,6 +121,7 @@ def build_gemini_duo_audio_briefing_prompt(
     turns: list[dict[str, str]],
     section_type: str,
 ) -> str:
+    host_alias, partner_alias = build_gemini_duo_speaker_aliases(host_persona, partner_persona)
     host_tone_prompt, host_speaking_style_prompt, host_duo_prompt = resolve_audio_briefing_persona_prompts(host_persona)
     partner_tone_prompt, partner_speaking_style_prompt, partner_duo_prompt = resolve_audio_briefing_persona_prompts(partner_persona)
 
@@ -112,20 +134,23 @@ def build_gemini_duo_audio_briefing_prompt(
     prompt_lines: list[str] = [
         "あなたは音声ブリーフィング番組の二人会話を音声化するAIです。",
         f"以下は {section_label} の台本です。会話の本文は改変せず、日本語の自然な掛け合いとして読み上げてください。",
-        "話者ラベルは HOST と PARTNER を使います。",
+        f"話者ラベルは {host_alias} と {partner_alias} を使います。",
+        f"{host_alias} と {partner_alias} は明確に別人物として演じてください。",
+        "二人の声色・話速・抑揚が似すぎないようにしてください。",
+        "同じテンポや同じ感情の置き方に寄せないでください。",
     ]
     if host_tone_prompt:
-        prompt_lines.append(f"HOST のトーン指示: {host_tone_prompt}")
+        prompt_lines.append(f"{host_alias} のトーン指示: {host_tone_prompt}")
     if host_speaking_style_prompt:
-        prompt_lines.append(f"HOST の話し方指示: {host_speaking_style_prompt}")
+        prompt_lines.append(f"{host_alias} の話し方指示: {host_speaking_style_prompt}")
     if host_duo_prompt:
-        prompt_lines.append(f"HOST の会話指示: {host_duo_prompt}")
+        prompt_lines.append(f"{host_alias} の会話指示: {host_duo_prompt}")
     if partner_tone_prompt:
-        prompt_lines.append(f"PARTNER のトーン指示: {partner_tone_prompt}")
+        prompt_lines.append(f"{partner_alias} のトーン指示: {partner_tone_prompt}")
     if partner_speaking_style_prompt:
-        prompt_lines.append(f"PARTNER の話し方指示: {partner_speaking_style_prompt}")
+        prompt_lines.append(f"{partner_alias} の話し方指示: {partner_speaking_style_prompt}")
     if partner_duo_prompt:
-        prompt_lines.append(f"PARTNER の会話指示: {partner_duo_prompt}")
+        prompt_lines.append(f"{partner_alias} の会話指示: {partner_duo_prompt}")
     prompt_lines.extend(
         [
             "追加の説明や要約は入れないでください。",
@@ -144,6 +169,7 @@ def estimate_gemini_duo_request_bytes(
     section_type: str,
     turns: list[dict[str, str]],
 ) -> int:
+    host_alias, partner_alias = build_gemini_duo_speaker_aliases(host_persona, partner_persona)
     prompt = build_gemini_duo_audio_briefing_prompt(host_persona, partner_persona, turns, section_type)
     body = {
         "input": {
@@ -151,7 +177,7 @@ def estimate_gemini_duo_request_bytes(
             "multiSpeakerMarkup": {
                 "turns": [
                     {
-                        "speaker": "HOST" if str((turn or {}).get("speaker") or "").strip() == "host" else "PARTNER",
+                        "speaker": host_alias if str((turn or {}).get("speaker") or "").strip() == "host" else partner_alias,
                         "text": str((turn or {}).get("text") or "").strip(),
                     }
                     for turn in turns or []
@@ -164,11 +190,11 @@ def estimate_gemini_duo_request_bytes(
             "multiSpeakerVoiceConfig": {
                 "speakerVoiceConfigs": [
                     {
-                        "speakerAlias": "HOST",
+                        "speakerAlias": host_alias,
                         "speakerId": str(host_voice_name or "").strip(),
                     },
                     {
-                        "speakerAlias": "PARTNER",
+                        "speakerAlias": partner_alias,
                         "speakerId": str(partner_voice_name or "").strip(),
                     },
                 ]
@@ -337,6 +363,7 @@ def synthesize_gemini_multi_speaker_tts(
     if not filtered_turns:
         raise RuntimeError("gemini duo turns are empty")
 
+    host_alias, partner_alias = build_gemini_duo_speaker_aliases(host_persona, partner_persona)
     prompt = build_gemini_duo_audio_briefing_prompt(host_persona, partner_persona, filtered_turns, section_type)
     response = httpx.post(
         f"{_resolve_gemini_tts_endpoint()}/v1/text:synthesize",
@@ -347,7 +374,7 @@ def synthesize_gemini_multi_speaker_tts(
                 "multiSpeakerMarkup": {
                     "turns": [
                         {
-                            "speaker": "HOST" if turn["speaker"] == "host" else "PARTNER",
+                            "speaker": host_alias if turn["speaker"] == "host" else partner_alias,
                             "text": turn["text"],
                         }
                         for turn in filtered_turns
@@ -360,11 +387,11 @@ def synthesize_gemini_multi_speaker_tts(
                 "multiSpeakerVoiceConfig": {
                     "speakerVoiceConfigs": [
                         {
-                            "speakerAlias": "HOST",
+                            "speakerAlias": host_alias,
                             "speakerId": normalized_host_voice_name,
                         },
                         {
-                            "speakerAlias": "PARTNER",
+                            "speakerAlias": partner_alias,
                             "speakerId": normalized_partner_voice_name,
                         },
                     ]

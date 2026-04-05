@@ -85,6 +85,80 @@ class AivisRateLimiterTests(unittest.TestCase):
         self.assertGreaterEqual(sleep_mock.call_count, 1)
         fallback_acquire_mock.assert_called_once_with("shared-key")
 
+
+class GeminiTTSPromptTests(unittest.TestCase):
+    def test_build_gemini_duo_prompt_emphasizes_distinct_speakers(self):
+        prompt = gemini_tts.build_gemini_duo_audio_briefing_prompt(
+            host_persona="native",
+            partner_persona="analyst",
+            turns=[
+                {"speaker": "host", "text": "最初の話題です。"},
+                {"speaker": "partner", "text": "補足します。"},
+            ],
+            section_type="article",
+        )
+
+        self.assertIn("NATIVE と ANALYST は明確に別人物として演じてください。", prompt)
+        self.assertIn("二人の声色・話速・抑揚が似すぎないようにしてください。", prompt)
+        self.assertIn("同じテンポや同じ感情の置き方に寄せないでください。", prompt)
+
+    def test_build_gemini_duo_prompt_uses_persona_aliases(self):
+        prompt = gemini_tts.build_gemini_duo_audio_briefing_prompt(
+            host_persona="native",
+            partner_persona="analyst",
+            turns=[
+                {"speaker": "host", "text": "最初の話題です。"},
+                {"speaker": "partner", "text": "補足します。"},
+            ],
+            section_type="article",
+        )
+
+        self.assertIn("話者ラベルは NATIVE と ANALYST を使います。", prompt)
+        self.assertIn("NATIVE のトーン指示:", prompt)
+        self.assertIn("ANALYST のトーン指示:", prompt)
+
+    def test_synthesize_gemini_multi_speaker_tts_uses_persona_aliases_in_payload(self):
+        captured: dict[str, object] = {}
+
+        def fake_post(url, headers=None, json=None, timeout=None):
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            request = httpx.Request("POST", url)
+            return httpx.Response(200, request=request, json={"audioContent": base64.b64encode(b"mp3").decode("ascii")})
+
+        with (
+            patch("app.services.gemini_tts._cloud_tts_headers", return_value={"Authorization": "Bearer test"}),
+            patch("app.services.gemini_tts.httpx.post", side_effect=fake_post),
+        ):
+            audio_bytes, content_type, suffix, duration_sec = gemini_tts.synthesize_gemini_multi_speaker_tts(
+                model="gemini-2.5-flash-tts",
+                host_voice_name="Erinome",
+                partner_voice_name="Zephyr",
+                host_persona="native",
+                partner_persona="analyst",
+                section_type="article",
+                turns=[
+                    {"speaker": "host", "text": "冒頭です"},
+                    {"speaker": "partner", "text": "補足です"},
+                ],
+            )
+
+        payload = captured["json"]
+        self.assertIsInstance(payload, dict)
+        turns = payload["input"]["multiSpeakerMarkup"]["turns"]
+        self.assertEqual(turns[0]["speaker"], "NATIVE")
+        self.assertEqual(turns[1]["speaker"], "ANALYST")
+        configs = payload["voice"]["multiSpeakerVoiceConfig"]["speakerVoiceConfigs"]
+        self.assertEqual(configs[0]["speakerAlias"], "NATIVE")
+        self.assertEqual(configs[0]["speakerId"], "Erinome")
+        self.assertEqual(configs[1]["speakerAlias"], "ANALYST")
+        self.assertEqual(configs[1]["speakerId"], "Zephyr")
+        self.assertEqual(content_type, "audio/mpeg")
+        self.assertEqual(suffix, ".mp3")
+        self.assertEqual(audio_bytes, b"mp3")
+        self.assertGreaterEqual(duration_sec, 0)
+
     def test_redis_execution_gate_waits_until_shared_request_finishes(self):
         class FakeRedis:
             def __init__(self):

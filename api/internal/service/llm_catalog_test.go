@@ -40,6 +40,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("qwen3.6-plus"); got == nil {
 		t.Fatal("qwen3.6-plus not found in catalog")
 	}
+	if got := findModelCatalog("fireworks/qwen3p6-plus"); got == nil {
+		t.Fatal("fireworks/qwen3p6-plus not found in catalog")
+	}
 	if got := findModelCatalog("grok-4.20-0309-non-reasoning"); got == nil {
 		t.Fatal("grok-4.20-0309-non-reasoning not found in catalog")
 	}
@@ -65,6 +68,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "grok-4.20-0309-reasoning", provider: "xai"},
 		{model: "glm-4.7-flash", provider: "zai"},
 		{model: "fireworks/gpt-oss-20b", provider: "fireworks"},
+		{model: "fireworks/qwen3p6-plus", provider: "fireworks"},
 		{model: "kimi-k2.5", provider: "moonshot"},
 		{model: "kimi-k2-0905-preview", provider: "moonshot"},
 		{model: "kimi-k2-thinking-turbo", provider: "moonshot"},

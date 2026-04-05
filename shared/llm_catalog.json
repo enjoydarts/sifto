@@ -1816,6 +1816,29 @@
       }
     },
     {
+      "id": "fireworks/qwen3p6-plus",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "balanced",
+      "highlights": ["fast"],
+      "comment": "Fireworks に追加された Qwen 3.6 Plus 枠。要約や質問応答の比較候補として使える上位 Qwen 系モデル。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_serverless_qwen3p6_plus_2026_04",
+        "input_per_mtok_usd": 0.5,
+        "output_per_mtok_usd": 3.0,
+        "cache_read_per_mtok_usd": 0.1
+      }
+    },
+    {
       "id": "deepseek-chat",
       "provider": "deepseek",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],

@@ -25,6 +25,13 @@ type AudioBriefingsHandler struct {
 	worker         *service.WorkerClient
 }
 
+type audioBriefingUsedTTSPayload struct {
+	Provider          string  `json:"provider"`
+	TTSModel          *string `json:"tts_model,omitempty"`
+	HostVoiceModel    *string `json:"host_voice_model,omitempty"`
+	PartnerVoiceModel *string `json:"partner_voice_model,omitempty"`
+}
+
 func NewAudioBriefingsHandler(
 	repo *repository.AudioBriefingRepo,
 	orchestrator *service.AudioBriefingOrchestrator,
@@ -278,12 +285,53 @@ func (h *AudioBriefingsHandler) loadDetail(ctx context.Context, userID, jobID st
 		"job":               job,
 		"items":             items,
 		"chunks":            chunks,
+		"used_tts":          audioBriefingUsedTTS(chunks),
 		"audio_url":         audioURL,
 		"delete_allowed":    service.AudioBriefingDeleteAllowed(job),
 		"resume_allowed":    service.AudioBriefingResumeAllowed(job),
 		"archive_allowed":   service.AudioBriefingArchiveAllowed(job),
 		"unarchive_allowed": service.AudioBriefingUnarchiveAllowed(job),
 	}, nil
+}
+
+func audioBriefingUsedTTS(chunks []model.AudioBriefingScriptChunk) *audioBriefingUsedTTSPayload {
+	if len(chunks) == 0 {
+		return nil
+	}
+	payload := &audioBriefingUsedTTSPayload{}
+	for _, chunk := range chunks {
+		provider := strings.TrimSpace(derefString(chunk.TTSProvider))
+		if provider == "" {
+			continue
+		}
+		if payload.Provider == "" {
+			payload.Provider = provider
+		}
+		if payload.TTSModel == nil {
+			if model := strings.TrimSpace(derefString(chunk.TTSModel)); model != "" {
+				payload.TTSModel = &model
+			}
+		}
+		speaker := strings.TrimSpace(derefString(chunk.Speaker))
+		voiceModel := strings.TrimSpace(derefString(chunk.VoiceModel))
+		if voiceModel == "" {
+			continue
+		}
+		switch speaker {
+		case "partner":
+			if payload.PartnerVoiceModel == nil {
+				payload.PartnerVoiceModel = &voiceModel
+			}
+		default:
+			if payload.HostVoiceModel == nil {
+				payload.HostVoiceModel = &voiceModel
+			}
+		}
+	}
+	if payload.Provider == "" {
+		return nil
+	}
+	return payload
 }
 
 func (h *AudioBriefingsHandler) updateArchiveStatus(w http.ResponseWriter, r *http.Request, archiveStatus string) {

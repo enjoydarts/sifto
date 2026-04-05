@@ -43,7 +43,7 @@ func (r *OpenAITTSVoiceRepo) GetLatestRun(ctx context.Context) (*OpenAITTSVoiceS
 	err := r.db.QueryRow(ctx, `
 		SELECT id, started_at, finished_at, last_progress_at, status, trigger_type, fetched_count, saved_count, error_message
 		FROM openai_tts_voice_sync_runs
-		ORDER BY started_at DESC
+		ORDER BY started_at DESC, id DESC
 		LIMIT 1
 	`).Scan(&run.ID, &run.StartedAt, &run.FinishedAt, &run.LastProgressAt, &run.Status, &run.TriggerType, &run.FetchedCount, &run.SavedCount, &run.ErrorMessage)
 	if err != nil {
@@ -151,7 +151,7 @@ func (r *OpenAITTSVoiceRepo) ListLatestSuccessfulSnapshots(ctx context.Context) 
 		SELECT id, started_at, finished_at, last_progress_at, status, trigger_type, fetched_count, saved_count, error_message
 		FROM openai_tts_voice_sync_runs
 		WHERE status = 'success' AND saved_count > 0
-		ORDER BY started_at DESC
+		ORDER BY started_at DESC, id DESC
 		LIMIT 1
 	`).Scan(&run.ID, &run.StartedAt, &run.FinishedAt, &run.LastProgressAt, &run.Status, &run.TriggerType, &run.FetchedCount, &run.SavedCount, &run.ErrorMessage)
 	if err != nil {
@@ -187,7 +187,7 @@ func (r *OpenAITTSVoiceRepo) ListPreviousSuccessfulSnapshots(ctx context.Context
 			SELECT id
 			FROM openai_tts_voice_sync_runs
 			WHERE status = 'success' AND id <> $1
-			ORDER BY started_at DESC
+			ORDER BY started_at DESC, id DESC
 			LIMIT 1
 		)
 		ORDER BY voice_id ASC, name ASC

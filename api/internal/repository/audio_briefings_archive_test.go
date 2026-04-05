@@ -119,6 +119,7 @@ func TestAudioBriefingScriptChunkScanReadsStorageBucket(t *testing.T) {
 	now := time.Date(2026, 3, 25, 11, 30, 0, 0, time.UTC)
 	audioKey := "audio-briefings/user-1/job-1/chunk-01.mp3"
 	ttsProvider := "aivis"
+	ttsModel := "gemini-2.5-flash-tts"
 	voiceModel := "voice-model"
 	voiceStyle := "voice-style"
 	speaker := "partner"
@@ -136,6 +137,7 @@ func TestAudioBriefingScriptChunkScanReadsStorageBucket(t *testing.T) {
 		1,
 		"",
 		ttsProvider,
+		ttsModel,
 		voiceModel,
 		voiceStyle,
 		audioKey,

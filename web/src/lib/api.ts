@@ -1625,10 +1625,18 @@ export interface AudioBriefingScriptChunk {
   error_message?: string | null;
 }
 
+export interface AudioBriefingUsedTTS {
+  provider: string;
+  tts_model?: string | null;
+  host_voice_model?: string | null;
+  partner_voice_model?: string | null;
+}
+
 export interface AudioBriefingDetailResponse {
   job: AudioBriefingJob;
   items: AudioBriefingJobItem[];
   chunks: AudioBriefingScriptChunk[];
+  used_tts?: AudioBriefingUsedTTS | null;
   audio_url?: string | null;
   delete_allowed?: boolean;
   resume_allowed?: boolean;

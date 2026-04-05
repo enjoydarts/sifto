@@ -51,6 +51,12 @@ function formatScriptModels(value: string | null | undefined) {
   return models.join(", ");
 }
 
+function formatUsedTTSModel(value: string | null | undefined) {
+  const raw = (value ?? "").trim();
+  if (!raw) return "—";
+  return formatModelDisplayName(raw);
+}
+
 function formatBGMName(value: string | null | undefined) {
   const raw = (value ?? "").trim();
   if (!raw) return "—";
@@ -491,6 +497,16 @@ export default function AudioBriefingDetailPage() {
               ) : null}
               {detail.job.prompt_key ? (
                 <span className="text-xs">{t("itemDetail.execution.prompt.key").replace("{{key}}", detail.job.prompt_key)}</span>
+              ) : null}
+            </div>
+          ) : null}
+          {detail.used_tts ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-[var(--color-editorial-ink-soft)]">
+              <span>{t("audioBriefing.ttsProvider", "TTS provider")}: {detail.used_tts.provider || "—"}</span>
+              <span>{t("audioBriefing.ttsModel", "TTS model")}: {formatUsedTTSModel(detail.used_tts.tts_model)}</span>
+              <span>{t("audioBriefing.hostVoiceModel", "Host voice")}: {detail.used_tts.host_voice_model || "—"}</span>
+              {detail.job.conversation_mode === "duo" ? (
+                <span>{t("audioBriefing.partnerVoiceModel", "Partner voice")}: {detail.used_tts.partner_voice_model || "—"}</span>
               ) : null}
             </div>
           ) : null}

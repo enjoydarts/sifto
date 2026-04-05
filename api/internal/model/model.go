@@ -224,6 +224,7 @@ type AudioBriefingScriptChunk struct {
 	AttemptCount     int        `json:"attempt_count"`
 	LastErrorCode    *string    `json:"last_error_code,omitempty"`
 	TTSProvider      *string    `json:"tts_provider,omitempty"`
+	TTSModel         *string    `json:"tts_model,omitempty"`
 	VoiceModel       *string    `json:"voice_model,omitempty"`
 	VoiceStyle       *string    `json:"voice_style,omitempty"`
 	R2AudioObjectKey *string    `json:"r2_audio_object_key,omitempty"`

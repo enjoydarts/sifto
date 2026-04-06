@@ -147,7 +147,7 @@ func (r *AudioBriefingRepo) UpsertSettings(ctx context.Context, userID string, e
 
 func (r *AudioBriefingRepo) ListPersonaVoicesByUser(ctx context.Context, userID string) ([]model.AudioBriefingPersonaVoice, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT user_id, persona, tts_provider, tts_model, voice_model, voice_style, speech_rate, emotional_intensity, tempo_dynamics, line_break_silence_seconds, pitch, volume_gain, created_at, updated_at
+		SELECT user_id, persona, tts_provider, tts_model, voice_model, voice_style, COALESCE(provider_voice_label, ''), COALESCE(provider_voice_description, ''), speech_rate, emotional_intensity, tempo_dynamics, line_break_silence_seconds, pitch, volume_gain, created_at, updated_at
 		FROM audio_briefing_persona_voices
 		WHERE user_id = $1
 		ORDER BY persona
@@ -167,6 +167,8 @@ func (r *AudioBriefingRepo) ListPersonaVoicesByUser(ctx context.Context, userID 
 			&row.TTSModel,
 			&row.VoiceModel,
 			&row.VoiceStyle,
+			&row.ProviderVoiceLabel,
+			&row.ProviderVoiceDescription,
 			&row.SpeechRate,
 			&row.EmotionalIntensity,
 			&row.TempoDynamics,
@@ -196,9 +198,9 @@ func (r *AudioBriefingRepo) UpsertPersonaVoices(ctx context.Context, userID stri
 	for _, row := range rows {
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO audio_briefing_persona_voices (
-				user_id, persona, tts_provider, tts_model, voice_model, voice_style, speech_rate, emotional_intensity, tempo_dynamics, line_break_silence_seconds, pitch, volume_gain
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		`, userID, row.Persona, row.TTSProvider, row.TTSModel, row.VoiceModel, row.VoiceStyle, row.SpeechRate, row.EmotionalIntensity, row.TempoDynamics, row.LineBreakSilenceSeconds, row.Pitch, row.VolumeGain); err != nil {
+				user_id, persona, tts_provider, tts_model, voice_model, voice_style, provider_voice_label, provider_voice_description, speech_rate, emotional_intensity, tempo_dynamics, line_break_silence_seconds, pitch, volume_gain
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		`, userID, row.Persona, row.TTSProvider, row.TTSModel, row.VoiceModel, row.VoiceStyle, row.ProviderVoiceLabel, row.ProviderVoiceDescription, row.SpeechRate, row.EmotionalIntensity, row.TempoDynamics, row.LineBreakSilenceSeconds, row.Pitch, row.VolumeGain); err != nil {
 			return nil, err
 		}
 	}
@@ -211,7 +213,7 @@ func (r *AudioBriefingRepo) UpsertPersonaVoices(ctx context.Context, userID stri
 func (r *AudioBriefingRepo) GetPersonaVoice(ctx context.Context, userID, persona string) (*model.AudioBriefingPersonaVoice, error) {
 	var row model.AudioBriefingPersonaVoice
 	err := r.db.QueryRow(ctx, `
-		SELECT user_id, persona, tts_provider, tts_model, voice_model, voice_style, speech_rate, emotional_intensity, tempo_dynamics, line_break_silence_seconds, pitch, volume_gain, created_at, updated_at
+		SELECT user_id, persona, tts_provider, tts_model, voice_model, voice_style, COALESCE(provider_voice_label, ''), COALESCE(provider_voice_description, ''), speech_rate, emotional_intensity, tempo_dynamics, line_break_silence_seconds, pitch, volume_gain, created_at, updated_at
 		FROM audio_briefing_persona_voices
 		WHERE user_id = $1 AND persona = $2
 	`, userID, persona).Scan(
@@ -221,6 +223,8 @@ func (r *AudioBriefingRepo) GetPersonaVoice(ctx context.Context, userID, persona
 		&row.TTSModel,
 		&row.VoiceModel,
 		&row.VoiceStyle,
+		&row.ProviderVoiceLabel,
+		&row.ProviderVoiceDescription,
 		&row.SpeechRate,
 		&row.EmotionalIntensity,
 		&row.TempoDynamics,

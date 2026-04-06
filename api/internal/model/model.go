@@ -53,6 +53,8 @@ type UserSettings struct {
 	HasOpenRouterAPIKey              bool       `json:"has_openrouter_api_key"`
 	AivisAPIKeyLast4                 *string    `json:"aivis_api_key_last4,omitempty"`
 	HasAivisAPIKey                   bool       `json:"has_aivis_api_key"`
+	FishAudioAPIKeyLast4             *string    `json:"fish_api_key_last4,omitempty"`
+	HasFishAudioAPIKey               bool       `json:"has_fish_api_key"`
 	AivisUserDictionaryUUID          *string    `json:"aivis_user_dictionary_uuid,omitempty"`
 	PodcastEnabled                   bool       `json:"podcast_enabled"`
 	PodcastFeedSlug                  *string    `json:"podcast_feed_slug,omitempty"`
@@ -123,38 +125,42 @@ type AudioBriefingSettings struct {
 }
 
 type AudioBriefingPersonaVoice struct {
-	UserID                  string     `json:"user_id"`
-	Persona                 string     `json:"persona"`
-	TTSProvider             string     `json:"tts_provider"`
-	TTSModel                string     `json:"tts_model"`
-	VoiceModel              string     `json:"voice_model"`
-	VoiceStyle              string     `json:"voice_style"`
-	SpeechRate              float64    `json:"speech_rate"`
-	EmotionalIntensity      float64    `json:"emotional_intensity"`
-	TempoDynamics           float64    `json:"tempo_dynamics"`
-	LineBreakSilenceSeconds float64    `json:"line_break_silence_seconds"`
-	Pitch                   float64    `json:"pitch"`
-	VolumeGain              float64    `json:"volume_gain"`
-	CreatedAt               time.Time  `json:"created_at"`
-	UpdatedAt               time.Time  `json:"updated_at"`
-	DeletedAt               *time.Time `json:"deleted_at,omitempty"`
+	UserID                   string     `json:"user_id"`
+	Persona                  string     `json:"persona"`
+	TTSProvider              string     `json:"tts_provider"`
+	TTSModel                 string     `json:"tts_model"`
+	VoiceModel               string     `json:"voice_model"`
+	VoiceStyle               string     `json:"voice_style"`
+	ProviderVoiceLabel       string     `json:"provider_voice_label"`
+	ProviderVoiceDescription string     `json:"provider_voice_description"`
+	SpeechRate               float64    `json:"speech_rate"`
+	EmotionalIntensity       float64    `json:"emotional_intensity"`
+	TempoDynamics            float64    `json:"tempo_dynamics"`
+	LineBreakSilenceSeconds  float64    `json:"line_break_silence_seconds"`
+	Pitch                    float64    `json:"pitch"`
+	VolumeGain               float64    `json:"volume_gain"`
+	CreatedAt                time.Time  `json:"created_at"`
+	UpdatedAt                time.Time  `json:"updated_at"`
+	DeletedAt                *time.Time `json:"deleted_at,omitempty"`
 }
 
 type SummaryAudioVoiceSettings struct {
-	UserID                  string    `json:"user_id"`
-	TTSProvider             string    `json:"tts_provider"`
-	TTSModel                string    `json:"tts_model"`
-	VoiceModel              string    `json:"voice_model"`
-	VoiceStyle              string    `json:"voice_style"`
-	SpeechRate              float64   `json:"speech_rate"`
-	EmotionalIntensity      float64   `json:"emotional_intensity"`
-	TempoDynamics           float64   `json:"tempo_dynamics"`
-	LineBreakSilenceSeconds float64   `json:"line_break_silence_seconds"`
-	Pitch                   float64   `json:"pitch"`
-	VolumeGain              float64   `json:"volume_gain"`
-	AivisUserDictionaryUUID *string   `json:"aivis_user_dictionary_uuid,omitempty"`
-	CreatedAt               time.Time `json:"created_at"`
-	UpdatedAt               time.Time `json:"updated_at"`
+	UserID                   string    `json:"user_id"`
+	TTSProvider              string    `json:"tts_provider"`
+	TTSModel                 string    `json:"tts_model"`
+	VoiceModel               string    `json:"voice_model"`
+	VoiceStyle               string    `json:"voice_style"`
+	ProviderVoiceLabel       string    `json:"provider_voice_label"`
+	ProviderVoiceDescription string    `json:"provider_voice_description"`
+	SpeechRate               float64   `json:"speech_rate"`
+	EmotionalIntensity       float64   `json:"emotional_intensity"`
+	TempoDynamics            float64   `json:"tempo_dynamics"`
+	LineBreakSilenceSeconds  float64   `json:"line_break_silence_seconds"`
+	Pitch                    float64   `json:"pitch"`
+	VolumeGain               float64   `json:"volume_gain"`
+	AivisUserDictionaryUUID  *string   `json:"aivis_user_dictionary_uuid,omitempty"`
+	CreatedAt                time.Time `json:"created_at"`
+	UpdatedAt                time.Time `json:"updated_at"`
 }
 
 type AudioBriefingJob struct {

@@ -8,6 +8,7 @@ import wave
 import boto3
 import httpx
 from app.services.aivis_speech import AIVIS_RATE_LIMITER, AivisRateLimiter, AivisRedisRateLimiter, AivisSpeechService, build_aivis_payload
+from app.services.fish_tts import synthesize_fish_multi_speaker_tts, synthesize_fish_tts
 from app.services.gemini_tts import synthesize_gemini_multi_speaker_tts, synthesize_gemini_tts
 from app.services.tts_provider_registry import synthesize_catalog_tts
 
@@ -97,6 +98,8 @@ class AudioBriefingTTSService:
         self.gemini_tts_endpoint = (os.getenv("GEMINI_TTS_ENDPOINT", "https://generativelanguage.googleapis.com").strip() or "https://generativelanguage.googleapis.com").rstrip("/")
         self.gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
         self.gemini_timeout_sec = max(_env_float("GEMINI_TTS_TIMEOUT_SEC", 300.0), 1.0)
+        self.fish_api_key = os.getenv("FISH_API_KEY", "").strip()
+        self.fish_timeout_sec = max(_env_float("FISH_TTS_TIMEOUT_SEC", 300.0), 1.0)
         self.openai_tts_endpoint = (os.getenv("OPENAI_TTS_ENDPOINT", "https://api.openai.com").strip() or "https://api.openai.com").rstrip("/")
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
         self.openai_timeout_sec = max(_env_float("OPENAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
@@ -126,6 +129,7 @@ class AudioBriefingTTSService:
         user_dictionary_uuid: str | None = None,
         aivis_api_key: str | None = None,
         google_api_key: str | None = None,
+        fish_api_key: str | None = None,
         xai_api_key: str | None = None,
         openai_api_key: str | None = None,
     ) -> tuple[str, int]:
@@ -172,6 +176,15 @@ class AudioBriefingTTSService:
                     speech_rate=speech_rate,
                     api_key_override=google_api_key,
                 )
+            elif provider == "fish":
+                payload, content_type, suffix, duration_sec = self.synthesize_fish_audio(
+                    voice_id=voice_model,
+                    tts_model=tts_model,
+                    text=text,
+                    speech_rate=speech_rate,
+                    volume_gain=volume_gain,
+                    api_key_override=fish_api_key,
+                )
             elif provider == "openai":
                 payload, content_type, suffix, duration_sec = self.synthesize_openai_audio(
                     voice_id=voice_model,
@@ -211,6 +224,33 @@ class AudioBriefingTTSService:
             partner_persona=partner_persona,
             section_type=section_type,
             turns=turns,
+        )
+        if not output_object_key.endswith(suffix):
+            output_object_key = output_object_key + suffix
+        self.upload_bytes(output_object_key, payload, content_type)
+        return output_object_key, duration_sec
+
+    def synthesize_fish_duo_and_upload(
+        self,
+        *,
+        tts_model: str,
+        host_persona: str,
+        partner_persona: str,
+        host_voice_model: str,
+        partner_voice_model: str,
+        section_type: str,
+        turns: list[dict[str, str]],
+        output_object_key: str,
+        api_key_override: str | None = None,
+    ) -> tuple[str, int]:
+        _ = (host_persona, partner_persona, section_type)
+        payload, content_type, suffix, duration_sec = synthesize_fish_multi_speaker_tts(
+            model=tts_model,
+            host_voice_name=host_voice_model,
+            partner_voice_name=partner_voice_model,
+            turns=turns,
+            api_key=(api_key_override or "").strip() or self.fish_api_key,
+            timeout_sec=self.fish_timeout_sec,
         )
         if not output_object_key.endswith(suffix):
             output_object_key = output_object_key + suffix
@@ -401,6 +441,29 @@ class AudioBriefingTTSService:
             persona=persona,
             text=text,
             speech_rate=speech_rate,
+        )
+
+    def synthesize_fish_audio(
+        self,
+        *,
+        voice_id: str,
+        tts_model: str,
+        text: str,
+        speech_rate: float,
+        volume_gain: float,
+        api_key_override: str | None = None,
+    ) -> tuple[bytes, str, str, int]:
+        normalized_tts_model = (tts_model or "").strip()
+        if not normalized_tts_model:
+            raise RuntimeError("fish tts model is required")
+        return synthesize_fish_tts(
+            model=normalized_tts_model,
+            voice_name=voice_id,
+            text=text,
+            speech_rate=speech_rate,
+            volume_gain=volume_gain,
+            api_key=(api_key_override or "").strip() or self.fish_api_key,
+            timeout_sec=self.fish_timeout_sec,
         )
 
     def synthesize_openai_audio(

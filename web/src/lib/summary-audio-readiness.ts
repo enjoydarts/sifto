@@ -38,6 +38,10 @@ export function getSummaryAudioReadiness(settings: UserSettings | null | undefin
       return settings?.has_xai_api_key
         ? { ready: true, reasonKey: null }
         : { ready: false, reasonKey: "summaryAudio.playbackBlocked.xaiApiKeyMissing" };
+    case "fish":
+      return settings?.has_fish_api_key
+        ? { ready: true, reasonKey: null }
+        : { ready: false, reasonKey: "summaryAudio.playbackBlocked.fishApiKeyMissing" };
     case "openai":
       return settings?.has_openai_api_key
         ? { ready: true, reasonKey: null }

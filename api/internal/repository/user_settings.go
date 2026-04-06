@@ -85,6 +85,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var siliconflowAPIKeyEnc *string
 	var openrouterAPIKeyEnc *string
 	var aivisAPIKeyEnc *string
+	var fishAPIKeyEnc *string
 	var inoreaderAccessTokenEnc *string
 	err := r.db.QueryRow(ctx, `
 		SELECT user_id,
@@ -118,6 +119,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       openrouter_api_key_last4,
 		       aivis_api_key_enc,
 		       aivis_api_key_last4,
+		       fish_api_key_enc,
+		       fish_api_key_last4,
 		       aivis_user_dictionary_uuid,
 		       podcast_enabled,
 		       podcast_feed_slug,
@@ -201,6 +204,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.OpenRouterAPIKeyLast4,
 		&aivisAPIKeyEnc,
 		&v.AivisAPIKeyLast4,
+		&fishAPIKeyEnc,
+		&v.FishAudioAPIKeyLast4,
 		&v.AivisUserDictionaryUUID,
 		&v.PodcastEnabled,
 		&v.PodcastFeedSlug,
@@ -268,6 +273,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasSiliconFlowAPIKey = siliconflowAPIKeyEnc != nil && *siliconflowAPIKeyEnc != ""
 	v.HasOpenRouterAPIKey = openrouterAPIKeyEnc != nil && *openrouterAPIKeyEnc != ""
 	v.HasAivisAPIKey = aivisAPIKeyEnc != nil && *aivisAPIKeyEnc != ""
+	v.HasFishAudioAPIKey = fishAPIKeyEnc != nil && *fishAPIKeyEnc != ""
 	v.HasInoreaderOAuth = inoreaderAccessTokenEnc != nil && *inoreaderAccessTokenEnc != ""
 	return &v, nil
 }
@@ -831,6 +837,25 @@ func (r *UserSettingsRepo) GetAivisAPIKeyEncrypted(ctx context.Context, userID s
 	return v, nil
 }
 
+func (r *UserSettingsRepo) GetFishAudioAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT fish_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1
+	`, userID).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
 func (r *UserSettingsRepo) GetAivisUserDictionaryUUID(ctx context.Context, userID string) (*string, error) {
 	var v *string
 	err := r.db.QueryRow(ctx, `
@@ -1140,6 +1165,22 @@ func (r *UserSettingsRepo) SetAivisAPIKey(ctx context.Context, userID, encrypted
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetFishAudioAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, fish_api_key_enc, fish_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET fish_api_key_enc = EXCLUDED.fish_api_key_enc,
+		    fish_api_key_last4 = EXCLUDED.fish_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) SetAivisUserDictionaryUUID(ctx context.Context, userID, uuid string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, aivis_user_dictionary_uuid)
@@ -1386,6 +1427,22 @@ func (r *UserSettingsRepo) ClearAivisAPIKey(ctx context.Context, userID string) 
 		ON CONFLICT (user_id) DO UPDATE
 		SET aivis_api_key_enc = NULL,
 		    aivis_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearFishAudioAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, fish_api_key_enc, fish_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET fish_api_key_enc = NULL,
+		    fish_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

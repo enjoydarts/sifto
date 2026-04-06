@@ -356,6 +356,50 @@ export interface GeminiTTSVoicesResponse {
   voices: GeminiTTSVoiceCatalogEntry[];
 }
 
+export interface FishModelAuthor {
+  id?: string | null;
+  name?: string | null;
+  username?: string | null;
+  avatar_url?: string | null;
+}
+
+export interface FishModelTag {
+  name: string;
+}
+
+export interface FishModelSample {
+  audio_url: string;
+  text?: string | null;
+  transcript?: string | null;
+  duration_seconds?: number | null;
+}
+
+export interface FishModelSnapshot {
+  _id: string;
+  title: string;
+  description: string;
+  cover_image?: string | null;
+  tags: FishModelTag[];
+  languages: string[];
+  visibility: string;
+  like_count: number;
+  task_count: number;
+  author?: FishModelAuthor | null;
+  samples: FishModelSample[];
+  fetched_at: string;
+  updated_at?: string | null;
+}
+
+export type FishBrowseSort = "recommended" | "trending" | "latest";
+
+export interface FishBrowseResponse {
+  items: FishModelSnapshot[];
+  page: number;
+  page_size: number;
+  total: number;
+  has_more: boolean;
+}
+
 export interface ProviderModelSnapshotEntry {
   provider: string;
   model_id: string;
@@ -1443,6 +1487,8 @@ export interface UserSettings {
   openrouter_api_key_last4: string | null;
   has_aivis_api_key: boolean;
   aivis_api_key_last4: string | null;
+  has_fish_api_key?: boolean;
+  fish_api_key_last4?: string | null;
   aivis_user_dictionary_uuid?: string | null;
   gemini_tts_enabled?: boolean;
   podcast?: PodcastSettings;
@@ -1541,6 +1587,8 @@ export interface AudioBriefingPersonaVoice {
   tts_model: string;
   voice_model: string;
   voice_style: string;
+  provider_voice_label?: string;
+  provider_voice_description?: string;
   speech_rate: number;
   emotional_intensity: number;
   tempo_dynamics: number;
@@ -1554,6 +1602,8 @@ export interface SummaryAudioVoiceSettings {
   tts_model: string;
   voice_model: string;
   voice_style: string;
+  provider_voice_label?: string;
+  provider_voice_description?: string;
   speech_rate: number;
   emotional_intensity: number;
   tempo_dynamics: number;
@@ -2715,6 +2765,16 @@ export const api = {
       "/settings/aivis-key",
       { method: "DELETE" }
     ),
+  setFishApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_fish_api_key: boolean; fish_api_key_last4: string | null }>(
+      "/settings/fish-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteFishApiKey: () =>
+    apiFetch<{ user_id: string; has_fish_api_key: boolean; fish_api_key_last4: string | null }>(
+      "/settings/fish-key",
+      { method: "DELETE" }
+    ),
   getAivisUserDictionaries: () =>
     apiFetch<AivisUserDictionariesResponse>("/settings/aivis-user-dictionaries"),
   getPromptAdminCapabilities: () =>
@@ -2806,6 +2866,15 @@ export const api = {
     apiFetch<AivisSyncStatusResponse>("/aivis-models/status"),
   syncAivisModels: () =>
     apiFetch<AivisModelsResponse>("/aivis-models/sync", { method: "POST" }),
+  browseFishModels: (params?: { sort?: FishBrowseSort; query?: string; page?: number; pageSize?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.sort) search.set("sort", params.sort);
+    if (params?.query?.trim()) search.set("query", params.query.trim());
+    if (params?.page) search.set("page", String(params.page));
+    if (params?.pageSize) search.set("page_size", String(params.pageSize));
+    const qs = search.toString();
+    return apiFetch<FishBrowseResponse>(`/fish-models/browse${qs ? `?${qs}` : ""}`);
+  },
   getXAIVoices: () =>
     apiFetch<XAIVoicesResponse>("/xai-voices"),
   getXAIVoiceSyncStatus: () =>

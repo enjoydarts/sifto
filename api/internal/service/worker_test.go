@@ -74,6 +74,7 @@ func TestSynthesizeAudioBriefingUploadAppliesAudioBriefingTimeout(t *testing.T) 
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)
@@ -122,6 +123,7 @@ func TestSynthesizeAudioBriefingUploadIncludesUserDictionaryUUID(t *testing.T) {
 		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
 		"heartbeat-token",
 		strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),
+		nil,
 		nil,
 		nil,
 		nil,
@@ -236,6 +238,7 @@ func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeSummaryAudio(...) error = %v", err)
@@ -285,6 +288,7 @@ func TestSynthesizeAudioBriefingUploadIncludesXAIAPIKeyHeader(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		strptr("xai-key"),
 		nil,
 	)
@@ -327,6 +331,7 @@ func TestSynthesizeSummaryAudioIncludesXAIAPIKeyHeader(t *testing.T) {
 		1.0,
 		0,
 		0,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -387,6 +392,7 @@ func TestSynthesizeSummaryAudioDoesNotIncludeGoogleAPIKeyHeaderForGemini(t *test
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeSummaryAudio(...) error = %v", err)
@@ -440,6 +446,7 @@ func TestSynthesizeAudioBriefingUploadIncludesOpenAIAPIKeyHeaderAndTTSModel(t *t
 		"chunk-1",
 		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
 		"heartbeat-token",
+		nil,
 		nil,
 		nil,
 		nil,
@@ -503,6 +510,7 @@ func TestSynthesizeAudioBriefingUploadDoesNotIncludeGeminiAPIKeyHeaderAndInclude
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)
@@ -550,6 +558,7 @@ func TestSynthesizeSummaryAudioIncludesOpenAIAPIKeyHeaderAndTTSModel(t *testing.
 		1.0,
 		0,
 		0,
+		nil,
 		nil,
 		nil,
 		nil,

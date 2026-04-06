@@ -115,6 +115,20 @@ function resolvedAudioDuration(audio: HTMLAudioElement): number {
   return Number.isFinite(audio.duration) ? audio.duration : 0;
 }
 
+function sameSummaryItemDetail(a: ItemDetail | null, b: ItemDetail | null): boolean {
+  if (!a || !b) {
+    return a === b;
+  }
+  return (
+    a.id === b.id &&
+    (a.summary?.id ?? null) === (b.summary?.id ?? null) &&
+    (a.summary?.summary ?? null) === (b.summary?.summary ?? null) &&
+    (a.summary?.translated_title ?? null) === (b.summary?.translated_title ?? null) &&
+    (a.translated_title ?? null) === (b.translated_title ?? null) &&
+    (a.source_title ?? null) === (b.source_title ?? null)
+  );
+}
+
 function isNaturalEndingPause(audio: HTMLAudioElement | null): boolean {
   if (!audio) {
     return false;
@@ -215,10 +229,11 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       if (!nextDetail) {
         return prev;
       }
-      if (prev.currentItemID !== currentSummaryItemID) {
+      const expectedItemID = prev.currentItemID ?? prev.queue[0]?.id ?? null;
+      if (expectedItemID !== currentSummaryItemID) {
         return prev;
       }
-      if (prev.currentItemDetail?.id === nextDetail.id) {
+      if (sameSummaryItemDetail(prev.currentItemDetail as ItemDetail | null, nextDetail as ItemDetail | null)) {
         return prev;
       }
       return {
@@ -265,6 +280,25 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       };
     });
   }, [mode, summaryQueueQuery.data]);
+
+  useEffect(() => {
+    if (mode !== "summary_queue") {
+      return;
+    }
+    if (playbackState !== "playing" && playbackState !== "paused" && playbackState !== "preparing") {
+      return;
+    }
+    if (summaryQueue.queue.length < 2) {
+      return;
+    }
+    if (prefetchedAudioRef.current?.itemID === summaryQueue.queue[1]?.id) {
+      return;
+    }
+    if (pendingPrefetchRef.current?.itemID === summaryQueue.queue[1]?.id) {
+      return;
+    }
+    void ensureSummaryPrefetch(summaryQueue.queue, 1);
+  }, [mode, playbackState, summaryQueue.queue]);
 
   const requestSummaryAutoPlay = useEffectEvent(() => {
     void (async () => {
@@ -849,7 +883,17 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     };
     const started = await playSummaryQueue(nextQueue, true);
     if (started) {
-      setSummaryQueue(nextState);
+      setSummaryQueue((prev) => ({
+        ...nextState,
+        currentItemDetail:
+          prev.currentItemDetail && prev.currentItemDetail.id === nextState.currentItemID
+            ? prev.currentItemDetail
+            : nextState.currentItemDetail,
+        prefetchedItemID:
+          (prev.prefetchedItemID && prev.prefetchedItemID !== nextState.currentItemID ? prev.prefetchedItemID : null),
+        prefetchingItemID:
+          (prev.prefetchingItemID && prev.prefetchingItemID !== nextState.currentItemID ? prev.prefetchingItemID : null),
+      }));
       await persistRemoteSession("update", { summaryQueueState: nextState, positionSec: 0, durationSec: 0 });
     }
   }
@@ -877,7 +921,17 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         };
         const started = await playSummaryQueue(replenishedQueue, true);
         if (started) {
-          setSummaryQueue(nextState);
+          setSummaryQueue((prev) => ({
+            ...nextState,
+            currentItemDetail:
+              prev.currentItemDetail && prev.currentItemDetail.id === nextState.currentItemID
+                ? prev.currentItemDetail
+                : nextState.currentItemDetail,
+            prefetchedItemID:
+              (prev.prefetchedItemID && prev.prefetchedItemID !== nextState.currentItemID ? prev.prefetchedItemID : null),
+            prefetchingItemID:
+              (prev.prefetchingItemID && prev.prefetchingItemID !== nextState.currentItemID ? prev.prefetchingItemID : null),
+          }));
           await persistRemoteSession("update", { summaryQueueState: nextState, positionSec: 0, durationSec: 0 });
         }
         return;
@@ -918,7 +972,17 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     };
     const started = await playSummaryQueue(nextQueue, true);
     if (started) {
-      setSummaryQueue(nextState);
+      setSummaryQueue((prev) => ({
+        ...nextState,
+        currentItemDetail:
+          prev.currentItemDetail && prev.currentItemDetail.id === nextState.currentItemID
+            ? prev.currentItemDetail
+            : nextState.currentItemDetail,
+        prefetchedItemID:
+          (prev.prefetchedItemID && prev.prefetchedItemID !== nextState.currentItemID ? prev.prefetchedItemID : null),
+        prefetchingItemID:
+          (prev.prefetchingItemID && prev.prefetchingItemID !== nextState.currentItemID ? prev.prefetchingItemID : null),
+      }));
       await persistRemoteSession("update", { summaryQueueState: nextState, positionSec: 0, durationSec: 0 });
     }
   }

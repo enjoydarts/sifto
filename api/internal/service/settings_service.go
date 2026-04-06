@@ -61,6 +61,8 @@ type SettingsGetPayload struct {
 	OpenRouterAPIKeyLast4   *string          `json:"openrouter_api_key_last4,omitempty"`
 	HasAivisAPIKey          bool             `json:"has_aivis_api_key"`
 	AivisAPIKeyLast4        *string          `json:"aivis_api_key_last4,omitempty"`
+	HasFishAudioAPIKey      bool             `json:"has_fish_api_key"`
+	FishAudioAPIKeyLast4    *string          `json:"fish_api_key_last4,omitempty"`
 	AivisUserDictionaryUUID *string          `json:"aivis_user_dictionary_uuid,omitempty"`
 	GeminiTTSEnabled        bool             `json:"gemini_tts_enabled"`
 	Podcast                 map[string]any   `json:"podcast"`
@@ -142,31 +144,35 @@ func ErrInvalidPodcastCategory() error {
 }
 
 type UpdateAudioBriefingPersonaVoiceInput struct {
-	Persona                 string
-	TTSProvider             string
-	TTSModel                string
-	VoiceModel              string
-	VoiceStyle              string
-	SpeechRate              float64
-	EmotionalIntensity      float64
-	TempoDynamics           float64
-	LineBreakSilenceSeconds float64
-	Pitch                   float64
-	VolumeGain              float64
+	Persona                  string
+	TTSProvider              string
+	TTSModel                 string
+	VoiceModel               string
+	VoiceStyle               string
+	ProviderVoiceLabel       string
+	ProviderVoiceDescription string
+	SpeechRate               float64
+	EmotionalIntensity       float64
+	TempoDynamics            float64
+	LineBreakSilenceSeconds  float64
+	Pitch                    float64
+	VolumeGain               float64
 }
 
 type UpdateSummaryAudioVoiceSettingsInput struct {
-	TTSProvider             string
-	TTSModel                string
-	VoiceModel              string
-	VoiceStyle              string
-	SpeechRate              float64
-	EmotionalIntensity      float64
-	TempoDynamics           float64
-	LineBreakSilenceSeconds float64
-	Pitch                   float64
-	VolumeGain              float64
-	AivisUserDictionaryUUID *string
+	TTSProvider              string
+	TTSModel                 string
+	VoiceModel               string
+	VoiceStyle               string
+	ProviderVoiceLabel       string
+	ProviderVoiceDescription string
+	SpeechRate               float64
+	EmotionalIntensity       float64
+	TempoDynamics            float64
+	LineBreakSilenceSeconds  float64
+	Pitch                    float64
+	VolumeGain               float64
+	AivisUserDictionaryUUID  *string
 }
 
 var modelSettingPurposes = map[string]string{
@@ -333,6 +339,8 @@ func AudioBriefingPersonaVoicesPayload(rows []model.AudioBriefingPersonaVoice) [
 			"tts_model":                  row.TTSModel,
 			"voice_model":                row.VoiceModel,
 			"voice_style":                row.VoiceStyle,
+			"provider_voice_label":       row.ProviderVoiceLabel,
+			"provider_voice_description": row.ProviderVoiceDescription,
 			"speech_rate":                row.SpeechRate,
 			"emotional_intensity":        row.EmotionalIntensity,
 			"tempo_dynamics":             row.TempoDynamics,
@@ -351,6 +359,8 @@ func SummaryAudioVoiceSettingsPayload(settings *model.SummaryAudioVoiceSettings)
 			"tts_model":                  "",
 			"voice_model":                "",
 			"voice_style":                "",
+			"provider_voice_label":       "",
+			"provider_voice_description": "",
 			"speech_rate":                0,
 			"emotional_intensity":        0,
 			"tempo_dynamics":             0,
@@ -365,6 +375,8 @@ func SummaryAudioVoiceSettingsPayload(settings *model.SummaryAudioVoiceSettings)
 		"tts_model":                  settings.TTSModel,
 		"voice_model":                settings.VoiceModel,
 		"voice_style":                settings.VoiceStyle,
+		"provider_voice_label":       settings.ProviderVoiceLabel,
+		"provider_voice_description": settings.ProviderVoiceDescription,
 		"speech_rate":                settings.SpeechRate,
 		"emotional_intensity":        settings.EmotionalIntensity,
 		"tempo_dynamics":             settings.TempoDynamics,
@@ -519,6 +531,8 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		OpenRouterAPIKeyLast4:   settings.OpenRouterAPIKeyLast4,
 		HasAivisAPIKey:          settings.HasAivisAPIKey,
 		AivisAPIKeyLast4:        settings.AivisAPIKeyLast4,
+		HasFishAudioAPIKey:      settings.HasFishAudioAPIKey,
+		FishAudioAPIKeyLast4:    settings.FishAudioAPIKeyLast4,
 		AivisUserDictionaryUUID: settings.AivisUserDictionaryUUID,
 		GeminiTTSEnabled:        GeminiTTSEnabledForUser(ctx, s.userRepo, userID),
 		Podcast:                 PodcastSettingsPayload(settings),
@@ -573,18 +587,20 @@ func (s *SettingsService) UpdateSummaryAudioVoiceSettings(ctx context.Context, u
 		}
 	}
 	return s.summaryAudioRepo.Upsert(ctx, model.SummaryAudioVoiceSettings{
-		UserID:                  userID,
-		TTSProvider:             normalized.TTSProvider,
-		TTSModel:                normalized.TTSModel,
-		VoiceModel:              normalized.VoiceModel,
-		VoiceStyle:              normalized.VoiceStyle,
-		SpeechRate:              normalized.SpeechRate,
-		EmotionalIntensity:      normalized.EmotionalIntensity,
-		TempoDynamics:           normalized.TempoDynamics,
-		LineBreakSilenceSeconds: normalized.LineBreakSilenceSeconds,
-		Pitch:                   normalized.Pitch,
-		VolumeGain:              normalized.VolumeGain,
-		AivisUserDictionaryUUID: normalized.AivisUserDictionaryUUID,
+		UserID:                   userID,
+		TTSProvider:              normalized.TTSProvider,
+		TTSModel:                 normalized.TTSModel,
+		VoiceModel:               normalized.VoiceModel,
+		VoiceStyle:               normalized.VoiceStyle,
+		ProviderVoiceLabel:       normalized.ProviderVoiceLabel,
+		ProviderVoiceDescription: normalized.ProviderVoiceDescription,
+		SpeechRate:               normalized.SpeechRate,
+		EmotionalIntensity:       normalized.EmotionalIntensity,
+		TempoDynamics:            normalized.TempoDynamics,
+		LineBreakSilenceSeconds:  normalized.LineBreakSilenceSeconds,
+		Pitch:                    normalized.Pitch,
+		VolumeGain:               normalized.VolumeGain,
+		AivisUserDictionaryUUID:  normalized.AivisUserDictionaryUUID,
 	})
 }
 
@@ -642,8 +658,10 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 		seen[persona] = struct{}{}
 		provider := strings.TrimSpace(strings.ToLower(row.TTSProvider))
 		caps := LookupTTSProviderCapabilities(provider)
+		providerVoiceLabel := strings.TrimSpace(row.ProviderVoiceLabel)
+		providerVoiceDescription := strings.TrimSpace(row.ProviderVoiceDescription)
 		switch provider {
-		case "aivis", "mock", "xai", "openai", "gemini_tts":
+		case "aivis", "mock", "xai", "openai", "gemini_tts", "fish":
 		default:
 			return nil, fmt.Errorf("invalid tts_provider for %s", persona)
 		}
@@ -685,17 +703,19 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 			}
 		}
 		out = append(out, model.AudioBriefingPersonaVoice{
-			Persona:                 persona,
-			TTSProvider:             provider,
-			TTSModel:                ttsModel,
-			VoiceModel:              voiceModel,
-			VoiceStyle:              voiceStyle,
-			SpeechRate:              row.SpeechRate,
-			EmotionalIntensity:      row.EmotionalIntensity,
-			TempoDynamics:           row.TempoDynamics,
-			LineBreakSilenceSeconds: row.LineBreakSilenceSeconds,
-			Pitch:                   row.Pitch,
-			VolumeGain:              row.VolumeGain,
+			Persona:                  persona,
+			TTSProvider:              provider,
+			TTSModel:                 ttsModel,
+			VoiceModel:               voiceModel,
+			VoiceStyle:               voiceStyle,
+			ProviderVoiceLabel:       providerVoiceLabel,
+			ProviderVoiceDescription: providerVoiceDescription,
+			SpeechRate:               row.SpeechRate,
+			EmotionalIntensity:       row.EmotionalIntensity,
+			TempoDynamics:            row.TempoDynamics,
+			LineBreakSilenceSeconds:  row.LineBreakSilenceSeconds,
+			Pitch:                    row.Pitch,
+			VolumeGain:               row.VolumeGain,
 		})
 	}
 	return out, nil
@@ -706,6 +726,8 @@ func normalizeSummaryAudioVoiceSettingsInput(in UpdateSummaryAudioVoiceSettingsI
 	voiceModel := strings.TrimSpace(in.VoiceModel)
 	voiceStyle := strings.TrimSpace(in.VoiceStyle)
 	ttsModel := strings.TrimSpace(in.TTSModel)
+	providerVoiceLabel := strings.TrimSpace(in.ProviderVoiceLabel)
+	providerVoiceDescription := strings.TrimSpace(in.ProviderVoiceDescription)
 	dictUUID := normalizeOptionalString(in.AivisUserDictionaryUUID)
 	if provider == "" && voiceModel == "" && voiceStyle == "" && ttsModel == "" && dictUUID == nil &&
 		in.SpeechRate == 0 && in.EmotionalIntensity == 0 && in.TempoDynamics == 0 && in.LineBreakSilenceSeconds == 0 &&
@@ -713,7 +735,7 @@ func normalizeSummaryAudioVoiceSettingsInput(in UpdateSummaryAudioVoiceSettingsI
 		return &model.SummaryAudioVoiceSettings{}, nil
 	}
 	switch provider {
-	case "aivis", "mock", "xai", "openai", "gemini_tts":
+	case "aivis", "mock", "xai", "openai", "gemini_tts", "fish":
 	default:
 		return nil, fmt.Errorf("invalid tts_provider")
 	}
@@ -748,17 +770,19 @@ func normalizeSummaryAudioVoiceSettingsInput(in UpdateSummaryAudioVoiceSettingsI
 		}
 	}
 	return &model.SummaryAudioVoiceSettings{
-		TTSProvider:             provider,
-		TTSModel:                ttsModel,
-		VoiceModel:              voiceModel,
-		VoiceStyle:              voiceStyle,
-		SpeechRate:              in.SpeechRate,
-		EmotionalIntensity:      in.EmotionalIntensity,
-		TempoDynamics:           in.TempoDynamics,
-		LineBreakSilenceSeconds: in.LineBreakSilenceSeconds,
-		Pitch:                   in.Pitch,
-		VolumeGain:              in.VolumeGain,
-		AivisUserDictionaryUUID: dictUUID,
+		TTSProvider:              provider,
+		TTSModel:                 ttsModel,
+		VoiceModel:               voiceModel,
+		VoiceStyle:               voiceStyle,
+		ProviderVoiceLabel:       providerVoiceLabel,
+		ProviderVoiceDescription: providerVoiceDescription,
+		SpeechRate:               in.SpeechRate,
+		EmotionalIntensity:       in.EmotionalIntensity,
+		TempoDynamics:            in.TempoDynamics,
+		LineBreakSilenceSeconds:  in.LineBreakSilenceSeconds,
+		Pitch:                    in.Pitch,
+		VolumeGain:               in.VolumeGain,
+		AivisUserDictionaryUUID:  dictUUID,
 	}, nil
 }
 
@@ -838,6 +862,19 @@ func validateAivisVoiceSelectionAgainstSnapshots(snapshots []repository.AivisMod
 		}
 	}
 	return fmt.Errorf("aivis speaker/style is not synced")
+}
+
+func validateFishAudioVoiceSelectionAgainstSnapshots(snapshots []repository.FishAudioModelSnapshot, voiceModel string) error {
+	modelID := strings.TrimSpace(voiceModel)
+	if modelID == "" {
+		return fmt.Errorf("voice model is empty")
+	}
+	for _, snapshot := range snapshots {
+		if strings.TrimSpace(snapshot.ModelID) == modelID {
+			return nil
+		}
+	}
+	return fmt.Errorf("fish model is not synced")
 }
 
 func validateCatalogModelForPurpose(catalog *LLMCatalog, model *string, purpose string) error {
@@ -1221,6 +1258,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetOpenRouterAPIKey(ctx, userID, enc, last4)
 	case "aivis":
 		return s.repo.SetAivisAPIKey(ctx, userID, enc, last4)
+	case "fish":
+		return s.repo.SetFishAudioAPIKey(ctx, userID, enc, last4)
 	default:
 		return nil, fmt.Errorf("unsupported provider")
 	}
@@ -1258,6 +1297,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearOpenRouterAPIKey(ctx, userID)
 	case "aivis":
 		return s.repo.ClearAivisAPIKey(ctx, userID)
+	case "fish":
+		return s.repo.ClearFishAudioAPIKey(ctx, userID)
 	default:
 		return nil, fmt.Errorf("unsupported provider")
 	}

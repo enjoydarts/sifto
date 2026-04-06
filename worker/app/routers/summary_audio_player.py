@@ -35,6 +35,7 @@ def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Reques
         service = SummaryAudioPlayerService()
         aivis_api_key = request.headers.get("x-aivis-api-key", "").strip() or None
         google_api_key = request.headers.get("x-google-api-key", "").strip() or None
+        fish_api_key = request.headers.get("x-fish-api-key", "").strip() or None
         xai_api_key = request.headers.get("x-xai-api-key", "").strip() or None
         audio_base64, content_type, duration_sec, resolved_text = service.synthesize(
             provider=req.provider,
@@ -52,6 +53,7 @@ def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Reques
             user_dictionary_uuid=req.user_dictionary_uuid,
             aivis_api_key=aivis_api_key,
             google_api_key=google_api_key,
+            fish_api_key=fish_api_key,
             xai_api_key=xai_api_key,
             openai_api_key=request.headers.get("x-openai-api-key", "").strip() or None,
         )

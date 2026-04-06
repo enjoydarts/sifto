@@ -486,17 +486,19 @@ func (h *SettingsHandler) UpdateAudioBriefingPersonaVoices(w http.ResponseWriter
 	userID := middleware.GetUserID(r)
 	var body struct {
 		Voices []struct {
-			Persona                 string  `json:"persona"`
-			TTSProvider             string  `json:"tts_provider"`
-			TTSModel                string  `json:"tts_model"`
-			VoiceModel              string  `json:"voice_model"`
-			VoiceStyle              string  `json:"voice_style"`
-			SpeechRate              float64 `json:"speech_rate"`
-			EmotionalIntensity      float64 `json:"emotional_intensity"`
-			TempoDynamics           float64 `json:"tempo_dynamics"`
-			LineBreakSilenceSeconds float64 `json:"line_break_silence_seconds"`
-			Pitch                   float64 `json:"pitch"`
-			VolumeGain              float64 `json:"volume_gain"`
+			Persona                  string  `json:"persona"`
+			TTSProvider              string  `json:"tts_provider"`
+			TTSModel                 string  `json:"tts_model"`
+			VoiceModel               string  `json:"voice_model"`
+			VoiceStyle               string  `json:"voice_style"`
+			ProviderVoiceLabel       string  `json:"provider_voice_label"`
+			ProviderVoiceDescription string  `json:"provider_voice_description"`
+			SpeechRate               float64 `json:"speech_rate"`
+			EmotionalIntensity       float64 `json:"emotional_intensity"`
+			TempoDynamics            float64 `json:"tempo_dynamics"`
+			LineBreakSilenceSeconds  float64 `json:"line_break_silence_seconds"`
+			Pitch                    float64 `json:"pitch"`
+			VolumeGain               float64 `json:"volume_gain"`
 		} `json:"voices"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -510,17 +512,19 @@ func (h *SettingsHandler) UpdateAudioBriefingPersonaVoices(w http.ResponseWriter
 			usesGeminiTTS = true
 		}
 		inputs = append(inputs, service.UpdateAudioBriefingPersonaVoiceInput{
-			Persona:                 voice.Persona,
-			TTSProvider:             voice.TTSProvider,
-			TTSModel:                voice.TTSModel,
-			VoiceModel:              voice.VoiceModel,
-			VoiceStyle:              voice.VoiceStyle,
-			SpeechRate:              voice.SpeechRate,
-			EmotionalIntensity:      voice.EmotionalIntensity,
-			TempoDynamics:           voice.TempoDynamics,
-			LineBreakSilenceSeconds: voice.LineBreakSilenceSeconds,
-			Pitch:                   voice.Pitch,
-			VolumeGain:              voice.VolumeGain,
+			Persona:                  voice.Persona,
+			TTSProvider:              voice.TTSProvider,
+			TTSModel:                 voice.TTSModel,
+			VoiceModel:               voice.VoiceModel,
+			VoiceStyle:               voice.VoiceStyle,
+			ProviderVoiceLabel:       voice.ProviderVoiceLabel,
+			ProviderVoiceDescription: voice.ProviderVoiceDescription,
+			SpeechRate:               voice.SpeechRate,
+			EmotionalIntensity:       voice.EmotionalIntensity,
+			TempoDynamics:            voice.TempoDynamics,
+			LineBreakSilenceSeconds:  voice.LineBreakSilenceSeconds,
+			Pitch:                    voice.Pitch,
+			VolumeGain:               voice.VolumeGain,
 		})
 	}
 	if usesGeminiTTS {
@@ -563,17 +567,19 @@ func (h *SettingsHandler) GetSummaryAudioVoiceSettings(w http.ResponseWriter, r 
 func (h *SettingsHandler) UpdateSummaryAudioVoiceSettings(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	var body struct {
-		TTSProvider             string  `json:"tts_provider"`
-		TTSModel                string  `json:"tts_model"`
-		VoiceModel              string  `json:"voice_model"`
-		VoiceStyle              string  `json:"voice_style"`
-		SpeechRate              float64 `json:"speech_rate"`
-		EmotionalIntensity      float64 `json:"emotional_intensity"`
-		TempoDynamics           float64 `json:"tempo_dynamics"`
-		LineBreakSilenceSeconds float64 `json:"line_break_silence_seconds"`
-		Pitch                   float64 `json:"pitch"`
-		VolumeGain              float64 `json:"volume_gain"`
-		AivisUserDictionaryUUID *string `json:"aivis_user_dictionary_uuid"`
+		TTSProvider              string  `json:"tts_provider"`
+		TTSModel                 string  `json:"tts_model"`
+		VoiceModel               string  `json:"voice_model"`
+		VoiceStyle               string  `json:"voice_style"`
+		ProviderVoiceLabel       string  `json:"provider_voice_label"`
+		ProviderVoiceDescription string  `json:"provider_voice_description"`
+		SpeechRate               float64 `json:"speech_rate"`
+		EmotionalIntensity       float64 `json:"emotional_intensity"`
+		TempoDynamics            float64 `json:"tempo_dynamics"`
+		LineBreakSilenceSeconds  float64 `json:"line_break_silence_seconds"`
+		Pitch                    float64 `json:"pitch"`
+		VolumeGain               float64 `json:"volume_gain"`
+		AivisUserDictionaryUUID  *string `json:"aivis_user_dictionary_uuid"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -586,17 +592,19 @@ func (h *SettingsHandler) UpdateSummaryAudioVoiceSettings(w http.ResponseWriter,
 		}
 	}
 	settings, err := h.settings.UpdateSummaryAudioVoiceSettings(r.Context(), userID, service.UpdateSummaryAudioVoiceSettingsInput{
-		TTSProvider:             body.TTSProvider,
-		TTSModel:                body.TTSModel,
-		VoiceModel:              body.VoiceModel,
-		VoiceStyle:              body.VoiceStyle,
-		SpeechRate:              body.SpeechRate,
-		EmotionalIntensity:      body.EmotionalIntensity,
-		TempoDynamics:           body.TempoDynamics,
-		LineBreakSilenceSeconds: body.LineBreakSilenceSeconds,
-		Pitch:                   body.Pitch,
-		VolumeGain:              body.VolumeGain,
-		AivisUserDictionaryUUID: body.AivisUserDictionaryUUID,
+		TTSProvider:              body.TTSProvider,
+		TTSModel:                 body.TTSModel,
+		VoiceModel:               body.VoiceModel,
+		VoiceStyle:               body.VoiceStyle,
+		ProviderVoiceLabel:       body.ProviderVoiceLabel,
+		ProviderVoiceDescription: body.ProviderVoiceDescription,
+		SpeechRate:               body.SpeechRate,
+		EmotionalIntensity:       body.EmotionalIntensity,
+		TempoDynamics:            body.TempoDynamics,
+		LineBreakSilenceSeconds:  body.LineBreakSilenceSeconds,
+		Pitch:                    body.Pitch,
+		VolumeGain:               body.VolumeGain,
+		AivisUserDictionaryUUID:  body.AivisUserDictionaryUUID,
 	})
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "invalid ") || strings.HasPrefix(err.Error(), "aivis models are not synced") {
@@ -1096,6 +1104,20 @@ func (h *SettingsHandler) DeleteAivisAPIKey(w http.ResponseWriter, r *http.Reque
 	h.deleteAPIKey(w, r, "aivis", map[string]func(*model.UserSettings) any{
 		"has_aivis_api_key":   func(s *model.UserSettings) any { return s.HasAivisAPIKey },
 		"aivis_api_key_last4": func(s *model.UserSettings) any { return s.AivisAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) SetFishAudioAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "fish", map[string]func(*model.UserSettings) any{
+		"has_fish_api_key":   func(s *model.UserSettings) any { return s.HasFishAudioAPIKey },
+		"fish_api_key_last4": func(s *model.UserSettings) any { return s.FishAudioAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteFishAudioAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "fish", map[string]func(*model.UserSettings) any{
+		"has_fish_api_key":   func(s *model.UserSettings) any { return s.HasFishAudioAPIKey },
+		"fish_api_key_last4": func(s *model.UserSettings) any { return s.FishAudioAPIKeyLast4 },
 	})
 }
 

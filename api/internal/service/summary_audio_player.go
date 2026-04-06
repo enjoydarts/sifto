@@ -50,6 +50,7 @@ type summaryAudioSynthesizer interface {
 		volumeGain float64,
 		aivisUserDictionaryUUID *string,
 		aivisAPIKey *string,
+		fishAudioAPIKey *string,
 		googleAPIKey *string,
 		xaiAPIKey *string,
 		openAIAPIKey *string,
@@ -115,6 +116,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	narration := BuildSummaryAudioNarration(derefString(item.TranslatedTitle), derefString(item.Title), summaryText)
 	var aivisAPIKey *string
 	var aivisUserDictionaryUUID *string
+	var fishAudioAPIKey *string
 	var googleAPIKey *string
 	var xaiAPIKey *string
 	var openAIAPIKey *string
@@ -126,6 +128,14 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		aivisUserDictionaryUUID = settings.AivisUserDictionaryUUID
 	} else if strings.EqualFold(provider, "xai") {
 		xaiAPIKey, err = s.loadXAIAPIKey(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+	} else if strings.EqualFold(provider, "fish") {
+		if ttsModel == "" {
+			return nil, ErrSummaryAudioMissingModel
+		}
+		fishAudioAPIKey, err = loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetFishAudioAPIKeyEncrypted, s.cipher, userID, "fish api key is not configured")
 		if err != nil {
 			return nil, err
 		}
@@ -161,6 +171,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		settings.VolumeGain,
 		aivisUserDictionaryUUID,
 		aivisAPIKey,
+		fishAudioAPIKey,
 		googleAPIKey,
 		xaiAPIKey,
 		openAIAPIKey,

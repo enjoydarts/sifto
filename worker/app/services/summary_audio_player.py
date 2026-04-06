@@ -4,6 +4,7 @@ import os
 from app.services.audio_briefing_tts import _env_float
 from app.services.audio_briefing_tts import synthesize_mock_audio
 from app.services.aivis_speech import AivisSpeechService
+from app.services.fish_tts import synthesize_fish_tts
 from app.services.gemini_tts import synthesize_gemini_tts
 from app.services.tts_provider_registry import synthesize_catalog_tts
 
@@ -25,6 +26,8 @@ class SummaryAudioPlayerService:
         self.xai_timeout_sec = max(_env_float("XAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
         self.gemini_tts_endpoint = (os.getenv("GEMINI_TTS_ENDPOINT", "https://generativelanguage.googleapis.com").strip() or "https://generativelanguage.googleapis.com").rstrip("/")
         self.gemini_timeout_sec = max(_env_float("GEMINI_TTS_TIMEOUT_SEC", 300.0), 1.0)
+        self.fish_api_key = os.getenv("FISH_API_KEY", "").strip()
+        self.fish_timeout_sec = max(_env_float("FISH_TTS_TIMEOUT_SEC", 300.0), 1.0)
         self.openai_tts_endpoint = (os.getenv("OPENAI_TTS_ENDPOINT", "https://api.openai.com").strip() or "https://api.openai.com").rstrip("/")
         self.openai_timeout_sec = max(_env_float("OPENAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
 
@@ -46,6 +49,7 @@ class SummaryAudioPlayerService:
         user_dictionary_uuid: str | None = None,
         aivis_api_key: str | None = None,
         google_api_key: str | None = None,
+        fish_api_key: str | None = None,
         xai_api_key: str | None = None,
         openai_api_key: str | None = None,
     ) -> tuple[str, str, int, str]:
@@ -84,6 +88,16 @@ class SummaryAudioPlayerService:
                 voice_name=voice_model,
                 text=text,
                 speech_rate=speech_rate,
+            )
+        elif normalized_provider == "fish":
+            audio_bytes, content_type, _, duration_sec = synthesize_fish_tts(
+                model=tts_model,
+                voice_name=voice_model,
+                text=text,
+                speech_rate=speech_rate,
+                volume_gain=volume_gain,
+                api_key=(fish_api_key or "").strip() or self.fish_api_key,
+                timeout_sec=self.fish_timeout_sec,
             )
         elif normalized_provider == "openai":
             audio_bytes, content_type, _, duration_sec = synthesize_catalog_tts(

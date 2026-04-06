@@ -56,6 +56,7 @@ const secondaryLinks = [
   { href: "/poe-models", labelKey: "nav.poeModels", icon: Link2 },
   { href: "/openrouter-models", labelKey: "nav.openrouterModels", icon: Link2 },
   { href: "/aivis-models", labelKey: "nav.aivisModels", icon: Link2 },
+  { href: "/fish-models", labelKey: "nav.fishModels", icon: Link2 },
   { href: "/prompt-admin", labelKey: "nav.promptAdmin", icon: SettingsIcon },
   { href: "/settings", labelKey: "nav.settings", icon: SettingsIcon },
   { href: "/debug/digests", labelKey: "nav.debug", icon: Bug },
@@ -113,7 +114,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
     {
       labelKey: "nav.group.llm",
       items: visibleSecondaryLinks.filter((link) =>
-        ["/llm-usage", "/llm-analysis", "/provider-model-snapshots", "/poe-models", "/openrouter-models", "/aivis-models", "/prompt-admin"].includes(link.href),
+        ["/llm-usage", "/llm-analysis", "/provider-model-snapshots", "/poe-models", "/openrouter-models", "/aivis-models", "/fish-models", "/prompt-admin"].includes(link.href),
       ),
     },
   ];

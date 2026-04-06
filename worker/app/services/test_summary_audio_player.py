@@ -115,6 +115,45 @@ class SummaryAudioPlayerTests(unittest.TestCase):
         self.assertEqual(duration_sec, 5)
         self.assertEqual(resolved_text, "summary text")
 
+    def test_synthesize_uses_fish_provider(self):
+        service = summary_audio_player.SummaryAudioPlayerService()
+
+        with patch("app.services.summary_audio_player.synthesize_fish_tts", return_value=(b"audio", "audio/mpeg", ".mp3", 5)) as synth:
+            audio_base64, content_type, duration_sec, resolved_text = service.synthesize(
+                provider="fish",
+                voice_model="fish-model-1",
+                voice_style="",
+                tts_model="s2-pro",
+                text="summary text",
+                speech_rate=1.1,
+                emotional_intensity=1.0,
+                tempo_dynamics=1.0,
+                line_break_silence_seconds=0.4,
+                chunk_trailing_silence_seconds=1.25,
+                pitch=0.0,
+                volume_gain=0.4,
+                user_dictionary_uuid=None,
+                aivis_api_key=None,
+                google_api_key=None,
+                xai_api_key=None,
+                openai_api_key=None,
+                fish_api_key="fish-key",
+            )
+
+        synth.assert_called_once_with(
+            model="s2-pro",
+            voice_name="fish-model-1",
+            text="summary text",
+            speech_rate=1.1,
+            volume_gain=0.4,
+            api_key="fish-key",
+            timeout_sec=service.fish_timeout_sec,
+        )
+        self.assertEqual(audio_base64, "YXVkaW8=")
+        self.assertEqual(content_type, "audio/mpeg")
+        self.assertEqual(duration_sec, 5)
+        self.assertEqual(resolved_text, "summary text")
+
     def test_synthesize_uses_gemini_provider(self):
         service = summary_audio_player.SummaryAudioPlayerService()
 

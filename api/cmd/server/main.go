@@ -137,6 +137,8 @@ func main() {
 	poeModelsH := handler.NewPoeModelsHandler(poeModelRepo, userSettingsRepo, secretCipher, providerModelUpdateRepo, poeCatalogSvc, poeUsageSvc)
 	aivisCatalogSvc := service.NewAivisCatalogService()
 	aivisModelsH := handler.NewAivisModelsHandler(aivisModelRepo, providerModelUpdateRepo, aivisCatalogSvc)
+	fishAudioCatalogSvc := service.NewFishAudioCatalogService()
+	fishAudioModelsH := handler.NewFishAudioModelsHandler(fishAudioCatalogSvc)
 	xaiVoiceRepo := repository.NewXAIVoiceRepo(db)
 	xaiVoiceCatalogSvc := service.NewXAIVoiceCatalogService()
 	xaiVoicesH := handler.NewXAIVoicesHandler(xaiVoiceRepo, userSettingsRepo, providerModelUpdateRepo, secretCipher, xaiVoiceCatalogSvc)
@@ -325,6 +327,9 @@ func main() {
 			r.Get("/status", aivisModelsH.Status)
 			r.Post("/sync", aivisModelsH.Sync)
 		})
+		r.Route("/fish-models", func(r chi.Router) {
+			r.Get("/browse", fishAudioModelsH.Browse)
+		})
 		r.Route("/xai-voices", func(r chi.Router) {
 			r.Get("/", xaiVoicesH.List)
 			r.Get("/status", xaiVoicesH.Status)
@@ -438,6 +443,8 @@ func main() {
 			r.Delete("/openrouter-key", settingsH.DeleteOpenRouterAPIKey)
 			r.Post("/aivis-key", settingsH.SetAivisAPIKey)
 			r.Delete("/aivis-key", settingsH.DeleteAivisAPIKey)
+			r.Post("/fish-key", settingsH.SetFishAudioAPIKey)
+			r.Delete("/fish-key", settingsH.DeleteFishAudioAPIKey)
 			r.Get("/aivis-user-dictionaries", settingsH.GetAivisUserDictionaries)
 			r.Post("/aivis-user-dictionary", settingsH.SetAivisUserDictionary)
 			r.Delete("/aivis-user-dictionary", settingsH.DeleteAivisUserDictionary)

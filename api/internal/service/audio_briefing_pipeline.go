@@ -841,6 +841,7 @@ func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context
 		return "", nil, repository.ErrNotFound
 	}
 	hostRequiresGemini := hostVoice != nil && strings.EqualFold(strings.TrimSpace(hostVoice.TTSProvider), "gemini_tts")
+	hostRequiresFish := hostVoice != nil && strings.EqualFold(strings.TrimSpace(hostVoice.TTSProvider), "fish")
 	if existing := strings.TrimSpace(derefString(job.PartnerPersona)); existing != "" {
 		voice, err := o.repo.GetPersonaVoice(ctx, job.UserID, existing)
 		if err != nil {
@@ -851,6 +852,9 @@ func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context
 		}
 		if hostRequiresGemini && !audioBriefingGeminiDuoReady(hostVoice, voice) {
 			return "", nil, fmt.Errorf("audio briefing duo partner must use gemini_tts with the same tts model as host")
+		}
+		if hostRequiresFish && !audioBriefingFishDuoReady(hostVoice, voice) {
+			return "", nil, fmt.Errorf("audio briefing duo partner must use fish with s2-pro and a distinct voice from host")
 		}
 		return normalizeAudioBriefingPersona(existing), voice, nil
 	}
@@ -873,6 +877,9 @@ func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context
 			if hostRequiresGemini {
 				return "", nil, fmt.Errorf("audio briefing duo random partner persona requires another gemini_tts voice with the same tts model")
 			}
+			if hostRequiresFish {
+				return "", nil, fmt.Errorf("audio briefing duo random partner persona requires another fish voice using s2-pro")
+			}
 			return "", nil, fmt.Errorf("audio briefing duo random partner persona requires another configured persona voice")
 		}
 		if _, err := o.repo.SetPartnerPersona(ctx, job.ID, partnerPersona); err != nil {
@@ -882,6 +889,9 @@ func (o *AudioBriefingOrchestrator) resolveAudioBriefingPartnerVoice(ctx context
 	}
 	if hostRequiresGemini {
 		return "", nil, fmt.Errorf("audio briefing duo partner persona must be explicitly configured for gemini_tts")
+	}
+	if hostRequiresFish {
+		return "", nil, fmt.Errorf("audio briefing duo partner persona must be explicitly configured for fish")
 	}
 	return "", nil, fmt.Errorf("audio briefing duo partner persona must be explicitly configured")
 }
@@ -1805,6 +1815,9 @@ func resolveRandomAudioBriefingPartnerCandidate(
 			continue
 		}
 		if hostRequiresGemini && !audioBriefingGeminiDuoReady(hostVoice, &voice) {
+			continue
+		}
+		if hostVoice != nil && strings.EqualFold(strings.TrimSpace(hostVoice.TTSProvider), "fish") && !audioBriefingFishDuoReady(hostVoice, &voice) {
 			continue
 		}
 		if _, exists := candidateVoices[persona]; exists {

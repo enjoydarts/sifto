@@ -11,6 +11,8 @@ class SummaryTaskCommonTests(unittest.TestCase):
         self.assertIn("「〜である。」の連続を避け", SUMMARY_SYSTEM_INSTRUCTION)
         self.assertIn("ニュースレター編集者", SUMMARY_SYSTEM_INSTRUCTION)
         self.assertIn("短文の羅列", SUMMARY_SYSTEM_INSTRUCTION)
+        self.assertIn("技術記事は、一般的なビジネス記事より importance を明確に高く採点", SUMMARY_SYSTEM_INSTRUCTION)
+        self.assertIn("actionability も高く採点", SUMMARY_SYSTEM_INSTRUCTION)
 
     def test_build_summary_task_fallback_requests_natural_connected_prose(self):
         task = build_summary_task(
@@ -30,6 +32,8 @@ class SummaryTaskCommonTests(unittest.TestCase):
         self.assertIn("ニュースレターの編集者が書く前文のように", prompt)
         self.assertIn("短文を切って並べるのではなく", prompt)
         self.assertIn("必要に応じて主語や関係を補い", prompt)
+        self.assertIn("技術記事を明確に優遇してください", prompt)
+        self.assertIn("importance と actionability を高めに採点", prompt)
 
     def test_build_summary_task_fallback_uses_safe_translated_title_example(self):
         task = build_summary_task(

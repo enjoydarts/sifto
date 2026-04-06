@@ -115,3 +115,30 @@ class FishTTSServiceTests(unittest.TestCase):
                 "top_p": 0.7,
             },
         )
+
+    def test_synthesize_fish_multi_speaker_tts_accepts_preprocessed_text(self):
+        captured: dict[str, object] = {}
+
+        def fake_post(url, headers=None, json=None, timeout=None):
+            captured["json"] = json
+            request = httpx.Request("POST", url)
+            return httpx.Response(200, content=b"audio", request=request)
+
+        with mock.patch("app.services.fish_tts.httpx.post", side_effect=fake_post):
+            synthesize_fish_multi_speaker_tts(
+                model="s2-pro",
+                host_voice_name="host-voice",
+                partner_voice_name="partner-voice",
+                turns=[
+                    {"speaker": "host", "text": "最初の話題です。"},
+                    {"speaker": "partner", "text": "補足します。"},
+                ],
+                text="<|speaker:0|>[自然に]最初の話題です。<|speaker:1|>[落ち着いて]補足します。",
+                api_key="fish-key",
+                timeout_sec=30.0,
+            )
+
+        self.assertEqual(
+            captured["json"]["text"],
+            "<|speaker:0|>[自然に]最初の話題です。<|speaker:1|>[落ち着いて]補足します。",
+        )

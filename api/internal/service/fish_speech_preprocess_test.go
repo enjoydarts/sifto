@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/enjoydarts/sifto/api/internal/repository"
@@ -18,7 +19,7 @@ func (s *fishPreprocessUsageRepoStub) Insert(_ context.Context, in repository.LL
 
 func TestRecordFishPreprocessLLMUsageUsesSeparatePromptMetadata(t *testing.T) {
 	repo := &fishPreprocessUsageRepoStub{}
-	userID := "00000000-0000-4000-8000-000000000021"
+	userID := "00000000-0000-4000-8000-000000000022"
 	itemID := "00000000-0000-4000-8000-000000000099"
 	usage := &LLMUsage{
 		Provider:                 "openai",
@@ -55,11 +56,19 @@ func TestRecordFishPreprocessLLMUsageUsesSeparatePromptMetadata(t *testing.T) {
 
 type fishPreprocessWorkerStub struct {
 	gotAPIKey *string
+	gotText   string
+	gotModel  string
+	gotPrompt string
+	gotVars   map[string]string
 	response  *FishSpeechPreprocessResponse
 }
 
-func (s *fishPreprocessWorkerStub) PreprocessFishSpeechText(_ context.Context, _ string, _ string, _ string, apiKey *string) (*FishSpeechPreprocessResponse, error) {
+func (s *fishPreprocessWorkerStub) PreprocessFishSpeechText(_ context.Context, text string, model string, promptKey string, variables map[string]string, apiKey *string) (*FishSpeechPreprocessResponse, error) {
 	s.gotAPIKey = apiKey
+	s.gotText = text
+	s.gotModel = model
+	s.gotPrompt = promptKey
+	s.gotVars = variables
 	if s.response != nil {
 		return s.response, nil
 	}
@@ -76,9 +85,17 @@ func TestFishSpeechPreprocessUsesOnlySelectedProviderKey(t *testing.T) {
 	lockSettingsServiceTestDB(t, db)
 
 	ctx := context.Background()
-	userID := "00000000-0000-4000-8000-000000000021"
+	userID := "00000000-0000-4000-8000-000000000023"
+	sourceID := "00000000-0000-4000-8000-000000000121"
+	itemID := "00000000-0000-4000-8000-000000000111"
 	if _, err := db.Exec(ctx, `DELETE FROM llm_usage_logs WHERE user_id = $1`, userID); err != nil {
 		t.Fatalf("reset llm_usage_logs: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM items WHERE id = $1`, itemID); err != nil {
+		t.Fatalf("reset items: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM sources WHERE id = $1`, sourceID); err != nil {
+		t.Fatalf("reset sources: %v", err)
 	}
 	if _, err := db.Exec(ctx, `DELETE FROM user_settings WHERE user_id = $1`, userID); err != nil {
 		t.Fatalf("reset user_settings: %v", err)
@@ -112,6 +129,20 @@ func TestFishSpeechPreprocessUsesOnlySelectedProviderKey(t *testing.T) {
 	}
 
 	worker := &fishPreprocessWorkerStub{}
+	worker.response = &FishSpeechPreprocessResponse{
+		Text: "[自然に] テスト",
+		LLM: &LLMUsage{
+			Provider:           "openrouter",
+			Model:              "openai/gpt-oss-20b",
+			RequestedModel:     "openrouter::openai/gpt-oss-20b",
+			ResolvedModel:      "openai/gpt-oss-20b",
+			PricingModelFamily: "openrouter",
+			PricingSource:      "openrouter",
+			InputTokens:        21,
+			OutputTokens:       8,
+			EstimatedCostUSD:   0.001,
+		},
+	}
 	service := NewFishSpeechPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
 
 	result, err := service.PreprocessSummaryAudioText(ctx, userID, "", "元テキスト")
@@ -135,7 +166,7 @@ func TestFishSpeechPreprocessRequiresConfiguredModel(t *testing.T) {
 	lockSettingsServiceTestDB(t, db)
 
 	ctx := context.Background()
-	userID := "00000000-0000-4000-8000-000000000021"
+	userID := "00000000-0000-4000-8000-000000000023"
 	if _, err := db.Exec(ctx, `DELETE FROM user_settings WHERE user_id = $1`, userID); err != nil {
 		t.Fatalf("reset user_settings: %v", err)
 	}
@@ -163,7 +194,7 @@ func TestFishSpeechPreprocessRejectsEmptyOutput(t *testing.T) {
 	lockSettingsServiceTestDB(t, db)
 
 	ctx := context.Background()
-	userID := "00000000-0000-4000-8000-000000000021"
+	userID := "00000000-0000-4000-8000-000000000024"
 	if _, err := db.Exec(ctx, `DELETE FROM user_settings WHERE user_id = $1`, userID); err != nil {
 		t.Fatalf("reset user_settings: %v", err)
 	}
@@ -197,5 +228,210 @@ func TestFishSpeechPreprocessRejectsEmptyOutput(t *testing.T) {
 	_, err = service.PreprocessSummaryAudioText(ctx, userID, "", "元テキスト")
 	if err == nil || err != ErrFishPreprocessEmptyOutput {
 		t.Fatalf("PreprocessSummaryAudioText() error = %v, want %v", err, ErrFishPreprocessEmptyOutput)
+	}
+}
+
+func TestFishSpeechPreprocessAudioBriefingSingleUsesPromptKeyAndPersonaVariables(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "fish-preprocess-briefing-single-test-key")
+	db, err := repository.NewPool(context.Background())
+	if err != nil {
+		t.Fatalf("NewPool() error = %v", err)
+	}
+	t.Cleanup(db.Close)
+	lockSettingsServiceTestDB(t, db)
+
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000025"
+	sourceID := "00000000-0000-4000-8000-000000000123"
+	itemID := "00000000-0000-4000-8000-000000000113"
+	if _, err := db.Exec(ctx, `DELETE FROM llm_usage_logs WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset llm_usage_logs: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM items WHERE id = $1`, itemID); err != nil {
+		t.Fatalf("reset items: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM sources WHERE id = $1`, sourceID); err != nil {
+		t.Fatalf("reset sources: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM user_settings WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset user_settings: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("reset users: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, $3)`, userID, "fish-preprocess-briefing-single@example.com", "Fish Preprocess"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO sources (id, user_id, url, type, title) VALUES ($1, $2, $3, 'manual', $4)`, sourceID, userID, "https://example.com/feed", "Example Source"); err != nil {
+		t.Fatalf("insert source: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO items (id, source_id, url, title, status, content_text) VALUES ($1, $2, $3, $4, 'fetched', $5)`, itemID, sourceID, "https://example.com/items/113", "Briefing Item", "body"); err != nil {
+		t.Fatalf("insert item: %v", err)
+	}
+
+	repo := repository.NewUserSettingsRepo(db)
+	modelName := strptr("openrouter::openai/gpt-oss-20b")
+	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
+		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
+		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+	); err != nil {
+		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
+	}
+	cipher := NewSecretCipher()
+	enc, err := cipher.EncryptString("openrouter-secret")
+	if err != nil {
+		t.Fatalf("EncryptString(openrouter): %v", err)
+	}
+	if _, err := repo.SetOpenRouterAPIKey(ctx, userID, enc, "cret"); err != nil {
+		t.Fatalf("SetOpenRouterAPIKey() error = %v", err)
+	}
+
+	worker := &fishPreprocessWorkerStub{}
+	worker.response = &FishSpeechPreprocessResponse{
+		Text: "[自然に] テスト",
+		LLM: &LLMUsage{
+			Provider:           "openrouter",
+			Model:              "openai/gpt-oss-20b",
+			RequestedModel:     "openrouter::openai/gpt-oss-20b",
+			ResolvedModel:      "openai/gpt-oss-20b",
+			PricingModelFamily: "openrouter",
+			PricingSource:      "openrouter",
+			InputTokens:        21,
+			OutputTokens:       8,
+			EstimatedCostUSD:   0.001,
+		},
+	}
+	service := NewFishSpeechPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
+
+	if _, err := service.PreprocessAudioBriefingSingleText(ctx, userID, itemID, "editor", "元テキスト"); err != nil {
+		t.Fatalf("PreprocessAudioBriefingSingleText() error = %v", err)
+	}
+	if worker.gotPrompt != fishAudioBriefingSinglePreprocessPromptKey {
+		t.Fatalf("promptKey = %q, want %q", worker.gotPrompt, fishAudioBriefingSinglePreprocessPromptKey)
+	}
+	if got := worker.gotVars["persona_name"]; got != "editor" {
+		t.Fatalf("variables.persona_name = %q, want editor", got)
+	}
+
+	var (
+		purpose   string
+		promptKey string
+		loggedID  *string
+	)
+	if err := db.QueryRow(ctx, `SELECT purpose, prompt_key, item_id FROM llm_usage_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`, userID).Scan(&purpose, &promptKey, &loggedID); err != nil {
+		t.Fatalf("select llm_usage_logs: %v", err)
+	}
+	if purpose != fishPreprocessPurpose {
+		t.Fatalf("purpose = %q, want %q", purpose, fishPreprocessPurpose)
+	}
+	if promptKey != fishAudioBriefingSinglePreprocessPromptKey {
+		t.Fatalf("prompt_key = %q, want %q", promptKey, fishAudioBriefingSinglePreprocessPromptKey)
+	}
+	if loggedID == nil || strings.TrimSpace(*loggedID) != itemID {
+		t.Fatalf("item_id = %v, want %s", loggedID, itemID)
+	}
+}
+
+func TestFishSpeechPreprocessAudioBriefingDuoUsesPersonaVariables(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "fish-preprocess-briefing-duo-test-key")
+	db, err := repository.NewPool(context.Background())
+	if err != nil {
+		t.Fatalf("NewPool() error = %v", err)
+	}
+	t.Cleanup(db.Close)
+	lockSettingsServiceTestDB(t, db)
+
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000023"
+	sourceID := "00000000-0000-4000-8000-000000000122"
+	itemID := "00000000-0000-4000-8000-000000000112"
+	if _, err := db.Exec(ctx, `DELETE FROM llm_usage_logs WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset llm_usage_logs: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM items WHERE id = $1`, itemID); err != nil {
+		t.Fatalf("reset items: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM sources WHERE id = $1`, sourceID); err != nil {
+		t.Fatalf("reset sources: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM user_settings WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset user_settings: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("reset users: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, $3)`, userID, "fish-preprocess-briefing-duo@example.com", "Fish Preprocess"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO sources (id, user_id, url, type, title) VALUES ($1, $2, $3, 'manual', $4)`, sourceID, userID, "https://example.com/feed", "Example Source"); err != nil {
+		t.Fatalf("insert source: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO items (id, source_id, url, title, status, content_text) VALUES ($1, $2, $3, $4, 'fetched', $5)`, itemID, sourceID, "https://example.com/items/112", "Briefing Item", "body"); err != nil {
+		t.Fatalf("insert item: %v", err)
+	}
+
+	repo := repository.NewUserSettingsRepo(db)
+	modelName := strptr("openrouter::openai/gpt-oss-20b")
+	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
+		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
+		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+	); err != nil {
+		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
+	}
+	cipher := NewSecretCipher()
+	enc, err := cipher.EncryptString("openrouter-secret")
+	if err != nil {
+		t.Fatalf("EncryptString(openrouter): %v", err)
+	}
+	if _, err := repo.SetOpenRouterAPIKey(ctx, userID, enc, "cret"); err != nil {
+		t.Fatalf("SetOpenRouterAPIKey() error = %v", err)
+	}
+
+	worker := &fishPreprocessWorkerStub{}
+	worker.response = &FishSpeechPreprocessResponse{
+		Text: "<|speaker:0|>[自然に] 冒頭<|speaker:1|>[少し柔らかく] 補足",
+		LLM: &LLMUsage{
+			Provider:           "openrouter",
+			Model:              "openai/gpt-oss-20b",
+			RequestedModel:     "openrouter::openai/gpt-oss-20b",
+			ResolvedModel:      "openai/gpt-oss-20b",
+			PricingModelFamily: "openrouter",
+			PricingSource:      "openrouter",
+			InputTokens:        34,
+			OutputTokens:       13,
+			EstimatedCostUSD:   0.002,
+		},
+	}
+	service := NewFishSpeechPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
+
+	if _, err := service.PreprocessAudioBriefingDuoText(ctx, userID, itemID, "native", "analyst", "<|speaker:0|>冒頭<|speaker:1|>補足"); err != nil {
+		t.Fatalf("PreprocessAudioBriefingDuoText() error = %v", err)
+	}
+	if worker.gotPrompt != fishAudioBriefingDuoPreprocessPromptKey {
+		t.Fatalf("promptKey = %q, want %q", worker.gotPrompt, fishAudioBriefingDuoPreprocessPromptKey)
+	}
+	if got := worker.gotVars["host_persona_name"]; got != "native" {
+		t.Fatalf("variables.host_persona_name = %q, want native", got)
+	}
+	if got := worker.gotVars["partner_persona_name"]; got != "analyst" {
+		t.Fatalf("variables.partner_persona_name = %q, want analyst", got)
+	}
+
+	var (
+		purpose   string
+		promptKey string
+		loggedID  *string
+	)
+	if err := db.QueryRow(ctx, `SELECT purpose, prompt_key, item_id FROM llm_usage_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`, userID).Scan(&purpose, &promptKey, &loggedID); err != nil {
+		t.Fatalf("select llm_usage_logs: %v", err)
+	}
+	if purpose != fishPreprocessPurpose {
+		t.Fatalf("purpose = %q, want %q", purpose, fishPreprocessPurpose)
+	}
+	if promptKey != fishAudioBriefingDuoPreprocessPromptKey {
+		t.Fatalf("prompt_key = %q, want %q", promptKey, fishAudioBriefingDuoPreprocessPromptKey)
+	}
+	if loggedID == nil || strings.TrimSpace(*loggedID) != itemID {
+		t.Fatalf("item_id = %v, want %s", loggedID, itemID)
 	}
 }

@@ -1,0 +1,2 @@
+ALTER TABLE audio_briefing_script_chunks
+ADD COLUMN provider_voice_label TEXT;

@@ -204,16 +204,18 @@ func TestBuildAudioBriefingDraftFromTurnsUsesSpeakerVoices(t *testing.T) {
 	translated := "翻訳題"
 	summary := "要約本文です。"
 	hostVoice := &model.AudioBriefingPersonaVoice{
-		Persona:     "editor",
-		TTSProvider: "aivis",
-		VoiceModel:  "speaker-host",
-		VoiceStyle:  "calm",
+		Persona:            "editor",
+		TTSProvider:        "aivis",
+		VoiceModel:         "speaker-host",
+		ProviderVoiceLabel: "Host Voice",
+		VoiceStyle:         "calm",
 	}
 	partnerVoice := &model.AudioBriefingPersonaVoice{
-		Persona:     "analyst",
-		TTSProvider: "aivis",
-		VoiceModel:  "speaker-partner",
-		VoiceStyle:  "bright",
+		Persona:            "analyst",
+		TTSProvider:        "aivis",
+		VoiceModel:         "speaker-partner",
+		ProviderVoiceLabel: "Partner Voice",
+		VoiceStyle:         "bright",
 	}
 
 	draft := BuildAudioBriefingDraftFromTurns(
@@ -247,6 +249,12 @@ func TestBuildAudioBriefingDraftFromTurnsUsesSpeakerVoices(t *testing.T) {
 	}
 	if got := derefString(draft.Chunks[1].VoiceModel); got != "speaker-partner" {
 		t.Fatalf("partner voice model = %q, want speaker-partner", got)
+	}
+	if got := derefString(draft.Chunks[0].ProviderVoiceLabel); got != "Host Voice" {
+		t.Fatalf("host provider voice label = %q, want Host Voice", got)
+	}
+	if got := derefString(draft.Chunks[1].ProviderVoiceLabel); got != "Partner Voice" {
+		t.Fatalf("partner provider voice label = %q, want Partner Voice", got)
 	}
 	if got := derefString(draft.Chunks[1].Speaker); got != "partner" {
 		t.Fatalf("partner speaker = %q, want partner", got)

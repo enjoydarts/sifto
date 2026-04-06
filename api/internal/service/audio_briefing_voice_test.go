@@ -305,6 +305,52 @@ func TestAudioBriefingGeminiDuoSplitGroupsIsolatesOversizedSingleTurn(t *testing
 	}
 }
 
+func TestAudioBriefingFishDuoPreprocessTextUsesSpeakerTagsInSeqOrder(t *testing.T) {
+	group := audioBriefingChunkGroup{
+		PartType: "article",
+		ItemID:   "item-1",
+		Chunks: []*model.AudioBriefingScriptChunk{
+			{Seq: 2, Speaker: stringPtr("partner"), Text: "補足します。"},
+			{Seq: 1, Speaker: stringPtr("host"), Text: "最初の話題です。"},
+		},
+	}
+
+	got := audioBriefingFishDuoPreprocessText(group)
+
+	if got != "<|speaker:0|>最初の話題です。<|speaker:1|>補足します。" {
+		t.Fatalf("audioBriefingFishDuoPreprocessText() = %q", got)
+	}
+}
+
+func TestAudioBriefingFishDuoPreprocessTextDefaultsBlankSpeakerToHost(t *testing.T) {
+	group := audioBriefingChunkGroup{
+		PartType: "article",
+		ItemID:   "item-1",
+		Chunks: []*model.AudioBriefingScriptChunk{
+			{Seq: 1, Text: "話者未設定です。"},
+			{Seq: 2, Speaker: stringPtr("partner"), Text: "補足します。"},
+		},
+	}
+
+	got := audioBriefingFishDuoPreprocessText(group)
+
+	if got != "<|speaker:0|>話者未設定です。<|speaker:1|>補足します。" {
+		t.Fatalf("audioBriefingFishDuoPreprocessText() = %q", got)
+	}
+}
+
+func TestAudioBriefingValidateFishDuoPreprocessedTextRejectsMissingSpeakerTags(t *testing.T) {
+	if err := audioBriefingValidateFishDuoPreprocessedText("[自然に] テキスト"); err == nil {
+		t.Fatal("audioBriefingValidateFishDuoPreprocessedText() error = nil, want error")
+	}
+}
+
+func TestAudioBriefingValidateFishDuoPreprocessedTextAcceptsBothSpeakerTags(t *testing.T) {
+	if err := audioBriefingValidateFishDuoPreprocessedText("<|speaker:0|>[自然に] 冒頭<|speaker:1|>[少し柔らかく] 補足"); err != nil {
+		t.Fatalf("audioBriefingValidateFishDuoPreprocessedText() error = %v", err)
+	}
+}
+
 func ptrTime(v time.Time) *time.Time {
 	return &v
 }

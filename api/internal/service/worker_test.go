@@ -268,6 +268,10 @@ func TestPreprocessFishSpeechTextIncludesPromptAndProviderHeader(t *testing.T) {
 		if got := body["model"]; got != "openrouter::openai/gpt-oss-20b" {
 			t.Fatalf("model = %v, want openrouter::openai/gpt-oss-20b", got)
 		}
+		variables, _ := body["variables"].(map[string]any)
+		if got := variables["persona_name"]; got != "editor" {
+			t.Fatalf("variables.persona_name = %v, want editor", got)
+		}
 		respBody, _ := json.Marshal(map[string]any{
 			"text": "前処理済みテキスト",
 			"llm": map[string]any{
@@ -291,6 +295,7 @@ func TestPreprocessFishSpeechTextIncludesPromptAndProviderHeader(t *testing.T) {
 		"元テキスト",
 		"openrouter::openai/gpt-oss-20b",
 		"fish.summary_preprocess",
+		map[string]string{"persona_name": "editor"},
 		strptr("openrouter-key"),
 	)
 	if err != nil {

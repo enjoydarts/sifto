@@ -29,7 +29,9 @@ type audioBriefingUsedTTSPayload struct {
 	Provider          string  `json:"provider"`
 	TTSModel          *string `json:"tts_model,omitempty"`
 	HostVoiceModel    *string `json:"host_voice_model,omitempty"`
+	HostVoiceLabel    *string `json:"host_voice_label,omitempty"`
 	PartnerVoiceModel *string `json:"partner_voice_model,omitempty"`
+	PartnerVoiceLabel *string `json:"partner_voice_label,omitempty"`
 }
 
 func NewAudioBriefingsHandler(
@@ -314,6 +316,7 @@ func audioBriefingUsedTTS(chunks []model.AudioBriefingScriptChunk) *audioBriefin
 		}
 		speaker := strings.TrimSpace(derefString(chunk.Speaker))
 		voiceModel := strings.TrimSpace(derefString(chunk.VoiceModel))
+		voiceLabel := strings.TrimSpace(derefString(chunk.ProviderVoiceLabel))
 		if voiceModel == "" {
 			continue
 		}
@@ -322,9 +325,15 @@ func audioBriefingUsedTTS(chunks []model.AudioBriefingScriptChunk) *audioBriefin
 			if payload.PartnerVoiceModel == nil {
 				payload.PartnerVoiceModel = &voiceModel
 			}
+			if payload.PartnerVoiceLabel == nil && voiceLabel != "" {
+				payload.PartnerVoiceLabel = &voiceLabel
+			}
 		default:
 			if payload.HostVoiceModel == nil {
 				payload.HostVoiceModel = &voiceModel
+			}
+			if payload.HostVoiceLabel == nil && voiceLabel != "" {
+				payload.HostVoiceLabel = &voiceLabel
 			}
 		}
 	}

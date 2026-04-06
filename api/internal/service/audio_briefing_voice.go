@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path"
 	"sort"
@@ -28,6 +29,7 @@ type AudioBriefingVoiceRunner struct {
 	userSettings *repository.UserSettingsRepo
 	cipher       *SecretCipher
 	worker       *WorkerClient
+	preprocess   audioBriefingFishPreprocessor
 }
 
 const audioBriefingChunkMaxAttempts = 3
@@ -47,6 +49,11 @@ type audioBriefingChunkGroup struct {
 	PartType string
 	ItemID   string
 	Chunks   []*model.AudioBriefingScriptChunk
+}
+
+type audioBriefingFishPreprocessor interface {
+	PreprocessAudioBriefingSingleText(ctx context.Context, userID, itemID, persona, text string) (*FishSpeechPreprocessResult, error)
+	PreprocessAudioBriefingDuoText(ctx context.Context, userID, itemID, hostPersona, partnerPersona, text string) (*FishSpeechPreprocessResult, error)
 }
 
 func audioBriefingVoiceConfigComplete(provider, voiceModel, voiceStyle string) bool {
@@ -87,8 +94,8 @@ func audioBriefingFishDuoReady(hostVoice, partnerVoice *model.AudioBriefingPerso
 		hostVoiceModel != partnerVoiceModel
 }
 
-func NewAudioBriefingVoiceRunner(repo *repository.AudioBriefingRepo, userRepo *repository.UserRepo, userSettings *repository.UserSettingsRepo, cipher *SecretCipher, worker *WorkerClient) *AudioBriefingVoiceRunner {
-	return &AudioBriefingVoiceRunner{repo: repo, userRepo: userRepo, userSettings: userSettings, cipher: cipher, worker: worker}
+func NewAudioBriefingVoiceRunner(repo *repository.AudioBriefingRepo, userRepo *repository.UserRepo, userSettings *repository.UserSettingsRepo, cipher *SecretCipher, worker *WorkerClient, preprocess audioBriefingFishPreprocessor) *AudioBriefingVoiceRunner {
+	return &AudioBriefingVoiceRunner{repo: repo, userRepo: userRepo, userSettings: userSettings, cipher: cipher, worker: worker, preprocess: preprocess}
 }
 
 func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, jobID string) (result *AudioBriefingVoiceRunResult, err error) {
@@ -280,6 +287,45 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 	if leadChunk := audioBriefingChunkGroupLeadChunk(group); leadChunk != nil {
 		audioObjectKey = audioBriefingChunkObjectKey(userID, jobID, leadChunk.Seq)
 	}
+	synthText := chunk.Text
+	fishDuoPreprocessedText := ""
+	if useFishDuoGroup && !audioBriefingFishDuoReady(voice, partnerVoice) {
+		err := fmt.Errorf("fish duo multi-speaker is not fully configured")
+		return r.handleChunkGroupGenerationFailure(ctx, jobID, group, "tts_failed", err)
+	}
+	if provider == "fish" && r.preprocess != nil {
+		itemID := strings.TrimSpace(derefString(chunk.ItemID))
+		if useFishDuoGroup {
+			preprocessed, preprocessErr := r.preprocess.PreprocessAudioBriefingDuoText(
+				ctx,
+				userID,
+				itemID,
+				job.Persona,
+				derefString(job.PartnerPersona),
+				audioBriefingFishDuoPreprocessText(group),
+			)
+			if preprocessErr != nil {
+				return r.handleChunkGroupGenerationFailure(ctx, jobID, group, "tts_failed", preprocessErr)
+			}
+			fishDuoPreprocessedText = strings.TrimSpace(preprocessed.Text)
+			if validateErr := audioBriefingValidateFishDuoPreprocessedText(fishDuoPreprocessedText); validateErr != nil {
+				return r.handleChunkGroupGenerationFailure(ctx, jobID, group, "tts_failed", validateErr)
+			}
+			if persistErr := r.repo.SetChunkGroupPreprocessedText(ctx, groupChunkIDs, stringPtrOrNil(fishDuoPreprocessedText)); persistErr != nil {
+				log.Printf("audio briefing fish duo preprocess persistence failed job_id=%s chunk_ids=%v err=%v", jobID, groupChunkIDs, persistErr)
+			}
+		} else {
+			preprocessPersona := audioBriefingPreprocessPersona(job, chunk)
+			preprocessed, preprocessErr := r.preprocess.PreprocessAudioBriefingSingleText(ctx, userID, itemID, preprocessPersona, synthText)
+			if preprocessErr != nil {
+				return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", preprocessErr)
+			}
+			synthText = preprocessed.Text
+			if persistErr := r.repo.SetChunkPreprocessedText(ctx, chunk.ID, stringPtrOrNil(strings.TrimSpace(synthText))); persistErr != nil {
+				log.Printf("audio briefing fish preprocess persistence failed job_id=%s chunk_id=%s err=%v", jobID, chunk.ID, persistErr)
+			}
+		}
+	}
 	var resp *AudioBriefingSynthesizeUploadResponse
 	if useGeminiDuoGroup {
 		if !audioBriefingGeminiDuoReady(voice, partnerVoice) {
@@ -299,10 +345,6 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			googleAPIKey,
 		)
 	} else if useFishDuoGroup {
-		if !audioBriefingFishDuoReady(voice, partnerVoice) {
-			err := fmt.Errorf("fish duo multi-speaker is not fully configured")
-			return r.handleChunkGroupGenerationFailure(ctx, jobID, group, "tts_failed", err)
-		}
 		resp, err = r.worker.SynthesizeAudioBriefingFishDuoUpload(
 			ctx,
 			ttsModel,
@@ -312,6 +354,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			strings.TrimSpace(partnerVoice.VoiceModel),
 			group.PartType,
 			audioBriefingGeminiDuoTurns(group),
+			fishDuoPreprocessedText,
 			audioObjectKey,
 			fishAudioAPIKey,
 		)
@@ -323,7 +366,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			voiceStyle,
 			ttsModel,
 			job.Persona,
-			chunk.Text,
+			synthText,
 			speechParams.SpeechRate,
 			speechParams.EmotionalIntensity,
 			speechParams.TempoDynamics,
@@ -365,6 +408,56 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		return nil, err
 	}
 	return &AudioBriefingVoiceRunResult{ProcessedChunk: true}, nil
+}
+
+func audioBriefingPreprocessPersona(job *model.AudioBriefingJob, chunk *model.AudioBriefingScriptChunk) string {
+	if job == nil {
+		return ""
+	}
+	if chunk != nil && strings.TrimSpace(derefString(chunk.Speaker)) == "partner" {
+		return strings.TrimSpace(derefString(job.PartnerPersona))
+	}
+	return strings.TrimSpace(job.Persona)
+}
+
+func audioBriefingFishDuoPreprocessText(group audioBriefingChunkGroup) string {
+	chunks := append([]*model.AudioBriefingScriptChunk{}, group.Chunks...)
+	sort.SliceStable(chunks, func(i, j int) bool {
+		if chunks[i] == nil {
+			return false
+		}
+		if chunks[j] == nil {
+			return true
+		}
+		return chunks[i].Seq < chunks[j].Seq
+	})
+	parts := make([]string, 0, len(chunks))
+	for _, chunk := range chunks {
+		if chunk == nil {
+			continue
+		}
+		text := strings.TrimSpace(chunk.Text)
+		if text == "" {
+			continue
+		}
+		speakerTag := "<|speaker:1|>"
+		if strings.TrimSpace(derefString(chunk.Speaker)) != "partner" {
+			speakerTag = "<|speaker:0|>"
+		}
+		parts = append(parts, speakerTag+text)
+	}
+	return strings.Join(parts, "")
+}
+
+func audioBriefingValidateFishDuoPreprocessedText(text string) error {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return fmt.Errorf("fish duo preprocess returned empty text")
+	}
+	if !strings.Contains(trimmed, "<|speaker:0|>") || !strings.Contains(trimmed, "<|speaker:1|>") {
+		return fmt.Errorf("fish duo preprocess must retain both speaker tags")
+	}
+	return nil
 }
 
 func (r *AudioBriefingVoiceRunner) loadXAIAPIKey(ctx context.Context, userID string) (*string, error) {

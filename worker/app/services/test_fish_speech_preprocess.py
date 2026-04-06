@@ -243,6 +243,91 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
 
         get_template.assert_called_once_with(DEFAULT_FISH_PREPROCESS_PROMPT_KEY)
 
+    def test_preprocess_renders_supplied_variables(self):
+        service = FishSpeechPreprocessService()
+
+        with patch(
+            "app.services.fish_speech_preprocess.get_default_prompt_template",
+            return_value={
+                "system_instruction": "SYSTEM",
+                "prompt_text": "話者: {{persona_name}}\n本文:\n{{text}}",
+            },
+        ), patch(
+            "app.services.fish_speech_preprocess.openai_chat_json",
+            return_value=("整形済み", {"input_tokens": 1, "output_tokens": 1}),
+        ) as chat_json:
+            service.preprocess(
+                text="元テキスト",
+                model="gpt-5.4-mini",
+                api_key="openai-key",
+                variables={"persona_name": "editor"},
+            )
+
+        chat_json.assert_called_once_with(
+            "話者: editor\n本文:\n元テキスト",
+            "gpt-5.4-mini",
+            "openai-key",
+            system_instruction="SYSTEM",
+            max_output_tokens=3200,
+        )
+
+    def test_preprocess_enriches_audio_briefing_persona_tone_prompts(self):
+        service = FishSpeechPreprocessService()
+
+        with patch(
+            "app.services.fish_speech_preprocess.get_default_prompt_template",
+            return_value={
+                "system_instruction": "SYSTEM",
+                "prompt_text": "話者: {{persona_name}}\nトーン: {{tone_prompt}}\n本文:\n{{text}}",
+            },
+        ), patch(
+            "app.services.fish_speech_preprocess.openai_chat_json",
+            return_value=("整形済み", {"input_tokens": 1, "output_tokens": 1}),
+        ) as chat_json:
+            service.preprocess(
+                text="元テキスト",
+                model="gpt-5.4-mini",
+                api_key="openai-key",
+                prompt_key="fish.audio_briefing_single_preprocess",
+                variables={"persona_name": "editor"},
+            )
+
+        self.assertIn("話者: editor", chat_json.call_args.args[0])
+        self.assertIn("落ち着いた編集者として、重要度と意味合いを端正に語る。", chat_json.call_args.args[0])
+
+    def test_preprocess_enriches_audio_briefing_duo_persona_prompts(self):
+        service = FishSpeechPreprocessService()
+
+        with patch(
+            "app.services.fish_speech_preprocess.get_default_prompt_template",
+            return_value={
+                "system_instruction": "SYSTEM",
+                "prompt_text": (
+                    "ホスト: {{host_persona_name}} / {{host_tone_prompt}}\n"
+                    "パートナー: {{partner_persona_name}} / {{partner_tone_prompt}}\n"
+                    "{{text}}"
+                ),
+            },
+        ), patch(
+            "app.services.fish_speech_preprocess.openai_chat_json",
+            return_value=("整形済み", {"input_tokens": 1, "output_tokens": 1}),
+        ) as chat_json:
+            service.preprocess(
+                text="<|speaker:0|>冒頭<|speaker:1|>補足",
+                model="gpt-5.4-mini",
+                api_key="openai-key",
+                prompt_key="fish.audio_briefing_duo_preprocess",
+                variables={
+                    "host_persona_name": "native",
+                    "partner_persona_name": "analyst",
+                },
+            )
+
+        rendered = chat_json.call_args.args[0]
+        self.assertIn("ホスト: native / 明るく自然体のAIネイティブとして、体感と共有したくなる空気感を軽やかに語る。", rendered)
+        self.assertIn("パートナー: analyst / 理知的に背景と含意を整理するアナリストとして、情報の筋道を丁寧に示す。", rendered)
+        self.assertIn("<|speaker:0|>冒頭<|speaker:1|>補足", rendered)
+
     def test_preprocess_llm_meta_uses_separate_purpose(self):
         service = FishSpeechPreprocessService()
 

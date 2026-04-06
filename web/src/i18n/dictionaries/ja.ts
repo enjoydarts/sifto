@@ -1771,6 +1771,8 @@ export const jaDict: Dict = {
   "audioBriefing.openPlayerOverlay": "プレイヤーを開く",
   "audioBriefing.selectedItems": "採用記事",
   "audioBriefing.scriptChunks": "台本チャンク",
+  "audioBriefing.preprocessedTextLabel": "Fish前処理テキスト",
+  "audioBriefing.preprocessedTextHelp": "Fish Audio に送る直前の前処理済みテキストを確認できます。",
   "audioBriefing.detailDescription": "台本生成から音声化、連結までの進行状況を確認します。",
   "audioBriefing.archive": "アーカイブ",
   "audioBriefing.unarchive": "公開中に戻す",

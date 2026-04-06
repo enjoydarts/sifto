@@ -1110,6 +1110,7 @@ func (w *WorkerClient) SynthesizeAudioBriefingFishDuoUpload(
 	partnerVoiceModel string,
 	sectionType string,
 	turns []AudioBriefingGeminiDuoTurn,
+	preprocessedText string,
 	outputObjectKey string,
 	fishAPIKey *string,
 ) (*AudioBriefingSynthesizeUploadResponse, error) {
@@ -1127,6 +1128,9 @@ func (w *WorkerClient) SynthesizeAudioBriefingFishDuoUpload(
 		"section_type":        strings.TrimSpace(sectionType),
 		"turns":               turns,
 		"output_object_key":   outputObjectKey,
+	}
+	if strings.TrimSpace(preprocessedText) != "" {
+		requestBody["preprocessed_text"] = strings.TrimSpace(preprocessedText)
 	}
 	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload-fish-duo", requestBody, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, fishAPIKey, w.internalSecret))
 }
@@ -1182,12 +1186,14 @@ func (w *WorkerClient) PreprocessFishSpeechText(
 	text string,
 	model string,
 	promptKey string,
+	variables map[string]string,
 	apiKey *string,
 ) (*FishSpeechPreprocessResponse, error) {
 	requestBody := map[string]any{
 		"text":       text,
 		"model":      model,
 		"prompt_key": promptKey,
+		"variables":  variables,
 	}
 	headers := workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret)
 	if headers == nil {

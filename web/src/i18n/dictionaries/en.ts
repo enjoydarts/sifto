@@ -1770,6 +1770,8 @@ export const enDict: Dict = {
   "audioBriefing.openPlayerOverlay": "Open player",
   "audioBriefing.selectedItems": "Selected Items",
   "audioBriefing.scriptChunks": "Script Chunks",
+  "audioBriefing.preprocessedTextLabel": "Fish preprocessed text",
+  "audioBriefing.preprocessedTextHelp": "Inspect the preprocessed text sent to Fish Audio right before synthesis.",
   "audioBriefing.detailDescription": "Inspect pipeline progress from scripting through voicing and concat.",
   "audioBriefing.archive": "Archive",
   "audioBriefing.unarchive": "Restore to published",

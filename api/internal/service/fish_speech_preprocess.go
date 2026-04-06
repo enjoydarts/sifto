@@ -13,9 +13,11 @@ import (
 )
 
 const (
-	fishSummaryPreprocessPromptKey = "fish.summary_preprocess"
-	fishPreprocessPurpose          = "fish_preprocess"
-	fishPreprocessPromptSource     = "shared_template"
+	fishSummaryPreprocessPromptKey             = "fish.summary_preprocess"
+	fishAudioBriefingSinglePreprocessPromptKey = "fish.audio_briefing_single_preprocess"
+	fishAudioBriefingDuoPreprocessPromptKey    = "fish.audio_briefing_duo_preprocess"
+	fishPreprocessPurpose                      = "fish_preprocess"
+	fishPreprocessPromptSource                 = "shared_template"
 )
 
 var (
@@ -34,6 +36,7 @@ type fishSpeechPreprocessWorker interface {
 		text string,
 		model string,
 		promptKey string,
+		variables map[string]string,
 		apiKey *string,
 	) (*FishSpeechPreprocessResponse, error)
 }
@@ -63,10 +66,23 @@ func NewFishSpeechPreprocessService(
 }
 
 func (s *FishSpeechPreprocessService) PreprocessSummaryAudioText(ctx context.Context, userID, itemID, text string) (*FishSpeechPreprocessResult, error) {
-	return s.Preprocess(ctx, userID, itemID, fishSummaryPreprocessPromptKey, text)
+	return s.Preprocess(ctx, userID, itemID, fishSummaryPreprocessPromptKey, text, nil)
 }
 
-func (s *FishSpeechPreprocessService) Preprocess(ctx context.Context, userID, itemID, promptKey, text string) (*FishSpeechPreprocessResult, error) {
+func (s *FishSpeechPreprocessService) PreprocessAudioBriefingSingleText(ctx context.Context, userID, itemID, persona, text string) (*FishSpeechPreprocessResult, error) {
+	return s.Preprocess(ctx, userID, itemID, fishAudioBriefingSinglePreprocessPromptKey, text, map[string]string{
+		"persona_name": strings.TrimSpace(persona),
+	})
+}
+
+func (s *FishSpeechPreprocessService) PreprocessAudioBriefingDuoText(ctx context.Context, userID, itemID, hostPersona, partnerPersona, text string) (*FishSpeechPreprocessResult, error) {
+	return s.Preprocess(ctx, userID, itemID, fishAudioBriefingDuoPreprocessPromptKey, text, map[string]string{
+		"host_persona_name":    strings.TrimSpace(hostPersona),
+		"partner_persona_name": strings.TrimSpace(partnerPersona),
+	})
+}
+
+func (s *FishSpeechPreprocessService) Preprocess(ctx context.Context, userID, itemID, promptKey, text string, variables map[string]string) (*FishSpeechPreprocessResult, error) {
 	trimmedText := strings.TrimSpace(text)
 	if trimmedText == "" {
 		return &FishSpeechPreprocessResult{Text: text}, nil
@@ -105,6 +121,7 @@ func (s *FishSpeechPreprocessService) Preprocess(ctx context.Context, userID, it
 		text,
 		modelName,
 		promptKey,
+		variables,
 		apiKey,
 	)
 	if err != nil {

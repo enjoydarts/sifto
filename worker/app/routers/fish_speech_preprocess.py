@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.services.fish_speech_preprocess import DEFAULT_FISH_PREPROCESS_PROMPT_KEY, FishSpeechPreprocessService
 from app.services.llm_catalog import provider_api_key_header, provider_for_model
@@ -12,6 +12,7 @@ class FishSpeechPreprocessRequest(BaseModel):
     text: str
     model: str
     prompt_key: str = DEFAULT_FISH_PREPROCESS_PROMPT_KEY
+    variables: dict[str, str] = Field(default_factory=dict)
 
 
 class FishSpeechPreprocessResponse(BaseModel):
@@ -47,6 +48,7 @@ def preprocess_fish_text(req: FishSpeechPreprocessRequest, request: Request):
                 model=req.model,
                 api_key=api_key,
                 prompt_key=req.prompt_key,
+                variables=req.variables,
             ),
             output_builder=lambda result: {
                 "text_chars": len(result.get("text") or ""),

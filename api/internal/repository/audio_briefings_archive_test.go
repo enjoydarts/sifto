@@ -121,8 +121,10 @@ func TestAudioBriefingScriptChunkScanReadsStorageBucket(t *testing.T) {
 	ttsProvider := "aivis"
 	ttsModel := "gemini-2.5-flash-tts"
 	voiceModel := "voice-model"
+	providerVoiceLabel := "Voice Name"
 	voiceStyle := "voice-style"
 	speaker := "partner"
+	preprocessedText := "[自然に] 本文です。"
 
 	chunk, err := scanAudioBriefingScriptChunk(stubAudioBriefingScanner{values: []any{
 		"chunk-1",
@@ -132,6 +134,7 @@ func TestAudioBriefingScriptChunkScanReadsStorageBucket(t *testing.T) {
 		nil,
 		speaker,
 		"本文です。",
+		preprocessedText,
 		12,
 		"generated",
 		1,
@@ -139,6 +142,7 @@ func TestAudioBriefingScriptChunkScanReadsStorageBucket(t *testing.T) {
 		ttsProvider,
 		ttsModel,
 		voiceModel,
+		providerVoiceLabel,
 		voiceStyle,
 		audioKey,
 		"briefings-standard",
@@ -159,5 +163,11 @@ func TestAudioBriefingScriptChunkScanReadsStorageBucket(t *testing.T) {
 	}
 	if chunk.Speaker == nil || *chunk.Speaker != speaker {
 		t.Fatalf("chunk.Speaker = %v, want %q", chunk.Speaker, speaker)
+	}
+	if chunk.PreprocessedText == nil || *chunk.PreprocessedText != preprocessedText {
+		t.Fatalf("chunk.PreprocessedText = %v, want %q", chunk.PreprocessedText, preprocessedText)
+	}
+	if chunk.ProviderVoiceLabel == nil || *chunk.ProviderVoiceLabel != providerVoiceLabel {
+		t.Fatalf("chunk.ProviderVoiceLabel = %v, want %q", chunk.ProviderVoiceLabel, providerVoiceLabel)
 	}
 }

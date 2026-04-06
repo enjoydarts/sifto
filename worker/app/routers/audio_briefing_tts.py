@@ -45,6 +45,7 @@ class AudioBriefingGeminiDuoSynthesizeRequest(BaseModel):
     partner_voice_model: str
     section_type: str
     turns: list[AudioBriefingGeminiDuoTurn]
+    preprocessed_text: str | None = None
     output_object_key: str
 
 
@@ -173,6 +174,7 @@ def synthesize_audio_briefing_fish_duo(req: AudioBriefingGeminiDuoSynthesizeRequ
             partner_voice_model=req.partner_voice_model,
             section_type=req.section_type,
             turns=[turn.model_dump() for turn in req.turns],
+            preprocessed_text=req.preprocessed_text,
             output_object_key=req.output_object_key,
             api_key_override=request.headers.get("x-fish-api-key", "").strip() or None,
         )

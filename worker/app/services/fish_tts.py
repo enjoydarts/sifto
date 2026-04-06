@@ -194,6 +194,7 @@ def synthesize_fish_multi_speaker_tts(
     host_voice_name: str,
     partner_voice_name: str,
     turns: list[dict[str, str]],
+    text: str | None = None,
     api_key: str | None = None,
     timeout_sec: float | None = None,
 ) -> tuple[bytes, str, str, int]:
@@ -208,7 +209,7 @@ def synthesize_fish_multi_speaker_tts(
         raise RuntimeError("fish partner voice name is required")
     if normalized_host_voice_name == normalized_partner_voice_name:
         raise RuntimeError("fish duo requires distinct host and partner voices")
-    dialogue_text = build_fish_duo_text(turns)
+    dialogue_text = str(text or "").strip() or build_fish_duo_text(turns)
     if not dialogue_text:
         raise RuntimeError("fish duo turns are empty")
     return _synthesize_fish_tts(

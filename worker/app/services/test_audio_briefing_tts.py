@@ -619,6 +619,46 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
         self.assertEqual(duration_sec, 18)
         self.assertTrue(object_key.endswith(".mp3"))
 
+    def test_synthesize_fish_duo_and_upload_passes_preprocessed_text(self):
+        service = AudioBriefingTTSService()
+
+        with patch(
+            "app.services.audio_briefing_tts.synthesize_fish_multi_speaker_tts",
+            return_value=(b"mp3", "audio/mpeg", ".mp3", 18),
+        ) as synth:
+            with patch.object(service, "upload_bytes") as upload:
+                object_key, duration_sec = service.synthesize_fish_duo_and_upload(
+                    tts_model="s2-pro",
+                    host_persona="snark",
+                    partner_persona="analyst",
+                    host_voice_model="fish-host",
+                    partner_voice_model="fish-partner",
+                    section_type="article",
+                    turns=[
+                        {"speaker": "host", "text": "冒頭です"},
+                        {"speaker": "partner", "text": "補足です"},
+                    ],
+                    preprocessed_text="<|speaker:0|>[自然に]冒頭です<|speaker:1|>[落ち着いて]補足です",
+                    output_object_key="audio/test",
+                    api_key_override="fish-key",
+                )
+
+        synth.assert_called_once_with(
+            model="s2-pro",
+            host_voice_name="fish-host",
+            partner_voice_name="fish-partner",
+            turns=[
+                {"speaker": "host", "text": "冒頭です"},
+                {"speaker": "partner", "text": "補足です"},
+            ],
+            text="<|speaker:0|>[自然に]冒頭です<|speaker:1|>[落ち着いて]補足です",
+            api_key="fish-key",
+            timeout_sec=service.fish_timeout_sec,
+        )
+        upload.assert_called_once()
+        self.assertEqual(duration_sec, 18)
+        self.assertTrue(object_key.endswith(".mp3"))
+
     def test_synthesize_gemini_duo_and_upload_uses_multi_speaker_payload(self):
         service = AudioBriefingTTSService()
 

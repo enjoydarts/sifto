@@ -1687,10 +1687,12 @@ export interface AudioBriefingScriptChunk {
   part_type: string;
   speaker?: "host" | "partner" | string | null;
   text: string;
+  preprocessed_text?: string | null;
   char_count: number;
   tts_status: string;
   tts_provider?: string | null;
   voice_model?: string | null;
+  provider_voice_label?: string | null;
   voice_style?: string | null;
   r2_audio_object_key?: string | null;
   duration_sec?: number | null;
@@ -1701,7 +1703,9 @@ export interface AudioBriefingUsedTTS {
   provider: string;
   tts_model?: string | null;
   host_voice_model?: string | null;
+  host_voice_label?: string | null;
   partner_voice_model?: string | null;
+  partner_voice_label?: string | null;
 }
 
 export interface AudioBriefingDetailResponse {

@@ -240,18 +240,23 @@ class AudioBriefingTTSService:
         partner_voice_model: str,
         section_type: str,
         turns: list[dict[str, str]],
+        preprocessed_text: str | None = None,
         output_object_key: str,
         api_key_override: str | None = None,
     ) -> tuple[str, int]:
         _ = (host_persona, partner_persona, section_type)
-        payload, content_type, suffix, duration_sec = synthesize_fish_multi_speaker_tts(
-            model=tts_model,
-            host_voice_name=host_voice_model,
-            partner_voice_name=partner_voice_model,
-            turns=turns,
-            api_key=(api_key_override or "").strip() or self.fish_api_key,
-            timeout_sec=self.fish_timeout_sec,
-        )
+        synth_kwargs = {
+            "model": tts_model,
+            "host_voice_name": host_voice_model,
+            "partner_voice_name": partner_voice_model,
+            "turns": turns,
+            "api_key": (api_key_override or "").strip() or self.fish_api_key,
+            "timeout_sec": self.fish_timeout_sec,
+        }
+        normalized_preprocessed_text = (preprocessed_text or "").strip()
+        if normalized_preprocessed_text:
+            synth_kwargs["text"] = normalized_preprocessed_text
+        payload, content_type, suffix, duration_sec = synthesize_fish_multi_speaker_tts(**synth_kwargs)
         if not output_object_key.endswith(suffix):
             output_object_key = output_object_key + suffix
         self.upload_bytes(output_object_key, payload, content_type)

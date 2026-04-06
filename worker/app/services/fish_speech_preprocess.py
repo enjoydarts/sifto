@@ -8,6 +8,7 @@ from app.services.deepseek_service import _chat_json as deepseek_chat_json
 from app.services.deepseek_service import _llm_meta as deepseek_llm_meta
 from app.services.fireworks_service import _chat_json as fireworks_chat_json
 from app.services.fireworks_service import _llm_meta as fireworks_llm_meta
+from app.services.gemini_tts import resolve_audio_briefing_persona_prompts
 from app.services.gemini_service import _generate_content as gemini_generate_content
 from app.services.gemini_service import _llm_meta as gemini_llm_meta
 from app.services.groq_service import _chat_json as groq_chat_json
@@ -45,6 +46,7 @@ class FishSpeechPreprocessService:
         model: str,
         api_key: str | None,
         prompt_key: str = DEFAULT_FISH_PREPROCESS_PROMPT_KEY,
+        variables: dict[str, str] | None = None,
     ) -> dict:
         rendered_text = str(text or "").strip()
         if not rendered_text:
@@ -58,7 +60,7 @@ class FishSpeechPreprocessService:
 
         template = get_default_prompt_template(prompt_key)
         system_instruction = str(template.get("system_instruction") or "")
-        prompt = self._build_prompt(str(template.get("prompt_text") or ""), rendered_text)
+        prompt = self._build_prompt(str(template.get("prompt_text") or ""), rendered_text, prompt_key, variables)
 
         handlers = {
             "anthropic": lambda key: self._preprocess_anthropic(model_name, key, system_instruction, prompt),
@@ -81,11 +83,34 @@ class FishSpeechPreprocessService:
             raise RuntimeError(f"unsupported fish preprocess provider: {provider}")
         return handler((api_key or "").strip())
 
-    def _build_prompt(self, prompt_text: str, rendered_text: str) -> str:
-        rendered = render_prompt_template(prompt_text, {"text": rendered_text})
+    def _build_prompt(self, prompt_text: str, rendered_text: str, prompt_key: str, variables: dict[str, str] | None) -> str:
+        prompt_variables = self._enrich_variables(prompt_key, variables)
+        prompt_variables["text"] = rendered_text
+        rendered = render_prompt_template(prompt_text, prompt_variables)
         if rendered == prompt_text:
             return f"{rendered}\n\n{rendered_text}"
         return rendered
+
+    def _enrich_variables(self, prompt_key: str, variables: dict[str, str] | None) -> dict[str, str]:
+        enriched = {str(key): str(value) for key, value in (variables or {}).items()}
+        if prompt_key == "fish.audio_briefing_single_preprocess":
+            persona_name = str(enriched.get("persona_name") or "").strip()
+            if persona_name and not str(enriched.get("tone_prompt") or "").strip():
+                tone_prompt, _speaking_style_prompt, _duo_conversation_prompt = resolve_audio_briefing_persona_prompts(persona_name)
+                if tone_prompt:
+                    enriched["tone_prompt"] = tone_prompt
+        elif prompt_key == "fish.audio_briefing_duo_preprocess":
+            host_persona_name = str(enriched.get("host_persona_name") or "").strip()
+            partner_persona_name = str(enriched.get("partner_persona_name") or "").strip()
+            if host_persona_name and not str(enriched.get("host_tone_prompt") or "").strip():
+                host_tone_prompt, _host_speaking_style_prompt, _host_duo_conversation_prompt = resolve_audio_briefing_persona_prompts(host_persona_name)
+                if host_tone_prompt:
+                    enriched["host_tone_prompt"] = host_tone_prompt
+            if partner_persona_name and not str(enriched.get("partner_tone_prompt") or "").strip():
+                partner_tone_prompt, _partner_speaking_style_prompt, _partner_duo_conversation_prompt = resolve_audio_briefing_persona_prompts(partner_persona_name)
+                if partner_tone_prompt:
+                    enriched["partner_tone_prompt"] = partner_tone_prompt
+        return enriched
 
     def _preprocess_openai_compat(self, chat_json, llm_meta, model: str, api_key: str, system_instruction: str, prompt: str) -> dict:
         text, usage = chat_json(

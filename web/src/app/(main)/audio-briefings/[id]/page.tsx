@@ -57,6 +57,14 @@ function formatUsedTTSModel(value: string | null | undefined) {
   return formatModelDisplayName(raw);
 }
 
+function formatUsedVoiceLabel(label: string | null | undefined, model: string | null | undefined) {
+  const normalizedLabel = (label ?? "").trim();
+  if (normalizedLabel) return normalizedLabel;
+  const normalizedModel = (model ?? "").trim();
+  if (normalizedModel) return normalizedModel;
+  return "—";
+}
+
 function formatBGMName(value: string | null | undefined) {
   const raw = (value ?? "").trim();
   if (!raw) return "—";
@@ -504,9 +512,9 @@ export default function AudioBriefingDetailPage() {
             <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-[var(--color-editorial-ink-soft)]">
               <span>{t("audioBriefing.ttsProvider", "TTS provider")}: {detail.used_tts.provider || "—"}</span>
               <span>{t("audioBriefing.ttsModel", "TTS model")}: {formatUsedTTSModel(detail.used_tts.tts_model)}</span>
-              <span>{t("audioBriefing.hostVoiceModel", "Host voice")}: {detail.used_tts.host_voice_model || "—"}</span>
+              <span>{t("audioBriefing.hostVoiceModel", "Host voice")}: {formatUsedVoiceLabel(detail.used_tts.host_voice_label, detail.used_tts.host_voice_model)}</span>
               {detail.job.conversation_mode === "duo" ? (
-                <span>{t("audioBriefing.partnerVoiceModel", "Partner voice")}: {detail.used_tts.partner_voice_model || "—"}</span>
+                <span>{t("audioBriefing.partnerVoiceModel", "Partner voice")}: {formatUsedVoiceLabel(detail.used_tts.partner_voice_label, detail.used_tts.partner_voice_model)}</span>
               ) : null}
             </div>
           ) : null}
@@ -551,6 +559,19 @@ export default function AudioBriefingDetailPage() {
                   <span>{chunk.char_count} chars</span>
                 </div>
                 <p className="mt-3 whitespace-pre-wrap font-serif text-[17px] leading-[1.95] text-[var(--color-editorial-ink)]">{chunk.text}</p>
+                {chunk.preprocessed_text ? (
+                  <details className="mt-4 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3">
+                    <summary className="cursor-pointer text-sm font-medium text-[var(--color-editorial-ink)]">
+                      {t("audioBriefing.preprocessedTextLabel", "Fish前処理テキスト")}
+                    </summary>
+                    <p className="mt-2 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">
+                      {t("audioBriefing.preprocessedTextHelp", "Fish Audio に送る直前の前処理済みテキストを確認できます。")}
+                    </p>
+                    <pre className="mt-3 whitespace-pre-wrap break-words rounded-[16px] bg-[var(--color-editorial-panel-strong)] px-3 py-3 text-sm leading-6 text-[var(--color-editorial-ink)] [overflow-wrap:anywhere]">
+                      {chunk.preprocessed_text}
+                    </pre>
+                  </details>
+                ) : null}
               </article>
             ))}
           </div>

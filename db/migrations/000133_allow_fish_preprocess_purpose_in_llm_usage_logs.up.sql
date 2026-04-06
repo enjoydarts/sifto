@@ -19,5 +19,6 @@ ALTER TABLE llm_usage_logs
     'source_navigator',
     'ask_navigator',
     'audio_briefing_script',
+    'ai_navigator_brief',
     'fish_preprocess'
   ));

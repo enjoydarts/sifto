@@ -196,6 +196,10 @@ func defaultPromptVariablesSchema(promptKey string) json.RawMessage {
   "articles_json": {"type": "string"},
   "existing_context": {"type": "string"}
 }`)
+	case "fish.summary_preprocess":
+		return mustRawJSON(`{
+  "text": {"type": "string"}
+}`)
 	default:
 		return nil
 	}
@@ -207,6 +211,8 @@ func defaultPromptNotes(promptKey string) string {
 		return "現行コード既定と同じテンプレートを編集用にそのまま表示します。"
 	case "audio_briefing_script.single", "audio_briefing_script.duo":
 		return "現行コード既定と同等の完成promptを直接編集できます。固定ルールは本文に見える形で持ち、persona や記事データなどの runtime 変数だけを差し込みます。"
+	case "fish.summary_preprocess":
+		return "Fish Audio の読み上げ前テキストに自然言語タグを挿入する前処理 prompt です。現在は Summary Audio の Fish 経路でのみ使います。"
 	default:
 		return ""
 	}
@@ -340,6 +346,10 @@ func defaultPromptPreviewVariables(promptKey string) json.RawMessage {
   "response_example": "{\n  \"turns\": [\n    {\"speaker\": \"host\", \"section\": \"article\", \"item_id\": \"item-1\", \"text\": \"host が記事を導入する\"},\n    {\"speaker\": \"partner\", \"section\": \"article\", \"item_id\": \"item-1\", \"text\": \"partner が反応を返す\"}\n  ]\n}",
   "articles_json": "[{\"item_id\":\"item-1\",\"title\":\"Example title\",\"translated_title\":\"翻訳タイトル\",\"source_title\":\"Source\",\"summary\":\"Summary text\",\"published_at\":\"2026-04-01T08:00:00Z\"}]",
   "existing_context": "なし"
+}`)
+	case "fish.summary_preprocess":
+		return mustRawJSON(`{
+  "text": "新しいAIモデルが公開されました。APIの料金は23.5パーセント下がります。"
 }`)
 	default:
 		return nil

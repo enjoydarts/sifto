@@ -16,12 +16,13 @@ var (
 )
 
 type SummaryAudioSynthesis struct {
-	Item         *model.ItemDetail `json:"item,omitempty"`
-	Persona      string            `json:"persona"`
-	AudioBase64  string            `json:"audio_base64"`
-	ContentType  string            `json:"content_type"`
-	DurationSec  int               `json:"duration_sec"`
-	ResolvedText string            `json:"resolved_text"`
+	Item             *model.ItemDetail `json:"item,omitempty"`
+	Persona          string            `json:"persona"`
+	AudioBase64      string            `json:"audio_base64"`
+	ContentType      string            `json:"content_type"`
+	DurationSec      int               `json:"duration_sec"`
+	ResolvedText     string            `json:"resolved_text"`
+	PreprocessedText *string           `json:"preprocessed_text,omitempty"`
 }
 
 type SummaryAudioPlayerService struct {
@@ -31,6 +32,7 @@ type SummaryAudioPlayerService struct {
 	userSettings *repository.UserSettingsRepo
 	cipher       *SecretCipher
 	worker       summaryAudioSynthesizer
+	preprocess   summaryAudioFishPreprocessor
 }
 
 type summaryAudioSynthesizer interface {
@@ -57,6 +59,10 @@ type summaryAudioSynthesizer interface {
 	) (*SummaryAudioSynthesizeResponse, error)
 }
 
+type summaryAudioFishPreprocessor interface {
+	PreprocessSummaryAudioText(ctx context.Context, userID, itemID, text string) (*FishSpeechPreprocessResult, error)
+}
+
 func NewSummaryAudioPlayerService(
 	items *repository.ItemRepo,
 	summaryAudio *repository.SummaryAudioVoiceSettingsRepo,
@@ -64,6 +70,7 @@ func NewSummaryAudioPlayerService(
 	userSettings *repository.UserSettingsRepo,
 	cipher *SecretCipher,
 	worker summaryAudioSynthesizer,
+	preprocess summaryAudioFishPreprocessor,
 ) *SummaryAudioPlayerService {
 	return &SummaryAudioPlayerService{
 		items:        items,
@@ -72,6 +79,7 @@ func NewSummaryAudioPlayerService(
 		userSettings: userSettings,
 		cipher:       cipher,
 		worker:       worker,
+		preprocess:   preprocess,
 	}
 }
 
@@ -114,6 +122,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		return nil, ErrSummaryAudioMissingVoice
 	}
 	narration := BuildSummaryAudioNarration(derefString(item.TranslatedTitle), derefString(item.Title), summaryText)
+	var preprocessedText *string
 	var aivisAPIKey *string
 	var aivisUserDictionaryUUID *string
 	var fishAudioAPIKey *string
@@ -138,6 +147,14 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		fishAudioAPIKey, err = loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetFishAudioAPIKeyEncrypted, s.cipher, userID, "fish api key is not configured")
 		if err != nil {
 			return nil, err
+		}
+		if s.preprocess != nil {
+			preprocessed, preprocessErr := s.preprocess.PreprocessSummaryAudioText(ctx, userID, item.ID, narration)
+			if preprocessErr != nil {
+				return nil, preprocessErr
+			}
+			preprocessedText = stringPtrOrNil(preprocessed.Text)
+			narration = preprocessed.Text
 		}
 	} else if strings.EqualFold(provider, "gemini_tts") {
 		if ttsModel == "" {
@@ -180,12 +197,13 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		return nil, err
 	}
 	return &SummaryAudioSynthesis{
-		Item:         item,
-		Persona:      "",
-		AudioBase64:  resp.AudioBase64,
-		ContentType:  resp.ContentType,
-		DurationSec:  resp.DurationSec,
-		ResolvedText: resp.ResolvedText,
+		Item:             item,
+		Persona:          "",
+		AudioBase64:      resp.AudioBase64,
+		ContentType:      resp.ContentType,
+		DurationSec:      resp.DurationSec,
+		ResolvedText:     resp.ResolvedText,
+		PreprocessedText: preprocessedText,
 	}, nil
 }
 

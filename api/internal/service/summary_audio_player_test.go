@@ -1,19 +1,170 @@
 package service
 
-import "testing"
+import (
+	"context"
+	"testing"
 
-func TestBuildSummaryAudioNarrationPrefersTranslatedTitle(t *testing.T) {
-	got := BuildSummaryAudioNarration("邦題タイトル", "Original Title", "要約本文")
-	want := "邦題タイトル\n\n要約本文"
-	if got != want {
-		t.Fatalf("BuildSummaryAudioNarration(...) = %q, want %q", got, want)
-	}
+	"github.com/enjoydarts/sifto/api/internal/model"
+	"github.com/enjoydarts/sifto/api/internal/repository"
+)
+
+type summaryAudioSynthStub struct {
+	gotText string
+	resp    *SummaryAudioSynthesizeResponse
 }
 
-func TestBuildSummaryAudioNarrationFallsBackToOriginalTitle(t *testing.T) {
-	got := BuildSummaryAudioNarration("", "Original Title", "要約本文")
-	want := "Original Title\n\n要約本文"
-	if got != want {
-		t.Fatalf("BuildSummaryAudioNarration(...) = %q, want %q", got, want)
+func (s *summaryAudioSynthStub) SynthesizeSummaryAudio(
+	_ context.Context,
+	_ string,
+	_ string,
+	_ string,
+	_ string,
+	text string,
+	_ float64,
+	_ float64,
+	_ float64,
+	_ float64,
+	_ float64,
+	_ float64,
+	_ float64,
+	_ *string,
+	_ *string,
+	_ *string,
+	_ *string,
+	_ *string,
+	_ *string,
+) (*SummaryAudioSynthesizeResponse, error) {
+	s.gotText = text
+	if s.resp != nil {
+		return s.resp, nil
+	}
+	return &SummaryAudioSynthesizeResponse{
+		AudioBase64:  "Zm9v",
+		ContentType:  "audio/mpeg",
+		DurationSec:  12,
+		ResolvedText: text,
+	}, nil
+}
+
+type summaryAudioPreprocessStub struct {
+	gotUserID string
+	gotItemID string
+	gotText   string
+	resp      *FishSpeechPreprocessResult
+}
+
+func (s *summaryAudioPreprocessStub) PreprocessSummaryAudioText(_ context.Context, userID, itemID, text string) (*FishSpeechPreprocessResult, error) {
+	s.gotUserID = userID
+	s.gotItemID = itemID
+	s.gotText = text
+	if s.resp != nil {
+		return s.resp, nil
+	}
+	return &FishSpeechPreprocessResult{Text: text}, nil
+}
+
+func TestSummaryAudioPlayerUsesFishPreprocessOutput(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "summary-audio-fish-test-key")
+	db, err := repository.NewPool(context.Background())
+	if err != nil {
+		t.Fatalf("NewPool() error = %v", err)
+	}
+	t.Cleanup(db.Close)
+	lockSettingsServiceTestDB(t, db)
+
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+	sourceID := "00000000-0000-4000-8000-000000000031"
+	itemID := "00000000-0000-4000-8000-000000000041"
+	if _, err := db.Exec(ctx, `DELETE FROM llm_usage_logs WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset llm_usage_logs: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM summary_audio_voice_settings WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset summary_audio_voice_settings: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM item_summaries WHERE item_id = $1`, itemID); err != nil {
+		t.Fatalf("reset item_summaries: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM items WHERE id = $1`, itemID); err != nil {
+		t.Fatalf("reset items: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM sources WHERE id = $1`, sourceID); err != nil {
+		t.Fatalf("reset sources: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM user_settings WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset user_settings: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("reset users: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, $3)`, userID, "summary-audio@example.com", "Summary Audio"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO sources (id, user_id, url, type, title) VALUES ($1, $2, $3, 'manual', $4)`, sourceID, userID, "https://example.com/feed", "Example Source"); err != nil {
+		t.Fatalf("insert source: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO items (id, source_id, url, title, status, content_text) VALUES ($1, $2, $3, $4, 'summarized', $5)`, itemID, sourceID, "https://example.com/items/1", "Original Title", "body"); err != nil {
+		t.Fatalf("insert item: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO item_summaries (item_id, summary, topics, translated_title, score, score_breakdown, score_reason, score_policy_version) VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, '', '')`,
+		itemID, "Summary body", []string{"ai"}, "Translated Title", 0.9); err != nil {
+		t.Fatalf("insert summary: %v", err)
+	}
+
+	userSettingsRepo := repository.NewUserSettingsRepo(db)
+	summaryAudioRepo := repository.NewSummaryAudioVoiceSettingsRepo(db)
+	if _, err := summaryAudioRepo.Upsert(ctx, model.SummaryAudioVoiceSettings{
+		UserID:                  userID,
+		TTSProvider:             "fish",
+		TTSModel:                "s1",
+		VoiceModel:              "fish-voice",
+		SpeechRate:              1,
+		EmotionalIntensity:      1,
+		TempoDynamics:           1,
+		LineBreakSilenceSeconds: 0.4,
+	}); err != nil {
+		t.Fatalf("summaryAudioRepo.Upsert() error = %v", err)
+	}
+	cipher := NewSecretCipher()
+	fishEnc, err := cipher.EncryptString("fish-secret")
+	if err != nil {
+		t.Fatalf("EncryptString(fish): %v", err)
+	}
+	if _, err := userSettingsRepo.SetFishAudioAPIKey(ctx, userID, fishEnc, "cret"); err != nil {
+		t.Fatalf("SetFishAudioAPIKey() error = %v", err)
+	}
+
+	synth := &summaryAudioSynthStub{}
+	preprocess := &summaryAudioPreprocessStub{
+		resp: &FishSpeechPreprocessResult{Text: "[自然に] Translated Title\n\n[落ち着いて] Summary body"},
+	}
+	service := NewSummaryAudioPlayerService(
+		repository.NewItemRepo(db),
+		summaryAudioRepo,
+		repository.NewUserRepo(db),
+		userSettingsRepo,
+		cipher,
+		synth,
+		preprocess,
+	)
+
+	result, err := service.Synthesize(ctx, userID, itemID)
+	if err != nil {
+		t.Fatalf("Synthesize() error = %v", err)
+	}
+	if preprocess.gotUserID != userID {
+		t.Fatalf("preprocess userID = %q, want %q", preprocess.gotUserID, userID)
+	}
+	if preprocess.gotItemID != itemID {
+		t.Fatalf("preprocess itemID = %q, want %q", preprocess.gotItemID, itemID)
+	}
+	if preprocess.gotText != "Translated Title\n\nSummary body" {
+		t.Fatalf("preprocess text = %q, want narration", preprocess.gotText)
+	}
+	if synth.gotText != "[自然に] Translated Title\n\n[落ち着いて] Summary body" {
+		t.Fatalf("synth text = %q, want preprocessed narration", synth.gotText)
+	}
+	if result == nil || result.ResolvedText != "[自然に] Translated Title\n\n[落ち着いて] Summary body" {
+		t.Fatalf("result = %#v, want resolved preprocessed text", result)
 	}
 }

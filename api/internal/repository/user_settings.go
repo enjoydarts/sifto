@@ -159,12 +159,13 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	       ai_navigator_brief_enabled,
 	       navigator_persona_mode,
 	       navigator_persona,
-	       navigator_model,
+		       navigator_model,
 	       navigator_fallback_model,
 	       ai_navigator_brief_model,
 	       ai_navigator_brief_fallback_model,
 	       audio_briefing_script_model,
 	       audio_briefing_script_fallback_model,
+	       fish_preprocess_model,
 	       inoreader_access_token_enc,
 		       inoreader_token_expires_at,
 		       created_at,
@@ -250,6 +251,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.AINavigatorBriefFallbackModel,
 		&v.AudioBriefingScriptModel,
 		&v.AudioBriefingScriptFallbackModel,
+		&v.FishPreprocessModel,
 		&inoreaderAccessTokenEnc,
 		&v.InoreaderTokenExpiresAt,
 		&v.CreatedAt,
@@ -473,7 +475,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 	ctx context.Context,
 	userID string,
 	factsModel, factsSecondaryModel *string, factsSecondaryRatePercent int, factsFallbackModel, summaryModel, summarySecondaryModel *string, summarySecondaryRatePercent int, summaryFallbackModel, digestClusterModel, digestModel, askModel, sourceSuggestionModel, embeddingModel, factsCheckModel, faithfulnessCheckModel *string,
-	navigatorEnabled bool, aiNavigatorBriefEnabled bool, navigatorPersonaMode string, navigatorPersona string, navigatorModel, navigatorFallbackModel, aiNavigatorBriefModel, aiNavigatorBriefFallbackModel, audioBriefingScriptModel, audioBriefingScriptFallbackModel *string,
+	navigatorEnabled bool, aiNavigatorBriefEnabled bool, navigatorPersonaMode string, navigatorPersona string, navigatorModel, navigatorFallbackModel, aiNavigatorBriefModel, aiNavigatorBriefFallbackModel, audioBriefingScriptModel, audioBriefingScriptFallbackModel, fishPreprocessModel *string,
 ) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (
@@ -502,8 +504,9 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 				ai_navigator_brief_model,
 				ai_navigator_brief_fallback_model,
 				audio_briefing_script_model,
-				audio_briefing_script_fallback_model
-			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+				audio_briefing_script_fallback_model,
+				fish_preprocess_model
+			) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
 			ON CONFLICT (user_id) DO UPDATE
 			SET facts_model = EXCLUDED.facts_model,
 			    facts_secondary_model = EXCLUDED.facts_secondary_model,
@@ -530,6 +533,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 			    ai_navigator_brief_fallback_model = EXCLUDED.ai_navigator_brief_fallback_model,
 			    audio_briefing_script_model = EXCLUDED.audio_briefing_script_model,
 			    audio_briefing_script_fallback_model = EXCLUDED.audio_briefing_script_fallback_model,
+			    fish_preprocess_model = EXCLUDED.fish_preprocess_model,
 			    updated_at = NOW()`,
 		userID,
 		factsModel,
@@ -557,6 +561,7 @@ func (r *UserSettingsRepo) UpsertLLMModelConfig(
 		aiNavigatorBriefFallbackModel,
 		audioBriefingScriptModel,
 		audioBriefingScriptFallbackModel,
+		fishPreprocessModel,
 	)
 	if err != nil {
 		return nil, err

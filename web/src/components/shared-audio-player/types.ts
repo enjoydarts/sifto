@@ -38,6 +38,7 @@ export type SharedSummaryQueueState = {
   queue: Item[];
   currentItemID: string | null;
   currentItemDetail: ItemDetail | null;
+  currentPreprocessedText: string | null;
   currentIndex: number;
   excludedItemIDs: string[];
   prefetchedItemID: string | null;

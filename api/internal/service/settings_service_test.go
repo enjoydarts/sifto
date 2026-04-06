@@ -299,6 +299,7 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 		AINavigatorBriefFallbackModel:    strptr("google/gemini-2.5-flash"),
 		AudioBriefingScriptModel:         strptr("gpt-5.4"),
 		AudioBriefingScriptFallbackModel: strptr("google/gemini-2.5-flash"),
+		FishPreprocessModel:              strptr("gpt-5.4-mini"),
 		HasPoeAPIKey:                     true,
 		PoeAPIKeyLast4:                   strptr("abcd"),
 	}
@@ -329,6 +330,9 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 	if gotAudioBriefingScriptFallback, _ := got["audio_briefing_script_fallback"].(*string); gotAudioBriefingScriptFallback == nil || *gotAudioBriefingScriptFallback != "google/gemini-2.5-flash" {
 		t.Fatalf("audio_briefing_script_fallback = %v, want %q", got["audio_briefing_script_fallback"], "google/gemini-2.5-flash")
 	}
+	if gotFishPreprocessModel, _ := got["fish_preprocess_model"].(*string); gotFishPreprocessModel == nil || *gotFishPreprocessModel != "gpt-5.4-mini" {
+		t.Fatalf("fish_preprocess_model = %v, want %q", got["fish_preprocess_model"], "gpt-5.4-mini")
+	}
 	if gotNavigatorPersonaMode, _ := got["navigator_persona_mode"].(string); gotNavigatorPersonaMode != PersonaModeRandom {
 		t.Fatalf("navigator_persona_mode = %v, want %q", got["navigator_persona_mode"], PersonaModeRandom)
 	}
@@ -337,6 +341,26 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 	}
 	if gotBriefFallback, _ := got["ai_navigator_brief_fallback"].(*string); gotBriefFallback == nil || *gotBriefFallback != "google/gemini-2.5-flash" {
 		t.Fatalf("ai_navigator_brief_fallback = %v, want %q", got["ai_navigator_brief_fallback"], "google/gemini-2.5-flash")
+	}
+}
+
+func TestUpdateLLMModelsAcceptsFishPreprocessModel(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+
+	settings, err := svc.UpdateLLMModels(ctx, userID, UpdateLLMModelsInput{
+		FishPreprocessModel: strptr("gpt-5.4-mini"),
+	})
+	if err != nil {
+		t.Fatalf("UpdateLLMModels() error = %v", err)
+	}
+	if settings.FishPreprocessModel == nil || *settings.FishPreprocessModel != "gpt-5.4-mini" {
+		t.Fatalf("FishPreprocessModel = %v, want gpt-5.4-mini", settings.FishPreprocessModel)
+	}
+	got := LLMModelSettingsPayload(settings)
+	if gotFishPreprocessModel, _ := got["fish_preprocess_model"].(*string); gotFishPreprocessModel == nil || *gotFishPreprocessModel != "gpt-5.4-mini" {
+		t.Fatalf("fish_preprocess_model payload = %v, want gpt-5.4-mini", got["fish_preprocess_model"])
 	}
 }
 

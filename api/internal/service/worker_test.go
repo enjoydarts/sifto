@@ -248,6 +248,59 @@ func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
 	}
 }
 
+func TestPreprocessFishSpeechTextIncludesPromptAndProviderHeader(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path != "/fish/preprocess-text" {
+			t.Fatalf("path = %q, want /fish/preprocess-text", req.URL.Path)
+		}
+		if got := req.Header.Get("X-Openai-Api-Key"); got != "openrouter-key" {
+			t.Fatalf("X-Openai-Api-Key = %q, want openrouter-key", got)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if got := body["prompt_key"]; got != "fish.summary_preprocess" {
+			t.Fatalf("prompt_key = %v, want fish.summary_preprocess", got)
+		}
+		if got := body["model"]; got != "openrouter::openai/gpt-oss-20b" {
+			t.Fatalf("model = %v, want openrouter::openai/gpt-oss-20b", got)
+		}
+		respBody, _ := json.Marshal(map[string]any{
+			"text": "前処理済みテキスト",
+			"llm": map[string]any{
+				"provider":           "openrouter",
+				"model":              "openrouter::openai/gpt-oss-20b",
+				"pricing_source":     "openrouter_billed",
+				"input_tokens":       10,
+				"output_tokens":      20,
+				"estimated_cost_usd": 0.001,
+			},
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	})
+
+	resp, err := client.PreprocessFishSpeechText(
+		context.Background(),
+		"元テキスト",
+		"openrouter::openai/gpt-oss-20b",
+		"fish.summary_preprocess",
+		strptr("openrouter-key"),
+	)
+	if err != nil {
+		t.Fatalf("PreprocessFishSpeechText(...) error = %v", err)
+	}
+	if resp == nil || resp.Text != "前処理済みテキスト" {
+		t.Fatalf("response = %#v, want text", resp)
+	}
+}
+
 func TestSynthesizeAudioBriefingUploadIncludesXAIAPIKeyHeader(t *testing.T) {
 	client := NewWorkerClient()
 	client.baseURL = "http://worker.test"

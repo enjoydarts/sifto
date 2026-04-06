@@ -63,6 +63,7 @@ function createEmptySummaryQueue(): SharedSummaryQueueState {
     queue: [],
     currentItemID: null,
     currentItemDetail: null,
+    currentPreprocessedText: null,
     currentIndex: 0,
     excludedItemIDs: [],
     prefetchedItemID: null,
@@ -127,6 +128,21 @@ function sameSummaryItemDetail(a: ItemDetail | null, b: ItemDetail | null): bool
     (a.translated_title ?? null) === (b.translated_title ?? null) &&
     (a.source_title ?? null) === (b.source_title ?? null)
   );
+}
+
+function preparedSummaryItemDetail(prepared: SummaryAudioPrepared | null, itemID: string | null): ItemDetail | null {
+  if (!prepared || !itemID || prepared.itemID !== itemID) {
+    return null;
+  }
+  const detail = prepared.response.item ?? null;
+  return detail && detail.id === itemID ? detail : null;
+}
+
+function preparedSummaryPreprocessedText(prepared: SummaryAudioPrepared | null, itemID: string | null): string | null {
+  if (!prepared || !itemID || prepared.itemID !== itemID) {
+    return null;
+  }
+  return prepared.response.preprocessed_text ?? null;
 }
 
 function isNaturalEndingPause(audio: HTMLAudioElement | null): boolean {
@@ -672,6 +688,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         queue,
         currentItemID: prepared.itemID,
         currentItemDetail: immediateDetail,
+        currentPreprocessedText: prepared.response.preprocessed_text ?? null,
         prefetchedItemID: prefetchedAudioRef.current?.itemID ?? null,
       }));
       audio.src = prepared.objectURL;
@@ -789,6 +806,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       queue: seededQueue,
       currentItemID: null,
       currentItemDetail: null,
+      currentPreprocessedText: null,
       currentIndex: options?.currentIndex ?? 0,
       excludedItemIDs: options?.excludedItemIDs ?? [],
       prefetchedItemID: null,
@@ -876,6 +894,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       queue: nextQueue,
       currentItemID: nextQueue[0]?.id ?? null,
       currentItemDetail: null,
+      currentPreprocessedText: null,
       currentIndex: currentState.currentIndex + index,
       excludedItemIDs: [...currentState.excludedItemIDs, ...currentState.queue.slice(0, index).map((item) => item.id)],
       prefetchedItemID: null,
@@ -883,12 +902,18 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     };
     const started = await playSummaryQueue(nextQueue, true);
     if (started) {
+      const preparedDetail = preparedSummaryItemDetail(currentAudioRef.current, nextState.currentItemID);
+      const preparedPreprocessedText = preparedSummaryPreprocessedText(currentAudioRef.current, nextState.currentItemID);
       setSummaryQueue((prev) => ({
         ...nextState,
         currentItemDetail:
           prev.currentItemDetail && prev.currentItemDetail.id === nextState.currentItemID
             ? prev.currentItemDetail
-            : nextState.currentItemDetail,
+            : preparedDetail ?? nextState.currentItemDetail,
+        currentPreprocessedText:
+          prev.currentItemID === nextState.currentItemID
+            ? prev.currentPreprocessedText
+            : preparedPreprocessedText ?? nextState.currentPreprocessedText,
         prefetchedItemID:
           (prev.prefetchedItemID && prev.prefetchedItemID !== nextState.currentItemID ? prev.prefetchedItemID : null),
         prefetchingItemID:
@@ -914,6 +939,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
           queue: replenishedQueue,
           currentItemID: replenishedQueue[0]?.id ?? null,
           currentItemDetail: null,
+          currentPreprocessedText: null,
           currentIndex: currentState.currentIndex + queue.length,
           excludedItemIDs: [...currentState.excludedItemIDs, ...queue.map((item) => item.id)],
           prefetchedItemID: null,
@@ -921,12 +947,18 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         };
         const started = await playSummaryQueue(replenishedQueue, true);
         if (started) {
+          const preparedDetail = preparedSummaryItemDetail(currentAudioRef.current, nextState.currentItemID);
+          const preparedPreprocessedText = preparedSummaryPreprocessedText(currentAudioRef.current, nextState.currentItemID);
           setSummaryQueue((prev) => ({
             ...nextState,
             currentItemDetail:
               prev.currentItemDetail && prev.currentItemDetail.id === nextState.currentItemID
                 ? prev.currentItemDetail
-                : nextState.currentItemDetail,
+                : preparedDetail ?? nextState.currentItemDetail,
+            currentPreprocessedText:
+              prev.currentItemID === nextState.currentItemID
+                ? prev.currentPreprocessedText
+                : preparedPreprocessedText ?? nextState.currentPreprocessedText,
             prefetchedItemID:
               (prev.prefetchedItemID && prev.prefetchedItemID !== nextState.currentItemID ? prev.prefetchedItemID : null),
             prefetchingItemID:
@@ -951,6 +983,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         currentIndex: prev.currentIndex + (queue.length > 0 ? 1 : 0),
         currentItemID: null,
         currentItemDetail: null,
+        currentPreprocessedText: null,
         excludedItemIDs: [...prev.excludedItemIDs, ...queue.map((item) => item.id)],
         prefetchedItemID: null,
         prefetchingItemID: null,
@@ -965,6 +998,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       queue: nextQueue,
       currentItemID: nextQueue[0]?.id ?? null,
       currentItemDetail: null,
+      currentPreprocessedText: null,
       currentIndex: currentState.currentIndex + 1,
       excludedItemIDs: currentState.queue[0] ? [...currentState.excludedItemIDs, currentState.queue[0].id] : currentState.excludedItemIDs,
       prefetchedItemID: null,
@@ -972,12 +1006,18 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     };
     const started = await playSummaryQueue(nextQueue, true);
     if (started) {
+      const preparedDetail = preparedSummaryItemDetail(currentAudioRef.current, nextState.currentItemID);
+      const preparedPreprocessedText = preparedSummaryPreprocessedText(currentAudioRef.current, nextState.currentItemID);
       setSummaryQueue((prev) => ({
         ...nextState,
         currentItemDetail:
           prev.currentItemDetail && prev.currentItemDetail.id === nextState.currentItemID
             ? prev.currentItemDetail
-            : nextState.currentItemDetail,
+            : preparedDetail ?? nextState.currentItemDetail,
+        currentPreprocessedText:
+          prev.currentItemID === nextState.currentItemID
+            ? prev.currentPreprocessedText
+            : preparedPreprocessedText ?? nextState.currentPreprocessedText,
         prefetchedItemID:
           (prev.prefetchedItemID && prev.prefetchedItemID !== nextState.currentItemID ? prev.prefetchedItemID : null),
         prefetchingItemID:

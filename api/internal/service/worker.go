@@ -446,6 +446,11 @@ type SummaryAudioSynthesizeResponse struct {
 	ResolvedText string `json:"resolved_text"`
 }
 
+type FishSpeechPreprocessResponse struct {
+	Text string    `json:"text"`
+	LLM  *LLMUsage `json:"llm,omitempty"`
+}
+
 type AudioBriefingPresignResponse struct {
 	AudioURL string `json:"audio_url"`
 }
@@ -1170,6 +1175,32 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 		requestBody["user_dictionary_uuid"] = uuid
 	}
 	return postWithHeaders[SummaryAudioSynthesizeResponse](ctx, w, "/summary-audio/synthesize", requestBody, workerHeaders(nil, googleAPIKey, nil, nil, nil, nil, xaiAPIKey, nil, nil, openAIAPIKey, aivisAPIKey, fishAudioAPIKey, w.internalSecret))
+}
+
+func (w *WorkerClient) PreprocessFishSpeechText(
+	ctx context.Context,
+	text string,
+	model string,
+	promptKey string,
+	apiKey *string,
+) (*FishSpeechPreprocessResponse, error) {
+	requestBody := map[string]any{
+		"text":       text,
+		"model":      model,
+		"prompt_key": promptKey,
+	}
+	headers := workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret)
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	if apiKey != nil && *apiKey != "" {
+		if provider := CatalogProviderForModel(model); provider != "" {
+			if providerConfig := providerCatalogByID(provider); providerConfig != nil && providerConfig.APIKeyHeader != "" {
+				headers[providerConfig.APIKeyHeader] = *apiKey
+			}
+		}
+	}
+	return postWithHeaders[FishSpeechPreprocessResponse](ctx, w, "/fish/preprocess-text", requestBody, headers)
 }
 
 func (w *WorkerClient) PresignAudioBriefingObject(ctx context.Context, objectKey string, expiresSec int) (*AudioBriefingPresignResponse, error) {

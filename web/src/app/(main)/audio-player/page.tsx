@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { LoaderCircle, Play, Volume2 } from "lucide-react";
+import { ChevronDown, LoaderCircle, Play, Volume2 } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
@@ -31,6 +31,7 @@ export default function SummaryAudioPlayerPage() {
   const player = useSharedAudioPlayer();
   const queueKind = parseQueueKind(searchParams.get("queue"));
   const autoStartedQueueKindRef = useRef<SummaryAudioQueueKind | null>(null);
+  const [showPreprocessedText, setShowPreprocessedText] = useState(false);
   const settingsQuery = useQuery({
     queryKey: ["settings", "summary-audio-readiness"],
     queryFn: () => api.getSettings(),
@@ -64,7 +65,12 @@ export default function SummaryAudioPlayerPage() {
 
   useEffect(() => {
     autoStartedQueueKindRef.current = null;
+    setShowPreprocessedText(false);
   }, [queueKind]);
+
+  useEffect(() => {
+    setShowPreprocessedText(false);
+  }, [player.summaryQueue.currentItemID]);
 
   useEffect(() => {
     void requestQueueStart();
@@ -79,6 +85,8 @@ export default function SummaryAudioPlayerPage() {
     t("summaryAudio.untitled");
   const originalTitle = detail?.title || t("summaryAudio.originalTitleEmpty");
   const sourceTitle = detail?.source_title || t("summaryAudio.sourceUnknown");
+  const preprocessedText = player.summaryQueue.currentPreprocessedText;
+  const showFishPreprocessedText = Boolean(preprocessedText);
   const queueCountLabel = `${player.display.queueCount.toLocaleString(locale)} ${t("summaryAudio.queueCount")}`;
   const queueButtons =
     queueKind === "brief" ? [...queueKinds, "brief" as SummaryAudioQueueKind] : queueKinds;
@@ -161,6 +169,35 @@ export default function SummaryAudioPlayerPage() {
                   {hasQueuedItem ? detail?.summary?.summary || t("summaryAudio.summaryPending") : t("summaryAudio.empty")}
                 </p>
               </div>
+
+              {showFishPreprocessedText ? (
+                <div className="rounded-[var(--radius-card)] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)]">
+                  <button
+                    type="button"
+                    onClick={() => setShowPreprocessedText((prev) => !prev)}
+                    aria-expanded={showPreprocessedText}
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                  >
+                    <div className="space-y-1">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
+                        {t("summaryAudio.preprocessedTextLabel")}
+                      </div>
+                      <p className="text-sm text-editorial-muted">{t("summaryAudio.preprocessedTextHelp")}</p>
+                    </div>
+                    <ChevronDown
+                      className={`size-4 shrink-0 text-[var(--color-editorial-ink-faint)] transition ${showPreprocessedText ? "rotate-180" : ""}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                  {showPreprocessedText ? (
+                    <div className="border-t border-[var(--color-editorial-line)] px-4 py-4">
+                      <p className="whitespace-pre-wrap text-sm leading-7 text-editorial-strong">
+                        {preprocessedText}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </SectionCard>
 

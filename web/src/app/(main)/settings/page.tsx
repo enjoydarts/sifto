@@ -124,6 +124,12 @@ function buildCostPerformancePreset(catalog: LLMCatalog | null): NonNullable<Use
       "gpt-5.4-mini",
       "gpt-5-mini",
     ]),
+    fish_preprocess_model: firstMatchingModelId(purposeModels("summary"), [
+      "openai/gpt-oss-20b",
+      "gemini-2.5-flash-lite",
+      "gpt-5.4-mini",
+      "gpt-5-mini",
+    ]),
     source_suggestion: firstMatchingModelId(purposeModels("source_suggestion"), [
       "openai/gpt-oss-20b",
       "gemini-2.5-flash-lite",
@@ -187,6 +193,8 @@ function localizeLLMSettingKey(settingKey: string, t: (key: string, fallback?: s
       return t("settings.model.audioBriefingScript");
     case "audio_briefing_script_fallback":
       return t("settings.model.audioBriefingScriptFallback");
+    case "fish_preprocess_model":
+      return t("settings.model.fishPreprocess");
     case "embedding":
       return t("settings.model.embeddings");
     default:
@@ -2285,6 +2293,7 @@ export default function SettingsPage() {
   const [aiNavigatorBriefFallbackModel, setAINavigatorBriefFallbackModel] = useState("");
   const [audioBriefingScriptModel, setAudioBriefingScriptModel] = useState("");
   const [audioBriefingScriptFallbackModel, setAudioBriefingScriptFallbackModel] = useState("");
+  const [fishPreprocessModel, setFishPreprocessModel] = useState("");
   const [navigatorPersonaDefinitions, setNavigatorPersonaDefinitions] = useState<Record<string, NavigatorPersonaDefinition>>({});
   const loadSeqRef = useRef(0);
   const llmModelsDirtyRef = useRef(false);
@@ -2471,6 +2480,7 @@ export default function SettingsPage() {
     setAINavigatorBriefFallbackModel(llmModels?.ai_navigator_brief_fallback ?? "");
     setAudioBriefingScriptModel(llmModels?.audio_briefing_script ?? "");
     setAudioBriefingScriptFallbackModel(llmModels?.audio_briefing_script_fallback ?? "");
+    setFishPreprocessModel(llmModels?.fish_preprocess_model ?? "");
   }, []);
 
   const onChangeLLMModel = useCallback((setter: (value: string) => void, value: string) => {
@@ -2505,6 +2515,7 @@ export default function SettingsPage() {
       ai_navigator_brief_fallback: string | null;
       audio_briefing_script: string | null;
       audio_briefing_script_fallback: string | null;
+      fish_preprocess_model: string | null;
     }>) => {
       const emptyToNull = (v: string) => {
         const s = v.trim();
@@ -2541,6 +2552,7 @@ export default function SettingsPage() {
         ai_navigator_brief_fallback: emptyToNull(aiNavigatorBriefFallbackModel),
         audio_briefing_script: emptyToNull(audioBriefingScriptModel),
         audio_briefing_script_fallback: emptyToNull(audioBriefingScriptFallbackModel),
+        fish_preprocess_model: emptyToNull(fishPreprocessModel),
         ...overrides,
       };
     },
@@ -2569,6 +2581,7 @@ export default function SettingsPage() {
       navigatorPersona,
       audioBriefingScriptFallbackModel,
       audioBriefingScriptModel,
+      fishPreprocessModel,
       openAIEmbeddingModel,
     ]
   );
@@ -2958,6 +2971,7 @@ export default function SettingsPage() {
     setOpenAIEmbeddingModel(preset.embedding ?? "");
     setFactsCheckModel(preset.facts_check ?? "");
     setFaithfulnessCheckModel(preset.faithfulness_check ?? "");
+    setFishPreprocessModel(preset.fish_preprocess_model ?? "");
   }, [catalog]);
 
   const optionsForPurpose = useCallback(
@@ -2969,6 +2983,26 @@ export default function SettingsPage() {
           return !isUnavailableOpenRouterModel(item);
         })
         .map(toModelOption);
+      if (!currentValue || items.some((item) => item.value === currentValue)) {
+        return items;
+      }
+      const providerLabel = inferProviderLabelFromModelID(currentValue, t);
+      return [
+        {
+          value: currentValue,
+          label: formatModelDisplayName(currentValue),
+          selectedLabel: formatProviderModelLabel(providerLabel, currentValue),
+          provider: providerLabel ?? undefined,
+        },
+        ...items,
+      ];
+    },
+    [catalog?.chat_models, t, toModelOption]
+  );
+
+  const optionsForChatModel = useCallback(
+    (currentValue?: string): ModelOption[] => {
+      const items = (catalog?.chat_models ?? []).map(toModelOption);
       if (!currentValue || items.some((item) => item.value === currentValue)) {
         return items;
       }
@@ -6971,6 +7005,22 @@ export default function SettingsPage() {
                         <ModelSelect label={t("settings.model.sourceSuggestion")} value={anthropicSourceSuggestionModel} onChange={(value) => onChangeLLMModel(setAnthropicSourceSuggestionModel, value)} options={sourceSuggestionModelOptions} labels={modelSelectLabels} variant="modal" />
                         <ModelSelect label={t("settings.model.ask")} value={anthropicAskModel} onChange={(value) => onChangeLLMModel(setAnthropicAskModel, value)} options={optionsForPurpose("ask", anthropicAskModel)} labels={modelSelectLabels} variant="modal" />
                         <ModelSelect label={t("settings.model.embeddings")} value={openAIEmbeddingModel} onChange={(value) => onChangeLLMModel(setOpenAIEmbeddingModel, value)} options={openAIEmbeddingModelOptions} labels={modelSelectLabels} variant="modal" />
+                      </div>
+                    </section>
+                    <section className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.group.fishPreprocess")}</h4>
+                      <p className="mt-1 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
+                        {t("settings.group.fishPreprocessDescription")}
+                      </p>
+                      <div className="mt-3 grid gap-4 md:grid-cols-2">
+                        <ModelSelect
+                          label={t("settings.model.fishPreprocess")}
+                          value={fishPreprocessModel}
+                          onChange={(value) => onChangeLLMModel(setFishPreprocessModel, value)}
+                          options={optionsForChatModel(fishPreprocessModel)}
+                          labels={modelSelectLabels}
+                          variant="modal"
+                        />
                       </div>
                     </section>
                   </div>

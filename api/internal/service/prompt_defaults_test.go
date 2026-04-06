@@ -14,6 +14,7 @@ func TestLookupPromptTemplateDefault(t *testing.T) {
 		"digest.default",
 		"audio_briefing_script.single",
 		"audio_briefing_script.duo",
+		"fish.summary_preprocess",
 	}
 
 	for _, key := range cases {

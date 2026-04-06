@@ -109,6 +109,7 @@ type UpdateLLMModelsInput struct {
 	AINavigatorBriefFallback    *string
 	AudioBriefingScript         *string
 	AudioBriefingScriptFallback *string
+	FishPreprocessModel         *string
 }
 
 type UpdateAudioBriefingSettingsInput struct {
@@ -302,6 +303,7 @@ func LLMModelSettingsPayload(settings *model.UserSettings) map[string]any {
 		"ai_navigator_brief_fallback":    settings.AINavigatorBriefFallbackModel,
 		"audio_briefing_script":          settings.AudioBriefingScriptModel,
 		"audio_briefing_script_fallback": settings.AudioBriefingScriptFallbackModel,
+		"fish_preprocess_model":          settings.FishPreprocessModel,
 	}
 }
 
@@ -965,6 +967,16 @@ func validateCatalogModelCapabilities(catalog *LLMCatalog, model *string, settin
 	return nil
 }
 
+func validateCatalogChatModel(catalog *LLMCatalog, model *string, settingKey string) error {
+	if model == nil {
+		return nil
+	}
+	if CatalogChatModelByIDInCatalog(catalog, *model) == nil {
+		return fmt.Errorf("invalid model for %s", settingKey)
+	}
+	return nil
+}
+
 func (s *SettingsService) LLMCatalog(ctx context.Context, userID string) (*LLMCatalog, error) {
 	catalog := LLMCatalogData()
 	if s.openRouterOverrideRepo == nil || strings.TrimSpace(userID) == "" {
@@ -1002,6 +1014,7 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		"ai_navigator_brief_fallback":    normalizeOptionalModel(in.AINavigatorBriefFallback),
 		"audio_briefing_script":          normalizeOptionalModel(in.AudioBriefingScript),
 		"audio_briefing_script_fallback": normalizeOptionalModel(in.AudioBriefingScriptFallback),
+		"fish_preprocess_model":          normalizeOptionalModel(in.FishPreprocessModel),
 	}
 	for settingKey, purpose := range modelSettingPurposes {
 		if err := validateCatalogModelForPurpose(catalog, normalized[settingKey], purpose); err != nil {
@@ -1014,6 +1027,9 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 	embeddingModel := normalized["embedding"]
 	if embeddingModel != nil && !CatalogIsEmbeddingModelInCatalog(catalog, *embeddingModel) {
 		return nil, fmt.Errorf("invalid embedding model")
+	}
+	if err := validateCatalogChatModel(catalog, normalized["fish_preprocess_model"], "fish_preprocess_model"); err != nil {
+		return nil, err
 	}
 	return s.repo.UpsertLLMModelConfig(
 		ctx,
@@ -1043,6 +1059,7 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		normalized["ai_navigator_brief_fallback"],
 		normalized["audio_briefing_script"],
 		normalized["audio_briefing_script_fallback"],
+		normalized["fish_preprocess_model"],
 	)
 }
 

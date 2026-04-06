@@ -292,6 +292,14 @@ func CatalogModelByIDInCatalog(catalog *LLMCatalog, model string) *LLMModelCatal
 	return findModelCatalogInCatalog(catalog, model)
 }
 
+func CatalogChatModelByIDInCatalog(catalog *LLMCatalog, model string) *LLMModelCatalog {
+	entry := findModelCatalogInCatalog(catalog, model)
+	if entry == nil || CatalogIsEmbeddingModelInCatalog(catalog, model) {
+		return nil
+	}
+	return entry
+}
+
 func providerCatalogByID(provider string) *LLMProviderCatalog {
 	p := strings.TrimSpace(provider)
 	if p == "" {

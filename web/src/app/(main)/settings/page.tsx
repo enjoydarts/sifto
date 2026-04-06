@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Brain, ChevronDown, KeyRound, RefreshCw, Search, Settings as SettingsIcon, X } from "lucide-react";
-import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, FishModelSnapshot, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, SummaryAudioVoiceSettings, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
+import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, AudioBriefingPreset, FishModelSnapshot, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, SaveAudioBriefingPresetRequest, SummaryAudioVoiceSettings, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -311,9 +311,47 @@ function buildDefaultAudioBriefingVoices(personaKeys: NavigatorPersonaKey[]): Au
   }));
 }
 
+function normalizeAudioBriefingPresetVoices(voices: AudioBriefingPersonaVoice[]): AudioBriefingPersonaVoice[] {
+  const defaults = buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS);
+  const byPersona = new Map(voices.map((voice) => [voice.persona, voice] as const));
+  return defaults.map((voice) => byPersona.get(voice.persona) ?? voice);
+}
+
 function formatAudioBriefingDecimalInput(value: number): string {
   if (!Number.isFinite(value)) return "";
   return value.toFixed(4).replace(/\.?0+$/, "");
+}
+
+function buildAudioBriefingPresetRequest(
+  name: string,
+  audioBriefingDefaultPersonaMode: "fixed" | "random",
+  audioBriefingDefaultPersona: string,
+  audioBriefingConversationMode: "single" | "duo",
+  audioBriefingVoices: AudioBriefingPersonaVoice[],
+): SaveAudioBriefingPresetRequest {
+  return {
+    name: name.trim(),
+    default_persona_mode: audioBriefingDefaultPersonaMode,
+    default_persona: audioBriefingDefaultPersona,
+    conversation_mode: audioBriefingConversationMode,
+    voices: audioBriefingVoices,
+  };
+}
+
+function formatAudioBriefingPresetVoiceLabel(voice: AudioBriefingPersonaVoice, t: ReturnType<typeof useI18n>["t"]): string {
+  const provider = voice.tts_provider.trim();
+  const primary = voice.provider_voice_label?.trim() || voice.voice_model.trim();
+  if (!primary) return t("settings.audioBriefing.unsetShort");
+  return provider ? `${provider} / ${primary}` : primary;
+}
+
+function formatAudioBriefingPresetVoiceDetail(voice: AudioBriefingPersonaVoice, t: ReturnType<typeof useI18n>["t"]): string {
+  return (
+    voice.provider_voice_description?.trim() ||
+    voice.voice_style.trim() ||
+    voice.voice_model.trim() ||
+    t("settings.audioBriefing.unsetShort")
+  );
 }
 
 function buildAudioBriefingVoiceInputDrafts(voices: AudioBriefingPersonaVoice[]): AudioBriefingVoiceInputDrafts {
@@ -1014,6 +1052,389 @@ function getSummaryAudioVoiceStatus(
     detail: t("settings.summaryAudio.status.readyDetail"),
     configured: true,
   };
+}
+
+type AudioBriefingPresetSaveModalProps = {
+  open: boolean;
+  saving: boolean;
+  presetName: string;
+  defaultPersonaMode: "fixed" | "random";
+  defaultPersona: string;
+  conversationMode: "single" | "duo";
+  voices: AudioBriefingPersonaVoice[];
+  onClose: () => void;
+  onChangeName: (value: string) => void;
+  onSave: () => void;
+};
+
+function AudioBriefingPresetSaveModal({
+  open,
+  saving,
+  presetName,
+  defaultPersonaMode,
+  defaultPersona,
+  conversationMode,
+  voices,
+  onClose,
+  onChangeName,
+  onSave,
+}: AudioBriefingPresetSaveModalProps) {
+  const { t } = useI18n();
+
+  const configuredCount = useMemo(
+    () => voices.filter((voice) => voice.voice_model.trim().length > 0).length,
+    [voices],
+  );
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 py-6" onClick={onClose}>
+      <div
+        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] shadow-[0_30px_80px_rgba(35,24,12,0.24)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--color-editorial-line)] px-5 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--color-editorial-ink)]">{t("settings.audioBriefing.presetSaveTitle")}</h2>
+            <p className="mt-1 text-sm text-[var(--color-editorial-ink-soft)]">{t("settings.audioBriefing.presetSaveSubtitle")}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex size-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-white text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+            aria-label={t("common.close")}
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          <div className="space-y-5">
+          <label className="block">
+            <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.audioBriefing.presetName")}</div>
+            <input
+              value={presetName}
+              onChange={(e) => onChangeName(e.target.value)}
+              placeholder={t("settings.audioBriefing.presetNamePlaceholder")}
+              className="mt-2 w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-white px-4 py-3 text-sm text-[var(--color-editorial-ink)] outline-none placeholder:text-[var(--color-editorial-ink-faint)]"
+            />
+            <p className="mt-2 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">{t("settings.audioBriefing.presetNameHelp")}</p>
+          </label>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                {t("settings.audioBriefing.defaultPersona")}
+              </div>
+              <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">
+                {defaultPersonaMode === "random"
+                  ? t("settings.personaMode.random")
+                  : t(`settings.navigator.persona.${defaultPersona}`, defaultPersona)}
+              </div>
+            </div>
+            <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                {t("settings.audioBriefing.conversationMode")}
+              </div>
+              <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">
+                {t(`settings.audioBriefing.conversationMode.${conversationMode}`)}
+              </div>
+            </div>
+            <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                {t("settings.audioBriefing.summary.configured")}
+              </div>
+              <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">
+                {`${configuredCount}/${voices.length}`}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+              {t("settings.audioBriefing.presetSaveIncludes")}
+            </div>
+            <div className="mt-2 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.audioBriefing.presetSaveIncludesHelp")}</div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {voices.map((voice) => (
+                <div key={voice.persona} className="rounded-[16px] border border-[var(--color-editorial-line)] bg-white px-4 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-editorial-ink-faint)]">
+                    {t(`settings.navigator.persona.${voice.persona}`, voice.persona)}
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-[var(--color-editorial-ink)]">
+                    {formatAudioBriefingPresetVoiceLabel(voice, t)}
+                  </div>
+                  <div className="mt-1 text-[12px] text-[var(--color-editorial-ink-soft)]">
+                    {formatAudioBriefingPresetVoiceDetail(voice, t)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          </div>
+        </div>
+
+        <div className="shrink-0 flex flex-wrap items-center justify-end gap-2 border-t border-[var(--color-editorial-line)] px-5 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+          >
+            {t("common.cancel")}
+          </button>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving || !presetName.trim()}
+            className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {saving ? t("common.saving") : t("settings.audioBriefing.presetSaveConfirm")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type AudioBriefingPresetApplyModalProps = {
+  open: boolean;
+  loading: boolean;
+  error: string | null;
+  presets: AudioBriefingPreset[];
+  selectedPresetID: string | null;
+  onClose: () => void;
+  onRefresh: () => void;
+  onSelectPreset: (presetID: string) => void;
+  onApplyPreset: (preset: AudioBriefingPreset) => void;
+};
+
+function AudioBriefingPresetApplyModal({
+  open,
+  loading,
+  error,
+  presets,
+  selectedPresetID,
+  onClose,
+  onRefresh,
+  onSelectPreset,
+  onApplyPreset,
+}: AudioBriefingPresetApplyModalProps) {
+  const { t } = useI18n();
+  const [query, setQuery] = useState("");
+
+  const filteredPresets = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return presets;
+    return presets.filter((preset) =>
+      [preset.name, preset.default_persona_mode, preset.default_persona, preset.conversation_mode, ...preset.voices.flatMap((voice) => [
+        voice.persona,
+        voice.tts_provider,
+        voice.tts_model,
+        voice.voice_model,
+        voice.voice_style,
+        voice.provider_voice_label ?? "",
+        voice.provider_voice_description ?? "",
+      ])]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [presets, query]);
+
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+    }
+  }, [open]);
+
+  const selectedPreset = useMemo(() => {
+    if (!filteredPresets.length) return null;
+    return filteredPresets.find((preset) => preset.id === selectedPresetID) ?? filteredPresets[0];
+  }, [filteredPresets, selectedPresetID]);
+
+  useEffect(() => {
+    if (!open || selectedPreset) return;
+    if (filteredPresets[0]) {
+      onSelectPreset(filteredPresets[0].id);
+    }
+  }, [filteredPresets, onSelectPreset, open, selectedPreset]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 py-6" onClick={onClose}>
+      <div
+        className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] shadow-[0_30px_80px_rgba(35,24,12,0.24)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--color-editorial-line)] px-5 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--color-editorial-ink)]">{t("settings.audioBriefing.presetApplyTitle")}</h2>
+            <p className="mt-1 text-sm text-[var(--color-editorial-ink-soft)]">{t("settings.audioBriefing.presetApplySubtitle")}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+            >
+              {t("common.refresh")}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex size-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-white text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+              aria-label={t("common.close")}
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
+          <div className="min-h-0 overflow-auto border-b border-[var(--color-editorial-line)] px-5 py-5 lg:border-b-0 lg:border-r">
+            <div className="flex items-center gap-3 rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-3">
+              <Search className="size-4 text-[var(--color-editorial-ink-soft)]" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("settings.audioBriefing.presetSearchPlaceholder")}
+                className="w-full bg-transparent text-sm text-[var(--color-editorial-ink)] outline-none placeholder:text-[var(--color-editorial-ink-faint)]"
+              />
+            </div>
+
+            {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+
+            <div className="mt-4 space-y-2">
+              {loading ? (
+                <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white px-4 py-6 text-center text-sm text-[var(--color-editorial-ink-soft)]">
+                  {t("common.loading")}
+                </div>
+              ) : filteredPresets.length === 0 ? (
+                <div className="rounded-[18px] border border-dashed border-[var(--color-editorial-line)] bg-white/80 px-4 py-6 text-center text-sm text-[var(--color-editorial-ink-soft)]">
+                  {presets.length === 0 ? t("settings.audioBriefing.presetEmpty") : t("settings.audioBriefing.presetNoResults")}
+                </div>
+              ) : (
+                filteredPresets.map((preset) => {
+                  const active = preset.id === selectedPreset?.id;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => onSelectPreset(preset.id)}
+                      className={joinClassNames(
+                        "w-full rounded-[18px] border px-4 py-4 text-left transition",
+                        active
+                          ? "border-[var(--color-editorial-ink)] bg-[var(--color-editorial-panel-strong)] shadow-[var(--shadow-card)]"
+                          : "border-[var(--color-editorial-line)] bg-white hover:bg-[var(--color-editorial-panel-strong)]"
+                      )}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{preset.name}</div>
+                          <div className="mt-1 text-[12px] text-[var(--color-editorial-ink-soft)]">
+                            {t(`settings.audioBriefing.conversationMode.${preset.conversation_mode === "duo" ? "duo" : "single"}`)}
+                          </div>
+                        </div>
+                        <span className="rounded-full border border-[var(--color-editorial-line)] bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-editorial-ink-soft)]">
+                          {preset.default_persona_mode === "random"
+                            ? t("settings.personaMode.random")
+                            : t(`settings.navigator.persona.${preset.default_persona}`, preset.default_persona)}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2 text-[12px] text-[var(--color-editorial-ink-soft)]">
+                        <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2.5 py-1">
+                          {`${preset.voices.filter((voice) => voice.voice_model.trim()).length}/${preset.voices.length} ${t("settings.audioBriefing.summary.configured")}`}
+                        </span>
+                        <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2.5 py-1">
+                          {preset.updated_at ? new Date(preset.updated_at).toLocaleString() : t("common.unknown")}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="min-h-0 overflow-auto px-5 py-5">
+            {selectedPreset ? (
+              <div className="space-y-5">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                    {t("settings.audioBriefing.presetSelected")}
+                  </div>
+                  <h3 className="mt-2 text-lg font-semibold text-[var(--color-editorial-ink)]">{selectedPreset.name}</h3>
+                  <p className="mt-2 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.audioBriefing.presetApplyHelp")}</p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.audioBriefing.defaultPersona")}
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">
+                      {selectedPreset.default_persona_mode === "random"
+                        ? t("settings.personaMode.random")
+                        : t(`settings.navigator.persona.${selectedPreset.default_persona}`, selectedPreset.default_persona)}
+                    </div>
+                  </div>
+                  <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                      {t("settings.audioBriefing.conversationMode")}
+                    </div>
+                    <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">
+                      {t(`settings.audioBriefing.conversationMode.${selectedPreset.conversation_mode === "duo" ? "duo" : "single"}`)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                    {t("settings.audioBriefing.presetVoices")}
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {normalizeAudioBriefingPresetVoices(selectedPreset.voices).map((voice) => (
+                      <div key={voice.persona} className="rounded-[16px] border border-[var(--color-editorial-line)] bg-white px-4 py-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">
+                              {t(`settings.navigator.persona.${voice.persona}`, voice.persona)}
+                            </div>
+                            <div className="mt-1 text-[12px] text-[var(--color-editorial-ink-soft)]">
+                              {formatAudioBriefingPresetVoiceLabel(voice, t)}
+                            </div>
+                          </div>
+                          <div className="text-[12px] text-[var(--color-editorial-ink-soft)]">
+                            {formatAudioBriefingPresetVoiceDetail(voice, t)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onApplyPreset(selectedPreset)}
+                    className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90"
+                  >
+                    {t("settings.audioBriefing.presetApplyConfirm")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-[22px] border border-dashed border-[var(--color-editorial-line)] bg-white/70 px-5 py-8 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                {t("settings.audioBriefing.presetApplyEmpty")}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 type XAIVoicePickerModalProps = {
@@ -1786,6 +2207,15 @@ export default function SettingsPage() {
   const [audioBriefingVoiceInputDrafts, setAudioBriefingVoiceInputDrafts] = useState<AudioBriefingVoiceInputDrafts>(() =>
     buildAudioBriefingVoiceInputDrafts(buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS))
   );
+  const [audioBriefingPresets, setAudioBriefingPresets] = useState<AudioBriefingPreset[]>([]);
+  const [audioBriefingPresetsLoading, setAudioBriefingPresetsLoading] = useState(false);
+  const [audioBriefingPresetsLoaded, setAudioBriefingPresetsLoaded] = useState(false);
+  const [audioBriefingPresetsError, setAudioBriefingPresetsError] = useState<string | null>(null);
+  const [audioBriefingPresetSaveOpen, setAudioBriefingPresetSaveOpen] = useState(false);
+  const [audioBriefingPresetApplyOpen, setAudioBriefingPresetApplyOpen] = useState(false);
+  const [audioBriefingPresetName, setAudioBriefingPresetName] = useState("");
+  const [audioBriefingPresetSaving, setAudioBriefingPresetSaving] = useState(false);
+  const [audioBriefingPresetApplySelection, setAudioBriefingPresetApplySelection] = useState<string | null>(null);
   const [aivisModelsData, setAivisModelsData] = useState<AivisModelsResponse | null>(null);
   const [aivisModelsLoading, setAivisModelsLoading] = useState(false);
   const [aivisModelsSyncing, setAivisModelsSyncing] = useState(false);
@@ -1943,6 +2373,18 @@ export default function SettingsPage() {
     []
   );
 
+  const syncAudioBriefingPresetForm = useCallback((preset: AudioBriefingPreset) => {
+    const nextVoices = normalizeAudioBriefingPresetVoices(preset.voices ?? []);
+    setAudioBriefingDefaultPersonaMode(preset.default_persona_mode === "random" ? "random" : "fixed");
+    setAudioBriefingDefaultPersona(preset.default_persona || "editor");
+    setAudioBriefingConversationMode(preset.conversation_mode === "duo" ? "duo" : "single");
+    setAudioBriefingVoices(nextVoices);
+    setAudioBriefingVoiceInputDrafts(buildAudioBriefingVoiceInputDrafts(nextVoices));
+    setExpandedAudioBriefingPersonas((prev) =>
+      prev.includes(preset.default_persona) ? prev : [preset.default_persona]
+    );
+  }, []);
+
   const syncSummaryAudioForm = useCallback((summaryAudio?: UserSettings["summary_audio"] | null) => {
     const next = summaryAudio ?? buildDefaultSummaryAudioVoiceSettings();
     setSummaryAudioProvider(next.tts_provider || "aivis");
@@ -1959,6 +2401,21 @@ export default function SettingsPage() {
     setSummaryAudioVolumeGain(formatAudioBriefingDecimalInput(next.volume_gain ?? 0));
     setSummaryAudioAivisUserDictionaryUUID(next.aivis_user_dictionary_uuid ?? "");
     setSummaryAudioVoiceInputDrafts(buildSummaryAudioVoiceInputDrafts(next));
+  }, []);
+
+  const loadAudioBriefingPresets = useCallback(async () => {
+    setAudioBriefingPresetsLoading(true);
+    setAudioBriefingPresetsError(null);
+    try {
+      const presets = await api.listAudioBriefingPresets();
+      setAudioBriefingPresets(presets ?? []);
+    } catch (e) {
+      setAudioBriefingPresets([]);
+      setAudioBriefingPresetsError(String(e));
+    } finally {
+      setAudioBriefingPresetsLoaded(true);
+      setAudioBriefingPresetsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -2345,6 +2802,24 @@ export default function SettingsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (activeSection !== "audio-briefing" && !audioBriefingPresetSaveOpen && !audioBriefingPresetApplyOpen) {
+      return;
+    }
+    if (audioBriefingPresetsLoaded || audioBriefingPresetsLoading || audioBriefingPresets.length > 0) {
+      return;
+    }
+    void loadAudioBriefingPresets().catch(() => undefined);
+  }, [
+    activeSection,
+    audioBriefingPresetApplyOpen,
+    audioBriefingPresetSaveOpen,
+    audioBriefingPresets.length,
+    audioBriefingPresetsLoading,
+    audioBriefingPresetsLoaded,
+    loadAudioBriefingPresets,
+  ]);
 
   useEffect(() => {
     if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || aivisModelsData != null || aivisModelsLoading) return;
@@ -3852,6 +4327,71 @@ export default function SettingsPage() {
     await persistAudioBriefingVoices();
   }
 
+  async function submitAudioBriefingPresetSave() {
+    const name = audioBriefingPresetName.trim();
+    if (!name) {
+      showToast(t("settings.audioBriefing.presetNameRequired"), "error");
+      return;
+    }
+    setAudioBriefingPresetSaving(true);
+    try {
+      const presets = audioBriefingPresetsLoaded ? audioBriefingPresets : await api.listAudioBriefingPresets();
+      if (!audioBriefingPresetsLoaded) {
+        setAudioBriefingPresets(presets);
+        setAudioBriefingPresetsLoaded(true);
+        setAudioBriefingPresetsError(null);
+      }
+      const existing = presets.find((preset) => preset.name.trim() === name);
+      const payload = buildAudioBriefingPresetRequest(
+        name,
+        audioBriefingDefaultPersonaMode,
+        audioBriefingDefaultPersona,
+        audioBriefingConversationMode,
+        audioBriefingVoices,
+      );
+      const saved = existing
+        ? await (async () => {
+            const ok = await confirm({
+              title: t("settings.audioBriefing.presetOverwriteTitle"),
+              message: t("settings.audioBriefing.presetOverwriteMessage").replace("{{name}}", name),
+              confirmLabel: t("settings.audioBriefing.presetOverwriteConfirm"),
+            });
+            if (!ok) return null;
+            return api.updateAudioBriefingPreset(existing.id, payload);
+          })()
+        : await api.createAudioBriefingPreset(payload);
+      if (!saved) return;
+      setAudioBriefingPresets((prev) => [saved, ...prev.filter((preset) => preset.id !== saved.id)]);
+      setAudioBriefingPresetSaveOpen(false);
+      setAudioBriefingPresetName("");
+      showToast(existing ? t("settings.audioBriefing.presetUpdated") : t("settings.audioBriefing.presetSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setAudioBriefingPresetSaving(false);
+    }
+  }
+
+  function openAudioBriefingPresetSaveModal() {
+    setAudioBriefingPresetName("");
+    setAudioBriefingPresetSaveOpen(true);
+  }
+
+  async function openAudioBriefingPresetApplyModal() {
+    setAudioBriefingPresetApplySelection(null);
+    setAudioBriefingPresetApplyOpen(true);
+    if (audioBriefingPresets.length === 0) {
+      await loadAudioBriefingPresets();
+    }
+  }
+
+  function applyAudioBriefingPreset(preset: AudioBriefingPreset) {
+    syncAudioBriefingPresetForm(preset);
+    setAudioBriefingPresetApplySelection(preset.id);
+    setAudioBriefingPresetApplyOpen(false);
+    showToast(t("settings.audioBriefing.presetApplied"), "success");
+  }
+
   async function persistSummaryAudioSettings() {
     setSummaryAudioSaving(true);
     try {
@@ -4488,6 +5028,25 @@ export default function SettingsPage() {
                       <p className="mt-1 max-w-3xl text-[12px] leading-6 text-[var(--color-editorial-ink-soft)]">{t("settings.audioBriefing.summaryHelp")}</p>
                     </div>
                     <div className="flex flex-wrap justify-end gap-2 lg:ml-auto">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void openAudioBriefingPresetApplyModal();
+                        }}
+                        disabled={audioBriefingPresetsLoading && audioBriefingPresets.length === 0}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                      >
+                        {audioBriefingPresetsLoading && audioBriefingPresets.length === 0 ? t("common.loading") : t("settings.audioBriefing.applyPreset")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void openAudioBriefingPresetSaveModal();
+                        }}
+                        className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {t("settings.audioBriefing.savePreset")}
+                      </button>
                       <button
                         type="submit"
                         disabled={savingAudioBriefing}
@@ -7001,6 +7560,41 @@ export default function SettingsPage() {
           setSummaryAudioProviderVoiceLabel("");
           setSummaryAudioProviderVoiceDescription("");
         }}
+      />
+
+      <AudioBriefingPresetSaveModal
+        open={audioBriefingPresetSaveOpen}
+        saving={audioBriefingPresetSaving}
+        presetName={audioBriefingPresetName}
+        defaultPersonaMode={audioBriefingDefaultPersonaMode}
+        defaultPersona={audioBriefingDefaultPersona}
+        conversationMode={audioBriefingConversationMode}
+        voices={audioBriefingVoices}
+        onClose={() => {
+          setAudioBriefingPresetSaveOpen(false);
+          setAudioBriefingPresetName("");
+        }}
+        onChangeName={setAudioBriefingPresetName}
+        onSave={() => {
+          void submitAudioBriefingPresetSave();
+        }}
+      />
+
+      <AudioBriefingPresetApplyModal
+        open={audioBriefingPresetApplyOpen}
+        loading={audioBriefingPresetsLoading}
+        error={audioBriefingPresetsError}
+        presets={audioBriefingPresets}
+        selectedPresetID={audioBriefingPresetApplySelection}
+        onClose={() => {
+          setAudioBriefingPresetApplyOpen(false);
+          setAudioBriefingPresetApplySelection(null);
+        }}
+        onRefresh={() => {
+          void loadAudioBriefingPresets();
+        }}
+        onSelectPreset={setAudioBriefingPresetApplySelection}
+        onApplyPreset={applyAudioBriefingPreset}
       />
 
       <ModelGuideModal

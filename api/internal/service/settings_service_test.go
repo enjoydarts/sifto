@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
@@ -26,6 +28,12 @@ func newSettingsServiceForTest(t *testing.T) *SettingsService {
 	if _, err := db.Exec(context.Background(), `DELETE FROM audio_briefing_persona_voices WHERE user_id = $1`, userID); err != nil {
 		t.Fatalf("reset persona voices: %v", err)
 	}
+	if _, err := db.Exec(context.Background(), `DELETE FROM audio_briefing_preset_voices WHERE preset_id IN (SELECT id FROM audio_briefing_presets WHERE user_id = $1)`, userID); err != nil {
+		t.Fatalf("reset preset voices: %v", err)
+	}
+	if _, err := db.Exec(context.Background(), `DELETE FROM audio_briefing_presets WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset presets: %v", err)
+	}
 	if _, err := db.Exec(context.Background(), `DELETE FROM summary_audio_voice_settings WHERE user_id = $1`, userID); err != nil {
 		t.Fatalf("reset summary audio voice settings: %v", err)
 	}
@@ -38,7 +46,7 @@ func newSettingsServiceForTest(t *testing.T) *SettingsService {
 		t.Fatalf("insert test user: %v", err)
 	}
 
-	return NewSettingsService(
+	svc := NewSettingsService(
 		repository.NewUserSettingsRepo(db),
 		repository.NewUserRepo(db),
 		repository.NewAudioBriefingRepo(db),
@@ -50,6 +58,82 @@ func newSettingsServiceForTest(t *testing.T) *SettingsService {
 		nil,
 		nil,
 	)
+	svc.SetAudioBriefingPresetRepo(repository.NewAudioBriefingPresetRepo(db))
+	return svc
+}
+
+func TestAudioBriefingPresetPayloadIncludesVoices(t *testing.T) {
+	now := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
+	preset := model.AudioBriefingPreset{
+		ID:                 "preset-1",
+		UserID:             "user-1",
+		Name:               "Morning Briefing",
+		DefaultPersonaMode: PersonaModeRandom,
+		DefaultPersona:     "editor",
+		ConversationMode:   "duo",
+		Voices: []model.AudioBriefingPersonaVoice{
+			{
+				Persona:     "editor",
+				TTSProvider: "xai",
+				VoiceModel:  "voice-1",
+				CreatedAt:   now,
+				UpdatedAt:   now,
+			},
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	got := AudioBriefingPresetPayload(preset)
+	if got["name"] != "Morning Briefing" {
+		t.Fatalf("name = %v, want Morning Briefing", got["name"])
+	}
+	if got["conversation_mode"] != "duo" {
+		t.Fatalf("conversation_mode = %v, want duo", got["conversation_mode"])
+	}
+	voices, ok := got["voices"].([]map[string]any)
+	if !ok || len(voices) != 1 {
+		t.Fatalf("voices = %#v, want 1 voice", got["voices"])
+	}
+}
+
+func TestCreateAudioBriefingPresetRejectsDuplicateName(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+
+	_, err := svc.CreateAudioBriefingPreset(ctx, userID, SaveAudioBriefingPresetInput{
+		Name:   "morning",
+		Voices: []UpdateAudioBriefingPersonaVoiceInput{},
+	})
+	if err != nil {
+		t.Fatalf("CreateAudioBriefingPreset() error = %v", err)
+	}
+
+	_, err = svc.CreateAudioBriefingPreset(ctx, userID, SaveAudioBriefingPresetInput{
+		Name:   "morning",
+		Voices: []UpdateAudioBriefingPersonaVoiceInput{},
+	})
+	if !errors.Is(err, repository.ErrConflict) {
+		t.Fatalf("CreateAudioBriefingPreset() error = %v, want conflict", err)
+	}
+}
+
+func TestCreateAudioBriefingPresetValidatesVoices(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	_, err := svc.CreateAudioBriefingPreset(context.Background(), "00000000-0000-4000-8000-000000000021", SaveAudioBriefingPresetInput{
+		Name: "voice-check",
+		Voices: []UpdateAudioBriefingPersonaVoiceInput{
+			{
+				Persona:     "editor",
+				TTSProvider: "openai",
+				VoiceModel:  "alloy",
+			},
+		},
+	})
+	if err == nil || err.Error() != "invalid tts_model for editor" {
+		t.Fatalf("CreateAudioBriefingPreset() error = %v, want invalid tts_model for editor", err)
+	}
 }
 
 func lockSettingsServiceTestDB(t *testing.T, db *pgxpool.Pool) {

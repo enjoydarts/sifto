@@ -1597,6 +1597,26 @@ export interface AudioBriefingPersonaVoice {
   volume_gain: number;
 }
 
+export interface AudioBriefingPreset {
+  id: string;
+  user_id: string;
+  name: string;
+  default_persona_mode: "fixed" | "random" | string;
+  default_persona: string;
+  conversation_mode: "single" | "duo" | string;
+  voices: AudioBriefingPersonaVoice[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SaveAudioBriefingPresetRequest {
+  name: string;
+  default_persona_mode: "fixed" | "random" | string;
+  default_persona: string;
+  conversation_mode: "single" | "duo" | string;
+  voices: AudioBriefingPersonaVoice[];
+}
+
 export interface SummaryAudioVoiceSettings {
   tts_provider: string;
   tts_model: string;
@@ -2487,6 +2507,22 @@ export const api = {
     apiFetch<{ user_id: string; audio_briefing: AudioBriefingSettings }>("/settings/audio-briefing", {
       method: "PATCH",
       body: JSON.stringify(body),
+    }),
+  listAudioBriefingPresets: () =>
+    apiFetch<{ presets: AudioBriefingPreset[] }>("/audio-briefing-presets").then((resp) => resp.presets ?? []),
+  createAudioBriefingPreset: (body: SaveAudioBriefingPresetRequest) =>
+    apiFetch<{ preset: AudioBriefingPreset }>("/audio-briefing-presets", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }).then((resp) => resp.preset),
+  updateAudioBriefingPreset: (id: string, body: SaveAudioBriefingPresetRequest) =>
+    apiFetch<{ preset: AudioBriefingPreset }>(`/audio-briefing-presets/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }).then((resp) => resp.preset),
+  deleteAudioBriefingPreset: (id: string) =>
+    apiFetch<void>(`/audio-briefing-presets/${id}`, {
+      method: "DELETE",
     }),
   getSummaryAudioSettings: () =>
     apiFetch<{ user_id: string; summary_audio: SummaryAudioVoiceSettings | null }>("/settings/summary-audio"),

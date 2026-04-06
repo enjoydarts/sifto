@@ -144,6 +144,18 @@ type AudioBriefingPersonaVoice struct {
 	DeletedAt                *time.Time `json:"deleted_at,omitempty"`
 }
 
+type AudioBriefingPreset struct {
+	ID                 string                      `json:"id"`
+	UserID             string                      `json:"user_id"`
+	Name               string                      `json:"name"`
+	DefaultPersonaMode string                      `json:"default_persona_mode"`
+	DefaultPersona     string                      `json:"default_persona"`
+	ConversationMode   string                      `json:"conversation_mode"`
+	Voices             []AudioBriefingPersonaVoice `json:"voices,omitempty"`
+	CreatedAt          time.Time                   `json:"created_at"`
+	UpdatedAt          time.Time                   `json:"updated_at"`
+}
+
 type SummaryAudioVoiceSettings struct {
 	UserID                   string    `json:"user_id"`
 	TTSProvider              string    `json:"tts_provider"`

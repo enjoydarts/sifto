@@ -17,16 +17,17 @@ import (
 )
 
 type SettingsService struct {
-	repo                   *repository.UserSettingsRepo
-	userRepo               *repository.UserRepo
-	audioBriefingRepo      *repository.AudioBriefingRepo
-	summaryAudioRepo       *repository.SummaryAudioVoiceSettingsRepo
-	aivisModelRepo         *repository.AivisModelRepo
-	obsidianRepo           *repository.ObsidianExportRepo
-	llmUsageRepo           *repository.LLMUsageLogRepo
-	openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo
-	cipher                 *SecretCipher
-	githubApp              *GitHubAppClient
+	repo                    *repository.UserSettingsRepo
+	userRepo                *repository.UserRepo
+	audioBriefingRepo       *repository.AudioBriefingRepo
+	audioBriefingPresetRepo *repository.AudioBriefingPresetRepo
+	summaryAudioRepo        *repository.SummaryAudioVoiceSettingsRepo
+	aivisModelRepo          *repository.AivisModelRepo
+	obsidianRepo            *repository.ObsidianExportRepo
+	llmUsageRepo            *repository.LLMUsageLogRepo
+	openRouterOverrideRepo  *repository.OpenRouterModelOverrideRepo
+	cipher                  *SecretCipher
+	githubApp               *GitHubAppClient
 }
 
 type SettingsGetPayload struct {
@@ -144,19 +145,27 @@ func ErrInvalidPodcastCategory() error {
 }
 
 type UpdateAudioBriefingPersonaVoiceInput struct {
-	Persona                  string
-	TTSProvider              string
-	TTSModel                 string
-	VoiceModel               string
-	VoiceStyle               string
-	ProviderVoiceLabel       string
-	ProviderVoiceDescription string
-	SpeechRate               float64
-	EmotionalIntensity       float64
-	TempoDynamics            float64
-	LineBreakSilenceSeconds  float64
-	Pitch                    float64
-	VolumeGain               float64
+	Persona                  string  `json:"persona"`
+	TTSProvider              string  `json:"tts_provider"`
+	TTSModel                 string  `json:"tts_model"`
+	VoiceModel               string  `json:"voice_model"`
+	VoiceStyle               string  `json:"voice_style"`
+	ProviderVoiceLabel       string  `json:"provider_voice_label"`
+	ProviderVoiceDescription string  `json:"provider_voice_description"`
+	SpeechRate               float64 `json:"speech_rate"`
+	EmotionalIntensity       float64 `json:"emotional_intensity"`
+	TempoDynamics            float64 `json:"tempo_dynamics"`
+	LineBreakSilenceSeconds  float64 `json:"line_break_silence_seconds"`
+	Pitch                    float64 `json:"pitch"`
+	VolumeGain               float64 `json:"volume_gain"`
+}
+
+type SaveAudioBriefingPresetInput struct {
+	Name               string                                 `json:"name"`
+	DefaultPersonaMode string                                 `json:"default_persona_mode"`
+	DefaultPersona     string                                 `json:"default_persona"`
+	ConversationMode   string                                 `json:"conversation_mode"`
+	Voices             []UpdateAudioBriefingPersonaVoiceInput `json:"voices"`
 }
 
 type UpdateSummaryAudioVoiceSettingsInput struct {
@@ -219,16 +228,17 @@ var modelSettingRequiredCapabilities = map[string][]string{
 
 func NewSettingsService(repo *repository.UserSettingsRepo, userRepo *repository.UserRepo, audioBriefingRepo *repository.AudioBriefingRepo, summaryAudioRepo *repository.SummaryAudioVoiceSettingsRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *SecretCipher, githubApp *GitHubAppClient) *SettingsService {
 	return &SettingsService{
-		repo:                   repo,
-		userRepo:               userRepo,
-		audioBriefingRepo:      audioBriefingRepo,
-		summaryAudioRepo:       summaryAudioRepo,
-		aivisModelRepo:         aivisModelRepo,
-		obsidianRepo:           obsidianRepo,
-		llmUsageRepo:           llmUsageRepo,
-		openRouterOverrideRepo: openRouterOverrideRepo,
-		cipher:                 cipher,
-		githubApp:              githubApp,
+		repo:                    repo,
+		userRepo:                userRepo,
+		audioBriefingRepo:       audioBriefingRepo,
+		audioBriefingPresetRepo: nil,
+		summaryAudioRepo:        summaryAudioRepo,
+		aivisModelRepo:          aivisModelRepo,
+		obsidianRepo:            obsidianRepo,
+		llmUsageRepo:            llmUsageRepo,
+		openRouterOverrideRepo:  openRouterOverrideRepo,
+		cipher:                  cipher,
+		githubApp:               githubApp,
 	}
 }
 
@@ -237,6 +247,13 @@ func (s *SettingsService) UserRepo() *repository.UserRepo {
 		return nil
 	}
 	return s.userRepo
+}
+
+func (s *SettingsService) SetAudioBriefingPresetRepo(repo *repository.AudioBriefingPresetRepo) {
+	if s == nil {
+		return
+	}
+	s.audioBriefingPresetRepo = repo
 }
 
 func obsidianExportPayload(settings *model.ObsidianExportSettings, githubApp *GitHubAppClient) map[string]any {
@@ -350,6 +367,19 @@ func AudioBriefingPersonaVoicesPayload(rows []model.AudioBriefingPersonaVoice) [
 		})
 	}
 	return out
+}
+
+func AudioBriefingPresetPayload(p model.AudioBriefingPreset) map[string]any {
+	return map[string]any{
+		"id":                   p.ID,
+		"name":                 p.Name,
+		"default_persona_mode": NormalizePersonaMode(&p.DefaultPersonaMode),
+		"default_persona":      p.DefaultPersona,
+		"conversation_mode":    normalizeAudioBriefingConversationMode(&p.ConversationMode),
+		"voices":               AudioBriefingPersonaVoicesPayload(p.Voices),
+		"created_at":           p.CreatedAt,
+		"updated_at":           p.UpdatedAt,
+	}
 }
 
 func SummaryAudioVoiceSettingsPayload(settings *model.SummaryAudioVoiceSettings) map[string]any {
@@ -721,6 +751,42 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 	return out, nil
 }
 
+func (s *SettingsService) validateAudioBriefingPersonaVoiceInputsWithAivis(ctx context.Context, rows []UpdateAudioBriefingPersonaVoiceInput) ([]model.AudioBriefingPersonaVoice, error) {
+	normalizedRows, err := validateAudioBriefingPersonaVoiceInputs(rows)
+	if err != nil {
+		return nil, err
+	}
+	if s.aivisModelRepo == nil {
+		return normalizedRows, nil
+	}
+	needsAivisValidation := false
+	for _, row := range normalizedRows {
+		if strings.EqualFold(strings.TrimSpace(row.TTSProvider), "aivis") {
+			needsAivisValidation = true
+			break
+		}
+	}
+	if !needsAivisValidation {
+		return normalizedRows, nil
+	}
+	snapshots, latestRun, err := s.aivisModelRepo.ListLatestSnapshots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if latestRun == nil || len(snapshots) == 0 {
+		return nil, fmt.Errorf("aivis models are not synced")
+	}
+	for _, row := range normalizedRows {
+		if !strings.EqualFold(strings.TrimSpace(row.TTSProvider), "aivis") {
+			continue
+		}
+		if err := validateAivisVoiceSelectionAgainstSnapshots(snapshots, row.VoiceModel, row.VoiceStyle); err != nil {
+			return nil, fmt.Errorf("invalid aivis voice for %s: %w", row.Persona, err)
+		}
+	}
+	return normalizedRows, nil
+}
+
 func normalizeSummaryAudioVoiceSettingsInput(in UpdateSummaryAudioVoiceSettingsInput) (*model.SummaryAudioVoiceSettings, error) {
 	provider := strings.TrimSpace(strings.ToLower(in.TTSProvider))
 	voiceModel := strings.TrimSpace(in.VoiceModel)
@@ -1073,39 +1139,78 @@ func (s *SettingsService) UpdateAudioBriefingPersonaVoices(ctx context.Context, 
 	if s.audioBriefingRepo == nil {
 		return nil, fmt.Errorf("audio briefing unavailable")
 	}
-	normalizedRows, err := validateAudioBriefingPersonaVoiceInputs(rows)
+	normalizedRows, err := s.validateAudioBriefingPersonaVoiceInputsWithAivis(ctx, rows)
 	if err != nil {
 		return nil, err
 	}
-	if s.aivisModelRepo != nil {
-		var aivisSnapshots []repository.AivisModelSnapshot
-		needsAivisValidation := false
-		for _, row := range normalizedRows {
-			if strings.EqualFold(strings.TrimSpace(row.TTSProvider), "aivis") {
-				needsAivisValidation = true
-				break
-			}
-		}
-		if needsAivisValidation {
-			var latestRun *repository.AivisSyncRun
-			aivisSnapshots, latestRun, err = s.aivisModelRepo.ListLatestSnapshots(ctx)
-			if err != nil {
-				return nil, err
-			}
-			if latestRun == nil || len(aivisSnapshots) == 0 {
-				return nil, fmt.Errorf("aivis models are not synced")
-			}
-			for _, row := range normalizedRows {
-				if !strings.EqualFold(strings.TrimSpace(row.TTSProvider), "aivis") {
-					continue
-				}
-				if err := validateAivisVoiceSelectionAgainstSnapshots(aivisSnapshots, row.VoiceModel, row.VoiceStyle); err != nil {
-					return nil, fmt.Errorf("invalid aivis voice for %s: %w", row.Persona, err)
-				}
-			}
-		}
-	}
 	return s.audioBriefingRepo.UpsertPersonaVoices(ctx, userID, normalizedRows)
+}
+
+func (s *SettingsService) ListAudioBriefingPresets(ctx context.Context, userID string) ([]model.AudioBriefingPreset, error) {
+	if s.audioBriefingPresetRepo == nil {
+		return nil, fmt.Errorf("audio briefing presets unavailable")
+	}
+	return s.audioBriefingPresetRepo.ListByUser(ctx, userID)
+}
+
+func (s *SettingsService) CreateAudioBriefingPreset(ctx context.Context, userID string, in SaveAudioBriefingPresetInput) (*model.AudioBriefingPreset, error) {
+	if s.audioBriefingPresetRepo == nil {
+		return nil, fmt.Errorf("audio briefing presets unavailable")
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, fmt.Errorf("preset name is required")
+	}
+	voices, err := s.validateAudioBriefingPersonaVoiceInputsWithAivis(ctx, in.Voices)
+	if err != nil {
+		return nil, err
+	}
+	preset, err := s.audioBriefingPresetRepo.Create(ctx, model.AudioBriefingPreset{
+		UserID:             userID,
+		Name:               name,
+		DefaultPersonaMode: NormalizePersonaMode(&in.DefaultPersonaMode),
+		DefaultPersona:     normalizeAudioBriefingDefaultPersona(&in.DefaultPersona),
+		ConversationMode:   normalizeAudioBriefingConversationMode(&in.ConversationMode),
+		Voices:             voices,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return preset, nil
+}
+
+func (s *SettingsService) UpdateAudioBriefingPreset(ctx context.Context, userID, presetID string, in SaveAudioBriefingPresetInput) (*model.AudioBriefingPreset, error) {
+	if s.audioBriefingPresetRepo == nil {
+		return nil, fmt.Errorf("audio briefing presets unavailable")
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, fmt.Errorf("preset name is required")
+	}
+	voices, err := s.validateAudioBriefingPersonaVoiceInputsWithAivis(ctx, in.Voices)
+	if err != nil {
+		return nil, err
+	}
+	preset, err := s.audioBriefingPresetRepo.Update(ctx, model.AudioBriefingPreset{
+		ID:                 presetID,
+		UserID:             userID,
+		Name:               name,
+		DefaultPersonaMode: NormalizePersonaMode(&in.DefaultPersonaMode),
+		DefaultPersona:     normalizeAudioBriefingDefaultPersona(&in.DefaultPersona),
+		ConversationMode:   normalizeAudioBriefingConversationMode(&in.ConversationMode),
+		Voices:             voices,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return preset, nil
+}
+
+func (s *SettingsService) DeleteAudioBriefingPreset(ctx context.Context, userID, presetID string) error {
+	if s.audioBriefingPresetRepo == nil {
+		return fmt.Errorf("audio briefing presets unavailable")
+	}
+	return s.audioBriefingPresetRepo.Delete(ctx, userID, presetID)
 }
 
 func normalizeOptionalString(v *string) *string {

@@ -1,0 +1,38 @@
+name: Repair Migration 133 Dirty State
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repair-migration-133-dirty:
+    name: Repair dirty migration state at 133
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Connect Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Install golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.18.1/migrate.linux-amd64.tar.gz | tar xz
+          sudo mv migrate /usr/local/bin/migrate
+
+      - name: Check Tailscale connectivity
+        run: tailscale status
+
+      - name: Repair dirty migration state and rerun 133
+        env:
+          MIGRATE_DATABASE_URL: ${{ secrets.MIGRATE_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          migrate -path db/migrations -database "$MIGRATE_DATABASE_URL" force 132
+          migrate -path db/migrations -database "$MIGRATE_DATABASE_URL" up
+          migrate -path db/migrations -database "$MIGRATE_DATABASE_URL" version

@@ -123,6 +123,7 @@ services:
       - web_node_modules:/app/node_modules
     environment:
       NEXT_PUBLIC_API_URL: http://api:8080
+      NODE_OPTIONS: --max-old-space-size=6144
       NEXT_PUBLIC_ALLOW_DEV_AUTH_BYPASS: ${ALLOW_DEV_AUTH_BYPASS}
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}

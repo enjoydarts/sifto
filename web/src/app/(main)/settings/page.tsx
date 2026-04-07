@@ -2360,39 +2360,67 @@ export default function SettingsPage() {
       })),
     [navigatorPersonaDefinitions]
   );
+  const syncAudioBriefingVoiceForm = useCallback((voices?: UserSettings["audio_briefing_persona_voices"] | AudioBriefingPersonaVoice[] | null) => {
+    const defaults = buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS);
+    const byPersona = new Map((voices ?? []).map((voice) => [voice.persona, voice] as const));
+    const nextVoices = defaults.map((voice) => byPersona.get(voice.persona) ?? voice);
+    setAudioBriefingVoices(nextVoices);
+    setAudioBriefingVoiceInputDrafts(buildAudioBriefingVoiceInputDrafts(nextVoices));
+  }, []);
+
+  const syncAudioBriefingSettingsForm = useCallback((audioBriefing?: UserSettings["audio_briefing"] | null) => {
+    setAudioBriefingEnabled(Boolean(audioBriefing?.enabled));
+    setAudioBriefingScheduleSelection(resolveAudioBriefingScheduleSelection(audioBriefing));
+    setAudioBriefingArticlesPerEpisode(String(audioBriefing?.articles_per_episode ?? 5));
+    setAudioBriefingTargetDurationMinutes(String(audioBriefing?.target_duration_minutes ?? 20));
+    setAudioBriefingChunkTrailingSilenceSeconds(formatAudioBriefingDecimalInput(audioBriefing?.chunk_trailing_silence_seconds ?? 1.0));
+    setAudioBriefingProgramName(audioBriefing?.program_name ?? "");
+    setAudioBriefingDefaultPersonaMode(audioBriefing?.default_persona_mode === "random" ? "random" : "fixed");
+    setAudioBriefingDefaultPersona(audioBriefing?.default_persona ?? "editor");
+    setAudioBriefingConversationMode(audioBriefing?.conversation_mode === "duo" ? "duo" : "single");
+    setAudioBriefingBGMEnabled(Boolean(audioBriefing?.bgm_enabled));
+    setAudioBriefingBGMR2Prefix(audioBriefing?.bgm_r2_prefix ?? "");
+  }, []);
+
   const syncAudioBriefingForm = useCallback(
     (audioBriefing?: UserSettings["audio_briefing"] | null, voices?: UserSettings["audio_briefing_persona_voices"] | null) => {
-      setAudioBriefingEnabled(Boolean(audioBriefing?.enabled));
-      setAudioBriefingScheduleSelection(resolveAudioBriefingScheduleSelection(audioBriefing));
-      setAudioBriefingArticlesPerEpisode(String(audioBriefing?.articles_per_episode ?? 5));
-      setAudioBriefingTargetDurationMinutes(String(audioBriefing?.target_duration_minutes ?? 20));
-      setAudioBriefingChunkTrailingSilenceSeconds(formatAudioBriefingDecimalInput(audioBriefing?.chunk_trailing_silence_seconds ?? 1.0));
-      setAudioBriefingProgramName(audioBriefing?.program_name ?? "");
-      setAudioBriefingDefaultPersonaMode(audioBriefing?.default_persona_mode === "random" ? "random" : "fixed");
-      setAudioBriefingDefaultPersona(audioBriefing?.default_persona ?? "editor");
-      setAudioBriefingConversationMode(audioBriefing?.conversation_mode === "duo" ? "duo" : "single");
-      setAudioBriefingBGMEnabled(Boolean(audioBriefing?.bgm_enabled));
-      setAudioBriefingBGMR2Prefix(audioBriefing?.bgm_r2_prefix ?? "");
-      const defaults = buildDefaultAudioBriefingVoices(NAVIGATOR_PERSONA_KEYS);
-      const byPersona = new Map((voices ?? []).map((voice) => [voice.persona, voice]));
-      const nextVoices = defaults.map((voice) => byPersona.get(voice.persona) ?? voice);
-      setAudioBriefingVoices(nextVoices);
-      setAudioBriefingVoiceInputDrafts(buildAudioBriefingVoiceInputDrafts(nextVoices));
+      syncAudioBriefingSettingsForm(audioBriefing);
+      syncAudioBriefingVoiceForm(voices);
     },
-    []
+    [syncAudioBriefingSettingsForm, syncAudioBriefingVoiceForm]
   );
 
   const syncAudioBriefingPresetForm = useCallback((preset: AudioBriefingPreset) => {
-    const nextVoices = normalizeAudioBriefingPresetVoices(preset.voices ?? []);
-    setAudioBriefingDefaultPersonaMode(preset.default_persona_mode === "random" ? "random" : "fixed");
-    setAudioBriefingDefaultPersona(preset.default_persona || "editor");
-    setAudioBriefingConversationMode(preset.conversation_mode === "duo" ? "duo" : "single");
-    setAudioBriefingVoices(nextVoices);
-    setAudioBriefingVoiceInputDrafts(buildAudioBriefingVoiceInputDrafts(nextVoices));
+    syncAudioBriefingSettingsForm({
+      enabled: audioBriefingEnabled,
+      schedule_mode: audioBriefingScheduleSelection === "fixed3x" ? "fixed_slots_3x" : "interval",
+      interval_hours: audioBriefingScheduleSelection === "interval3h" ? 3 : 6,
+      articles_per_episode: Number(audioBriefingArticlesPerEpisode),
+      target_duration_minutes: Number(audioBriefingTargetDurationMinutes),
+      chunk_trailing_silence_seconds: Number(audioBriefingChunkTrailingSilenceSeconds),
+      program_name: audioBriefingProgramName.trim() || null,
+      default_persona_mode: preset.default_persona_mode === "random" ? "random" : "fixed",
+      default_persona: preset.default_persona || "editor",
+      conversation_mode: preset.conversation_mode === "duo" ? "duo" : "single",
+      bgm_enabled: audioBriefingBGMEnabled,
+      bgm_r2_prefix: audioBriefingBGMR2Prefix.trim() || null,
+    });
+    syncAudioBriefingVoiceForm(normalizeAudioBriefingPresetVoices(preset.voices ?? []));
     setExpandedAudioBriefingPersonas((prev) =>
       prev.includes(preset.default_persona) ? prev : [preset.default_persona]
     );
-  }, []);
+  }, [
+    audioBriefingArticlesPerEpisode,
+    audioBriefingBGMEnabled,
+    audioBriefingBGMR2Prefix,
+    audioBriefingChunkTrailingSilenceSeconds,
+    audioBriefingEnabled,
+    audioBriefingProgramName,
+    audioBriefingScheduleSelection,
+    audioBriefingTargetDurationMinutes,
+    syncAudioBriefingSettingsForm,
+    syncAudioBriefingVoiceForm,
+  ]);
 
   const syncSummaryAudioForm = useCallback((summaryAudio?: UserSettings["summary_audio"] | null) => {
     const next = summaryAudio ?? buildDefaultSummaryAudioVoiceSettings();
@@ -4237,7 +4265,7 @@ export default function SettingsPage() {
       };
       const resp = await api.updateAudioBriefingSettings(payload);
       setSettings((prev) => (prev ? { ...prev, audio_briefing: resp.audio_briefing } : prev));
-      syncAudioBriefingForm(resp.audio_briefing, settings?.audio_briefing_persona_voices);
+      syncAudioBriefingSettingsForm(resp.audio_briefing);
       showToast(t("settings.toast.audioBriefingSaved"), "success");
     } catch (e) {
       showToast(String(e), "error");
@@ -4347,7 +4375,7 @@ export default function SettingsPage() {
     try {
       const resp = await api.updateAudioBriefingPersonaVoices(audioBriefingVoices);
       setSettings((prev) => (prev ? { ...prev, audio_briefing_persona_voices: resp.audio_briefing_persona_voices } : prev));
-      syncAudioBriefingForm(settings?.audio_briefing, resp.audio_briefing_persona_voices);
+      syncAudioBriefingVoiceForm(resp.audio_briefing_persona_voices);
       showToast(t("settings.toast.audioBriefingVoicesSaved"), "success");
     } catch (e) {
       showToast(String(e), "error");

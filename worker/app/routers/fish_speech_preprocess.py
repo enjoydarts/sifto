@@ -12,7 +12,7 @@ class FishSpeechPreprocessRequest(BaseModel):
     text: str
     model: str
     prompt_key: str = DEFAULT_FISH_PREPROCESS_PROMPT_KEY
-    variables: dict[str, str] = Field(default_factory=dict)
+    variables: dict[str, str] | None = Field(default_factory=dict)
 
 
 class FishSpeechPreprocessResponse(BaseModel):
@@ -48,7 +48,7 @@ def preprocess_fish_text(req: FishSpeechPreprocessRequest, request: Request):
                 model=req.model,
                 api_key=api_key,
                 prompt_key=req.prompt_key,
-                variables=req.variables,
+                variables=req.variables or {},
             ),
             output_builder=lambda result: {
                 "text_chars": len(result.get("text") or ""),

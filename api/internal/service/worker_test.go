@@ -306,6 +306,47 @@ func TestPreprocessFishSpeechTextIncludesPromptAndProviderHeader(t *testing.T) {
 	}
 }
 
+func TestPreprocessFishSpeechTextNormalizesNilVariablesToEmptyObject(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		variables, ok := body["variables"].(map[string]any)
+		if !ok {
+			t.Fatalf("variables = %#v, want empty object", body["variables"])
+		}
+		if len(variables) != 0 {
+			t.Fatalf("variables = %#v, want empty object", variables)
+		}
+		respBody, _ := json.Marshal(map[string]any{
+			"text": "前処理済みテキスト",
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	})
+
+	resp, err := client.PreprocessFishSpeechText(
+		context.Background(),
+		"元テキスト",
+		"gpt-5.4-mini",
+		"fish.summary_preprocess",
+		nil,
+		strptr("openai-key"),
+	)
+	if err != nil {
+		t.Fatalf("PreprocessFishSpeechText(...) error = %v", err)
+	}
+	if resp == nil || resp.Text != "前処理済みテキスト" {
+		t.Fatalf("response = %#v, want text", resp)
+	}
+}
+
 func TestSynthesizeAudioBriefingUploadIncludesXAIAPIKeyHeader(t *testing.T) {
 	client := NewWorkerClient()
 	client.baseURL = "http://worker.test"

@@ -1189,6 +1189,9 @@ func (w *WorkerClient) PreprocessFishSpeechText(
 	variables map[string]string,
 	apiKey *string,
 ) (*FishSpeechPreprocessResponse, error) {
+	if variables == nil {
+		variables = map[string]string{}
+	}
 	requestBody := map[string]any{
 		"text":       text,
 		"model":      model,

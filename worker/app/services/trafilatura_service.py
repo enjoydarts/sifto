@@ -126,15 +126,22 @@ def _decode_html_response(resp: httpx.Response) -> str:
     candidates.extend(["utf-8", "cp932", "shift_jis", "euc_jp", "iso2022_jp"])
 
     seen = set()
+    first_decoded: str | None = None
     for enc in candidates:
         normalized = (enc or "").strip().lower()
         if not normalized or normalized in seen:
             continue
         seen.add(normalized)
         try:
-            return content.decode(normalized)
+            decoded = content.decode(normalized)
         except Exception:
             continue
+        if first_decoded is None:
+            first_decoded = decoded
+        if not _needs_refetch(decoded):
+            return decoded
+    if first_decoded is not None:
+        return first_decoded
     return content.decode("utf-8", errors="replace")
 
 

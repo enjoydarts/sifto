@@ -220,6 +220,36 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "NASAは4年1か月ぶりに有人月探査へ向けたロケット『SLS』の打ち上げを目指す。")
         self.assertEqual(result["content"], "アルテミス計画の進捗をまとめる。")
 
+    def test_extract_body_prefers_utf8_when_declared_shift_jis_result_is_cjk_mojibake(self):
+        html = "<html><head><title>TOPPAN、ギリシャ語写本の本文を解読できるAI-OCRを開発</title></head><body>ギリシャ語写本の本文を解読できるAI-OCRを開発したと発表した。</body></html>"
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.headers = {"content-type": "text/html; charset=Shift_JIS"}
+        response.content = html.encode("utf-8")
+        response.url = "https://example.com/final"
+        response.text = response.content.decode("cp932", errors="ignore")
+        captured = {}
+
+        def fake_bare_extraction(downloaded, **kwargs):
+            captured["downloaded"] = downloaded
+            return {
+                "title": "TOPPAN、ギリシャ語写本の本文を解読できるAI-OCRを開発",
+                "text": "ギリシャ語写本の本文を解読できるAI-OCRを開発したと発表した。",
+                "date": None,
+            }
+
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=None), patch(
+            "app.services.trafilatura_service.httpx.get", return_value=response
+        ), patch(
+            "app.services.trafilatura_service.trafilatura.bare_extraction",
+            side_effect=fake_bare_extraction,
+        ):
+            result = extract_body("https://example.com/start")
+
+        self.assertIn("TOPPAN、ギリシャ語写本", captured["downloaded"])
+        self.assertEqual(result["title"], "TOPPAN、ギリシャ語写本の本文を解読できるAI-OCRを開発")
+        self.assertEqual(result["content"], "ギリシャ語写本の本文を解読できるAI-OCRを開発したと発表した。")
+
 
 if __name__ == "__main__":
     unittest.main()

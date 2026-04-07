@@ -20,7 +20,10 @@ function joinClassNames(...parts: Array<string | false | null | undefined>) {
 }
 
 function isLucideIcon(value: ErrorStateProps["icon"]): value is LucideIcon {
-  return typeof value === "function";
+  return (
+    typeof value === "function" ||
+    (typeof value === "object" && value !== null && "$$typeof" in value && "render" in value)
+  );
 }
 
 const TONE_CLASS: Record<ErrorTone, { border: string; iconBg: string; iconText: string }> = {

@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useState, useEffect, useCallback, useMemo, useRef, startTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCheck, Newspaper, Search, Volume2, X } from "lucide-react";
 import { api, Item, ItemSearchSuggestion } from "@/lib/api";
@@ -11,9 +11,10 @@ import { useConfirm } from "@/components/confirm-provider";
 import { InlineReader } from "@/components/inline-reader";
 import { PageTransition } from "@/components/page-transition";
 import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
+import { buildItemsSearchParams, useItemsViewState } from "@/components/items/use-items-view-state";
 import { FiltersBar } from "@/components/items/filters-bar";
 import { ItemCard } from "@/components/items/item-card";
-import { FeedTabs, type FeedMode, type SortMode } from "@/components/items/feed-tabs";
+import { FeedTabs } from "@/components/items/feed-tabs";
 import { ItemsSummaryStrip } from "@/components/items/items-summary-strip";
 import { ItemsListState } from "@/components/items/items-list-state";
 import { DenseArticleList } from "@/components/items/dense-article-list";
@@ -23,104 +24,12 @@ import { SectionCard } from "@/components/ui/section-card";
 import { Tag } from "@/components/ui/tag";
 import { SkeletonList } from "@/components/ui/skeleton-list";
 
-const FILTERS = ["", "summarized", "pending", "new", "fetched", "facts_extracted", "failed", "deleted"] as const;
 type ItemsFeedQueryData = {
   items: Item[];
   total: number;
   searchUnavailable?: boolean;
   searchMode?: "natural" | "and" | "or" | string | null;
 };
-
-function parseItemsQueryState(searchParams: URLSearchParams) {
-  const qFeed = searchParams.get("feed");
-  const qFilter = searchParams.get("status");
-  const deletedViaLegacyStatus = qFilter === "deleted";
-  const feedMode: FeedMode =
-    qFeed === "later"
-      ? "later"
-      : qFeed === "read"
-        ? "read"
-        : qFeed === "pending"
-          ? "pending"
-          : qFeed === "deleted"
-            ? "deleted"
-            : "unread";
-
-  const qSort = searchParams.get("sort");
-  const sortMode: SortMode = qSort === "score" ? "score" : qSort === "personal_score" ? "personal_score" : "newest";
-
-  const filter =
-    qFilter && FILTERS.includes(qFilter as (typeof FILTERS)[number]) && qFilter !== "deleted" ? qFilter : "";
-  const topic = (searchParams.get("topic") ?? "").trim();
-  const sourceID = (searchParams.get("source_id") ?? "").trim();
-  const searchQuery = (searchParams.get("q") ?? "").trim();
-  const qSearchMode = searchParams.get("search_mode");
-  const searchMode: "natural" | "and" | "or" = qSearchMode === "and" ? "and" : qSearchMode === "or" ? "or" : "natural";
-
-  const pendingFeed = qFeed === "pending";
-  const unreadOnly = !pendingFeed && searchParams.get("unread") === "1";
-  const favoriteOnly = !pendingFeed && searchParams.get("favorite") === "1";
-
-  const qPage = Number(searchParams.get("page"));
-  const page = Number.isFinite(qPage) && qPage >= 1 ? Math.floor(qPage) : 1;
-
-  return {
-    feedMode: deletedViaLegacyStatus ? "deleted" : feedMode,
-    sortMode,
-    filter,
-    topic,
-    sourceID,
-    searchQuery,
-    searchMode,
-    unreadOnly,
-    favoriteOnly,
-    page,
-  };
-}
-
-function buildItemsQueryString(
-  current: ReturnType<typeof parseItemsQueryState>,
-  patch: Partial<{
-    feed: FeedMode;
-    sort: SortMode;
-    status: string;
-    topic: string;
-    sourceId: string;
-    q: string;
-    searchMode: "natural" | "and" | "or";
-    unread: boolean;
-    favorite: boolean;
-    page: number;
-  }>
-) {
-  const q = new URLSearchParams();
-  const nextFeed = patch.feed ?? current.feedMode;
-  const nextSort = patch.sort ?? current.sortMode;
-  const implicitStatus = nextFeed === "pending" ? "pending" : "";
-  const nextStatus = patch.status ?? (patch.feed ? implicitStatus : current.filter);
-  const nextTopic = patch.topic ?? current.topic;
-  const nextSourceID = patch.sourceId ?? current.sourceID;
-  const nextSearch = patch.q ?? current.searchQuery;
-  const nextSearchMode = patch.searchMode ?? current.searchMode;
-  const isDeletedFeed = nextFeed === "deleted";
-  const nextUnread =
-    nextFeed === "pending" || isDeletedFeed ? false : nextFeed === "later" ? true : patch.unread ?? current.unreadOnly;
-  const nextFavorite = nextFeed === "pending" || isDeletedFeed ? false : patch.favorite ?? current.favoriteOnly;
-  const nextPage = patch.page ?? current.page;
-
-  q.set("feed", nextFeed);
-  if (nextStatus) q.set("status", nextStatus);
-  if (nextSourceID) q.set("source_id", nextSourceID);
-  if (nextTopic) q.set("topic", nextTopic);
-  if (nextSearch) q.set("q", nextSearch);
-  if (nextSearch) q.set("search_mode", nextSearchMode);
-  q.set("sort", nextFeed === "pending" ? "newest" : nextSort);
-  if (nextUnread) q.set("unread", "1");
-  if (nextFavorite) q.set("favorite", "1");
-  if (nextPage > 1) q.set("page", String(nextPage));
-
-  return q.toString();
-}
 
 function ItemsPageContent() {
   const { t, locale } = useI18n();
@@ -129,10 +38,8 @@ function ItemsPageContent() {
   const player = useSharedAudioPlayer();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const queryState = useMemo(() => parseItemsQueryState(new URLSearchParams(searchParams.toString())), [searchParams]);
-  const { feedMode, sortMode, filter, topic, sourceID, searchQuery, searchMode, unreadOnly, favoriteOnly, page } = queryState;
+  const { state: viewState, currentItemsHref, setFeed, setSort, setFilter, setTopic, setSource, setSearch, setFavorite, setPage, resetFilters } = useItemsViewState();
+  const { feedMode, sortMode, filter, topic, sourceID, searchQuery, searchMode, unreadOnly, favoriteOnly, page } = viewState;
   const unreadMode = feedMode === "unread";
   const readMode = feedMode === "read";
   const laterMode = feedMode === "later";
@@ -250,49 +157,10 @@ function ItemsPageContent() {
     });
   }, [searchOpen, suggestions.length]);
 
-  const replaceItemsQuery = useCallback(
-    (
-        patch: Partial<{
-          feed: FeedMode;
-          sort: SortMode;
-          status: string;
-          topic: string;
-          sourceId: string;
-          q: string;
-          searchMode: "natural" | "and" | "or";
-          unread: boolean;
-          favorite: boolean;
-          page: number;
-      }>
-    ) => {
-      const nextQuery = buildItemsQueryString(queryState, patch);
-      const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
-      startTransition(() => {
-        router.replace(nextUrl, { scroll: false });
-      });
-    },
-    [pathname, queryState, router]
-  );
-
-  const itemsQueryString = useMemo(() => {
-    const q = new URLSearchParams();
-    q.set("feed", feedMode);
-    if (filter) q.set("status", filter);
-    if (sourceID) q.set("source_id", sourceID);
-    if (topic) q.set("topic", topic);
-    if (searchQuery) q.set("q", searchQuery);
-    if (searchQuery) q.set("search_mode", searchMode);
-    q.set("sort", pendingMode ? "newest" : sortMode);
-    if (page > 1) q.set("page", String(page));
-    if (!pendingMode && !deletedMode && (unreadOnly || laterMode)) q.set("unread", "1");
-    if (!pendingMode && !deletedMode && favoriteOnly) q.set("favorite", "1");
-    return q.toString();
-  }, [deletedMode, favoriteOnly, feedMode, filter, laterMode, page, pendingMode, searchMode, searchQuery, sortMode, sourceID, topic, unreadOnly]);
-
   const submitSearch = useCallback(() => {
-    replaceItemsQuery({ q: normalizedSearchDraft, searchMode: searchModeDraft, page: 1 });
+    setSearch(normalizedSearchDraft, searchModeDraft);
     setSearchOpen(false);
-  }, [normalizedSearchDraft, replaceItemsQuery, searchModeDraft]);
+  }, [normalizedSearchDraft, searchModeDraft, setSearch]);
 
   const visibleSearchValue = useMemo(() => {
     if (activeSuggestionIndex >= 0 && suggestions[activeSuggestionIndex]) {
@@ -307,16 +175,11 @@ function ItemsPageContent() {
         const nextQuery = suggestion.label.trim();
         setSearchDraft(nextQuery);
         setActiveSuggestionIndex(-1);
-        replaceItemsQuery({ q: nextQuery, searchMode: searchModeDraft, page: 1 });
+        setSearch(nextQuery, searchModeDraft);
         setSearchOpen(false);
       }
     },
-    [replaceItemsQuery, searchModeDraft]
-  );
-
-  const currentItemsHref = useMemo(
-    () => (itemsQueryString ? `${pathname}?${itemsQueryString}` : pathname),
-    [itemsQueryString, pathname]
+    [searchModeDraft, setSearch]
   );
   const showFilterBadges = !!(sourceID || searchQuery || topic || (filter && filter !== "pending"));
 
@@ -698,7 +561,7 @@ function ItemsPageContent() {
 
   const railFilterTags = [
     topic ? (
-      <Tag key="topic" tone="accent" removable onRemove={() => replaceItemsQuery({ topic: "", page: 1 })}>
+      <Tag key="topic" tone="accent" removable onRemove={() => setTopic("")}>
         {t("items.topic")}: {topic}
       </Tag>
     ) : null,
@@ -708,13 +571,13 @@ function ItemsPageContent() {
         tone="accent"
         removable
         removeLabel={t("common.clear")}
-        onRemove={() => replaceItemsQuery({ sourceId: "", page: 1 })}
+        onRemove={() => setSource("")}
       >
         {t("items.filter.sourceApplied")}
       </Tag>
     ) : null,
     searchQuery ? (
-      <Tag key="search" tone="success" removable onRemove={() => replaceItemsQuery({ q: "", page: 1 })}>
+      <Tag key="search" tone="success" removable onRemove={() => setSearch("", searchMode)}>
         {t("items.search.active")}: {searchQuery}
       </Tag>
     ) : null,
@@ -724,7 +587,7 @@ function ItemsPageContent() {
         tone="accent"
         removable
         removeLabel={t("common.clear")}
-        onRemove={() => replaceItemsQuery({ status: "", page: 1 })}
+        onRemove={() => setFilter("")}
       >
         {t(`items.filter.${filter}`)}
       </Tag>
@@ -890,7 +753,7 @@ function ItemsPageContent() {
                   <FeedTabs
                     feedMode={feedMode}
                     onSelect={(feed) => {
-                      replaceItemsQuery({ feed, page: 1, unread: false });
+                      setFeed(feed);
                     }}
                     t={t}
                   />
@@ -903,8 +766,8 @@ function ItemsPageContent() {
                   favoriteOnly={favoriteOnly}
                   toolbarAction={toolbarAction}
                   bulkMarkingRead={bulkMarkingRead}
-                  onSortChange={(sort) => replaceItemsQuery({ sort, page: 1 })}
-                  onFavoriteChange={(v) => replaceItemsQuery({ favorite: v, page: 1 })}
+                  onSortChange={setSort}
+                  onFavoriteChange={setFavorite}
                   onToolbarActionChange={setToolbarAction}
                   onToolbarRun={() => {
                     if (toolbarAction === "bulk_filtered") {
@@ -1040,7 +903,7 @@ function ItemsPageContent() {
                   setError(null);
                   void queryClient.invalidateQueries({ queryKey: listQueryKey });
                 }}
-                onResetFilters={() => replaceItemsQuery({ q: "", topic: "", sourceId: "", status: "", page: 1, favorite: false })}
+                onResetFilters={resetFilters}
                 t={t}
               />
             ) : (
@@ -1052,7 +915,7 @@ function ItemsPageContent() {
                 total={itemsTotal}
                 page={page}
                 pageSize={pageSize}
-                onPageChange={(nextPage) => replaceItemsQuery({ page: nextPage })}
+                onPageChange={setPage}
               />
             )}
           </div>

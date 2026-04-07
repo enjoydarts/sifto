@@ -55,9 +55,10 @@ function ItemsPageContent() {
   const [bulkMarkingRead, setBulkMarkingRead] = useState(false);
   const [bulkRetrying, setBulkRetrying] = useState(false);
   const [bulkRetryingFromFacts, setBulkRetryingFromFacts] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectedItemIDs, setSelectedItemIDs] = useState<string[]>([]);
   const [toolbarAction, setToolbarAction] = useState<"" | "triage_all" | "bulk_filtered" | "bulk_older">("");
-  const [pendingBulkAction, setPendingBulkAction] = useState<"" | "retry" | "retry_from_facts">("");
+  const [pendingBulkAction, setPendingBulkAction] = useState<"" | "retry" | "retry_from_facts" | "delete">("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchDraft, setSearchDraft] = useState(searchQuery);
   const [searchModeDraft, setSearchModeDraft] = useState<"natural" | "and" | "or">(searchMode);
@@ -421,6 +422,42 @@ function ItemsPageContent() {
       showToast(`${t("common.error")}: ${String(e)}`, "error");
     } finally {
       setBulkRetrying(false);
+    }
+  }, [confirm, queryClient, selectedItemIDs, showToast, t]);
+
+  const bulkDelete = useCallback(async () => {
+    if (selectedItemIDs.length === 0) return;
+    const ok = await confirm({
+      title: t("items.bulkDelete.title").replace("{{count}}", String(selectedItemIDs.length)),
+      message: t("items.bulkDelete.message"),
+      confirmLabel: t("items.bulkDelete.confirm"),
+      tone: "danger",
+    });
+    if (!ok) return;
+
+    setBulkDeleting(true);
+    try {
+      const result = await api.deleteItemsBulk(selectedItemIDs);
+      if (result.skipped_count > 0) {
+        showToast(
+          t("items.bulkDelete.toastDeletedAndSkipped")
+            .replace("{{deleted}}", String(result.updated_count))
+            .replace("{{skipped}}", String(result.skipped_count)),
+          "info"
+        );
+      } else {
+        showToast(t("items.bulkDelete.toastDeleted").replace("{{count}}", String(result.updated_count)), "success");
+      }
+      setSelectedItemIDs([]);
+      setPendingBulkAction("");
+      await queryClient.invalidateQueries({ queryKey: ["items-feed"] });
+      await queryClient.invalidateQueries({ queryKey: ["focus-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["briefing-today"] });
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setBulkDeleting(false);
     }
   }, [confirm, queryClient, selectedItemIDs, showToast, t]);
 
@@ -818,6 +855,7 @@ function ItemsPageContent() {
                       <option value="">{t("items.pendingActions.placeholder")}</option>
                       <option value="retry">{t("items.bulkRetry.run")}</option>
                       <option value="retry_from_facts">{t("items.bulkRetryFromFacts.run")}</option>
+                      <option value="delete">{t("items.bulkDelete.run")}</option>
                     </select>
                     <button
                       type="button"
@@ -825,7 +863,8 @@ function ItemsPageContent() {
                         visibleSelectedCount === 0 ||
                         !pendingBulkAction ||
                         bulkRetrying ||
-                        bulkRetryingFromFacts
+                        bulkRetryingFromFacts ||
+                        bulkDeleting
                       }
                       onClick={() => {
                         if (pendingBulkAction === "retry") {
@@ -834,11 +873,15 @@ function ItemsPageContent() {
                         }
                         if (pendingBulkAction === "retry_from_facts") {
                           void bulkRetryFromFacts();
+                          return;
+                        }
+                        if (pendingBulkAction === "delete") {
+                          void bulkDelete();
                         }
                       }}
                       className="inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50 xl:px-2.5"
                     >
-                      {bulkRetrying || bulkRetryingFromFacts ? t("common.saving") : (
+                      {bulkRetrying || bulkRetryingFromFacts || bulkDeleting ? t("common.saving") : (
                         <>
                           <span className="xl:hidden">{t("items.actions.run")}</span>
                           <span className="hidden xl:inline">{t("items.actions.run")}</span>

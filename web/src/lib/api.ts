@@ -963,6 +963,13 @@ export interface BulkMarkLaterResult {
   updated_count: number;
 }
 
+export interface BulkDeleteItemsResult {
+  status: "ok";
+  item_ids: string[];
+  updated_count: number;
+  skipped_count: number;
+}
+
 export interface FavoritesMarkdownExportParams {
   days?: number;
   limit?: number;
@@ -2326,6 +2333,11 @@ export const api = {
     apiFetch<ItemLaterResult>(`/items/${id}/later`, { method: "DELETE" }),
   deleteItem: (id: string) =>
     apiFetch<void>(`/items/${id}`, { method: "DELETE" }),
+  deleteItemsBulk: (itemIds: string[]) =>
+    apiFetch<BulkDeleteItemsResult>("/items/delete-bulk", {
+      method: "POST",
+      body: JSON.stringify({ item_ids: itemIds }),
+    }),
   restoreItem: (id: string) =>
     apiFetch<ItemDetail>(`/items/${id}/restore`, { method: "POST" }),
   setItemFeedback: (id: string, body: { rating: number; is_favorite: boolean }) =>

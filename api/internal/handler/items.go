@@ -64,6 +64,13 @@ type retryBulkResult struct {
 	queuedItemIDs []string
 }
 
+type deleteBulkResult struct {
+	Status       string   `json:"status"`
+	ItemIDs      []string `json:"item_ids"`
+	UpdatedCount int      `json:"updated_count"`
+	SkippedCount int      `json:"skipped_count"`
+}
+
 func normalizeBulkItemIDs(itemIDs []string) []string {
 	if len(itemIDs) == 0 {
 		return nil
@@ -110,6 +117,28 @@ func runRetryBulk(
 		}
 		result.QueuedCount++
 		result.queuedItemIDs = append(result.queuedItemIDs, item.ID)
+	}
+	return result
+}
+
+func runDeleteBulk(
+	ctx context.Context,
+	itemIDs []string,
+	deleteItem func(context.Context, string) error,
+) deleteBulkResult {
+	result := deleteBulkResult{
+		Status:  "ok",
+		ItemIDs: append([]string(nil), itemIDs...),
+	}
+	for _, itemID := range itemIDs {
+		if err := deleteItem(ctx, itemID); err != nil {
+			if !errors.Is(err, repository.ErrConflict) && !errors.Is(err, repository.ErrNotFound) {
+				log.Printf("delete bulk failed item_id=%s err=%v", itemID, err)
+			}
+			result.SkippedCount++
+			continue
+		}
+		result.UpdatedCount++
 	}
 	return result
 }
@@ -162,6 +191,55 @@ func (h *ItemHandler) RetryBulk(w http.ResponseWriter, r *http.Request) {
 	}
 	h.invalidateUserCaches(r.Context(), userID)
 	w.WriteHeader(http.StatusAccepted)
+	writeJSON(w, result)
+}
+
+func (h *ItemHandler) DeleteBulk(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body retryBulkRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	itemIDs := normalizeBulkItemIDs(body.ItemIDs)
+	if len(itemIDs) == 0 {
+		http.Error(w, "item_ids is required", http.StatusBadRequest)
+		return
+	}
+	if len(itemIDs) > 100 {
+		http.Error(w, "too many item_ids", http.StatusBadRequest)
+		return
+	}
+
+	result := runDeleteBulk(
+		r.Context(),
+		itemIDs,
+		func(ctx context.Context, itemID string) error {
+			item, err := h.getItemDetail(ctx, userID, itemID, false)
+			if err != nil {
+				log.Printf("item delete detail preload failed item_id=%s user_id=%s err=%v", itemID, userID, err)
+				item = nil
+			}
+			if err := h.repo.Delete(ctx, itemID, userID); err != nil {
+				return err
+			}
+			if err := h.bumpItemDetailVersion(ctx, itemID); err != nil {
+				log.Printf("item-detail version bump failed item_id=%s err=%v", itemID, err)
+			}
+			if err := h.publisher.SendItemSearchDeleteE(ctx, itemID); err != nil {
+				log.Printf("item-search delete enqueue failed item_id=%s err=%v", itemID, err)
+			}
+			h.enqueueSearchSuggestionDelete(ctx, userID, item, itemID)
+			return nil
+		},
+	)
+
+	if result.UpdatedCount > 0 {
+		if err := h.bumpUserItemsVersion(r.Context(), userID); err != nil {
+			log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
+		}
+		h.invalidateUserCaches(r.Context(), userID)
+	}
 	writeJSON(w, result)
 }
 

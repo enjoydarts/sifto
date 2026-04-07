@@ -56,3 +56,30 @@ func TestRunRetryBulk(t *testing.T) {
 		t.Fatalf("len(ItemIDs) = %d, want 4", len(result.ItemIDs))
 	}
 }
+
+func TestRunDeleteBulk(t *testing.T) {
+	result := runDeleteBulk(
+		context.Background(),
+		[]string{"item-1", "item-2", "item-3"},
+		func(_ context.Context, itemID string) error {
+			switch itemID {
+			case "item-1":
+				return nil
+			case "item-2":
+				return repository.ErrConflict
+			default:
+				return repository.ErrNotFound
+			}
+		},
+	)
+
+	if result.UpdatedCount != 1 {
+		t.Fatalf("UpdatedCount = %d, want 1", result.UpdatedCount)
+	}
+	if result.SkippedCount != 2 {
+		t.Fatalf("SkippedCount = %d, want 2", result.SkippedCount)
+	}
+	if len(result.ItemIDs) != 3 {
+		t.Fatalf("len(ItemIDs) = %d, want 3", len(result.ItemIDs))
+	}
+}

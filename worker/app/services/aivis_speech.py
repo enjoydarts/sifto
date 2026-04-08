@@ -366,37 +366,33 @@ class AivisSpeechService:
             audio_bytes = b""
             for attempt in range(self.aivis_retry_attempts):
                 AIVIS_RATE_LIMITER.acquire(rate_limit_key)
-                synthesis_token = AIVIS_SYNTHESIS_GATE.acquire(rate_limit_key)
                 try:
-                    try:
-                        response = client.post(self.aivis_tts_endpoint, json=payload, headers=headers)
-                        response.raise_for_status()
-                        audio_bytes = response.content
-                        break
-                    except httpx.HTTPStatusError as exc:
-                        last_exc = exc
-                        status_code = exc.response.status_code if exc.response is not None else 0
-                        if status_code not in _AIVIS_RETRYABLE_STATUS_CODES or attempt >= self.aivis_retry_attempts - 1:
-                            detail = ""
-                            if exc.response is not None:
-                                body = (exc.response.text or "").strip()
-                                if body:
-                                    detail = f" body={body[:500]}"
-                            raise RuntimeError(f"Aivis TTS status={status_code}{detail}") from exc
-                        retry_after_sec = parse_retry_after_seconds(
-                            exc.response.headers.get("Retry-After") if exc.response is not None else None,
-                            self.aivis_retry_fallback_sec,
-                        )
-                        backoff_sec = self.aivis_retry_fallback_sec * (2**attempt)
-                        time.sleep(max(retry_after_sec, backoff_sec))
-                    except httpx.TimeoutException as exc:
-                        last_exc = exc
-                        if attempt >= self.aivis_retry_attempts - 1:
-                            raise
-                        backoff_sec = self.aivis_retry_fallback_sec * (2**attempt)
-                        time.sleep(backoff_sec)
-                finally:
-                    AIVIS_SYNTHESIS_GATE.release(rate_limit_key, synthesis_token)
+                    response = client.post(self.aivis_tts_endpoint, json=payload, headers=headers)
+                    response.raise_for_status()
+                    audio_bytes = response.content
+                    break
+                except httpx.HTTPStatusError as exc:
+                    last_exc = exc
+                    status_code = exc.response.status_code if exc.response is not None else 0
+                    if status_code not in _AIVIS_RETRYABLE_STATUS_CODES or attempt >= self.aivis_retry_attempts - 1:
+                        detail = ""
+                        if exc.response is not None:
+                            body = (exc.response.text or "").strip()
+                            if body:
+                                detail = f" body={body[:500]}"
+                        raise RuntimeError(f"Aivis TTS status={status_code}{detail}") from exc
+                    retry_after_sec = parse_retry_after_seconds(
+                        exc.response.headers.get("Retry-After") if exc.response is not None else None,
+                        self.aivis_retry_fallback_sec,
+                    )
+                    backoff_sec = self.aivis_retry_fallback_sec * (2**attempt)
+                    time.sleep(max(retry_after_sec, backoff_sec))
+                except httpx.TimeoutException as exc:
+                    last_exc = exc
+                    if attempt >= self.aivis_retry_attempts - 1:
+                        raise
+                    backoff_sec = self.aivis_retry_fallback_sec * (2**attempt)
+                    time.sleep(backoff_sec)
             if not audio_bytes and last_exc is not None:
                 raise last_exc
         duration_sec = probe_duration_seconds(audio_bytes, ".mp3")

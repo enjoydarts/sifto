@@ -739,8 +739,6 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
             patch("app.services.aivis_speech.httpx.Client", return_value=fake_client),
             patch("app.services.aivis_speech.probe_duration_seconds", return_value=12),
             patch.object(aivis_speech.AIVIS_RATE_LIMITER, "acquire") as acquire_mock,
-            patch.object(aivis_speech.AIVIS_SYNTHESIS_GATE, "acquire", side_effect=["lock-1", "lock-2", "lock-3"]) as gate_acquire_mock,
-            patch.object(aivis_speech.AIVIS_SYNTHESIS_GATE, "release") as gate_release_mock,
             patch("app.services.aivis_speech.time.sleep") as sleep_mock,
         ):
             audio_bytes, content_type, suffix, duration_sec = service.synthesize_aivis_audio(
@@ -764,10 +762,6 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
         self.assertEqual(duration_sec, 12)
         self.assertEqual(fake_client.calls, 3)
         self.assertEqual(acquire_mock.call_count, 3)
-        self.assertEqual(gate_acquire_mock.call_count, 3)
-        self.assertEqual(gate_release_mock.call_args_list[0].args, ("key", "lock-1"))
-        self.assertEqual(gate_release_mock.call_args_list[1].args, ("key", "lock-2"))
-        self.assertEqual(gate_release_mock.call_args_list[2].args, ("key", "lock-3"))
         self.assertEqual([call.args[0] for call in sleep_mock.call_args_list], [9.0, 18.0])
 
     def test_synthesize_aivis_audio_retries_after_504(self):
@@ -811,8 +805,6 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
             patch("app.services.aivis_speech.httpx.Client", return_value=fake_client),
             patch("app.services.aivis_speech.probe_duration_seconds", return_value=12),
             patch.object(aivis_speech.AIVIS_RATE_LIMITER, "acquire"),
-            patch.object(aivis_speech.AIVIS_SYNTHESIS_GATE, "acquire", side_effect=["lock-1", "lock-2"]),
-            patch.object(aivis_speech.AIVIS_SYNTHESIS_GATE, "release"),
             patch("app.services.aivis_speech.time.sleep") as sleep_mock,
         ):
             audio_bytes, content_type, suffix, duration_sec = service.synthesize_aivis_audio(
@@ -836,6 +828,58 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
         self.assertEqual(duration_sec, 12)
         self.assertEqual(fake_client.calls, 2)
         self.assertEqual([call.args[0] for call in sleep_mock.call_args_list], [9.0])
+
+    def test_synthesize_aivis_audio_does_not_use_synthesis_gate(self):
+        service = AudioBriefingTTSService()
+        service.aivis_tts_endpoint = "https://example.test/v1/tts/synthesize"
+
+        class FakeResponse:
+            status_code = 200
+            content = b"mp3-bytes"
+            headers = {}
+            text = "ok"
+
+            def raise_for_status(self):
+                return None
+
+        class FakeClient:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def post(self, url, json, headers):
+                return FakeResponse()
+
+        with (
+            patch("app.services.aivis_speech.httpx.Client", return_value=FakeClient()),
+            patch("app.services.aivis_speech.probe_duration_seconds", return_value=12),
+            patch.object(aivis_speech.AIVIS_RATE_LIMITER, "acquire"),
+            patch.object(aivis_speech.AIVIS_SYNTHESIS_GATE, "acquire") as gate_acquire_mock,
+            patch.object(aivis_speech.AIVIS_SYNTHESIS_GATE, "release") as gate_release_mock,
+        ):
+            audio_bytes, content_type, suffix, duration_sec = service.synthesize_aivis_audio(
+                voice_model="model-uuid",
+                voice_style="speaker-uuid:0",
+                text="hello",
+                speech_rate=1.0,
+                emotional_intensity=1.0,
+                tempo_dynamics=1.0,
+                line_break_silence_seconds=0.4,
+                chunk_trailing_silence_seconds=1.0,
+                pitch=0.0,
+                volume_gain=0.0,
+                user_dictionary_uuid=None,
+                api_key_override="key",
+            )
+
+        self.assertEqual(audio_bytes, b"mp3-bytes")
+        self.assertEqual(content_type, "audio/mpeg")
+        self.assertEqual(suffix, ".mp3")
+        self.assertEqual(duration_sec, 12)
+        gate_acquire_mock.assert_not_called()
+        gate_release_mock.assert_not_called()
 
 
 if __name__ == "__main__":

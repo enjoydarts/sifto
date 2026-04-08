@@ -35,6 +35,7 @@ from app.services.zai_service import _llm_meta as zai_llm_meta
 
 FISH_PREPROCESS_PURPOSE = "fish_preprocess"
 GEMINI_TTS_PREPROCESS_PURPOSE = "gemini_tts_preprocess"
+ELEVENLABS_TTS_PREPROCESS_PURPOSE = "elevenlabs_tts_preprocess"
 DEFAULT_TTS_MARKUP_PREPROCESS_PROMPT_KEY = "fish.summary_preprocess"
 _MAX_OUTPUT_TOKENS = 3200
 
@@ -95,13 +96,13 @@ class TTSMarkupPreprocessService:
 
     def _enrich_variables(self, prompt_key: str, variables: dict[str, str] | None) -> dict[str, str]:
         enriched = {str(key): str(value) for key, value in (variables or {}).items()}
-        if prompt_key in {"fish.audio_briefing_single_preprocess", "gemini.audio_briefing_single_preprocess"}:
+        if prompt_key in {"fish.audio_briefing_single_preprocess", "gemini.audio_briefing_single_preprocess", "elevenlabs.audio_briefing_single_preprocess"}:
             persona_name = str(enriched.get("persona_name") or "").strip()
             if persona_name and not str(enriched.get("tone_prompt") or "").strip():
                 tone_prompt, _speaking_style_prompt, _duo_conversation_prompt = resolve_audio_briefing_persona_prompts(persona_name)
                 if tone_prompt:
                     enriched["tone_prompt"] = tone_prompt
-        elif prompt_key in {"fish.audio_briefing_duo_preprocess", "gemini.audio_briefing_duo_preprocess"}:
+        elif prompt_key in {"fish.audio_briefing_duo_preprocess", "gemini.audio_briefing_duo_preprocess", "elevenlabs.audio_briefing_duo_preprocess"}:
             host_persona_name = str(enriched.get("host_persona_name") or "").strip()
             partner_persona_name = str(enriched.get("partner_persona_name") or "").strip()
             if host_persona_name and not str(enriched.get("host_tone_prompt") or "").strip():
@@ -117,6 +118,8 @@ class TTSMarkupPreprocessService:
     def _purpose_for_prompt_key(self, prompt_key: str) -> str:
         if str(prompt_key or "").strip().startswith("gemini."):
             return GEMINI_TTS_PREPROCESS_PURPOSE
+        if str(prompt_key or "").strip().startswith("elevenlabs."):
+            return ELEVENLABS_TTS_PREPROCESS_PURPOSE
         return FISH_PREPROCESS_PURPOSE
 
     def _preprocess_openai_compat(self, chat_json, llm_meta, model: str, api_key: str, system_instruction: str, prompt: str, purpose: str) -> dict:

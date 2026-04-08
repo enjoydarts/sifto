@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Brain, ChevronDown, KeyRound, RefreshCw, Search, Settings as SettingsIcon, X } from "lucide-react";
-import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, AudioBriefingPreset, FishModelSnapshot, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, SaveAudioBriefingPresetRequest, SummaryAudioVoiceSettings, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
+import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, AudioBriefingPreset, ElevenLabsVoiceCatalogEntry, ElevenLabsVoicesResponse, FishModelSnapshot, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, LLMCatalogModel, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, SaveAudioBriefingPresetRequest, SummaryAudioVoiceSettings, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -13,6 +13,7 @@ import { getSummaryAudioReadiness } from "@/lib/summary-audio-readiness";
 import OneSignalSettings from "@/components/onesignal-settings";
 import ApiKeyCard from "@/components/settings/api-key-card";
 import AivisVoicePickerModal from "@/components/settings/aivis-voice-picker-modal";
+import ElevenLabsVoicePickerModalExternal from "@/components/settings/elevenlabs-voice-picker-modal";
 import FishVoicePickerModal from "@/components/settings/fish-voice-picker-modal";
 import UIFontPickerModal from "@/components/settings/ui-font-picker-modal";
 import ModelGuideModal from "@/components/settings/model-guide-modal";
@@ -462,12 +463,39 @@ function formatAudioBriefingScheduleSelection(
   }
 }
 
+function formatTTSProviderLabel(provider: string, t: (key: string, fallback?: string) => string): string {
+  switch (provider.trim().toLowerCase()) {
+    case "aivis":
+      return "Aivis";
+    case "fish":
+      return t("settings.summaryAudio.provider.fish");
+    case "xai":
+      return t("settings.summaryAudio.provider.xai");
+    case "openai":
+      return t("settings.summaryAudio.provider.openai");
+    case "gemini_tts":
+      return t("settings.summaryAudio.provider.gemini_tts");
+    case "elevenlabs":
+      return t("settings.summaryAudio.provider.elevenlabs");
+    case "mock":
+      return "Mock";
+    default:
+      return provider;
+  }
+}
+
 const TTS_PROVIDER_CAPABILITIES: Record<string, TTSProviderCapabilities> = {
   aivis: {
     requiresVoiceStyle: true,
     supportsCatalogPicker: true,
     supportsSeparateTTSModel: false,
     supportsSpeechTuning: true,
+  },
+  elevenlabs: {
+    requiresVoiceStyle: false,
+    supportsCatalogPicker: true,
+    supportsSeparateTTSModel: true,
+    supportsSpeechTuning: false,
   },
   xai: {
     requiresVoiceStyle: false,
@@ -559,6 +587,37 @@ const FISH_TTS_MODEL_OPTIONS: ModelOption[] = [
   },
 ];
 
+const ELEVENLABS_TTS_MODEL_OPTIONS: ModelOption[] = [
+  {
+    value: "eleven_flash_v2_5",
+    label: "eleven_flash_v2_5",
+    selectedLabel: "ElevenLabs / eleven_flash_v2_5",
+    note: "Lowest latency ElevenLabs model",
+    provider: "ElevenLabs",
+  },
+  {
+    value: "eleven_turbo_v2_5",
+    label: "eleven_turbo_v2_5",
+    selectedLabel: "ElevenLabs / eleven_turbo_v2_5",
+    note: "Balanced speed and quality",
+    provider: "ElevenLabs",
+  },
+  {
+    value: "eleven_multilingual_v2",
+    label: "eleven_multilingual_v2",
+    selectedLabel: "ElevenLabs / eleven_multilingual_v2",
+    note: "Multilingual speech model",
+    provider: "ElevenLabs",
+  },
+  {
+    value: "eleven_v3",
+    label: "eleven_v3",
+    selectedLabel: "ElevenLabs / eleven_v3",
+    note: "Required for dialogue synthesis",
+    provider: "ElevenLabs",
+  },
+];
+
 function buildOpenAITTSModelOptions(currentValue: string): ModelOption[] {
   const trimmed = currentValue.trim();
   if (!trimmed || OPENAI_TTS_MODEL_OPTIONS.some((option) => option.value === trimmed)) {
@@ -604,6 +663,22 @@ function buildFishTTSModelOptions(currentValue: string): ModelOption[] {
       provider: "Fish Audio",
     },
     ...FISH_TTS_MODEL_OPTIONS,
+  ];
+}
+
+function buildElevenLabsTTSModelOptions(currentValue: string): ModelOption[] {
+  const trimmed = currentValue.trim();
+  if (!trimmed || ELEVENLABS_TTS_MODEL_OPTIONS.some((option) => option.value === trimmed)) {
+    return ELEVENLABS_TTS_MODEL_OPTIONS;
+  }
+  return [
+    {
+      value: trimmed,
+      label: trimmed,
+      selectedLabel: `ElevenLabs / ${trimmed}`,
+      provider: "ElevenLabs",
+    },
+    ...ELEVENLABS_TTS_MODEL_OPTIONS,
   ];
 }
 
@@ -668,6 +743,10 @@ function resolveGeminiTTSVoiceSelection(voices: GeminiTTSVoiceCatalogEntry[], vo
   return voices.find((item) => item.voice_name === voice.voice_model) ?? null;
 }
 
+function resolveElevenLabsVoiceSelection(voices: ElevenLabsVoiceCatalogEntry[], voice: VoiceModelSelection) {
+  return voices.find((item) => item.voice_id === voice.voice_model) ?? null;
+}
+
 function getAudioBriefingProviderCapabilities(provider: string): TTSProviderCapabilities {
   return TTS_PROVIDER_CAPABILITIES[provider.trim().toLowerCase()] ?? {
     requiresVoiceStyle: true,
@@ -691,11 +770,14 @@ function getAudioBriefingVoiceStatus(
   xaiVoices: XAIVoiceSnapshot[],
   openAIVoices: OpenAITTSVoiceSnapshot[],
   geminiVoices: GeminiTTSVoiceCatalogEntry[],
+  elevenLabsVoices: ElevenLabsVoiceCatalogEntry[],
   hasAivisAPIKey: boolean,
   hasFishAPIKey: boolean,
   hasXAIAPIKey: boolean,
   hasOpenAIAPIKey: boolean,
+  hasElevenLabsAPIKey: boolean,
   geminiTTSEnabled: boolean,
+  conversationMode: "single" | "duo",
   t: (key: string, fallback?: string) => string
 ) {
   const provider = voice.tts_provider.trim().toLowerCase();
@@ -822,6 +904,47 @@ function getAudioBriefingVoiceStatus(
       configured: true,
     };
   }
+  if (provider === "elevenlabs") {
+    const resolved = resolveElevenLabsVoiceSelection(elevenLabsVoices, voice);
+    if (!voice.tts_model.trim()) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.audioBriefing.status.elevenlabsModelMissing"),
+        detail: t("settings.audioBriefing.status.elevenlabsModelMissingDetail"),
+        configured: true,
+      };
+    }
+    if (!hasElevenLabsAPIKey) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.audioBriefing.status.elevenlabsApiKeyMissing"),
+        detail: t("settings.audioBriefing.status.elevenlabsApiKeyMissingDetail"),
+        configured: true,
+      };
+    }
+    if (!voice.voice_model.trim()) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.audioBriefing.status.elevenlabsVoiceMissing"),
+        detail: t("settings.audioBriefing.status.elevenlabsVoiceMissingDetail"),
+        configured: true,
+      };
+    }
+    if (conversationMode === "duo" && voice.tts_model.trim() !== "eleven_v3") {
+      return {
+        tone: "warn" as const,
+        label: t("settings.audioBriefing.status.elevenlabsDuoModelWarning"),
+        detail: t("settings.audioBriefing.status.elevenlabsDuoModelWarningDetail"),
+        configured: true,
+      };
+    }
+    return {
+      tone: "ok" as const,
+      label: t("settings.audioBriefing.status.elevenlabsReady"),
+      detail: resolved?.description || t("settings.audioBriefing.status.elevenlabsReadyDetail"),
+      configured: true,
+    };
+  }
   if (provider !== "aivis") {
     return {
       tone: "muted" as const,
@@ -868,9 +991,6 @@ function isSummaryAudioVoiceConfigured(voice: SummaryAudioVoiceSettings) {
   if (!voice.voice_model.trim()) {
     return false;
   }
-  if (capabilities.supportsSeparateTTSModel && !voice.tts_model.trim()) {
-    return false;
-  }
   if (capabilities.requiresVoiceStyle && !voice.voice_style.trim()) {
     return false;
   }
@@ -884,10 +1004,12 @@ function getSummaryAudioVoiceStatus(
   xaiVoices: XAIVoiceSnapshot[],
   openAIVoices: OpenAITTSVoiceSnapshot[],
   geminiVoices: GeminiTTSVoiceCatalogEntry[],
+  elevenLabsVoices: ElevenLabsVoiceCatalogEntry[],
   hasAivisAPIKey: boolean,
   hasFishAPIKey: boolean,
   hasXAIAPIKey: boolean,
   hasOpenAIAPIKey: boolean,
+  hasElevenLabsAPIKey: boolean,
   geminiTTSEnabled: boolean,
   t: (key: string, fallback?: string) => string
 ) {
@@ -1012,6 +1134,47 @@ function getSummaryAudioVoiceStatus(
       tone: "ok" as const,
       label: t("settings.summaryAudio.status.fishReady"),
       detail: t("settings.summaryAudio.status.fishReadyDetail"),
+      configured: true,
+    };
+  }
+  if (provider === "elevenlabs") {
+    const resolved = resolveElevenLabsVoiceSelection(elevenLabsVoices, voice);
+    if (!voice.tts_model.trim()) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.summaryAudio.status.elevenlabsModelMissing"),
+        detail: t("settings.summaryAudio.status.elevenlabsModelMissingDetail"),
+        configured: true,
+      };
+    }
+    if (!hasElevenLabsAPIKey) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.summaryAudio.status.elevenlabsApiKeyMissing"),
+        detail: t("settings.summaryAudio.status.elevenlabsApiKeyMissingDetail"),
+        configured: true,
+      };
+    }
+    if (!voice.voice_model.trim()) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.summaryAudio.status.elevenlabsVoiceMissing"),
+        detail: t("settings.summaryAudio.status.elevenlabsVoiceMissingDetail"),
+        configured: false,
+      };
+    }
+    if (!resolved) {
+      return {
+        tone: "warn" as const,
+        label: t("settings.summaryAudio.status.elevenlabsVoiceMissing"),
+        detail: t("settings.summaryAudio.status.elevenlabsVoiceMissingDetail"),
+        configured: true,
+      };
+    }
+    return {
+      tone: "ok" as const,
+      label: t("settings.summaryAudio.status.elevenlabsReady"),
+      detail: resolved?.description || t("settings.summaryAudio.status.elevenlabsReadyDetail"),
       configured: true,
     };
   }
@@ -2082,6 +2245,226 @@ function GeminiTTSVoicePickerModal({
   );
 }
 
+type ElevenLabsVoicePickerModalProps = {
+  open: boolean;
+  loading: boolean;
+  error: string | null;
+  voices: ElevenLabsVoiceCatalogEntry[];
+  currentVoiceID: string;
+  onClose: () => void;
+  onRefresh: () => Promise<void> | void;
+  onSelect: (selection: { voice_id: string; label: string; description: string }) => void;
+};
+
+function ElevenLabsVoicePickerModal({
+  open,
+  loading,
+  error,
+  voices,
+  currentVoiceID,
+  onClose,
+  onRefresh,
+  onSelect,
+}: ElevenLabsVoicePickerModalProps) {
+  const { t } = useI18n();
+  const [query, setQuery] = useState("");
+  const [selectedVoiceID, setSelectedVoiceID] = useState<string | null>(null);
+
+  const japaneseVoices = useMemo(
+    () =>
+      voices.filter((voice) => {
+        const languages = voice.languages ?? [];
+        const joinedMeta = [
+          ...languages,
+          voice.description,
+          voice.name,
+          voice.category ?? "",
+          ...Object.values(voice.labels ?? {}).map((value) => String(value ?? "")),
+        ]
+          .join(" ")
+          .toLowerCase();
+        return (
+          joinedMeta.includes("ja") ||
+          joinedMeta.includes("japanese") ||
+          joinedMeta.includes("日本語") ||
+          joinedMeta.includes("日本")
+        );
+      }),
+    [voices]
+  );
+
+  const filteredVoices = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = japaneseVoices.length > 0 ? japaneseVoices : voices;
+    if (!q) return base;
+    return base.filter((voice) =>
+      [
+        voice.voice_id,
+        voice.name,
+        voice.description,
+        voice.category ?? "",
+        (voice.languages ?? []).join(" "),
+        Object.values(voice.labels ?? {}).map((value) => String(value ?? "")).join(" "),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [japaneseVoices, query, voices]);
+
+  const selectedVoice = useMemo(() => {
+    const activeVoiceID = selectedVoiceID ?? currentVoiceID;
+    return (
+      filteredVoices.find((voice) => voice.voice_id === activeVoiceID) ??
+      voices.find((voice) => voice.voice_id === activeVoiceID) ??
+      null
+    );
+  }, [currentVoiceID, filteredVoices, selectedVoiceID, voices]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/45 px-4 py-6" onClick={onClose}>
+      <div
+        className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] shadow-[0_30px_80px_rgba(35,24,12,0.24)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--color-editorial-line)] px-5 py-4">
+          <div>
+            <h2 className="text-base font-semibold text-[var(--color-editorial-ink)]">{t("settings.audioBriefing.elevenlabsPickerTitle")}</h2>
+            <p className="mt-1 text-sm text-[var(--color-editorial-ink-soft)]">{t("settings.audioBriefing.elevenlabsPickerSubtitle")}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void onRefresh()}
+              className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+            >
+              <RefreshCw className="size-4" />
+              {t("common.refresh")}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex size-10 items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-white text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+              aria-label={t("common.close")}
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="border-b border-[var(--color-editorial-line)] px-5 py-4">
+          <div className="flex items-center gap-3 rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-3">
+            <Search className="size-4 text-[var(--color-editorial-ink-soft)]" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("settings.audioBriefing.elevenlabsPickerSearch")}
+              className="w-full bg-transparent text-sm text-[var(--color-editorial-ink)] outline-none placeholder:text-[var(--color-editorial-ink-faint)]"
+            />
+          </div>
+          {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        </div>
+
+        <div className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]">
+          <div className="min-h-0 overflow-auto border-b border-[var(--color-editorial-line)] lg:border-b-0 lg:border-r">
+            <div className="overflow-x-auto">
+              <table className="min-w-[820px] divide-y divide-[var(--color-editorial-line)] text-sm">
+                <thead className="bg-[var(--color-editorial-panel-strong)]">
+                  <tr className="text-left text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">
+                    <th className="px-4 py-3">{t("settings.audioBriefing.elevenlabsVoiceTable.voice")}</th>
+                    <th className="px-4 py-3">{t("settings.audioBriefing.elevenlabsVoiceTable.category")}</th>
+                    <th className="px-4 py-3">{t("settings.audioBriefing.elevenlabsVoiceTable.description")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-editorial-line)] bg-white">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-8 text-center text-sm text-[var(--color-editorial-ink-soft)]">{t("common.loading")}</td>
+                    </tr>
+                  ) : filteredVoices.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-4 py-8 text-center text-sm text-[var(--color-editorial-ink-soft)]">{t("settings.audioBriefing.elevenlabsPickerNoResults")}</td>
+                    </tr>
+                  ) : (
+                    filteredVoices.map((voice) => (
+                      <tr
+                        key={voice.voice_id}
+                        className={`cursor-pointer transition hover:bg-[var(--color-editorial-panel)] ${selectedVoice?.voice_id === voice.voice_id ? "bg-[var(--color-editorial-panel)]" : ""}`}
+                        onClick={() => setSelectedVoiceID(voice.voice_id)}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-[var(--color-editorial-ink)]">{voice.name || voice.voice_id}</div>
+                          <div className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">{voice.voice_id}</div>
+                        </td>
+                        <td className="px-4 py-3 text-[var(--color-editorial-ink)]">{voice.category || "—"}</td>
+                        <td className="px-4 py-3 text-[var(--color-editorial-ink-soft)]">{voice.description || "—"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="min-h-0 overflow-auto px-5 py-5">
+            {selectedVoice ? (
+              <div className="space-y-5">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.audioBriefing.elevenlabsPickerSelected")}</div>
+                  <h3 className="mt-2 text-lg font-semibold text-[var(--color-editorial-ink)]">{selectedVoice.name || selectedVoice.voice_id}</h3>
+                  <p className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                    {selectedVoice.description || t("settings.audioBriefing.elevenlabsPickerNoDescription")}
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.audioBriefing.elevenlabsVoiceTable.voice")}</div>
+                    <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">{selectedVoice.voice_id}</div>
+                  </div>
+                  <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+                    <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.audioBriefing.elevenlabsVoiceTable.category")}</div>
+                    <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">{selectedVoice.category || "—"}</div>
+                  </div>
+                </div>
+                {selectedVoice.preview_url ? (
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.audioBriefing.elevenlabsPreview")}</div>
+                    <div className="mt-3 rounded-[18px] border border-[var(--color-editorial-line)] bg-white p-4">
+                      <audio controls preload="none" className="w-full" src={selectedVoice.preview_url} />
+                    </div>
+                  </div>
+                ) : null}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelect({
+                        voice_id: selectedVoice.voice_id,
+                        label: selectedVoice.name || selectedVoice.voice_id,
+                        description: selectedVoice.description || "",
+                      });
+                      onClose();
+                    }}
+                    className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90"
+                  >
+                    {t("settings.audioBriefing.elevenlabsPickerSelect")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-[22px] border border-dashed border-[var(--color-editorial-line)] bg-white/70 px-5 py-8 text-sm leading-7 text-[var(--color-editorial-ink-soft)]">
+                {t("settings.audioBriefing.elevenlabsPickerEmptySelection")}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const queryClient = useQueryClient();
   const { t } = useI18n();
@@ -2129,6 +2512,8 @@ export default function SettingsPage() {
   const [deletingOpenRouterKey, setDeletingOpenRouterKey] = useState(false);
   const [savingAivisKey, setSavingAivisKey] = useState(false);
   const [deletingAivisKey, setDeletingAivisKey] = useState(false);
+  const [savingElevenLabsKey, setSavingElevenLabsKey] = useState(false);
+  const [deletingElevenLabsKey, setDeletingElevenLabsKey] = useState(false);
   const [savingFishKey, setSavingFishKey] = useState(false);
   const [deletingFishKey, setDeletingFishKey] = useState(false);
   const [savingAivisDictionary, setSavingAivisDictionary] = useState(false);
@@ -2164,6 +2549,7 @@ export default function SettingsPage() {
   const [siliconFlowApiKeyInput, setSiliconFlowApiKeyInput] = useState("");
   const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
   const [aivisApiKeyInput, setAivisApiKeyInput] = useState("");
+  const [elevenLabsApiKeyInput, setElevenLabsApiKeyInput] = useState("");
   const [fishApiKeyInput, setFishApiKeyInput] = useState("");
   const [aivisUserDictionaryUUID, setAivisUserDictionaryUUID] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
@@ -2243,6 +2629,9 @@ export default function SettingsPage() {
   const [openAITTSVoicesLoading, setOpenAITTSVoicesLoading] = useState(false);
   const [openAITTSVoicesSyncing, setOpenAITTSVoicesSyncing] = useState(false);
   const [openAITTSVoicesError, setOpenAITTSVoicesError] = useState<string | null>(null);
+  const [elevenLabsVoicesData, setElevenLabsVoicesData] = useState<ElevenLabsVoicesResponse | null>(null);
+  const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
+  const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
   const [geminiTTSVoicesData, setGeminiTTSVoicesData] = useState<GeminiTTSVoicesResponse | null>(null);
   const [geminiTTSVoicesLoading, setGeminiTTSVoicesLoading] = useState(false);
   const [geminiTTSVoicesError, setGeminiTTSVoicesError] = useState<string | null>(null);
@@ -2253,10 +2642,12 @@ export default function SettingsPage() {
   const [aivisPickerPersona, setAivisPickerPersona] = useState<string | null>(null);
   const [xaiPickerPersona, setXAIPickerPersona] = useState<string | null>(null);
   const [fishPickerPersona, setFishPickerPersona] = useState<string | null>(null);
+  const [elevenLabsPickerPersona, setElevenLabsPickerPersona] = useState<string | null>(null);
   const [openAITTPickerPersona, setOpenAITTPickerPersona] = useState<string | null>(null);
   const [geminiTTSPickerPersona, setGeminiTTSPickerPersona] = useState<string | null>(null);
   const [summaryAudioAivisPickerOpen, setSummaryAudioAivisPickerOpen] = useState(false);
   const [summaryAudioFishPickerOpen, setSummaryAudioFishPickerOpen] = useState(false);
+  const [summaryAudioElevenLabsPickerOpen, setSummaryAudioElevenLabsPickerOpen] = useState(false);
   const [summaryAudioXAIPickerOpen, setSummaryAudioXAIPickerOpen] = useState(false);
   const [summaryAudioOpenAITTPickerOpen, setSummaryAudioOpenAITTPickerOpen] = useState(false);
   const [summaryAudioGeminiTTSPickerOpen, setSummaryAudioGeminiTTSPickerOpen] = useState(false);
@@ -2330,18 +2721,22 @@ export default function SettingsPage() {
       xaiVoicesData?.voices ?? [],
       openAITTSVoicesData?.voices ?? [],
       geminiTTSVoicesData?.voices ?? [],
+      elevenLabsVoicesData?.voices ?? [],
       Boolean(settings?.has_aivis_api_key),
       Boolean(settings?.has_fish_api_key),
       Boolean(settings?.has_xai_api_key),
       Boolean(settings?.has_openai_api_key),
+      Boolean(settings?.has_elevenlabs_api_key),
       Boolean(settings?.gemini_tts_enabled),
       t
     );
   }, [
     aivisModelsData?.models,
+    elevenLabsVoicesData?.voices,
     geminiTTSVoicesData?.voices,
     openAITTSVoicesData?.voices,
     settings?.has_fish_api_key,
+    settings?.has_elevenlabs_api_key,
     settings?.gemini_tts_enabled,
     settings?.has_aivis_api_key,
     settings?.has_openai_api_key,
@@ -2703,6 +3098,22 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const loadElevenLabsVoices = useCallback(async () => {
+    setElevenLabsVoicesLoading(true);
+    try {
+      const next = await api.getElevenLabsVoices();
+      setElevenLabsVoicesData(next);
+      setElevenLabsVoicesError(null);
+      return next;
+    } catch (e) {
+      const message = String(e);
+      setElevenLabsVoicesError(message);
+      throw e;
+    } finally {
+      setElevenLabsVoicesLoading(false);
+    }
+  }, []);
+
   const loadGeminiTTSVoices = useCallback(async () => {
     setGeminiTTSVoicesLoading(true);
     try {
@@ -2820,6 +3231,10 @@ export default function SettingsPage() {
         setAivisUserDictionariesLoaded(false);
         setAivisUserDictionariesError(null);
       }
+      if (!data.has_elevenlabs_api_key) {
+        setElevenLabsVoicesData(null);
+        setElevenLabsVoicesError(null);
+      }
       if (!data.has_xai_api_key) {
         setXAIVoicesData(null);
         setXAIVoicesError(null);
@@ -2906,6 +3321,24 @@ export default function SettingsPage() {
     }
     void loadOpenAITTSVoices().catch(() => undefined);
   }, [activeSection, loadOpenAITTSVoices, openAITTSVoicesData, openAITTSVoicesLoading, settings?.has_openai_api_key]);
+
+  useEffect(() => {
+    if (
+      (activeSection !== "audio-briefing" && activeSection !== "summary-audio")
+      || !settings?.has_elevenlabs_api_key
+      || elevenLabsVoicesData != null
+      || elevenLabsVoicesLoading
+    ) {
+      return;
+    }
+    void loadElevenLabsVoices().catch(() => undefined);
+  }, [
+    activeSection,
+    elevenLabsVoicesData,
+    elevenLabsVoicesLoading,
+    loadElevenLabsVoices,
+    settings?.has_elevenlabs_api_key,
+  ]);
 
   useEffect(() => {
     if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || geminiTTSVoicesData != null || geminiTTSVoicesLoading) {
@@ -3370,6 +3803,21 @@ export default function SettingsPage() {
           saving: savingAivisKey,
           deleting: deletingAivisKey,
           notSet: t("settings.aivisNotSet"),
+        },
+        {
+          id: "elevenlabs",
+          title: t("settings.elevenlabsTitle"),
+          description: t("settings.elevenlabsDescription"),
+          configured: Boolean(settings.has_elevenlabs_api_key),
+          last4: settings.elevenlabs_api_key_last4 ?? null,
+          value: elevenLabsApiKeyInput,
+          onChange: setElevenLabsApiKeyInput,
+          onSubmit: submitElevenLabsApiKey,
+          onDelete: handleDeleteElevenLabsApiKey,
+          placeholder: "sk_...",
+          saving: savingElevenLabsKey,
+          deleting: deletingElevenLabsKey,
+          notSet: t("settings.elevenlabsNotSet"),
         },
         {
           id: "fish",
@@ -4165,6 +4613,26 @@ export default function SettingsPage() {
     }
   }
 
+  async function submitElevenLabsApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingElevenLabsKey(true);
+    try {
+      if (!elevenLabsApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setElevenLabsApiKey(elevenLabsApiKeyInput.trim());
+      setElevenLabsApiKeyInput("");
+      setElevenLabsVoicesData(null);
+      setElevenLabsVoicesError(null);
+      await load();
+      showToast(t("settings.toast.elevenlabsSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingElevenLabsKey(false);
+    }
+  }
+
   async function submitFishApiKey(e: FormEvent) {
     e.preventDefault();
     setSavingFishKey(true);
@@ -4205,6 +4673,29 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setDeletingAivisKey(false);
+    }
+  }
+
+  async function handleDeleteElevenLabsApiKey() {
+    if (!(await confirm({
+      title: t("settings.elevenlabsDeleteTitle"),
+      message: t("settings.elevenlabsDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingElevenLabsKey(true);
+    try {
+      await api.deleteElevenLabsApiKey();
+      setElevenLabsVoicesData(null);
+      setElevenLabsVoicesError(null);
+      await load();
+      showToast(t("settings.toast.elevenlabsDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingElevenLabsKey(false);
     }
   }
 
@@ -4572,6 +5063,8 @@ export default function SettingsPage() {
     setSummaryAudioProviderVoiceDescription("");
     if (!capabilities.supportsSeparateTTSModel) {
       setSummaryAudioTTSModel("");
+    } else if (normalized === "elevenlabs") {
+      setSummaryAudioTTSModel("eleven_flash_v2_5");
     } else if (normalized === "fish") {
       setSummaryAudioTTSModel("s2-pro");
     } else if (normalized === "openai") {
@@ -4632,6 +5125,8 @@ export default function SettingsPage() {
           const capabilities = getAudioBriefingProviderCapabilities(nextProvider);
           if (!capabilities.supportsSeparateTTSModel) {
             nextVoice.tts_model = "";
+          } else if (nextProvider === "elevenlabs") {
+            nextVoice.tts_model = "eleven_flash_v2_5";
           } else if (nextProvider === "fish") {
             nextVoice.tts_model = "s2-pro";
           } else if (nextProvider === "openai") {
@@ -4644,7 +5139,7 @@ export default function SettingsPage() {
           if (!capabilities.requiresVoiceStyle) {
             nextVoice.voice_style = "";
           }
-          if (nextProvider !== "fish") {
+          if (nextProvider !== "fish" && nextProvider !== "elevenlabs") {
             nextVoice.provider_voice_label = "";
             nextVoice.provider_voice_description = "";
           }
@@ -4723,6 +5218,17 @@ export default function SettingsPage() {
     setFishPickerPersona(persona);
   }
 
+  async function openElevenLabsPicker(persona: string) {
+    setElevenLabsPickerPersona(persona);
+    if (elevenLabsVoicesData == null) {
+      try {
+        await loadElevenLabsVoices();
+      } catch {
+        return;
+      }
+    }
+  }
+
   async function openOpenAITTSPicker(persona: string) {
     setOpenAITTPickerPersona(persona);
     if (openAITTSVoicesData == null) {
@@ -4755,6 +5261,9 @@ export default function SettingsPage() {
   const activeXAIVoice = xaiPickerPersona
     ? audioBriefingVoices.find((voice) => voice.persona === xaiPickerPersona) ?? null
     : null;
+  const activeElevenLabsVoice = elevenLabsPickerPersona
+    ? audioBriefingVoices.find((voice) => voice.persona === elevenLabsPickerPersona) ?? null
+    : null;
   const activeOpenAITTSVoice = openAITTPickerPersona
     ? audioBriefingVoices.find((voice) => voice.persona === openAITTPickerPersona) ?? null
     : null;
@@ -4763,15 +5272,18 @@ export default function SettingsPage() {
     : null;
   const audioBriefingAivisModels = aivisModelsData?.models ?? [];
   const audioBriefingXAIVoices = xaiVoicesData?.voices ?? [];
+  const audioBriefingElevenLabsVoices = elevenLabsVoicesData?.voices ?? [];
   const audioBriefingOpenAITTSVoices = openAITTSVoicesData?.voices ?? [];
   const audioBriefingGeminiTTSVoices = geminiTTSVoicesData?.voices ?? [];
   const summaryAudioAivisModels = audioBriefingAivisModels;
   const summaryAudioXAIVoices = audioBriefingXAIVoices;
+  const summaryAudioElevenLabsVoices = audioBriefingElevenLabsVoices;
   const summaryAudioOpenAITTSVoices = audioBriefingOpenAITTSVoices;
   const summaryAudioGeminiTTSVoices = audioBriefingGeminiTTSVoices;
   const hasUserAivisAPIKey = Boolean(settings?.has_aivis_api_key);
   const hasUserFishAPIKey = Boolean(settings?.has_fish_api_key);
   const hasUserXAIAPIKey = Boolean(settings?.has_xai_api_key);
+  const hasUserElevenLabsAPIKey = Boolean(settings?.has_elevenlabs_api_key);
   const hasUserOpenAIAPIKey = Boolean(settings?.has_openai_api_key);
   const geminiTTSEnabled = Boolean(settings?.gemini_tts_enabled);
   const summaryAudioProviderCapabilities = getAudioBriefingProviderCapabilities(summaryAudioProvider);
@@ -4783,8 +5295,10 @@ export default function SettingsPage() {
     : summaryAudioProvider === "fish"
       ? null
       : summaryAudioProvider === "xai"
-      ? resolveXAIVoiceSelection(summaryAudioXAIVoices, { voice_model: summaryAudioVoiceModel })
-      : summaryAudioProvider === "openai"
+        ? resolveXAIVoiceSelection(summaryAudioXAIVoices, { voice_model: summaryAudioVoiceModel })
+        : summaryAudioProvider === "elevenlabs"
+          ? resolveElevenLabsVoiceSelection(summaryAudioElevenLabsVoices, { voice_model: summaryAudioVoiceModel })
+        : summaryAudioProvider === "openai"
         ? resolveOpenAITTSVoiceSelection(summaryAudioOpenAITTSVoices, { voice_model: summaryAudioVoiceModel })
         : summaryAudioProvider === "gemini_tts"
           ? resolveGeminiTTSVoiceSelection(summaryAudioGeminiTTSVoices, { voice_model: summaryAudioVoiceModel })
@@ -4794,6 +5308,9 @@ export default function SettingsPage() {
     : null;
   const summaryAudioResolvedXAIVoice = summaryAudioProvider === "xai"
     ? (summaryAudioResolvedVoice as XAIVoiceSnapshot | null)
+    : null;
+  const summaryAudioResolvedElevenLabsVoice = summaryAudioProvider === "elevenlabs"
+    ? (summaryAudioResolvedVoice as ElevenLabsVoiceCatalogEntry | null)
     : null;
   const summaryAudioResolvedFishVoice = summaryAudioProvider === "fish"
     ? (summaryAudioResolvedVoice as FishModelSnapshot | null)
@@ -4812,6 +5329,8 @@ export default function SettingsPage() {
         ? null
       : voice.tts_provider === "xai"
         ? resolveXAIVoiceSelection(audioBriefingXAIVoices, voice)
+        : voice.tts_provider === "elevenlabs"
+          ? resolveElevenLabsVoiceSelection(audioBriefingElevenLabsVoices, voice)
         : voice.tts_provider === "openai"
           ? resolveOpenAITTSVoiceSelection(audioBriefingOpenAITTSVoices, voice)
           : voice.tts_provider === "gemini_tts"
@@ -4824,11 +5343,14 @@ export default function SettingsPage() {
       audioBriefingXAIVoices,
       audioBriefingOpenAITTSVoices,
       audioBriefingGeminiTTSVoices,
+      audioBriefingElevenLabsVoices,
       hasUserAivisAPIKey,
       hasUserFishAPIKey,
       hasUserXAIAPIKey,
       hasUserOpenAIAPIKey,
+      hasUserElevenLabsAPIKey,
       geminiTTSEnabled,
+      audioBriefingConversationMode,
       t
     ),
   }));
@@ -4846,6 +5368,8 @@ export default function SettingsPage() {
           ? summaryAudioResolvedOpenAIVoice?.name || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
           : summaryAudioProvider === "gemini_tts"
             ? summaryAudioResolvedGeminiVoice?.label || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
+            : summaryAudioProvider === "elevenlabs"
+              ? summaryAudioResolvedElevenLabsVoice?.name || summaryAudioProviderVoiceLabel || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
             : summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort");
   const summaryAudioResolvedVoiceDetail =
     summaryAudioProvider === "aivis"
@@ -4860,6 +5384,8 @@ export default function SettingsPage() {
           ? summaryAudioResolvedOpenAIVoice?.description || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
           : summaryAudioProvider === "gemini_tts"
             ? summaryAudioResolvedGeminiVoice?.description || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
+            : summaryAudioProvider === "elevenlabs"
+              ? summaryAudioResolvedElevenLabsVoice?.description || summaryAudioProviderVoiceDescription || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort")
             : summaryAudioVoiceStyle || summaryAudioVoiceModel || t("settings.summaryAudio.unsetShort");
   const audioBriefingUsesAivisCloud = audioBriefingVoices.some((voice) => voice.tts_provider === "aivis");
   const audioBriefingNeedsAivisAPIKey = audioBriefingUsesAivisCloud && !hasUserAivisAPIKey;
@@ -4867,6 +5393,8 @@ export default function SettingsPage() {
   const audioBriefingNeedsFishAPIKey = audioBriefingUsesFish && !hasUserFishAPIKey;
   const audioBriefingUsesXAI = audioBriefingVoices.some((voice) => voice.tts_provider === "xai");
   const audioBriefingNeedsXAIAPIKey = audioBriefingUsesXAI && !hasUserXAIAPIKey;
+  const audioBriefingUsesElevenLabs = audioBriefingVoices.some((voice) => voice.tts_provider === "elevenlabs");
+  const audioBriefingNeedsElevenLabsAPIKey = audioBriefingUsesElevenLabs && !hasUserElevenLabsAPIKey;
   const audioBriefingUsesOpenAI = audioBriefingVoices.some((voice) => voice.tts_provider === "openai");
   const audioBriefingNeedsOpenAIAPIKey = audioBriefingUsesOpenAI && !hasUserOpenAIAPIKey;
   const audioBriefingUsesGeminiTTS = audioBriefingVoices.some((voice) => voice.tts_provider === "gemini_tts");
@@ -4888,6 +5416,11 @@ export default function SettingsPage() {
   );
   const fishDuoDistinctVoiceCount = new Set(fishDuoCompatibleVoices.map((voice) => voice.voice_model.trim())).size;
   const fishDuoReady = hasUserFishAPIKey && fishDuoDistinctVoiceCount >= 2;
+  const elevenLabsDuoCompatibleVoices = audioBriefingVoices.filter((voice) =>
+    voice.tts_provider === "elevenlabs" && voice.tts_model === "eleven_v3" && voice.voice_model.trim().length > 0
+  );
+  const elevenLabsDuoDistinctVoiceCount = new Set(elevenLabsDuoCompatibleVoices.map((voice) => voice.voice_model.trim())).size;
+  const elevenLabsDuoReady = hasUserElevenLabsAPIKey && elevenLabsDuoDistinctVoiceCount >= 2;
 
   const sectionNavItems: Array<{
     id: SettingsSectionID;
@@ -5449,6 +5982,31 @@ export default function SettingsPage() {
                             : t("settings.audioBriefing.fishDuoNeedsSetupDetail")}
                         </p>
                       </div>
+                      <div
+                        className={`rounded-[18px] border px-4 py-4 ${
+                          elevenLabsDuoReady
+                            ? "border-[rgba(34,197,94,0.24)] bg-[rgba(240,253,244,0.82)]"
+                            : "border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)]"
+                        }`}
+                      >
+                        <div
+                          className={`text-[11px] font-semibold uppercase tracking-[0.14em] ${
+                            elevenLabsDuoReady ? "text-[#166534]" : "text-[#b45309]"
+                          }`}
+                        >
+                          {elevenLabsDuoReady
+                            ? t("settings.audioBriefing.elevenlabsDuoReadyTitle")
+                            : t("settings.audioBriefing.elevenlabsDuoNeedsSetupTitle")}
+                        </div>
+                        <p className={`mt-2 text-sm leading-6 ${elevenLabsDuoReady ? "text-[#166534]" : "text-[#b45309]"}`}>
+                          {elevenLabsDuoReady
+                            ? tWithVars(t, "settings.audioBriefing.elevenlabsDuoReadyDetail", {
+                                count: elevenLabsDuoDistinctVoiceCount,
+                                model: "eleven_v3",
+                              })
+                            : t("settings.audioBriefing.elevenlabsDuoNeedsSetupDetail")}
+                        </p>
+                      </div>
                     </div>
                   ) : null}
                 </form>
@@ -5666,6 +6224,12 @@ export default function SettingsPage() {
                     </div>
                   ) : null}
 
+                  {elevenLabsVoicesError ? (
+                    <div className="rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-3 text-sm text-[#b45309]">
+                      {elevenLabsVoicesError}
+                    </div>
+                  ) : null}
+
                   {geminiTTSVoicesError ? (
                     <div className="rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-3 text-sm text-[#b45309]">
                       {geminiTTSVoicesError}
@@ -5720,6 +6284,25 @@ export default function SettingsPage() {
                     </div>
                   ) : null}
 
+                  {audioBriefingNeedsElevenLabsAPIKey ? (
+                    <div className="flex flex-col gap-3 rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-4 text-sm text-[#b45309] lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <div className="font-semibold">{t("settings.audioBriefing.elevenlabsApiKeyWarningTitle")}</div>
+                        <div className="mt-1 leading-6">{t("settings.audioBriefing.elevenlabsApiKeyWarningDetail")}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveSection("system");
+                          setActiveAccessProvider("elevenlabs");
+                        }}
+                        className="inline-flex min-h-10 items-center justify-center rounded-full border border-[rgba(180,83,9,0.22)] bg-white px-4 py-2 text-sm font-medium text-[#92400e] hover:bg-[rgba(255,255,255,0.72)]"
+                      >
+                        {t("settings.audioBriefing.openApiKeys")}
+                      </button>
+                    </div>
+                  ) : null}
+
                   {audioBriefingNeedsOpenAIAPIKey ? (
                     <div className="flex flex-col gap-3 rounded-[16px] border border-[rgba(245,158,11,0.28)] bg-[rgba(255,251,235,0.85)] px-4 py-4 text-sm text-[#b45309] lg:flex-row lg:items-center lg:justify-between">
                       <div>
@@ -5755,8 +6338,10 @@ export default function SettingsPage() {
                       const isXAIProvider = voice.tts_provider === "xai";
                       const isOpenAIProvider = voice.tts_provider === "openai";
                       const isGeminiProvider = voice.tts_provider === "gemini_tts";
+                      const isElevenLabsProvider = voice.tts_provider === "elevenlabs";
                       const aivisResolved = isAivisProvider ? resolveAivisVoiceSelection(audioBriefingAivisModels, voice) : null;
                       const xaiResolved = isXAIProvider ? resolveXAIVoiceSelection(audioBriefingXAIVoices, voice) : null;
+                      const elevenLabsResolved = isElevenLabsProvider ? resolveElevenLabsVoiceSelection(audioBriefingElevenLabsVoices, voice) : null;
                       const openAIResolved = isOpenAIProvider ? resolveOpenAITTSVoiceSelection(audioBriefingOpenAITTSVoices, voice) : null;
                       const geminiResolved = isGeminiProvider ? resolveGeminiTTSVoiceSelection(audioBriefingGeminiTTSVoices, voice) : null;
                       const selectedVoiceLabel = isAivisProvider
@@ -5765,10 +6350,12 @@ export default function SettingsPage() {
                           ? voice.provider_voice_label || voice.voice_model || t("settings.audioBriefing.unsetShort")
                         : isXAIProvider
                           ? xaiResolved?.name || voice.voice_model || t("settings.audioBriefing.unsetShort")
-                          : isOpenAIProvider
-                            ? openAIResolved?.name || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                        : isOpenAIProvider
+                          ? openAIResolved?.name || voice.voice_model || t("settings.audioBriefing.unsetShort")
                             : isGeminiProvider
                               ? geminiResolved?.label || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                            : isElevenLabsProvider
+                              ? elevenLabsResolved?.name || voice.provider_voice_label || voice.voice_model || t("settings.audioBriefing.unsetShort")
                             : voice.voice_model || t("settings.audioBriefing.unsetShort");
                       const selectedVoiceDetail = isAivisProvider
                         ? (aivisResolved?.speaker && aivisResolved?.style
@@ -5782,6 +6369,8 @@ export default function SettingsPage() {
                             ? openAIResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
                             : isGeminiProvider
                               ? geminiResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                            : isElevenLabsProvider
+                              ? elevenLabsResolved?.description || voice.provider_voice_description || voice.voice_model || t("settings.audioBriefing.unsetShort")
                             : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort");
                       const toneClasses = status.tone === "ok"
                         ? "border-[rgba(34,197,94,0.28)] bg-[rgba(240,253,244,0.72)]"
@@ -5823,7 +6412,7 @@ export default function SettingsPage() {
 
                             <div className="flex min-w-[180px] flex-1 flex-wrap items-center gap-2 text-[12px] text-[var(--color-editorial-ink-soft)]">
                               <span className="rounded-full border border-[var(--color-editorial-line)] bg-white px-2.5 py-1">
-                                {voice.tts_provider}
+                                {formatTTSProviderLabel(voice.tts_provider, t)}
                               </span>
                               <span className="rounded-full border border-[var(--color-editorial-line)] bg-white px-2.5 py-1">
                                 {selectedVoiceLabel}
@@ -5864,10 +6453,11 @@ export default function SettingsPage() {
                                       hasUserXAIAPIKey || voice.tts_provider === "xai" ? "xai" : null,
                                       hasUserOpenAIAPIKey || voice.tts_provider === "openai" ? "openai" : null,
                                       geminiTTSEnabled || voice.tts_provider === "gemini_tts" ? "gemini_tts" : null,
+                                      "elevenlabs",
                                       "mock",
                                     ].filter(Boolean) as string[])).map((provider) => (
                                       <option key={`${voice.persona}-${provider}`} value={provider}>
-                                        {provider === "fish" ? t("settings.audioBriefing.provider.fish") : provider}
+                                        {formatTTSProviderLabel(provider, t)}
                                       </option>
                                     ))}
                                   </select>
@@ -5878,7 +6468,9 @@ export default function SettingsPage() {
                                   <div className="flex flex-wrap items-start justify-between gap-3">
                                     <div>
                                       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                                        {t("settings.audioBriefing.voiceModel")}
+                                        {isElevenLabsProvider
+                                          ? t("settings.audioBriefing.elevenlabsVoice")
+                                          : t("settings.audioBriefing.voiceModel")}
                                       </div>
                                       <div className="mt-3 text-sm font-semibold text-[var(--color-editorial-ink)]">
                                         {isAivisProvider
@@ -5887,11 +6479,13 @@ export default function SettingsPage() {
                                             ? voice.provider_voice_label || voice.voice_model || t("settings.audioBriefing.fishVoiceEmpty")
                                             : isXAIProvider
                                               ? xaiResolved?.name ?? t("settings.audioBriefing.xaiVoiceEmpty")
-                                              : isOpenAIProvider
-                                                ? openAIResolved?.name ?? t("settings.audioBriefing.openAITTSVoiceEmpty")
-                                                : isGeminiProvider
-                                                  ? geminiResolved?.label ?? t("settings.audioBriefing.geminiTTSVoiceEmpty")
-                                                  : voice.voice_model || t("settings.audioBriefing.unsetShort")}
+                                            : isOpenAIProvider
+                                              ? openAIResolved?.name ?? t("settings.audioBriefing.openAITTSVoiceEmpty")
+                                              : isGeminiProvider
+                                                ? geminiResolved?.label ?? t("settings.audioBriefing.geminiTTSVoiceEmpty")
+                                                : isElevenLabsProvider
+                                                  ? elevenLabsResolved?.name || voice.provider_voice_label || voice.voice_model || t("settings.audioBriefing.elevenlabsVoiceEmpty")
+                                                : voice.voice_model || t("settings.audioBriefing.unsetShort")}
                                       </div>
                                       <div className="mt-1 text-[12px] text-[var(--color-editorial-ink-soft)]">
                                         {isAivisProvider
@@ -5902,11 +6496,13 @@ export default function SettingsPage() {
                                             ? voice.provider_voice_description || voice.voice_model || t("settings.audioBriefing.unsetShort")
                                             : isXAIProvider
                                               ? xaiResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
-                                              : isOpenAIProvider
-                                                ? openAIResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
-                                                : isGeminiProvider
-                                                  ? geminiResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
-                                                  : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort")}
+                                          : isOpenAIProvider
+                                            ? openAIResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                                            : isGeminiProvider
+                                              ? geminiResolved?.description || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                                              : isElevenLabsProvider
+                                                ? elevenLabsResolved?.description || voice.provider_voice_description || voice.voice_model || t("settings.audioBriefing.unsetShort")
+                                            : voice.voice_style || voice.voice_model || t("settings.audioBriefing.unsetShort")}
                                       </div>
                                     </div>
                                   </div>
@@ -5953,6 +6549,15 @@ export default function SettingsPage() {
                                       className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
                                     >
                                       {t("settings.audioBriefing.pickGeminiTTSVoice")}
+                                    </button>
+                                  ) : providerCapabilities.supportsCatalogPicker && isElevenLabsProvider ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => void openElevenLabsPicker(voice.persona)}
+                                      disabled={!hasUserElevenLabsAPIKey && !audioBriefingElevenLabsVoices.length}
+                                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      {t("settings.audioBriefing.pickElevenLabsVoice")}
                                     </button>
                                   ) : null}
                                 </div>
@@ -6034,6 +6639,29 @@ export default function SettingsPage() {
                                     </div>
                                     <div className="mt-1 text-[12px] text-[var(--color-editorial-ink-soft)]">
                                       {geminiResolved?.description || voice.voice_model || t("settings.audioBriefing.geminiTTSVoiceEmpty")}
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : isElevenLabsProvider ? (
+                                <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.85fr)]">
+                                  <ModelSelect
+                                    key={`audio-briefing-elevenlabs-tts-model-${voice.persona}-${voice.tts_provider}`}
+                                    label={t("settings.audioBriefing.elevenlabsTTSModel")}
+                                    value={voice.tts_model}
+                                    onChange={(value) => updateAudioBriefingVoice(voice.persona, { tts_model: value })}
+                                    options={buildElevenLabsTTSModelOptions(voice.tts_model)}
+                                    labels={modelSelectLabels}
+                                    variant="modal"
+                                  />
+                                  <div className="rounded-[16px] border border-[var(--color-editorial-line)] bg-white p-4">
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+                                      {t("settings.audioBriefing.elevenlabsVoice")}
+                                    </div>
+                                    <div className="mt-2 text-sm font-semibold text-[var(--color-editorial-ink)]">
+                                      {elevenLabsResolved?.name || voice.provider_voice_label || t("settings.audioBriefing.elevenlabsVoiceEmpty")}
+                                    </div>
+                                    <div className="mt-1 text-[12px] text-[var(--color-editorial-ink-soft)]">
+                                      {elevenLabsResolved?.description || voice.provider_voice_description || voice.voice_model || t("settings.audioBriefing.elevenlabsVoiceEmpty")}
                                     </div>
                                   </div>
                                 </div>
@@ -6489,6 +7117,7 @@ export default function SettingsPage() {
                       <option value="xai">{t("settings.summaryAudio.provider.xai")}</option>
                       <option value="openai">{t("settings.summaryAudio.provider.openai")}</option>
                       <option value="gemini_tts">{t("settings.summaryAudio.provider.gemini_tts")}</option>
+                      <option value="elevenlabs">{t("settings.summaryAudio.provider.elevenlabs")}</option>
                     </select>
                   </label>
 
@@ -6501,6 +7130,8 @@ export default function SettingsPage() {
                       options={
                         summaryAudioProvider === "fish"
                           ? buildFishTTSModelOptions(summaryAudioTTSModel)
+                          : summaryAudioProvider === "elevenlabs"
+                            ? buildElevenLabsTTSModelOptions(summaryAudioTTSModel)
                           : summaryAudioProvider === "openai"
                             ? buildOpenAITTSModelOptions(summaryAudioTTSModel)
                             : buildGeminiTTSModelOptions(summaryAudioTTSModel)
@@ -6511,10 +7142,14 @@ export default function SettingsPage() {
                   ) : (
                     <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                        {t("settings.summaryAudio.voiceModel")}
+                        {summaryAudioProvider === "elevenlabs"
+                          ? t("settings.summaryAudio.elevenlabsVoice")
+                          : t("settings.summaryAudio.voiceModel")}
                       </div>
                       <div className="mt-2 text-sm text-[var(--color-editorial-ink-soft)]">
-                        {t("settings.summaryAudio.voiceModelHelp")}
+                        {summaryAudioProvider === "elevenlabs"
+                          ? t("settings.summaryAudio.elevenlabsVoiceHelp")
+                          : t("settings.summaryAudio.voiceModelHelp")}
                       </div>
                     </div>
                   )}
@@ -6522,7 +7157,9 @@ export default function SettingsPage() {
 
                 <label className="flex flex-col rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                    {t("settings.summaryAudio.voiceModel")}
+                    {summaryAudioProvider === "elevenlabs"
+                      ? t("settings.summaryAudio.elevenlabsVoice")
+                      : t("settings.summaryAudio.voiceModel")}
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <div className="rounded-[12px] border border-[var(--color-editorial-line)] bg-white px-3 py-2.5 text-sm text-[var(--color-editorial-ink)]">
@@ -6538,6 +7175,11 @@ export default function SettingsPage() {
                           }
                         } else if (summaryAudioProvider === "fish") {
                           setSummaryAudioFishPickerOpen(true);
+                        } else if (summaryAudioProvider === "elevenlabs") {
+                          setSummaryAudioElevenLabsPickerOpen(true);
+                          if (elevenLabsVoicesData == null) {
+                            void loadElevenLabsVoices().catch(() => undefined);
+                          }
                         } else if (summaryAudioProvider === "xai") {
                           setSummaryAudioXAIPickerOpen(true);
                           if (xaiVoicesData == null) {
@@ -6555,17 +7197,20 @@ export default function SettingsPage() {
                           }
                         }
                       }}
-                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)]"
+                      disabled={summaryAudioProvider === "elevenlabs" && !hasUserElevenLabsAPIKey && !summaryAudioElevenLabsVoices.length}
+                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {summaryAudioProvider === "aivis"
                         ? t("settings.audioBriefing.pickAivisVoice")
                         : summaryAudioProvider === "fish"
                           ? t("settings.audioBriefing.pickFishVoice")
-                        : summaryAudioProvider === "xai"
-                          ? t("settings.audioBriefing.pickXaiVoice")
-                          : summaryAudioProvider === "openai"
-                            ? t("settings.audioBriefing.pickOpenAITTSVoice")
-                            : t("settings.audioBriefing.pickGeminiTTSVoice")}
+                          : summaryAudioProvider === "elevenlabs"
+                            ? t("settings.summaryAudio.pickElevenLabsVoice")
+                            : summaryAudioProvider === "xai"
+                              ? t("settings.audioBriefing.pickXaiVoice")
+                              : summaryAudioProvider === "openai"
+                                ? t("settings.audioBriefing.pickOpenAITTSVoice")
+                                : t("settings.audioBriefing.pickGeminiTTSVoice")}
                     </button>
                   </div>
                   <div className="mt-3 text-[12px] leading-5 text-[var(--color-editorial-ink-soft)]">{summaryAudioResolvedVoiceDetail}</div>
@@ -7674,6 +8319,27 @@ export default function SettingsPage() {
         }}
       />
 
+      <ElevenLabsVoicePickerModalExternal
+        open={Boolean(elevenLabsPickerPersona)}
+        loading={elevenLabsVoicesLoading}
+        error={elevenLabsVoicesError}
+        voices={audioBriefingElevenLabsVoices}
+        currentVoiceID={activeElevenLabsVoice?.voice_model ?? ""}
+        onClose={() => setElevenLabsPickerPersona(null)}
+        onRefresh={() => {
+          void loadElevenLabsVoices().catch(() => undefined);
+        }}
+        onSelect={(selection) => {
+          if (!elevenLabsPickerPersona) return;
+          updateAudioBriefingVoice(elevenLabsPickerPersona, {
+            voice_model: selection.voice_id,
+            voice_style: "",
+            provider_voice_label: selection.label,
+            provider_voice_description: selection.description,
+          });
+        }}
+      />
+
       <GeminiTTSVoicePickerModal
         open={Boolean(geminiTTSPickerPersona)}
         loading={geminiTTSVoicesLoading}
@@ -7727,6 +8393,24 @@ export default function SettingsPage() {
           setSummaryAudioVoiceStyle("");
           setSummaryAudioProviderVoiceLabel(selection.provider_voice_label);
           setSummaryAudioProviderVoiceDescription(selection.provider_voice_description);
+        }}
+      />
+
+      <ElevenLabsVoicePickerModalExternal
+        open={summaryAudioElevenLabsPickerOpen}
+        loading={elevenLabsVoicesLoading}
+        error={elevenLabsVoicesError}
+        voices={summaryAudioElevenLabsVoices}
+        currentVoiceID={summaryAudioVoiceModel}
+        onClose={() => setSummaryAudioElevenLabsPickerOpen(false)}
+        onRefresh={() => {
+          void loadElevenLabsVoices().catch(() => undefined);
+        }}
+        onSelect={(selection) => {
+          setSummaryAudioVoiceModel(selection.voice_id);
+          setSummaryAudioVoiceStyle("");
+          setSummaryAudioProviderVoiceLabel(selection.label);
+          setSummaryAudioProviderVoiceDescription(selection.description);
         }}
       />
 

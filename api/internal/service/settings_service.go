@@ -65,6 +65,8 @@ type SettingsGetPayload struct {
 	AivisAPIKeyLast4        *string          `json:"aivis_api_key_last4,omitempty"`
 	HasFishAudioAPIKey      bool             `json:"has_fish_api_key"`
 	FishAudioAPIKeyLast4    *string          `json:"fish_api_key_last4,omitempty"`
+	HasElevenLabsAPIKey     bool             `json:"has_elevenlabs_api_key"`
+	ElevenLabsAPIKeyLast4   *string          `json:"elevenlabs_api_key_last4,omitempty"`
 	AivisUserDictionaryUUID *string          `json:"aivis_user_dictionary_uuid,omitempty"`
 	GeminiTTSEnabled        bool             `json:"gemini_tts_enabled"`
 	Podcast                 map[string]any   `json:"podcast"`
@@ -574,6 +576,8 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		AivisAPIKeyLast4:        settings.AivisAPIKeyLast4,
 		HasFishAudioAPIKey:      settings.HasFishAudioAPIKey,
 		FishAudioAPIKeyLast4:    settings.FishAudioAPIKeyLast4,
+		HasElevenLabsAPIKey:     settings.HasElevenLabsAPIKey,
+		ElevenLabsAPIKeyLast4:   settings.ElevenLabsAPIKeyLast4,
 		AivisUserDictionaryUUID: settings.AivisUserDictionaryUUID,
 		GeminiTTSEnabled:        GeminiTTSEnabledForUser(ctx, s.userRepo, userID),
 		Podcast:                 PodcastSettingsPayload(settings),
@@ -732,7 +736,7 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 		providerVoiceLabel := strings.TrimSpace(row.ProviderVoiceLabel)
 		providerVoiceDescription := strings.TrimSpace(row.ProviderVoiceDescription)
 		switch provider {
-		case "aivis", "mock", "xai", "openai", "gemini_tts", "fish":
+		case "aivis", "mock", "xai", "openai", "gemini_tts", "fish", "elevenlabs":
 		default:
 			return nil, fmt.Errorf("invalid tts_provider for %s", persona)
 		}
@@ -842,7 +846,7 @@ func normalizeSummaryAudioVoiceSettingsInput(in UpdateSummaryAudioVoiceSettingsI
 		return &model.SummaryAudioVoiceSettings{}, nil
 	}
 	switch provider {
-	case "aivis", "mock", "xai", "openai", "gemini_tts", "fish":
+	case "aivis", "mock", "xai", "openai", "gemini_tts", "fish", "elevenlabs":
 	default:
 		return nil, fmt.Errorf("invalid tts_provider")
 	}
@@ -1421,6 +1425,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetAivisAPIKey(ctx, userID, enc, last4)
 	case "fish":
 		return s.repo.SetFishAudioAPIKey(ctx, userID, enc, last4)
+	case "elevenlabs":
+		return s.repo.SetElevenLabsAPIKey(ctx, userID, enc, last4)
 	default:
 		return nil, fmt.Errorf("unsupported provider")
 	}
@@ -1460,6 +1466,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearAivisAPIKey(ctx, userID)
 	case "fish":
 		return s.repo.ClearFishAudioAPIKey(ctx, userID)
+	case "elevenlabs":
+		return s.repo.ClearElevenLabsAPIKey(ctx, userID)
 	default:
 		return nil, fmt.Errorf("unsupported provider")
 	}

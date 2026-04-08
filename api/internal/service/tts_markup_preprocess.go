@@ -13,15 +13,19 @@ import (
 )
 
 const (
-	fishSummaryPreprocessPromptKey               = "fish.summary_preprocess"
-	fishAudioBriefingSinglePreprocessPromptKey   = "fish.audio_briefing_single_preprocess"
-	fishAudioBriefingDuoPreprocessPromptKey      = "fish.audio_briefing_duo_preprocess"
-	geminiSummaryPreprocessPromptKey             = "gemini.summary_preprocess"
-	geminiAudioBriefingSinglePreprocessPromptKey = "gemini.audio_briefing_single_preprocess"
-	geminiAudioBriefingDuoPreprocessPromptKey    = "gemini.audio_briefing_duo_preprocess"
-	fishPreprocessPurpose                        = "fish_preprocess"
-	geminiTTSPreprocessPurpose                   = "gemini_tts_preprocess"
-	fishPreprocessPromptSource                   = "shared_template"
+	fishSummaryPreprocessPromptKey                   = "fish.summary_preprocess"
+	fishAudioBriefingSinglePreprocessPromptKey       = "fish.audio_briefing_single_preprocess"
+	fishAudioBriefingDuoPreprocessPromptKey          = "fish.audio_briefing_duo_preprocess"
+	geminiSummaryPreprocessPromptKey                 = "gemini.summary_preprocess"
+	geminiAudioBriefingSinglePreprocessPromptKey     = "gemini.audio_briefing_single_preprocess"
+	geminiAudioBriefingDuoPreprocessPromptKey        = "gemini.audio_briefing_duo_preprocess"
+	elevenLabsSummaryPreprocessPromptKey             = "elevenlabs.summary_preprocess"
+	elevenLabsAudioBriefingSinglePreprocessPromptKey = "elevenlabs.audio_briefing_single_preprocess"
+	elevenLabsAudioBriefingDuoPreprocessPromptKey    = "elevenlabs.audio_briefing_duo_preprocess"
+	fishPreprocessPurpose                            = "fish_preprocess"
+	geminiTTSPreprocessPurpose                       = "gemini_tts_preprocess"
+	elevenLabsTTSPreprocessPurpose                   = "elevenlabs_tts_preprocess"
+	fishPreprocessPromptSource                       = "shared_template"
 )
 
 var (
@@ -193,29 +197,41 @@ func (s *TTSMarkupPreprocessService) loadProviderKey(ctx context.Context, userID
 }
 
 func summaryPreprocessPromptKeyForProvider(provider string) string {
-	if strings.EqualFold(strings.TrimSpace(provider), "gemini_tts") {
+	switch strings.TrimSpace(strings.ToLower(provider)) {
+	case "gemini_tts":
 		return geminiSummaryPreprocessPromptKey
+	case "elevenlabs":
+		return elevenLabsSummaryPreprocessPromptKey
 	}
 	return fishSummaryPreprocessPromptKey
 }
 
 func audioBriefingSinglePreprocessPromptKeyForProvider(provider string) string {
-	if strings.EqualFold(strings.TrimSpace(provider), "gemini_tts") {
+	switch strings.TrimSpace(strings.ToLower(provider)) {
+	case "gemini_tts":
 		return geminiAudioBriefingSinglePreprocessPromptKey
+	case "elevenlabs":
+		return elevenLabsAudioBriefingSinglePreprocessPromptKey
 	}
 	return fishAudioBriefingSinglePreprocessPromptKey
 }
 
 func audioBriefingDuoPreprocessPromptKeyForProvider(provider string) string {
-	if strings.EqualFold(strings.TrimSpace(provider), "gemini_tts") {
+	switch strings.TrimSpace(strings.ToLower(provider)) {
+	case "gemini_tts":
 		return geminiAudioBriefingDuoPreprocessPromptKey
+	case "elevenlabs":
+		return elevenLabsAudioBriefingDuoPreprocessPromptKey
 	}
 	return fishAudioBriefingDuoPreprocessPromptKey
 }
 
 func preprocessPurposeForPromptKey(promptKey string) string {
-	if strings.HasPrefix(strings.TrimSpace(promptKey), "gemini.") {
+	switch {
+	case strings.HasPrefix(strings.TrimSpace(promptKey), "gemini."):
 		return geminiTTSPreprocessPurpose
+	case strings.HasPrefix(strings.TrimSpace(promptKey), "elevenlabs."):
+		return elevenLabsTTSPreprocessPurpose
 	}
 	return fishPreprocessPurpose
 }

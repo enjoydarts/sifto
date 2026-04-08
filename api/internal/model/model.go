@@ -55,6 +55,8 @@ type UserSettings struct {
 	HasAivisAPIKey                   bool       `json:"has_aivis_api_key"`
 	FishAudioAPIKeyLast4             *string    `json:"fish_api_key_last4,omitempty"`
 	HasFishAudioAPIKey               bool       `json:"has_fish_api_key"`
+	ElevenLabsAPIKeyLast4            *string    `json:"elevenlabs_api_key_last4,omitempty"`
+	HasElevenLabsAPIKey              bool       `json:"has_elevenlabs_api_key"`
 	AivisUserDictionaryUUID          *string    `json:"aivis_user_dictionary_uuid,omitempty"`
 	PodcastEnabled                   bool       `json:"podcast_enabled"`
 	PodcastFeedSlug                  *string    `json:"podcast_feed_slug,omitempty"`

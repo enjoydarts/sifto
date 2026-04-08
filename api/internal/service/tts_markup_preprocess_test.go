@@ -513,3 +513,250 @@ func TestTTSMarkupPreprocessGeminiPromptUsesGeminiPurpose(t *testing.T) {
 		t.Fatalf("prompt_key = %q, want %q", promptKey, geminiSummaryPreprocessPromptKey)
 	}
 }
+
+func TestTTSMarkupPreprocessElevenLabsPromptUsesElevenLabsPurpose(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "tts-markup-preprocess-elevenlabs-purpose-test-key")
+	db, err := repository.NewPool(context.Background())
+	if err != nil {
+		t.Fatalf("NewPool() error = %v", err)
+	}
+	t.Cleanup(db.Close)
+	lockSettingsServiceTestDB(t, db)
+
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000027"
+	if _, err := db.Exec(ctx, `DELETE FROM llm_usage_logs WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset llm_usage_logs: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM user_settings WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset user_settings: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("reset users: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, $3)`, userID, "tts-markup-preprocess-elevenlabs@example.com", "TTS Markup Preprocess"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	repo := repository.NewUserSettingsRepo(db)
+	modelName := strptr("openrouter::openai/gpt-5.4-mini")
+	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
+		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
+		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+	); err != nil {
+		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
+	}
+	cipher := NewSecretCipher()
+	enc, err := cipher.EncryptString("openrouter-secret")
+	if err != nil {
+		t.Fatalf("EncryptString(openrouter): %v", err)
+	}
+	if _, err := repo.SetOpenRouterAPIKey(ctx, userID, enc, "cret"); err != nil {
+		t.Fatalf("SetOpenRouterAPIKey() error = %v", err)
+	}
+
+	worker := &ttsMarkupPreprocessWorkerStub{
+		response: &TTSMarkupPreprocessResponse{
+			Text: "[自然に] テスト",
+			LLM: &LLMUsage{
+				Provider:           "openrouter",
+				Model:              "openai/gpt-5.4-mini",
+				RequestedModel:     "openrouter::openai/gpt-5.4-mini",
+				ResolvedModel:      "openai/gpt-5.4-mini",
+				PricingModelFamily: "openrouter",
+				PricingSource:      "openrouter",
+				InputTokens:        10,
+				OutputTokens:       4,
+				EstimatedCostUSD:   0.001,
+			},
+		},
+	}
+	service := NewTTSMarkupPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
+
+	if _, err := service.PreprocessSummaryAudioTextForProvider(ctx, userID, "", "elevenlabs", "元テキスト"); err != nil {
+		t.Fatalf("PreprocessSummaryAudioTextForProvider() error = %v", err)
+	}
+
+	var (
+		purpose   string
+		promptKey string
+	)
+	if err := db.QueryRow(ctx, `SELECT purpose, prompt_key FROM llm_usage_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`, userID).Scan(&purpose, &promptKey); err != nil {
+		t.Fatalf("select llm_usage_logs: %v", err)
+	}
+	if purpose != elevenLabsTTSPreprocessPurpose {
+		t.Fatalf("purpose = %q, want %q", purpose, elevenLabsTTSPreprocessPurpose)
+	}
+	if promptKey != elevenLabsSummaryPreprocessPromptKey {
+		t.Fatalf("prompt_key = %q, want %q", promptKey, elevenLabsSummaryPreprocessPromptKey)
+	}
+}
+
+func TestTTSMarkupPreprocessElevenLabsAudioBriefingSingleUsesPromptKeyAndPersonaVariables(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "tts-markup-preprocess-elevenlabs-single-test-key")
+	db, err := repository.NewPool(context.Background())
+	if err != nil {
+		t.Fatalf("NewPool() error = %v", err)
+	}
+	t.Cleanup(db.Close)
+	lockSettingsServiceTestDB(t, db)
+
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000028"
+	if _, err := db.Exec(ctx, `DELETE FROM llm_usage_logs WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset llm_usage_logs: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM user_settings WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset user_settings: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("reset users: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, $3)`, userID, "tts-markup-preprocess-elevenlabs-single@example.com", "TTS Markup Preprocess"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	repo := repository.NewUserSettingsRepo(db)
+	modelName := strptr("openrouter::openai/gpt-5.4-mini")
+	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
+		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
+		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+	); err != nil {
+		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
+	}
+	cipher := NewSecretCipher()
+	enc, err := cipher.EncryptString("openrouter-secret")
+	if err != nil {
+		t.Fatalf("EncryptString(openrouter): %v", err)
+	}
+	if _, err := repo.SetOpenRouterAPIKey(ctx, userID, enc, "cret"); err != nil {
+		t.Fatalf("SetOpenRouterAPIKey() error = %v", err)
+	}
+
+	worker := &ttsMarkupPreprocessWorkerStub{}
+	worker.response = &TTSMarkupPreprocessResponse{
+		Text: "[自然に] テスト",
+		LLM: &LLMUsage{
+			Provider:           "openrouter",
+			Model:              "openai/gpt-5.4-mini",
+			RequestedModel:     "openrouter::openai/gpt-5.4-mini",
+			ResolvedModel:      "openai/gpt-5.4-mini",
+			PricingModelFamily: "openrouter",
+			PricingSource:      "openrouter",
+			InputTokens:        21,
+			OutputTokens:       8,
+			EstimatedCostUSD:   0.001,
+		},
+	}
+	service := NewTTSMarkupPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
+
+	if _, err := service.PreprocessAudioBriefingSingleTextForProvider(ctx, userID, "", "elevenlabs", "editor", "元テキスト"); err != nil {
+		t.Fatalf("PreprocessAudioBriefingSingleTextForProvider() error = %v", err)
+	}
+	if worker.gotPrompt != elevenLabsAudioBriefingSinglePreprocessPromptKey {
+		t.Fatalf("promptKey = %q, want %q", worker.gotPrompt, elevenLabsAudioBriefingSinglePreprocessPromptKey)
+	}
+	if got := worker.gotVars["persona_name"]; got != "editor" {
+		t.Fatalf("variables.persona_name = %q, want editor", got)
+	}
+
+	var (
+		purpose   string
+		promptKey string
+	)
+	if err := db.QueryRow(ctx, `SELECT purpose, prompt_key FROM llm_usage_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`, userID).Scan(&purpose, &promptKey); err != nil {
+		t.Fatalf("select llm_usage_logs: %v", err)
+	}
+	if purpose != elevenLabsTTSPreprocessPurpose {
+		t.Fatalf("purpose = %q, want %q", purpose, elevenLabsTTSPreprocessPurpose)
+	}
+	if promptKey != elevenLabsAudioBriefingSinglePreprocessPromptKey {
+		t.Fatalf("prompt_key = %q, want %q", promptKey, elevenLabsAudioBriefingSinglePreprocessPromptKey)
+	}
+}
+
+func TestTTSMarkupPreprocessElevenLabsAudioBriefingDuoUsesPersonaVariables(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "tts-markup-preprocess-elevenlabs-duo-test-key")
+	db, err := repository.NewPool(context.Background())
+	if err != nil {
+		t.Fatalf("NewPool() error = %v", err)
+	}
+	t.Cleanup(db.Close)
+	lockSettingsServiceTestDB(t, db)
+
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000029"
+	if _, err := db.Exec(ctx, `DELETE FROM llm_usage_logs WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset llm_usage_logs: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM user_settings WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset user_settings: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("reset users: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, $3)`, userID, "tts-markup-preprocess-elevenlabs-duo@example.com", "TTS Markup Preprocess"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	repo := repository.NewUserSettingsRepo(db)
+	modelName := strptr("openrouter::openai/gpt-5.4-mini")
+	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
+		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
+		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+	); err != nil {
+		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
+	}
+	cipher := NewSecretCipher()
+	enc, err := cipher.EncryptString("openrouter-secret")
+	if err != nil {
+		t.Fatalf("EncryptString(openrouter): %v", err)
+	}
+	if _, err := repo.SetOpenRouterAPIKey(ctx, userID, enc, "cret"); err != nil {
+		t.Fatalf("SetOpenRouterAPIKey() error = %v", err)
+	}
+
+	worker := &ttsMarkupPreprocessWorkerStub{}
+	worker.response = &TTSMarkupPreprocessResponse{
+		Text: "<|speaker:0|>[自然に] 冒頭<|speaker:1|>[少し柔らかく] 補足",
+		LLM: &LLMUsage{
+			Provider:           "openrouter",
+			Model:              "openai/gpt-5.4-mini",
+			RequestedModel:     "openrouter::openai/gpt-5.4-mini",
+			ResolvedModel:      "openai/gpt-5.4-mini",
+			PricingModelFamily: "openrouter",
+			PricingSource:      "openrouter",
+			InputTokens:        34,
+			OutputTokens:       13,
+			EstimatedCostUSD:   0.002,
+		},
+	}
+	service := NewTTSMarkupPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
+
+	if _, err := service.PreprocessAudioBriefingDuoTextForProvider(ctx, userID, "", "elevenlabs", "native", "analyst", "<|speaker:0|>冒頭<|speaker:1|>補足"); err != nil {
+		t.Fatalf("PreprocessAudioBriefingDuoTextForProvider() error = %v", err)
+	}
+	if worker.gotPrompt != elevenLabsAudioBriefingDuoPreprocessPromptKey {
+		t.Fatalf("promptKey = %q, want %q", worker.gotPrompt, elevenLabsAudioBriefingDuoPreprocessPromptKey)
+	}
+	if got := worker.gotVars["host_persona_name"]; got != "native" {
+		t.Fatalf("variables.host_persona_name = %q, want native", got)
+	}
+	if got := worker.gotVars["partner_persona_name"]; got != "analyst" {
+		t.Fatalf("variables.partner_persona_name = %q, want analyst", got)
+	}
+
+	var (
+		purpose   string
+		promptKey string
+	)
+	if err := db.QueryRow(ctx, `SELECT purpose, prompt_key FROM llm_usage_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`, userID).Scan(&purpose, &promptKey); err != nil {
+		t.Fatalf("select llm_usage_logs: %v", err)
+	}
+	if purpose != elevenLabsTTSPreprocessPurpose {
+		t.Fatalf("purpose = %q, want %q", purpose, elevenLabsTTSPreprocessPurpose)
+	}
+	if promptKey != elevenLabsAudioBriefingDuoPreprocessPromptKey {
+		t.Fatalf("prompt_key = %q, want %q", promptKey, elevenLabsAudioBriefingDuoPreprocessPromptKey)
+	}
+}

@@ -190,6 +190,44 @@ class SummaryAudioPlayerTests(unittest.TestCase):
         self.assertEqual(duration_sec, 5)
         self.assertEqual(resolved_text, "summary text")
 
+    def test_synthesize_uses_elevenlabs_provider(self):
+        service = summary_audio_player.SummaryAudioPlayerService()
+
+        with patch("app.services.summary_audio_player.synthesize_elevenlabs_tts", return_value=(b"audio", "audio/mpeg", ".mp3", 6)) as synth:
+            audio_base64, content_type, duration_sec, resolved_text = service.synthesize(
+                provider="elevenlabs",
+                voice_model="voice-1",
+                voice_style="",
+                tts_model="eleven_multilingual_v2",
+                text="summary text",
+                speech_rate=1.0,
+                emotional_intensity=1.0,
+                tempo_dynamics=1.0,
+                line_break_silence_seconds=0.4,
+                chunk_trailing_silence_seconds=1.25,
+                pitch=0.0,
+                volume_gain=0.0,
+                user_dictionary_uuid=None,
+                aivis_api_key=None,
+                google_api_key=None,
+                xai_api_key=None,
+                openai_api_key=None,
+                elevenlabs_api_key="eleven-key",
+            )
+
+        synth.assert_called_once_with(
+            endpoint=service.elevenlabs_tts_endpoint,
+            api_key="eleven-key",
+            model="eleven_multilingual_v2",
+            voice_id="voice-1",
+            text="summary text",
+            timeout_sec=service.elevenlabs_timeout_sec,
+        )
+        self.assertEqual(audio_base64, "YXVkaW8=")
+        self.assertEqual(content_type, "audio/mpeg")
+        self.assertEqual(duration_sec, 6)
+        self.assertEqual(resolved_text, "summary text")
+
     def test_synthesize_openai_tts_uses_current_openai_payload_shape(self):
         captured: dict[str, object] = {}
 

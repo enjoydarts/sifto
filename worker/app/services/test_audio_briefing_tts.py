@@ -495,6 +495,91 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
         self.assertEqual(duration_sec, 12)
         self.assertTrue(object_key.endswith(".mp3"))
 
+    def test_synthesize_and_upload_uses_elevenlabs_provider(self):
+        service = AudioBriefingTTSService()
+
+        with patch.object(service, "synthesize_elevenlabs_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 14)) as synth:
+            with patch.object(service, "upload_bytes") as upload:
+                object_key, duration_sec = service.synthesize_and_upload(
+                    provider="elevenlabs",
+                    voice_model="voice-1",
+                    voice_style="",
+                    tts_model="eleven_multilingual_v2",
+                    text="hello",
+                    speech_rate=1.0,
+                    emotional_intensity=1.0,
+                    tempo_dynamics=1.0,
+                    line_break_silence_seconds=0.0,
+                    chunk_trailing_silence_seconds=0.0,
+                    pitch=0.0,
+                    volume_gain=0.0,
+                    output_object_key="audio/test",
+                    elevenlabs_api_key="eleven-key",
+                )
+
+        synth.assert_called_once_with(
+            voice_id="voice-1",
+            tts_model="eleven_multilingual_v2",
+            text="hello",
+            api_key_override="eleven-key",
+        )
+        upload.assert_called_once()
+        self.assertEqual(duration_sec, 14)
+        self.assertTrue(object_key.endswith(".mp3"))
+
+    def test_synthesize_elevenlabs_duo_and_upload_requires_eleven_v3(self):
+        service = AudioBriefingTTSService()
+
+        with self.assertRaisesRegex(RuntimeError, "eleven_v3"):
+            service.synthesize_elevenlabs_duo_and_upload(
+                tts_model="eleven_multilingual_v2",
+                host_persona="editor",
+                partner_persona="analyst",
+                host_voice_model="host-voice",
+                partner_voice_model="partner-voice",
+                section_type="article",
+                turns=[
+                    {"speaker": "host", "text": "最初の話題です。"},
+                    {"speaker": "partner", "text": "補足します。"},
+                ],
+                output_object_key="audio/test",
+                api_key_override="eleven-key",
+            )
+
+    def test_synthesize_elevenlabs_duo_and_upload_uses_dialogue_tts(self):
+        service = AudioBriefingTTSService()
+
+        with patch("app.services.audio_briefing_tts.synthesize_elevenlabs_dialogue_tts", return_value=(b"mp3", "audio/mpeg", ".mp3", 16)) as synth:
+            with patch.object(service, "upload_bytes") as upload:
+                object_key, duration_sec = service.synthesize_elevenlabs_duo_and_upload(
+                    tts_model="eleven_v3",
+                    host_persona="editor",
+                    partner_persona="analyst",
+                    host_voice_model="host-voice",
+                    partner_voice_model="partner-voice",
+                    section_type="article",
+                    turns=[
+                        {"speaker": "host", "text": "最初の話題です。"},
+                        {"speaker": "partner", "text": "補足します。"},
+                    ],
+                    output_object_key="audio/test",
+                    api_key_override="eleven-key",
+                )
+
+        synth.assert_called_once_with(
+            endpoint=service.elevenlabs_tts_endpoint,
+            api_key="eleven-key",
+            model="eleven_v3",
+            turns=[
+                {"text": "最初の話題です。", "voice_id": "host-voice"},
+                {"text": "補足します。", "voice_id": "partner-voice"},
+            ],
+            timeout_sec=service.elevenlabs_timeout_sec,
+        )
+        upload.assert_called_once()
+        self.assertEqual(duration_sec, 16)
+        self.assertTrue(object_key.endswith(".mp3"))
+
     def test_synthesize_openai_audio_uses_current_openai_payload_shape(self):
         captured: dict[str, object] = {}
         service = AudioBriefingTTSService()

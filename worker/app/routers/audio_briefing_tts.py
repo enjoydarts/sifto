@@ -105,6 +105,7 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
         aivis_api_key = request.headers.get("x-aivis-api-key", "").strip() or None
         google_api_key = request.headers.get("x-google-api-key", "").strip() or None
         fish_api_key = request.headers.get("x-fish-api-key", "").strip() or None
+        elevenlabs_api_key = request.headers.get("x-elevenlabs-api-key", "").strip() or None
         xai_api_key = request.headers.get("x-xai-api-key", "").strip() or None
         audio_object_key, duration_sec = service.synthesize_and_upload(
             provider=req.provider,
@@ -128,6 +129,7 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
             aivis_api_key=aivis_api_key,
             google_api_key=google_api_key,
             fish_api_key=fish_api_key,
+            elevenlabs_api_key=elevenlabs_api_key,
             xai_api_key=xai_api_key,
             openai_api_key=request.headers.get("x-openai-api-key", "").strip() or None,
         )
@@ -184,6 +186,29 @@ def synthesize_audio_briefing_fish_duo(req: AudioBriefingGeminiDuoSynthesizeRequ
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"audio briefing fish duo synth failed: {exc}")
+
+
+@router.post("/audio-briefing/synthesize-upload-elevenlabs-duo", response_model=AudioBriefingSynthesizeResponse)
+def synthesize_audio_briefing_elevenlabs_duo(req: AudioBriefingGeminiDuoSynthesizeRequest, request: Request):
+    try:
+        service = AudioBriefingTTSService()
+        audio_object_key, duration_sec = service.synthesize_elevenlabs_duo_and_upload(
+            tts_model=req.tts_model,
+            host_persona=req.host_persona,
+            partner_persona=req.partner_persona,
+            host_voice_model=req.host_voice_model,
+            partner_voice_model=req.partner_voice_model,
+            section_type=req.section_type,
+            turns=[turn.model_dump() for turn in req.turns],
+            output_object_key=req.output_object_key,
+            api_key_override=request.headers.get("x-elevenlabs-api-key", "").strip() or None,
+        )
+        return AudioBriefingSynthesizeResponse(
+            audio_object_key=audio_object_key,
+            duration_sec=duration_sec,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"audio briefing elevenlabs duo synth failed: {exc}")
 
 
 @router.post("/audio-briefing/presign", response_model=AudioBriefingPresignResponse)

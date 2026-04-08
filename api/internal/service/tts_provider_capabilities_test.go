@@ -18,3 +18,20 @@ func TestLookupTTSProviderCapabilitiesIncludesGeminiTTS(t *testing.T) {
 		t.Fatalf("RequiresUserAPIKey = true, want false")
 	}
 }
+
+func TestLookupTTSProviderCapabilitiesIncludesElevenLabs(t *testing.T) {
+	caps := LookupTTSProviderCapabilities("elevenlabs")
+
+	if !caps.SupportsCatalogPicker {
+		t.Fatalf("SupportsCatalogPicker = false, want true")
+	}
+	if !caps.SupportsSeparateTTSModel {
+		t.Fatalf("SupportsSeparateTTSModel = false, want true")
+	}
+	if caps.RequiresVoiceStyle {
+		t.Fatalf("RequiresVoiceStyle = true, want false")
+	}
+	if !caps.RequiresUserAPIKey {
+		t.Fatalf("RequiresUserAPIKey = false, want true")
+	}
+}

@@ -53,6 +53,7 @@ type summaryAudioSynthesizer interface {
 		aivisUserDictionaryUUID *string,
 		aivisAPIKey *string,
 		fishAudioAPIKey *string,
+		elevenLabsAPIKey *string,
 		googleAPIKey *string,
 		xaiAPIKey *string,
 		openAIAPIKey *string,
@@ -127,6 +128,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	var aivisAPIKey *string
 	var aivisUserDictionaryUUID *string
 	var fishAudioAPIKey *string
+	var elevenLabsAPIKey *string
 	var googleAPIKey *string
 	var xaiAPIKey *string
 	var openAIAPIKey *string
@@ -172,6 +174,22 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 			preprocessedText = stringPtrOrNil(preprocessed.Text)
 			narration = preprocessed.Text
 		}
+	} else if strings.EqualFold(provider, "elevenlabs") {
+		if ttsModel == "" {
+			return nil, ErrSummaryAudioMissingModel
+		}
+		elevenLabsAPIKey, err = loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetElevenLabsAPIKeyEncrypted, s.cipher, userID, "elevenlabs api key is not configured")
+		if err != nil {
+			return nil, err
+		}
+		if s.preprocess != nil {
+			preprocessed, preprocessErr := s.preprocess.PreprocessSummaryAudioTextForProvider(ctx, userID, item.ID, provider, narration)
+			if preprocessErr != nil {
+				return nil, preprocessErr
+			}
+			preprocessedText = stringPtrOrNil(preprocessed.Text)
+			narration = preprocessed.Text
+		}
 	} else if strings.EqualFold(provider, "openai") {
 		if ttsModel == "" {
 			return nil, ErrSummaryAudioMissingModel
@@ -198,6 +216,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		aivisUserDictionaryUUID,
 		aivisAPIKey,
 		fishAudioAPIKey,
+		elevenLabsAPIKey,
 		googleAPIKey,
 		xaiAPIKey,
 		openAIAPIKey,

@@ -8,6 +8,7 @@ import wave
 import boto3
 import httpx
 from app.services.aivis_speech import AIVIS_RATE_LIMITER, AivisRateLimiter, AivisRedisRateLimiter, AivisSpeechService, build_aivis_payload
+from app.services.elevenlabs_tts import synthesize_elevenlabs_dialogue_tts, synthesize_elevenlabs_tts
 from app.services.fish_tts import synthesize_fish_multi_speaker_tts, synthesize_fish_tts
 from app.services.gemini_tts import synthesize_gemini_multi_speaker_tts, synthesize_gemini_tts
 from app.services.tts_provider_registry import synthesize_catalog_tts
@@ -100,6 +101,9 @@ class AudioBriefingTTSService:
         self.gemini_timeout_sec = max(_env_float("GEMINI_TTS_TIMEOUT_SEC", 300.0), 1.0)
         self.fish_api_key = os.getenv("FISH_API_KEY", "").strip()
         self.fish_timeout_sec = max(_env_float("FISH_TTS_TIMEOUT_SEC", 300.0), 1.0)
+        self.elevenlabs_tts_endpoint = (os.getenv("ELEVENLABS_TTS_ENDPOINT", "https://api.elevenlabs.io").strip() or "https://api.elevenlabs.io").rstrip("/")
+        self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
+        self.elevenlabs_timeout_sec = max(_env_float("ELEVENLABS_TTS_TIMEOUT_SEC", 300.0), 1.0)
         self.openai_tts_endpoint = (os.getenv("OPENAI_TTS_ENDPOINT", "https://api.openai.com").strip() or "https://api.openai.com").rstrip("/")
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
         self.openai_timeout_sec = max(_env_float("OPENAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
@@ -130,6 +134,7 @@ class AudioBriefingTTSService:
         aivis_api_key: str | None = None,
         google_api_key: str | None = None,
         fish_api_key: str | None = None,
+        elevenlabs_api_key: str | None = None,
         xai_api_key: str | None = None,
         openai_api_key: str | None = None,
     ) -> tuple[str, int]:
@@ -185,6 +190,13 @@ class AudioBriefingTTSService:
                     volume_gain=volume_gain,
                     api_key_override=fish_api_key,
                 )
+            elif provider == "elevenlabs":
+                payload, content_type, suffix, duration_sec = self.synthesize_elevenlabs_audio(
+                    voice_id=voice_model,
+                    tts_model=tts_model,
+                    text=text,
+                    api_key_override=elevenlabs_api_key,
+                )
             elif provider == "openai":
                 payload, content_type, suffix, duration_sec = self.synthesize_openai_audio(
                     voice_id=voice_model,
@@ -202,6 +214,44 @@ class AudioBriefingTTSService:
             return output_object_key, duration_sec
         finally:
             heartbeat.stop()
+
+    def synthesize_elevenlabs_duo_and_upload(
+        self,
+        *,
+        tts_model: str,
+        host_persona: str,
+        partner_persona: str,
+        host_voice_model: str,
+        partner_voice_model: str,
+        section_type: str,
+        turns: list[dict[str, str]],
+        output_object_key: str,
+        api_key_override: str | None = None,
+    ) -> tuple[str, int]:
+        _ = (host_persona, partner_persona, section_type)
+        dialogue_turns = []
+        for turn in turns or []:
+            speaker = str((turn or {}).get("speaker") or "").strip()
+            text = str((turn or {}).get("text") or "").strip()
+            if not text:
+                continue
+            dialogue_turns.append(
+                {
+                    "text": text,
+                    "voice_id": host_voice_model if speaker != "partner" else partner_voice_model,
+                }
+            )
+        payload, content_type, suffix, duration_sec = synthesize_elevenlabs_dialogue_tts(
+            endpoint=self.elevenlabs_tts_endpoint,
+            api_key=(api_key_override or "").strip() or self.elevenlabs_api_key,
+            model=tts_model,
+            turns=dialogue_turns,
+            timeout_sec=self.elevenlabs_timeout_sec,
+        )
+        if not output_object_key.endswith(suffix):
+            output_object_key = output_object_key + suffix
+        self.upload_bytes(output_object_key, payload, content_type)
+        return output_object_key, duration_sec
 
     def synthesize_gemini_duo_and_upload(
         self,
@@ -494,6 +544,23 @@ class AudioBriefingTTSService:
             text=text,
             speech_rate=speech_rate,
             timeout_sec=self.openai_timeout_sec,
+        )
+
+    def synthesize_elevenlabs_audio(
+        self,
+        *,
+        voice_id: str,
+        tts_model: str,
+        text: str,
+        api_key_override: str | None = None,
+    ) -> tuple[bytes, str, str, int]:
+        return synthesize_elevenlabs_tts(
+            endpoint=self.elevenlabs_tts_endpoint,
+            api_key=(api_key_override or "").strip() or self.elevenlabs_api_key,
+            model=tts_model,
+            voice_id=voice_id,
+            text=text,
+            timeout_sec=self.elevenlabs_timeout_sec,
         )
 
 

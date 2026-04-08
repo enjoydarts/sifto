@@ -147,6 +147,8 @@ func main() {
 	xaiVoiceRepo := repository.NewXAIVoiceRepo(db)
 	xaiVoiceCatalogSvc := service.NewXAIVoiceCatalogService()
 	xaiVoicesH := handler.NewXAIVoicesHandler(xaiVoiceRepo, userSettingsRepo, providerModelUpdateRepo, secretCipher, xaiVoiceCatalogSvc)
+	elevenLabsVoiceCatalogSvc := service.NewElevenLabsVoiceCatalogService()
+	elevenLabsVoicesH := handler.NewElevenLabsVoicesHandler(userSettingsRepo, secretCipher, elevenLabsVoiceCatalogSvc)
 	openAITTSVoiceRepo := repository.NewOpenAITTSVoiceRepo(db)
 	openAITTSVoiceCatalogSvc := service.NewOpenAITTSVoiceCatalogService()
 	openAITTSVoicesH := handler.NewOpenAITTSVoicesHandler(openAITTSVoiceRepo, providerModelUpdateRepo, openAITTSVoiceCatalogSvc)
@@ -341,6 +343,9 @@ func main() {
 			r.Get("/status", xaiVoicesH.Status)
 			r.Post("/sync", xaiVoicesH.Sync)
 		})
+		r.Route("/elevenlabs-voices", func(r chi.Router) {
+			r.Get("/", elevenLabsVoicesH.List)
+		})
 		r.Route("/openai-tts-voices", func(r chi.Router) {
 			r.Get("/", openAITTSVoicesH.List)
 			r.Get("/status", openAITTSVoicesH.Status)
@@ -459,6 +464,8 @@ func main() {
 			r.Delete("/aivis-key", settingsH.DeleteAivisAPIKey)
 			r.Post("/fish-key", settingsH.SetFishAudioAPIKey)
 			r.Delete("/fish-key", settingsH.DeleteFishAudioAPIKey)
+			r.Post("/elevenlabs-key", settingsH.SetElevenLabsAPIKey)
+			r.Delete("/elevenlabs-key", settingsH.DeleteElevenLabsAPIKey)
 			r.Get("/aivis-user-dictionaries", settingsH.GetAivisUserDictionaries)
 			r.Post("/aivis-user-dictionary", settingsH.SetAivisUserDictionary)
 			r.Delete("/aivis-user-dictionary", settingsH.DeleteAivisUserDictionary)

@@ -196,17 +196,17 @@ func defaultPromptVariablesSchema(promptKey string) json.RawMessage {
   "articles_json": {"type": "string"},
   "existing_context": {"type": "string"}
 }`)
-	case "fish.summary_preprocess", "gemini.summary_preprocess":
+	case "fish.summary_preprocess", "gemini.summary_preprocess", "elevenlabs.summary_preprocess":
 		return mustRawJSON(`{
   "text": {"type": "string"}
 }`)
-	case "fish.audio_briefing_single_preprocess", "gemini.audio_briefing_single_preprocess":
+	case "fish.audio_briefing_single_preprocess", "gemini.audio_briefing_single_preprocess", "elevenlabs.audio_briefing_single_preprocess":
 		return mustRawJSON(`{
   "persona_name": {"type": "string"},
   "tone_prompt": {"type": "string"},
   "text": {"type": "string"}
 }`)
-	case "fish.audio_briefing_duo_preprocess", "gemini.audio_briefing_duo_preprocess":
+	case "fish.audio_briefing_duo_preprocess", "gemini.audio_briefing_duo_preprocess", "elevenlabs.audio_briefing_duo_preprocess":
 		return mustRawJSON(`{
   "host_persona_name": {"type": "string"},
   "host_tone_prompt": {"type": "string"},
@@ -237,6 +237,12 @@ func defaultPromptNotes(promptKey string) string {
 		return "Gemini TTS の Audio Briefing Single 向け前処理 prompt です。"
 	case "gemini.audio_briefing_duo_preprocess":
 		return "Gemini TTS の Audio Briefing Duo 向け前処理 prompt です。"
+	case "elevenlabs.summary_preprocess":
+		return "ElevenLabs TTS の Summary Audio 向け前処理 prompt です。"
+	case "elevenlabs.audio_briefing_single_preprocess":
+		return "ElevenLabs TTS の Audio Briefing Single 向け前処理 prompt です。"
+	case "elevenlabs.audio_briefing_duo_preprocess":
+		return "ElevenLabs TTS の Audio Briefing Duo 向け前処理 prompt です。"
 	default:
 		return ""
 	}
@@ -371,17 +377,17 @@ func defaultPromptPreviewVariables(promptKey string) json.RawMessage {
   "articles_json": "[{\"item_id\":\"item-1\",\"title\":\"Example title\",\"translated_title\":\"翻訳タイトル\",\"source_title\":\"Source\",\"summary\":\"Summary text\",\"published_at\":\"2026-04-01T08:00:00Z\"}]",
   "existing_context": "なし"
 }`)
-	case "fish.summary_preprocess", "gemini.summary_preprocess":
+	case "fish.summary_preprocess", "gemini.summary_preprocess", "elevenlabs.summary_preprocess":
 		return mustRawJSON(`{
   "text": "新しいAIモデルが公開されました。APIの料金は23.5パーセント下がります。"
 }`)
-	case "fish.audio_briefing_single_preprocess", "gemini.audio_briefing_single_preprocess":
+	case "fish.audio_briefing_single_preprocess", "gemini.audio_briefing_single_preprocess", "elevenlabs.audio_briefing_single_preprocess":
 		return mustRawJSON(`{
   "persona_name": "editor",
   "tone_prompt": "落ち着いていて整理がうまく、やや温かみのある話し方",
   "text": "今日は重要なテックニュースを三本に絞って見ていきます。まずは新しいAIモデルの公開からです。"
 }`)
-	case "fish.audio_briefing_duo_preprocess", "gemini.audio_briefing_duo_preprocess":
+	case "fish.audio_briefing_duo_preprocess", "gemini.audio_briefing_duo_preprocess", "elevenlabs.audio_briefing_duo_preprocess":
 		return mustRawJSON(`{
   "host_persona_name": "editor",
   "host_tone_prompt": "落ち着いていて整理がうまい",

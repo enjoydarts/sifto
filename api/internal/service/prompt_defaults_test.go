@@ -20,6 +20,9 @@ func TestLookupPromptTemplateDefault(t *testing.T) {
 		"gemini.summary_preprocess",
 		"gemini.audio_briefing_single_preprocess",
 		"gemini.audio_briefing_duo_preprocess",
+		"elevenlabs.summary_preprocess",
+		"elevenlabs.audio_briefing_single_preprocess",
+		"elevenlabs.audio_briefing_duo_preprocess",
 	}
 
 	for _, key := range cases {

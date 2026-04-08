@@ -65,7 +65,7 @@ func audioBriefingVoiceConfigComplete(provider, voiceModel, voiceStyle string) b
 	if provider == "" || voiceModel == "" {
 		return false
 	}
-	return voiceStyle != "" || strings.EqualFold(provider, "xai") || strings.EqualFold(provider, "mock") || strings.EqualFold(provider, "openai") || strings.EqualFold(provider, "gemini_tts") || strings.EqualFold(provider, "fish")
+	return voiceStyle != "" || strings.EqualFold(provider, "xai") || strings.EqualFold(provider, "mock") || strings.EqualFold(provider, "openai") || strings.EqualFold(provider, "gemini_tts") || strings.EqualFold(provider, "fish") || strings.EqualFold(provider, "elevenlabs")
 }
 
 func audioBriefingGeminiDuoReady(hostVoice, partnerVoice *model.AudioBriefingPersonaVoice) bool {
@@ -91,6 +91,21 @@ func audioBriefingFishDuoReady(hostVoice, partnerVoice *model.AudioBriefingPerso
 		strings.EqualFold(strings.TrimSpace(partnerVoice.TTSProvider), "fish") &&
 		strings.TrimSpace(hostVoice.TTSModel) == "s2-pro" &&
 		strings.TrimSpace(partnerVoice.TTSModel) == "s2-pro" &&
+		hostVoiceModel != "" &&
+		partnerVoiceModel != "" &&
+		hostVoiceModel != partnerVoiceModel
+}
+
+func audioBriefingElevenLabsDuoReady(hostVoice, partnerVoice *model.AudioBriefingPersonaVoice) bool {
+	if hostVoice == nil || partnerVoice == nil {
+		return false
+	}
+	hostVoiceModel := strings.TrimSpace(hostVoice.VoiceModel)
+	partnerVoiceModel := strings.TrimSpace(partnerVoice.VoiceModel)
+	return strings.EqualFold(strings.TrimSpace(hostVoice.TTSProvider), "elevenlabs") &&
+		strings.EqualFold(strings.TrimSpace(partnerVoice.TTSProvider), "elevenlabs") &&
+		strings.TrimSpace(hostVoice.TTSModel) == "eleven_v3" &&
+		strings.TrimSpace(partnerVoice.TTSModel) == "eleven_v3" &&
 		hostVoiceModel != "" &&
 		partnerVoiceModel != "" &&
 		hostVoiceModel != partnerVoiceModel
@@ -176,16 +191,18 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 	provider := strings.TrimSpace(derefString(chunk.TTSProvider))
 	useGeminiDuoGroup := len(group.Chunks) > 1 && provider == "gemini_tts" && strings.TrimSpace(job.ConversationMode) == "duo"
 	useFishDuoGroup := len(group.Chunks) > 1 && provider == "fish" && strings.TrimSpace(job.ConversationMode) == "duo"
+	useElevenLabsDuoGroup := len(group.Chunks) > 1 && provider == "elevenlabs" && strings.TrimSpace(job.ConversationMode) == "duo"
 	if useGeminiDuoGroup {
 		group = audioBriefingGeminiDuoSplitGroups(group, audioBriefingGeminiDuoSoftByteLimit())[0]
 	}
 	groupChunkIDs := audioBriefingChunkGroupIDs(group)
 	useGeminiDuoGroup = len(groupChunkIDs) > 1 && provider == "gemini_tts" && strings.TrimSpace(job.ConversationMode) == "duo"
 	useFishDuoGroup = len(groupChunkIDs) > 1 && provider == "fish" && strings.TrimSpace(job.ConversationMode) == "duo"
+	useElevenLabsDuoGroup = len(groupChunkIDs) > 1 && provider == "elevenlabs" && strings.TrimSpace(job.ConversationMode) == "duo"
 	if resetGenerating {
 		if chunk.AttemptCount >= audioBriefingChunkMaxAttempts {
 			message := "stale generating chunk exceeded retry limit"
-			if useGeminiDuoGroup || useFishDuoGroup {
+			if useGeminiDuoGroup || useFishDuoGroup || useElevenLabsDuoGroup {
 				if err := r.repo.MarkChunkGroupExhausted(ctx, groupChunkIDs, "tts_stalled", message); err != nil {
 					r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 					return nil, err
@@ -197,7 +214,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			r.bestEffortFailVoicing(jobID, "tts_stalled", message)
 			return nil, errors.New(message)
 		}
-		if useGeminiDuoGroup || useFishDuoGroup {
+		if useGeminiDuoGroup || useFishDuoGroup || useElevenLabsDuoGroup {
 			if err := r.repo.MarkChunkGroupRetryWait(ctx, groupChunkIDs, "tts_stalled", "stale generating chunk reset for retry"); err != nil {
 				r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 				return nil, err
@@ -212,7 +229,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 		return nil, err
 	}
-	if useGeminiDuoGroup || useFishDuoGroup {
+	if useGeminiDuoGroup || useFishDuoGroup || useElevenLabsDuoGroup {
 		if err := r.repo.StartChunkGroupGenerating(ctx, groupChunkIDs, HashAudioBriefingCallbackToken(rawHeartbeatToken)); err != nil {
 			if err == repository.ErrInvalidState {
 				return &AudioBriefingVoiceRunResult{Waiting: true}, nil
@@ -240,6 +257,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 	var aivisAPIKey *string
 	var aivisUserDictionaryUUID *string
 	var fishAudioAPIKey *string
+	var elevenLabsAPIKey *string
 	var googleAPIKey *string
 	var xaiAPIKey *string
 	var openAIAPIKey *string
@@ -274,6 +292,15 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 		if err := EnsureGeminiTTSEnabledForUser(ctx, r.userRepo, userID); err != nil {
 			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
 		}
+	} else if provider == "elevenlabs" {
+		if ttsModel == "" {
+			err := fmt.Errorf("elevenlabs tts model is not configured")
+			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
+		}
+		elevenLabsAPIKey, err = loadAndDecryptAudioBriefingUserSecret(ctx, r.userSettings.GetElevenLabsAPIKeyEncrypted, r.cipher, userID, "elevenlabs api key is not configured")
+		if err != nil {
+			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", err)
+		}
 	} else if provider == "openai" {
 		if ttsModel == "" {
 			err := fmt.Errorf("openai tts model is not configured")
@@ -291,8 +318,13 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 	}
 	synthText := chunk.Text
 	fishDuoPreprocessedText := ""
+	elevenLabsDuoPreprocessedText := ""
 	if useFishDuoGroup && !audioBriefingFishDuoReady(voice, partnerVoice) {
 		err := fmt.Errorf("fish duo multi-speaker is not fully configured")
+		return r.handleChunkGroupGenerationFailure(ctx, jobID, group, "tts_failed", err)
+	}
+	if useElevenLabsDuoGroup && !audioBriefingElevenLabsDuoReady(voice, partnerVoice) {
+		err := fmt.Errorf("elevenlabs duo multi-speaker is not fully configured")
 		return r.handleChunkGroupGenerationFailure(ctx, jobID, group, "tts_failed", err)
 	}
 	if provider == "fish" && r.preprocess != nil {
@@ -361,6 +393,39 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 				log.Printf("audio briefing gemini preprocess persistence failed job_id=%s chunk_id=%s err=%v", jobID, chunk.ID, persistErr)
 			}
 		}
+	} else if provider == "elevenlabs" && r.preprocess != nil {
+		itemID := strings.TrimSpace(derefString(chunk.ItemID))
+		if useElevenLabsDuoGroup {
+			preprocessed, preprocessErr := r.preprocess.PreprocessAudioBriefingDuoTextForProvider(
+				ctx,
+				userID,
+				itemID,
+				provider,
+				job.Persona,
+				derefString(job.PartnerPersona),
+				audioBriefingFishDuoPreprocessText(group),
+			)
+			if preprocessErr != nil {
+				return r.handleChunkGroupGenerationFailure(ctx, jobID, group, "tts_failed", preprocessErr)
+			}
+			elevenLabsDuoPreprocessedText = strings.TrimSpace(preprocessed.Text)
+			if validateErr := audioBriefingValidateGeminiDuoPreprocessedText(elevenLabsDuoPreprocessedText); validateErr != nil {
+				return r.handleChunkGroupGenerationFailure(ctx, jobID, group, "tts_failed", validateErr)
+			}
+			if persistErr := r.repo.SetChunkGroupPreprocessedText(ctx, groupChunkIDs, stringPtrOrNil(elevenLabsDuoPreprocessedText)); persistErr != nil {
+				log.Printf("audio briefing elevenlabs duo preprocess persistence failed job_id=%s chunk_ids=%v err=%v", jobID, groupChunkIDs, persistErr)
+			}
+		} else {
+			preprocessPersona := audioBriefingPreprocessPersona(job, chunk)
+			preprocessed, preprocessErr := r.preprocess.PreprocessAudioBriefingSingleTextForProvider(ctx, userID, itemID, provider, preprocessPersona, synthText)
+			if preprocessErr != nil {
+				return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", preprocessErr)
+			}
+			synthText = preprocessed.Text
+			if persistErr := r.repo.SetChunkPreprocessedText(ctx, chunk.ID, stringPtrOrNil(strings.TrimSpace(synthText))); persistErr != nil {
+				log.Printf("audio briefing elevenlabs preprocess persistence failed job_id=%s chunk_id=%s err=%v", jobID, chunk.ID, persistErr)
+			}
+		}
 	}
 	var resp *AudioBriefingSynthesizeUploadResponse
 	if useGeminiDuoGroup {
@@ -394,6 +459,19 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			audioObjectKey,
 			fishAudioAPIKey,
 		)
+	} else if useElevenLabsDuoGroup {
+		resp, err = r.worker.SynthesizeAudioBriefingElevenLabsDuoUpload(
+			ctx,
+			ttsModel,
+			job.Persona,
+			derefString(job.PartnerPersona),
+			strings.TrimSpace(voice.VoiceModel),
+			strings.TrimSpace(partnerVoice.VoiceModel),
+			group.PartType,
+			audioBriefingGeminiDuoTurnsFromText(group, elevenLabsDuoPreprocessedText),
+			audioObjectKey,
+			elevenLabsAPIKey,
+		)
 	} else {
 		resp, err = r.worker.SynthesizeAudioBriefingUpload(
 			ctx,
@@ -417,18 +495,19 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			aivisUserDictionaryUUID,
 			aivisAPIKey,
 			fishAudioAPIKey,
+			elevenLabsAPIKey,
 			googleAPIKey,
 			xaiAPIKey,
 			openAIAPIKey,
 		)
 	}
 	if err != nil {
-		if !useGeminiDuoGroup && !useFishDuoGroup {
+		if !useGeminiDuoGroup && !useFishDuoGroup && !useElevenLabsDuoGroup {
 			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", annotateAudioBriefingChunkError(chunk, err))
 		}
 		return r.handleChunkGroupGenerationFailure(ctx, jobID, group, "tts_failed", annotateAudioBriefingChunkError(chunk, err))
 	}
-	if useGeminiDuoGroup || useFishDuoGroup {
+	if useGeminiDuoGroup || useFishDuoGroup || useElevenLabsDuoGroup {
 		if err := r.repo.MarkChunkGroupGenerated(ctx, groupChunkIDs, resp.AudioObjectKey, resp.DurationSec); err != nil {
 			r.bestEffortFailVoicing(jobID, "tts_failed", err.Error())
 			return nil, err

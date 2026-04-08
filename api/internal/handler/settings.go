@@ -1158,6 +1158,20 @@ func (h *SettingsHandler) DeleteFishAudioAPIKey(w http.ResponseWriter, r *http.R
 	})
 }
 
+func (h *SettingsHandler) SetElevenLabsAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "elevenlabs", map[string]func(*model.UserSettings) any{
+		"has_elevenlabs_api_key":   func(s *model.UserSettings) any { return s.HasElevenLabsAPIKey },
+		"elevenlabs_api_key_last4": func(s *model.UserSettings) any { return s.ElevenLabsAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteElevenLabsAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "elevenlabs", map[string]func(*model.UserSettings) any{
+		"has_elevenlabs_api_key":   func(s *model.UserSettings) any { return s.HasElevenLabsAPIKey },
+		"elevenlabs_api_key_last4": func(s *model.UserSettings) any { return s.ElevenLabsAPIKeyLast4 },
+	})
+}
+
 func (h *SettingsHandler) GetAivisUserDictionaries(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	items, err := h.aivisDictionaries.List(r.Context(), userID)

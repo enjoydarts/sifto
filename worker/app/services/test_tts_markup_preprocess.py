@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from app.services.tts_markup_preprocess import (
     DEFAULT_TTS_MARKUP_PREPROCESS_PROMPT_KEY,
+    ELEVENLABS_TTS_PREPROCESS_PURPOSE,
     FISH_PREPROCESS_PURPOSE,
     GEMINI_TTS_PREPROCESS_PURPOSE,
     TTSMarkupPreprocessService,
@@ -107,6 +108,39 @@ class TTSMarkupPreprocessServiceTests(unittest.TestCase):
         self.assertEqual(result["text"], "[落ち着いて]整形済み")
         self.assertEqual(result["llm"]["provider"], "google")
 
+    def test_preprocess_uses_elevenlabs_plain_text_generation(self):
+        service = TTSMarkupPreprocessService()
+
+        with (
+            patch(
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
+                return_value={
+                    "system_instruction": "SYSTEM",
+                    "prompt_text": "{{text}}",
+                },
+            ),
+            patch(
+                "app.services.tts_markup_preprocess.openrouter_chat_json",
+                return_value=("[自然に]整形済み", {"input_tokens": 10, "output_tokens": 20}),
+            ) as chat_json,
+        ):
+            result = service.preprocess(
+                text="元テキスト",
+                model="openrouter::openai/gpt-5.4-mini",
+                api_key="openrouter-key",
+                prompt_key="elevenlabs.summary_preprocess",
+            )
+
+        chat_json.assert_called_once_with(
+            "元テキスト",
+            "openrouter::openai/gpt-5.4-mini",
+            "openrouter-key",
+            system_instruction="SYSTEM",
+            max_output_tokens=3200,
+        )
+        self.assertEqual(result["text"], "[自然に]整形済み")
+        self.assertEqual(result["llm"]["provider"], "openrouter")
+
     def test_preprocess_uses_anthropic_transport(self):
         service = TTSMarkupPreprocessService()
         message = type(
@@ -206,6 +240,44 @@ class TTSMarkupPreprocessServiceTests(unittest.TestCase):
             system_prompt=None,
             user_prompt="固定プロンプト\n## 【テキスト】\n\n元テキスト",
         )
+
+    def test_preprocess_enriches_elevenlabs_audio_briefing_single_prompt_variables(self):
+        service = TTSMarkupPreprocessService()
+
+        with (
+            patch(
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
+                return_value={
+                    "system_instruction": "SYSTEM",
+                    "prompt_text": "{{persona_name}}|{{tone_prompt}}|{{text}}",
+                },
+            ),
+            patch(
+                "app.services.tts_markup_preprocess.resolve_audio_briefing_persona_prompts",
+                return_value=("落ち着いていて整理がうまい", "", ""),
+            ) as persona_prompts,
+            patch(
+                "app.services.tts_markup_preprocess.openrouter_chat_json",
+                return_value=("[自然に]整形済み", {"input_tokens": 10, "output_tokens": 20}),
+            ) as chat_json,
+        ):
+            result = service.preprocess(
+                text="元テキスト",
+                model="openrouter::openai/gpt-5.4-mini",
+                api_key="openrouter-key",
+                prompt_key="elevenlabs.audio_briefing_single_preprocess",
+                variables={"persona_name": "editor"},
+            )
+
+        persona_prompts.assert_called_once_with("editor")
+        chat_json.assert_called_once_with(
+            "editor|落ち着いていて整理がうまい|元テキスト",
+            "openrouter::openai/gpt-5.4-mini",
+            "openrouter-key",
+            system_instruction="SYSTEM",
+            max_output_tokens=3200,
+        )
+        self.assertEqual(result["llm"]["provider"], "openrouter")
 
     def test_preprocess_surfaces_anthropic_failure_detail(self):
         service = TTSMarkupPreprocessService()

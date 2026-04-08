@@ -75,6 +75,7 @@ func TestSynthesizeAudioBriefingUploadAppliesAudioBriefingTimeout(t *testing.T) 
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)
@@ -123,6 +124,7 @@ func TestSynthesizeAudioBriefingUploadIncludesUserDictionaryUUID(t *testing.T) {
 		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
 		"heartbeat-token",
 		strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),
+		nil,
 		nil,
 		nil,
 		nil,
@@ -234,6 +236,7 @@ func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
 		0,
 		0,
 		strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),
+		nil,
 		nil,
 		nil,
 		nil,
@@ -388,6 +391,7 @@ func TestSynthesizeAudioBriefingUploadIncludesXAIAPIKeyHeader(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 		strptr("xai-key"),
 		nil,
 	)
@@ -430,6 +434,7 @@ func TestSynthesizeSummaryAudioIncludesXAIAPIKeyHeader(t *testing.T) {
 		1.0,
 		0,
 		0,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -492,6 +497,7 @@ func TestSynthesizeSummaryAudioDoesNotIncludeGoogleAPIKeyHeaderForGemini(t *test
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeSummaryAudio(...) error = %v", err)
@@ -545,6 +551,7 @@ func TestSynthesizeAudioBriefingUploadIncludesOpenAIAPIKeyHeaderAndTTSModel(t *t
 		"chunk-1",
 		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
 		"heartbeat-token",
+		nil,
 		nil,
 		nil,
 		nil,
@@ -610,9 +617,125 @@ func TestSynthesizeAudioBriefingUploadDoesNotIncludeGeminiAPIKeyHeaderAndInclude
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)
+	}
+}
+
+func TestSynthesizeAudioBriefingUploadIncludesElevenLabsAPIKeyHeaderAndTTSModel(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.Header.Get("X-Elevenlabs-Api-Key"); got != "eleven-key" {
+			t.Fatalf("X-Elevenlabs-Api-Key = %q, want eleven-key", got)
+		}
+		if req.URL.Path != "/audio-briefing/synthesize-upload" {
+			t.Fatalf("path = %q, want /audio-briefing/synthesize-upload", req.URL.Path)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if got := body["tts_model"]; got != "eleven_multilingual_v2" {
+			t.Fatalf("tts_model = %v, want eleven_multilingual_v2", got)
+		}
+		respBody, _ := json.Marshal(map[string]any{
+			"audio_object_key": "foo.mp3",
+			"duration_sec":     12,
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	})
+
+	_, err := client.SynthesizeAudioBriefingUpload(
+		context.Background(),
+		"elevenlabs",
+		"voice-1",
+		"",
+		"eleven_multilingual_v2",
+		"editor",
+		"text",
+		1.0,
+		1.0,
+		1.0,
+		0.4,
+		1.0,
+		0,
+		0,
+		"foo",
+		"chunk-1",
+		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
+		"heartbeat-token",
+		nil,
+		nil,
+		nil,
+		strptr("eleven-key"),
+		nil,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)
+	}
+}
+
+func TestSynthesizeAudioBriefingElevenLabsDuoUploadIncludesTurnsAndElevenLabsHeader(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.Header.Get("X-Elevenlabs-Api-Key"); got != "eleven-key" {
+			t.Fatalf("X-Elevenlabs-Api-Key = %q, want eleven-key", got)
+		}
+		if req.URL.Path != "/audio-briefing/synthesize-upload-elevenlabs-duo" {
+			t.Fatalf("path = %q, want /audio-briefing/synthesize-upload-elevenlabs-duo", req.URL.Path)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		turns, ok := body["turns"].([]any)
+		if !ok || len(turns) != 2 {
+			t.Fatalf("turns = %#v, want 2 items", body["turns"])
+		}
+		if got := body["tts_model"]; got != "eleven_v3" {
+			t.Fatalf("tts_model = %v, want eleven_v3", got)
+		}
+		respBody, _ := json.Marshal(map[string]any{
+			"audio_object_key": "foo.mp3",
+			"duration_sec":     12,
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	})
+
+	resp, err := client.SynthesizeAudioBriefingElevenLabsDuoUpload(
+		context.Background(),
+		"eleven_v3",
+		"editor",
+		"analyst",
+		"voice-1",
+		"voice-2",
+		"article",
+		[]AudioBriefingGeminiDuoTurn{
+			{Speaker: "host", Text: "冒頭です"},
+			{Speaker: "partner", Text: "補足です"},
+		},
+		"foo",
+		strptr("eleven-key"),
+	)
+	if err != nil {
+		t.Fatalf("SynthesizeAudioBriefingElevenLabsDuoUpload(...) error = %v", err)
+	}
+	if resp == nil || resp.AudioObjectKey != "foo.mp3" {
+		t.Fatalf("response = %#v, want foo.mp3", resp)
 	}
 }
 
@@ -662,7 +785,65 @@ func TestSynthesizeSummaryAudioIncludesOpenAIAPIKeyHeaderAndTTSModel(t *testing.
 		nil,
 		nil,
 		nil,
+		nil,
 		strptr("openai-key"),
+	)
+	if err != nil {
+		t.Fatalf("SynthesizeSummaryAudio(...) error = %v", err)
+	}
+	if resp == nil || resp.AudioBase64 != "Zm9v" {
+		t.Fatalf("AudioBase64 = %#v, want Zm9v", resp)
+	}
+}
+
+func TestSynthesizeSummaryAudioIncludesElevenLabsAPIKeyHeaderAndTTSModel(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.Header.Get("X-Elevenlabs-Api-Key"); got != "eleven-key" {
+			t.Fatalf("X-Elevenlabs-Api-Key = %q, want eleven-key", got)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if got := body["tts_model"]; got != "eleven_multilingual_v2" {
+			t.Fatalf("tts_model = %v, want eleven_multilingual_v2", got)
+		}
+		respBody, _ := json.Marshal(map[string]any{
+			"audio_base64":  "Zm9v",
+			"content_type":  "audio/mpeg",
+			"duration_sec":  12,
+			"resolved_text": "summary text",
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	})
+
+	resp, err := client.SynthesizeSummaryAudio(
+		context.Background(),
+		"elevenlabs",
+		"voice-1",
+		"",
+		"eleven_multilingual_v2",
+		"summary text",
+		1.0,
+		1.0,
+		1.0,
+		0.4,
+		1.0,
+		0,
+		0,
+		nil,
+		nil,
+		nil,
+		strptr("eleven-key"),
+		nil,
+		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeSummaryAudio(...) error = %v", err)

@@ -341,6 +341,22 @@ export interface OpenAITTSVoicesResponse {
   voices: OpenAITTSVoiceSnapshot[];
 }
 
+export interface ElevenLabsVoiceCatalogEntry {
+  voice_id: string;
+  name: string;
+  description: string;
+  labels?: Record<string, unknown>;
+  category?: string | null;
+  preview_url: string;
+  languages?: string[];
+}
+
+export interface ElevenLabsVoicesResponse {
+  provider: string;
+  source: string;
+  voices: ElevenLabsVoiceCatalogEntry[];
+}
+
 export interface GeminiTTSVoiceCatalogEntry {
   voice_name: string;
   label: string;
@@ -1496,6 +1512,8 @@ export interface UserSettings {
   openrouter_api_key_last4: string | null;
   has_aivis_api_key: boolean;
   aivis_api_key_last4: string | null;
+  has_elevenlabs_api_key?: boolean;
+  elevenlabs_api_key_last4?: string | null;
   has_fish_api_key?: boolean;
   fish_api_key_last4?: string | null;
   ui_font_sans_key?: string;
@@ -2850,6 +2868,16 @@ export const api = {
       "/settings/aivis-key",
       { method: "DELETE" }
     ),
+  setElevenLabsApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_elevenlabs_api_key: boolean; elevenlabs_api_key_last4: string | null }>(
+      "/settings/elevenlabs-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteElevenLabsApiKey: () =>
+    apiFetch<{ user_id: string; has_elevenlabs_api_key: boolean; elevenlabs_api_key_last4: string | null }>(
+      "/settings/elevenlabs-key",
+      { method: "DELETE" }
+    ),
   setFishApiKey: (apiKey: string) =>
     apiFetch<{ user_id: string; has_fish_api_key: boolean; fish_api_key_last4: string | null }>(
       "/settings/fish-key",
@@ -2972,6 +3000,8 @@ export const api = {
     apiFetch<{ run: OpenAITTSVoiceSyncRun | null }>("/openai-tts-voices/status"),
   syncOpenAITTSVoices: () =>
     apiFetch<OpenAITTSVoicesResponse>("/openai-tts-voices/sync", { method: "POST" }),
+  getElevenLabsVoices: () =>
+    apiFetch<ElevenLabsVoicesResponse>("/elevenlabs-voices"),
   getGeminiTTSVoices: () =>
     apiFetch<GeminiTTSVoicesResponse>("/gemini-tts-voices"),
   deleteInoreaderOAuth: () =>

@@ -151,6 +151,32 @@ func TestAudioBriefingVoiceConfigCompleteAllowsGeminiWithoutVoiceStyle(t *testin
 	}
 }
 
+func TestAudioBriefingVoiceConfigCompleteAllowsElevenLabsWithoutVoiceStyle(t *testing.T) {
+	if !audioBriefingVoiceConfigComplete("elevenlabs", "voice-1", "") {
+		t.Fatal("audioBriefingVoiceConfigComplete(elevenlabs) = false, want true")
+	}
+}
+
+func TestAudioBriefingElevenLabsDuoReadyRequiresElevenV3AndDistinctVoices(t *testing.T) {
+	host := &model.AudioBriefingPersonaVoice{
+		TTSProvider: "elevenlabs",
+		TTSModel:    "eleven_v3",
+		VoiceModel:  "voice-1",
+	}
+	partner := &model.AudioBriefingPersonaVoice{
+		TTSProvider: "elevenlabs",
+		TTSModel:    "eleven_v3",
+		VoiceModel:  "voice-2",
+	}
+	if !audioBriefingElevenLabsDuoReady(host, partner) {
+		t.Fatal("audioBriefingElevenLabsDuoReady() = false, want true")
+	}
+	partner.TTSModel = "eleven_multilingual_v2"
+	if audioBriefingElevenLabsDuoReady(host, partner) {
+		t.Fatal("audioBriefingElevenLabsDuoReady() = true, want false for non-v3")
+	}
+}
+
 func TestAudioBriefingChunkGroupForSelectionUsesArticleItemID(t *testing.T) {
 	chunks := []model.AudioBriefingScriptChunk{
 		{ID: "chunk-1", Seq: 1, PartType: "article", ItemID: stringPtr("item-1"), Speaker: stringPtr("host"), Text: "h1"},

@@ -101,6 +101,8 @@ type UserSettings struct {
 	AudioBriefingScriptModel         *string    `json:"audio_briefing_script_model,omitempty"`
 	AudioBriefingScriptFallbackModel *string    `json:"audio_briefing_script_fallback_model,omitempty"`
 	FishPreprocessModel              *string    `json:"fish_preprocess_model,omitempty"`
+	UIFontSansKey                    string     `json:"ui_font_sans_key"`
+	UIFontSerifKey                   string     `json:"ui_font_serif_key"`
 	HasInoreaderOAuth                bool       `json:"has_inoreader_oauth"`
 	InoreaderTokenExpiresAt          *time.Time `json:"inoreader_token_expires_at,omitempty"`
 	CreatedAt                        time.Time  `json:"created_at"`

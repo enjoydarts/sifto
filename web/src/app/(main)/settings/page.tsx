@@ -14,6 +14,7 @@ import OneSignalSettings from "@/components/onesignal-settings";
 import ApiKeyCard from "@/components/settings/api-key-card";
 import AivisVoicePickerModal from "@/components/settings/aivis-voice-picker-modal";
 import FishVoicePickerModal from "@/components/settings/fish-voice-picker-modal";
+import UIFontPickerModal from "@/components/settings/ui-font-picker-modal";
 import ModelGuideModal from "@/components/settings/model-guide-modal";
 import ModelSelect, { type ModelOption } from "@/components/settings/model-select";
 import { PreferenceProfilePanel } from "@/components/settings/preference-profile-panel";
@@ -22,6 +23,7 @@ import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { formatModelDisplayName } from "@/lib/model-display";
+import { DEFAULT_UI_FONT_SANS_KEY, DEFAULT_UI_FONT_SERIF_KEY, ensureUIFontPreviewLoaded, getSelectableSansFonts, getSelectableSerifFonts, getUIFontByKey, persistUIFontSelection } from "@/lib/ui-fonts";
 
 const MODEL_UPDATES_DISMISSED_AT_KEY = "provider-model-updates:dismissed-at";
 
@@ -2166,6 +2168,11 @@ export default function SettingsPage() {
   const [aivisUserDictionaryUUID, setAivisUserDictionaryUUID] = useState("");
   const [activeAccessProvider, setActiveAccessProvider] = useState("anthropic");
   const [activeSection, setActiveSection] = useState<SettingsSectionID>("models");
+  const [uiFontSansKey, setUIFontSansKey] = useState(DEFAULT_UI_FONT_SANS_KEY);
+  const [uiFontSerifKey, setUIFontSerifKey] = useState(DEFAULT_UI_FONT_SERIF_KEY);
+  const [uiFontSansPickerOpen, setUIFontSansPickerOpen] = useState(false);
+  const [uiFontSerifPickerOpen, setUIFontSerifPickerOpen] = useState(false);
+  const [savingUIFontSettings, setSavingUIFontSettings] = useState(false);
   const [llmExtrasOpen, setLLMExtrasOpen] = useState(false);
   const [modelGuideOpen, setModelGuideOpen] = useState(false);
   const [readingPlanWindow, setReadingPlanWindow] = useState<"24h" | "today_jst" | "7d">("24h");
@@ -2253,6 +2260,8 @@ export default function SettingsPage() {
   const [summaryAudioXAIPickerOpen, setSummaryAudioXAIPickerOpen] = useState(false);
   const [summaryAudioOpenAITTPickerOpen, setSummaryAudioOpenAITTPickerOpen] = useState(false);
   const [summaryAudioGeminiTTSPickerOpen, setSummaryAudioGeminiTTSPickerOpen] = useState(false);
+  const uiFontSansOptions = useMemo(() => getSelectableSansFonts(), []);
+  const uiFontSerifOptions = useMemo(() => getSelectableSerifFonts(), []);
   const [expandedAudioBriefingPersonas, setExpandedAudioBriefingPersonas] = useState<string[]>(["editor"]);
   const [obsidianEnabled, setObsidianEnabled] = useState(false);
   const [notificationPriority, setNotificationPriority] = useState<NotificationPriorityRule>({
@@ -2297,6 +2306,7 @@ export default function SettingsPage() {
   const [navigatorPersonaDefinitions, setNavigatorPersonaDefinitions] = useState<Record<string, NavigatorPersonaDefinition>>({});
   const loadSeqRef = useRef(0);
   const llmModelsDirtyRef = useRef(false);
+  const uiFontsDirtyRef = useRef(false);
   const llmExtrasRef = useRef<HTMLDivElement | null>(null);
   const summaryAudioVoiceStatus = useMemo(() => {
     return getSummaryAudioVoiceStatus(
@@ -2438,6 +2448,11 @@ export default function SettingsPage() {
     setSummaryAudioVolumeGain(formatAudioBriefingDecimalInput(next.volume_gain ?? 0));
     setSummaryAudioAivisUserDictionaryUUID(next.aivis_user_dictionary_uuid ?? "");
     setSummaryAudioVoiceInputDrafts(buildSummaryAudioVoiceInputDrafts(next));
+  }, []);
+
+  const syncUIFontForm = useCallback((nextSettings?: UserSettings | null) => {
+    setUIFontSansKey(nextSettings?.ui_font_sans_key?.trim() || DEFAULT_UI_FONT_SANS_KEY);
+    setUIFontSerifKey(nextSettings?.ui_font_serif_key?.trim() || DEFAULT_UI_FONT_SERIF_KEY);
   }, []);
 
   const loadAudioBriefingPresets = useCallback(async () => {
@@ -2826,6 +2841,9 @@ export default function SettingsPage() {
       setObsidianRepoBranch(data.obsidian_export?.github_repo_branch ?? "main");
       setObsidianRootPath(data.obsidian_export?.vault_root_path ?? "Sifto/Favorites");
       syncSummaryAudioForm(data.summary_audio ?? null);
+      if (!uiFontsDirtyRef.current) {
+        syncUIFontForm(data);
+      }
       if (!llmModelsDirtyRef.current) {
         syncLLMModelForm(data.llm_models);
       }
@@ -2838,7 +2856,7 @@ export default function SettingsPage() {
         setLoading(false);
       }
     }
-  }, [syncAudioBriefingForm, syncLLMModelForm, syncPodcastForm, syncSummaryAudioForm, t]);
+  }, [syncAudioBriefingForm, syncLLMModelForm, syncPodcastForm, syncSummaryAudioForm, syncUIFontForm, t]);
 
   useEffect(() => {
     load();
@@ -2861,6 +2879,14 @@ export default function SettingsPage() {
     audioBriefingPresetsLoaded,
     loadAudioBriefingPresets,
   ]);
+
+  useEffect(() => {
+    ensureUIFontPreviewLoaded(uiFontSansKey);
+  }, [uiFontSansKey]);
+
+  useEffect(() => {
+    ensureUIFontPreviewLoaded(uiFontSerifKey);
+  }, [uiFontSerifKey]);
 
   useEffect(() => {
     if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || aivisModelsData != null || aivisModelsLoading) return;
@@ -3365,6 +3391,17 @@ export default function SettingsPage() {
 
   const configuredProviderCount = accessCards.filter((card) => card.configured).length;
   const activeAccessCard = accessCards.find((card) => card.id === activeAccessProvider) ?? accessCards[0];
+  const savedUIFontSansKey = settings?.ui_font_sans_key?.trim() || DEFAULT_UI_FONT_SANS_KEY;
+  const savedUIFontSerifKey = settings?.ui_font_serif_key?.trim() || DEFAULT_UI_FONT_SERIF_KEY;
+  const savedUIFontSans = getUIFontByKey(savedUIFontSansKey);
+  const savedUIFontSerif = getUIFontByKey(savedUIFontSerifKey);
+  const selectedUIFontSans = getUIFontByKey(uiFontSansKey) ?? savedUIFontSans;
+  const selectedUIFontSerif = getUIFontByKey(uiFontSerifKey) ?? savedUIFontSerif;
+  const uiFontsDirty = savedUIFontSansKey !== uiFontSansKey || savedUIFontSerifKey !== uiFontSerifKey;
+
+  useEffect(() => {
+    uiFontsDirtyRef.current = uiFontsDirty;
+  }, [uiFontsDirty]);
 
   function dismissProviderModelUpdates() {
     const latest = providerModelUpdates.reduce<string | null>((max, event) => {
@@ -3414,6 +3451,36 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setSavingBudget(false);
+    }
+  }
+
+  async function submitUIFontSettings(e: FormEvent) {
+    e.preventDefault();
+    setSavingUIFontSettings(true);
+    try {
+      const resp = await api.updateUIFontSettings({
+        ui_font_sans_key: uiFontSansKey,
+        ui_font_serif_key: uiFontSerifKey,
+      });
+      persistUIFontSelection({
+        sansKey: resp.ui_font_sans_key,
+        serifKey: resp.ui_font_serif_key,
+      });
+      setSettings((prev) =>
+        prev
+          ? {
+              ...prev,
+              ui_font_sans_key: resp.ui_font_sans_key,
+              ui_font_serif_key: resp.ui_font_serif_key,
+            }
+          : prev
+      );
+      void queryClient.invalidateQueries({ queryKey: ["settings"] });
+      showToast(t("settings.uiFonts.saved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingUIFontSettings(false);
     }
   }
 
@@ -7379,6 +7446,90 @@ export default function SettingsPage() {
           {activeSection === "system" ? (
             <div className="space-y-5">
               <SectionCard>
+                <form onSubmit={submitUIFontSettings}>
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.uiFonts.title")}</div>
+                      <div className="mt-1 text-xs text-[var(--color-editorial-ink-faint)]">{t("settings.uiFonts.description")}</div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={savingUIFontSettings || !uiFontsDirty}
+                      className="inline-flex min-h-10 items-center rounded-full bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] transition disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {savingUIFontSettings ? t("common.saving") : t("common.save")}
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.uiFonts.sansLabel")}</div>
+                          <div className="mt-1 text-sm font-semibold text-[var(--color-editorial-ink)]">
+                            {selectedUIFontSans?.label ?? t("settings.uiFonts.defaultSansLabel")}
+                          </div>
+                          <div className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">
+                            {selectedUIFontSans?.family ?? "Sawarabi Gothic"}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setUIFontSansPickerOpen(true)}
+                          className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+                        >
+                          {t("settings.uiFonts.choose")}
+                        </button>
+                      </div>
+                      <div className="mt-4 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-4">
+                        <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.uiFonts.preview")}</div>
+                        <div
+                          className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink)]"
+                          style={{ fontFamily: selectedUIFontSans ? `"${selectedUIFontSans.family}", sans-serif` : undefined }}
+                        >
+                          {selectedUIFontSans?.preview_ui ?? t("settings.uiFonts.defaultSansPreview")}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.uiFonts.serifLabel")}</div>
+                          <div className="mt-1 text-sm font-semibold text-[var(--color-editorial-ink)]">
+                            {selectedUIFontSerif?.label ?? t("settings.uiFonts.defaultSerifLabel")}
+                          </div>
+                          <div className="mt-1 text-xs text-[var(--color-editorial-ink-soft)]">
+                            {selectedUIFontSerif?.family ?? "Sawarabi Mincho"}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setUIFontSerifPickerOpen(true)}
+                          className="inline-flex min-h-10 items-center rounded-full border border-[var(--color-editorial-line)] bg-white px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+                        >
+                          {t("settings.uiFonts.choose")}
+                        </button>
+                      </div>
+                      <div className="mt-4 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-4">
+                        <div className="text-xs uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">{t("settings.uiFonts.preview")}</div>
+                        <div
+                          className="mt-2 text-sm leading-7 text-[var(--color-editorial-ink)]"
+                          style={{ fontFamily: selectedUIFontSerif ? `"${selectedUIFontSerif.family}", serif` : undefined }}
+                        >
+                          {selectedUIFontSerif?.preview_ui ?? t("settings.uiFonts.defaultSerifPreview")}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-[20px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3 text-sm text-[var(--color-editorial-ink-soft)]">
+                    {uiFontsDirty ? t("settings.uiFonts.pendingNotice") : t("settings.uiFonts.savedNotice")}
+                  </div>
+                </form>
+              </SectionCard>
+
+              <SectionCard>
                 <div>
                   <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.access.selectProvider")}</div>
                   <div className="mt-1 text-xs text-[var(--color-editorial-ink-faint)]">
@@ -7638,6 +7789,32 @@ export default function SettingsPage() {
           setSummaryAudioProviderVoiceLabel("");
           setSummaryAudioProviderVoiceDescription("");
         }}
+      />
+
+      <UIFontPickerModal
+        open={uiFontSansPickerOpen}
+        kind="sans"
+        title={t("settings.uiFonts.sansModalTitle")}
+        subtitle={t("settings.uiFonts.sansModalSubtitle")}
+        fonts={uiFontSansOptions}
+        currentKey={savedUIFontSansKey}
+        selectedKey={uiFontSansKey}
+        defaultKey={DEFAULT_UI_FONT_SANS_KEY}
+        onClose={() => setUIFontSansPickerOpen(false)}
+        onSelect={setUIFontSansKey}
+      />
+
+      <UIFontPickerModal
+        open={uiFontSerifPickerOpen}
+        kind="serif"
+        title={t("settings.uiFonts.serifModalTitle")}
+        subtitle={t("settings.uiFonts.serifModalSubtitle")}
+        fonts={uiFontSerifOptions}
+        currentKey={savedUIFontSerifKey}
+        selectedKey={uiFontSerifKey}
+        defaultKey={DEFAULT_UI_FONT_SERIF_KEY}
+        onClose={() => setUIFontSerifPickerOpen(false)}
+        onSelect={setUIFontSerifKey}
       />
 
       <AudioBriefingPresetSaveModal

@@ -140,6 +140,15 @@ func (h *SettingsHandler) GetLLMCatalog(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, catalog)
 }
 
+func (h *SettingsHandler) GetUIFontCatalog(w http.ResponseWriter, r *http.Request) {
+	catalog, err := h.settings.LoadUIFontCatalog(r.Context())
+	if err != nil {
+		http.Error(w, "failed to load ui font catalog", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, catalog)
+}
+
 func (h *SettingsHandler) GetNavigatorPersonas(w http.ResponseWriter, r *http.Request) {
 	personaPath, err := resolveNavigatorPersonasPath()
 	if err != nil {
@@ -847,6 +856,32 @@ func (h *SettingsHandler) UpdateBudget(w http.ResponseWriter, r *http.Request) {
 		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
 	}
 	writeJSON(w, settings)
+}
+
+func (h *SettingsHandler) UpdateUIFontSettings(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body service.UpdateUIFontSettingsInput
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	settings, err := h.settings.UpdateUIFontSettings(r.Context(), userID, body)
+	if err != nil {
+		if err.Error() == "invalid ui_font_sans_key" || err.Error() == "invalid ui_font_serif_key" {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeRepoError(w, err)
+		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
+	writeJSON(w, map[string]any{
+		"user_id":           settings.UserID,
+		"ui_font_sans_key":  settings.UIFontSansKey,
+		"ui_font_serif_key": settings.UIFontSerifKey,
+	})
 }
 
 func (h *SettingsHandler) setAPIKey(w http.ResponseWriter, r *http.Request, provider string, payload map[string]func(*model.UserSettings) any) {

@@ -26,6 +26,7 @@ type SettingsService struct {
 	obsidianRepo            *repository.ObsidianExportRepo
 	llmUsageRepo            *repository.LLMUsageLogRepo
 	openRouterOverrideRepo  *repository.OpenRouterModelOverrideRepo
+	uiFontCatalog           *UIFontCatalogService
 	cipher                  *SecretCipher
 	githubApp               *GitHubAppClient
 }
@@ -78,6 +79,8 @@ type SettingsGetPayload struct {
 	AudioBriefing           map[string]any   `json:"audio_briefing"`
 	AudioBriefingVoices     []map[string]any `json:"audio_briefing_persona_voices"`
 	SummaryAudio            map[string]any   `json:"summary_audio"`
+	UIFontSansKey           string           `json:"ui_font_sans_key"`
+	UIFontSerifKey          string           `json:"ui_font_serif_key"`
 	CurrentMonth            map[string]any   `json:"current_month"`
 	ObsidianExport          map[string]any   `json:"obsidian_export"`
 	NotificationPriority    map[string]any   `json:"notification_priority"`
@@ -185,6 +188,11 @@ type UpdateSummaryAudioVoiceSettingsInput struct {
 	AivisUserDictionaryUUID  *string
 }
 
+type UpdateUIFontSettingsInput struct {
+	UIFontSansKey  string `json:"ui_font_sans_key"`
+	UIFontSerifKey string `json:"ui_font_serif_key"`
+}
+
 var modelSettingPurposes = map[string]string{
 	"facts":                          "facts",
 	"facts_secondary":                "facts",
@@ -238,6 +246,7 @@ func NewSettingsService(repo *repository.UserSettingsRepo, userRepo *repository.
 		obsidianRepo:            obsidianRepo,
 		llmUsageRepo:            llmUsageRepo,
 		openRouterOverrideRepo:  openRouterOverrideRepo,
+		uiFontCatalog:           NewUIFontCatalogService(),
 		cipher:                  cipher,
 		githubApp:               githubApp,
 	}
@@ -579,6 +588,8 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		AudioBriefing:           AudioBriefingSettingsPayload(audioBriefingSettings),
 		AudioBriefingVoices:     AudioBriefingPersonaVoicesPayload(audioBriefingVoices),
 		SummaryAudio:            SummaryAudioVoiceSettingsPayload(summaryAudioSettings),
+		UIFontSansKey:           normalizeUIFontKeyOrDefault(settings.UIFontSansKey, DefaultUIFontSansKey),
+		UIFontSerifKey:          normalizeUIFontKeyOrDefault(settings.UIFontSerifKey, DefaultUIFontSerifKey),
 		ObsidianExport:          obsidianExportPayload(obsidianSettings, s.githubApp),
 		CurrentMonth: map[string]any{
 			"month_jst":            monthStart.Format("2006-01"),
@@ -589,6 +600,34 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 			"remaining_budget_pct": remainingPct,
 		},
 	}, nil
+}
+
+func normalizeUIFontKeyOrDefault(raw, fallback string) string {
+	normalized := strings.TrimSpace(strings.ToLower(raw))
+	if normalized == "" {
+		return fallback
+	}
+	return normalized
+}
+
+func (s *SettingsService) LoadUIFontCatalog(ctx context.Context) (*UIFontCatalog, error) {
+	if s.uiFontCatalog == nil {
+		return nil, fmt.Errorf("ui font catalog unavailable")
+	}
+	return s.uiFontCatalog.LoadCatalog(ctx)
+}
+
+func (s *SettingsService) UpdateUIFontSettings(ctx context.Context, userID string, in UpdateUIFontSettingsInput) (*model.UserSettings, error) {
+	catalog, err := s.LoadUIFontCatalog(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sansKey := normalizeUIFontKeyOrDefault(in.UIFontSansKey, DefaultUIFontSansKey)
+	serifKey := normalizeUIFontKeyOrDefault(in.UIFontSerifKey, DefaultUIFontSerifKey)
+	if err := ValidateUIFontSelection(catalog, sansKey, serifKey); err != nil {
+		return nil, err
+	}
+	return s.repo.UpsertUIFontConfig(ctx, userID, sansKey, serifKey)
 }
 
 func (s *SettingsService) GetSummaryAudioVoiceSettings(ctx context.Context, userID string) (*model.SummaryAudioVoiceSettings, error) {

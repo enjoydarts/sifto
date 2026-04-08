@@ -364,6 +364,54 @@ func TestUpdateLLMModelsAcceptsFishPreprocessModel(t *testing.T) {
 	}
 }
 
+func TestSettingsGetPayloadIncludesUIFontKeys(t *testing.T) {
+	payload := &SettingsGetPayload{
+		UIFontSansKey:  "biz-udgothic",
+		UIFontSerifKey: "biz-udmincho",
+	}
+
+	if payload.UIFontSansKey != "biz-udgothic" {
+		t.Fatalf("UIFontSansKey = %q, want biz-udgothic", payload.UIFontSansKey)
+	}
+	if payload.UIFontSerifKey != "biz-udmincho" {
+		t.Fatalf("UIFontSerifKey = %q, want biz-udmincho", payload.UIFontSerifKey)
+	}
+}
+
+func TestUpdateUIFontSettingsAcceptsSelectableKeys(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000031"
+
+	settings, err := svc.UpdateUIFontSettings(ctx, userID, UpdateUIFontSettingsInput{
+		UIFontSansKey:  "biz-udgothic",
+		UIFontSerifKey: "biz-udmincho",
+	})
+	if err != nil {
+		t.Fatalf("UpdateUIFontSettings() error = %v", err)
+	}
+	if settings.UIFontSansKey != "biz-udgothic" {
+		t.Fatalf("UIFontSansKey = %q, want biz-udgothic", settings.UIFontSansKey)
+	}
+	if settings.UIFontSerifKey != "biz-udmincho" {
+		t.Fatalf("UIFontSerifKey = %q, want biz-udmincho", settings.UIFontSerifKey)
+	}
+}
+
+func TestUpdateUIFontSettingsRejectsDisplayKey(t *testing.T) {
+	svc := newSettingsServiceForTest(t)
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000032"
+
+	_, err := svc.UpdateUIFontSettings(ctx, userID, UpdateUIFontSettingsInput{
+		UIFontSansKey:  "dotgothic16",
+		UIFontSerifKey: "biz-udmincho",
+	})
+	if err == nil || err.Error() != "invalid ui_font_sans_key" {
+		t.Fatalf("UpdateUIFontSettings() error = %v, want invalid ui_font_sans_key", err)
+	}
+}
+
 func TestResolveAINavigatorBriefModelUsesBriefSpecificOverrides(t *testing.T) {
 	settings := &model.UserSettings{
 		NavigatorModel:                strptr("gpt-5.4"),

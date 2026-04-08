@@ -1497,6 +1497,8 @@ export interface UserSettings {
   aivis_api_key_last4: string | null;
   has_fish_api_key?: boolean;
   fish_api_key_last4?: string | null;
+  ui_font_sans_key?: string;
+  ui_font_serif_key?: string;
   aivis_user_dictionary_uuid?: string | null;
   gemini_tts_enabled?: boolean;
   podcast?: PodcastSettings;
@@ -1553,6 +1555,24 @@ export interface UserSettings {
   };
   notification_priority?: NotificationPriorityRule;
   current_month: UserSettingsCurrentMonth;
+}
+
+export interface UIFontCatalogEntry {
+  key: string;
+  label: string;
+  family: string;
+  category: "sans" | "serif" | "display";
+  selectable_for_sans: boolean;
+  selectable_for_serif: boolean;
+  preview_ui: string;
+  preview_body: string;
+}
+
+export interface UIFontCatalogResponse {
+  catalog_name: string;
+  source: string;
+  source_reference: string;
+  fonts: UIFontCatalogEntry[];
 }
 
 export interface AudioBriefingSettings {
@@ -2570,6 +2590,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
   getLLMCatalog: () => apiFetch<LLMCatalog>("/settings/llm-catalog"),
+  getUIFontCatalog: () => apiFetch<UIFontCatalogResponse>("/settings/ui-font-catalog"),
   updateSettings: (body: {
     monthly_budget_usd: number | null;
     budget_alert_enabled: boolean;
@@ -2577,6 +2598,14 @@ export const api = {
     digest_email_enabled: boolean;
   }) =>
     apiFetch<UserSettings>("/settings", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  updateUIFontSettings: (body: {
+    ui_font_sans_key: string;
+    ui_font_serif_key: string;
+  }) =>
+    apiFetch<{ user_id: string; ui_font_sans_key: string; ui_font_serif_key: string }>("/settings/ui-fonts", {
       method: "PATCH",
       body: JSON.stringify(body),
     }),

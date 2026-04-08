@@ -163,9 +163,11 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	       navigator_fallback_model,
 	       ai_navigator_brief_model,
 	       ai_navigator_brief_fallback_model,
-	       audio_briefing_script_model,
-	       audio_briefing_script_fallback_model,
-	       fish_preprocess_model,
+		       audio_briefing_script_model,
+		       audio_briefing_script_fallback_model,
+		       fish_preprocess_model,
+		       ui_font_sans_key,
+		       ui_font_serif_key,
 	       inoreader_access_token_enc,
 		       inoreader_token_expires_at,
 		       created_at,
@@ -252,6 +254,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.AudioBriefingScriptModel,
 		&v.AudioBriefingScriptFallbackModel,
 		&v.FishPreprocessModel,
+		&v.UIFontSansKey,
+		&v.UIFontSerifKey,
 		&inoreaderAccessTokenEnc,
 		&v.InoreaderTokenExpiresAt,
 		&v.CreatedAt,
@@ -464,6 +468,25 @@ func (r *UserSettingsRepo) UpsertReadingPlanConfig(ctx context.Context, userID, 
 		    reading_plan_exclude_read = EXCLUDED.reading_plan_exclude_read,
 		    updated_at = NOW()`,
 		userID, window, size, diversifyTopics, excludeRead,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) UpsertUIFontConfig(ctx context.Context, userID, sansKey, serifKey string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (
+			user_id,
+			ui_font_sans_key,
+			ui_font_serif_key
+		) VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET ui_font_sans_key = EXCLUDED.ui_font_sans_key,
+		    ui_font_serif_key = EXCLUDED.ui_font_serif_key,
+		    updated_at = NOW()`,
+		userID, sansKey, serifKey,
 	)
 	if err != nil {
 		return nil, err

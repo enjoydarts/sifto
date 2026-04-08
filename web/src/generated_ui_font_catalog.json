@@ -1,0 +1,397 @@
+{
+  "catalog_name": "Google Fonts Japanese UI Fonts",
+  "source": "google-webfonts",
+  "source_reference": "https://fonts.google.com/?lang=ja_Jpan",
+  "fonts": [
+    {
+      "key": "sawarabi-gothic",
+      "label": "さわらびゴシック",
+      "family": "Sawarabi Gothic",
+      "category": "sans",
+      "selectable_for_sans": true,
+      "selectable_for_serif": false,
+      "preview_ui": "今日は重要な記事を3本ピックアップしました。",
+      "preview_body": "情報の見通しをよくするため、要点を短く整理して読みやすく表示します。"
+    },
+    {
+      "key": "noto-sans-jp",
+      "label": "Noto Sans JP",
+      "family": "Noto Sans JP",
+      "category": "sans",
+      "selectable_for_sans": true,
+      "selectable_for_serif": false,
+      "preview_ui": "今日は重要な記事を3本ピックアップしました。",
+      "preview_body": "情報の見通しをよくするため、要点を短く整理して読みやすく表示します。"
+    },
+    {
+      "key": "biz-udgothic",
+      "label": "BIZ UDゴシック",
+      "family": "BIZ UDGothic",
+      "category": "sans",
+      "selectable_for_sans": true,
+      "selectable_for_serif": false,
+      "preview_ui": "今日は重要な記事を3本ピックアップしました。",
+      "preview_body": "情報の見通しをよくするため、要点を短く整理して読みやすく表示します。"
+    },
+    {
+      "key": "biz-udpgothic",
+      "label": "BIZ UDPゴシック",
+      "family": "BIZ UDPGothic",
+      "category": "sans",
+      "selectable_for_sans": true,
+      "selectable_for_serif": false,
+      "preview_ui": "今日は重要な記事を3本ピックアップしました。",
+      "preview_body": "情報の見通しをよくするため、要点を短く整理して読みやすく表示します。"
+    },
+    {
+      "key": "zen-kaku-gothic-new",
+      "label": "Zen角ゴシック New",
+      "family": "Zen Kaku Gothic New",
+      "category": "sans",
+      "selectable_for_sans": true,
+      "selectable_for_serif": false,
+      "preview_ui": "今日は重要な記事を3本ピックアップしました。",
+      "preview_body": "情報の見通しをよくするため、要点を短く整理して読みやすく表示します。"
+    },
+    {
+      "key": "zen-maru-gothic",
+      "label": "Zen丸ゴシック",
+      "family": "Zen Maru Gothic",
+      "category": "sans",
+      "selectable_for_sans": true,
+      "selectable_for_serif": false,
+      "preview_ui": "今日は重要な記事を3本ピックアップしました。",
+      "preview_body": "情報の見通しをよくするため、要点を短く整理して読みやすく表示します。"
+    },
+    {
+      "key": "m-plus-1p",
+      "label": "M PLUS 1p",
+      "family": "M PLUS 1p",
+      "category": "sans",
+      "selectable_for_sans": true,
+      "selectable_for_serif": false,
+      "preview_ui": "今日は重要な記事を3本ピックアップしました。",
+      "preview_body": "情報の見通しをよくするため、要点を短く整理して読みやすく表示します。"
+    },
+    {
+      "key": "m-plus-rounded-1c",
+      "label": "M PLUS Rounded 1c",
+      "family": "M PLUS Rounded 1c",
+      "category": "sans",
+      "selectable_for_sans": true,
+      "selectable_for_serif": false,
+      "preview_ui": "今日は重要な記事を3本ピックアップしました。",
+      "preview_body": "情報の見通しをよくするため、要点を短く整理して読みやすく表示します。"
+    },
+    {
+      "key": "ibm-plex-sans-jp",
+      "label": "IBM Plex Sans JP",
+      "family": "IBM Plex Sans JP",
+      "category": "sans",
+      "selectable_for_sans": true,
+      "selectable_for_serif": false,
+      "preview_ui": "今日は重要な記事を3本ピックアップしました。",
+      "preview_body": "情報の見通しをよくするため、要点を短く整理して読みやすく表示します。"
+    },
+    {
+      "key": "kosugi",
+      "label": "小杉",
+      "family": "Kosugi",
+      "category": "sans",
+      "selectable_for_sans": true,
+      "selectable_for_serif": false,
+      "preview_ui": "今日は重要な記事を3本ピックアップしました。",
+      "preview_body": "情報の見通しをよくするため、要点を短く整理して読みやすく表示します。"
+    },
+    {
+      "key": "kosugi-maru",
+      "label": "小杉丸",
+      "family": "Kosugi Maru",
+      "category": "sans",
+      "selectable_for_sans": true,
+      "selectable_for_serif": false,
+      "preview_ui": "今日は重要な記事を3本ピックアップしました。",
+      "preview_body": "情報の見通しをよくするため、要点を短く整理して読みやすく表示します。"
+    },
+    {
+      "key": "murecho",
+      "label": "ムレチョウ",
+      "family": "Murecho",
+      "category": "sans",
+      "selectable_for_sans": true,
+      "selectable_for_serif": false,
+      "preview_ui": "今日は重要な記事を3本ピックアップしました。",
+      "preview_body": "情報の見通しをよくするため、要点を短く整理して読みやすく表示します。"
+    },
+    {
+      "key": "sawarabi-mincho",
+      "label": "さわらび明朝",
+      "family": "Sawarabi Mincho",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "noto-serif-jp",
+      "label": "Noto Serif JP",
+      "family": "Noto Serif JP",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "biz-udmincho",
+      "label": "BIZ UD明朝",
+      "family": "BIZ UDMincho",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "biz-udpmincho",
+      "label": "BIZ UDP明朝",
+      "family": "BIZ UDPMincho",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "zen-old-mincho",
+      "label": "Zen Old明朝",
+      "family": "Zen Old Mincho",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "shippori-mincho",
+      "label": "しっぽり明朝",
+      "family": "Shippori Mincho",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "shippori-mincho-b1",
+      "label": "しっぽり明朝 B1",
+      "family": "Shippori Mincho B1",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "kaisei-decol",
+      "label": "解星デコール",
+      "family": "Kaisei Decol",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "kaisei-opti",
+      "label": "解星オプティ",
+      "family": "Kaisei Opti",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "kaisei-tokumin",
+      "label": "解星特ミン",
+      "family": "Kaisei Tokumin",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "kaisei-harunoumi",
+      "label": "解星春の海",
+      "family": "Kaisei HarunoUmi",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "yuji-syuku",
+      "label": "遊字 宿",
+      "family": "Yuji Syuku",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "yuji-mai",
+      "label": "遊字 舞",
+      "family": "Yuji Mai",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "yuji-boku",
+      "label": "遊字 朴",
+      "family": "Yuji Boku",
+      "category": "serif",
+      "selectable_for_sans": false,
+      "selectable_for_serif": true,
+      "preview_ui": "静かな朝に読むためのブリーフィングです。",
+      "preview_body": "背景の情報も含めて、落ち着いた調子で本文を読める明朝体を選べます。"
+    },
+    {
+      "key": "dotgothic16",
+      "label": "DotGothic16",
+      "family": "DotGothic16",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    },
+    {
+      "key": "hachi-maru-pop",
+      "label": "はちまるポップ",
+      "family": "Hachi Maru Pop",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    },
+    {
+      "key": "yusei-magic",
+      "label": "ユウセイ・マジック",
+      "family": "Yusei Magic",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    },
+    {
+      "key": "shippori-antique",
+      "label": "しっぽりアンチック",
+      "family": "Shippori Antique",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    },
+    {
+      "key": "shippori-antique-b1",
+      "label": "しっぽりアンチック B1",
+      "family": "Shippori Antique B1",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    },
+    {
+      "key": "stick",
+      "label": "スティック",
+      "family": "Stick",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    },
+    {
+      "key": "train-one",
+      "label": "トレイン One",
+      "family": "Train One",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    },
+    {
+      "key": "rocknroll-one",
+      "label": "ロックンロール One",
+      "family": "RocknRoll One",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    },
+    {
+      "key": "zen-antique",
+      "label": "Zenアンチック",
+      "family": "Zen Antique",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    },
+    {
+      "key": "zen-kurenaido",
+      "label": "Zen紅道",
+      "family": "Zen Kurenaido",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    },
+    {
+      "key": "kiwi-maru",
+      "label": "キウイ丸",
+      "family": "Kiwi Maru",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    },
+    {
+      "key": "yomogi",
+      "label": "よもぎ",
+      "family": "Yomogi",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    },
+    {
+      "key": "yuji-hentaigana-akari",
+      "label": "遊字 変体仮名 あかり",
+      "family": "Yuji Hentaigana Akari",
+      "category": "display",
+      "selectable_for_sans": false,
+      "selectable_for_serif": false,
+      "preview_ui": "視認性より雰囲気を優先した装飾系です。",
+      "preview_body": "常用本文より見出しや遊び向きの日本語フォントです。"
+    }
+  ]
+}

@@ -47,6 +47,11 @@ type audioBriefingSpeakerVoices struct {
 
 const audioBriefingCharsPerMinute = 400
 
+func audioBriefingTitle(slotStartedAt time.Time) string {
+	slotStartedAt = slotStartedAt.In(timeutil.JST)
+	return fmt.Sprintf("%d年%d月%d日 %02d:%02d便の音声ブリーフィング", slotStartedAt.Year(), slotStartedAt.Month(), slotStartedAt.Day(), slotStartedAt.Hour(), slotStartedAt.Minute())
+}
+
 func BuildAudioBriefingDraft(
 	slotStartedAt time.Time,
 	persona string,
@@ -57,7 +62,7 @@ func BuildAudioBriefingDraft(
 ) AudioBriefingDraft {
 	slotStartedAt = slotStartedAt.In(timeutil.JST)
 	if len(items) == 0 {
-		title := fmt.Sprintf("%02d:%02d便の音声ブリーフィング", slotStartedAt.Hour(), slotStartedAt.Minute())
+		title := audioBriefingTitle(slotStartedAt)
 		reason := "この配信枠に含める記事が見つからなかったため、生成をスキップしました。"
 		return AudioBriefingDraft{
 			Title:        title,
@@ -67,7 +72,7 @@ func BuildAudioBriefingDraft(
 	}
 
 	slotLabel := fmt.Sprintf("%02d:%02d便", slotStartedAt.Hour(), slotStartedAt.Minute())
-	title := fmt.Sprintf("%sの音声ブリーフィング", slotLabel)
+	title := audioBriefingTitle(slotStartedAt)
 	chunks := make([]model.AudioBriefingScriptChunk, 0, len(items)+3)
 	ttsProvider, ttsModel, voiceModel, providerVoiceLabel, voiceStyle := audioBriefingVoiceRefs(voice)
 	opening := fmt.Sprintf("%sです。%sの%sをお届けします。今回は直近の注目記事を%d本まとめて見ていきます。", audioBriefingSpeakerName(persona), slotLabel, resolvedAudioBriefingProgramName(programName), len(items))
@@ -119,7 +124,7 @@ func BuildAudioBriefingDraftFromNarration(
 ) AudioBriefingDraft {
 	slotStartedAt = slotStartedAt.In(timeutil.JST)
 	if len(items) == 0 {
-		title := fmt.Sprintf("%02d:%02d便の音声ブリーフィング", slotStartedAt.Hour(), slotStartedAt.Minute())
+		title := audioBriefingTitle(slotStartedAt)
 		reason := "この配信枠に含める記事が見つからなかったため、生成をスキップしました。"
 		return AudioBriefingDraft{
 			Title:        title,
@@ -129,7 +134,7 @@ func BuildAudioBriefingDraftFromNarration(
 	}
 
 	slotLabel := fmt.Sprintf("%02d:%02d便", slotStartedAt.Hour(), slotStartedAt.Minute())
-	title := fmt.Sprintf("%sの音声ブリーフィング", slotLabel)
+	title := audioBriefingTitle(slotStartedAt)
 	chunks := make([]model.AudioBriefingScriptChunk, 0, len(items)+3)
 	ttsProvider, ttsModel, voiceModel, providerVoiceLabel, voiceStyle := audioBriefingVoiceRefs(voice)
 
@@ -215,7 +220,7 @@ func BuildAudioBriefingDraftFromTurns(
 ) AudioBriefingDraft {
 	slotStartedAt = slotStartedAt.In(timeutil.JST)
 	if len(items) == 0 {
-		title := fmt.Sprintf("%02d:%02d便の音声ブリーフィング", slotStartedAt.Hour(), slotStartedAt.Minute())
+		title := audioBriefingTitle(slotStartedAt)
 		reason := "この配信枠に含める記事が見つからなかったため、生成をスキップしました。"
 		return AudioBriefingDraft{
 			Title:        title,

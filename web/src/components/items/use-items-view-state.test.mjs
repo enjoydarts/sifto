@@ -88,6 +88,42 @@ test("itemsViewStateReducer clears unread filter when switching to read feed", (
   assert.equal(next.page, 1);
 });
 
+test("itemsViewStateReducer restores unread default sort when moving from pending to unread", () => {
+  const next = itemsViewStateReducer(
+    makeState({
+      feedMode: "pending",
+      sortMode: "newest",
+      page: 4,
+    }),
+    {
+      type: "set_feed",
+      feed: "unread",
+    }
+  );
+
+  assert.equal(next.feedMode, "unread");
+  assert.equal(next.sortMode, "personal_score");
+  assert.equal(next.page, 1);
+});
+
+test("itemsViewStateReducer restores non-unread default sort when moving away from unread", () => {
+  const next = itemsViewStateReducer(
+    makeState({
+      feedMode: "unread",
+      sortMode: "personal_score",
+      page: 2,
+    }),
+    {
+      type: "set_feed",
+      feed: "read",
+    }
+  );
+
+  assert.equal(next.feedMode, "read");
+  assert.equal(next.sortMode, "newest");
+  assert.equal(next.page, 1);
+});
+
 test("itemsViewStateReducer resets page and updates search", () => {
   const next = itemsViewStateReducer(makeState({ page: 6 }), {
     type: "set_search",

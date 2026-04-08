@@ -2,6 +2,10 @@ import type { FeedMode, SortMode } from "./feed-tabs";
 
 const FILTERS = ["", "summarized", "pending", "new", "fetched", "facts_extracted", "failed", "deleted"] as const;
 
+function defaultSortForFeed(feedMode: FeedMode): SortMode {
+  return feedMode === "unread" ? "personal_score" : "newest";
+}
+
 export type ItemsViewState = {
   feedMode: FeedMode;
   sortMode: SortMode;
@@ -44,7 +48,7 @@ export function parseItemsQueryState(searchParams: URLSearchParams): ItemsViewSt
             : "unread";
 
   const qSort = searchParams.get("sort");
-  const defaultSort: SortMode = feedMode === "unread" ? "personal_score" : "newest";
+  const defaultSort = defaultSortForFeed(feedMode);
   const sortMode: SortMode = qSort === "score" ? "score" : qSort === "personal_score" ? "personal_score" : defaultSort;
 
   const filter =
@@ -120,11 +124,17 @@ export function itemsViewStateReducer(state: ItemsViewState, action: ItemsViewSt
     case "hydrate_from_url":
       return normalizeItemsViewState(action.state);
     case "set_feed":
+      {
+        const previousDefaultSort = defaultSortForFeed(state.feedMode);
+        const nextDefaultSort = defaultSortForFeed(action.feed);
+        const nextSortMode = state.sortMode === previousDefaultSort ? nextDefaultSort : state.sortMode;
       return normalizeItemsViewState({
         ...state,
         feedMode: action.feed,
+        sortMode: nextSortMode,
         page: 1,
       });
+      }
     case "set_sort":
       return normalizeItemsViewState({
         ...state,

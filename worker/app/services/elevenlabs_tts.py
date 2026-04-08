@@ -104,7 +104,7 @@ def synthesize_elevenlabs_dialogue_tts(
         raise RuntimeError("elevenlabs dialogue inputs are empty")
 
     response = httpx.post(
-        f"{normalized_endpoint}/v1/text-to-dialogue/convert",
+        f"{normalized_endpoint}/v1/text-to-dialogue",
         headers={
             "xi-api-key": normalized_api_key,
             "Content-Type": "application/json",

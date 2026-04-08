@@ -76,7 +76,7 @@ class ElevenLabsTTSServiceTests(unittest.TestCase):
         self.assertEqual(content_type, "audio/mpeg")
         self.assertEqual(suffix, ".mp3")
         self.assertGreaterEqual(duration_sec, 1)
-        self.assertEqual(captured["url"], "https://api.elevenlabs.io/v1/text-to-dialogue/convert")
+        self.assertEqual(captured["url"], "https://api.elevenlabs.io/v1/text-to-dialogue")
         self.assertEqual(
             captured["headers"],
             {

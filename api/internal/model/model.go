@@ -605,6 +605,7 @@ type PersonalScoreBreakdown struct {
 	TopicRelevance      PersonalScoreComponent `json:"topic_relevance"`
 	EmbeddingSimilarity PersonalScoreComponent `json:"embedding_similarity"`
 	SourceAffinity      PersonalScoreComponent `json:"source_affinity"`
+	RecencyDecay        PersonalScoreComponent `json:"recency_decay"`
 	MatchedTopics       []string               `json:"matched_topics,omitempty"`
 	DominantDimension   *string                `json:"dominant_dimension,omitempty"`
 }

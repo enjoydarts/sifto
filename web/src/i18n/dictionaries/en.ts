@@ -1832,6 +1832,8 @@ export const enDict: Dict = {
   "summaryAudio.queue.unread": "Unread",
   "summaryAudio.queue.later": "Later",
   "summaryAudio.queue.favorite": "Favorites",
+  "summaryAudio.queue.view": "Current view",
+  "summaryAudio.queue.viewHelp": "Playback follows the same filters and sort order you had selected in the items list.",
   "summaryAudio.queueTitle": "Queue",
   "summaryAudio.queueCount": "items",
   "summaryAudio.nowPlaying": "Now playing",

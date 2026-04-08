@@ -12,7 +12,7 @@ export type SharedPlaybackState =
   | "error"
   | "finished";
 
-export type SummaryAudioQueueKind = "unread" | "later" | "favorite" | "brief";
+export type SummaryAudioQueueKind = "unread" | "later" | "favorite" | "brief" | "view";
 
 export type SummaryAudioPrepared = {
   itemID: string;
@@ -35,6 +35,7 @@ export type SharedAudioBriefingPayload = {
 
 export type SharedSummaryQueueState = {
   queueKind: SummaryAudioQueueKind | null;
+  queueQuery: string | null;
   queue: Item[];
   currentItemID: string | null;
   currentItemDetail: ItemDetail | null;
@@ -72,7 +73,7 @@ export type SharedAudioPlayerContextValue = {
   display: SharedAudioDisplayMeta;
   summaryQueue: SharedSummaryQueueState;
   audioBriefing: SharedAudioBriefingPayload | null;
-  startSummaryQueuePlayback: (queueKind: SummaryAudioQueueKind, initialItems?: Item[]) => Promise<void>;
+  startSummaryQueuePlayback: (queueKind: SummaryAudioQueueKind, initialItems?: Item[], options?: { queueQuery?: string | null }) => Promise<void>;
   startAudioBriefingPlayback: (payload: SharedAudioBriefingPayload) => Promise<void>;
   resumePlaybackSession: (session: PlaybackSession) => Promise<void>;
   selectSummaryQueueItem: (index: number) => Promise<void>;

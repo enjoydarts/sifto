@@ -23,20 +23,34 @@ func loadFeedbackPreferenceProfile(ctx context.Context, db *pgxpool.Pool, userID
 		       (
 		         CASE
 		           WHEN fb.rating > 0 THEN 1.0
-		           WHEN fb.rating < 0 THEN -1.0
+		           WHEN fb.rating < 0 THEN -1.2
 		           ELSE 0.0
 		         END
-		         + CASE WHEN fb.is_favorite THEN 1.0 ELSE 0.0 END
+		         + CASE WHEN fb.is_favorite THEN 1.4 ELSE 0.0 END
+		         + CASE WHEN il.item_id IS NOT NULL THEN 0.45 ELSE 0.0 END
+		         + CASE WHEN ir.item_id IS NOT NULL THEN 0.2 ELSE 0.0 END
+		         + CASE WHEN i.deleted_at IS NOT NULL THEN -0.7 ELSE 0.0 END
 		       )::double precision AS signal
-		FROM item_feedbacks fb
-		JOIN items i ON i.id = fb.item_id
+		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		JOIN item_embeddings ie ON ie.item_id = i.id
-		WHERE fb.user_id = $1
-		  AND s.user_id = $1
-		  AND i.deleted_at IS NULL
-		  AND (fb.rating <> 0 OR fb.is_favorite = true)
-		ORDER BY fb.updated_at DESC`, userID)
+		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
+		LEFT JOIN item_laters il ON il.item_id = i.id AND il.user_id = $1
+		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+		WHERE s.user_id = $1
+		  AND (
+		    fb.rating <> 0
+		    OR fb.is_favorite = true
+		    OR il.item_id IS NOT NULL
+		    OR ir.item_id IS NOT NULL
+		    OR i.deleted_at IS NOT NULL
+		  )
+		ORDER BY GREATEST(
+			COALESCE(fb.updated_at, '-infinity'::timestamptz),
+			COALESCE(il.created_at, '-infinity'::timestamptz),
+			COALESCE(ir.read_at, '-infinity'::timestamptz),
+			COALESCE(i.deleted_at, '-infinity'::timestamptz)
+		) DESC`, userID)
 	if err != nil {
 		return nil, err
 	}

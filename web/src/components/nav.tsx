@@ -35,7 +35,7 @@ import { api, enableForceFreshReload, OpenRouterSyncRun } from "@/lib/api";
 
 const primaryLinks = [
   { href: "/", labelKey: "nav.briefing", icon: Sparkles },
-  { href: "/items?feed=unread&sort=newest", activeHref: "/items", labelKey: "nav.inbox", icon: Newspaper },
+  { href: "/items?feed=unread&sort=personal_score", activeHref: "/items", labelKey: "nav.inbox", icon: Newspaper },
   { href: "/triage", labelKey: "nav.triage", icon: CheckCheck },
   { href: "/ask", labelKey: "nav.ask", icon: Search },
 ];

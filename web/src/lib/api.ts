@@ -637,6 +637,7 @@ export interface PersonalScoreBreakdown {
   topic_relevance: PersonalScoreComponent;
   embedding_similarity: PersonalScoreComponent;
   source_affinity: PersonalScoreComponent;
+  recency_decay: PersonalScoreComponent;
   matched_topics?: string[];
   dominant_dimension?: string | null;
 }

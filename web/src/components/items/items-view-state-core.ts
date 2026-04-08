@@ -44,7 +44,8 @@ export function parseItemsQueryState(searchParams: URLSearchParams): ItemsViewSt
             : "unread";
 
   const qSort = searchParams.get("sort");
-  const sortMode: SortMode = qSort === "score" ? "score" : qSort === "personal_score" ? "personal_score" : "newest";
+  const defaultSort: SortMode = feedMode === "unread" ? "personal_score" : "newest";
+  const sortMode: SortMode = qSort === "score" ? "score" : qSort === "personal_score" ? "personal_score" : defaultSort;
 
   const filter =
     qFilter && FILTERS.includes(qFilter as (typeof FILTERS)[number]) && qFilter !== "deleted" ? qFilter : "";

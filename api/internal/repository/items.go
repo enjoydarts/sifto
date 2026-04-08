@@ -254,8 +254,10 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 	offsetArg := `$` + itoa(len(args))
 
 	orderBy := ` ORDER BY i.created_at DESC`
-	if p.Sort == "score" || p.Sort == "personal_score" {
+	if p.Sort == "score" {
 		orderBy = ` ORDER BY sm.score DESC NULLS LAST, i.created_at DESC`
+	} else if p.Sort == "personal_score" {
+		orderBy = ` ORDER BY sm.personal_score DESC NULLS LAST, sm.score DESC NULLS LAST, i.created_at DESC`
 	}
 
 	rows, err := r.db.Query(ctx, `
@@ -265,7 +267,7 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
-		       sm.score, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
+		       sm.score, sm.personal_score, sm.personal_score_reason, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
@@ -579,7 +581,7 @@ func (r *ItemRepo) ReadingPlan(ctx context.Context, userID string, p ReadingPlan
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
-		       sm.score, sm.score_breakdown, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
+		       sm.score, sm.score_breakdown, sm.personal_score, sm.personal_score_reason, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
@@ -700,7 +702,7 @@ func (r *ItemRepo) BriefingClusters24h(ctx context.Context, userID string, limit
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
-		       sm.score, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
+		       sm.score, sm.personal_score, sm.personal_score_reason, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
@@ -842,7 +844,7 @@ func (r *ItemRepo) HighlightItems24h(ctx context.Context, userID string, minScor
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
-		       sm.score, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
+		       sm.score, sm.personal_score, sm.personal_score_reason, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		JOIN sources s ON s.id = i.source_id
@@ -1532,7 +1534,7 @@ func scanItems(rows itemRowScanner) ([]model.Item, error) {
 	for rows.Next() {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.SourceTitle, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
-			&it.Status, &it.ProcessingError, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.Status, &it.ProcessingError, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.PersonalScore, &it.PersonalScoreReason, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)
@@ -1547,7 +1549,7 @@ func scanItemsWithBreakdown(rows itemRowScanner) ([]model.Item, error) {
 	for rows.Next() {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.SourceTitle, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
-			&it.Status, &it.ProcessingError, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryScoreBreakdown, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.Status, &it.ProcessingError, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.SummaryScoreBreakdown, &it.PersonalScore, &it.PersonalScoreReason, &it.SummaryTopics, &it.TranslatedTitle, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)

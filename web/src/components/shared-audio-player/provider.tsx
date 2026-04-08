@@ -43,23 +43,91 @@ function base64ToBlob(base64: string, contentType: string): Blob {
   return new Blob([bytes], { type: contentType || "audio/mpeg" });
 }
 
-async function fetchSummaryQueue(queueKind: SummaryAudioQueueKind): Promise<Item[]> {
+function summaryQueueParamsForKind(queueKind: SummaryAudioQueueKind): Parameters<typeof api.getItems>[0] | null {
+  if (queueKind === "brief") {
+    return null;
+  }
+  return queueKind === "later"
+    ? { status: "summarized", page_size: PLAYBACK_QUEUE_BUFFER_SIZE, sort: "newest", unread_only: true, later_only: true }
+    : queueKind === "favorite"
+      ? { status: "summarized", page_size: PLAYBACK_QUEUE_BUFFER_SIZE, sort: "newest", favorite_only: true }
+      : { status: "summarized", page_size: PLAYBACK_QUEUE_BUFFER_SIZE, sort: "newest", unread_only: true };
+}
+
+function parseSummaryViewQuery(queueQuery: string): Parameters<typeof api.getItems>[0] {
+  const params = new URLSearchParams(queueQuery);
+  const feed = params.get("feed");
+  const filter = params.get("status");
+  const pendingMode = feed === "pending";
+  const deletedMode = feed === "deleted" || filter === "deleted";
+  const laterMode = feed === "later";
+  const unreadMode = feed === "unread";
+  const readMode = feed === "read";
+  const searchQuery = (params.get("q") ?? "").trim();
+  const searchMode = (params.get("search_mode") ?? "").trim();
+  const sourceID = (params.get("source_id") ?? "").trim();
+  const topic = (params.get("topic") ?? "").trim();
+  const sort = params.get("sort") || (unreadMode ? "personal_score" : "newest");
+  const unreadOnly = !pendingMode && !deletedMode && (unreadMode || params.get("unread") === "1" || laterMode);
+  const favoriteOnly = !pendingMode && !deletedMode && params.get("favorite") === "1";
+  return {
+    status: deletedMode ? "deleted" : filter || (pendingMode ? "pending" : "summarized"),
+    ...(sourceID ? { source_id: sourceID } : {}),
+    ...(topic ? { topic } : {}),
+    ...(searchQuery ? { q: searchQuery } : {}),
+    ...(searchQuery && searchMode ? { search_mode: searchMode } : {}),
+    sort: pendingMode ? "newest" : sort,
+    unread_only: unreadOnly,
+    read_only: pendingMode || deletedMode ? false : readMode,
+    favorite_only: favoriteOnly,
+    later_only: pendingMode || deletedMode ? false : laterMode,
+  };
+}
+
+async function fetchSummaryQueue(queueKind: SummaryAudioQueueKind, queueQuery?: string | null, excludedItemIDs?: string[]): Promise<Item[]> {
   if (queueKind === "brief") {
     return [];
   }
-  const params =
-    queueKind === "later"
-      ? { status: "summarized", page_size: PLAYBACK_QUEUE_BUFFER_SIZE, sort: "newest", unread_only: true, later_only: true }
-      : queueKind === "favorite"
-        ? { status: "summarized", page_size: PLAYBACK_QUEUE_BUFFER_SIZE, sort: "newest", favorite_only: true }
-        : { status: "summarized", page_size: PLAYBACK_QUEUE_BUFFER_SIZE, sort: "newest", unread_only: true };
-  const response = await api.getItems(params);
-  return response.items;
+  if (queueKind !== "view") {
+    const params = summaryQueueParamsForKind(queueKind);
+    const response = await api.getItems(params ?? undefined);
+    return response.items;
+  }
+
+  if (!queueQuery) {
+    return [];
+  }
+
+  const baseParams = parseSummaryViewQuery(queueQuery);
+  const excluded = new Set(excludedItemIDs ?? []);
+  const items: Item[] = [];
+  let page = 1;
+  let hasNext = true;
+  while (hasNext && items.length < PLAYBACK_QUEUE_BUFFER_SIZE) {
+    const response = await api.getItems({
+      ...baseParams,
+      page,
+      page_size: 200,
+    });
+    for (const item of response.items) {
+      if (excluded.has(item.id)) {
+        continue;
+      }
+      items.push(item);
+      if (items.length >= PLAYBACK_QUEUE_BUFFER_SIZE) {
+        break;
+      }
+    }
+    hasNext = response.has_next;
+    page += 1;
+  }
+  return items;
 }
 
 function createEmptySummaryQueue(): SharedSummaryQueueState {
   return {
     queueKind: null,
+    queueQuery: null,
     queue: [],
     currentItemID: null,
     currentItemDetail: null,
@@ -73,6 +141,7 @@ function createEmptySummaryQueue(): SharedSummaryQueueState {
 
 type SummaryResumePayload = {
   queue_kind: SummaryAudioQueueKind;
+  queue_query?: string | null;
   queue_items: Item[];
   current_item_id: string | null;
   current_queue_index: number;
@@ -192,14 +261,14 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   }, [summaryQueue]);
 
   const summaryQueueQuery = useQuery({
-    queryKey: ["shared-summary-audio-queue", summaryQueue.queueKind],
+    queryKey: ["shared-summary-audio-queue", summaryQueue.queueKind, summaryQueue.queueQuery],
     queryFn: async () => {
-      if (!summaryQueue.queueKind) {
+      if (!summaryQueue.queueKind || summaryQueue.queueKind === "view") {
         return [];
       }
-      return fetchSummaryQueue(summaryQueue.queueKind);
+      return fetchSummaryQueue(summaryQueue.queueKind, summaryQueue.queueQuery);
     },
-    enabled: Boolean(summaryQueue.queueKind),
+    enabled: Boolean(summaryQueue.queueKind && summaryQueue.queueKind !== "view"),
   });
 
   const navigatorPersonasQuery = useQuery({
@@ -327,6 +396,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       }
       await createSummaryPlaybackSession(
         summaryQueue.queueKind,
+        summaryQueue.queueQuery,
         summaryQueue.queue,
         summaryQueue.currentIndex,
         summaryQueue.excludedItemIDs,
@@ -410,6 +480,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
 
   function buildSummaryResumePayload(
     queueKind: SummaryAudioQueueKind,
+    queueQuery: string | null,
     queue: Item[],
     currentIndex: number,
     excludedItemIDs: string[],
@@ -417,6 +488,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
   ): SummaryResumePayload {
     return {
       queue_kind: queueKind,
+      queue_query: queueQuery,
       queue_items: queue,
       current_item_id: queue[0]?.id ?? null,
       current_queue_index: currentIndex,
@@ -437,6 +509,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
 
   async function createSummaryPlaybackSession(
     queueKind: SummaryAudioQueueKind,
+    queueQuery: string | null,
     queue: Item[],
     currentIndex: number,
     excludedItemIDs: string[],
@@ -454,7 +527,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       current_position_sec: offsetSec,
       duration_sec: durationSec,
       progress_ratio: progressRatio(offsetSec, durationSec),
-      resume_payload: buildSummaryResumePayload(queueKind, queue, currentIndex, excludedItemIDs, offsetSec),
+      resume_payload: buildSummaryResumePayload(queueKind, queueQuery, queue, currentIndex, excludedItemIDs, offsetSec),
     });
     remoteSessionIDRef.current = session.id;
     lastPersistedPositionSecRef.current = offsetSec;
@@ -505,6 +578,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         progress_ratio: progressRatio(effectivePosition, effectiveDuration),
         resume_payload: buildSummaryResumePayload(
           state.queueKind,
+          state.queueQuery,
           state.queue,
           state.currentIndex,
           state.excludedItemIDs,
@@ -740,7 +814,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       ...queueState.excludedItemIDs,
       ...queueState.queue.map((item) => item.id),
     ]);
-    const incoming = await fetchSummaryQueue(queueKind);
+    const incoming = await fetchSummaryQueue(queueKind, queueState.queueQuery, [...consumedIDs]);
     return incoming
       .filter((item) => !consumedIDs.has(item.id))
       .slice(0, PLAYBACK_QUEUE_BUFFER_SIZE);
@@ -784,12 +858,13 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       currentIndex?: number;
       excludedItemIDs?: string[];
       startOffsetSec?: number;
+      queueQuery?: string | null;
     },
   ) {
     if (summaryAudioSettingsLoaded && !summaryAudioConfigured) {
       return;
     }
-    const seededQueue = (initialItems ?? []).slice(0, PLAYBACK_QUEUE_BUFFER_SIZE);
+    const seededQueue = initialItems ?? await fetchSummaryQueue(queueKind, options?.queueQuery, options?.excludedItemIDs);
     await interruptRemoteSessionIfNeeded();
     await stopPlaybackInternal();
     remoteSessionIDRef.current = null;
@@ -803,6 +878,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     readProgressActiveItemIDRef.current = null;
     setSummaryQueue({
       queueKind,
+      queueQuery: options?.queueQuery ?? null,
       queue: seededQueue,
       currentItemID: null,
       currentItemDetail: null,
@@ -817,6 +893,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       if (started) {
         await createSummaryPlaybackSession(
           queueKind,
+          options?.queueQuery ?? null,
           seededQueue,
           options?.currentIndex ?? 0,
           options?.excludedItemIDs ?? [],
@@ -826,8 +903,12 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     }
   }
 
-  async function startSummaryQueuePlayback(queueKind: SummaryAudioQueueKind, initialItems?: Item[]) {
-    await startSummaryQueuePlaybackInternal(queueKind, initialItems);
+  async function startSummaryQueuePlayback(
+    queueKind: SummaryAudioQueueKind,
+    initialItems?: Item[],
+    options?: { queueQuery?: string | null },
+  ) {
+    await startSummaryQueuePlaybackInternal(queueKind, initialItems, { queueQuery: options?.queueQuery ?? null });
   }
 
   async function startAudioBriefingPlaybackInternal(payload: SharedAudioBriefingPayload, startOffsetSec = 0) {
@@ -891,6 +972,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     await flushReadProgress(currentState.currentItemID);
     const nextState: SharedSummaryQueueState = {
       queueKind: currentState.queueKind,
+      queueQuery: currentState.queueQuery,
       queue: nextQueue,
       currentItemID: nextQueue[0]?.id ?? null,
       currentItemDetail: null,
@@ -936,6 +1018,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
         resetReadProgressForItem(currentState.currentItemID);
         const nextState: SharedSummaryQueueState = {
           queueKind: currentState.queueKind,
+          queueQuery: currentState.queueQuery,
           queue: replenishedQueue,
           currentItemID: replenishedQueue[0]?.id ?? null,
           currentItemDetail: null,
@@ -995,6 +1078,7 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
     resetReadProgressForItem(currentState.currentItemID);
     const nextState: SharedSummaryQueueState = {
       queueKind: currentState.queueKind,
+      queueQuery: currentState.queueQuery,
       queue: nextQueue,
       currentItemID: nextQueue[0]?.id ?? null,
       currentItemDetail: null,
@@ -1070,13 +1154,15 @@ export function SharedAudioPlayerProvider({ children }: { children: React.ReactN
       const payload = (session.resume_payload ?? {}) as Partial<SummaryResumePayload>;
       const queueItems = Array.isArray(payload.queue_items) ? (payload.queue_items as Item[]) : [];
       const queueKind = payload.queue_kind;
-      if (!queueKind || queueItems.length === 0) {
+      const queueQuery = typeof payload.queue_query === "string" ? payload.queue_query : null;
+      if (!queueKind || (queueKind !== "view" && queueItems.length === 0)) {
         return;
       }
       await startSummaryQueuePlaybackInternal(queueKind, queueItems, {
         currentIndex: payload.current_queue_index ?? 0,
         excludedItemIDs: Array.isArray(payload.excluded_item_ids) ? (payload.excluded_item_ids as string[]) : [],
         startOffsetSec: payload.current_item_offset_sec ?? session.current_position_sec ?? 0,
+        queueQuery,
       });
       return;
     }

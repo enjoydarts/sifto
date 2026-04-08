@@ -18,6 +18,7 @@ import { Tag } from "@/components/ui/tag";
 const queueKinds: SummaryAudioQueueKind[] = ["unread", "later", "favorite"];
 
 function parseQueueKind(raw: string | null): SummaryAudioQueueKind {
+  if (raw === "view") return "view";
   if (raw === "later") return "later";
   if (raw === "favorite") return "favorite";
   if (raw === "brief") return "brief";
@@ -30,6 +31,7 @@ export default function SummaryAudioPlayerPage() {
   const searchParams = useSearchParams();
   const player = useSharedAudioPlayer();
   const queueKind = parseQueueKind(searchParams.get("queue"));
+  const viewQuery = searchParams.get("view");
   const autoStartedQueueKindRef = useRef<SummaryAudioQueueKind | null>(null);
   const [showPreprocessedText, setShowPreprocessedText] = useState(false);
   const settingsQuery = useQuery({
@@ -55,18 +57,21 @@ export default function SummaryAudioPlayerPage() {
     }
     if (
       player.mode === "summary_queue" &&
-      player.summaryQueue.queueKind === queueKind
+      player.summaryQueue.queueKind === queueKind &&
+      player.summaryQueue.queueQuery === (queueKind === "view" ? viewQuery : null)
     ) {
       return;
     }
     autoStartedQueueKindRef.current = queueKind;
-    await player.startSummaryQueuePlayback(queueKind);
+    await player.startSummaryQueuePlayback(queueKind, undefined, {
+      queueQuery: queueKind === "view" ? viewQuery : null,
+    });
   });
 
   useEffect(() => {
     autoStartedQueueKindRef.current = null;
     setShowPreprocessedText(false);
-  }, [queueKind]);
+  }, [queueKind, viewQuery]);
 
   useEffect(() => {
     setShowPreprocessedText(false);
@@ -89,7 +94,11 @@ export default function SummaryAudioPlayerPage() {
   const showFishPreprocessedText = Boolean(preprocessedText);
   const queueCountLabel = `${player.display.queueCount.toLocaleString(locale)} ${t("summaryAudio.queueCount")}`;
   const queueButtons =
-    queueKind === "brief" ? [...queueKinds, "brief" as SummaryAudioQueueKind] : queueKinds;
+    queueKind === "brief"
+      ? [...queueKinds, "brief" as SummaryAudioQueueKind]
+      : queueKind === "view"
+        ? [...queueKinds, "view" as SummaryAudioQueueKind]
+        : queueKinds;
   return (
     <PageTransition>
       <div className="space-y-4">
@@ -231,6 +240,9 @@ export default function SummaryAudioPlayerPage() {
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
                 {t("summaryAudio.queueTitle")}
               </div>
+              {queueKind === "view" ? (
+                <p className="text-sm leading-6 text-editorial-muted">{t("summaryAudio.queue.viewHelp")}</p>
+              ) : null}
               {summaryAudioPlaybackBlocked ? (
                 <div className="rounded-[18px] border border-[rgba(245,158,11,0.35)] bg-[rgba(255,251,235,0.82)] p-4">
                   <div className="text-sm font-semibold text-[#b45309]">{t("summaryAudio.playbackBlocked.title")}</div>

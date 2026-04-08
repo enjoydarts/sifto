@@ -127,26 +127,20 @@ func computeTopicInterests(actions []topicAction) map[string]float64 {
 		}
 	}
 
-	// Clamp negatives to 0
-	for k, v := range raw {
-		if v < 0 {
-			raw[k] = 0
-		}
-	}
-
-	// Normalize by max
-	var maxVal float64
+	// Normalize by max absolute value so dislikes remain negative.
+	var maxAbs float64
 	for _, v := range raw {
-		if v > maxVal {
-			maxVal = v
+		abs := math.Abs(v)
+		if abs > maxAbs {
+			maxAbs = abs
 		}
 	}
-	if maxVal <= 0 {
+	if maxAbs <= 0 {
 		return raw
 	}
 	out := make(map[string]float64, len(raw))
 	for k, v := range raw {
-		out[k] = v / maxVal
+		out[k] = v / maxAbs
 	}
 	return out
 }
@@ -543,17 +537,32 @@ func (r *PreferenceProfileRepo) loadReadingPattern(ctx context.Context, userID s
 func (r *PreferenceProfileRepo) loadFeedbackBreakdowns(ctx context.Context, userID string) (positive, negative []model.ItemSummaryScoreBreakdown, feedbackCount int, err error) {
 	rows, err := r.db.Query(ctx, `
 		SELECT
-			fb.rating,
-			fb.is_favorite,
+			(
+				CASE
+					WHEN fb.rating > 0 THEN 1.0
+					WHEN fb.rating < 0 THEN -1.2
+					ELSE 0.0
+				END
+				+ CASE WHEN fb.is_favorite = true THEN 1.4 ELSE 0.0 END
+				+ CASE WHEN il.item_id IS NOT NULL THEN 0.45 ELSE 0.0 END
+				+ CASE WHEN ir.item_id IS NOT NULL THEN 0.2 ELSE 0.0 END
+				+ CASE WHEN i.deleted_at IS NOT NULL THEN -0.7 ELSE 0.0 END
+			)::double precision AS signal,
 			isb.score_breakdown
-		FROM item_feedbacks fb
-		JOIN items i ON i.id = fb.item_id
+		FROM items i
 		JOIN sources s ON s.id = i.source_id
 		JOIN item_summaries isb ON isb.item_id = i.id
-		WHERE fb.user_id = $1
-		  AND s.user_id = $1
-		  AND i.deleted_at IS NULL
-		  AND (fb.rating <> 0 OR fb.is_favorite = true)
+		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
+		LEFT JOIN item_laters il ON il.item_id = i.id AND il.user_id = $1
+		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
+		WHERE s.user_id = $1
+		  AND (
+		    fb.rating <> 0
+		    OR fb.is_favorite = true
+		    OR il.item_id IS NOT NULL
+		    OR ir.item_id IS NOT NULL
+		    OR i.deleted_at IS NOT NULL
+		  )
 		  AND isb.score_breakdown IS NOT NULL`, userID)
 	if err != nil {
 		return nil, nil, 0, err
@@ -561,20 +570,19 @@ func (r *PreferenceProfileRepo) loadFeedbackBreakdowns(ctx context.Context, user
 	defer rows.Close()
 
 	for rows.Next() {
-		var rating int
-		var isFav bool
+		var signal float64
 		var bd *model.ItemSummaryScoreBreakdown
-		if err := rows.Scan(&rating, &isFav, scoreBreakdownScanner{dst: &bd}); err != nil {
+		if err := rows.Scan(&signal, scoreBreakdownScanner{dst: &bd}); err != nil {
 			return nil, nil, 0, err
 		}
-		if bd == nil {
+		if bd == nil || signal == 0 {
 			continue
 		}
 		feedbackCount++
-		if rating > 0 || isFav {
+		if signal > 0 {
 			positive = append(positive, *bd)
 		}
-		if rating < 0 {
+		if signal < 0 {
 			negative = append(negative, *bd)
 		}
 	}
@@ -588,24 +596,27 @@ func (r *PreferenceProfileRepo) loadTopicActions(ctx context.Context, userID str
 				isb.topics,
 				(
 					CASE
+						WHEN i.deleted_at IS NOT NULL THEN -0.7
 						WHEN fb.is_favorite = true THEN 2.0
 						WHEN fb.rating > 0 THEN 1.0
-						WHEN fb.rating < 0 THEN -1.0
-						ELSE 0.3
+						WHEN fb.rating < 0 THEN -1.2
+						WHEN il.item_id IS NOT NULL THEN 0.45
+						WHEN ir.item_id IS NOT NULL THEN 0.2
+						ELSE 0.0
 					END
 				)::double precision AS signal,
-				COALESCE(fb.updated_at, ir.read_at, i.created_at) AS acted_at
+				COALESCE(fb.updated_at, il.created_at, ir.read_at, i.deleted_at, i.created_at) AS acted_at
 			FROM items i
 			JOIN sources s ON s.id = i.source_id
 			JOIN item_summaries isb ON isb.item_id = i.id
 			LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1::uuid
+			LEFT JOIN item_laters il ON il.item_id = i.id AND il.user_id = $1::uuid
 			LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1::uuid
 			WHERE s.user_id = $1::uuid
-			  AND i.deleted_at IS NULL
 			  AND isb.topics IS NOT NULL
 			  AND array_length(isb.topics, 1) > 0
-			  AND COALESCE(fb.updated_at, ir.read_at, i.created_at) >= NOW() - INTERVAL '90 days'
-			  AND (fb.item_id IS NOT NULL OR ir.item_id IS NOT NULL)
+			  AND COALESCE(fb.updated_at, il.created_at, ir.read_at, i.deleted_at, i.created_at) >= NOW() - INTERVAL '90 days'
+			  AND (fb.item_id IS NOT NULL OR il.item_id IS NOT NULL OR ir.item_id IS NOT NULL OR i.deleted_at IS NOT NULL)
 			UNION ALL
 			SELECT isb.topics, 2.0::double precision AS signal, n.updated_at AS acted_at
 			FROM item_notes n
@@ -670,22 +681,27 @@ func (r *PreferenceProfileRepo) loadSourceAffinities(ctx context.Context, userID
 				s.id AS source_id,
 				COUNT(i.id)::int AS item_count_30d,
 				COUNT(ir.item_id)::int AS read_count_30d,
+				COUNT(il.item_id)::int AS later_count_30d,
+				COUNT(*) FILTER (WHERE i.deleted_at IS NOT NULL)::int AS deleted_count_30d,
 				COALESCE(SUM(
 					CASE
+						WHEN i.deleted_at IS NOT NULL THEN -0.7
 						WHEN fb.is_favorite = true THEN 2.0
 						WHEN fb.rating > 0 THEN 1.0
-						WHEN fb.rating < 0 THEN -1.0
+						WHEN fb.rating < 0 THEN -1.2
 						ELSE 0.0
 					END
 				), 0)::double precision AS feedback_signal
 			FROM sources s
 			LEFT JOIN items i
 			       ON i.source_id = s.id
-			      AND i.deleted_at IS NULL
 			      AND COALESCE(i.published_at, i.created_at) >= NOW() - INTERVAL '30 days'
 			LEFT JOIN item_reads ir
 			       ON ir.item_id = i.id
 			      AND ir.user_id = $1
+			LEFT JOIN item_laters il
+			       ON il.item_id = i.id
+			      AND il.user_id = $1
 			LEFT JOIN item_feedbacks fb
 			       ON fb.item_id = i.id
 			      AND fb.user_id = $1
@@ -697,7 +713,9 @@ func (r *PreferenceProfileRepo) loadSourceAffinities(ctx context.Context, userID
 			source_id,
 			(
 				feedback_signal * 0.7
+				+ CASE WHEN item_count_30d > 0 THEN (later_count_30d::double precision / item_count_30d::double precision) * 0.9 ELSE 0 END
 				+ CASE WHEN item_count_30d > 0 THEN (read_count_30d::double precision / item_count_30d::double precision) * 1.8 ELSE 0 END
+				- CASE WHEN item_count_30d > 0 THEN (deleted_count_30d::double precision / item_count_30d::double precision) * 1.3 ELSE 0 END
 			)::double precision AS affinity_score
 		FROM base
 		WHERE item_count_30d > 0`, userID)
@@ -714,19 +732,16 @@ func (r *PreferenceProfileRepo) loadSourceAffinities(ctx context.Context, userID
 		if err := rows.Scan(&sourceID, &score); err != nil {
 			return nil, err
 		}
-		if score < 0 {
-			score = 0
-		}
 		raw[sourceID] = score
-		if score > maxVal {
-			maxVal = score
+		if abs := math.Abs(score); abs > maxVal {
+			maxVal = abs
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	// Normalize to 0.0-1.0
+	// Normalize to -1.0..1.0
 	if maxVal <= 0 {
 		return raw, nil
 	}

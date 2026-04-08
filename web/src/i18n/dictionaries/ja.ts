@@ -1833,6 +1833,8 @@ export const jaDict: Dict = {
   "summaryAudio.queue.unread": "未読",
   "summaryAudio.queue.later": "あとで読む",
   "summaryAudio.queue.favorite": "お気に入り",
+  "summaryAudio.queue.view": "現在の一覧",
+  "summaryAudio.queue.viewHelp": "記事一覧で選んでいた絞り込みと並び順をそのまま使って再生しています。",
   "summaryAudio.queueTitle": "再生キュー",
   "summaryAudio.queueCount": "件",
   "summaryAudio.nowPlaying": "再生中",

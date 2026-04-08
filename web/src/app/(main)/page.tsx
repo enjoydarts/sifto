@@ -334,7 +334,7 @@ export default function BriefingPage() {
                       setInlineItemId(nowReading.id);
                       return;
                     }
-                    router.push("/items?feed=unread&sort=newest");
+                    router.push("/items?feed=unread&sort=personal_score");
                   }}
                   className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 press focus-ring md:w-auto"
                 >
@@ -342,7 +342,7 @@ export default function BriefingPage() {
                   {t("briefing.readNow", "今すぐ読む")}
                 </button>
                 <Link
-                  href="/items?feed=unread&sort=newest"
+                  href="/items?feed=unread&sort=personal_score"
                   className="inline-flex min-h-11 w-full items-center justify-center rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] press focus-ring md:w-auto"
                 >
                   {t("briefing.hub.openInbox")}
@@ -460,7 +460,7 @@ export default function BriefingPage() {
                           {t("briefing.readNow", "今すぐ読む")}
                         </button>
                         <Link
-                          href={`/items/${nowReading.id}?from=${encodeURIComponent("/items?feed=unread&sort=newest")}`}
+                          href={`/items/${nowReading.id}?from=${encodeURIComponent("/items?feed=unread&sort=personal_score")}`}
                           className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] press focus-ring"
                         >
                           {t("items.action.openDetail")}
@@ -491,7 +491,7 @@ export default function BriefingPage() {
                     {t("briefing.nextReads", "Next Up")}
                   </h2>
                 </div>
-                <Link href="/items?feed=unread&sort=newest" className="text-[12px] font-semibold text-[var(--color-editorial-ink-faint)] hover:text-[var(--color-editorial-ink)]">
+                <Link href="/items?feed=unread&sort=personal_score" className="text-[12px] font-semibold text-[var(--color-editorial-ink-faint)] hover:text-[var(--color-editorial-ink)]">
                   {t("briefing.openRecommended")}
                 </Link>
               </div>
@@ -641,7 +641,7 @@ export default function BriefingPage() {
             queueItemIds={nowQueueIds}
             onClose={() => setInlineItemId(null)}
             onOpenDetail={(itemId) => {
-              router.push(`/items/${itemId}?from=${encodeURIComponent("/items?feed=unread&sort=newest")}`);
+              router.push(`/items/${itemId}?from=${encodeURIComponent("/items?feed=unread&sort=personal_score")}`);
             }}
             onOpenItem={(itemId) => setInlineItemId(itemId)}
             onReadToggled={() => {

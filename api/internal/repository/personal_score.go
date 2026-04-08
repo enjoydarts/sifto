@@ -4,6 +4,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/model"
 )
@@ -21,6 +22,9 @@ type PersonalScoreInput struct {
 	Topics         []string
 	Embedding      []float64
 	SourceID       string
+	PublishedAt    *time.Time
+	FetchedAt      *time.Time
+	CreatedAt      time.Time
 }
 
 // CalcPersonalScore computes a personal relevance score for an item given a user profile.
@@ -35,27 +39,36 @@ func CalcPersonalScoreDetailed(item PersonalScoreInput, profile *model.UserPrefe
 	if item.SummaryScore != nil {
 		base = *item.SummaryScore
 	}
+	recency := calcRecencyDecay(item)
 
 	// Cold start: not enough feedback
 	if profile == nil || profile.FeedbackCount < 10 {
-		return PersonalScoreResult{Score: base, Reason: "attention"}
+		return PersonalScoreResult{
+			Score:     base,
+			Reason:    "attention",
+			Breakdown: nil,
+		}
 	}
 
 	// Component weights
-	alpha := 0.50 // learned weight score
-	beta := 0.20  // topic relevance
-	gamma := 0.18 // embedding similarity
-	delta := 0.12 // source affinity
+	alpha := 0.32 // learned weight score
+	baseWeight := 0.18
+	beta := 0.14    // topic relevance
+	gamma := 0.16   // embedding similarity
+	delta := 0.10   // source affinity
+	epsilon := 0.10 // recency
 
 	hasEmbedding := len(item.Embedding) > 0 && len(profile.PrefEmbedding) > 0 && len(item.Embedding) == len(profile.PrefEmbedding)
 
 	// Re-normalize if embedding is unavailable
 	if !hasEmbedding {
-		total := alpha + beta + delta
+		total := alpha + baseWeight + beta + delta + epsilon
 		alpha = alpha / total
+		baseWeight = baseWeight / total
 		beta = beta / total
 		gamma = 0
 		delta = delta / total
+		epsilon = epsilon / total
 	}
 
 	lwScore := calcLearnedWeightScore(item.ScoreBreakdown, profile.LearnedWeights)
@@ -66,12 +79,13 @@ func CalcPersonalScoreDetailed(item PersonalScoreInput, profile *model.UserPrefe
 	}
 	srcAff := calcSourceAffinity(item.SourceID, profile.SourceAffinities)
 
-	score := alpha*lwScore + beta*topicRel + gamma*embSim + delta*srcAff
+	score := alpha*lwScore + baseWeight*base + beta*topicRel + gamma*embSim + delta*srcAff + epsilon*recency
+	score *= 0.36 + 0.64*recency
 
 	// Clamp to [0, 1]
 	score = clamp01(score)
 
-	reason := determineReason(item, profile, embSim, topicRel, srcAff)
+	reason := determineReason(item, profile, embSim, topicRel, srcAff, recency)
 	return PersonalScoreResult{
 		Score:  score,
 		Reason: reason,
@@ -80,6 +94,7 @@ func CalcPersonalScoreDetailed(item PersonalScoreInput, profile *model.UserPrefe
 			TopicRelevance:      model.PersonalScoreComponent{Value: clamp01(topicRel), Weight: beta},
 			EmbeddingSimilarity: model.PersonalScoreComponent{Value: clamp01(embSim), Weight: gamma},
 			SourceAffinity:      model.PersonalScoreComponent{Value: clamp01(srcAff), Weight: delta},
+			RecencyDecay:        model.PersonalScoreComponent{Value: recency, Weight: epsilon},
 			MatchedTopics:       matchedTopics(item.Topics, profile.TopicInterests),
 			DominantDimension:   dominantDimension(item.ScoreBreakdown, profile.LearnedWeights),
 		},
@@ -125,7 +140,7 @@ func calcTopicRelevance(topics []string, interests map[string]float64) float64 {
 	if count == 0 {
 		return 0.5
 	}
-	return sum / float64(count)
+	return clamp01(0.5 + 0.5*(sum/float64(count)))
 }
 
 // calcEmbeddingSimilarity computes dot product similarity between embeddings.
@@ -139,13 +154,41 @@ func calcSourceAffinity(sourceID string, affinities map[string]float64) float64 
 		return 0.5
 	}
 	if v, ok := affinities[sourceID]; ok {
-		return v
+		return clamp01(0.5 + 0.5*v)
 	}
 	return 0.5
 }
 
+func calcRecencyDecay(item PersonalScoreInput) float64 {
+	timestamp := item.PublishedAt
+	if timestamp == nil || timestamp.IsZero() {
+		timestamp = item.FetchedAt
+	}
+	if (timestamp == nil || timestamp.IsZero()) && !item.CreatedAt.IsZero() {
+		timestamp = &item.CreatedAt
+	}
+	if timestamp == nil || timestamp.IsZero() {
+		return 0.5
+	}
+	ageHours := time.Since(*timestamp).Hours()
+	if ageHours <= 0 {
+		return 1
+	}
+	if ageHours <= 6 {
+		return 1
+	}
+	decay := math.Exp(-math.Ln2 * ageHours / 72.0)
+	if decay < 0.02 {
+		return 0.02
+	}
+	return decay
+}
+
 // determineReason selects the most informative reason for the score.
-func determineReason(item PersonalScoreInput, profile *model.UserPreferenceProfile, embSim, topicRel, srcAff float64) string {
+func determineReason(item PersonalScoreInput, profile *model.UserPreferenceProfile, embSim, topicRel, srcAff, recency float64) string {
+	if recency >= 0.92 {
+		return "recency"
+	}
 	if embSim > 0.7 {
 		return "embedding_similarity"
 	}

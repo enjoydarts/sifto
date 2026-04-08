@@ -50,11 +50,14 @@ export function ItemCard({
   selectable = false,
   selected = false,
   readUpdating,
+  feedbackUpdating = false,
   retrying,
   onOpen,
   onOpenDetail,
   onToggleSelected,
   onToggleRead,
+  onToggleLike,
+  onToggleDislike,
   onRetry,
   onPrefetch,
   animationDelay,
@@ -67,11 +70,14 @@ export function ItemCard({
   selectable?: boolean;
   selected?: boolean;
   readUpdating: boolean;
+  feedbackUpdating?: boolean;
   retrying: boolean;
   onOpen: () => void;
   onOpenDetail: () => void;
   onToggleSelected?: () => void;
   onToggleRead: () => void;
+  onToggleLike?: () => void;
+  onToggleDislike?: () => void;
   onRetry: () => void;
   onPrefetch: () => void;
   animationDelay?: number;
@@ -219,11 +225,49 @@ export function ItemCard({
               {item.source_title ? <span>{item.source_title}</span> : null}
             </div>
 
-            {reactionPill ? (
+            {reactionPill || onToggleLike || onToggleDislike ? (
               <div className="mt-2 flex flex-wrap items-center gap-2">
+                {onToggleLike ? (
+                  <button
+                    type="button"
+                    disabled={feedbackUpdating}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleLike();
+                    }}
+                    aria-label={t("items.feedback.like")}
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                      item.feedback_rating === 1
+                        ? "border-[var(--color-editorial-success-line)] bg-[var(--color-editorial-success-soft)] text-[var(--color-editorial-success)]"
+                        : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-faint)] hover:bg-[var(--color-editorial-panel)]"
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    <ThumbsUp className="size-3.5" aria-hidden="true" />
+                  </button>
+                ) : null}
+                {onToggleDislike ? (
+                  <button
+                    type="button"
+                    disabled={feedbackUpdating}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleDislike();
+                    }}
+                    aria-label={t("items.feedback.dislike")}
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                      item.feedback_rating === -1
+                        ? "border-[var(--color-editorial-error-line)] bg-[var(--color-editorial-error-soft)] text-[var(--color-editorial-error)]"
+                        : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-faint)] hover:bg-[var(--color-editorial-panel)]"
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    <ThumbsDown className="size-3.5" aria-hidden="true" />
+                  </button>
+                ) : null}
+                {reactionPill ? (
                 <Tag tone={reactionPill.tone} icon={reactionPill.icon}>
                   {reactionPill.label}
                 </Tag>
+                ) : null}
               </div>
             ) : null}
 

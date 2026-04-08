@@ -45,13 +45,13 @@ function ItemsPageContent() {
   const laterMode = feedMode === "later";
   const pendingMode = feedMode === "pending";
   const deletedMode = feedMode === "deleted";
-  const summaryAudioQueueKind = favoriteOnly ? "favorite" : laterMode ? "later" : "unread";
   const summaryAudioPlaybackBlocked = player.summaryAudioSettingsLoaded && !player.summaryAudioConfigured;
   const pageSize = 20;
   const [error, setError] = useState<string | null>(null);
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
   const [retryingIds, setRetryingIds] = useState<Record<string, boolean>>({});
   const [readUpdatingIds, setReadUpdatingIds] = useState<Record<string, boolean>>({});
+  const [feedbackUpdatingIds, setFeedbackUpdatingIds] = useState<Record<string, boolean>>({});
   const [bulkMarkingRead, setBulkMarkingRead] = useState(false);
   const [bulkRetrying, setBulkRetrying] = useState(false);
   const [bulkRetryingFromFacts, setBulkRetryingFromFacts] = useState(false);
@@ -187,6 +187,11 @@ function ItemsPageContent() {
   const scrollStorageKey = useMemo(() => `items-scroll:${currentItemsHref}`, [currentItemsHref]);
   const lastItemStorageKey = useMemo(() => `items-last-item:${currentItemsHref}`, [currentItemsHref]);
   const queueStorageKey = useMemo(() => `items-queue:${currentItemsHref}`, [currentItemsHref]);
+  const summaryAudioViewQuery = useMemo(() => {
+    const params = buildItemsSearchParams(viewState);
+    params.delete("page");
+    return params.toString();
+  }, [viewState]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -560,6 +565,96 @@ function ItemsPageContent() {
     });
   }, [queryClient]);
 
+  const syncFeedbackInFeeds = useCallback((itemId: string, isFavorite: boolean, rating: number) => {
+    queryClient.setQueriesData({ queryKey: ["items-feed"] }, (prev: unknown) => {
+      if (!prev || typeof prev !== "object") return prev;
+      const data = prev as {
+        items?: Array<Record<string, unknown>>;
+        planClusters?: Array<Record<string, unknown>>;
+      };
+      const patchItem = (v: Record<string, unknown>) =>
+        v.id === itemId
+          ? { ...v, is_favorite: isFavorite, feedback_rating: rating }
+          : v;
+      let changed = false;
+      const next: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+      if (Array.isArray(data.items)) {
+        next.items = data.items.map((v) => {
+          const nv = patchItem(v);
+          if (nv !== v) changed = true;
+          return nv;
+        });
+      }
+      if (Array.isArray(data.planClusters)) {
+        next.planClusters = data.planClusters.map((cluster) => {
+          const c = { ...cluster } as Record<string, unknown>;
+          const rep = c.representative;
+          if (rep && typeof rep === "object") {
+            const nr = patchItem(rep as Record<string, unknown>);
+            if (nr !== rep) {
+              c.representative = nr;
+              changed = true;
+            }
+          }
+          const clusterItems = c.items;
+          if (Array.isArray(clusterItems)) {
+            c.items = clusterItems.map((v) => {
+              if (!v || typeof v !== "object") return v;
+              const nv = patchItem(v as Record<string, unknown>);
+              if (nv !== v) changed = true;
+              return nv;
+            });
+          }
+          return c;
+        });
+      }
+      return changed ? next : prev;
+    });
+    queryClient.setQueryData(["item-detail", itemId], (prev: unknown) => {
+      if (!prev || typeof prev !== "object") return prev;
+      return {
+        ...(prev as Record<string, unknown>),
+        is_favorite: isFavorite,
+        feedback_rating: rating,
+        feedback: {
+          ...(((prev as { feedback?: Record<string, unknown> }).feedback ?? {}) as Record<string, unknown>),
+          is_favorite: isFavorite,
+          rating,
+        },
+      };
+    });
+  }, [queryClient]);
+
+  const updateItemFeedback = useCallback(async (item: Item, patch: { rating?: -1 | 0 | 1; is_favorite?: boolean }) => {
+    if (feedbackUpdatingIds[item.id]) {
+      return;
+    }
+    setFeedbackUpdatingIds((prev) => ({ ...prev, [item.id]: true }));
+    const currentRating = (item.feedback_rating ?? 0) as -1 | 0 | 1;
+    const currentFavorite = Boolean(item.is_favorite);
+    const nextRating = patch.rating != null ? patch.rating : currentRating;
+    const nextFavorite = patch.is_favorite != null ? patch.is_favorite : currentFavorite;
+    try {
+      const next = await api.setItemFeedback(item.id, {
+        rating: nextRating,
+        is_favorite: nextFavorite,
+      });
+      syncFeedbackInFeeds(item.id, next.is_favorite, next.rating);
+      await queryClient.invalidateQueries({ queryKey: ["items-feed"] });
+      await queryClient.invalidateQueries({ queryKey: ["preference-profile"] });
+      showToast(t("itemDetail.toast.feedbackSaved"), "success");
+    } catch (e) {
+      setError(String(e));
+      showToast(`${t("common.error")}: ${String(e)}`, "error");
+    } finally {
+      setFeedbackUpdatingIds((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+    }
+  }, [feedbackUpdatingIds, queryClient, showToast, syncFeedbackInFeeds, t]);
+
   const renderItem = useCallback((item: Item, opts?: { featured?: boolean; rank?: number; animIdx?: number }) => {
     const featured = Boolean(opts?.featured);
     const href = detailHref(item.id);
@@ -583,18 +678,21 @@ function ItemsPageContent() {
         selectable={pendingMode}
         selected={selectedItemIDSet.has(item.id)}
         readUpdating={!!readUpdatingIds[item.id]}
+        feedbackUpdating={!!feedbackUpdatingIds[item.id]}
         retrying={!!retryingIds[item.id]}
         onOpen={openInlineReader}
         onOpenDetail={openDetail}
         onToggleSelected={() => toggleSelectedItem(item.id)}
         onToggleRead={() => void toggleRead(item)}
+        onToggleLike={() => void updateItemFeedback(item, { rating: item.feedback_rating === 1 ? 0 : 1 })}
+        onToggleDislike={() => void updateItemFeedback(item, { rating: item.feedback_rating === -1 ? 0 : -1 })}
         onRetry={() => void retryItem(item.id)}
         onPrefetch={() => prefetchItemDetail(item.id)}
         animationDelay={(opts?.animIdx ?? 0) * 40}
         t={t}
       />
     );
-  }, [detailHref, locale, pendingMode, prefetchItemDetail, readUpdatingIds, rememberScroll, retryItem, retryingIds, router, saveReadQueue, selectedItemIDSet, sortedItems, t, toggleRead, toggleSelectedItem]);
+  }, [detailHref, feedbackUpdatingIds, locale, pendingMode, prefetchItemDetail, readUpdatingIds, rememberScroll, retryItem, retryingIds, router, saveReadQueue, selectedItemIDSet, sortedItems, t, toggleRead, toggleSelectedItem, updateItemFeedback]);
 
   const railFilterTags = [
     topic ? (
@@ -695,7 +793,7 @@ function ItemsPageContent() {
                       if (summaryAudioPlaybackBlocked) {
                         return;
                       }
-                      router.push(`/audio-player?queue=${summaryAudioQueueKind}`);
+                      router.push(`/audio-player?queue=view&view=${encodeURIComponent(summaryAudioViewQuery)}`);
                     }}
                     disabled={summaryAudioPlaybackBlocked}
                     className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:cursor-not-allowed disabled:opacity-50 press focus-ring"
@@ -766,7 +864,7 @@ function ItemsPageContent() {
                         if (summaryAudioPlaybackBlocked) {
                           return;
                         }
-                        router.push(`/audio-player?queue=${summaryAudioQueueKind}`);
+                        router.push(`/audio-player?queue=view&view=${encodeURIComponent(summaryAudioViewQuery)}`);
                       }}
                       disabled={summaryAudioPlaybackBlocked}
                       className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50 press focus-ring"

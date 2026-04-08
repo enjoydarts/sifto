@@ -147,6 +147,21 @@ func TestComputeTopicInterests_TimeDecay(t *testing.T) {
 	}
 }
 
+func TestComputeTopicInterests_PreservesNegativeSignals(t *testing.T) {
+	actions := []topicAction{
+		{Topics: []string{"AI"}, Signal: 1.0, DaysAgo: 0},
+		{Topics: []string{"Celebrity"}, Signal: -1.0, DaysAgo: 0},
+	}
+
+	interests := computeTopicInterests(actions)
+	if interests["ai"] != 1.0 {
+		t.Fatalf("ai should normalize to 1.0, got %f", interests["ai"])
+	}
+	if interests["celebrity"] >= 0 {
+		t.Fatalf("celebrity should remain negative, got %f", interests["celebrity"])
+	}
+}
+
 func TestPreferenceProfileIncludesNewSignals(t *testing.T) {
 	actions := []topicAction{
 		{Topics: []string{"AI"}, Signal: 2.0, DaysAgo: 0},    // note / insight

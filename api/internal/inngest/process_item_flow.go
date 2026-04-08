@@ -302,12 +302,25 @@ func itemDetailCacheVersionKey(itemID string) string {
 	return fmt.Sprintf("cache_version:item_detail:v2:%s", itemID)
 }
 
+func userItemsCacheVersionKey(userID string) string {
+	return fmt.Sprintf("cache_version:user_items:%s", userID)
+}
+
 func bumpProcessItemDetailCacheVersion(ctx context.Context, cache service.JSONCache, itemID string) {
 	if cache == nil || itemID == "" {
 		return
 	}
 	if _, err := cache.BumpVersion(ctx, itemDetailCacheVersionKey(itemID)); err != nil {
 		log.Printf("process-item cache bump failed item_id=%s err=%v", itemID, err)
+	}
+}
+
+func bumpProcessUserItemsCacheVersion(ctx context.Context, cache service.JSONCache, userID string) {
+	if cache == nil || userID == "" {
+		return
+	}
+	if _, err := cache.BumpVersion(ctx, userItemsCacheVersionKey(userID)); err != nil {
+		log.Printf("process-item user-items cache bump failed user_id=%s err=%v", userID, err)
 	}
 }
 
@@ -757,6 +770,12 @@ func summarizeAndPersistItem(
 		summary.ScorePolicyVersion,
 	); err != nil {
 		return nil, fmt.Errorf("insert summary: %w", err)
+	}
+	if userIDPtr != nil {
+		if err := deps.itemViewRepo.PersistPersonalScores(ctx, *userIDPtr, []string{itemID}); err != nil {
+			log.Printf("process-item personal score persist failed item_id=%s user_id=%s err=%v", itemID, *userIDPtr, err)
+		}
+		bumpProcessUserItemsCacheVersion(ctx, deps.cache, *userIDPtr)
 	}
 	bumpProcessItemDetailCacheVersion(ctx, deps.cache, itemID)
 	if err := deps.publisher.SendItemSearchUpsertE(ctx, itemID); err != nil {

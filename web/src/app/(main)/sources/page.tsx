@@ -1070,7 +1070,7 @@ function SourceCard({
             ) : null}
           </div>
           <Link
-            href={`/items?feed=unread&sort=newest&source_id=${src.id}`}
+            href={`/items?feed=unread&sort=personal_score&source_id=${src.id}`}
             className="mt-3 block text-[17px] font-semibold leading-7 text-[var(--color-editorial-ink)] hover:underline"
           >
             {src.title ?? src.url}
@@ -1083,7 +1083,7 @@ function SourceCard({
           ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
-              href={`/items?feed=unread&sort=newest&source_id=${src.id}`}
+              href={`/items?feed=unread&sort=personal_score&source_id=${src.id}`}
               className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-4 text-sm font-semibold text-[var(--color-editorial-panel-strong)]"
             >
               {t("sources.openItems")}

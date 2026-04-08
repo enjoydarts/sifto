@@ -795,8 +795,19 @@ func (h *ItemHandler) List(w http.ResponseWriter, r *http.Request) {
 			writeRepoError(w, err)
 			return
 		}
-		if sort == "personal_score" && resp != nil && len(resp.Items) > 0 {
+	}
+	if resp != nil && sort == "personal_score" {
+		missingPersonalScores := make([]string, 0, len(resp.Items))
+		for _, item := range resp.Items {
+			if item.PersonalScore == nil {
+				missingPersonalScores = append(missingPersonalScores, item.ID)
+			}
+		}
+		if len(missingPersonalScores) > 0 {
 			h.applyPersonalScoreSort(r.Context(), userID, resp)
+			if persistErr := h.repo.PersistPersonalScores(r.Context(), userID, missingPersonalScores); persistErr != nil {
+				log.Printf("personal_score persist on list failed user_id=%s count=%d err=%v", userID, len(missingPersonalScores), persistErr)
+			}
 		}
 	}
 	if h.cache != nil && resp != nil && cacheKeyErr == nil {
@@ -835,6 +846,9 @@ func (h *ItemHandler) applyPersonalScoreSort(ctx context.Context, userID string,
 			ScoreBreakdown: it.SummaryScoreBreakdown,
 			Topics:         it.SummaryTopics,
 			SourceID:       it.SourceID,
+			PublishedAt:    it.PublishedAt,
+			FetchedAt:      it.FetchedAt,
+			CreatedAt:      it.CreatedAt,
 		}
 		if embeddings != nil {
 			input.Embedding = embeddings[it.ID]
@@ -1486,6 +1500,9 @@ func (h *ItemHandler) applyPersonalizationToDetail(ctx context.Context, userID s
 		ScoreBreakdown: item.SummaryScoreBreakdown,
 		Topics:         item.SummaryTopics,
 		SourceID:       item.SourceID,
+		PublishedAt:    item.PublishedAt,
+		FetchedAt:      item.FetchedAt,
+		CreatedAt:      item.CreatedAt,
 	}
 	if h.repo != nil {
 		if embByID, embErr := h.repo.LoadItemEmbeddingsByID(ctx, []string{item.ID}); embErr == nil {
@@ -2067,6 +2084,20 @@ func (h *ItemHandler) SetFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.reviewQueueRepo != nil && body.IsFavorite {
 		_ = h.reviewQueueRepo.EnqueueDefault(r.Context(), userID, id, "favorite", time.Now())
+	}
+	if h.prefProfileRepo != nil {
+		profile, profileErr := h.prefProfileRepo.BuildProfileForUser(r.Context(), userID)
+		if profileErr != nil {
+			log.Printf("preference profile rebuild failed user_id=%s err=%v", userID, profileErr)
+		} else if upsertErr := h.prefProfileRepo.UpsertProfile(r.Context(), profile); upsertErr != nil {
+			log.Printf("preference profile upsert failed user_id=%s err=%v", userID, upsertErr)
+		}
+	}
+	if refreshErr := h.repo.RefreshRecentPersonalScores(r.Context(), userID, 1200); refreshErr != nil {
+		log.Printf("personal score refresh failed user_id=%s err=%v", userID, refreshErr)
+	}
+	if persistErr := h.repo.PersistPersonalScores(r.Context(), userID, []string{id}); persistErr != nil {
+		log.Printf("personal score persist failed user_id=%s item_id=%s err=%v", userID, id, persistErr)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
 	writeJSON(w, fb)

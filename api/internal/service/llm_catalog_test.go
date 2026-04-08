@@ -49,6 +49,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("grok-4.20-0309-reasoning"); got == nil {
 		t.Fatal("grok-4.20-0309-reasoning not found in catalog")
 	}
+	if got := findModelCatalog("glm-5.1"); got == nil {
+		t.Fatal("glm-5.1 not found in catalog")
+	}
 }
 
 func TestCatalogProviderAndDefaults(t *testing.T) {
@@ -66,6 +69,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "grok-4-fast-non-reasoning", provider: "xai"},
 		{model: "grok-4.20-0309-non-reasoning", provider: "xai"},
 		{model: "grok-4.20-0309-reasoning", provider: "xai"},
+		{model: "glm-5.1", provider: "zai"},
 		{model: "glm-4.7-flash", provider: "zai"},
 		{model: "fireworks/gpt-oss-20b", provider: "fireworks"},
 		{model: "fireworks/qwen3p6-plus", provider: "fireworks"},

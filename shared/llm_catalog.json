@@ -141,6 +141,7 @@
       "id": "zai",
       "api_key_header": "x-zai-api-key",
       "match_exact": [
+        "glm-5.1",
         "glm-5-turbo",
         "glm-5",
         "glm-4.7",
@@ -1331,6 +1332,29 @@
         "pricing_source": "xai_docs_2026_04",
         "input_per_mtok_usd": 2.0,
         "output_per_mtok_usd": 6.0
+      }
+    },
+    {
+      "id": "glm-5.1",
+      "provider": "zai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": [],
+      "comment": "GLM-5 系の更新版。GLM-5 を使っていた処理の比較候補として選べるようにする追加枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "zai_docs_2026_04",
+        "input_per_mtok_usd": 1.4,
+        "output_per_mtok_usd": 4.4,
+        "cache_read_per_mtok_usd": 0.26
       }
     },
     {

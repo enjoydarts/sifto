@@ -640,7 +640,7 @@ function ItemsPageContent() {
         is_favorite: nextFavorite,
       });
       syncFeedbackInFeeds(item.id, next.is_favorite, next.rating);
-      await queryClient.invalidateQueries({ queryKey: ["items-feed"] });
+      await queryClient.invalidateQueries({ queryKey: ["items-feed"], refetchType: "none" });
       await queryClient.invalidateQueries({ queryKey: ["preference-profile"] });
       showToast(t("itemDetail.toast.feedbackSaved"), "success");
     } catch (e) {

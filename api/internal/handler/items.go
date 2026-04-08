@@ -2093,9 +2093,6 @@ func (h *ItemHandler) SetFeedback(w http.ResponseWriter, r *http.Request) {
 			log.Printf("preference profile upsert failed user_id=%s err=%v", userID, upsertErr)
 		}
 	}
-	if refreshErr := h.repo.RefreshRecentPersonalScores(r.Context(), userID, 1200); refreshErr != nil {
-		log.Printf("personal score refresh failed user_id=%s err=%v", userID, refreshErr)
-	}
 	if persistErr := h.repo.PersistPersonalScores(r.Context(), userID, []string{id}); persistErr != nil {
 		log.Printf("personal score persist failed user_id=%s item_id=%s err=%v", userID, id, persistErr)
 	}

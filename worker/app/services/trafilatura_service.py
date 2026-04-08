@@ -97,13 +97,13 @@ def _needs_refetch(downloaded: str | None) -> bool:
     if _looks_mojibake(downloaded):
         return True
     declared = (_declared_charset_in_text(downloaded) or "").strip().lower()
+    if declared in {"shift_jis", "shift-jis", "sjis", "cp932", "ms932", "windows-31j"}:
+        return True
     if declared in {"utf-8", "utf8"} and _looks_utf8_legacy_mojibake(downloaded):
         return True
     if declared in {"utf-8", "utf8"} and _looks_cjk_utf8_mojibake(downloaded):
         return True
     if declared in {"utf-8", "utf8"} and _looks_latin_box_utf8_mojibake(downloaded):
-        return True
-    if declared in {"shift_jis", "shift-jis", "sjis", "cp932", "ms932", "windows-31j"} and "\ufffd" in downloaded:
         return True
     if _looks_utf8_legacy_mojibake(downloaded):
         return True

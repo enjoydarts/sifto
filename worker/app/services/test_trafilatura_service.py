@@ -115,6 +115,37 @@ class TrafilaturaServiceTests(unittest.TestCase):
         self.assertEqual(result["title"], "高橋慎一監督の新作映画『ハバナの奇跡』")
         self.assertEqual(result["content"], "社会主義国でのジャズクラブ誕生を追う")
 
+    def test_extract_body_always_refetches_declared_shift_jis_pages(self):
+        html = "<html><head><title>TOPPAN、ギリシャ語写本の本文を解読できるAI-OCRを開発</title></head><body>ギリシャ語写本の本文を解読できるAI-OCRを開発したと発表した。</body></html>"
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.headers = {"content-type": "text/html"}
+        response.content = html.encode("cp932")
+        response.url = "https://example.com/final"
+        response.text = response.content.decode("utf-8", errors="replace")
+        captured = {}
+        fetched = "<html><head><meta charset=\"Shift_JIS\" /><title>敾撉崲擄側乽拞悽僊儕僔儍岅乿傪撉傒庢傝</title></head></html>"
+
+        def fake_bare_extraction(downloaded, **kwargs):
+            captured["downloaded"] = downloaded
+            return {
+                "title": "TOPPAN、ギリシャ語写本の本文を解読できるAI-OCRを開発",
+                "text": "ギリシャ語写本の本文を解読できるAI-OCRを開発したと発表した。",
+                "date": None,
+            }
+
+        with patch("app.services.trafilatura_service.trafilatura.fetch_url", return_value=fetched), patch(
+            "app.services.trafilatura_service.httpx.get", return_value=response
+        ), patch(
+            "app.services.trafilatura_service.trafilatura.bare_extraction",
+            side_effect=fake_bare_extraction,
+        ):
+            result = extract_body("https://example.com/start")
+
+        self.assertIn("TOPPAN、ギリシャ語写本", captured["downloaded"])
+        self.assertEqual(result["title"], "TOPPAN、ギリシャ語写本の本文を解読できるAI-OCRを開発")
+        self.assertEqual(result["content"], "ギリシャ語写本の本文を解読できるAI-OCRを開発したと発表した。")
+
     def test_extract_body_refetches_when_utf8_page_is_decoded_as_legacy_japanese_encoding(self):
         html = "<html><head><meta charset=\"utf-8\"><title>涼宮ハルヒの憂鬱「DEATH NOTE」の放送20周年アニメ7作品、ABEMAで一挙無料配信</title></head><body>ABEMAが周年アニメ特集を始める。</body></html>"
         response = Mock()

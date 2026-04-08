@@ -1072,6 +1072,29 @@ func (h *ItemHandler) invalidateUserCaches(ctx context.Context, userID string) {
 	}
 }
 
+func (h *ItemHandler) refreshPreferenceProfileAsync(userID, itemID string) {
+	if userID == "" || itemID == "" || h.prefProfileRepo == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		profile, profileErr := h.prefProfileRepo.BuildProfileForUser(ctx, userID)
+		if profileErr != nil {
+			log.Printf("preference profile rebuild failed user_id=%s err=%v", userID, profileErr)
+			return
+		}
+		if upsertErr := h.prefProfileRepo.UpsertProfile(ctx, profile); upsertErr != nil {
+			log.Printf("preference profile upsert failed user_id=%s err=%v", userID, upsertErr)
+			return
+		}
+		if persistErr := h.repo.PersistPersonalScores(ctx, userID, []string{itemID}); persistErr != nil {
+			log.Printf("personal score persist failed user_id=%s item_id=%s err=%v", userID, itemID, persistErr)
+		}
+	}()
+}
+
 func (h *ItemHandler) TopicTrends(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	limit := parseIntOrDefault(r.URL.Query().Get("limit"), 8)
@@ -2085,18 +2108,8 @@ func (h *ItemHandler) SetFeedback(w http.ResponseWriter, r *http.Request) {
 	if h.reviewQueueRepo != nil && body.IsFavorite {
 		_ = h.reviewQueueRepo.EnqueueDefault(r.Context(), userID, id, "favorite", time.Now())
 	}
-	if h.prefProfileRepo != nil {
-		profile, profileErr := h.prefProfileRepo.BuildProfileForUser(r.Context(), userID)
-		if profileErr != nil {
-			log.Printf("preference profile rebuild failed user_id=%s err=%v", userID, profileErr)
-		} else if upsertErr := h.prefProfileRepo.UpsertProfile(r.Context(), profile); upsertErr != nil {
-			log.Printf("preference profile upsert failed user_id=%s err=%v", userID, upsertErr)
-		}
-	}
-	if persistErr := h.repo.PersistPersonalScores(r.Context(), userID, []string{id}); persistErr != nil {
-		log.Printf("personal score persist failed user_id=%s item_id=%s err=%v", userID, id, persistErr)
-	}
 	h.invalidateUserCaches(r.Context(), userID)
+	h.refreshPreferenceProfileAsync(userID, id)
 	writeJSON(w, fb)
 }
 

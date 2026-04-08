@@ -1303,8 +1303,8 @@ func generateAudioBriefingsFn(client inngestgo.Client, db *pgxpool.Pool, worker 
 	promptResolver := service.NewPromptResolver(promptTemplateRepo)
 	secretCipher := service.NewSecretCipher()
 	audioConcatRunner := service.NewAudioConcatRunnerFromEnv()
-	fishSpeechPreprocessSvc := service.NewFishSpeechPreprocessService(userSettingsRepo, secretCipher, worker, llmUsageRepo, cache)
-	audioBriefingVoiceRunner := service.NewAudioBriefingVoiceRunner(audioBriefingRepo, userRepo, userSettingsRepo, secretCipher, worker, fishSpeechPreprocessSvc)
+	ttsMarkupPreprocessSvc := service.NewTTSMarkupPreprocessService(userSettingsRepo, secretCipher, worker, llmUsageRepo, cache)
+	audioBriefingVoiceRunner := service.NewAudioBriefingVoiceRunner(audioBriefingRepo, userRepo, userSettingsRepo, secretCipher, worker, ttsMarkupPreprocessSvc)
 	audioBriefingConcatStarter := service.NewAudioBriefingConcatStarter(audioBriefingRepo, audioConcatRunner)
 	orchestrator := service.NewAudioBriefingOrchestrator(audioBriefingRepo, userSettingsRepo, llmUsageRepo, promptResolver, secretCipher, worker, cache, audioBriefingVoiceRunner, audioBriefingConcatStarter)
 
@@ -1520,8 +1520,8 @@ func runAudioBriefingPipelineFn(client inngestgo.Client, db *pgxpool.Pool, worke
 	promptResolver := service.NewPromptResolver(promptTemplateRepo)
 	secretCipher := service.NewSecretCipher()
 	audioConcatRunner := service.NewAudioConcatRunnerFromEnv()
-	fishSpeechPreprocessSvc := service.NewFishSpeechPreprocessService(userSettingsRepo, secretCipher, worker, llmUsageRepo, cache)
-	audioBriefingVoiceRunner := service.NewAudioBriefingVoiceRunner(audioBriefingRepo, userRepo, userSettingsRepo, secretCipher, worker, fishSpeechPreprocessSvc)
+	ttsMarkupPreprocessSvc := service.NewTTSMarkupPreprocessService(userSettingsRepo, secretCipher, worker, llmUsageRepo, cache)
+	audioBriefingVoiceRunner := service.NewAudioBriefingVoiceRunner(audioBriefingRepo, userRepo, userSettingsRepo, secretCipher, worker, ttsMarkupPreprocessSvc)
 	audioBriefingConcatStarter := service.NewAudioBriefingConcatStarter(audioBriefingRepo, audioConcatRunner)
 	orchestrator := service.NewAudioBriefingOrchestrator(audioBriefingRepo, userSettingsRepo, llmUsageRepo, promptResolver, secretCipher, worker, cache, audioBriefingVoiceRunner, audioBriefingConcatStarter)
 

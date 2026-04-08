@@ -1,27 +1,28 @@
 import unittest
 from unittest.mock import patch
 
-from app.services.fish_speech_preprocess import (
-    DEFAULT_FISH_PREPROCESS_PROMPT_KEY,
+from app.services.tts_markup_preprocess import (
+    DEFAULT_TTS_MARKUP_PREPROCESS_PROMPT_KEY,
     FISH_PREPROCESS_PURPOSE,
-    FishSpeechPreprocessService,
+    GEMINI_TTS_PREPROCESS_PURPOSE,
+    TTSMarkupPreprocessService,
 )
 
 
-class FishSpeechPreprocessServiceTests(unittest.TestCase):
+class TTSMarkupPreprocessServiceTests(unittest.TestCase):
     def test_preprocess_uses_openai_compatible_transport(self):
-        service = FishSpeechPreprocessService()
+        service = TTSMarkupPreprocessService()
 
         with (
             patch(
-                "app.services.fish_speech_preprocess.get_default_prompt_template",
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
                 return_value={
                     "system_instruction": "SYSTEM",
                     "prompt_text": "{{text}}",
                 },
             ),
             patch(
-                "app.services.fish_speech_preprocess.openai_chat_json",
+                "app.services.tts_markup_preprocess.openai_chat_json",
                 return_value=("[自然に]前処理済み", {"input_tokens": 11, "output_tokens": 22}),
             ) as chat_json,
         ):
@@ -43,18 +44,18 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
         self.assertEqual(result["llm"]["model"], "gpt-5.4-mini")
 
     def test_preprocess_appends_text_when_prompt_has_no_placeholder(self):
-        service = FishSpeechPreprocessService()
+        service = TTSMarkupPreprocessService()
 
         with (
             patch(
-                "app.services.fish_speech_preprocess.get_default_prompt_template",
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
                 return_value={
                     "system_instruction": "SYSTEM",
                     "prompt_text": "固定プロンプト\n## 【テキスト】",
                 },
             ),
             patch(
-                "app.services.fish_speech_preprocess.openai_chat_json",
+                "app.services.tts_markup_preprocess.openai_chat_json",
                 return_value=("整形済み", {"input_tokens": 8, "output_tokens": 12}),
             ) as chat_json,
         ):
@@ -74,18 +75,18 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
         self.assertEqual(result["text"], "整形済み")
 
     def test_preprocess_uses_gemini_plain_text_generation(self):
-        service = FishSpeechPreprocessService()
+        service = TTSMarkupPreprocessService()
 
         with (
             patch(
-                "app.services.fish_speech_preprocess.get_default_prompt_template",
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
                 return_value={
                     "system_instruction": "SYSTEM",
                     "prompt_text": "{{text}}",
                 },
             ),
             patch(
-                "app.services.fish_speech_preprocess.gemini_generate_content",
+                "app.services.tts_markup_preprocess.gemini_generate_content",
                 return_value=("[落ち着いて]整形済み", {"input_tokens": 10, "output_tokens": 20}),
             ) as generate_content,
         ):
@@ -107,7 +108,7 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
         self.assertEqual(result["llm"]["provider"], "google")
 
     def test_preprocess_uses_anthropic_transport(self):
-        service = FishSpeechPreprocessService()
+        service = TTSMarkupPreprocessService()
         message = type(
             "Message",
             (),
@@ -128,14 +129,14 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
 
         with (
             patch(
-                "app.services.fish_speech_preprocess.get_default_prompt_template",
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
                 return_value={
                     "system_instruction": "SYSTEM",
                     "prompt_text": "{{text}}",
                 },
             ),
             patch(
-                "app.services.fish_speech_preprocess.anthropic_call_with_model_fallback",
+                "app.services.tts_markup_preprocess.anthropic_call_with_model_fallback",
                 return_value=(message, "claude-sonnet-4-6", []),
             ) as anthropic_call,
         ):
@@ -158,7 +159,7 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
         self.assertEqual(result["llm"]["provider"], "anthropic")
 
     def test_preprocess_uses_prompt_as_is_when_system_instruction_is_empty(self):
-        service = FishSpeechPreprocessService()
+        service = TTSMarkupPreprocessService()
         message = type(
             "Message",
             (),
@@ -179,14 +180,14 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
 
         with (
             patch(
-                "app.services.fish_speech_preprocess.get_default_prompt_template",
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
                 return_value={
                     "system_instruction": "",
                     "prompt_text": "固定プロンプト\n## 【テキスト】",
                 },
             ),
             patch(
-                "app.services.fish_speech_preprocess.anthropic_call_with_model_fallback",
+                "app.services.tts_markup_preprocess.anthropic_call_with_model_fallback",
                 return_value=(message, "claude-sonnet-4-6", []),
             ) as anthropic_call,
         ):
@@ -207,18 +208,18 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
         )
 
     def test_preprocess_surfaces_anthropic_failure_detail(self):
-        service = FishSpeechPreprocessService()
+        service = TTSMarkupPreprocessService()
 
         with (
             patch(
-                "app.services.fish_speech_preprocess.get_default_prompt_template",
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
                 return_value={
                     "system_instruction": "",
                     "prompt_text": "固定プロンプト\n## 【テキスト】",
                 },
             ),
             patch(
-                "app.services.fish_speech_preprocess.anthropic_call_with_model_fallback",
+                "app.services.tts_markup_preprocess.anthropic_call_with_model_fallback",
                 return_value=(None, None, [{"model": "claude-haiku-4-5", "reason": "invalid_request_error"}]),
             ),
         ):
@@ -230,30 +231,30 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
                 )
 
     def test_preprocess_defaults_prompt_key(self):
-        service = FishSpeechPreprocessService()
+        service = TTSMarkupPreprocessService()
 
         with patch(
-            "app.services.fish_speech_preprocess.get_default_prompt_template",
+            "app.services.tts_markup_preprocess.get_default_prompt_template",
             return_value={"system_instruction": "SYSTEM", "prompt_text": "{{text}}"},
         ) as get_template, patch(
-            "app.services.fish_speech_preprocess.openai_chat_json",
+            "app.services.tts_markup_preprocess.openai_chat_json",
             return_value=("整形済み", {"input_tokens": 1, "output_tokens": 1}),
         ):
             service.preprocess(text="元テキスト", model="gpt-5.4-mini", api_key="openai-key")
 
-        get_template.assert_called_once_with(DEFAULT_FISH_PREPROCESS_PROMPT_KEY)
+        get_template.assert_called_once_with(DEFAULT_TTS_MARKUP_PREPROCESS_PROMPT_KEY)
 
     def test_preprocess_renders_supplied_variables(self):
-        service = FishSpeechPreprocessService()
+        service = TTSMarkupPreprocessService()
 
         with patch(
-            "app.services.fish_speech_preprocess.get_default_prompt_template",
+            "app.services.tts_markup_preprocess.get_default_prompt_template",
             return_value={
                 "system_instruction": "SYSTEM",
                 "prompt_text": "話者: {{persona_name}}\n本文:\n{{text}}",
             },
         ), patch(
-            "app.services.fish_speech_preprocess.openai_chat_json",
+            "app.services.tts_markup_preprocess.openai_chat_json",
             return_value=("整形済み", {"input_tokens": 1, "output_tokens": 1}),
         ) as chat_json:
             service.preprocess(
@@ -272,16 +273,16 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
         )
 
     def test_preprocess_enriches_audio_briefing_persona_tone_prompts(self):
-        service = FishSpeechPreprocessService()
+        service = TTSMarkupPreprocessService()
 
         with patch(
-            "app.services.fish_speech_preprocess.get_default_prompt_template",
+            "app.services.tts_markup_preprocess.get_default_prompt_template",
             return_value={
                 "system_instruction": "SYSTEM",
                 "prompt_text": "話者: {{persona_name}}\nトーン: {{tone_prompt}}\n本文:\n{{text}}",
             },
         ), patch(
-            "app.services.fish_speech_preprocess.openai_chat_json",
+            "app.services.tts_markup_preprocess.openai_chat_json",
             return_value=("整形済み", {"input_tokens": 1, "output_tokens": 1}),
         ) as chat_json:
             service.preprocess(
@@ -296,10 +297,10 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
         self.assertIn("落ち着いた編集者として、重要度と意味合いを端正に語る。", chat_json.call_args.args[0])
 
     def test_preprocess_enriches_audio_briefing_duo_persona_prompts(self):
-        service = FishSpeechPreprocessService()
+        service = TTSMarkupPreprocessService()
 
         with patch(
-            "app.services.fish_speech_preprocess.get_default_prompt_template",
+            "app.services.tts_markup_preprocess.get_default_prompt_template",
             return_value={
                 "system_instruction": "SYSTEM",
                 "prompt_text": (
@@ -309,7 +310,7 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
                 ),
             },
         ), patch(
-            "app.services.fish_speech_preprocess.openai_chat_json",
+            "app.services.tts_markup_preprocess.openai_chat_json",
             return_value=("整形済み", {"input_tokens": 1, "output_tokens": 1}),
         ) as chat_json:
             service.preprocess(
@@ -329,23 +330,47 @@ class FishSpeechPreprocessServiceTests(unittest.TestCase):
         self.assertIn("<|speaker:0|>冒頭<|speaker:1|>補足", rendered)
 
     def test_preprocess_llm_meta_uses_separate_purpose(self):
-        service = FishSpeechPreprocessService()
+        service = TTSMarkupPreprocessService()
 
         with (
             patch(
-                "app.services.fish_speech_preprocess.get_default_prompt_template",
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
                 return_value={"system_instruction": "SYSTEM", "prompt_text": "{{text}}"},
             ),
             patch(
-                "app.services.fish_speech_preprocess.openai_chat_json",
+                "app.services.tts_markup_preprocess.openai_chat_json",
                 return_value=("整形済み", {"input_tokens": 1, "output_tokens": 1}),
             ),
-            patch("app.services.fish_speech_preprocess.openai_llm_meta", return_value={"purpose": FISH_PREPROCESS_PURPOSE}) as llm_meta,
+            patch("app.services.tts_markup_preprocess.openai_llm_meta", return_value={"purpose": FISH_PREPROCESS_PURPOSE}) as llm_meta,
         ):
             result = service.preprocess(text="元テキスト", model="gpt-5.4-mini", api_key="openai-key")
 
         llm_meta.assert_called_once_with("gpt-5.4-mini", FISH_PREPROCESS_PURPOSE, {"input_tokens": 1, "output_tokens": 1})
         self.assertEqual(result["llm"]["purpose"], FISH_PREPROCESS_PURPOSE)
+
+    def test_preprocess_uses_gemini_tts_purpose_for_gemini_prompt_keys(self):
+        service = TTSMarkupPreprocessService()
+
+        with (
+            patch(
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
+                return_value={"system_instruction": "SYSTEM", "prompt_text": "{{text}}"},
+            ),
+            patch(
+                "app.services.tts_markup_preprocess.openai_chat_json",
+                return_value=("整形済み", {"input_tokens": 1, "output_tokens": 1}),
+            ),
+            patch("app.services.tts_markup_preprocess.openai_llm_meta", return_value={"purpose": GEMINI_TTS_PREPROCESS_PURPOSE}) as llm_meta,
+        ):
+            result = service.preprocess(
+                text="元テキスト",
+                model="gpt-5.4-mini",
+                api_key="openai-key",
+                prompt_key="gemini.summary_preprocess",
+            )
+
+        llm_meta.assert_called_once_with("gpt-5.4-mini", GEMINI_TTS_PREPROCESS_PURPOSE, {"input_tokens": 1, "output_tokens": 1})
+        self.assertEqual(result["llm"]["purpose"], GEMINI_TTS_PREPROCESS_PURPOSE)
 
 
 if __name__ == "__main__":

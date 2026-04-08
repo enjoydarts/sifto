@@ -112,7 +112,7 @@ type UpdateLLMModelsInput struct {
 	AINavigatorBriefFallback    *string
 	AudioBriefingScript         *string
 	AudioBriefingScriptFallback *string
-	FishPreprocessModel         *string
+	TTSMarkupPreprocessModel    *string
 }
 
 type UpdateAudioBriefingSettingsInput struct {
@@ -312,7 +312,7 @@ func LLMModelSettingsPayload(settings *model.UserSettings) map[string]any {
 		"ai_navigator_brief_fallback":    settings.AINavigatorBriefFallbackModel,
 		"audio_briefing_script":          settings.AudioBriefingScriptModel,
 		"audio_briefing_script_fallback": settings.AudioBriefingScriptFallbackModel,
-		"fish_preprocess_model":          settings.FishPreprocessModel,
+		"tts_markup_preprocess_model":    settings.TTSMarkupPreprocessModel,
 	}
 }
 
@@ -1053,7 +1053,7 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		"ai_navigator_brief_fallback":    normalizeOptionalModel(in.AINavigatorBriefFallback),
 		"audio_briefing_script":          normalizeOptionalModel(in.AudioBriefingScript),
 		"audio_briefing_script_fallback": normalizeOptionalModel(in.AudioBriefingScriptFallback),
-		"fish_preprocess_model":          normalizeOptionalModel(in.FishPreprocessModel),
+		"tts_markup_preprocess_model":    normalizeOptionalModel(in.TTSMarkupPreprocessModel),
 	}
 	for settingKey, purpose := range modelSettingPurposes {
 		if err := validateCatalogModelForPurpose(catalog, normalized[settingKey], purpose); err != nil {
@@ -1067,7 +1067,7 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 	if embeddingModel != nil && !CatalogIsEmbeddingModelInCatalog(catalog, *embeddingModel) {
 		return nil, fmt.Errorf("invalid embedding model")
 	}
-	if err := validateCatalogChatModel(catalog, normalized["fish_preprocess_model"], "fish_preprocess_model"); err != nil {
+	if err := validateCatalogChatModel(catalog, normalized["tts_markup_preprocess_model"], "tts_markup_preprocess_model"); err != nil {
 		return nil, err
 	}
 	return s.repo.UpsertLLMModelConfig(
@@ -1098,7 +1098,7 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		normalized["ai_navigator_brief_fallback"],
 		normalized["audio_briefing_script"],
 		normalized["audio_briefing_script_fallback"],
-		normalized["fish_preprocess_model"],
+		normalized["tts_markup_preprocess_model"],
 	)
 }
 

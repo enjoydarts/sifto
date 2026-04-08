@@ -188,6 +188,32 @@ func TestAudioBriefingGeminiDuoTurnsUsesGroupedChunkSpeakers(t *testing.T) {
 	}
 }
 
+func TestAudioBriefingGeminiDuoTurnsFromTextParsesSpeakerTaggedText(t *testing.T) {
+	group := audioBriefingChunkGroup{
+		PartType: "article",
+		ItemID:   "item-1",
+		Chunks: []*model.AudioBriefingScriptChunk{
+			{Speaker: stringPtr("host"), Text: "最初の発話"},
+			{Speaker: stringPtr("partner"), Text: "次の発話"},
+		},
+	}
+
+	turns := audioBriefingGeminiDuoTurnsFromText(group, "<|speaker:0|>[short pause] 最初の発話<|speaker:1|>[laughing] 次の発話")
+
+	if len(turns) != 2 {
+		t.Fatalf("len(turns) = %d, want 2", len(turns))
+	}
+	if turns[0].Speaker != "host" || turns[1].Speaker != "partner" {
+		t.Fatalf("turn speakers = %#v, want host/partner", turns)
+	}
+	if !strings.Contains(turns[0].Text, "[short pause]") {
+		t.Fatalf("turns[0].Text = %q, want preserved markup", turns[0].Text)
+	}
+	if !strings.Contains(turns[1].Text, "[laughing]") {
+		t.Fatalf("turns[1].Text = %q, want preserved markup", turns[1].Text)
+	}
+}
+
 func TestAudioBriefingChunkGroupForSelectionSortsBySeq(t *testing.T) {
 	chunks := []model.AudioBriefingScriptChunk{
 		{ID: "chunk-2", Seq: 2, PartType: "article", ItemID: stringPtr("item-1"), Speaker: stringPtr("partner"), Text: "p1"},

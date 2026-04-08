@@ -224,6 +224,7 @@ class AudioBriefingTTSService:
             partner_persona=partner_persona,
             section_type=section_type,
             turns=turns,
+            api_key=api_key_override,
         )
         if not output_object_key.endswith(suffix):
             output_object_key = output_object_key + suffix
@@ -446,6 +447,7 @@ class AudioBriefingTTSService:
             persona=persona,
             text=text,
             speech_rate=speech_rate,
+            api_key=api_key_override,
         )
 
     def synthesize_fish_audio(

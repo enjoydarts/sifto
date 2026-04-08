@@ -32,7 +32,7 @@ type SummaryAudioPlayerService struct {
 	userSettings *repository.UserSettingsRepo
 	cipher       *SecretCipher
 	worker       summaryAudioSynthesizer
-	preprocess   summaryAudioFishPreprocessor
+	preprocess   summaryAudioTTSMarkupPreprocessor
 }
 
 type summaryAudioSynthesizer interface {
@@ -59,8 +59,9 @@ type summaryAudioSynthesizer interface {
 	) (*SummaryAudioSynthesizeResponse, error)
 }
 
-type summaryAudioFishPreprocessor interface {
-	PreprocessSummaryAudioText(ctx context.Context, userID, itemID, text string) (*FishSpeechPreprocessResult, error)
+type summaryAudioTTSMarkupPreprocessor interface {
+	PreprocessSummaryAudioText(ctx context.Context, userID, itemID, text string) (*TTSMarkupPreprocessResult, error)
+	PreprocessSummaryAudioTextForProvider(ctx context.Context, userID, itemID, provider, text string) (*TTSMarkupPreprocessResult, error)
 }
 
 func NewSummaryAudioPlayerService(
@@ -70,7 +71,7 @@ func NewSummaryAudioPlayerService(
 	userSettings *repository.UserSettingsRepo,
 	cipher *SecretCipher,
 	worker summaryAudioSynthesizer,
-	preprocess summaryAudioFishPreprocessor,
+	preprocess summaryAudioTTSMarkupPreprocessor,
 ) *SummaryAudioPlayerService {
 	return &SummaryAudioPlayerService{
 		items:        items,
@@ -149,7 +150,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 			return nil, err
 		}
 		if s.preprocess != nil {
-			preprocessed, preprocessErr := s.preprocess.PreprocessSummaryAudioText(ctx, userID, item.ID, narration)
+			preprocessed, preprocessErr := s.preprocess.PreprocessSummaryAudioTextForProvider(ctx, userID, item.ID, provider, narration)
 			if preprocessErr != nil {
 				return nil, preprocessErr
 			}
@@ -162,6 +163,14 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		}
 		if err := EnsureGeminiTTSEnabledForUser(ctx, s.userRepo, userID); err != nil {
 			return nil, err
+		}
+		if s.preprocess != nil {
+			preprocessed, preprocessErr := s.preprocess.PreprocessSummaryAudioTextForProvider(ctx, userID, item.ID, provider, narration)
+			if preprocessErr != nil {
+				return nil, preprocessErr
+			}
+			preprocessedText = stringPtrOrNil(preprocessed.Text)
+			narration = preprocessed.Text
 		}
 	} else if strings.EqualFold(provider, "openai") {
 		if ttsModel == "" {

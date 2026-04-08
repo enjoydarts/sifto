@@ -230,7 +230,13 @@ def _cloud_tts_credentials():
     return creds, project_id
 
 
-def _cloud_tts_headers() -> dict[str, str]:
+def _cloud_tts_headers(api_key: str | None = None) -> dict[str, str]:
+    normalized_api_key = str(api_key or "").strip()
+    if normalized_api_key:
+        return {
+            "x-goog-api-key": normalized_api_key,
+            "Content-Type": "application/json",
+        }
     creds, discovered_project_id = _cloud_tts_credentials()
     if not creds.valid or creds.expired or not creds.token:
         creds.refresh(GoogleAuthRequest())
@@ -269,6 +275,7 @@ def synthesize_gemini_cloud_tts(
     voice_name: str,
     prompt: str,
     text: str,
+    api_key: str | None = None,
 ) -> tuple[bytes, str, str, int]:
     normalized_model = (model or "").strip()
     normalized_voice_name = (voice_name or "").strip()
@@ -281,7 +288,7 @@ def synthesize_gemini_cloud_tts(
         raise RuntimeError("gemini tts text is empty")
     response = httpx.post(
         f"{_resolve_gemini_tts_endpoint()}/v1/text:synthesize",
-        headers=_cloud_tts_headers(),
+        headers=_cloud_tts_headers(api_key),
         json={
             "input": {
                 "text": normalized_text,
@@ -320,6 +327,7 @@ def synthesize_gemini_tts(
     persona: str = "",
     text: str,
     speech_rate: float,
+    api_key: str | None = None,
 ) -> tuple[bytes, str, str, int]:
     if str(persona or "").strip():
         prompt = build_gemini_audio_briefing_prompt(persona, text, speech_rate)
@@ -330,6 +338,7 @@ def synthesize_gemini_tts(
         voice_name=voice_name,
         prompt=prompt,
         text=text,
+        api_key=api_key,
     )
 
 
@@ -342,6 +351,7 @@ def synthesize_gemini_multi_speaker_tts(
     partner_persona: str,
     section_type: str,
     turns: list[dict[str, str]],
+    api_key: str | None = None,
 ) -> tuple[bytes, str, str, int]:
     normalized_model = (model or "").strip()
     normalized_host_voice_name = (host_voice_name or "").strip()
@@ -367,7 +377,7 @@ def synthesize_gemini_multi_speaker_tts(
     prompt = build_gemini_duo_audio_briefing_prompt(host_persona, partner_persona, filtered_turns, section_type)
     response = httpx.post(
         f"{_resolve_gemini_tts_endpoint()}/v1/text:synthesize",
-        headers=_cloud_tts_headers(),
+        headers=_cloud_tts_headers(api_key),
         json={
             "input": {
                 "prompt": prompt,

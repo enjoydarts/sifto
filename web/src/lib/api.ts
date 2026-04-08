@@ -1536,7 +1536,7 @@ export interface UserSettings {
     ai_navigator_brief_fallback?: string | null;
     audio_briefing_script?: string | null;
     audio_briefing_script_fallback?: string | null;
-    fish_preprocess_model?: string | null;
+    tts_markup_preprocess_model?: string | null;
   };
   audio_briefing?: AudioBriefingSettings;
   audio_briefing_persona_voices?: AudioBriefingPersonaVoice[];
@@ -2694,7 +2694,7 @@ export const api = {
     ai_navigator_brief_fallback?: string | null;
     audio_briefing_script?: string | null;
     audio_briefing_script_fallback?: string | null;
-    fish_preprocess_model?: string | null;
+    tts_markup_preprocess_model?: string | null;
   }) =>
     apiFetch<{ user_id: string; llm_models: UserSettings["llm_models"] }>("/settings/llm-models", {
       method: "PATCH",

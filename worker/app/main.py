@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
-from app.routers import ai_navigator_brief, ask, ask_navigator, audio_briefing_script, audio_briefing_tts, briefing_navigator, digest, extract, facts, facts_check, feed_seed_suggestions, feed_suggestions, fish_speech_preprocess, item_navigator, source_navigator, summary_audio_player, summarize, summary_faithfulness, translate_title
+from app.routers import ai_navigator_brief, ask, ask_navigator, audio_briefing_script, audio_briefing_tts, briefing_navigator, digest, extract, facts, facts_check, feed_seed_suggestions, feed_suggestions, item_navigator, source_navigator, summary_audio_player, summarize, summary_faithfulness, translate_title, tts_markup_preprocess
 from app.services.langfuse_client import flush as langfuse_flush, log_runtime_status as langfuse_log_runtime_status, span as langfuse_span, update_current as langfuse_update_current, update_current_trace as langfuse_update_current_trace
 
 _SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
@@ -124,7 +124,7 @@ app.include_router(summary_faithfulness.router)
 app.include_router(translate_title.router)
 app.include_router(audio_briefing_tts.router)
 app.include_router(summary_audio_player.router)
-app.include_router(fish_speech_preprocess.router)
+app.include_router(tts_markup_preprocess.router)
 app.include_router(audio_briefing_script.router)
 app.include_router(ask.router)
 app.include_router(ask_navigator.router)

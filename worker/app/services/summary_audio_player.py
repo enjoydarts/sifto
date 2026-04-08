@@ -88,6 +88,7 @@ class SummaryAudioPlayerService:
                 voice_name=voice_model,
                 text=text,
                 speech_rate=speech_rate,
+                api_key=google_api_key,
             )
         elif normalized_provider == "fish":
             audio_bytes, content_type, _, duration_sec = synthesize_fish_tts(

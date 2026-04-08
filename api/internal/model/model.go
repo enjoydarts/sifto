@@ -100,7 +100,7 @@ type UserSettings struct {
 	AINavigatorBriefFallbackModel    *string    `json:"ai_navigator_brief_fallback_model,omitempty"`
 	AudioBriefingScriptModel         *string    `json:"audio_briefing_script_model,omitempty"`
 	AudioBriefingScriptFallbackModel *string    `json:"audio_briefing_script_fallback_model,omitempty"`
-	FishPreprocessModel              *string    `json:"fish_preprocess_model,omitempty"`
+	TTSMarkupPreprocessModel         *string    `json:"tts_markup_preprocess_model,omitempty"`
 	UIFontSansKey                    string     `json:"ui_font_sans_key"`
 	UIFontSerifKey                   string     `json:"ui_font_serif_key"`
 	HasInoreaderOAuth                bool       `json:"has_inoreader_oauth"`

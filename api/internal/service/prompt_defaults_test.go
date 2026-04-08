@@ -15,6 +15,11 @@ func TestLookupPromptTemplateDefault(t *testing.T) {
 		"audio_briefing_script.single",
 		"audio_briefing_script.duo",
 		"fish.summary_preprocess",
+		"fish.audio_briefing_single_preprocess",
+		"fish.audio_briefing_duo_preprocess",
+		"gemini.summary_preprocess",
+		"gemini.audio_briefing_single_preprocess",
+		"gemini.audio_briefing_duo_preprocess",
 	}
 
 	for _, key := range cases {

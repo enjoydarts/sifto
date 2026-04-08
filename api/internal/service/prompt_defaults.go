@@ -196,8 +196,22 @@ func defaultPromptVariablesSchema(promptKey string) json.RawMessage {
   "articles_json": {"type": "string"},
   "existing_context": {"type": "string"}
 }`)
-	case "fish.summary_preprocess":
+	case "fish.summary_preprocess", "gemini.summary_preprocess":
 		return mustRawJSON(`{
+  "text": {"type": "string"}
+}`)
+	case "fish.audio_briefing_single_preprocess", "gemini.audio_briefing_single_preprocess":
+		return mustRawJSON(`{
+  "persona_name": {"type": "string"},
+  "tone_prompt": {"type": "string"},
+  "text": {"type": "string"}
+}`)
+	case "fish.audio_briefing_duo_preprocess", "gemini.audio_briefing_duo_preprocess":
+		return mustRawJSON(`{
+  "host_persona_name": {"type": "string"},
+  "host_tone_prompt": {"type": "string"},
+  "partner_persona_name": {"type": "string"},
+  "partner_tone_prompt": {"type": "string"},
   "text": {"type": "string"}
 }`)
 	default:
@@ -212,7 +226,17 @@ func defaultPromptNotes(promptKey string) string {
 	case "audio_briefing_script.single", "audio_briefing_script.duo":
 		return "現行コード既定と同等の完成promptを直接編集できます。固定ルールは本文に見える形で持ち、persona や記事データなどの runtime 変数だけを差し込みます。"
 	case "fish.summary_preprocess":
-		return "Fish Audio の読み上げ前テキストに自然言語タグを挿入する前処理 prompt です。現在は Summary Audio の Fish 経路でのみ使います。"
+		return "Fish Audio の読み上げ前テキストに自然言語タグを挿入する前処理 prompt です。"
+	case "fish.audio_briefing_single_preprocess":
+		return "Fish Audio の Audio Briefing Single 向け前処理 prompt です。"
+	case "fish.audio_briefing_duo_preprocess":
+		return "Fish Audio の Audio Briefing Duo 向け前処理 prompt です。"
+	case "gemini.summary_preprocess":
+		return "Gemini TTS の Summary Audio 向け前処理 prompt です。公式マークアップの whitelist を使います。"
+	case "gemini.audio_briefing_single_preprocess":
+		return "Gemini TTS の Audio Briefing Single 向け前処理 prompt です。"
+	case "gemini.audio_briefing_duo_preprocess":
+		return "Gemini TTS の Audio Briefing Duo 向け前処理 prompt です。"
 	default:
 		return ""
 	}
@@ -347,9 +371,23 @@ func defaultPromptPreviewVariables(promptKey string) json.RawMessage {
   "articles_json": "[{\"item_id\":\"item-1\",\"title\":\"Example title\",\"translated_title\":\"翻訳タイトル\",\"source_title\":\"Source\",\"summary\":\"Summary text\",\"published_at\":\"2026-04-01T08:00:00Z\"}]",
   "existing_context": "なし"
 }`)
-	case "fish.summary_preprocess":
+	case "fish.summary_preprocess", "gemini.summary_preprocess":
 		return mustRawJSON(`{
   "text": "新しいAIモデルが公開されました。APIの料金は23.5パーセント下がります。"
+}`)
+	case "fish.audio_briefing_single_preprocess", "gemini.audio_briefing_single_preprocess":
+		return mustRawJSON(`{
+  "persona_name": "editor",
+  "tone_prompt": "落ち着いていて整理がうまく、やや温かみのある話し方",
+  "text": "今日は重要なテックニュースを三本に絞って見ていきます。まずは新しいAIモデルの公開からです。"
+}`)
+	case "fish.audio_briefing_duo_preprocess", "gemini.audio_briefing_duo_preprocess":
+		return mustRawJSON(`{
+  "host_persona_name": "editor",
+  "host_tone_prompt": "落ち着いていて整理がうまい",
+  "partner_persona_name": "analyst",
+  "partner_tone_prompt": "ややくだけているが観察が細かい",
+  "text": "<|speaker:0|> まずは新しいAIモデルの公開から見ていきます。\n<|speaker:1|> 価格改定まで含まれているので、実務への影響も大きそうですね。"
 }`)
 	default:
 		return nil

@@ -313,7 +313,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		AINavigatorBriefFallback    *string `json:"ai_navigator_brief_fallback"`
 		AudioBriefingScript         *string `json:"audio_briefing_script"`
 		AudioBriefingScriptFallback *string `json:"audio_briefing_script_fallback"`
-		FishPreprocessModel         *string `json:"fish_preprocess_model"`
+		TTSMarkupPreprocessModel    *string `json:"tts_markup_preprocess_model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
@@ -345,7 +345,7 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		AINavigatorBriefFallback:    body.AINavigatorBriefFallback,
 		AudioBriefingScript:         body.AudioBriefingScript,
 		AudioBriefingScriptFallback: body.AudioBriefingScriptFallback,
-		FishPreprocessModel:         body.FishPreprocessModel,
+		TTSMarkupPreprocessModel:    body.TTSMarkupPreprocessModel,
 	})
 	if err != nil {
 		if strings.HasPrefix(err.Error(), "invalid model for ") || strings.HasPrefix(err.Error(), "model missing required capability for ") || err.Error() == "invalid embedding model" {

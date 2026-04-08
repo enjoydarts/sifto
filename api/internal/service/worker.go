@@ -446,7 +446,7 @@ type SummaryAudioSynthesizeResponse struct {
 	ResolvedText string `json:"resolved_text"`
 }
 
-type FishSpeechPreprocessResponse struct {
+type TTSMarkupPreprocessResponse struct {
 	Text string    `json:"text"`
 	LLM  *LLMUsage `json:"llm,omitempty"`
 }
@@ -1181,14 +1181,14 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 	return postWithHeaders[SummaryAudioSynthesizeResponse](ctx, w, "/summary-audio/synthesize", requestBody, workerHeaders(nil, googleAPIKey, nil, nil, nil, nil, xaiAPIKey, nil, nil, openAIAPIKey, aivisAPIKey, fishAudioAPIKey, w.internalSecret))
 }
 
-func (w *WorkerClient) PreprocessFishSpeechText(
+func (w *WorkerClient) PreprocessTTSMarkupText(
 	ctx context.Context,
 	text string,
 	model string,
 	promptKey string,
 	variables map[string]string,
 	apiKey *string,
-) (*FishSpeechPreprocessResponse, error) {
+) (*TTSMarkupPreprocessResponse, error) {
 	if variables == nil {
 		variables = map[string]string{}
 	}
@@ -1209,7 +1209,7 @@ func (w *WorkerClient) PreprocessFishSpeechText(
 			}
 		}
 	}
-	return postWithHeaders[FishSpeechPreprocessResponse](ctx, w, "/fish/preprocess-text", requestBody, headers)
+	return postWithHeaders[TTSMarkupPreprocessResponse](ctx, w, "/tts/preprocess-text", requestBody, headers)
 }
 
 func (w *WorkerClient) PresignAudioBriefingObject(ctx context.Context, objectKey string, expiresSec int) (*AudioBriefingPresignResponse, error) {

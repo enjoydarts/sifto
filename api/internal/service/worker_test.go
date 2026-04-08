@@ -248,12 +248,12 @@ func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
 	}
 }
 
-func TestPreprocessFishSpeechTextIncludesPromptAndProviderHeader(t *testing.T) {
+func TestPreprocessTTSMarkupTextIncludesPromptAndProviderHeader(t *testing.T) {
 	client := NewWorkerClient()
 	client.baseURL = "http://worker.test"
 	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Path != "/fish/preprocess-text" {
-			t.Fatalf("path = %q, want /fish/preprocess-text", req.URL.Path)
+		if req.URL.Path != "/tts/preprocess-text" {
+			t.Fatalf("path = %q, want /tts/preprocess-text", req.URL.Path)
 		}
 		if got := req.Header.Get("X-Openai-Api-Key"); got != "openrouter-key" {
 			t.Fatalf("X-Openai-Api-Key = %q, want openrouter-key", got)
@@ -290,7 +290,7 @@ func TestPreprocessFishSpeechTextIncludesPromptAndProviderHeader(t *testing.T) {
 		}, nil
 	})
 
-	resp, err := client.PreprocessFishSpeechText(
+	resp, err := client.PreprocessTTSMarkupText(
 		context.Background(),
 		"元テキスト",
 		"openrouter::openai/gpt-oss-20b",
@@ -299,14 +299,14 @@ func TestPreprocessFishSpeechTextIncludesPromptAndProviderHeader(t *testing.T) {
 		strptr("openrouter-key"),
 	)
 	if err != nil {
-		t.Fatalf("PreprocessFishSpeechText(...) error = %v", err)
+		t.Fatalf("PreprocessTTSMarkupText(...) error = %v", err)
 	}
 	if resp == nil || resp.Text != "前処理済みテキスト" {
 		t.Fatalf("response = %#v, want text", resp)
 	}
 }
 
-func TestPreprocessFishSpeechTextNormalizesNilVariablesToEmptyObject(t *testing.T) {
+func TestPreprocessTTSMarkupTextNormalizesNilVariablesToEmptyObject(t *testing.T) {
 	client := NewWorkerClient()
 	client.baseURL = "http://worker.test"
 	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
@@ -331,7 +331,7 @@ func TestPreprocessFishSpeechTextNormalizesNilVariablesToEmptyObject(t *testing.
 		}, nil
 	})
 
-	resp, err := client.PreprocessFishSpeechText(
+	resp, err := client.PreprocessTTSMarkupText(
 		context.Background(),
 		"元テキスト",
 		"gpt-5.4-mini",
@@ -340,7 +340,7 @@ func TestPreprocessFishSpeechTextNormalizesNilVariablesToEmptyObject(t *testing.
 		strptr("openai-key"),
 	)
 	if err != nil {
-		t.Fatalf("PreprocessFishSpeechText(...) error = %v", err)
+		t.Fatalf("PreprocessTTSMarkupText(...) error = %v", err)
 	}
 	if resp == nil || resp.Text != "前処理済みテキスト" {
 		t.Fatalf("response = %#v, want text", resp)

@@ -126,7 +126,7 @@ function buildCostPerformancePreset(catalog: LLMCatalog | null): NonNullable<Use
       "gpt-5.4-mini",
       "gpt-5-mini",
     ]),
-    fish_preprocess_model: firstMatchingModelId(purposeModels("summary"), [
+    tts_markup_preprocess_model: firstMatchingModelId(purposeModels("summary"), [
       "openai/gpt-oss-20b",
       "gemini-2.5-flash-lite",
       "gpt-5.4-mini",
@@ -195,8 +195,8 @@ function localizeLLMSettingKey(settingKey: string, t: (key: string, fallback?: s
       return t("settings.model.audioBriefingScript");
     case "audio_briefing_script_fallback":
       return t("settings.model.audioBriefingScriptFallback");
-    case "fish_preprocess_model":
-      return t("settings.model.fishPreprocess");
+    case "tts_markup_preprocess_model":
+      return t("settings.model.ttsMarkupPreprocess");
     case "embedding":
       return t("settings.model.embeddings");
     default:
@@ -2302,7 +2302,7 @@ export default function SettingsPage() {
   const [aiNavigatorBriefFallbackModel, setAINavigatorBriefFallbackModel] = useState("");
   const [audioBriefingScriptModel, setAudioBriefingScriptModel] = useState("");
   const [audioBriefingScriptFallbackModel, setAudioBriefingScriptFallbackModel] = useState("");
-  const [fishPreprocessModel, setFishPreprocessModel] = useState("");
+  const [ttsMarkupPreprocessModel, setTTSMarkupPreprocessModel] = useState("");
   const [navigatorPersonaDefinitions, setNavigatorPersonaDefinitions] = useState<Record<string, NavigatorPersonaDefinition>>({});
   const loadSeqRef = useRef(0);
   const llmModelsDirtyRef = useRef(false);
@@ -2523,7 +2523,7 @@ export default function SettingsPage() {
     setAINavigatorBriefFallbackModel(llmModels?.ai_navigator_brief_fallback ?? "");
     setAudioBriefingScriptModel(llmModels?.audio_briefing_script ?? "");
     setAudioBriefingScriptFallbackModel(llmModels?.audio_briefing_script_fallback ?? "");
-    setFishPreprocessModel(llmModels?.fish_preprocess_model ?? "");
+    setTTSMarkupPreprocessModel(llmModels?.tts_markup_preprocess_model ?? "");
   }, []);
 
   const onChangeLLMModel = useCallback((setter: (value: string) => void, value: string) => {
@@ -2558,7 +2558,7 @@ export default function SettingsPage() {
       ai_navigator_brief_fallback: string | null;
       audio_briefing_script: string | null;
       audio_briefing_script_fallback: string | null;
-      fish_preprocess_model: string | null;
+      tts_markup_preprocess_model: string | null;
     }>) => {
       const emptyToNull = (v: string) => {
         const s = v.trim();
@@ -2595,7 +2595,7 @@ export default function SettingsPage() {
         ai_navigator_brief_fallback: emptyToNull(aiNavigatorBriefFallbackModel),
         audio_briefing_script: emptyToNull(audioBriefingScriptModel),
         audio_briefing_script_fallback: emptyToNull(audioBriefingScriptFallbackModel),
-        fish_preprocess_model: emptyToNull(fishPreprocessModel),
+        tts_markup_preprocess_model: emptyToNull(ttsMarkupPreprocessModel),
         ...overrides,
       };
     },
@@ -2624,7 +2624,7 @@ export default function SettingsPage() {
       navigatorPersona,
       audioBriefingScriptFallbackModel,
       audioBriefingScriptModel,
-      fishPreprocessModel,
+      ttsMarkupPreprocessModel,
       openAIEmbeddingModel,
     ]
   );
@@ -3025,7 +3025,7 @@ export default function SettingsPage() {
     setOpenAIEmbeddingModel(preset.embedding ?? "");
     setFactsCheckModel(preset.facts_check ?? "");
     setFaithfulnessCheckModel(preset.faithfulness_check ?? "");
-    setFishPreprocessModel(preset.fish_preprocess_model ?? "");
+    setTTSMarkupPreprocessModel(preset.tts_markup_preprocess_model ?? "");
   }, [catalog]);
 
   const optionsForPurpose = useCallback(
@@ -7103,16 +7103,16 @@ export default function SettingsPage() {
                       </div>
                     </section>
                     <section className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-4">
-                      <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.group.fishPreprocess")}</h4>
+                      <h4 className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("settings.group.ttsMarkupPreprocess")}</h4>
                       <p className="mt-1 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
-                        {t("settings.group.fishPreprocessDescription")}
+                        {t("settings.group.ttsMarkupPreprocessDescription")}
                       </p>
                       <div className="mt-3 grid gap-4 md:grid-cols-2">
                         <ModelSelect
-                          label={t("settings.model.fishPreprocess")}
-                          value={fishPreprocessModel}
-                          onChange={(value) => onChangeLLMModel(setFishPreprocessModel, value)}
-                          options={optionsForChatModel(fishPreprocessModel)}
+                          label={t("settings.model.ttsMarkupPreprocess")}
+                          value={ttsMarkupPreprocessModel}
+                          onChange={(value) => onChangeLLMModel(setTTSMarkupPreprocessModel, value)}
+                          options={optionsForChatModel(ttsMarkupPreprocessModel)}
                           labels={modelSelectLabels}
                           variant="modal"
                         />

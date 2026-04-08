@@ -1,32 +1,32 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.services.fish_speech_preprocess import DEFAULT_FISH_PREPROCESS_PROMPT_KEY, FishSpeechPreprocessService
+from app.services.tts_markup_preprocess import DEFAULT_TTS_MARKUP_PREPROCESS_PROMPT_KEY, TTSMarkupPreprocessService
 from app.services.llm_catalog import provider_api_key_header, provider_for_model
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
 
 
-class FishSpeechPreprocessRequest(BaseModel):
+class TTSMarkupPreprocessRequest(BaseModel):
     text: str
     model: str
-    prompt_key: str = DEFAULT_FISH_PREPROCESS_PROMPT_KEY
+    prompt_key: str = DEFAULT_TTS_MARKUP_PREPROCESS_PROMPT_KEY
     variables: dict[str, str] | None = Field(default_factory=dict)
 
 
-class FishSpeechPreprocessResponse(BaseModel):
+class TTSMarkupPreprocessResponse(BaseModel):
     text: str
     llm: dict | None = None
 
 
-@router.post("/fish/preprocess-text", response_model=FishSpeechPreprocessResponse)
-def preprocess_fish_text(req: FishSpeechPreprocessRequest, request: Request):
+@router.post("/tts/preprocess-text", response_model=TTSMarkupPreprocessResponse)
+def preprocess_tts_markup_text(req: TTSMarkupPreprocessRequest, request: Request):
     try:
-        service = FishSpeechPreprocessService()
+        service = TTSMarkupPreprocessService()
         provider = provider_for_model(req.model)
         if not provider:
-            raise RuntimeError(f"unsupported fish preprocess model provider: {req.model}")
+            raise RuntimeError(f"unsupported tts markup preprocess model provider: {req.model}")
         api_key_header = provider_api_key_header(provider)
         api_key = request.headers.get(api_key_header, "").strip() if api_key_header else ""
         result = run_observed_request(
@@ -55,6 +55,6 @@ def preprocess_fish_text(req: FishSpeechPreprocessRequest, request: Request):
                 **llm_usage_summary(result),
             },
         )
-        return FishSpeechPreprocessResponse(**result)
+        return TTSMarkupPreprocessResponse(**result)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"fish speech preprocess failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"tts markup preprocess failed: {exc}")

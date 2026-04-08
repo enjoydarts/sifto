@@ -183,6 +183,7 @@ class SummaryAudioPlayerTests(unittest.TestCase):
             voice_name="Kore",
             text="summary text",
             speech_rate=1.0,
+            api_key=None,
         )
         self.assertEqual(audio_base64, "YXVkaW8=")
         self.assertEqual(content_type, "audio/mpeg")

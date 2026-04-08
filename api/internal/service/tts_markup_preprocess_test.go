@@ -8,17 +8,17 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/repository"
 )
 
-type fishPreprocessUsageRepoStub struct {
+type ttsMarkupPreprocessUsageRepoStub struct {
 	input repository.LLMUsageLogInput
 }
 
-func (s *fishPreprocessUsageRepoStub) Insert(_ context.Context, in repository.LLMUsageLogInput) error {
+func (s *ttsMarkupPreprocessUsageRepoStub) Insert(_ context.Context, in repository.LLMUsageLogInput) error {
 	s.input = in
 	return nil
 }
 
-func TestRecordFishPreprocessLLMUsageUsesSeparatePromptMetadata(t *testing.T) {
-	repo := &fishPreprocessUsageRepoStub{}
+func TestRecordTTSMarkupPreprocessLLMUsageUsesSeparatePromptMetadata(t *testing.T) {
+	repo := &ttsMarkupPreprocessUsageRepoStub{}
 	userID := "00000000-0000-4000-8000-000000000022"
 	itemID := "00000000-0000-4000-8000-000000000099"
 	usage := &LLMUsage{
@@ -35,7 +35,7 @@ func TestRecordFishPreprocessLLMUsageUsesSeparatePromptMetadata(t *testing.T) {
 		EstimatedCostUSD:         0.123,
 	}
 
-	recordFishPreprocessLLMUsage(context.Background(), repo, NoopJSONCache{}, usage, &userID, &itemID, fishSummaryPreprocessPromptKey)
+	recordTTSMarkupPreprocessLLMUsage(context.Background(), repo, NoopJSONCache{}, usage, &userID, &itemID, fishSummaryPreprocessPromptKey, fishPreprocessPurpose)
 
 	if got := repo.input.PromptKey; got != fishSummaryPreprocessPromptKey {
 		t.Fatalf("PromptKey = %q, want %q", got, fishSummaryPreprocessPromptKey)
@@ -54,16 +54,16 @@ func TestRecordFishPreprocessLLMUsageUsesSeparatePromptMetadata(t *testing.T) {
 	}
 }
 
-type fishPreprocessWorkerStub struct {
+type ttsMarkupPreprocessWorkerStub struct {
 	gotAPIKey *string
 	gotText   string
 	gotModel  string
 	gotPrompt string
 	gotVars   map[string]string
-	response  *FishSpeechPreprocessResponse
+	response  *TTSMarkupPreprocessResponse
 }
 
-func (s *fishPreprocessWorkerStub) PreprocessFishSpeechText(_ context.Context, text string, model string, promptKey string, variables map[string]string, apiKey *string) (*FishSpeechPreprocessResponse, error) {
+func (s *ttsMarkupPreprocessWorkerStub) PreprocessTTSMarkupText(_ context.Context, text string, model string, promptKey string, variables map[string]string, apiKey *string) (*TTSMarkupPreprocessResponse, error) {
 	s.gotAPIKey = apiKey
 	s.gotText = text
 	s.gotModel = model
@@ -72,10 +72,10 @@ func (s *fishPreprocessWorkerStub) PreprocessFishSpeechText(_ context.Context, t
 	if s.response != nil {
 		return s.response, nil
 	}
-	return &FishSpeechPreprocessResponse{Text: "[自然に] テスト"}, nil
+	return &TTSMarkupPreprocessResponse{Text: "[自然に] テスト"}, nil
 }
 
-func TestFishSpeechPreprocessUsesOnlySelectedProviderKey(t *testing.T) {
+func TestTTSMarkupPreprocessUsesOnlySelectedProviderKey(t *testing.T) {
 	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "fish-preprocess-test-key")
 	db, err := repository.NewPool(context.Background())
 	if err != nil {
@@ -128,8 +128,8 @@ func TestFishSpeechPreprocessUsesOnlySelectedProviderKey(t *testing.T) {
 		t.Fatalf("seed invalid mistral key: %v", err)
 	}
 
-	worker := &fishPreprocessWorkerStub{}
-	worker.response = &FishSpeechPreprocessResponse{
+	worker := &ttsMarkupPreprocessWorkerStub{}
+	worker.response = &TTSMarkupPreprocessResponse{
 		Text: "[自然に] テスト",
 		LLM: &LLMUsage{
 			Provider:           "openrouter",
@@ -143,7 +143,7 @@ func TestFishSpeechPreprocessUsesOnlySelectedProviderKey(t *testing.T) {
 			EstimatedCostUSD:   0.001,
 		},
 	}
-	service := NewFishSpeechPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
+	service := NewTTSMarkupPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
 
 	result, err := service.PreprocessSummaryAudioText(ctx, userID, "", "元テキスト")
 	if err != nil {
@@ -157,7 +157,7 @@ func TestFishSpeechPreprocessUsesOnlySelectedProviderKey(t *testing.T) {
 	}
 }
 
-func TestFishSpeechPreprocessRequiresConfiguredModel(t *testing.T) {
+func TestTTSMarkupPreprocessRequiresConfiguredModel(t *testing.T) {
 	db, err := repository.NewPool(context.Background())
 	if err != nil {
 		t.Fatalf("NewPool() error = %v", err)
@@ -177,14 +177,14 @@ func TestFishSpeechPreprocessRequiresConfiguredModel(t *testing.T) {
 		t.Fatalf("insert user: %v", err)
 	}
 
-	service := NewFishSpeechPreprocessService(repository.NewUserSettingsRepo(db), NewSecretCipher(), &fishPreprocessWorkerStub{}, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
+	service := NewTTSMarkupPreprocessService(repository.NewUserSettingsRepo(db), NewSecretCipher(), &ttsMarkupPreprocessWorkerStub{}, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
 	_, err = service.PreprocessSummaryAudioText(ctx, userID, "", "元テキスト")
-	if err == nil || err != ErrFishPreprocessModelNotConfigured {
-		t.Fatalf("PreprocessSummaryAudioText() error = %v, want %v", err, ErrFishPreprocessModelNotConfigured)
+	if err == nil || err != ErrTTSMarkupPreprocessModelNotConfigured {
+		t.Fatalf("PreprocessSummaryAudioText() error = %v, want %v", err, ErrTTSMarkupPreprocessModelNotConfigured)
 	}
 }
 
-func TestFishSpeechPreprocessRejectsEmptyOutput(t *testing.T) {
+func TestTTSMarkupPreprocessRejectsEmptyOutput(t *testing.T) {
 	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "fish-preprocess-empty-output-test-key")
 	db, err := repository.NewPool(context.Background())
 	if err != nil {
@@ -222,16 +222,16 @@ func TestFishSpeechPreprocessRejectsEmptyOutput(t *testing.T) {
 		t.Fatalf("SetOpenRouterAPIKey() error = %v", err)
 	}
 
-	service := NewFishSpeechPreprocessService(repo, cipher, &fishPreprocessWorkerStub{
-		response: &FishSpeechPreprocessResponse{Text: "   "},
+	service := NewTTSMarkupPreprocessService(repo, cipher, &ttsMarkupPreprocessWorkerStub{
+		response: &TTSMarkupPreprocessResponse{Text: "   "},
 	}, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
 	_, err = service.PreprocessSummaryAudioText(ctx, userID, "", "元テキスト")
-	if err == nil || err != ErrFishPreprocessEmptyOutput {
-		t.Fatalf("PreprocessSummaryAudioText() error = %v, want %v", err, ErrFishPreprocessEmptyOutput)
+	if err == nil || err != ErrTTSMarkupPreprocessEmptyOutput {
+		t.Fatalf("PreprocessSummaryAudioText() error = %v, want %v", err, ErrTTSMarkupPreprocessEmptyOutput)
 	}
 }
 
-func TestFishSpeechPreprocessAudioBriefingSingleUsesPromptKeyAndPersonaVariables(t *testing.T) {
+func TestTTSMarkupPreprocessAudioBriefingSingleUsesPromptKeyAndPersonaVariables(t *testing.T) {
 	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "fish-preprocess-briefing-single-test-key")
 	db, err := repository.NewPool(context.Background())
 	if err != nil {
@@ -286,8 +286,8 @@ func TestFishSpeechPreprocessAudioBriefingSingleUsesPromptKeyAndPersonaVariables
 		t.Fatalf("SetOpenRouterAPIKey() error = %v", err)
 	}
 
-	worker := &fishPreprocessWorkerStub{}
-	worker.response = &FishSpeechPreprocessResponse{
+	worker := &ttsMarkupPreprocessWorkerStub{}
+	worker.response = &TTSMarkupPreprocessResponse{
 		Text: "[自然に] テスト",
 		LLM: &LLMUsage{
 			Provider:           "openrouter",
@@ -301,7 +301,7 @@ func TestFishSpeechPreprocessAudioBriefingSingleUsesPromptKeyAndPersonaVariables
 			EstimatedCostUSD:   0.001,
 		},
 	}
-	service := NewFishSpeechPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
+	service := NewTTSMarkupPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
 
 	if _, err := service.PreprocessAudioBriefingSingleText(ctx, userID, itemID, "editor", "元テキスト"); err != nil {
 		t.Fatalf("PreprocessAudioBriefingSingleText() error = %v", err)
@@ -332,7 +332,7 @@ func TestFishSpeechPreprocessAudioBriefingSingleUsesPromptKeyAndPersonaVariables
 	}
 }
 
-func TestFishSpeechPreprocessAudioBriefingDuoUsesPersonaVariables(t *testing.T) {
+func TestTTSMarkupPreprocessAudioBriefingDuoUsesPersonaVariables(t *testing.T) {
 	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "fish-preprocess-briefing-duo-test-key")
 	db, err := repository.NewPool(context.Background())
 	if err != nil {
@@ -387,8 +387,8 @@ func TestFishSpeechPreprocessAudioBriefingDuoUsesPersonaVariables(t *testing.T) 
 		t.Fatalf("SetOpenRouterAPIKey() error = %v", err)
 	}
 
-	worker := &fishPreprocessWorkerStub{}
-	worker.response = &FishSpeechPreprocessResponse{
+	worker := &ttsMarkupPreprocessWorkerStub{}
+	worker.response = &TTSMarkupPreprocessResponse{
 		Text: "<|speaker:0|>[自然に] 冒頭<|speaker:1|>[少し柔らかく] 補足",
 		LLM: &LLMUsage{
 			Provider:           "openrouter",
@@ -402,7 +402,7 @@ func TestFishSpeechPreprocessAudioBriefingDuoUsesPersonaVariables(t *testing.T) 
 			EstimatedCostUSD:   0.002,
 		},
 	}
-	service := NewFishSpeechPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
+	service := NewTTSMarkupPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
 
 	if _, err := service.PreprocessAudioBriefingDuoText(ctx, userID, itemID, "native", "analyst", "<|speaker:0|>冒頭<|speaker:1|>補足"); err != nil {
 		t.Fatalf("PreprocessAudioBriefingDuoText() error = %v", err)
@@ -433,5 +433,83 @@ func TestFishSpeechPreprocessAudioBriefingDuoUsesPersonaVariables(t *testing.T) 
 	}
 	if loggedID == nil || strings.TrimSpace(*loggedID) != itemID {
 		t.Fatalf("item_id = %v, want %s", loggedID, itemID)
+	}
+}
+
+func TestTTSMarkupPreprocessGeminiPromptUsesGeminiPurpose(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "tts-markup-preprocess-gemini-purpose-test-key")
+	db, err := repository.NewPool(context.Background())
+	if err != nil {
+		t.Fatalf("NewPool() error = %v", err)
+	}
+	t.Cleanup(db.Close)
+	lockSettingsServiceTestDB(t, db)
+
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000026"
+	if _, err := db.Exec(ctx, `DELETE FROM llm_usage_logs WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset llm_usage_logs: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM user_settings WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset user_settings: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("reset users: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, $3)`, userID, "tts-markup-preprocess-gemini@example.com", "TTS Markup Preprocess"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	repo := repository.NewUserSettingsRepo(db)
+	modelName := strptr("openrouter::openai/gpt-oss-20b")
+	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
+		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
+		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+	); err != nil {
+		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
+	}
+	cipher := NewSecretCipher()
+	enc, err := cipher.EncryptString("openrouter-secret")
+	if err != nil {
+		t.Fatalf("EncryptString(openrouter): %v", err)
+	}
+	if _, err := repo.SetOpenRouterAPIKey(ctx, userID, enc, "cret"); err != nil {
+		t.Fatalf("SetOpenRouterAPIKey() error = %v", err)
+	}
+
+	worker := &ttsMarkupPreprocessWorkerStub{
+		response: &TTSMarkupPreprocessResponse{
+			Text: "[short pause] テスト",
+			LLM: &LLMUsage{
+				Provider:           "openrouter",
+				Model:              "openai/gpt-oss-20b",
+				RequestedModel:     "openrouter::openai/gpt-oss-20b",
+				ResolvedModel:      "openai/gpt-oss-20b",
+				PricingModelFamily: "openrouter",
+				PricingSource:      "openrouter",
+				InputTokens:        10,
+				OutputTokens:       4,
+				EstimatedCostUSD:   0.001,
+			},
+		},
+	}
+	service := NewTTSMarkupPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
+
+	if _, err := service.Preprocess(ctx, userID, "", geminiSummaryPreprocessPromptKey, "元テキスト", nil); err != nil {
+		t.Fatalf("Preprocess() error = %v", err)
+	}
+
+	var (
+		purpose   string
+		promptKey string
+	)
+	if err := db.QueryRow(ctx, `SELECT purpose, prompt_key FROM llm_usage_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`, userID).Scan(&purpose, &promptKey); err != nil {
+		t.Fatalf("select llm_usage_logs: %v", err)
+	}
+	if purpose != geminiTTSPreprocessPurpose {
+		t.Fatalf("purpose = %q, want %q", purpose, geminiTTSPreprocessPurpose)
+	}
+	if promptKey != geminiSummaryPreprocessPromptKey {
+		t.Fatalf("prompt_key = %q, want %q", promptKey, geminiSummaryPreprocessPromptKey)
 	}
 }

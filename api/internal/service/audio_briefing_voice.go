@@ -29,7 +29,7 @@ type AudioBriefingVoiceRunner struct {
 	userSettings *repository.UserSettingsRepo
 	cipher       *SecretCipher
 	worker       *WorkerClient
-	preprocess   audioBriefingFishPreprocessor
+	preprocess   audioBriefingTTSMarkupPreprocessor
 }
 
 const audioBriefingChunkMaxAttempts = 3
@@ -51,9 +51,11 @@ type audioBriefingChunkGroup struct {
 	Chunks   []*model.AudioBriefingScriptChunk
 }
 
-type audioBriefingFishPreprocessor interface {
-	PreprocessAudioBriefingSingleText(ctx context.Context, userID, itemID, persona, text string) (*FishSpeechPreprocessResult, error)
-	PreprocessAudioBriefingDuoText(ctx context.Context, userID, itemID, hostPersona, partnerPersona, text string) (*FishSpeechPreprocessResult, error)
+type audioBriefingTTSMarkupPreprocessor interface {
+	PreprocessAudioBriefingSingleText(ctx context.Context, userID, itemID, persona, text string) (*TTSMarkupPreprocessResult, error)
+	PreprocessAudioBriefingDuoText(ctx context.Context, userID, itemID, hostPersona, partnerPersona, text string) (*TTSMarkupPreprocessResult, error)
+	PreprocessAudioBriefingSingleTextForProvider(ctx context.Context, userID, itemID, provider, persona, text string) (*TTSMarkupPreprocessResult, error)
+	PreprocessAudioBriefingDuoTextForProvider(ctx context.Context, userID, itemID, provider, hostPersona, partnerPersona, text string) (*TTSMarkupPreprocessResult, error)
 }
 
 func audioBriefingVoiceConfigComplete(provider, voiceModel, voiceStyle string) bool {
@@ -94,7 +96,7 @@ func audioBriefingFishDuoReady(hostVoice, partnerVoice *model.AudioBriefingPerso
 		hostVoiceModel != partnerVoiceModel
 }
 
-func NewAudioBriefingVoiceRunner(repo *repository.AudioBriefingRepo, userRepo *repository.UserRepo, userSettings *repository.UserSettingsRepo, cipher *SecretCipher, worker *WorkerClient, preprocess audioBriefingFishPreprocessor) *AudioBriefingVoiceRunner {
+func NewAudioBriefingVoiceRunner(repo *repository.AudioBriefingRepo, userRepo *repository.UserRepo, userSettings *repository.UserSettingsRepo, cipher *SecretCipher, worker *WorkerClient, preprocess audioBriefingTTSMarkupPreprocessor) *AudioBriefingVoiceRunner {
 	return &AudioBriefingVoiceRunner{repo: repo, userRepo: userRepo, userSettings: userSettings, cipher: cipher, worker: worker, preprocess: preprocess}
 }
 
@@ -296,10 +298,11 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 	if provider == "fish" && r.preprocess != nil {
 		itemID := strings.TrimSpace(derefString(chunk.ItemID))
 		if useFishDuoGroup {
-			preprocessed, preprocessErr := r.preprocess.PreprocessAudioBriefingDuoText(
+			preprocessed, preprocessErr := r.preprocess.PreprocessAudioBriefingDuoTextForProvider(
 				ctx,
 				userID,
 				itemID,
+				provider,
 				job.Persona,
 				derefString(job.PartnerPersona),
 				audioBriefingFishDuoPreprocessText(group),
@@ -316,13 +319,46 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			}
 		} else {
 			preprocessPersona := audioBriefingPreprocessPersona(job, chunk)
-			preprocessed, preprocessErr := r.preprocess.PreprocessAudioBriefingSingleText(ctx, userID, itemID, preprocessPersona, synthText)
+			preprocessed, preprocessErr := r.preprocess.PreprocessAudioBriefingSingleTextForProvider(ctx, userID, itemID, provider, preprocessPersona, synthText)
 			if preprocessErr != nil {
 				return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", preprocessErr)
 			}
 			synthText = preprocessed.Text
 			if persistErr := r.repo.SetChunkPreprocessedText(ctx, chunk.ID, stringPtrOrNil(strings.TrimSpace(synthText))); persistErr != nil {
 				log.Printf("audio briefing fish preprocess persistence failed job_id=%s chunk_id=%s err=%v", jobID, chunk.ID, persistErr)
+			}
+		}
+	} else if provider == "gemini_tts" && r.preprocess != nil {
+		itemID := strings.TrimSpace(derefString(chunk.ItemID))
+		if useGeminiDuoGroup {
+			preprocessed, preprocessErr := r.preprocess.PreprocessAudioBriefingDuoTextForProvider(
+				ctx,
+				userID,
+				itemID,
+				provider,
+				job.Persona,
+				derefString(job.PartnerPersona),
+				audioBriefingFishDuoPreprocessText(group),
+			)
+			if preprocessErr != nil {
+				return r.handleChunkGroupGenerationFailure(ctx, jobID, group, "tts_failed", preprocessErr)
+			}
+			synthText = strings.TrimSpace(preprocessed.Text)
+			if validateErr := audioBriefingValidateGeminiDuoPreprocessedText(synthText); validateErr != nil {
+				return r.handleChunkGroupGenerationFailure(ctx, jobID, group, "tts_failed", validateErr)
+			}
+			if persistErr := r.repo.SetChunkGroupPreprocessedText(ctx, groupChunkIDs, stringPtrOrNil(synthText)); persistErr != nil {
+				log.Printf("audio briefing gemini duo preprocess persistence failed job_id=%s chunk_ids=%v err=%v", jobID, groupChunkIDs, persistErr)
+			}
+		} else {
+			preprocessPersona := audioBriefingPreprocessPersona(job, chunk)
+			preprocessed, preprocessErr := r.preprocess.PreprocessAudioBriefingSingleTextForProvider(ctx, userID, itemID, provider, preprocessPersona, synthText)
+			if preprocessErr != nil {
+				return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", preprocessErr)
+			}
+			synthText = preprocessed.Text
+			if persistErr := r.repo.SetChunkPreprocessedText(ctx, chunk.ID, stringPtrOrNil(strings.TrimSpace(synthText))); persistErr != nil {
+				log.Printf("audio briefing gemini preprocess persistence failed job_id=%s chunk_id=%s err=%v", jobID, chunk.ID, persistErr)
 			}
 		}
 	}
@@ -340,7 +376,7 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 			strings.TrimSpace(voice.VoiceModel),
 			strings.TrimSpace(partnerVoice.VoiceModel),
 			group.PartType,
-			audioBriefingGeminiDuoTurns(group),
+			audioBriefingGeminiDuoTurnsFromText(group, synthText),
 			audioObjectKey,
 			googleAPIKey,
 		)
@@ -456,6 +492,17 @@ func audioBriefingValidateFishDuoPreprocessedText(text string) error {
 	}
 	if !strings.Contains(trimmed, "<|speaker:0|>") || !strings.Contains(trimmed, "<|speaker:1|>") {
 		return fmt.Errorf("fish duo preprocess must retain both speaker tags")
+	}
+	return nil
+}
+
+func audioBriefingValidateGeminiDuoPreprocessedText(text string) error {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return fmt.Errorf("gemini duo preprocess returned empty text")
+	}
+	if !strings.Contains(trimmed, "<|speaker:0|>") || !strings.Contains(trimmed, "<|speaker:1|>") {
+		return fmt.Errorf("gemini duo preprocess must retain both speaker tags")
 	}
 	return nil
 }
@@ -690,6 +737,45 @@ func audioBriefingGeminiDuoTurns(group audioBriefingChunkGroup) []AudioBriefingG
 			Speaker: speaker,
 			Text:    text,
 		})
+	}
+	return turns
+}
+
+func audioBriefingGeminiDuoTurnsFromText(group audioBriefingChunkGroup, text string) []AudioBriefingGeminiDuoTurn {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return audioBriefingGeminiDuoTurns(group)
+	}
+	turns := make([]AudioBriefingGeminiDuoTurn, 0, len(group.Chunks))
+	remaining := trimmed
+	for len(remaining) > 0 {
+		nextSpeaker := ""
+		switch {
+		case strings.HasPrefix(remaining, "<|speaker:0|>"):
+			nextSpeaker = "host"
+			remaining = strings.TrimPrefix(remaining, "<|speaker:0|>")
+		case strings.HasPrefix(remaining, "<|speaker:1|>"):
+			nextSpeaker = "partner"
+			remaining = strings.TrimPrefix(remaining, "<|speaker:1|>")
+		default:
+			return audioBriefingGeminiDuoTurns(group)
+		}
+
+		nextIndex := len(remaining)
+		if idx := strings.Index(remaining, "<|speaker:0|>"); idx >= 0 && idx < nextIndex {
+			nextIndex = idx
+		}
+		if idx := strings.Index(remaining, "<|speaker:1|>"); idx >= 0 && idx < nextIndex {
+			nextIndex = idx
+		}
+		turnText := strings.TrimSpace(remaining[:nextIndex])
+		if turnText != "" {
+			turns = append(turns, AudioBriefingGeminiDuoTurn{Speaker: nextSpeaker, Text: turnText})
+		}
+		remaining = strings.TrimSpace(remaining[nextIndex:])
+	}
+	if len(turns) == 0 {
+		return audioBriefingGeminiDuoTurns(group)
 	}
 	return turns
 }

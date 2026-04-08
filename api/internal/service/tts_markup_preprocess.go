@@ -13,50 +13,54 @@ import (
 )
 
 const (
-	fishSummaryPreprocessPromptKey             = "fish.summary_preprocess"
-	fishAudioBriefingSinglePreprocessPromptKey = "fish.audio_briefing_single_preprocess"
-	fishAudioBriefingDuoPreprocessPromptKey    = "fish.audio_briefing_duo_preprocess"
-	fishPreprocessPurpose                      = "fish_preprocess"
-	fishPreprocessPromptSource                 = "shared_template"
+	fishSummaryPreprocessPromptKey               = "fish.summary_preprocess"
+	fishAudioBriefingSinglePreprocessPromptKey   = "fish.audio_briefing_single_preprocess"
+	fishAudioBriefingDuoPreprocessPromptKey      = "fish.audio_briefing_duo_preprocess"
+	geminiSummaryPreprocessPromptKey             = "gemini.summary_preprocess"
+	geminiAudioBriefingSinglePreprocessPromptKey = "gemini.audio_briefing_single_preprocess"
+	geminiAudioBriefingDuoPreprocessPromptKey    = "gemini.audio_briefing_duo_preprocess"
+	fishPreprocessPurpose                        = "fish_preprocess"
+	geminiTTSPreprocessPurpose                   = "gemini_tts_preprocess"
+	fishPreprocessPromptSource                   = "shared_template"
 )
 
 var (
-	ErrFishPreprocessModelNotConfigured = fmt.Errorf("fish preprocess model is not configured")
-	ErrFishPreprocessEmptyOutput        = fmt.Errorf("fish preprocess returned empty text")
+	ErrTTSMarkupPreprocessModelNotConfigured = fmt.Errorf("tts markup preprocess model is not configured")
+	ErrTTSMarkupPreprocessEmptyOutput        = fmt.Errorf("tts markup preprocess returned empty text")
 )
 
-type FishSpeechPreprocessResult struct {
+type TTSMarkupPreprocessResult struct {
 	Text string
 	LLM  *LLMUsage
 }
 
-type fishSpeechPreprocessWorker interface {
-	PreprocessFishSpeechText(
+type ttsMarkupPreprocessWorker interface {
+	PreprocessTTSMarkupText(
 		ctx context.Context,
 		text string,
 		model string,
 		promptKey string,
 		variables map[string]string,
 		apiKey *string,
-	) (*FishSpeechPreprocessResponse, error)
+	) (*TTSMarkupPreprocessResponse, error)
 }
 
-type FishSpeechPreprocessService struct {
+type TTSMarkupPreprocessService struct {
 	userSettings *repository.UserSettingsRepo
 	cipher       *SecretCipher
-	worker       fishSpeechPreprocessWorker
+	worker       ttsMarkupPreprocessWorker
 	llmUsage     *repository.LLMUsageLogRepo
 	cache        JSONCache
 }
 
-func NewFishSpeechPreprocessService(
+func NewTTSMarkupPreprocessService(
 	userSettings *repository.UserSettingsRepo,
 	cipher *SecretCipher,
-	worker fishSpeechPreprocessWorker,
+	worker ttsMarkupPreprocessWorker,
 	llmUsage *repository.LLMUsageLogRepo,
 	cache JSONCache,
-) *FishSpeechPreprocessService {
-	return &FishSpeechPreprocessService{
+) *TTSMarkupPreprocessService {
+	return &TTSMarkupPreprocessService{
 		userSettings: userSettings,
 		cipher:       cipher,
 		worker:       worker,
@@ -65,42 +69,59 @@ func NewFishSpeechPreprocessService(
 	}
 }
 
-func (s *FishSpeechPreprocessService) PreprocessSummaryAudioText(ctx context.Context, userID, itemID, text string) (*FishSpeechPreprocessResult, error) {
+func (s *TTSMarkupPreprocessService) PreprocessSummaryAudioText(ctx context.Context, userID, itemID, text string) (*TTSMarkupPreprocessResult, error) {
 	return s.Preprocess(ctx, userID, itemID, fishSummaryPreprocessPromptKey, text, nil)
 }
 
-func (s *FishSpeechPreprocessService) PreprocessAudioBriefingSingleText(ctx context.Context, userID, itemID, persona, text string) (*FishSpeechPreprocessResult, error) {
+func (s *TTSMarkupPreprocessService) PreprocessSummaryAudioTextForProvider(ctx context.Context, userID, itemID, provider, text string) (*TTSMarkupPreprocessResult, error) {
+	return s.Preprocess(ctx, userID, itemID, summaryPreprocessPromptKeyForProvider(provider), text, nil)
+}
+
+func (s *TTSMarkupPreprocessService) PreprocessAudioBriefingSingleText(ctx context.Context, userID, itemID, persona, text string) (*TTSMarkupPreprocessResult, error) {
 	return s.Preprocess(ctx, userID, itemID, fishAudioBriefingSinglePreprocessPromptKey, text, map[string]string{
 		"persona_name": strings.TrimSpace(persona),
 	})
 }
 
-func (s *FishSpeechPreprocessService) PreprocessAudioBriefingDuoText(ctx context.Context, userID, itemID, hostPersona, partnerPersona, text string) (*FishSpeechPreprocessResult, error) {
+func (s *TTSMarkupPreprocessService) PreprocessAudioBriefingSingleTextForProvider(ctx context.Context, userID, itemID, provider, persona, text string) (*TTSMarkupPreprocessResult, error) {
+	return s.Preprocess(ctx, userID, itemID, audioBriefingSinglePreprocessPromptKeyForProvider(provider), text, map[string]string{
+		"persona_name": strings.TrimSpace(persona),
+	})
+}
+
+func (s *TTSMarkupPreprocessService) PreprocessAudioBriefingDuoText(ctx context.Context, userID, itemID, hostPersona, partnerPersona, text string) (*TTSMarkupPreprocessResult, error) {
 	return s.Preprocess(ctx, userID, itemID, fishAudioBriefingDuoPreprocessPromptKey, text, map[string]string{
 		"host_persona_name":    strings.TrimSpace(hostPersona),
 		"partner_persona_name": strings.TrimSpace(partnerPersona),
 	})
 }
 
-func (s *FishSpeechPreprocessService) Preprocess(ctx context.Context, userID, itemID, promptKey, text string, variables map[string]string) (*FishSpeechPreprocessResult, error) {
+func (s *TTSMarkupPreprocessService) PreprocessAudioBriefingDuoTextForProvider(ctx context.Context, userID, itemID, provider, hostPersona, partnerPersona, text string) (*TTSMarkupPreprocessResult, error) {
+	return s.Preprocess(ctx, userID, itemID, audioBriefingDuoPreprocessPromptKeyForProvider(provider), text, map[string]string{
+		"host_persona_name":    strings.TrimSpace(hostPersona),
+		"partner_persona_name": strings.TrimSpace(partnerPersona),
+	})
+}
+
+func (s *TTSMarkupPreprocessService) Preprocess(ctx context.Context, userID, itemID, promptKey, text string, variables map[string]string) (*TTSMarkupPreprocessResult, error) {
 	trimmedText := strings.TrimSpace(text)
 	if trimmedText == "" {
-		return &FishSpeechPreprocessResult{Text: text}, nil
+		return &TTSMarkupPreprocessResult{Text: text}, nil
 	}
 	if s == nil || s.userSettings == nil || s.worker == nil {
-		return &FishSpeechPreprocessResult{Text: text}, nil
+		return &TTSMarkupPreprocessResult{Text: text}, nil
 	}
 	userID = strings.TrimSpace(userID)
 	if userID == "" {
-		return &FishSpeechPreprocessResult{Text: text}, nil
+		return &TTSMarkupPreprocessResult{Text: text}, nil
 	}
 	settings, err := s.userSettings.EnsureDefaults(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	modelName := strings.TrimSpace(derefString(settings.FishPreprocessModel))
+	modelName := strings.TrimSpace(derefString(settings.TTSMarkupPreprocessModel))
 	if modelName == "" {
-		return nil, ErrFishPreprocessModelNotConfigured
+		return nil, ErrTTSMarkupPreprocessModelNotConfigured
 	}
 	provider := LLMProviderForModel(&modelName)
 	if !hasFishPreprocessProviderKey(settings, provider) {
@@ -110,13 +131,14 @@ func (s *FishSpeechPreprocessService) Preprocess(ctx context.Context, userID, it
 	if promptKey == "" {
 		promptKey = fishSummaryPreprocessPromptKey
 	}
+	purpose := preprocessPurposeForPromptKey(promptKey)
 
 	apiKey, err := s.loadProviderKey(ctx, userID, provider)
 	if err != nil {
 		return nil, err
 	}
-	traceCtx := WithWorkerTraceMetadata(ctx, fishPreprocessPurpose, &userID, nil, &itemID, nil)
-	resp, err := s.worker.PreprocessFishSpeechText(
+	traceCtx := WithWorkerTraceMetadata(ctx, purpose, &userID, nil, &itemID, nil)
+	resp, err := s.worker.PreprocessTTSMarkupText(
 		traceCtx,
 		text,
 		modelName,
@@ -127,16 +149,16 @@ func (s *FishSpeechPreprocessService) Preprocess(ctx context.Context, userID, it
 	if err != nil {
 		return nil, err
 	}
-	recordFishPreprocessLLMUsage(ctx, s.llmUsage, s.cache, resp.LLM, &userID, stringPtrOrNil(itemID), strings.TrimSpace(promptKey))
+	recordTTSMarkupPreprocessLLMUsage(ctx, s.llmUsage, s.cache, resp.LLM, &userID, stringPtrOrNil(itemID), strings.TrimSpace(promptKey), purpose)
 	if strings.TrimSpace(resp.Text) == "" {
-		return nil, ErrFishPreprocessEmptyOutput
+		return nil, ErrTTSMarkupPreprocessEmptyOutput
 	}
-	return &FishSpeechPreprocessResult{Text: resp.Text, LLM: resp.LLM}, nil
+	return &TTSMarkupPreprocessResult{Text: resp.Text, LLM: resp.LLM}, nil
 }
 
-func (s *FishSpeechPreprocessService) loadProviderKey(ctx context.Context, userID, provider string) (*string, error) {
+func (s *TTSMarkupPreprocessService) loadProviderKey(ctx context.Context, userID, provider string) (*string, error) {
 	if s == nil || s.userSettings == nil {
-		return nil, fmt.Errorf("fish preprocess settings repo is not configured")
+		return nil, fmt.Errorf("tts markup preprocess settings repo is not configured")
 	}
 	switch strings.TrimSpace(provider) {
 	case "google":
@@ -168,6 +190,34 @@ func (s *FishSpeechPreprocessService) loadProviderKey(ctx context.Context, userI
 	default:
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetAnthropicAPIKeyEncrypted, s.cipher, userID, "anthropic api key is not configured")
 	}
+}
+
+func summaryPreprocessPromptKeyForProvider(provider string) string {
+	if strings.EqualFold(strings.TrimSpace(provider), "gemini_tts") {
+		return geminiSummaryPreprocessPromptKey
+	}
+	return fishSummaryPreprocessPromptKey
+}
+
+func audioBriefingSinglePreprocessPromptKeyForProvider(provider string) string {
+	if strings.EqualFold(strings.TrimSpace(provider), "gemini_tts") {
+		return geminiAudioBriefingSinglePreprocessPromptKey
+	}
+	return fishAudioBriefingSinglePreprocessPromptKey
+}
+
+func audioBriefingDuoPreprocessPromptKeyForProvider(provider string) string {
+	if strings.EqualFold(strings.TrimSpace(provider), "gemini_tts") {
+		return geminiAudioBriefingDuoPreprocessPromptKey
+	}
+	return fishAudioBriefingDuoPreprocessPromptKey
+}
+
+func preprocessPurposeForPromptKey(promptKey string) string {
+	if strings.HasPrefix(strings.TrimSpace(promptKey), "gemini.") {
+		return geminiTTSPreprocessPurpose
+	}
+	return fishPreprocessPurpose
 }
 
 func hasFishPreprocessProviderKey(settings *model.UserSettings, provider string) bool {
@@ -206,12 +256,12 @@ func hasFishPreprocessProviderKey(settings *model.UserSettings, provider string)
 	}
 }
 
-type fishPreprocessLLMUsageRepo interface {
+type ttsMarkupPreprocessLLMUsageRepo interface {
 	Insert(ctx context.Context, in repository.LLMUsageLogInput) error
 }
 
-func recordFishPreprocessLLMUsage(ctx context.Context, repo fishPreprocessLLMUsageRepo, cache JSONCache, usage *LLMUsage, userID, itemID *string, promptKey string) {
-	usage = NormalizeCatalogPricedUsage(fishPreprocessPurpose, usage)
+func recordTTSMarkupPreprocessLLMUsage(ctx context.Context, repo ttsMarkupPreprocessLLMUsageRepo, cache JSONCache, usage *LLMUsage, userID, itemID *string, promptKey string, purpose string) {
+	usage = NormalizeCatalogPricedUsage(purpose, usage)
 	if repo == nil || usage == nil || userID == nil || *userID == "" {
 		return
 	}
@@ -219,7 +269,11 @@ func recordFishPreprocessLLMUsage(ctx context.Context, repo fishPreprocessLLMUsa
 	if promptKey == "" {
 		promptKey = fishSummaryPreprocessPromptKey
 	}
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%s|%s|%s|%d|%d|%d|%d", fishPreprocessPurpose, promptKey, usage.Provider, usage.Model, *userID, usage.InputTokens, usage.OutputTokens, usage.CacheCreationInputTokens, usage.CacheReadInputTokens)))
+	purpose = strings.TrimSpace(purpose)
+	if purpose == "" {
+		purpose = fishPreprocessPurpose
+	}
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%s|%s|%s|%d|%d|%d|%d", purpose, promptKey, usage.Provider, usage.Model, *userID, usage.InputTokens, usage.OutputTokens, usage.CacheCreationInputTokens, usage.CacheReadInputTokens)))
 	key := hex.EncodeToString(sum[:])
 	pricingSource := usage.PricingSource
 	if pricingSource == "" {
@@ -239,7 +293,7 @@ func recordFishPreprocessLLMUsage(ctx context.Context, repo fishPreprocessLLMUsa
 		PricingSource:            pricingSource,
 		OpenRouterCostUSD:        usage.OpenRouterCostUSD,
 		OpenRouterGenerationID:   strings.TrimSpace(usage.OpenRouterGenerationID),
-		Purpose:                  fishPreprocessPurpose,
+		Purpose:                  purpose,
 		InputTokens:              usage.InputTokens,
 		OutputTokens:             usage.OutputTokens,
 		CacheCreationInputTokens: usage.CacheCreationInputTokens,
@@ -248,7 +302,7 @@ func recordFishPreprocessLLMUsage(ctx context.Context, repo fishPreprocessLLMUsa
 	}); err == nil {
 		_ = BumpUserLLMUsageCacheVersion(ctx, cache, *userID)
 	} else {
-		log.Printf("llm usage insert failed purpose=%s user_id=%s provider=%s model=%s err=%v", fishPreprocessPurpose, *userID, usage.Provider, usage.Model, err)
+		log.Printf("llm usage insert failed purpose=%s user_id=%s provider=%s model=%s err=%v", purpose, *userID, usage.Provider, usage.Model, err)
 	}
 }
 

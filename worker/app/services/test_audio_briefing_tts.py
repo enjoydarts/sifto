@@ -159,6 +159,17 @@ class GeminiTTSPromptTests(unittest.TestCase):
         self.assertEqual(audio_bytes, b"mp3")
         self.assertGreaterEqual(duration_sec, 0)
 
+    def test_cloud_tts_headers_use_api_key_without_adc(self):
+        headers = gemini_tts._cloud_tts_headers("google-key")
+
+        self.assertEqual(
+            headers,
+            {
+                "x-goog-api-key": "google-key",
+                "Content-Type": "application/json",
+            },
+        )
+
     def test_redis_execution_gate_waits_until_shared_request_finishes(self):
         class FakeRedis:
             def __init__(self):
@@ -540,6 +551,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
             voice_name="Kore",
             prompt="あなたは音声ブリーフィング番組を担当するAIナビゲーターです。\n以下のペルソナ指示を反映しつつ、日本語で自然に読み上げてください。\nトーン指示: 落ち着いた編集者として、重要度と意味合いを端正に語る。\n話し方指示: 静かで端正な語り口。言い切りは落ち着いていて、余計に煽らない。\n読み上げ速度は通常の約0.95倍を目安に、自然さを保ってください。\n原稿は改変しないでください。追加説明や要約は入れないでください。\n\nsummary text",
             text="summary text",
+            api_key=None,
         )
         self.assertEqual(content_type, "audio/mpeg")
         self.assertEqual(suffix, ".mp3")
@@ -693,6 +705,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
                 {"speaker": "host", "text": "冒頭です"},
                 {"speaker": "partner", "text": "補足です"},
             ],
+            api_key=None,
         )
         upload.assert_called_once()
         self.assertEqual(duration_sec, 18)

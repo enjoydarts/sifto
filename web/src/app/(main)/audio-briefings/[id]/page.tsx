@@ -562,7 +562,7 @@ export default function AudioBriefingDetailPage() {
                 {chunk.preprocessed_text ? (
                   <details className="mt-4 rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-3">
                     <summary className="cursor-pointer text-sm font-medium text-[var(--color-editorial-ink)]">
-                      {t("audioBriefing.preprocessedTextLabel", "Fish前処理テキスト")}
+                      {t("audioBriefing.preprocessedTextLabel", "TTS前処理テキスト")}
                     </summary>
                     <p className="mt-2 text-sm leading-6 text-[var(--color-editorial-ink-soft)]">
                       {t("audioBriefing.preprocessedTextHelp", "Fish Audio に送る直前の前処理済みテキストを確認できます。")}

@@ -229,8 +229,7 @@ func BuildAudioBriefingDraftFromTurns(
 		}
 	}
 
-	slotLabel := fmt.Sprintf("%02d:%02d便", slotStartedAt.Hour(), slotStartedAt.Minute())
-	title := fmt.Sprintf("%sの音声ブリーフィング", slotLabel)
+	title := audioBriefingTitle(slotStartedAt)
 	if len(turns) == 0 {
 		return AudioBriefingDraft{
 			Title:  title,

@@ -203,6 +203,7 @@ func TestBuildAudioBriefingDraftFromTurnsUsesSpeakerVoices(t *testing.T) {
 	title := "原題"
 	translated := "翻訳題"
 	summary := "要約本文です。"
+	slotStartedAt := time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST)
 	hostVoice := &model.AudioBriefingPersonaVoice{
 		Persona:            "editor",
 		TTSProvider:        "aivis",
@@ -219,7 +220,7 @@ func TestBuildAudioBriefingDraftFromTurnsUsesSpeakerVoices(t *testing.T) {
 	}
 
 	draft := BuildAudioBriefingDraftFromTurns(
-		time.Date(2026, 3, 24, 6, 0, 0, 0, timeutil.JST),
+		slotStartedAt,
 		"editor",
 		[]model.AudioBriefingJobItem{{
 			ItemID:          "item-1",
@@ -240,6 +241,9 @@ func TestBuildAudioBriefingDraftFromTurnsUsesSpeakerVoices(t *testing.T) {
 
 	if len(draft.Chunks) != 3 {
 		t.Fatalf("len(draft.Chunks) = %d, want 3", len(draft.Chunks))
+	}
+	if got, want := draft.Title, "2026年3月24日 06:00便の音声ブリーフィング"; got != want {
+		t.Fatalf("draft.Title = %q, want %q", got, want)
 	}
 	if got := derefString(draft.Chunks[0].VoiceModel); got != "speaker-host" {
 		t.Fatalf("host voice model = %q, want speaker-host", got)

@@ -267,6 +267,9 @@ func findModelCatalogInCatalog(catalog *LLMCatalog, model string) *LLMModelCatal
 	if m == "" || catalog == nil {
 		return nil
 	}
+	if canonical := resolveCatalogAliasModelID(catalog, m); canonical != "" && canonical != m {
+		m = canonical
+	}
 	for i := range catalog.ChatModels {
 		if catalog.ChatModels[i].ID == m {
 			return &catalog.ChatModels[i]
@@ -278,6 +281,55 @@ func findModelCatalogInCatalog(catalog *LLMCatalog, model string) *LLMModelCatal
 		}
 	}
 	return nil
+}
+
+func resolveCatalogAliasModelID(catalog *LLMCatalog, model string) string {
+	m := strings.TrimSpace(model)
+	if m == "" || catalog == nil {
+		return ""
+	}
+	if catalogHasModelID(catalog, m) {
+		return m
+	}
+	candidates := []string{m}
+	if strings.HasPrefix(m, "models/") {
+		candidates = append(candidates, strings.TrimSpace(strings.TrimPrefix(m, "models/")))
+	}
+	if strings.HasSuffix(m, "-latest") {
+		candidates = append(candidates, strings.TrimSpace(strings.TrimSuffix(m, "-latest")))
+	}
+	if strings.HasPrefix(m, "models/") && strings.HasSuffix(m, "-latest") {
+		trimmed := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(m, "models/"), "-latest"))
+		candidates = append(candidates, trimmed)
+	}
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if catalogHasModelID(catalog, candidate) {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func catalogHasModelID(catalog *LLMCatalog, model string) bool {
+	m := strings.TrimSpace(model)
+	if m == "" || catalog == nil {
+		return false
+	}
+	for i := range catalog.ChatModels {
+		if catalog.ChatModels[i].ID == m {
+			return true
+		}
+	}
+	for i := range catalog.EmbeddingModels {
+		if catalog.EmbeddingModels[i].ID == m {
+			return true
+		}
+	}
+	return false
 }
 
 func findModelCatalog(model string) *LLMModelCatalog {

@@ -35,9 +35,9 @@ type ElevenLabsVoicesResponse struct {
 }
 
 type elevenLabsVoicesPayload struct {
-	Voices        []elevenLabsRemoteVoice `json:"voices"`
-	HasMore       bool                    `json:"has_more"`
-	LastSortID    *string                 `json:"last_sort_id"`
+	Voices     []elevenLabsRemoteVoice `json:"voices"`
+	HasMore    bool                    `json:"has_more"`
+	LastSortID *string                 `json:"last_sort_id"`
 }
 
 type elevenLabsRemoteVoice struct {

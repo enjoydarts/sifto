@@ -155,17 +155,23 @@ func TestValidateCatalogModelForPurpose(t *testing.T) {
 		name    string
 		model   *string
 		purpose string
+		key     string
 		wantErr bool
 	}{
-		{name: "nil allowed", model: nil, purpose: "summary", wantErr: false},
-		{name: "valid summary model", model: strptr("gpt-5.4-mini"), purpose: "summary", wantErr: false},
-		{name: "invalid purpose", model: strptr("text-embedding-3-small"), purpose: "summary", wantErr: true},
-		{name: "unknown model", model: strptr("unknown-model"), purpose: "summary", wantErr: true},
+		{name: "nil allowed", model: nil, purpose: "summary", key: "summary", wantErr: false},
+		{name: "valid summary model", model: strptr("gpt-5.4-mini"), purpose: "summary", key: "summary", wantErr: false},
+		{name: "google alias with models prefix", model: strptr("models/gemini-2.5-flash"), purpose: "summary", key: "summary", wantErr: false},
+		{name: "latest alias", model: strptr("gpt-5.4-mini-latest"), purpose: "summary", key: "summary", wantErr: false},
+		{name: "invalid purpose", model: strptr("text-embedding-3-small"), purpose: "summary", key: "faithfulness_check", wantErr: true},
+		{name: "unknown model", model: strptr("unknown-model"), purpose: "summary", key: "summary_fallback", wantErr: true},
 	}
 	for _, tt := range tests {
-		err := validateCatalogModelForPurpose(LLMCatalogData(), tt.model, tt.purpose)
+		err := validateCatalogModelForPurpose(LLMCatalogData(), tt.model, tt.purpose, tt.key)
 		if (err != nil) != tt.wantErr {
-			t.Fatalf("%s: validateCatalogModelForPurpose(%v, %q) err=%v, wantErr=%v", tt.name, tt.model, tt.purpose, err, tt.wantErr)
+			t.Fatalf("%s: validateCatalogModelForPurpose(%v, %q, %q) err=%v, wantErr=%v", tt.name, tt.model, tt.purpose, tt.key, err, tt.wantErr)
+		}
+		if tt.wantErr && err != nil && err.Error() != "invalid model for "+tt.key {
+			t.Fatalf("%s: err=%q, want %q", tt.name, err.Error(), "invalid model for "+tt.key)
 		}
 	}
 }

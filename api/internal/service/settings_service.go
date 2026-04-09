@@ -988,12 +988,12 @@ func validateFishAudioVoiceSelectionAgainstSnapshots(snapshots []repository.Fish
 	return fmt.Errorf("fish model is not synced")
 }
 
-func validateCatalogModelForPurpose(catalog *LLMCatalog, model *string, purpose string) error {
+func validateCatalogModelForPurpose(catalog *LLMCatalog, model *string, purpose, settingKey string) error {
 	if model == nil {
 		return nil
 	}
 	if !CatalogModelSupportsPurposeInCatalog(catalog, *model, purpose) {
-		return fmt.Errorf("invalid model for %s", purpose)
+		return fmt.Errorf("invalid model for %s", settingKey)
 	}
 	return nil
 }
@@ -1060,7 +1060,7 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 		"tts_markup_preprocess_model":    normalizeOptionalModel(in.TTSMarkupPreprocessModel),
 	}
 	for settingKey, purpose := range modelSettingPurposes {
-		if err := validateCatalogModelForPurpose(catalog, normalized[settingKey], purpose); err != nil {
+		if err := validateCatalogModelForPurpose(catalog, normalized[settingKey], purpose, settingKey); err != nil {
 			return nil, err
 		}
 		if err := validateCatalogModelCapabilities(catalog, normalized[settingKey], settingKey); err != nil {

@@ -14,6 +14,7 @@ from app.services.openai_service import rank_feed_suggestions as rank_feed_sugge
 from app.services.openrouter_service import rank_feed_suggestions as rank_feed_suggestions_openrouter
 from app.services.poe_service import rank_feed_suggestions as rank_feed_suggestions_poe
 from app.services.siliconflow_service import rank_feed_suggestions as rank_feed_suggestions_siliconflow
+from app.services.together_service import rank_feed_suggestions as rank_feed_suggestions_together
 from app.services.xai_service import rank_feed_suggestions as rank_feed_suggestions_xai
 from app.services.zai_service import rank_feed_suggestions as rank_feed_suggestions_zai
 from app.services.router_observe import llm_usage_summary, run_observed_request
@@ -139,6 +140,15 @@ def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Requ
                     api_key=api_key or "",
                 ),
                 "mistral": lambda api_key: rank_feed_suggestions_mistral(
+                    existing_sources=existing_sources,
+                    preferred_topics=req.preferred_topics,
+                    candidates=candidates,
+                    positive_examples=positive_examples,
+                    negative_examples=negative_examples,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "together": lambda api_key: rank_feed_suggestions_together(
                     existing_sources=existing_sources,
                     preferred_topics=req.preferred_topics,
                     candidates=candidates,

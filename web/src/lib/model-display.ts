@@ -1,6 +1,8 @@
 export function formatModelDisplayName(model: string): string {
   const raw = model.startsWith("openrouter::")
     ? model.slice("openrouter::".length)
+    : model.startsWith("together::")
+      ? model.slice("together::".length)
     : model.startsWith("siliconflow::")
       ? model.slice("siliconflow::".length)
       : model;

@@ -775,6 +775,7 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 	deepseekAPIKey *string,
 	alibabaAPIKey *string,
 	mistralAPIKey *string,
+	togetherAPIKey *string,
 	xaiAPIKey *string,
 	zaiAPIKey *string,
 	fireworksAPIKey *string,
@@ -788,7 +789,7 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 		"positive_examples": positiveExamples,
 		"negative_examples": negativeExamples,
 		"model":             model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, selectOpenAICompatibleKey(model, togetherAPIKey, openAIAPIKey), nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) SuggestFeedSeedSites(
@@ -829,6 +830,7 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 	deepseekAPIKey *string,
 	alibabaAPIKey *string,
 	mistralAPIKey *string,
+	togetherAPIKey *string,
 	xaiAPIKey *string,
 	zaiAPIKey *string,
 	fireworksAPIKey *string,
@@ -841,7 +843,7 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 		"positive_examples": positiveExamples,
 		"negative_examples": negativeExamples,
 		"model":             model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, selectOpenAICompatibleKey(model, togetherAPIKey, openAIAPIKey), nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) GenerateBriefingNavigatorWithModel(
@@ -1353,6 +1355,13 @@ func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *st
 		return nil
 	}
 	return headers
+}
+
+func selectOpenAICompatibleKey(model *string, togetherAPIKey *string, openAIAPIKey *string) *string {
+	if LLMProviderForModel(model) == "together" && togetherAPIKey != nil && strings.TrimSpace(*togetherAPIKey) != "" {
+		return togetherAPIKey
+	}
+	return openAIAPIKey
 }
 
 func applyWorkerTraceHeaders(ctx context.Context, headers map[string]string) map[string]string {

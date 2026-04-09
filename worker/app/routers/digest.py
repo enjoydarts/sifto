@@ -26,6 +26,8 @@ from app.services.poe_service import compose_digest_cluster_draft as compose_dig
 from app.services.runtime_prompt_overrides import bind_prompt_override
 from app.services.siliconflow_service import compose_digest as compose_digest_siliconflow
 from app.services.siliconflow_service import compose_digest_cluster_draft as compose_digest_cluster_draft_siliconflow
+from app.services.together_service import compose_digest as compose_digest_together
+from app.services.together_service import compose_digest_cluster_draft as compose_digest_cluster_draft_together
 from app.services.xai_service import compose_digest as compose_digest_xai
 from app.services.xai_service import compose_digest_cluster_draft as compose_digest_cluster_draft_xai
 from app.services.zai_service import compose_digest as compose_digest_zai
@@ -105,6 +107,7 @@ def compose_digest_endpoint(req: ComposeDigestRequest, request: Request):
                     "deepseek": lambda api_key: compose_digest_deepseek(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "alibaba": lambda api_key: compose_digest_alibaba(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "mistral": lambda api_key: compose_digest_mistral(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
+                    "together": lambda api_key: compose_digest_together(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "moonshot": lambda api_key: compose_digest_moonshot(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "xai": lambda api_key: compose_digest_xai(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
                     "zai": lambda api_key: compose_digest_zai(req.digest_date, items, model=str(req.model), api_key=api_key or ""),
@@ -185,6 +188,14 @@ def compose_digest_cluster_draft_endpoint(req: ComposeDigestClusterDraftRequest,
                         api_key=api_key or "",
                     ),
                     "mistral": lambda api_key: compose_digest_cluster_draft_mistral(
+                        cluster_label=req.cluster_label,
+                        item_count=req.item_count,
+                        topics=req.topics,
+                        source_lines=req.source_lines,
+                        model=str(req.model),
+                        api_key=api_key or "",
+                    ),
+                    "together": lambda api_key: compose_digest_cluster_draft_together(
                         cluster_label=req.cluster_label,
                         item_count=req.item_count,
                         topics=req.topics,

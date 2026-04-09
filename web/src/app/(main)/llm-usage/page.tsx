@@ -55,6 +55,7 @@ const PROVIDER_COLORS: Record<string, { stroke: string; fill: string; fillOpacit
   deepseek: { stroke: "#ef4444", fill: "#f87171", fillOpacity: 0.55, label: "DeepSeek" },
   alibaba: { stroke: "#0f766e", fill: "#14b8a6", fillOpacity: 0.55, label: "Alibaba" },
   mistral: { stroke: "#be123c", fill: "#fb7185", fillOpacity: 0.55, label: "Mistral" },
+  together: { stroke: "#0f766e", fill: "#5eead4", fillOpacity: 0.55, label: "Together AI" },
   xai: { stroke: "#4338ca", fill: "#818cf8", fillOpacity: 0.55, label: "xAI" },
   zai: { stroke: "#0891b2", fill: "#22d3ee", fillOpacity: 0.55, label: "Z.ai" },
   fireworks: { stroke: "#c2410c", fill: "#fb923c", fillOpacity: 0.55, label: "Fireworks" },

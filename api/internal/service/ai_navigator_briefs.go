@@ -255,6 +255,7 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 	deepseekKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetDeepSeekAPIKeyEncrypted, s.cipher, userID, "")
 	alibabaKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetAlibabaAPIKeyEncrypted, s.cipher, userID, "")
 	mistralKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetMistralAPIKeyEncrypted, s.cipher, userID, "")
+	togetherKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetTogetherAPIKeyEncrypted, s.cipher, userID, "")
 	moonshotKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetMoonshotAPIKeyEncrypted, s.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetXAIAPIKeyEncrypted, s.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetZAIAPIKeyEncrypted, s.cipher, userID, "")
@@ -270,6 +271,8 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 	switch LLMProviderForModel(modelName) {
 	case "openrouter":
 		openAIKey = openRouterKey
+	case "together":
+		openAIKey = togetherKey
 	case "moonshot":
 		openAIKey = moonshotKey
 	case "poe":
@@ -434,6 +437,7 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 	deepseekKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetDeepSeekAPIKeyEncrypted, s.cipher, userID, "")
 	alibabaKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetAlibabaAPIKeyEncrypted, s.cipher, userID, "")
 	mistralKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetMistralAPIKeyEncrypted, s.cipher, userID, "")
+	togetherKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetTogetherAPIKeyEncrypted, s.cipher, userID, "")
 	moonshotKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetMoonshotAPIKeyEncrypted, s.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetXAIAPIKeyEncrypted, s.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetZAIAPIKeyEncrypted, s.cipher, userID, "")
@@ -444,6 +448,8 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 	switch LLMProviderForModel(modelName) {
 	case "openrouter":
 		openAIKey = openRouterKey
+	case "together":
+		openAIKey = togetherKey
 	case "moonshot":
 		openAIKey = moonshotKey
 	case "poe":
@@ -857,6 +863,8 @@ func hasAINavigatorBriefProviderKey(settings *model.UserSettings, provider strin
 		return settings.HasAlibabaAPIKey
 	case "mistral":
 		return settings.HasMistralAPIKey
+	case "together":
+		return settings.HasTogetherAPIKey
 	case "moonshot":
 		return settings.HasMoonshotAPIKey
 	case "xai":

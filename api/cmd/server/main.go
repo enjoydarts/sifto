@@ -454,6 +454,8 @@ func main() {
 			r.Delete("/zai-key", settingsH.DeleteZAIAPIKey)
 			r.Post("/fireworks-key", settingsH.SetFireworksAPIKey)
 			r.Delete("/fireworks-key", settingsH.DeleteFireworksAPIKey)
+			r.Post("/together-key", settingsH.SetTogetherAPIKey)
+			r.Delete("/together-key", settingsH.DeleteTogetherAPIKey)
 			r.Post("/poe-key", settingsH.SetPoeAPIKey)
 			r.Delete("/poe-key", settingsH.DeletePoeAPIKey)
 			r.Post("/siliconflow-key", settingsH.SetSiliconFlowAPIKey)

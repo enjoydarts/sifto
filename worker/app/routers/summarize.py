@@ -14,6 +14,7 @@ from app.services.openrouter_service import summarize as summarize_openrouter
 from app.services.poe_service import summarize as summarize_poe
 from app.services.runtime_prompt_overrides import bind_prompt_override
 from app.services.siliconflow_service import summarize as summarize_siliconflow
+from app.services.together_service import summarize as summarize_together
 from app.services.xai_service import summarize as summarize_xai
 from app.services.zai_service import summarize as summarize_zai
 from app.services.router_observe import llm_usage_summary, run_observed_request
@@ -95,6 +96,13 @@ def summarize_endpoint(req: SummarizeRequest, request: Request):
                         api_key=api_key or "",
                     ),
                     "mistral": lambda api_key: summarize_mistral(
+                        req.title,
+                        req.facts,
+                        source_text_chars=req.source_text_chars,
+                        model=str(req.model),
+                        api_key=api_key or "",
+                    ),
+                    "together": lambda api_key: summarize_together(
                         req.title,
                         req.facts,
                         source_text_chars=req.source_text_chars,

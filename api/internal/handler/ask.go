@@ -98,6 +98,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		settings.HasDeepSeekAPIKey,
 		settings.HasAlibabaAPIKey,
 		settings.HasMistralAPIKey,
+		settings.HasTogetherAPIKey,
 		settings.HasMoonshotAPIKey,
 		settings.HasXAIAPIKey,
 		settings.HasZAIAPIKey,
@@ -107,7 +108,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		settings.HasOpenAIAPIKey,
 	)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or moonshot or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
 		return
 	}
 	cacheKey := cacheKeyAsk(userID, query, *modelName, embeddingModel, body.Days, body.UnreadOnly, body.Limit, body.SourceIDs)
@@ -163,6 +164,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	deepseekKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
 	alibabaKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
 	mistralKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
+	togetherKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetTogetherAPIKeyEncrypted, h.cipher, userID, "")
 	moonshotKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetMoonshotAPIKeyEncrypted, h.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
@@ -170,13 +172,15 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	poeKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
 	siliconFlowKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetSiliconFlowAPIKeyEncrypted, h.cipher, userID, "")
 	openAIChatKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
-	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, fireworksKey != nil, groqKey != nil, deepseekKey != nil, alibabaKey != nil, mistralKey != nil, moonshotKey != nil, xaiKey != nil, zaiKey != nil, openRouterKey != nil, poeKey != nil, siliconFlowKey != nil, openAIChatKey != nil)
+	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, fireworksKey != nil, groqKey != nil, deepseekKey != nil, alibabaKey != nil, mistralKey != nil, togetherKey != nil, moonshotKey != nil, xaiKey != nil, zaiKey != nil, openRouterKey != nil, poeKey != nil, siliconFlowKey != nil, openAIChatKey != nil)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or moonshot or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
 		return
 	}
 	if service.LLMProviderForModel(modelName) == "openrouter" {
 		openAIChatKey = openRouterKey
+	} else if service.LLMProviderForModel(modelName) == "together" {
+		openAIChatKey = togetherKey
 	} else if service.LLMProviderForModel(modelName) == "moonshot" {
 		openAIChatKey = moonshotKey
 	} else if service.LLMProviderForModel(modelName) == "poe" {
@@ -354,6 +358,7 @@ func (h *AskHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 	deepseekKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
 	alibabaKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
 	mistralKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
+	togetherKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetTogetherAPIKeyEncrypted, h.cipher, userID, "")
 	moonshotKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetMoonshotAPIKeyEncrypted, h.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
@@ -364,6 +369,8 @@ func (h *AskHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 	switch service.LLMProviderForModel(modelName) {
 	case "openrouter":
 		openAIKey = openRouterKey
+	case "together":
+		openAIKey = togetherKey
 	case "moonshot":
 		openAIKey = moonshotKey
 	case "poe":
@@ -475,7 +482,7 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 	return &v
 }
 
-func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFireworks, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasMoonshot, hasXAI, hasZAI, hasOpenRouter, hasPoe, hasSiliconFlow, hasOpenAI bool) *string {
+func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFireworks, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasTogether, hasMoonshot, hasXAI, hasZAI, hasOpenRouter, hasPoe, hasSiliconFlow, hasOpenAI bool) *string {
 	if settings != nil && settings.AskModel != nil && strings.TrimSpace(*settings.AskModel) != "" {
 		v := strings.TrimSpace(*settings.AskModel)
 		switch service.LLMProviderForModel(&v) {
@@ -501,6 +508,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "mistral":
 			if hasMistral {
+				return &v
+			}
+		case "together":
+			if hasTogether {
 				return &v
 			}
 		case "moonshot":
@@ -564,6 +575,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			if hasMistral {
 				return &v
 			}
+		case "together":
+			if hasTogether {
+				return &v
+			}
 		case "moonshot":
 			if hasMoonshot {
 				return &v
@@ -625,6 +640,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			if hasMistral {
 				return &v
 			}
+		case "together":
+			if hasTogether {
+				return &v
+			}
 		case "moonshot":
 			if hasMoonshot {
 				return &v
@@ -683,6 +702,11 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "mistral":
 			if hasMistral {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				return &v
+			}
+		case "together":
+			if hasTogether {
 				v := service.DefaultLLMModelForPurpose(provider, "ask")
 				return &v
 			}

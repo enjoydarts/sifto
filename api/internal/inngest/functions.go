@@ -713,6 +713,27 @@ func loadUserFireworksAPIKey(ctx context.Context, settingsRepo *repository.UserS
 	return &plain, nil
 }
 
+func loadUserTogetherAPIKey(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string) (*string, error) {
+	if settingsRepo == nil || userID == nil || *userID == "" {
+		return nil, fmt.Errorf("user together api key is required")
+	}
+	enc, err := settingsRepo.GetTogetherAPIKeyEncrypted(ctx, *userID)
+	if err != nil || enc == nil {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("user together api key is required")
+	}
+	if cipher == nil || !cipher.Enabled() {
+		return nil, fmt.Errorf("user secret encryption is not configured")
+	}
+	plain, err := cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt user together key: %w", err)
+	}
+	return &plain, nil
+}
+
 func loadUserOpenRouterAPIKey(ctx context.Context, settingsRepo *repository.UserSettingsRepo, cipher *service.SecretCipher, userID *string) (*string, error) {
 	if settingsRepo == nil || userID == nil || *userID == "" {
 		return nil, fmt.Errorf("user openrouter api key is required")
@@ -817,6 +838,11 @@ func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSetti
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
 						return nil, nil, nil, nil, nil, key, nil, nil, nil, nil, &fallback, nil
 					}
+				case "together":
+					if key, err := loadUserTogetherAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
+						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
+						return nil, nil, nil, nil, nil, nil, nil, nil, nil, key, &fallback, nil
+					}
 				case "moonshot":
 					if key, err := loadUserMoonshotAPIKey(ctx, settingsRepo, cipher, userID); err == nil && key != nil && strings.TrimSpace(*key) != "" {
 						fallback := service.DefaultLLMModelForPurpose(candidateProvider, purpose)
@@ -884,6 +910,9 @@ func loadLLMKeysForModel(ctx context.Context, settingsRepo *repository.UserSetti
 		return nil, nil, nil, nil, nil, key, nil, nil, nil, nil, model, err
 	case "moonshot":
 		key, err := loadUserMoonshotAPIKey(ctx, settingsRepo, cipher, userID)
+		return nil, nil, nil, nil, nil, nil, nil, nil, nil, key, model, err
+	case "together":
+		key, err := loadUserTogetherAPIKey(ctx, settingsRepo, cipher, userID)
 		return nil, nil, nil, nil, nil, nil, nil, nil, nil, key, model, err
 	case "xai":
 		key, err := loadUserXAIAPIKey(ctx, settingsRepo, cipher, userID)

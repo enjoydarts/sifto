@@ -16,6 +16,7 @@ from app.services.openrouter_service import generate_audio_briefing_script as ge
 from app.services.poe_service import generate_audio_briefing_script as generate_audio_briefing_script_poe
 from app.services.runtime_prompt_overrides import bind_prompt_override
 from app.services.siliconflow_service import generate_audio_briefing_script as generate_audio_briefing_script_siliconflow
+from app.services.together_service import generate_audio_briefing_script as generate_audio_briefing_script_together
 from app.services.router_observe import llm_usage_summary, run_observed_request
 from app.services.xai_service import generate_audio_briefing_script as generate_audio_briefing_script_xai
 from app.services.zai_service import generate_audio_briefing_script as generate_audio_briefing_script_zai
@@ -187,6 +188,20 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
                     api_key=api_key or "",
                 ),
                 "mistral": lambda api_key: generate_audio_briefing_script_mistral(
+                    persona=req.persona,
+                    articles=articles,
+                    intro_context=intro_context,
+                    target_duration_minutes=req.target_duration_minutes,
+                    target_chars=req.target_chars,
+                    chars_per_minute=req.chars_per_minute,
+                    include_opening=req.include_opening,
+                    include_overall_summary=req.include_overall_summary,
+                    include_article_segments=req.include_article_segments,
+                    include_ending=req.include_ending,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "together": lambda api_key: generate_audio_briefing_script_together(
                     persona=req.persona,
                     articles=articles,
                     intro_context=intro_context,

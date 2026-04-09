@@ -37,6 +37,7 @@ type ProviderModelDiscoveryKeys struct {
 	ZAI         string
 	Poe         string
 	Fireworks   string
+	Together    string
 }
 
 func NewProviderModelDiscoveryService() *ProviderModelDiscoveryService {
@@ -70,6 +71,7 @@ func (s *ProviderModelDiscoveryService) DiscoverAll(ctx context.Context) ([]Prov
 		{"xai", s.fetchXAIModels},
 		{"poe", s.fetchPoeModels},
 		{"fireworks", s.fetchFireworksModels},
+		{"together", s.fetchTogetherModels},
 	}
 	out := make([]ProviderModelsResult, 0, len(providers))
 	for _, p := range providers {
@@ -113,6 +115,44 @@ func readJSONResponse(resp *http.Response, dst any) error {
 		return fmt.Errorf("status %d", resp.StatusCode)
 	}
 	return json.NewDecoder(resp.Body).Decode(dst)
+}
+
+func readModelsListResponse(resp *http.Response) ([]string, error) {
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		if len(body) > 0 {
+			return nil, fmt.Errorf("status %d body=%s", resp.StatusCode, string(body))
+		}
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var wrapped struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &wrapped); err == nil && len(wrapped.Data) > 0 {
+		models := make([]string, 0, len(wrapped.Data))
+		for _, item := range wrapped.Data {
+			models = append(models, item.ID)
+		}
+		return normalizeModelIDs(models), nil
+	}
+	var direct []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(body, &direct); err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(direct))
+	for _, item := range direct {
+		models = append(models, item.ID)
+	}
+	return normalizeModelIDs(models), nil
 }
 
 func (s *ProviderModelDiscoveryService) fetchOpenAIModels(ctx context.Context) ([]string, error) {
@@ -250,6 +290,34 @@ func (s *ProviderModelDiscoveryService) fetchGroqModels(ctx context.Context) ([]
 		models = append(models, item.ID)
 	}
 	return normalizeModelIDs(models), nil
+}
+
+func (s *ProviderModelDiscoveryService) fetchTogetherModels(ctx context.Context) ([]string, error) {
+	apiKey := strings.TrimSpace(s.keys.Together)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("TOGETHER_API_KEY"))
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("api key is required")
+	}
+	base := strings.TrimRight(strings.TrimSpace(os.Getenv("TOGETHER_API_BASE_URL")), "/")
+	if base == "" {
+		base = "https://api.together.xyz"
+	} else if strings.HasSuffix(base, "/v1/chat/completions") {
+		base = strings.TrimSuffix(base, "/v1/chat/completions")
+	} else if strings.HasSuffix(base, "/chat/completions") {
+		base = strings.TrimSuffix(base, "/chat/completions")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	resp, err := s.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	return readModelsListResponse(resp)
 }
 
 func (s *ProviderModelDiscoveryService) fetchDeepSeekModels(ctx context.Context) ([]string, error) {

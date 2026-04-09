@@ -47,6 +47,8 @@ function providerLabel(provider: string) {
       return "Alibaba";
     case "mistral":
       return "Mistral";
+    case "together":
+      return "Together AI";
     case "xai":
       return "xAI";
     case "zai":
@@ -82,6 +84,8 @@ function providerColor(provider: string) {
       return "#14b8a6";
     case "mistral":
       return "#fb7185";
+    case "together":
+      return "#0ea5a4";
     case "xai":
       return "#818cf8";
     case "zai":

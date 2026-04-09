@@ -67,6 +67,7 @@ var (
 const openRouterAliasPrefix = "openrouter::"
 const poeAliasPrefix = "poe::"
 const siliconFlowAliasPrefix = "siliconflow::"
+const togetherAliasPrefix = "together::"
 
 var anthropicOpenRouterResolvedPattern = regexp.MustCompile(`^anthropic/claude-(\d+(?:\.\d+)*)-(opus|sonnet|haiku)-\d{8}$`)
 
@@ -139,6 +140,26 @@ func ResolveSiliconFlowModelID(model string) string {
 
 func IsSiliconFlowAliasedModel(model string) bool {
 	return strings.HasPrefix(strings.TrimSpace(model), siliconFlowAliasPrefix)
+}
+
+func TogetherAliasModelID(model string) string {
+	m := strings.TrimSpace(model)
+	if m == "" {
+		return ""
+	}
+	if strings.HasPrefix(m, togetherAliasPrefix) {
+		return m
+	}
+	return togetherAliasPrefix + m
+}
+
+func ResolveTogetherModelID(model string) string {
+	m := strings.TrimSpace(model)
+	return strings.TrimPrefix(m, togetherAliasPrefix)
+}
+
+func IsTogetherAliasedModel(model string) bool {
+	return strings.HasPrefix(strings.TrimSpace(model), togetherAliasPrefix)
 }
 
 func LLMCatalogData() *LLMCatalog {
@@ -292,6 +313,9 @@ func resolveCatalogAliasModelID(catalog *LLMCatalog, model string) string {
 		return m
 	}
 	candidates := []string{m}
+	if IsTogetherAliasedModel(m) {
+		candidates = append(candidates, ResolveTogetherModelID(m))
+	}
 	if strings.HasPrefix(m, "models/") {
 		candidates = append(candidates, strings.TrimSpace(strings.TrimPrefix(m, "models/")))
 	}
@@ -378,6 +402,9 @@ func CatalogProviderForModel(model string) string {
 	}
 	if IsSiliconFlowAliasedModel(m) {
 		return "siliconflow"
+	}
+	if IsTogetherAliasedModel(m) {
+		return "together"
 	}
 	if entry := findModelCatalog(m); entry != nil && entry.Provider != "" {
 		return entry.Provider

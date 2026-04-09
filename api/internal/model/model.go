@@ -45,6 +45,8 @@ type UserSettings struct {
 	HasZAIAPIKey                     bool       `json:"has_zai_api_key"`
 	FireworksAPIKeyLast4             *string    `json:"fireworks_api_key_last4,omitempty"`
 	HasFireworksAPIKey               bool       `json:"has_fireworks_api_key"`
+	TogetherAPIKeyLast4              *string    `json:"together_api_key_last4,omitempty"`
+	HasTogetherAPIKey                bool       `json:"has_together_api_key"`
 	PoeAPIKeyLast4                   *string    `json:"poe_api_key_last4,omitempty"`
 	HasPoeAPIKey                     bool       `json:"has_poe_api_key"`
 	SiliconFlowAPIKeyLast4           *string    `json:"siliconflow_api_key_last4,omitempty"`

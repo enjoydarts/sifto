@@ -52,6 +52,24 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("glm-5.1"); got == nil {
 		t.Fatal("glm-5.1 not found in catalog")
 	}
+	if got := findModelCatalog("gemma-4-31b-it"); got == nil {
+		t.Fatal("gemma-4-31b-it not found in catalog")
+	}
+	if got := findModelCatalog("gemma-4-26b-a4b-it"); got == nil {
+		t.Fatal("gemma-4-26b-a4b-it not found in catalog")
+	}
+	if got := findModelCatalog(TogetherAliasModelID("moonshotai/Kimi-K2.5")); got == nil {
+		t.Fatal("together::moonshotai/Kimi-K2.5 not found in catalog")
+	}
+	if got := findModelCatalog(TogetherAliasModelID("zai-org/GLM-5.1")); got == nil {
+		t.Fatal("together::zai-org/GLM-5.1 not found in catalog")
+	}
+	if got := findModelCatalog(TogetherAliasModelID("openai/gpt-oss-120b")); got == nil {
+		t.Fatal("together::openai/gpt-oss-120b not found in catalog")
+	}
+	if got := findModelCatalog(TogetherAliasModelID("Qwen/Qwen3-Coder-Next-FP8")); got == nil {
+		t.Fatal("together::Qwen/Qwen3-Coder-Next-FP8 not found in catalog")
+	}
 }
 
 func TestCatalogProviderAndDefaults(t *testing.T) {
@@ -70,12 +88,18 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "grok-4.20-0309-non-reasoning", provider: "xai"},
 		{model: "grok-4.20-0309-reasoning", provider: "xai"},
 		{model: "glm-5.1", provider: "zai"},
+		{model: "gemma-4-31b-it", provider: "google"},
+		{model: "gemma-4-26b-a4b-it", provider: "google"},
 		{model: "glm-4.7-flash", provider: "zai"},
 		{model: "fireworks/gpt-oss-20b", provider: "fireworks"},
 		{model: "fireworks/qwen3p6-plus", provider: "fireworks"},
 		{model: "kimi-k2.5", provider: "moonshot"},
 		{model: "kimi-k2-0905-preview", provider: "moonshot"},
 		{model: "kimi-k2-thinking-turbo", provider: "moonshot"},
+		{model: TogetherAliasModelID("moonshotai/Kimi-K2.5"), provider: "together"},
+		{model: TogetherAliasModelID("zai-org/GLM-5.1"), provider: "together"},
+		{model: TogetherAliasModelID("openai/gpt-oss-120b"), provider: "together"},
+		{model: TogetherAliasModelID("Qwen/Qwen3-Coder-Next-FP8"), provider: "together"},
 		{model: "gpt-5.4-mini", provider: "openai"},
 		{model: "openrouter::openai/gpt-oss-120b", provider: "openrouter"},
 		{model: "poe::Claude-Sonnet-4.5", provider: "poe"},
@@ -103,6 +127,9 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{provider: "zai", purpose: "ask", want: "glm-5-turbo"},
 		{provider: "fireworks", purpose: "ask", want: "fireworks/kimi-k2-instruct-0905"},
 		{provider: "moonshot", purpose: "ask", want: "kimi-k2.5"},
+		{provider: "together", purpose: "facts", want: TogetherAliasModelID("openai/gpt-oss-20b")},
+		{provider: "together", purpose: "summary", want: TogetherAliasModelID("moonshotai/Kimi-K2.5")},
+		{provider: "together", purpose: "source_suggestion", want: TogetherAliasModelID("LiquidAI/LFM2-24B-A2B")},
 	}
 	for _, tt := range defaults {
 		if got := DefaultLLMModelForPurpose(tt.provider, tt.purpose); got != tt.want {

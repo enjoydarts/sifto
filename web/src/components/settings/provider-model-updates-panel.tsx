@@ -3,6 +3,43 @@
 import { Brain, X } from "lucide-react";
 import type { ProviderModelChangeEvent } from "@/lib/api";
 
+function providerLabel(provider: string): string {
+  switch (provider) {
+    case "anthropic":
+      return "Anthropic";
+    case "google":
+      return "Google";
+    case "groq":
+      return "Groq";
+    case "deepseek":
+      return "DeepSeek";
+    case "alibaba":
+      return "Alibaba";
+    case "mistral":
+      return "Mistral";
+    case "moonshot":
+      return "Moonshot";
+    case "xai":
+      return "xAI";
+    case "zai":
+      return "Z.ai";
+    case "fireworks":
+      return "Fireworks";
+    case "together":
+      return "Together AI";
+    case "openrouter":
+      return "OpenRouter";
+    case "poe":
+      return "Poe";
+    case "siliconflow":
+      return "SiliconFlow";
+    case "openai":
+      return "OpenAI";
+    default:
+      return provider;
+  }
+}
+
 export default function ProviderModelUpdatesPanel({
   allEvents,
   visibleEvents,
@@ -65,7 +102,7 @@ export default function ProviderModelUpdatesPanel({
             <div key={event.id} className="rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-0.5 text-xs font-medium text-[var(--color-editorial-ink-soft)]">
-                  {event.provider}
+                  {providerLabel(event.provider)}
                 </span>
                 <span
                   className={`rounded px-2 py-0.5 text-xs font-medium ${

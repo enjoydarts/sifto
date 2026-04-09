@@ -57,6 +57,27 @@ function inferProviderLabelFromModelID(
   if (modelID.startsWith("siliconflow::")) {
     return t("settings.modelGuide.provider.siliconflow", "SiliconFlow");
   }
+  if (modelID.startsWith("together::")) {
+    return t("settings.modelGuide.provider.together", "Together AI");
+  }
+  if (modelID.includes("/")) {
+    const provider = modelID.split("/", 1)[0]?.toLowerCase();
+    if (
+      provider === "moonshotai" ||
+      provider === "zai-org" ||
+      provider === "liquidai" ||
+      provider === "essentialai" ||
+      provider === "openai" ||
+      provider === "deepseek-ai" ||
+      provider === "deepcogito" ||
+      provider === "mistralai" ||
+      provider === "meta-llama" ||
+      provider === "google" ||
+      provider === "qwen"
+    ) {
+      return t("settings.modelGuide.provider.together", "Together AI");
+    }
+  }
   return null;
 }
 
@@ -2504,6 +2525,8 @@ export default function SettingsPage() {
   const [deletingZAIKey, setDeletingZAIKey] = useState(false);
   const [savingFireworksKey, setSavingFireworksKey] = useState(false);
   const [deletingFireworksKey, setDeletingFireworksKey] = useState(false);
+  const [savingTogetherKey, setSavingTogetherKey] = useState(false);
+  const [deletingTogetherKey, setDeletingTogetherKey] = useState(false);
   const [savingPoeKey, setSavingPoeKey] = useState(false);
   const [deletingPoeKey, setDeletingPoeKey] = useState(false);
   const [savingSiliconFlowKey, setSavingSiliconFlowKey] = useState(false);
@@ -2545,6 +2568,7 @@ export default function SettingsPage() {
   const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
   const [zaiApiKeyInput, setZaiApiKeyInput] = useState("");
   const [fireworksApiKeyInput, setFireworksApiKeyInput] = useState("");
+  const [togetherApiKeyInput, setTogetherApiKeyInput] = useState("");
   const [poeApiKeyInput, setPoeApiKeyInput] = useState("");
   const [siliconFlowApiKeyInput, setSiliconFlowApiKeyInput] = useState("");
   const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
@@ -3745,6 +3769,21 @@ export default function SettingsPage() {
           notSet: t("settings.fireworksNotSet"),
         },
         {
+          id: "together",
+          title: t("settings.togetherTitle"),
+          description: t("settings.togetherDescription"),
+          configured: settings.has_together_api_key,
+          last4: settings.together_api_key_last4,
+          value: togetherApiKeyInput,
+          onChange: setTogetherApiKeyInput,
+          onSubmit: submitTogetherApiKey,
+          onDelete: handleDeleteTogetherApiKey,
+          placeholder: "together-...",
+          saving: savingTogetherKey,
+          deleting: deletingTogetherKey,
+          notSet: t("settings.togetherNotSet"),
+        },
+        {
           id: "poe",
           title: t("settings.poeTitle"),
           description: t("settings.poeDescription"),
@@ -4456,6 +4495,24 @@ export default function SettingsPage() {
     }
   }
 
+  async function submitTogetherApiKey(e: FormEvent) {
+    e.preventDefault();
+    setSavingTogetherKey(true);
+    try {
+      if (!togetherApiKeyInput.trim()) {
+        throw new Error(t("settings.error.enterApiKey"));
+      }
+      await api.setTogetherApiKey(togetherApiKeyInput.trim());
+      setTogetherApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.togetherSaved"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setSavingTogetherKey(false);
+    }
+  }
+
   async function handleDeleteFireworksApiKey() {
     if (!(await confirm({
       title: t("settings.fireworksDeleteTitle"),
@@ -4474,6 +4531,27 @@ export default function SettingsPage() {
       showToast(String(e), "error");
     } finally {
       setDeletingFireworksKey(false);
+    }
+  }
+
+  async function handleDeleteTogetherApiKey() {
+    if (!(await confirm({
+      title: t("settings.togetherDeleteTitle"),
+      message: t("settings.togetherDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingTogetherKey(true);
+    try {
+      await api.deleteTogetherApiKey();
+      await load();
+      showToast(t("settings.toast.togetherDeleted"), "success");
+    } catch (e) {
+      showToast(String(e), "error");
+    } finally {
+      setDeletingTogetherKey(false);
     }
   }
 

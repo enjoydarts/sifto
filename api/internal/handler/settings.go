@@ -1088,6 +1088,20 @@ func (h *SettingsHandler) DeleteFireworksAPIKey(w http.ResponseWriter, r *http.R
 	})
 }
 
+func (h *SettingsHandler) SetTogetherAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "together", map[string]func(*model.UserSettings) any{
+		"has_together_api_key":   func(s *model.UserSettings) any { return s.HasTogetherAPIKey },
+		"together_api_key_last4": func(s *model.UserSettings) any { return s.TogetherAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteTogetherAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "together", map[string]func(*model.UserSettings) any{
+		"has_together_api_key":   func(s *model.UserSettings) any { return s.HasTogetherAPIKey },
+		"together_api_key_last4": func(s *model.UserSettings) any { return s.TogetherAPIKeyLast4 },
+	})
+}
+
 func (h *SettingsHandler) SetPoeAPIKey(w http.ResponseWriter, r *http.Request) {
 	h.setAPIKey(w, r, "poe", map[string]func(*model.UserSettings) any{
 		"has_poe_api_key":   func(s *model.UserSettings) any { return s.HasPoeAPIKey },

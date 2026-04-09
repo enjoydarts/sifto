@@ -280,6 +280,7 @@ func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string,
 	deepseekKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
 	alibabaKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
 	mistralKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
+	togetherKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetTogetherAPIKeyEncrypted, h.cipher, userID, "")
 	moonshotKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMoonshotAPIKeyEncrypted, h.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
@@ -290,6 +291,8 @@ func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string,
 	switch service.LLMProviderForModel(modelName) {
 	case "openrouter":
 		openAIKey = openRouterKey
+	case "together":
+		openAIKey = togetherKey
 	case "moonshot":
 		openAIKey = moonshotKey
 	case "poe":
@@ -859,6 +862,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 	deepseekAPIKey := h.getUserDeepSeekAPIKey(ctx, userID)
 	alibabaAPIKey := h.getUserAlibabaAPIKey(ctx, userID)
 	mistralAPIKey := h.getUserMistralAPIKey(ctx, userID)
+	togetherAPIKey := h.getUserTogetherAPIKey(ctx, userID)
 	xaiAPIKey := h.getUserXAIAPIKey(ctx, userID)
 	zaiAPIKey := h.getUserZAIAPIKey(ctx, userID)
 	openRouterAPIKey := h.getUserOpenRouterAPIKey(ctx, userID)
@@ -874,6 +878,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 		deepseekAPIKey,
 		alibabaAPIKey,
 		mistralAPIKey,
+		togetherAPIKey,
 		xaiAPIKey,
 		zaiAPIKey,
 		openRouterAPIKey,
@@ -941,6 +946,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 			deepseekAPIKey,
 			alibabaAPIKey,
 			mistralAPIKey,
+			togetherAPIKey,
 			xaiAPIKey,
 			zaiAPIKey,
 			openAIAPIKey,
@@ -1013,6 +1019,7 @@ func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID s
 		deepseekAPIKey,
 		alibabaAPIKey,
 		mistralAPIKey,
+		togetherAPIKey,
 		xaiAPIKey,
 		zaiAPIKey,
 		openAIAPIKey,
@@ -1189,6 +1196,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	deepseekAPIKey *string,
 	alibabaAPIKey *string,
 	mistralAPIKey *string,
+	togetherAPIKey *string,
 	xaiAPIKey *string,
 	zaiAPIKey *string,
 	openAIAPIKey *string,
@@ -1214,10 +1222,11 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 	hasDeepSeek := deepseekAPIKey != nil && strings.TrimSpace(*deepseekAPIKey) != ""
 	hasAlibaba := alibabaAPIKey != nil && strings.TrimSpace(*alibabaAPIKey) != ""
 	hasMistral := mistralAPIKey != nil && strings.TrimSpace(*mistralAPIKey) != ""
+	hasTogether := togetherAPIKey != nil && strings.TrimSpace(*togetherAPIKey) != ""
 	hasXAI := xaiAPIKey != nil && strings.TrimSpace(*xaiAPIKey) != ""
 	hasZAI := zaiAPIKey != nil && strings.TrimSpace(*zaiAPIKey) != ""
 	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
-	if !hasAnthropic && !hasGoogle && !hasGroq && !hasFireworks && !hasDeepSeek && !hasAlibaba && !hasMistral && !hasXAI && !hasZAI && !hasOpenAI {
+	if !hasAnthropic && !hasGoogle && !hasGroq && !hasFireworks && !hasDeepSeek && !hasAlibaba && !hasMistral && !hasTogether && !hasXAI && !hasZAI && !hasOpenAI {
 		return nil
 	}
 	existing := make([]service.RankFeedSuggestionsExistingSource, 0, len(sources))
@@ -1262,6 +1271,7 @@ func (h *SourceHandler) rankSourceSuggestionsWithLLM(
 		deepseekAPIKey,
 		alibabaAPIKey,
 		mistralAPIKey,
+		togetherAPIKey,
 		xaiAPIKey,
 		zaiAPIKey,
 		fireworksAPIKey,
@@ -1527,6 +1537,25 @@ func (h *SourceHandler) getUserXAIAPIKey(ctx context.Context, userID string) *st
 	return &plain
 }
 
+func (h *SourceHandler) getUserTogetherAPIKey(ctx context.Context, userID string) *string {
+	if h.settingsRepo == nil || h.cipher == nil {
+		return nil
+	}
+	enc, err := h.settingsRepo.GetTogetherAPIKeyEncrypted(ctx, userID)
+	if err != nil || enc == nil || *enc == "" {
+		return nil
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil
+	}
+	plain = strings.TrimSpace(plain)
+	if plain == "" {
+		return nil
+	}
+	return &plain
+}
+
 func (h *SourceHandler) getUserZAIAPIKey(ctx context.Context, userID string) *string {
 	if h.settingsRepo == nil || h.cipher == nil {
 		return nil
@@ -1641,7 +1670,7 @@ func (h *SourceHandler) getUserOpenAIAPIKey(ctx context.Context, userID string) 
 	return &plain
 }
 
-func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, openAIAPIKey, model *string) (*string, *string, *string, *string, *string, *string, *string, *string, *string, *string, *string) {
+func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, togetherAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, openAIAPIKey, model *string) (*string, *string, *string, *string, *string, *string, *string, *string, *string, *string, *string) {
 	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
 	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
 	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
@@ -1649,6 +1678,7 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 	hasDeepSeek := deepseekAPIKey != nil && strings.TrimSpace(*deepseekAPIKey) != ""
 	hasAlibaba := alibabaAPIKey != nil && strings.TrimSpace(*alibabaAPIKey) != ""
 	hasMistral := mistralAPIKey != nil && strings.TrimSpace(*mistralAPIKey) != ""
+	hasTogether := togetherAPIKey != nil && strings.TrimSpace(*togetherAPIKey) != ""
 	hasXAI := xaiAPIKey != nil && strings.TrimSpace(*xaiAPIKey) != ""
 	hasZAI := zaiAPIKey != nil && strings.TrimSpace(*zaiAPIKey) != ""
 	hasOpenRouter := openRouterAPIKey != nil && strings.TrimSpace(*openRouterAPIKey) != ""
@@ -1687,6 +1717,10 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 		case "mistral":
 			if hasMistral {
 				return nil, nil, nil, nil, nil, nil, mistralAPIKey, nil, nil, nil, resolved
+			}
+		case "together":
+			if hasTogether {
+				return nil, nil, nil, nil, nil, nil, nil, nil, nil, togetherAPIKey, resolved
 			}
 		case "xai":
 			if hasXAI {
@@ -1794,6 +1828,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 	deepseekAPIKey *string,
 	alibabaAPIKey *string,
 	mistralAPIKey *string,
+	togetherAPIKey *string,
 	xaiAPIKey *string,
 	zaiAPIKey *string,
 	openAIAPIKey *string,
@@ -1834,6 +1869,7 @@ func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
 		deepseekAPIKey,
 		alibabaAPIKey,
 		mistralAPIKey,
+		togetherAPIKey,
 		xaiAPIKey,
 		zaiAPIKey,
 		fireworksAPIKey,

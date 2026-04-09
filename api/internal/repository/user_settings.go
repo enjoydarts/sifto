@@ -81,6 +81,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var xaiAPIKeyEnc *string
 	var zaiAPIKeyEnc *string
 	var fireworksAPIKeyEnc *string
+	var togetherAPIKeyEnc *string
 	var poeAPIKeyEnc *string
 	var siliconflowAPIKeyEnc *string
 	var openrouterAPIKeyEnc *string
@@ -112,6 +113,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       zai_api_key_last4,
 		       fireworks_api_key_enc,
 		       fireworks_api_key_last4,
+		       together_api_key_enc,
+		       together_api_key_last4,
 		       poe_api_key_enc,
 		       poe_api_key_last4,
 		       siliconflow_api_key_enc,
@@ -202,6 +205,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.ZAIAPIKeyLast4,
 		&fireworksAPIKeyEnc,
 		&v.FireworksAPIKeyLast4,
+		&togetherAPIKeyEnc,
+		&v.TogetherAPIKeyLast4,
 		&poeAPIKeyEnc,
 		&v.PoeAPIKeyLast4,
 		&siliconflowAPIKeyEnc,
@@ -280,6 +285,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasXAIAPIKey = xaiAPIKeyEnc != nil && *xaiAPIKeyEnc != ""
 	v.HasZAIAPIKey = zaiAPIKeyEnc != nil && *zaiAPIKeyEnc != ""
 	v.HasFireworksAPIKey = fireworksAPIKeyEnc != nil && *fireworksAPIKeyEnc != ""
+	v.HasTogetherAPIKey = togetherAPIKeyEnc != nil && *togetherAPIKeyEnc != ""
 	v.HasPoeAPIKey = poeAPIKeyEnc != nil && *poeAPIKeyEnc != ""
 	v.HasSiliconFlowAPIKey = siliconflowAPIKeyEnc != nil && *siliconflowAPIKeyEnc != ""
 	v.HasOpenRouterAPIKey = openrouterAPIKeyEnc != nil && *openrouterAPIKeyEnc != ""
@@ -797,6 +803,26 @@ func (r *UserSettingsRepo) GetFireworksAPIKeyEncrypted(ctx context.Context, user
 	return v, nil
 }
 
+func (r *UserSettingsRepo) GetTogetherAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT together_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1`,
+		userID,
+	).Scan(&v)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
 func (r *UserSettingsRepo) GetOpenRouterAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
 	var v *string
 	err := r.db.QueryRow(ctx, `
@@ -1154,6 +1180,22 @@ func (r *UserSettingsRepo) SetFireworksAPIKey(ctx context.Context, userID, encry
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetTogetherAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, together_api_key_enc, together_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET together_api_key_enc = EXCLUDED.together_api_key_enc,
+		    together_api_key_last4 = EXCLUDED.together_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) SetPoeAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, poe_api_key_enc, poe_api_key_last4)
@@ -1432,6 +1474,22 @@ func (r *UserSettingsRepo) ClearFireworksAPIKey(ctx context.Context, userID stri
 		ON CONFLICT (user_id) DO UPDATE
 		SET fireworks_api_key_enc = NULL,
 		    fireworks_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearTogetherAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, together_api_key_enc, together_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET together_api_key_enc = NULL,
+		    together_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

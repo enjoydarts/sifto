@@ -14,6 +14,7 @@ from app.services.openai_service import generate_ask_navigator as generate_ask_n
 from app.services.openrouter_service import generate_ask_navigator as generate_ask_navigator_openrouter
 from app.services.poe_service import generate_ask_navigator as generate_ask_navigator_poe
 from app.services.siliconflow_service import generate_ask_navigator as generate_ask_navigator_siliconflow
+from app.services.together_service import generate_ask_navigator as generate_ask_navigator_together
 from app.services.router_observe import llm_usage_summary, run_observed_request
 from app.services.xai_service import generate_ask_navigator as generate_ask_navigator_xai
 from app.services.zai_service import generate_ask_navigator as generate_ask_navigator_zai
@@ -85,6 +86,7 @@ def generate_ask_navigator_endpoint(req: AskNavigatorRequest, request: Request):
                 "deepseek": lambda api_key: generate_ask_navigator_deepseek(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
                 "alibaba": lambda api_key: generate_ask_navigator_alibaba(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
                 "mistral": lambda api_key: generate_ask_navigator_mistral(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
+                "together": lambda api_key: generate_ask_navigator_together(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
                 "moonshot": lambda api_key: generate_ask_navigator_moonshot(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
                 "xai": lambda api_key: generate_ask_navigator_xai(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
                 "zai": lambda api_key: generate_ask_navigator_zai(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),

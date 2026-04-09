@@ -252,6 +252,9 @@ func (s *ProviderModelSnapshotSyncService) buildDiscoveryService(ctx context.Con
 		if keys.Fireworks == "" {
 			keys.Fireworks = s.loadUserKey(ctx, user.ID, s.settings.GetFireworksAPIKeyEncrypted)
 		}
+		if keys.Together == "" {
+			keys.Together = s.loadUserKey(ctx, user.ID, s.settings.GetTogetherAPIKeyEncrypted)
+		}
 	}
 	return NewProviderModelDiscoveryServiceWithKeys(keys), nil
 }

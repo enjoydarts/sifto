@@ -13,6 +13,7 @@ from app.services.openrouter_service import extract_facts as extract_facts_openr
 from app.services.poe_service import extract_facts as extract_facts_poe
 from app.services.runtime_prompt_overrides import bind_prompt_override
 from app.services.siliconflow_service import extract_facts as extract_facts_siliconflow
+from app.services.together_service import extract_facts as extract_facts_together
 from app.services.moonshot_service import extract_facts as extract_facts_moonshot
 from app.services.xai_service import extract_facts as extract_facts_xai
 from app.services.zai_service import extract_facts as extract_facts_zai
@@ -53,6 +54,7 @@ def extract_facts_endpoint(req: FactsRequest, request: Request):
                     "deepseek": lambda api_key: extract_facts_deepseek(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "alibaba": lambda api_key: extract_facts_alibaba(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "mistral": lambda api_key: extract_facts_mistral(req.title, req.content, model=str(req.model), api_key=api_key or ""),
+                    "together": lambda api_key: extract_facts_together(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "moonshot": lambda api_key: extract_facts_moonshot(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "xai": lambda api_key: extract_facts_xai(req.title, req.content, model=str(req.model), api_key=api_key or ""),
                     "zai": lambda api_key: extract_facts_zai(req.title, req.content, model=str(req.model), api_key=api_key or ""),

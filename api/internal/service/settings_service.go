@@ -55,6 +55,8 @@ type SettingsGetPayload struct {
 	ZAIAPIKeyLast4          *string          `json:"zai_api_key_last4,omitempty"`
 	HasFireworksAPIKey      bool             `json:"has_fireworks_api_key"`
 	FireworksAPIKeyLast4    *string          `json:"fireworks_api_key_last4,omitempty"`
+	HasTogetherAPIKey       bool             `json:"has_together_api_key"`
+	TogetherAPIKeyLast4     *string          `json:"together_api_key_last4,omitempty"`
 	HasPoeAPIKey            bool             `json:"has_poe_api_key"`
 	PoeAPIKeyLast4          *string          `json:"poe_api_key_last4,omitempty"`
 	HasSiliconFlowAPIKey    bool             `json:"has_siliconflow_api_key"`
@@ -566,6 +568,8 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		ZAIAPIKeyLast4:          settings.ZAIAPIKeyLast4,
 		HasFireworksAPIKey:      settings.HasFireworksAPIKey,
 		FireworksAPIKeyLast4:    settings.FireworksAPIKeyLast4,
+		HasTogetherAPIKey:       settings.HasTogetherAPIKey,
+		TogetherAPIKeyLast4:     settings.TogetherAPIKeyLast4,
 		HasPoeAPIKey:            settings.HasPoeAPIKey,
 		PoeAPIKeyLast4:          settings.PoeAPIKeyLast4,
 		HasSiliconFlowAPIKey:    settings.HasSiliconFlowAPIKey,
@@ -1415,6 +1419,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetZAIAPIKey(ctx, userID, enc, last4)
 	case "fireworks":
 		return s.repo.SetFireworksAPIKey(ctx, userID, enc, last4)
+	case "together":
+		return s.repo.SetTogetherAPIKey(ctx, userID, enc, last4)
 	case "poe":
 		return s.repo.SetPoeAPIKey(ctx, userID, enc, last4)
 	case "siliconflow":
@@ -1456,6 +1462,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearZAIAPIKey(ctx, userID)
 	case "fireworks":
 		return s.repo.ClearFireworksAPIKey(ctx, userID)
+	case "together":
+		return s.repo.ClearTogetherAPIKey(ctx, userID)
 	case "poe":
 		return s.repo.ClearPoeAPIKey(ctx, userID)
 	case "siliconflow":

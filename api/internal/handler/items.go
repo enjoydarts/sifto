@@ -491,6 +491,7 @@ func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID str
 	deepseekKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
 	alibabaKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
 	mistralKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
+	togetherKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetTogetherAPIKeyEncrypted, h.cipher, userID, "")
 	moonshotKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMoonshotAPIKeyEncrypted, h.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
@@ -501,6 +502,8 @@ func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID str
 	switch service.LLMProviderForModel(modelName) {
 	case "openrouter":
 		openAIKey = openRouterKey
+	case "together":
+		openAIKey = togetherKey
 	case "moonshot":
 		openAIKey = moonshotKey
 	case "poe":

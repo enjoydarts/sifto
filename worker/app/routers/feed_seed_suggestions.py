@@ -14,6 +14,7 @@ from app.services.openai_service import suggest_feed_seed_sites as suggest_feed_
 from app.services.openrouter_service import suggest_feed_seed_sites as suggest_feed_seed_sites_openrouter
 from app.services.poe_service import suggest_feed_seed_sites as suggest_feed_seed_sites_poe
 from app.services.siliconflow_service import suggest_feed_seed_sites as suggest_feed_seed_sites_siliconflow
+from app.services.together_service import suggest_feed_seed_sites as suggest_feed_seed_sites_together
 from app.services.xai_service import suggest_feed_seed_sites as suggest_feed_seed_sites_xai
 from app.services.zai_service import suggest_feed_seed_sites as suggest_feed_seed_sites_zai
 from app.services.router_observe import llm_usage_summary, run_observed_request
@@ -113,6 +114,14 @@ def suggest_feed_seed_sites_endpoint(req: FeedSeedSuggestionRequest, request: Re
                     api_key=api_key or "",
                 ),
                 "mistral": lambda api_key: suggest_feed_seed_sites_mistral(
+                    existing_sources=existing_sources,
+                    preferred_topics=req.preferred_topics,
+                    positive_examples=positive_examples,
+                    negative_examples=negative_examples,
+                    model=str(req.model),
+                    api_key=api_key or "",
+                ),
+                "together": lambda api_key: suggest_feed_seed_sites_together(
                     existing_sources=existing_sources,
                     preferred_topics=req.preferred_topics,
                     positive_examples=positive_examples,

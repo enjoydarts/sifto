@@ -26,6 +26,8 @@ function providerLabel(provider: string) {
       return "Alibaba";
     case "mistral":
       return "Mistral";
+    case "together":
+      return "Together AI";
     case "xai":
       return "xAI";
     case "zai":

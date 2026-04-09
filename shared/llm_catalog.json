@@ -17,6 +17,7 @@
       "id": "google",
       "api_key_header": "x-google-api-key",
       "match_prefixes": ["gemini-", "models/gemini-"],
+      "match_exact": ["gemma-4-31b-it", "gemma-4-26b-a4b-it"],
       "default_models": {
         "facts": "gemini-2.5-flash-lite",
         "summary": "gemini-2.5-flash",
@@ -169,6 +170,41 @@
         "digest": "fireworks/glm-5",
         "ask": "fireworks/kimi-k2-instruct-0905",
         "source_suggestion": "fireworks/gpt-oss-20b"
+      }
+    },
+    {
+      "id": "together",
+      "api_key_header": "x-openai-api-key",
+      "match_exact": [
+        "moonshotai/Kimi-K2.5",
+        "moonshotai/Kimi-K2-Instruct",
+        "zai-org/GLM-5.1",
+        "zai-org/GLM-5",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "LiquidAI/LFM2-24B-A2B",
+        "deepseek-ai/DeepSeek-V3.1",
+        "deepseek-ai/DeepSeek-R1",
+        "deepseek-ai/DeepSeek-R1-0528",
+        "deepcogito/cogito-v2-1-671b",
+        "essentialai/rnj-1-instruct",
+        "mistralai/Mistral-7B-Instruct-v0.2",
+        "mistralai/Mixtral-8x7B-Instruct-v0.1",
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "meta-llama/Meta-Llama-3-8B-Instruct-Lite",
+        "google/gemma-3n-E4B-it",
+        "Qwen/Qwen2.5-7B-Instruct-Turbo",
+        "Qwen/Qwen3.5-397B-A17B",
+        "Qwen/Qwen3.5-9B",
+        "Qwen/Qwen3-Coder-Next-FP8"
+      ],
+      "default_models": {
+        "facts": "together::openai/gpt-oss-20b",
+        "summary": "together::moonshotai/Kimi-K2.5",
+        "digest_cluster_draft": "together::moonshotai/Kimi-K2.5",
+        "digest": "together::moonshotai/Kimi-K2.5",
+        "ask": "together::openai/gpt-oss-120b",
+        "source_suggestion": "together::LiquidAI/LFM2-24B-A2B"
       }
     },
     {
@@ -547,6 +583,50 @@
         "input_per_mtok_usd": 1.25,
         "output_per_mtok_usd": 10.0,
         "cache_read_per_mtok_usd": 0.125
+      }
+    },
+    {
+      "id": "gemma-4-31b-it",
+      "provider": "google",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["jsonStable"],
+      "comment": "Gemma 4 の上位 Instruct 枠。2026年4月9日時点では Google AI Studio で使える無料枠前提として扱い、正式 pricing 未掲載のため暫定で無料扱いにする。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "google_ai_studio_2026_04",
+        "input_per_mtok_usd": 0.0,
+        "output_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "gemma-4-26b-a4b-it",
+      "provider": "google",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["jsonStable", "fast"],
+      "comment": "Gemma 4 の 26B A4B MoE Instruct 枠。2026年4月9日時点では Google AI Studio で使える無料枠前提として扱い、正式 pricing 未掲載のため暫定で無料扱いにする。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "google_ai_studio_2026_04",
+        "input_per_mtok_usd": 0.0,
+        "output_per_mtok_usd": 0.0
       }
     },
     {
@@ -2159,6 +2239,466 @@
         "input_per_mtok_usd": 30.0,
         "output_per_mtok_usd": 180.0,
         "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "together::moonshotai/Kimi-K2.5",
+      "provider": "together",
+      "source_provider": "moonshotai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": ["fast", "jsonStable"],
+      "comment": "Together AI の主力候補。要約、質問応答、ダイジェストまで広く回せる高品質枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.5,
+        "output_per_mtok_usd": 2.8
+      }
+    },
+    {
+      "id": "together::moonshotai/Kimi-K2-Instruct",
+      "provider": "together",
+      "source_provider": "moonshotai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "ask",
+      "highlights": ["jsonStable"],
+      "comment": "K2.5 より一段古いが、JSON mode と agentic な応答を試したい時の比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_model_pages_2026_04",
+        "input_per_mtok_usd": 1.0,
+        "output_per_mtok_usd": 3.0
+      }
+    },
+    {
+      "id": "together::zai-org/GLM-5.1",
+      "provider": "together",
+      "source_provider": "zai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "coding",
+      "highlights": ["jsonStable"],
+      "comment": "GLM-5 系の更新版。Together 上でも GLM-5 を使っていた処理の比較候補として選べるようにする追加枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_pricing_2026_04",
+        "input_per_mtok_usd": 1.4,
+        "output_per_mtok_usd": 4.4
+      }
+    },
+    {
+      "id": "together::zai-org/GLM-5",
+      "provider": "together",
+      "source_provider": "zai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "coding",
+      "highlights": ["jsonStable"],
+      "comment": "長手数のエージェント系や難しめの実装相談に向く Together の Z.ai 上位枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 1.0,
+        "output_per_mtok_usd": 3.2
+      }
+    },
+    {
+      "id": "together::openai/gpt-oss-120b",
+      "provider": "together",
+      "source_provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": ["jsonStable", "fast"],
+      "comment": "Together の低コスト主力。要約、チェック、質問応答を安定して回しやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.6
+      }
+    },
+    {
+      "id": "together::openai/gpt-oss-20b",
+      "provider": "together",
+      "source_provider": "openai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "jsonStable", "fast"],
+      "comment": "軽量高速でかなり安い。抽出、軽い質問応答、ソース提案の第一候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.05,
+        "output_per_mtok_usd": 0.2
+      }
+    },
+    {
+      "id": "together::LiquidAI/LFM2-24B-A2B",
+      "provider": "together",
+      "source_provider": "liquidai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "source_suggestion",
+      "highlights": ["lowestCost", "fast"],
+      "comment": "低価格で高スループットな Together 専用候補。RAG 前段や候補生成を安く回す用途向け。",
+      "capabilities": {
+        "supports_structured_output": false,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.03,
+        "output_per_mtok_usd": 0.12
+      }
+    },
+    {
+      "id": "together::deepseek-ai/DeepSeek-V3.1",
+      "provider": "together",
+      "source_provider": "deepseek-ai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": ["jsonStable"],
+      "comment": "DeepSeek 系の高性能枠。要約や技術整理の比較対象として Together にも残す。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 1.7
+      }
+    },
+    {
+      "id": "together::deepseek-ai/DeepSeek-R1",
+      "provider": "together",
+      "source_provider": "deepseek-ai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "reasoning",
+      "highlights": ["jsonStable"],
+      "comment": "Together 上では DeepSeek-R1-0528 系の endpoint。難しめの推論比較用として入れておく。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 3.0,
+        "output_per_mtok_usd": 7.0
+      }
+    },
+    {
+      "id": "together::deepcogito/cogito-v2-1-671b",
+      "provider": "together",
+      "source_provider": "deepcogito",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "reasoning",
+      "highlights": [],
+      "comment": "Cogito 系の上位 reasoning 枠。短い推論連鎖で高い精度を見たい時の比較候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 1.25,
+        "output_per_mtok_usd": 1.25
+      }
+    },
+    {
+      "id": "together::essentialai/rnj-1-instruct",
+      "provider": "together",
+      "source_provider": "essentialai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "coding",
+      "highlights": ["fast"],
+      "comment": "軽量だが coding と tool use が強い。技術寄りの質問応答や実験用途向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.15
+      }
+    },
+    {
+      "id": "together::mistralai/Mixtral-8x7B-Instruct-v0.1",
+      "provider": "together",
+      "source_provider": "mistralai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": [],
+      "comment": "古めだが比較用として残す Mistral 系。中量モデルの基準線として使いやすい。",
+      "capabilities": {
+        "supports_structured_output": false,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_model_pages_2026_04",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 0.6
+      }
+    },
+    {
+      "id": "together::mistralai/Mistral-7B-Instruct-v0.2",
+      "provider": "together",
+      "source_provider": "mistralai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["fast"],
+      "comment": "小型 Mistral の比較枠。軽い抽出や簡単な整形タスクを低負荷で試したい時向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_model_pages_2026_04",
+        "input_per_mtok_usd": 0.2,
+        "output_per_mtok_usd": 0.2
+      }
+    },
+    {
+      "id": "together::meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "provider": "together",
+      "source_provider": "meta-llama",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": ["fast"],
+      "comment": "Together docs が最初の推奨候補に挙げる Meta 枠。標準的な比較対象として追加する。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.88,
+        "output_per_mtok_usd": 0.88
+      }
+    },
+    {
+      "id": "together::meta-llama/Meta-Llama-3-8B-Instruct-Lite",
+      "provider": "together",
+      "source_provider": "meta-llama",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "fast"],
+      "comment": "Meta 系の最軽量候補。安い比較枠として残し、軽い前処理や抽出に向ける。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.1,
+        "output_per_mtok_usd": 0.1
+      }
+    },
+    {
+      "id": "together::google/gemma-3n-E4B-it",
+      "provider": "together",
+      "source_provider": "google",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["lowestCost", "fast"],
+      "comment": "かなり安い Google 系候補。軽量な比較や大量バッチ処理の下限として使いやすい。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.02,
+        "output_per_mtok_usd": 0.04
+      }
+    },
+    {
+      "id": "together::Qwen/Qwen2.5-7B-Instruct-Turbo",
+      "provider": "together",
+      "source_provider": "qwen",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["fast"],
+      "comment": "Qwen の小型 turbo 枠。function calling と JSON mode を安く試す用途に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 0.3
+      }
+    },
+    {
+      "id": "together::Qwen/Qwen3.5-397B-A17B",
+      "provider": "together",
+      "source_provider": "qwen",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "reasoning",
+      "highlights": ["jsonStable"],
+      "comment": "Qwen 系の上位 multimodal reasoning 枠。高価だが難しい整理や agent 比較に向く。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 3.6
+      }
+    },
+    {
+      "id": "together::Qwen/Qwen3.5-9B",
+      "provider": "together",
+      "source_provider": "qwen",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["fast", "jsonStable"],
+      "comment": "Qwen3.5 の軽量上位枠。tool use と reasoning を安価に試せる実用候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.1,
+        "output_per_mtok_usd": 0.15
+      }
+    },
+    {
+      "id": "together::Qwen/Qwen3-Coder-Next-FP8",
+      "provider": "together",
+      "source_provider": "qwen",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "coding",
+      "highlights": ["jsonStable"],
+      "comment": "Together 上の coding agent 比較候補。長文コンテキストと tool use が強い。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.5,
+        "output_per_mtok_usd": 1.2
       }
     }
   ],

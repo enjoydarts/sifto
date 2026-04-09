@@ -1504,6 +1504,8 @@ export interface UserSettings {
   zai_api_key_last4: string | null;
   has_fireworks_api_key: boolean;
   fireworks_api_key_last4: string | null;
+  has_together_api_key: boolean;
+  together_api_key_last4: string | null;
   has_poe_api_key: boolean;
   poe_api_key_last4: string | null;
   has_siliconflow_api_key: boolean;
@@ -2823,9 +2825,19 @@ export const api = {
       "/settings/fireworks-key",
       { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
     ),
+  setTogetherApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_together_api_key: boolean; together_api_key_last4: string | null }>(
+      "/settings/together-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
   deleteFireworksApiKey: () =>
     apiFetch<{ user_id: string; has_fireworks_api_key: boolean; fireworks_api_key_last4: string | null }>(
       "/settings/fireworks-key",
+      { method: "DELETE" }
+    ),
+  deleteTogetherApiKey: () =>
+    apiFetch<{ user_id: string; has_together_api_key: boolean; together_api_key_last4: string | null }>(
+      "/settings/together-key",
       { method: "DELETE" }
     ),
   setPoeApiKey: (apiKey: string) =>

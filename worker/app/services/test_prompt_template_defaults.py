@@ -20,6 +20,9 @@ class PromptTemplateDefaultsTest(unittest.TestCase):
             "elevenlabs.summary_preprocess",
             "elevenlabs.audio_briefing_single_preprocess",
             "elevenlabs.audio_briefing_duo_preprocess",
+            "xai.summary_preprocess",
+            "xai.audio_briefing_single_preprocess",
+            "xai.audio_briefing_duo_preprocess",
         ]:
             template = get_default_prompt_template(prompt_key)
             self.assertEqual(template["prompt_key"], prompt_key)

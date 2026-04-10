@@ -143,6 +143,14 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		if err != nil {
 			return nil, err
 		}
+		if s.preprocess != nil {
+			preprocessed, preprocessErr := s.preprocess.PreprocessSummaryAudioTextForProvider(ctx, userID, item.ID, provider, narration)
+			if preprocessErr != nil {
+				return nil, preprocessErr
+			}
+			preprocessedText = stringPtrOrNil(preprocessed.Text)
+			narration = preprocessed.Text
+		}
 	} else if strings.EqualFold(provider, "fish") {
 		if ttsModel == "" {
 			return nil, ErrSummaryAudioMissingModel

@@ -22,9 +22,13 @@ const (
 	elevenLabsSummaryPreprocessPromptKey             = "elevenlabs.summary_preprocess"
 	elevenLabsAudioBriefingSinglePreprocessPromptKey = "elevenlabs.audio_briefing_single_preprocess"
 	elevenLabsAudioBriefingDuoPreprocessPromptKey    = "elevenlabs.audio_briefing_duo_preprocess"
+	xaiSummaryPreprocessPromptKey                    = "xai.summary_preprocess"
+	xaiAudioBriefingSinglePreprocessPromptKey        = "xai.audio_briefing_single_preprocess"
+	xaiAudioBriefingDuoPreprocessPromptKey           = "xai.audio_briefing_duo_preprocess"
 	fishPreprocessPurpose                            = "fish_preprocess"
 	geminiTTSPreprocessPurpose                       = "gemini_tts_preprocess"
 	elevenLabsTTSPreprocessPurpose                   = "elevenlabs_tts_preprocess"
+	xaiTTSPreprocessPurpose                          = "xai_tts_preprocess"
 	fishPreprocessPromptSource                       = "shared_template"
 )
 
@@ -204,6 +208,8 @@ func summaryPreprocessPromptKeyForProvider(provider string) string {
 		return geminiSummaryPreprocessPromptKey
 	case "elevenlabs":
 		return elevenLabsSummaryPreprocessPromptKey
+	case "xai":
+		return xaiSummaryPreprocessPromptKey
 	}
 	return fishSummaryPreprocessPromptKey
 }
@@ -214,6 +220,8 @@ func audioBriefingSinglePreprocessPromptKeyForProvider(provider string) string {
 		return geminiAudioBriefingSinglePreprocessPromptKey
 	case "elevenlabs":
 		return elevenLabsAudioBriefingSinglePreprocessPromptKey
+	case "xai":
+		return xaiAudioBriefingSinglePreprocessPromptKey
 	}
 	return fishAudioBriefingSinglePreprocessPromptKey
 }
@@ -224,6 +232,8 @@ func audioBriefingDuoPreprocessPromptKeyForProvider(provider string) string {
 		return geminiAudioBriefingDuoPreprocessPromptKey
 	case "elevenlabs":
 		return elevenLabsAudioBriefingDuoPreprocessPromptKey
+	case "xai":
+		return xaiAudioBriefingDuoPreprocessPromptKey
 	}
 	return fishAudioBriefingDuoPreprocessPromptKey
 }
@@ -234,6 +244,8 @@ func preprocessPurposeForPromptKey(promptKey string) string {
 		return geminiTTSPreprocessPurpose
 	case strings.HasPrefix(strings.TrimSpace(promptKey), "elevenlabs."):
 		return elevenLabsTTSPreprocessPurpose
+	case strings.HasPrefix(strings.TrimSpace(promptKey), "xai."):
+		return xaiTTSPreprocessPurpose
 	}
 	return fishPreprocessPurpose
 }

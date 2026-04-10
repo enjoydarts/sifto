@@ -426,6 +426,17 @@ func (r *AudioBriefingVoiceRunner) Start(ctx context.Context, userID string, job
 				log.Printf("audio briefing elevenlabs preprocess persistence failed job_id=%s chunk_id=%s err=%v", jobID, chunk.ID, persistErr)
 			}
 		}
+	} else if provider == "xai" && r.preprocess != nil {
+		itemID := strings.TrimSpace(derefString(chunk.ItemID))
+		preprocessPersona := audioBriefingPreprocessPersona(job, chunk)
+		preprocessed, preprocessErr := r.preprocess.PreprocessAudioBriefingSingleTextForProvider(ctx, userID, itemID, provider, preprocessPersona, synthText)
+		if preprocessErr != nil {
+			return r.handleChunkGenerationFailure(ctx, jobID, chunk, "tts_failed", preprocessErr)
+		}
+		synthText = preprocessed.Text
+		if persistErr := r.repo.SetChunkPreprocessedText(ctx, chunk.ID, stringPtrOrNil(strings.TrimSpace(synthText))); persistErr != nil {
+			log.Printf("audio briefing xai preprocess persistence failed job_id=%s chunk_id=%s err=%v", jobID, chunk.ID, persistErr)
+		}
 	}
 	var resp *AudioBriefingSynthesizeUploadResponse
 	if useGeminiDuoGroup {

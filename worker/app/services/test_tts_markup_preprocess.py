@@ -7,6 +7,7 @@ from app.services.tts_markup_preprocess import (
     FISH_PREPROCESS_PURPOSE,
     GEMINI_TTS_PREPROCESS_PURPOSE,
     TTSMarkupPreprocessService,
+    XAI_TTS_PREPROCESS_PURPOSE,
 )
 
 
@@ -140,6 +141,39 @@ class TTSMarkupPreprocessServiceTests(unittest.TestCase):
         )
         self.assertEqual(result["text"], "[自然に]整形済み")
         self.assertEqual(result["llm"]["provider"], "openrouter")
+
+    def test_preprocess_uses_xai_plain_text_generation(self):
+        service = TTSMarkupPreprocessService()
+
+        with (
+            patch(
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
+                return_value={
+                    "system_instruction": "SYSTEM",
+                    "prompt_text": "{{text}}",
+                },
+            ),
+            patch(
+                "app.services.tts_markup_preprocess.xai_chat_json",
+                return_value=("[pause]整形済み", {"input_tokens": 9, "output_tokens": 18}),
+            ) as chat_json,
+        ):
+            result = service.preprocess(
+                text="元テキスト",
+                model="grok-4-fast-non-reasoning",
+                api_key="xai-key",
+                prompt_key="xai.summary_preprocess",
+            )
+
+        chat_json.assert_called_once_with(
+            "元テキスト",
+            "grok-4-fast-non-reasoning",
+            "xai-key",
+            system_instruction="SYSTEM",
+            max_output_tokens=3200,
+        )
+        self.assertEqual(result["text"], "[pause]整形済み")
+        self.assertEqual(result["llm"]["provider"], "xai")
 
     def test_preprocess_uses_anthropic_transport(self):
         service = TTSMarkupPreprocessService()
@@ -443,6 +477,33 @@ class TTSMarkupPreprocessServiceTests(unittest.TestCase):
 
         llm_meta.assert_called_once_with("gpt-5.4-mini", GEMINI_TTS_PREPROCESS_PURPOSE, {"input_tokens": 1, "output_tokens": 1})
         self.assertEqual(result["llm"]["purpose"], GEMINI_TTS_PREPROCESS_PURPOSE)
+
+    def test_preprocess_uses_xai_tts_purpose_for_xai_prompt_keys(self):
+        service = TTSMarkupPreprocessService()
+
+        with (
+            patch(
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
+                return_value={
+                    "system_instruction": "SYSTEM",
+                    "prompt_text": "{{text}}",
+                },
+            ),
+            patch(
+                "app.services.tts_markup_preprocess.xai_chat_json",
+                return_value=("整形済み", {"input_tokens": 1, "output_tokens": 1}),
+            ),
+            patch("app.services.tts_markup_preprocess.xai_llm_meta", return_value={"purpose": XAI_TTS_PREPROCESS_PURPOSE}) as llm_meta,
+        ):
+            result = service.preprocess(
+                text="元テキスト",
+                model="grok-4-fast-non-reasoning",
+                api_key="xai-key",
+                prompt_key="xai.summary_preprocess",
+            )
+
+        llm_meta.assert_called_once_with("grok-4-fast-non-reasoning", XAI_TTS_PREPROCESS_PURPOSE, {"input_tokens": 1, "output_tokens": 1})
+        self.assertEqual(result["llm"]["purpose"], XAI_TTS_PREPROCESS_PURPOSE)
 
 
 if __name__ == "__main__":

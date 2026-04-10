@@ -21,6 +21,10 @@ export function formatModelDisplayName(model: string): string {
       return "Ministral 3 8B";
     case "ministral-3b-2512":
       return "Ministral 3 3B";
+    case "magistral-medium-2509":
+      return "Magistral Medium 1.2";
+    case "magistral-small-2509":
+      return "Magistral Small 1.2";
     case "deepseek-chat":
       return "deepseek-chat(V3.2)";
     case "deepseek-reasoner":

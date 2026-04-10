@@ -52,6 +52,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("glm-5.1"); got == nil {
 		t.Fatal("glm-5.1 not found in catalog")
 	}
+	if got := findModelCatalog("mistral-small-2603"); got == nil {
+		t.Fatal("mistral-small-2603 not found in catalog")
+	}
 	if got := findModelCatalog("gemma-4-31b-it"); got == nil {
 		t.Fatal("gemma-4-31b-it not found in catalog")
 	}
@@ -84,6 +87,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "qwen3.5-plus", provider: "alibaba"},
 		{model: "qwen3.6-plus", provider: "alibaba"},
 		{model: "mistral-small-2506", provider: "mistral"},
+		{model: "mistral-small-2603", provider: "mistral"},
 		{model: "grok-4-fast-non-reasoning", provider: "xai"},
 		{model: "grok-4.20-0309-non-reasoning", provider: "xai"},
 		{model: "grok-4.20-0309-reasoning", provider: "xai"},
@@ -122,7 +126,11 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{provider: "groq", purpose: "ask", want: "openai/gpt-oss-20b"},
 		{provider: "google", purpose: "facts", want: "gemini-2.5-flash-lite"},
 		{provider: "alibaba", purpose: "source_suggestion", want: "qwen3.5-flash"},
+		{provider: "mistral", purpose: "facts", want: "mistral-small-2603"},
+		{provider: "mistral", purpose: "summary", want: "mistral-small-2603"},
 		{provider: "mistral", purpose: "digest", want: "mistral-medium-2508"},
+		{provider: "mistral", purpose: "ask", want: "mistral-small-2603"},
+		{provider: "mistral", purpose: "source_suggestion", want: "mistral-small-2603"},
 		{provider: "xai", purpose: "facts", want: "grok-4-fast-non-reasoning"},
 		{provider: "zai", purpose: "ask", want: "glm-5-turbo"},
 		{provider: "fireworks", purpose: "ask", want: "fireworks/kimi-k2-instruct-0905"},

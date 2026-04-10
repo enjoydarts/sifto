@@ -78,6 +78,7 @@
       "id": "mistral",
       "api_key_header": "x-mistral-api-key",
       "match_exact": [
+        "mistral-small-2603",
         "mistral-large-2512",
         "mistral-medium-2508",
         "mistral-small-2506",
@@ -88,12 +89,12 @@
         "magistral-small-2509"
       ],
       "default_models": {
-        "facts": "mistral-small-2506",
-        "summary": "mistral-small-2506",
+        "facts": "mistral-small-2603",
+        "summary": "mistral-small-2603",
         "digest_cluster_draft": "mistral-medium-2508",
         "digest": "mistral-medium-2508",
-        "ask": "mistral-small-2506",
-        "source_suggestion": "ministral-8b-2512"
+        "ask": "mistral-small-2603",
+        "source_suggestion": "mistral-small-2603"
       }
     },
     {
@@ -947,13 +948,35 @@
       }
     },
     {
+      "id": "mistral-small-2603",
+      "provider": "mistral",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": ["fast", "jsonStable"],
+      "comment": "Mistral Small 4。小型枠の更新版で、抽出・要約・質問応答を広く任せやすい新しい主力候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "mistral_docs_2026_04",
+        "input_per_mtok_usd": 0.15,
+        "output_per_mtok_usd": 0.6
+      }
+    },
+    {
       "id": "mistral-large-2512",
       "provider": "mistral",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
       "recommendation": "strong",
       "best_for": "digest",
       "highlights": [],
-      "comment": "Mistral の上位汎用モデル。難しめの整理や長めのダイジェスト生成の比較候補。",
+      "comment": "Mistral Large 3。難しめの整理や長めのダイジェスト生成の比較候補。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,
@@ -997,7 +1020,7 @@
       "recommendation": "recommended",
       "best_for": "facts",
       "highlights": ["fast"],
-      "comment": "Mistral Small 3.2。抽出や軽めの要約でコストと品質のバランスが良い。",
+      "comment": "Mistral Small 3.2。旧 small default 枠で、抽出や軽めの要約でコストと品質のバランスが良い。",
       "capabilities": {
         "supports_structured_output": true,
         "supports_strict_json_schema": false,

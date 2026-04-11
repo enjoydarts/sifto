@@ -2,7 +2,7 @@ package service
 
 import "testing"
 
-func TestLookupTTSProviderMetadataIncludesXAIAndGemini(t *testing.T) {
+func TestLookupTTSProviderMetadataIncludesXAIGeminiAndAzureSpeech(t *testing.T) {
 	xai := LookupTTSProviderMetadata("xai")
 	if xai.SummaryRequiresTTSModel {
 		t.Fatalf("xai SummaryRequiresTTSModel = true, want false")
@@ -23,6 +23,23 @@ func TestLookupTTSProviderMetadataIncludesXAIAndGemini(t *testing.T) {
 	}
 	if gemini.PreprocessUsagePurpose != geminiTTSPreprocessPurpose {
 		t.Fatalf("gemini PreprocessUsagePurpose = %q", gemini.PreprocessUsagePurpose)
+	}
+
+	azure := LookupTTSProviderMetadata("azure_speech")
+	if azure.SummaryRequiresTTSModel {
+		t.Fatalf("azure SummaryRequiresTTSModel = true, want false")
+	}
+	if azure.SummaryPreprocessPromptKey != azureSpeechSummaryPreprocessPromptKey {
+		t.Fatalf("azure SummaryPreprocessPromptKey = %q", azure.SummaryPreprocessPromptKey)
+	}
+	if azure.AudioBriefingSinglePreprocessPromptKey != azureSpeechAudioBriefingSinglePreprocessPromptKey {
+		t.Fatalf("azure AudioBriefingSinglePreprocessPromptKey = %q", azure.AudioBriefingSinglePreprocessPromptKey)
+	}
+	if azure.AudioBriefingDuoPreprocessPromptKey != azureSpeechAudioBriefingDuoPreprocessPromptKey {
+		t.Fatalf("azure AudioBriefingDuoPreprocessPromptKey = %q", azure.AudioBriefingDuoPreprocessPromptKey)
+	}
+	if azure.PreprocessUsagePurpose != azureSpeechTTSPreprocessPurpose {
+		t.Fatalf("azure PreprocessUsagePurpose = %q", azure.PreprocessUsagePurpose)
 	}
 }
 

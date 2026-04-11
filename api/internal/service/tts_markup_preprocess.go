@@ -13,23 +13,27 @@ import (
 )
 
 const (
-	fishSummaryPreprocessPromptKey                   = "fish.summary_preprocess"
-	fishAudioBriefingSinglePreprocessPromptKey       = "fish.audio_briefing_single_preprocess"
-	fishAudioBriefingDuoPreprocessPromptKey          = "fish.audio_briefing_duo_preprocess"
-	geminiSummaryPreprocessPromptKey                 = "gemini.summary_preprocess"
-	geminiAudioBriefingSinglePreprocessPromptKey     = "gemini.audio_briefing_single_preprocess"
-	geminiAudioBriefingDuoPreprocessPromptKey        = "gemini.audio_briefing_duo_preprocess"
-	elevenLabsSummaryPreprocessPromptKey             = "elevenlabs.summary_preprocess"
-	elevenLabsAudioBriefingSinglePreprocessPromptKey = "elevenlabs.audio_briefing_single_preprocess"
-	elevenLabsAudioBriefingDuoPreprocessPromptKey    = "elevenlabs.audio_briefing_duo_preprocess"
-	xaiSummaryPreprocessPromptKey                    = "xai.summary_preprocess"
-	xaiAudioBriefingSinglePreprocessPromptKey        = "xai.audio_briefing_single_preprocess"
-	xaiAudioBriefingDuoPreprocessPromptKey           = "xai.audio_briefing_duo_preprocess"
-	fishPreprocessPurpose                            = "fish_preprocess"
-	geminiTTSPreprocessPurpose                       = "gemini_tts_preprocess"
-	elevenLabsTTSPreprocessPurpose                   = "elevenlabs_tts_preprocess"
-	xaiTTSPreprocessPurpose                          = "xai_tts_preprocess"
-	fishPreprocessPromptSource                       = "shared_template"
+	fishSummaryPreprocessPromptKey                    = "fish.summary_preprocess"
+	fishAudioBriefingSinglePreprocessPromptKey        = "fish.audio_briefing_single_preprocess"
+	fishAudioBriefingDuoPreprocessPromptKey           = "fish.audio_briefing_duo_preprocess"
+	geminiSummaryPreprocessPromptKey                  = "gemini.summary_preprocess"
+	geminiAudioBriefingSinglePreprocessPromptKey      = "gemini.audio_briefing_single_preprocess"
+	geminiAudioBriefingDuoPreprocessPromptKey         = "gemini.audio_briefing_duo_preprocess"
+	elevenLabsSummaryPreprocessPromptKey              = "elevenlabs.summary_preprocess"
+	elevenLabsAudioBriefingSinglePreprocessPromptKey  = "elevenlabs.audio_briefing_single_preprocess"
+	elevenLabsAudioBriefingDuoPreprocessPromptKey     = "elevenlabs.audio_briefing_duo_preprocess"
+	xaiSummaryPreprocessPromptKey                     = "xai.summary_preprocess"
+	xaiAudioBriefingSinglePreprocessPromptKey         = "xai.audio_briefing_single_preprocess"
+	xaiAudioBriefingDuoPreprocessPromptKey            = "xai.audio_briefing_duo_preprocess"
+	azureSpeechSummaryPreprocessPromptKey             = "azure_speech.summary_preprocess"
+	azureSpeechAudioBriefingSinglePreprocessPromptKey = "azure_speech.audio_briefing_single_preprocess"
+	azureSpeechAudioBriefingDuoPreprocessPromptKey    = "azure_speech.audio_briefing_duo_preprocess"
+	fishPreprocessPurpose                             = "fish_preprocess"
+	geminiTTSPreprocessPurpose                        = "gemini_tts_preprocess"
+	elevenLabsTTSPreprocessPurpose                    = "elevenlabs_tts_preprocess"
+	xaiTTSPreprocessPurpose                           = "xai_tts_preprocess"
+	azureSpeechTTSPreprocessPurpose                   = "azure_speech_tts_preprocess"
+	fishPreprocessPromptSource                        = "shared_template"
 )
 
 var (
@@ -85,6 +89,10 @@ func (s *TTSMarkupPreprocessService) PreprocessSummaryAudioTextForProvider(ctx c
 	return s.Preprocess(ctx, userID, itemID, summaryPreprocessPromptKeyForProvider(provider), text, nil)
 }
 
+func (s *TTSMarkupPreprocessService) PreprocessSummaryAudioTextForProviderWithVariables(ctx context.Context, userID, itemID, provider, text string, variables map[string]string) (*TTSMarkupPreprocessResult, error) {
+	return s.Preprocess(ctx, userID, itemID, summaryPreprocessPromptKeyForProvider(provider), text, variables)
+}
+
 func (s *TTSMarkupPreprocessService) PreprocessAudioBriefingSingleText(ctx context.Context, userID, itemID, persona, text string) (*TTSMarkupPreprocessResult, error) {
 	return s.Preprocess(ctx, userID, itemID, fishAudioBriefingSinglePreprocessPromptKey, text, map[string]string{
 		"persona_name": strings.TrimSpace(persona),
@@ -95,6 +103,16 @@ func (s *TTSMarkupPreprocessService) PreprocessAudioBriefingSingleTextForProvide
 	return s.Preprocess(ctx, userID, itemID, audioBriefingSinglePreprocessPromptKeyForProvider(provider), text, map[string]string{
 		"persona_name": strings.TrimSpace(persona),
 	})
+}
+
+func (s *TTSMarkupPreprocessService) PreprocessAudioBriefingSingleTextForProviderWithVariables(ctx context.Context, userID, itemID, provider, persona, text string, variables map[string]string) (*TTSMarkupPreprocessResult, error) {
+	enriched := map[string]string{
+		"persona_name": strings.TrimSpace(persona),
+	}
+	for key, value := range variables {
+		enriched[key] = value
+	}
+	return s.Preprocess(ctx, userID, itemID, audioBriefingSinglePreprocessPromptKeyForProvider(provider), text, enriched)
 }
 
 func (s *TTSMarkupPreprocessService) PreprocessAudioBriefingDuoText(ctx context.Context, userID, itemID, hostPersona, partnerPersona, text string) (*TTSMarkupPreprocessResult, error) {
@@ -109,6 +127,17 @@ func (s *TTSMarkupPreprocessService) PreprocessAudioBriefingDuoTextForProvider(c
 		"host_persona_name":    strings.TrimSpace(hostPersona),
 		"partner_persona_name": strings.TrimSpace(partnerPersona),
 	})
+}
+
+func (s *TTSMarkupPreprocessService) PreprocessAudioBriefingDuoTextForProviderWithVariables(ctx context.Context, userID, itemID, provider, hostPersona, partnerPersona, text string, variables map[string]string) (*TTSMarkupPreprocessResult, error) {
+	enriched := map[string]string{
+		"host_persona_name":    strings.TrimSpace(hostPersona),
+		"partner_persona_name": strings.TrimSpace(partnerPersona),
+	}
+	for key, value := range variables {
+		enriched[key] = value
+	}
+	return s.Preprocess(ctx, userID, itemID, audioBriefingDuoPreprocessPromptKeyForProvider(provider), text, enriched)
 }
 
 func (s *TTSMarkupPreprocessService) Preprocess(ctx context.Context, userID, itemID, promptKey, text string, variables map[string]string) (*TTSMarkupPreprocessResult, error) {

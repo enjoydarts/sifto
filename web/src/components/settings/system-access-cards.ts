@@ -19,6 +19,7 @@ export type AccessProviderID =
   | "poe"
   | "siliconflow"
   | "openrouter"
+  | "azure_speech"
   | "aivis"
   | "elevenlabs"
   | "fish";
@@ -26,6 +27,8 @@ export type AccessProviderID =
 export type AccessCardRuntime = {
   value: string;
   onChange: (value: string) => void;
+  secondaryValue?: string;
+  onSecondaryChange?: (value: string) => void;
   onSubmit: (event: FormEvent) => Promise<void>;
   onDelete: () => Promise<void>;
   saving: boolean;
@@ -39,10 +42,14 @@ export function createAccessCardRuntime(
   onDelete: () => Promise<void>,
   saving: boolean,
   deleting: boolean,
+  secondaryValue?: string,
+  onSecondaryChange?: (value: string) => void,
 ): AccessCardRuntime {
   return {
     value,
     onChange,
+    secondaryValue,
+    onSecondaryChange,
     onSubmit,
     onDelete,
     saving,
@@ -56,6 +63,11 @@ export type AccessCard = {
   description: string;
   configured: boolean;
   last4: string | null | undefined;
+  secondaryValue?: string;
+  onSecondaryChange?: (value: string) => void;
+  secondaryLabel?: string;
+  secondaryPlaceholder?: string;
+  secondaryStatusText?: string | null;
   value: string;
   onChange: (value: string) => void;
   onSubmit: (event: FormEvent) => Promise<void>;
@@ -72,6 +84,9 @@ type AccessCardMetadata = {
   descriptionKey: string;
   notSetKey: string;
   placeholder: string;
+  secondaryLabelKey?: string;
+  secondaryPlaceholder?: string;
+  selectSecondaryStatus?: (settings: UserSettings) => string | null | undefined;
   selectStatus: (settings: UserSettings) => { configured: boolean; last4: string | null | undefined };
 };
 
@@ -197,6 +212,20 @@ const ACCESS_CARD_METADATA: AccessCardMetadata[] = [
     selectStatus: (settings) => ({ configured: settings.has_openrouter_api_key, last4: settings.openrouter_api_key_last4 }),
   },
   {
+    id: "azure_speech",
+    titleKey: "settings.azureSpeechTitle",
+    descriptionKey: "settings.azureSpeechDescription",
+    notSetKey: "settings.azureSpeechNotSet",
+    placeholder: "speech-key-...",
+    secondaryLabelKey: "settings.azureSpeechRegionLabel",
+    secondaryPlaceholder: "japaneast",
+    selectStatus: (settings) => ({
+      configured: Boolean(settings.has_azure_speech_api_key && settings.azure_speech_region),
+      last4: settings.azure_speech_api_key_last4 ?? null,
+    }),
+    selectSecondaryStatus: (settings) => settings.azure_speech_region ?? null,
+  },
+  {
     id: "aivis",
     titleKey: "settings.aivisTitle",
     descriptionKey: "settings.aivisDescription",
@@ -240,6 +269,11 @@ export function buildAccessCards(
       description: t(item.descriptionKey),
       configured: status.configured,
       last4: status.last4,
+      secondaryValue: runtime.secondaryValue,
+      onSecondaryChange: runtime.onSecondaryChange,
+      secondaryLabel: item.secondaryLabelKey ? t(item.secondaryLabelKey) : undefined,
+      secondaryPlaceholder: item.secondaryPlaceholder,
+      secondaryStatusText: item.selectSecondaryStatus?.(settings) ?? null,
       value: runtime.value,
       onChange: runtime.onChange,
       onSubmit: runtime.onSubmit,

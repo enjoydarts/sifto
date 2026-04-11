@@ -1,0 +1,53 @@
+あなたは Azure AI Speech 向けの SSML 最適化専門家です。
+以下の日本語テキストを、二人の自然な会話として聞き取りやすくなるように完全な SSML へ整えてください。
+
+---
+## 【話者情報】
+- host persona: {{host_persona_name}}
+- host tone hint: {{host_tone_prompt}}
+- host voice name: {{host_voice_name}}
+- partner persona: {{partner_persona_name}}
+- partner tone hint: {{partner_tone_prompt}}
+- partner voice name: {{partner_voice_name}}
+- locale: {{voice_locale}}
+
+---
+## 【目的】
+- 会話のテンポと自然さを整える
+- 必要な箇所だけ Azure AI Speech の SSML を使って、間・抑揚・軽いニュアンスを補う
+- 話者の掛け合いと SSML の正当性を両立する
+
+---
+## 【SSML 構造】
+- root は `<speak version="1.0" xml:lang="{{voice_locale}}" xmlns="http://www.w3.org/2001/10/synthesis">...</speak>` にする
+- `mstts:express-as` を使う場合だけ `xmlns:mstts="https://www.w3.org/2001/mstts"` を root に追加する
+- 各話者区間は対応する `<voice xml:lang="{{voice_locale}}" name="...">...</voice>` で包む
+
+---
+## 【使ってよいタグと属性】
+- `prosody` の属性は `rate`, `pitch`, `volume` だけ使ってよい
+- `break` の属性は `time` または `strength` だけ使ってよい
+- `emphasis` の属性は `level` だけ使ってよい
+- `mstts:express-as` の属性は `style`, `styledegree`, `role` だけ使ってよい
+
+---
+## 【重要ルール】
+- `<|speaker:0|>` の区間は `{{host_voice_name}}`
+- `<|speaker:1|>` の区間は `{{partner_voice_name}}`
+- 話者順を変えない
+- `<|speaker:0|>` / `<|speaker:1|>` のマーカー自体は出力に残さない
+- 本文の意味を変えない
+- 読みやすさのために必要な範囲で break / prosody / emphasis / express-as を使う
+- 許可されていないタグや属性は使わない
+- voice 名・locale は書き換えない
+- 出力は SSML のみ
+
+---
+## 【日本語最適化】
+- 外来語・英語は必ず自然な日本語カタカナ表記に変換する（例: API → エーピーアイ、Cloud → クラウド、Ruby → ルビー、PostgreSQL → ポストグレスキューエル）
+- 強引で不自然な変換は避ける
+- 全文をカタカナにするのは禁止
+
+---
+## 【入力】
+{{text}}

@@ -7,6 +7,7 @@ type ApiKeyCardLabels = {
   configured: string;
   notSet: string;
   newApiKey: string;
+  region: string;
   saveOrUpdate: string;
   saving: string;
   deleteKey: string;
@@ -19,6 +20,11 @@ export default function ApiKeyCard({
   description,
   configured,
   last4,
+  secondaryValue,
+  onSecondaryChange,
+  secondaryLabel,
+  secondaryPlaceholder,
+  secondaryStatusText,
   value,
   onChange,
   onSubmit,
@@ -33,6 +39,11 @@ export default function ApiKeyCard({
   description: string;
   configured: boolean;
   last4?: string | null;
+  secondaryValue?: string;
+  onSecondaryChange?: (value: string) => void;
+  secondaryLabel?: string;
+  secondaryPlaceholder?: string;
+  secondaryStatusText?: string | null;
   value: string;
   onChange: (value: string) => void;
   onSubmit: FormEventHandler<HTMLFormElement>;
@@ -57,6 +68,12 @@ export default function ApiKeyCard({
           <>
             {labels.configured}{" "}
             <span className="font-mono text-xs text-[var(--color-editorial-ink-faint)]">••••{last4 ?? "****"}</span>
+            {secondaryStatusText ? (
+              <>
+                {" "}
+                <span className="text-xs text-[var(--color-editorial-ink-faint)]">{labels.region}: {secondaryStatusText}</span>
+              </>
+            ) : null}
           </>
         ) : (
           <span className="text-[var(--color-editorial-ink-faint)]">{labels.notSet}</span>
@@ -72,6 +89,20 @@ export default function ApiKeyCard({
         placeholder={placeholder}
         className="mt-1 w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink)] outline-none ring-0 placeholder:text-[var(--color-editorial-ink-faint)]"
       />
+
+      {secondaryLabel && onSecondaryChange ? (
+        <>
+          <label className="mt-4 block text-sm font-medium text-[var(--color-editorial-ink)]">{secondaryLabel}</label>
+          <input
+            type="text"
+            autoComplete="off"
+            value={secondaryValue ?? ""}
+            onChange={(e) => onSecondaryChange(e.target.value)}
+            placeholder={secondaryPlaceholder}
+            className="mt-1 w-full rounded-[14px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3 text-sm text-[var(--color-editorial-ink)] outline-none ring-0 placeholder:text-[var(--color-editorial-ink-faint)]"
+          />
+        </>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button

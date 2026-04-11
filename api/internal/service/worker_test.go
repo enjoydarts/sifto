@@ -56,6 +56,7 @@ func TestSynthesizeAudioBriefingUploadAppliesAudioBriefingTimeout(t *testing.T) 
 		"model",
 		"speaker:1",
 		"",
+		"",
 		"editor",
 		"text",
 		1.0,
@@ -69,6 +70,7 @@ func TestSynthesizeAudioBriefingUploadAppliesAudioBriefingTimeout(t *testing.T) 
 		"chunk-1",
 		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
 		"heartbeat-token",
+		nil,
 		nil,
 		nil,
 		nil,
@@ -110,6 +112,7 @@ func TestSynthesizeAudioBriefingUploadIncludesUserDictionaryUUID(t *testing.T) {
 		"model",
 		"speaker:1",
 		"",
+		"",
 		"editor",
 		"text",
 		1.0,
@@ -124,6 +127,7 @@ func TestSynthesizeAudioBriefingUploadIncludesUserDictionaryUUID(t *testing.T) {
 		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
 		"heartbeat-token",
 		strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),
+		nil,
 		nil,
 		nil,
 		nil,
@@ -227,6 +231,7 @@ func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
 		"model",
 		"speaker:1",
 		"",
+		"",
 		"邦題タイトル\n\n要約本文",
 		1.0,
 		1.0,
@@ -236,6 +241,7 @@ func TestSynthesizeSummaryAudioIncludesUserDictionaryUUID(t *testing.T) {
 		0,
 		0,
 		strptr("5b6f7aa3-2c34-4ad7-aad0-4e1d683d7861"),
+		nil,
 		nil,
 		nil,
 		nil,
@@ -374,6 +380,7 @@ func TestSynthesizeAudioBriefingUploadIncludesXAIAPIKeyHeader(t *testing.T) {
 		"voice-1",
 		"",
 		"",
+		"",
 		"editor",
 		"text",
 		1.0,
@@ -393,6 +400,7 @@ func TestSynthesizeAudioBriefingUploadIncludesXAIAPIKeyHeader(t *testing.T) {
 		nil,
 		nil,
 		strptr("xai-key"),
+		nil,
 		nil,
 	)
 	if err != nil {
@@ -426,6 +434,7 @@ func TestSynthesizeSummaryAudioIncludesXAIAPIKeyHeader(t *testing.T) {
 		"voice-1",
 		"",
 		"",
+		"",
 		"summary text",
 		1.0,
 		1.0,
@@ -440,6 +449,7 @@ func TestSynthesizeSummaryAudioIncludesXAIAPIKeyHeader(t *testing.T) {
 		nil,
 		nil,
 		strptr("xai-key"),
+		nil,
 		nil,
 	)
 	if err != nil {
@@ -483,6 +493,7 @@ func TestSynthesizeSummaryAudioDoesNotIncludeGoogleAPIKeyHeaderForGemini(t *test
 		"Kore",
 		"",
 		"gemini-2.5-flash-tts",
+		"",
 		"summary text",
 		1.0,
 		1.0,
@@ -491,6 +502,7 @@ func TestSynthesizeSummaryAudioDoesNotIncludeGoogleAPIKeyHeaderForGemini(t *test
 		1.0,
 		0,
 		0,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -538,6 +550,7 @@ func TestSynthesizeAudioBriefingUploadIncludesOpenAIAPIKeyHeaderAndTTSModel(t *t
 		"alloy",
 		"",
 		"gpt-4o-mini-tts",
+		"",
 		"editor",
 		"text",
 		1.0,
@@ -558,6 +571,7 @@ func TestSynthesizeAudioBriefingUploadIncludesOpenAIAPIKeyHeaderAndTTSModel(t *t
 		nil,
 		nil,
 		strptr("openai-key"),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeAudioBriefingUpload(...) error = %v", err)
@@ -598,6 +612,7 @@ func TestSynthesizeAudioBriefingUploadDoesNotIncludeGeminiAPIKeyHeaderAndInclude
 		"Kore",
 		"",
 		"gemini-2.5-flash-tts",
+		"",
 		"editor",
 		"text",
 		1.0,
@@ -611,6 +626,7 @@ func TestSynthesizeAudioBriefingUploadDoesNotIncludeGeminiAPIKeyHeaderAndInclude
 		"chunk-1",
 		"http://api.test/api/internal/audio-briefings/chunks/chunk-1/heartbeat",
 		"heartbeat-token",
+		nil,
 		nil,
 		nil,
 		nil,
@@ -658,6 +674,7 @@ func TestSynthesizeAudioBriefingUploadIncludesElevenLabsAPIKeyHeaderAndTTSModel(
 		"voice-1",
 		"",
 		"eleven_multilingual_v2",
+		"",
 		"editor",
 		"text",
 		1.0,
@@ -675,6 +692,7 @@ func TestSynthesizeAudioBriefingUploadIncludesElevenLabsAPIKeyHeaderAndTTSModel(
 		nil,
 		nil,
 		strptr("eleven-key"),
+		nil,
 		nil,
 		nil,
 		nil,
@@ -772,6 +790,7 @@ func TestSynthesizeSummaryAudioIncludesOpenAIAPIKeyHeaderAndTTSModel(t *testing.
 		"alloy",
 		"",
 		"gpt-4o-mini-tts",
+		"",
 		"summary text",
 		1.0,
 		1.0,
@@ -787,6 +806,7 @@ func TestSynthesizeSummaryAudioIncludesOpenAIAPIKeyHeaderAndTTSModel(t *testing.
 		nil,
 		nil,
 		strptr("openai-key"),
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeSummaryAudio(...) error = %v", err)
@@ -829,6 +849,7 @@ func TestSynthesizeSummaryAudioIncludesElevenLabsAPIKeyHeaderAndTTSModel(t *test
 		"voice-1",
 		"",
 		"eleven_multilingual_v2",
+		"",
 		"summary text",
 		1.0,
 		1.0,
@@ -844,6 +865,66 @@ func TestSynthesizeSummaryAudioIncludesElevenLabsAPIKeyHeaderAndTTSModel(t *test
 		nil,
 		nil,
 		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("SynthesizeSummaryAudio(...) error = %v", err)
+	}
+	if resp == nil || resp.AudioBase64 != "Zm9v" {
+		t.Fatalf("AudioBase64 = %#v, want Zm9v", resp)
+	}
+}
+
+func TestSynthesizeSummaryAudioIncludesAzureSpeechHeaderAndRegion(t *testing.T) {
+	client := NewWorkerClient()
+	client.baseURL = "http://worker.test"
+	client.http.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		if got := req.Header.Get("X-Azure-Speech-Api-Key"); got != "azure-key" {
+			t.Fatalf("X-Azure-Speech-Api-Key = %q, want azure-key", got)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if got := body["azure_speech_region"]; got != "japaneast" {
+			t.Fatalf("azure_speech_region = %v, want japaneast", got)
+		}
+		respBody, _ := json.Marshal(map[string]any{
+			"audio_base64":  "Zm9v",
+			"content_type":  "audio/mpeg",
+			"duration_sec":  12,
+			"resolved_text": "summary text",
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(bytes.NewReader(respBody)),
+		}, nil
+	})
+
+	resp, err := client.SynthesizeSummaryAudio(
+		context.Background(),
+		"azure_speech",
+		"ja-JP-NanamiNeural",
+		"",
+		"",
+		"japaneast",
+		"summary text",
+		1.0,
+		1.0,
+		1.0,
+		0.4,
+		1.0,
+		0.2,
+		0.1,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		strptr("azure-key"),
 	)
 	if err != nil {
 		t.Fatalf("SynthesizeSummaryAudio(...) error = %v", err)

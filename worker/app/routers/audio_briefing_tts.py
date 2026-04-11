@@ -25,6 +25,7 @@ class AudioBriefingSynthesizeRequest(BaseModel):
     heartbeat_url: str | None = None
     heartbeat_token: str | None = None
     user_dictionary_uuid: str | None = None
+    azure_speech_region: str | None = None
 
 
 class AudioBriefingSynthesizeResponse(BaseModel):
@@ -47,6 +48,11 @@ class AudioBriefingGeminiDuoSynthesizeRequest(BaseModel):
     turns: list[AudioBriefingGeminiDuoTurn]
     preprocessed_text: str | None = None
     output_object_key: str
+    speech_rate: float = 1.0
+    line_break_silence_seconds: float = 0.4
+    pitch: float = 0.0
+    volume_gain: float = 0.0
+    azure_speech_region: str | None = None
 
 
 class AudioBriefingPresignRequest(BaseModel):
@@ -107,6 +113,7 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
         fish_api_key = request.headers.get("x-fish-api-key", "").strip() or None
         elevenlabs_api_key = request.headers.get("x-elevenlabs-api-key", "").strip() or None
         xai_api_key = request.headers.get("x-xai-api-key", "").strip() or None
+        azure_speech_api_key = request.headers.get("x-azure-speech-api-key", "").strip() or None
         audio_object_key, duration_sec = service.synthesize_and_upload(
             provider=req.provider,
             voice_model=req.voice_model,
@@ -132,6 +139,8 @@ def synthesize_audio_briefing(req: AudioBriefingSynthesizeRequest, request: Requ
             elevenlabs_api_key=elevenlabs_api_key,
             xai_api_key=xai_api_key,
             openai_api_key=request.headers.get("x-openai-api-key", "").strip() or None,
+            azure_speech_api_key=azure_speech_api_key,
+            azure_speech_region=(req.azure_speech_region or "").strip() or None,
         )
         return AudioBriefingSynthesizeResponse(
             audio_object_key=audio_object_key,
@@ -209,6 +218,31 @@ def synthesize_audio_briefing_elevenlabs_duo(req: AudioBriefingGeminiDuoSynthesi
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"audio briefing elevenlabs duo synth failed: {exc}")
+
+
+@router.post("/audio-briefing/synthesize-upload-azure-speech-duo", response_model=AudioBriefingSynthesizeResponse)
+def synthesize_audio_briefing_azure_speech_duo(req: AudioBriefingGeminiDuoSynthesizeRequest, request: Request):
+    try:
+        service = AudioBriefingTTSService()
+        audio_object_key, duration_sec = service.synthesize_azure_speech_duo_and_upload(
+            host_voice_model=req.host_voice_model,
+            partner_voice_model=req.partner_voice_model,
+            turns=[turn.model_dump() for turn in req.turns],
+            preprocessed_text=req.preprocessed_text,
+            output_object_key=req.output_object_key,
+            speech_rate=req.speech_rate,
+            line_break_silence_seconds=req.line_break_silence_seconds,
+            pitch=req.pitch,
+            volume_gain=req.volume_gain,
+            api_key_override=request.headers.get("x-azure-speech-api-key", "").strip() or None,
+            region_override=(req.azure_speech_region or "").strip() or None,
+        )
+        return AudioBriefingSynthesizeResponse(
+            audio_object_key=audio_object_key,
+            duration_sec=duration_sec,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"audio briefing azure speech duo synth failed: {exc}")
 
 
 @router.post("/audio-briefing/presign", response_model=AudioBriefingPresignResponse)

@@ -142,7 +142,9 @@ export default function SummaryAudioSettingsSection({
         ? buildElevenLabsTTSModelOptions(ttsModel)
         : provider === "openai"
           ? buildOpenAITTSModelOptions(ttsModel)
-          : buildGeminiTTSModelOptions(ttsModel);
+          : provider === "gemini_tts"
+            ? buildGeminiTTSModelOptions(ttsModel)
+            : [];
 
   const voiceLabel =
     provider === "elevenlabs"
@@ -165,7 +167,9 @@ export default function SummaryAudioSettingsSection({
             ? t("settings.audioBriefing.pickXaiVoice")
             : provider === "openai"
               ? t("settings.audioBriefing.pickOpenAITTSVoice")
-              : t("settings.audioBriefing.pickGeminiTTSVoice");
+              : provider === "azure_speech"
+                ? t("settings.summaryAudio.pickAzureSpeechVoice")
+                : t("settings.audioBriefing.pickGeminiTTSVoice");
 
   const renderNumberField = (
     field: SummaryAudioNumericInputField,
@@ -232,6 +236,7 @@ export default function SummaryAudioSettingsSection({
               <option value="openai">{t("settings.summaryAudio.provider.openai")}</option>
               <option value="gemini_tts">{t("settings.summaryAudio.provider.gemini_tts")}</option>
               <option value="elevenlabs">{t("settings.summaryAudio.provider.elevenlabs")}</option>
+              <option value="azure_speech">{t("settings.summaryAudio.provider.azure_speech")}</option>
             </select>
           </label>
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Search, X } from "lucide-react";
-import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, AudioBriefingPreset, ElevenLabsVoiceCatalogEntry, ElevenLabsVoicesResponse, FishModelSnapshot, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, SaveAudioBriefingPresetRequest, SummaryAudioVoiceSettings, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
+import { AivisModelSnapshot, AivisModelsResponse, AivisUserDictionary, api, AudioBriefingPersonaVoice, AudioBriefingPreset, AzureSpeechVoiceCatalogEntry, AzureSpeechVoicesResponse, ElevenLabsVoiceCatalogEntry, ElevenLabsVoicesResponse, FishModelSnapshot, GeminiTTSVoiceCatalogEntry, GeminiTTSVoicesResponse, LLMCatalog, NavigatorPersonaDefinition, NotificationPriorityRule, OpenAITTSVoiceSnapshot, OpenAITTSVoicesResponse, PodcastCategoryOption, PreferenceProfile, ProviderModelChangeEvent, SaveAudioBriefingPresetRequest, SummaryAudioVoiceSettings, UserSettings, XAIVoiceSnapshot, XAIVoicesResponse } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { useConfirm } from "@/components/confirm-provider";
@@ -134,6 +134,7 @@ import {
   resolveFishVoiceSelection,
   resolveGeminiTTSVoiceSelection,
   resolveOpenAITTSVoiceSelection,
+  resolveAzureSpeechVoiceSelection,
   resolveXAIVoiceSelection,
   type VoiceModelSelection,
   type VoiceStyleSelection,
@@ -224,6 +225,8 @@ export default function SettingsPage() {
   const [deletingPoeKey, setDeletingPoeKey] = useState(false);
   const [savingSiliconFlowKey, setSavingSiliconFlowKey] = useState(false);
   const [deletingSiliconFlowKey, setDeletingSiliconFlowKey] = useState(false);
+  const [savingAzureSpeechConfig, setSavingAzureSpeechConfig] = useState(false);
+  const [deletingAzureSpeechConfig, setDeletingAzureSpeechConfig] = useState(false);
   const [savingOpenRouterKey, setSavingOpenRouterKey] = useState(false);
   const [deletingOpenRouterKey, setDeletingOpenRouterKey] = useState(false);
   const [savingAivisKey, setSavingAivisKey] = useState(false);
@@ -264,6 +267,8 @@ export default function SettingsPage() {
   const [togetherApiKeyInput, setTogetherApiKeyInput] = useState("");
   const [poeApiKeyInput, setPoeApiKeyInput] = useState("");
   const [siliconFlowApiKeyInput, setSiliconFlowApiKeyInput] = useState("");
+  const [azureSpeechApiKeyInput, setAzureSpeechApiKeyInput] = useState("");
+  const [azureSpeechRegionInput, setAzureSpeechRegionInput] = useState("");
   const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
   const [aivisApiKeyInput, setAivisApiKeyInput] = useState("");
   const [elevenLabsApiKeyInput, setElevenLabsApiKeyInput] = useState("");
@@ -343,6 +348,9 @@ export default function SettingsPage() {
   const [geminiTTSVoicesData, setGeminiTTSVoicesData] = useState<GeminiTTSVoicesResponse | null>(null);
   const [geminiTTSVoicesLoading, setGeminiTTSVoicesLoading] = useState(false);
   const [geminiTTSVoicesError, setGeminiTTSVoicesError] = useState<string | null>(null);
+  const [azureSpeechVoicesData, setAzureSpeechVoicesData] = useState<AzureSpeechVoicesResponse | null>(null);
+  const [azureSpeechVoicesLoading, setAzureSpeechVoicesLoading] = useState(false);
+  const [azureSpeechVoicesError, setAzureSpeechVoicesError] = useState<string | null>(null);
   const [aivisUserDictionaries, setAivisUserDictionaries] = useState<AivisUserDictionary[]>([]);
   const [aivisUserDictionariesLoading, setAivisUserDictionariesLoading] = useState(false);
   const [aivisUserDictionariesLoaded, setAivisUserDictionariesLoaded] = useState(false);
@@ -420,25 +428,31 @@ export default function SettingsPage() {
       openAITTSVoicesData?.voices ?? [],
       geminiTTSVoicesData?.voices ?? [],
       elevenLabsVoicesData?.voices ?? [],
+      azureSpeechVoicesData?.voices ?? [],
       Boolean(settings?.has_aivis_api_key),
       Boolean(settings?.has_fish_api_key),
       Boolean(settings?.has_xai_api_key),
       Boolean(settings?.has_openai_api_key),
       Boolean(settings?.has_elevenlabs_api_key),
+      Boolean(settings?.has_azure_speech_api_key),
+      settings?.azure_speech_region ?? "",
       Boolean(settings?.gemini_tts_enabled),
       t
     );
   }, [
     aivisModelsData?.models,
+    azureSpeechVoicesData?.voices,
     elevenLabsVoicesData?.voices,
     geminiTTSVoicesData?.voices,
     openAITTSVoicesData?.voices,
     settings?.has_fish_api_key,
     settings?.has_elevenlabs_api_key,
+    settings?.has_azure_speech_api_key,
     settings?.gemini_tts_enabled,
     settings?.has_aivis_api_key,
     settings?.has_openai_api_key,
     settings?.has_xai_api_key,
+    settings?.azure_speech_region,
     summaryAudioAivisUserDictionaryUUID,
     summaryAudioEmotionalIntensity,
     summaryAudioLineBreakSilenceSeconds,
@@ -793,6 +807,15 @@ export default function SettingsPage() {
     });
   }, []);
 
+  const loadAzureSpeechVoices = useCallback(async () => {
+    return loadResourceAction({
+      setLoading: setAzureSpeechVoicesLoading,
+      fetch: api.getAzureSpeechVoices,
+      setData: setAzureSpeechVoicesData,
+      setError: setAzureSpeechVoicesError,
+    });
+  }, []);
+
   const syncAivisModels = useCallback(async () => {
     return syncResourceAction({
       setSyncing: setAivisModelsSyncing,
@@ -988,6 +1011,13 @@ export default function SettingsPage() {
     }
     void loadGeminiTTSVoices().catch(() => undefined);
   }, [activeSection, geminiTTSVoicesData, geminiTTSVoicesLoading, loadGeminiTTSVoices]);
+
+  useEffect(() => {
+    if ((activeSection !== "audio-briefing" && activeSection !== "summary-audio") || !settings?.has_azure_speech_api_key || !settings?.azure_speech_region?.trim() || azureSpeechVoicesData != null || azureSpeechVoicesLoading) {
+      return;
+    }
+    void loadAzureSpeechVoices().catch(() => undefined);
+  }, [activeSection, azureSpeechVoicesData, azureSpeechVoicesLoading, loadAzureSpeechVoices, settings?.has_azure_speech_api_key, settings?.azure_speech_region]);
 
   useEffect(() => {
     if (activeSection !== "audio-briefing" && activeSection !== "summary-audio" || !settings?.has_aivis_api_key || aivisUserDictionariesLoading || aivisUserDictionariesLoaded) {
@@ -1253,29 +1283,80 @@ export default function SettingsPage() {
     },
   });
 
+  const submitAzureSpeechConfig = async (event: FormEvent) => {
+    event.preventDefault();
+    setSavingAzureSpeechConfig(true);
+    try {
+      const apiKey = azureSpeechApiKeyInput.trim();
+      const region = azureSpeechRegionInput.trim();
+      if (!apiKey) throw new Error(t("settings.error.enterApiKey"));
+      if (!region) throw new Error(t("settings.azureSpeechRegionRequired"));
+      await api.setAzureSpeechConfig(apiKey, region);
+      setAzureSpeechApiKeyInput("");
+      await load();
+      showToast(t("settings.toast.azureSpeechSaved"), "success");
+    } catch (error) {
+      showToast(String(error), "error");
+    } finally {
+      setSavingAzureSpeechConfig(false);
+    }
+  };
+
+  const deleteAzureSpeechConfig = async () => {
+    if (!(await confirm({
+      title: t("settings.azureSpeechDeleteTitle"),
+      message: t("settings.azureSpeechDeleteMessage"),
+      confirmLabel: t("settings.delete"),
+      tone: "danger",
+    }))) {
+      return;
+    }
+    setDeletingAzureSpeechConfig(true);
+    try {
+      await api.deleteAzureSpeechConfig();
+      setAzureSpeechRegionInput("");
+      await load();
+      showToast(t("settings.toast.azureSpeechDeleted"), "success");
+    } catch (error) {
+      showToast(String(error), "error");
+    } finally {
+      setDeletingAzureSpeechConfig(false);
+    }
+  };
+
   const apiKeyCardLabels = useMemo(() => buildApiKeyCardLabels(t), [t]);
 
   const accessCards = buildAccessCards(
     settings,
     {
-      anthropic: createAccessCardRuntime(anthropicApiKeyInput, setAnthropicApiKeyInput, apiKeyHandlers.anthropic.submit, apiKeyHandlers.anthropic.remove, savingAnthropicKey, deletingAnthropicKey),
-      openai: createAccessCardRuntime(openAIApiKeyInput, setOpenAIApiKeyInput, apiKeyHandlers.openai.submit, apiKeyHandlers.openai.remove, savingOpenAIKey, deletingOpenAIKey),
-      google: createAccessCardRuntime(googleApiKeyInput, setGoogleApiKeyInput, apiKeyHandlers.google.submit, apiKeyHandlers.google.remove, savingGoogleKey, deletingGoogleKey),
-      groq: createAccessCardRuntime(groqApiKeyInput, setGroqApiKeyInput, apiKeyHandlers.groq.submit, apiKeyHandlers.groq.remove, savingGroqKey, deletingGroqKey),
-      deepseek: createAccessCardRuntime(deepseekApiKeyInput, setDeepseekApiKeyInput, apiKeyHandlers.deepseek.submit, apiKeyHandlers.deepseek.remove, savingDeepSeekKey, deletingDeepSeekKey),
-      alibaba: createAccessCardRuntime(alibabaApiKeyInput, setAlibabaApiKeyInput, apiKeyHandlers.alibaba.submit, apiKeyHandlers.alibaba.remove, savingAlibabaKey, deletingAlibabaKey),
-      mistral: createAccessCardRuntime(mistralApiKeyInput, setMistralApiKeyInput, apiKeyHandlers.mistral.submit, apiKeyHandlers.mistral.remove, savingMistralKey, deletingMistralKey),
-      moonshot: createAccessCardRuntime(moonshotApiKeyInput, setMoonshotApiKeyInput, apiKeyHandlers.moonshot.submit, apiKeyHandlers.moonshot.remove, savingMoonshotKey, deletingMoonshotKey),
-      xai: createAccessCardRuntime(xaiApiKeyInput, setXaiApiKeyInput, apiKeyHandlers.xai.submit, apiKeyHandlers.xai.remove, savingXAIKey, deletingXAIKey),
-      zai: createAccessCardRuntime(zaiApiKeyInput, setZaiApiKeyInput, apiKeyHandlers.zai.submit, apiKeyHandlers.zai.remove, savingZAIKey, deletingZAIKey),
-      fireworks: createAccessCardRuntime(fireworksApiKeyInput, setFireworksApiKeyInput, apiKeyHandlers.fireworks.submit, apiKeyHandlers.fireworks.remove, savingFireworksKey, deletingFireworksKey),
-      together: createAccessCardRuntime(togetherApiKeyInput, setTogetherApiKeyInput, apiKeyHandlers.together.submit, apiKeyHandlers.together.remove, savingTogetherKey, deletingTogetherKey),
-      poe: createAccessCardRuntime(poeApiKeyInput, setPoeApiKeyInput, apiKeyHandlers.poe.submit, apiKeyHandlers.poe.remove, savingPoeKey, deletingPoeKey),
-      siliconflow: createAccessCardRuntime(siliconFlowApiKeyInput, setSiliconFlowApiKeyInput, apiKeyHandlers.siliconflow.submit, apiKeyHandlers.siliconflow.remove, savingSiliconFlowKey, deletingSiliconFlowKey),
-      openrouter: createAccessCardRuntime(openRouterApiKeyInput, setOpenRouterApiKeyInput, apiKeyHandlers.openrouter.submit, apiKeyHandlers.openrouter.remove, savingOpenRouterKey, deletingOpenRouterKey),
-      aivis: createAccessCardRuntime(aivisApiKeyInput, setAivisApiKeyInput, apiKeyHandlers.aivis.submit, apiKeyHandlers.aivis.remove, savingAivisKey, deletingAivisKey),
-      elevenlabs: createAccessCardRuntime(elevenLabsApiKeyInput, setElevenLabsApiKeyInput, apiKeyHandlers.elevenlabs.submit, apiKeyHandlers.elevenlabs.remove, savingElevenLabsKey, deletingElevenLabsKey),
-      fish: createAccessCardRuntime(fishApiKeyInput, setFishApiKeyInput, apiKeyHandlers.fish.submit, apiKeyHandlers.fish.remove, savingFishKey, deletingFishKey),
+      anthropic: createAccessCardRuntime(anthropicApiKeyInput, setAnthropicApiKeyInput, apiKeyHandlers.anthropic!.submit, apiKeyHandlers.anthropic!.remove, savingAnthropicKey, deletingAnthropicKey),
+      openai: createAccessCardRuntime(openAIApiKeyInput, setOpenAIApiKeyInput, apiKeyHandlers.openai!.submit, apiKeyHandlers.openai!.remove, savingOpenAIKey, deletingOpenAIKey),
+      google: createAccessCardRuntime(googleApiKeyInput, setGoogleApiKeyInput, apiKeyHandlers.google!.submit, apiKeyHandlers.google!.remove, savingGoogleKey, deletingGoogleKey),
+      groq: createAccessCardRuntime(groqApiKeyInput, setGroqApiKeyInput, apiKeyHandlers.groq!.submit, apiKeyHandlers.groq!.remove, savingGroqKey, deletingGroqKey),
+      deepseek: createAccessCardRuntime(deepseekApiKeyInput, setDeepseekApiKeyInput, apiKeyHandlers.deepseek!.submit, apiKeyHandlers.deepseek!.remove, savingDeepSeekKey, deletingDeepSeekKey),
+      alibaba: createAccessCardRuntime(alibabaApiKeyInput, setAlibabaApiKeyInput, apiKeyHandlers.alibaba!.submit, apiKeyHandlers.alibaba!.remove, savingAlibabaKey, deletingAlibabaKey),
+      mistral: createAccessCardRuntime(mistralApiKeyInput, setMistralApiKeyInput, apiKeyHandlers.mistral!.submit, apiKeyHandlers.mistral!.remove, savingMistralKey, deletingMistralKey),
+      moonshot: createAccessCardRuntime(moonshotApiKeyInput, setMoonshotApiKeyInput, apiKeyHandlers.moonshot!.submit, apiKeyHandlers.moonshot!.remove, savingMoonshotKey, deletingMoonshotKey),
+      xai: createAccessCardRuntime(xaiApiKeyInput, setXaiApiKeyInput, apiKeyHandlers.xai!.submit, apiKeyHandlers.xai!.remove, savingXAIKey, deletingXAIKey),
+      zai: createAccessCardRuntime(zaiApiKeyInput, setZaiApiKeyInput, apiKeyHandlers.zai!.submit, apiKeyHandlers.zai!.remove, savingZAIKey, deletingZAIKey),
+      fireworks: createAccessCardRuntime(fireworksApiKeyInput, setFireworksApiKeyInput, apiKeyHandlers.fireworks!.submit, apiKeyHandlers.fireworks!.remove, savingFireworksKey, deletingFireworksKey),
+      together: createAccessCardRuntime(togetherApiKeyInput, setTogetherApiKeyInput, apiKeyHandlers.together!.submit, apiKeyHandlers.together!.remove, savingTogetherKey, deletingTogetherKey),
+      poe: createAccessCardRuntime(poeApiKeyInput, setPoeApiKeyInput, apiKeyHandlers.poe!.submit, apiKeyHandlers.poe!.remove, savingPoeKey, deletingPoeKey),
+      siliconflow: createAccessCardRuntime(siliconFlowApiKeyInput, setSiliconFlowApiKeyInput, apiKeyHandlers.siliconflow!.submit, apiKeyHandlers.siliconflow!.remove, savingSiliconFlowKey, deletingSiliconFlowKey),
+      azure_speech: createAccessCardRuntime(
+        azureSpeechApiKeyInput,
+        setAzureSpeechApiKeyInput,
+        submitAzureSpeechConfig,
+        deleteAzureSpeechConfig,
+        savingAzureSpeechConfig,
+        deletingAzureSpeechConfig,
+        azureSpeechRegionInput,
+        setAzureSpeechRegionInput,
+      ),
+      openrouter: createAccessCardRuntime(openRouterApiKeyInput, setOpenRouterApiKeyInput, apiKeyHandlers.openrouter!.submit, apiKeyHandlers.openrouter!.remove, savingOpenRouterKey, deletingOpenRouterKey),
+      aivis: createAccessCardRuntime(aivisApiKeyInput, setAivisApiKeyInput, apiKeyHandlers.aivis!.submit, apiKeyHandlers.aivis!.remove, savingAivisKey, deletingAivisKey),
+      elevenlabs: createAccessCardRuntime(elevenLabsApiKeyInput, setElevenLabsApiKeyInput, apiKeyHandlers.elevenlabs!.submit, apiKeyHandlers.elevenlabs!.remove, savingElevenLabsKey, deletingElevenLabsKey),
+      fish: createAccessCardRuntime(fishApiKeyInput, setFishApiKeyInput, apiKeyHandlers.fish!.submit, apiKeyHandlers.fish!.remove, savingFishKey, deletingFishKey),
     },
     t,
   );
@@ -1827,6 +1908,7 @@ export default function SettingsPage() {
     openElevenLabsPicker,
     openOpenAITTSPicker,
     openGeminiTTSPicker,
+    openAzureSpeechPicker,
   } = buildAudioBriefingPickerOpeners({
     pickers: {
       setAivisPickerPersona: audioBriefingPickers.setAivisPickerPersona,
@@ -1835,17 +1917,20 @@ export default function SettingsPage() {
       setElevenLabsPickerPersona: audioBriefingPickers.setElevenLabsPickerPersona,
       setOpenAITTPickerPersona: audioBriefingPickers.setOpenAITTPickerPersona,
       setGeminiTTSPickerPersona: audioBriefingPickers.setGeminiTTSPickerPersona,
+      setAzureSpeechPickerPersona: audioBriefingPickers.setAzureSpeechPickerPersona,
     },
     aivisModelsData,
     xaiVoicesData,
     elevenLabsVoicesData,
     openAITTSVoicesData,
     geminiTTSVoicesData,
+    azureSpeechVoicesData,
     loadAivisModels,
     loadXAIVoices,
     loadElevenLabsVoices,
     loadOpenAITTSVoices,
     loadGeminiTTSVoices,
+    loadAzureSpeechVoices,
   });
 
   if (loading) return <p className="text-sm text-zinc-500">{t("common.loading")}</p>;
@@ -1857,23 +1942,28 @@ export default function SettingsPage() {
   const activeElevenLabsVoice = findAudioBriefingActiveVoice(audioBriefingVoices, audioBriefingPickers.elevenLabsPickerPersona);
   const activeOpenAITTSVoice = findAudioBriefingActiveVoice(audioBriefingVoices, audioBriefingPickers.openAITTPickerPersona);
   const activeGeminiTTSVoice = findAudioBriefingActiveVoice(audioBriefingVoices, audioBriefingPickers.geminiTTSPickerPersona);
+  const activeAzureSpeechVoice = findAudioBriefingActiveVoice(audioBriefingVoices, audioBriefingPickers.azureSpeechPickerPersona);
   const {
     audioBriefingAivisModels,
     audioBriefingXAIVoices,
     audioBriefingElevenLabsVoices,
     audioBriefingOpenAITTSVoices,
     audioBriefingGeminiTTSVoices,
+    audioBriefingAzureSpeechVoices,
     summaryAudioAivisModels,
     summaryAudioXAIVoices,
     summaryAudioElevenLabsVoices,
     summaryAudioOpenAITTSVoices,
     summaryAudioGeminiTTSVoices,
-  } = buildVoicePickerCatalogData(aivisModelsData, xaiVoicesData, elevenLabsVoicesData, openAITTSVoicesData, geminiTTSVoicesData);
+    summaryAudioAzureSpeechVoices,
+  } = buildVoicePickerCatalogData(aivisModelsData, xaiVoicesData, elevenLabsVoicesData, openAITTSVoicesData, geminiTTSVoicesData, azureSpeechVoicesData);
   const hasUserAivisAPIKey = Boolean(settings?.has_aivis_api_key);
   const hasUserFishAPIKey = Boolean(settings?.has_fish_api_key);
   const hasUserXAIAPIKey = Boolean(settings?.has_xai_api_key);
   const hasUserElevenLabsAPIKey = Boolean(settings?.has_elevenlabs_api_key);
   const hasUserOpenAIAPIKey = Boolean(settings?.has_openai_api_key);
+  const hasUserAzureSpeechAPIKey = Boolean(settings?.has_azure_speech_api_key);
+  const azureSpeechRegion = settings?.azure_speech_region?.trim() || "";
   const geminiTTSEnabled = Boolean(settings?.gemini_tts_enabled);
   const summaryAudioProviderCapabilities = getAudioBriefingProviderCapabilities(summaryAudioProvider);
   const summaryAudioResolvedVoice = summaryAudioProvider === "aivis"
@@ -1891,6 +1981,8 @@ export default function SettingsPage() {
         ? resolveOpenAITTSVoiceSelection(summaryAudioOpenAITTSVoices, { voice_model: summaryAudioVoiceModel })
         : summaryAudioProvider === "gemini_tts"
           ? resolveGeminiTTSVoiceSelection(summaryAudioGeminiTTSVoices, { voice_model: summaryAudioVoiceModel })
+          : summaryAudioProvider === "azure_speech"
+            ? resolveAzureSpeechVoiceSelection(summaryAudioAzureSpeechVoices, { voice_model: summaryAudioVoiceModel })
           : null;
   const summaryAudioResolvedAivisVoice = summaryAudioProvider === "aivis"
     ? (summaryAudioResolvedVoice as ReturnType<typeof resolveAivisVoiceSelection> | null)
@@ -1910,6 +2002,9 @@ export default function SettingsPage() {
   const summaryAudioResolvedGeminiVoice = summaryAudioProvider === "gemini_tts"
     ? (summaryAudioResolvedVoice as GeminiTTSVoiceCatalogEntry | null)
     : null;
+  const summaryAudioResolvedAzureSpeechVoice = summaryAudioProvider === "azure_speech"
+    ? (summaryAudioResolvedVoice as AzureSpeechVoiceCatalogEntry | null)
+    : null;
   const audioBriefingVoiceSummaries = audioBriefingVoices.map((voice) => ({
     voice,
     resolved: voice.tts_provider === "aivis"
@@ -1924,6 +2019,8 @@ export default function SettingsPage() {
           ? resolveOpenAITTSVoiceSelection(audioBriefingOpenAITTSVoices, voice)
           : voice.tts_provider === "gemini_tts"
             ? resolveGeminiTTSVoiceSelection(audioBriefingGeminiTTSVoices, voice)
+          : voice.tts_provider === "azure_speech"
+            ? resolveAzureSpeechVoiceSelection(audioBriefingAzureSpeechVoices, voice)
         : null,
     status: getAudioBriefingVoiceStatus(
       voice,
@@ -1933,11 +2030,14 @@ export default function SettingsPage() {
       audioBriefingOpenAITTSVoices,
       audioBriefingGeminiTTSVoices,
       audioBriefingElevenLabsVoices,
+      audioBriefingAzureSpeechVoices,
       hasUserAivisAPIKey,
       hasUserFishAPIKey,
       hasUserXAIAPIKey,
       hasUserOpenAIAPIKey,
       hasUserElevenLabsAPIKey,
+      hasUserAzureSpeechAPIKey,
+      azureSpeechRegion,
       geminiTTSEnabled,
       audioBriefingConversationMode,
       t
@@ -1959,6 +2059,7 @@ export default function SettingsPage() {
     openAIResolved: summaryAudioResolvedOpenAIVoice,
     geminiResolved: summaryAudioResolvedGeminiVoice,
     elevenLabsResolved: summaryAudioResolvedElevenLabsVoice,
+    azureSpeechResolved: summaryAudioResolvedAzureSpeechVoice,
   });
   const summaryAudioResolvedVoiceLabel = summaryAudioVoiceDisplay.label;
   const summaryAudioResolvedVoiceDetail = summaryAudioVoiceDisplay.detail;
@@ -1972,6 +2073,9 @@ export default function SettingsPage() {
   const audioBriefingNeedsElevenLabsAPIKey = audioBriefingUsesElevenLabs && !hasUserElevenLabsAPIKey;
   const audioBriefingUsesOpenAI = audioBriefingVoices.some((voice) => voice.tts_provider === "openai");
   const audioBriefingNeedsOpenAIAPIKey = audioBriefingUsesOpenAI && !hasUserOpenAIAPIKey;
+  const audioBriefingUsesAzureSpeech = audioBriefingVoices.some((voice) => voice.tts_provider === "azure_speech");
+  const audioBriefingNeedsAzureSpeechAPIKey = audioBriefingUsesAzureSpeech && !hasUserAzureSpeechAPIKey;
+  const audioBriefingNeedsAzureSpeechRegion = audioBriefingUsesAzureSpeech && !azureSpeechRegion;
   const audioBriefingUsesGeminiTTS = audioBriefingVoices.some((voice) => voice.tts_provider === "gemini_tts");
   const audioBriefingNeedsGeminiAccess = audioBriefingUsesGeminiTTS && !geminiTTSEnabled;
   const geminiDuoModelCounts = audioBriefingVoices.reduce((acc, voice) => {
@@ -2150,6 +2254,8 @@ export default function SettingsPage() {
     needsFishAPIKey: audioBriefingNeedsFishAPIKey,
     needsElevenLabsAPIKey: audioBriefingNeedsElevenLabsAPIKey,
     needsOpenAIAPIKey: audioBriefingNeedsOpenAIAPIKey,
+    needsAzureSpeechAPIKey: audioBriefingNeedsAzureSpeechAPIKey,
+    needsAzureSpeechRegion: audioBriefingNeedsAzureSpeechRegion,
     needsGeminiAccess: audioBriefingNeedsGeminiAccess,
     aivisLatestSyncedAt: aivisModelsData?.latest_run?.finished_at ?? undefined,
     openAITTSLatestSyncedAt: openAITTSVoicesData?.latest_run?.finished_at ?? undefined,
@@ -2164,6 +2270,7 @@ export default function SettingsPage() {
     hasUserXAIAPIKey,
     hasUserOpenAIAPIKey,
     hasUserElevenLabsAPIKey,
+    hasUserAzureSpeechAPIKey,
     geminiTTSEnabled,
   });
 
@@ -2172,12 +2279,14 @@ export default function SettingsPage() {
     audioBriefingXAIVoices,
     audioBriefingOpenAITTSVoices,
     audioBriefingGeminiTTSVoices,
+    audioBriefingAzureSpeechVoices,
     audioBriefingElevenLabsVoices,
     audioBriefingVoiceInputDrafts,
     aivisModelsSyncing,
     xaiVoicesSyncing,
     openAITTSVoicesSyncing,
     geminiTTSVoicesLoading,
+    azureSpeechVoicesLoading,
   });
 
   const audioBriefingVoiceMatrixActions = {
@@ -2201,6 +2310,9 @@ export default function SettingsPage() {
     },
     onOpenGeminiTTSPicker: (persona: string) => {
       void openGeminiTTSPicker(persona);
+    },
+    onOpenAzureSpeechPicker: (persona: string) => {
+      void openAzureSpeechPicker(persona);
     },
     onOpenElevenLabsPicker: (persona: string) => {
       void openElevenLabsPicker(persona);
@@ -2230,6 +2342,9 @@ export default function SettingsPage() {
     },
     onLoadGeminiTTSVoices: () => {
       void loadGeminiTTSVoices().catch(() => undefined);
+    },
+    onLoadAzureSpeechVoices: () => {
+      void loadAzureSpeechVoices().catch(() => undefined);
     },
   };
 
@@ -2305,17 +2420,20 @@ export default function SettingsPage() {
         setSummaryAudioXAIPickerOpen: summaryAudioPickers.setSummaryAudioXAIPickerOpen,
         setSummaryAudioOpenAITTPickerOpen: summaryAudioPickers.setSummaryAudioOpenAITTPickerOpen,
         setSummaryAudioGeminiTTSPickerOpen: summaryAudioPickers.setSummaryAudioGeminiTTSPickerOpen,
+        setSummaryAudioAzureSpeechPickerOpen: summaryAudioPickers.setSummaryAudioAzureSpeechPickerOpen,
       },
       aivisModelsData,
       xaiVoicesData,
       elevenLabsVoicesData,
       openAITTSVoicesData,
       geminiTTSVoicesData,
+      azureSpeechVoicesData,
       loadAivisModels,
       loadXAIVoices,
       loadElevenLabsVoices,
       loadOpenAITTSVoices,
       loadGeminiTTSVoices,
+      loadAzureSpeechVoices,
     }),
     onChangeVoiceStyle: setSummaryAudioVoiceStyle,
     onChangeNumberInput: (field: "speech_rate" | "tempo_dynamics" | "emotional_intensity" | "line_break_silence_seconds" | "pitch" | "volume_gain", raw: string) => {
@@ -2764,11 +2882,13 @@ export default function SettingsPage() {
           openAITTPickerPersona: audioBriefingPickers.openAITTPickerPersona,
           elevenLabsPickerPersona: audioBriefingPickers.elevenLabsPickerPersona,
           geminiTTSPickerPersona: audioBriefingPickers.geminiTTSPickerPersona,
+          azureSpeechPickerPersona: audioBriefingPickers.azureSpeechPickerPersona,
           activeAivisVoice: activeAivisVoice ?? null,
           activeXAIVoice: activeXAIVoice ?? null,
           activeOpenAITTSVoice: activeOpenAITTSVoice ?? null,
           activeElevenLabsVoice: activeElevenLabsVoice ?? null,
           activeGeminiTTSVoice: activeGeminiTTSVoice ?? null,
+          activeAzureSpeechVoice: activeAzureSpeechVoice ?? null,
           audioBriefingVoices,
         }}
         catalogs={{
@@ -2790,6 +2910,9 @@ export default function SettingsPage() {
           geminiTTSVoices: audioBriefingGeminiTTSVoices,
           geminiTTSVoicesLoading,
           geminiTTSVoicesError,
+          azureSpeechVoices: audioBriefingAzureSpeechVoices,
+          azureSpeechVoicesLoading,
+          azureSpeechVoicesError,
         }}
         actions={{
           onCloseAivis: audioBriefingPickers.closeAivisPicker,
@@ -2798,6 +2921,7 @@ export default function SettingsPage() {
           onCloseOpenAI: audioBriefingPickers.closeOpenAITTPicker,
           onCloseElevenLabs: audioBriefingPickers.closeElevenLabsPicker,
           onCloseGemini: audioBriefingPickers.closeGeminiTTSPicker,
+          onCloseAzureSpeech: audioBriefingPickers.closeAzureSpeechPicker,
           onSyncAivis: () => {
             void syncAivisModels();
           },
@@ -2813,12 +2937,16 @@ export default function SettingsPage() {
           onRefreshGemini: () => {
             void loadGeminiTTSVoices().catch(() => undefined);
           },
+          onRefreshAzureSpeech: () => {
+            void loadAzureSpeechVoices().catch(() => undefined);
+          },
           onSelectAivis: audioBriefingPickerSelectActions.onSelectAivis,
           onSelectFish: audioBriefingPickerSelectActions.onSelectFish,
           onSelectXAI: audioBriefingPickerSelectActions.onSelectXAI,
           onSelectOpenAI: audioBriefingPickerSelectActions.onSelectOpenAI,
           onSelectElevenLabs: audioBriefingPickerSelectActions.onSelectElevenLabs,
           onSelectGemini: audioBriefingPickerSelectActions.onSelectGemini,
+          onSelectAzureSpeech: audioBriefingPickerSelectActions.onSelectAzureSpeech,
         }}
       />
 
@@ -2830,6 +2958,7 @@ export default function SettingsPage() {
           summaryAudioXAIPickerOpen: summaryAudioPickers.summaryAudioXAIPickerOpen,
           summaryAudioOpenAITTPickerOpen: summaryAudioPickers.summaryAudioOpenAITTPickerOpen,
           summaryAudioGeminiTTSPickerOpen: summaryAudioPickers.summaryAudioGeminiTTSPickerOpen,
+          summaryAudioAzureSpeechPickerOpen: summaryAudioPickers.summaryAudioAzureSpeechPickerOpen,
           summaryAudioVoiceModel,
           summaryAudioVoiceStyle,
         }}
@@ -2852,6 +2981,9 @@ export default function SettingsPage() {
           geminiTTSVoices: summaryAudioGeminiTTSVoices,
           geminiTTSVoicesLoading,
           geminiTTSVoicesError,
+          azureSpeechVoices: summaryAudioAzureSpeechVoices,
+          azureSpeechVoicesLoading,
+          azureSpeechVoicesError,
         }}
         actions={{
           onCloseAivis: summaryAudioPickers.closeAivisPicker,
@@ -2860,6 +2992,7 @@ export default function SettingsPage() {
           onCloseXAI: summaryAudioPickers.closeXAIPicker,
           onCloseOpenAI: summaryAudioPickers.closeOpenAITTPicker,
           onCloseGemini: summaryAudioPickers.closeGeminiTTSPicker,
+          onCloseAzureSpeech: summaryAudioPickers.closeAzureSpeechPicker,
           onSyncAivis: () => {
             void syncAivisModels();
           },
@@ -2875,12 +3008,16 @@ export default function SettingsPage() {
           onRefreshGemini: () => {
             void loadGeminiTTSVoices().catch(() => undefined);
           },
+          onRefreshAzureSpeech: () => {
+            void loadAzureSpeechVoices().catch(() => undefined);
+          },
           onSelectAivis: summaryAudioPickerSelectActions.onSelectAivis,
           onSelectFish: summaryAudioPickerSelectActions.onSelectFish,
           onSelectElevenLabs: summaryAudioPickerSelectActions.onSelectElevenLabs,
           onSelectXAI: summaryAudioPickerSelectActions.onSelectXAI,
           onSelectOpenAI: summaryAudioPickerSelectActions.onSelectOpenAI,
           onSelectGemini: summaryAudioPickerSelectActions.onSelectGemini,
+          onSelectAzureSpeech: summaryAudioPickerSelectActions.onSelectAzureSpeech,
         }}
       />
 

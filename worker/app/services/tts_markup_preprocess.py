@@ -37,6 +37,7 @@ FISH_PREPROCESS_PURPOSE = "fish_preprocess"
 GEMINI_TTS_PREPROCESS_PURPOSE = "gemini_tts_preprocess"
 ELEVENLABS_TTS_PREPROCESS_PURPOSE = "elevenlabs_tts_preprocess"
 XAI_TTS_PREPROCESS_PURPOSE = "xai_tts_preprocess"
+AZURE_SPEECH_TTS_PREPROCESS_PURPOSE = "azure_speech_tts_preprocess"
 DEFAULT_TTS_MARKUP_PREPROCESS_PROMPT_KEY = "fish.summary_preprocess"
 _MAX_OUTPUT_TOKENS = 3200
 _PURPOSE_BY_PROMPT_KEY = {
@@ -52,6 +53,9 @@ _PURPOSE_BY_PROMPT_KEY = {
     "xai.summary_preprocess": XAI_TTS_PREPROCESS_PURPOSE,
     "xai.audio_briefing_single_preprocess": XAI_TTS_PREPROCESS_PURPOSE,
     "xai.audio_briefing_duo_preprocess": XAI_TTS_PREPROCESS_PURPOSE,
+    "azure_speech.summary_preprocess": AZURE_SPEECH_TTS_PREPROCESS_PURPOSE,
+    "azure_speech.audio_briefing_single_preprocess": AZURE_SPEECH_TTS_PREPROCESS_PURPOSE,
+    "azure_speech.audio_briefing_duo_preprocess": AZURE_SPEECH_TTS_PREPROCESS_PURPOSE,
 }
 
 
@@ -116,6 +120,7 @@ class TTSMarkupPreprocessService:
             "gemini.audio_briefing_single_preprocess",
             "elevenlabs.audio_briefing_single_preprocess",
             "xai.audio_briefing_single_preprocess",
+            "azure_speech.audio_briefing_single_preprocess",
         }:
             persona_name = str(enriched.get("persona_name") or "").strip()
             if persona_name and not str(enriched.get("tone_prompt") or "").strip():
@@ -127,6 +132,7 @@ class TTSMarkupPreprocessService:
             "gemini.audio_briefing_duo_preprocess",
             "elevenlabs.audio_briefing_duo_preprocess",
             "xai.audio_briefing_duo_preprocess",
+            "azure_speech.audio_briefing_duo_preprocess",
         }:
             host_persona_name = str(enriched.get("host_persona_name") or "").strip()
             partner_persona_name = str(enriched.get("partner_persona_name") or "").strip()

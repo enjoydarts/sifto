@@ -42,6 +42,7 @@ type summaryAudioSynthesizer interface {
 		voiceModel string,
 		voiceStyle string,
 		ttsModel string,
+		azureSpeechRegion string,
 		text string,
 		speechRate float64,
 		emotionalIntensity float64,
@@ -57,12 +58,14 @@ type summaryAudioSynthesizer interface {
 		googleAPIKey *string,
 		xaiAPIKey *string,
 		openAIAPIKey *string,
+		azureSpeechAPIKey *string,
 	) (*SummaryAudioSynthesizeResponse, error)
 }
 
 type summaryAudioTTSMarkupPreprocessor interface {
 	PreprocessSummaryAudioText(ctx context.Context, userID, itemID, text string) (*TTSMarkupPreprocessResult, error)
 	PreprocessSummaryAudioTextForProvider(ctx context.Context, userID, itemID, provider, text string) (*TTSMarkupPreprocessResult, error)
+	PreprocessSummaryAudioTextForProviderWithVariables(ctx context.Context, userID, itemID, provider, text string, variables map[string]string) (*TTSMarkupPreprocessResult, error)
 }
 
 func NewSummaryAudioPlayerService(
@@ -133,6 +136,8 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	var googleAPIKey *string
 	var xaiAPIKey *string
 	var openAIAPIKey *string
+	var azureSpeechAPIKey *string
+	azureSpeechRegion := ""
 	if strings.EqualFold(provider, "aivis") {
 		aivisAPIKey, err = s.loadAivisAPIKey(ctx, userID)
 		if err != nil {
@@ -207,6 +212,30 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		if err != nil {
 			return nil, err
 		}
+	} else if strings.EqualFold(provider, "azure_speech") {
+		azureSpeechAPIKey, err = loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetAzureSpeechAPIKeyEncrypted, s.cipher, userID, "azure speech api key is not configured")
+		if err != nil {
+			return nil, err
+		}
+		region, regionErr := s.userSettings.GetAzureSpeechRegion(ctx, userID)
+		if regionErr != nil {
+			return nil, regionErr
+		}
+		azureSpeechRegion = strings.TrimSpace(derefString(region))
+		if azureSpeechRegion == "" {
+			return nil, errors.New("azure speech region is not configured")
+		}
+		if s.preprocess != nil {
+			preprocessed, preprocessErr := s.preprocess.PreprocessSummaryAudioTextForProviderWithVariables(ctx, userID, item.ID, provider, narration, map[string]string{
+				"voice_name":   strings.TrimSpace(voiceModel),
+				"voice_locale": "ja-JP",
+			})
+			if preprocessErr != nil {
+				return nil, preprocessErr
+			}
+			preprocessedText = stringPtrOrNil(preprocessed.Text)
+			narration = preprocessed.Text
+		}
 	}
 	resp, err := s.worker.SynthesizeSummaryAudio(
 		ctx,
@@ -214,6 +243,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		voiceModel,
 		voiceStyle,
 		ttsModel,
+		azureSpeechRegion,
 		narration,
 		settings.SpeechRate,
 		settings.EmotionalIntensity,
@@ -229,6 +259,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 		googleAPIKey,
 		xaiAPIKey,
 		openAIAPIKey,
+		azureSpeechAPIKey,
 	)
 	if err != nil {
 		return nil, err

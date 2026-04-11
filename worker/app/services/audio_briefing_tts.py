@@ -8,6 +8,7 @@ import wave
 import boto3
 import httpx
 from app.services.aivis_speech import AIVIS_RATE_LIMITER, AivisRateLimiter, AivisRedisRateLimiter, AivisSpeechService, build_aivis_payload
+from app.services.azure_speech_tts import synthesize_azure_speech_duo_tts
 from app.services.elevenlabs_tts import synthesize_elevenlabs_dialogue_tts
 from app.services.fish_tts import synthesize_fish_multi_speaker_tts
 from app.services.gemini_tts import synthesize_gemini_multi_speaker_tts
@@ -86,7 +87,7 @@ class AudioBriefingTTSService:
         self.aivis_timeout_sec = max(_env_float("AIVIS_TTS_TIMEOUT_SEC", 300.0), 1.0)
         self.single_speaker_provider_runtime = {
             provider: load_single_speaker_tts_provider_runtime_metadata(provider)
-            for provider in ("xai", "gemini_tts", "fish", "elevenlabs", "openai")
+            for provider in ("xai", "gemini_tts", "fish", "elevenlabs", "openai", "azure_speech")
         }
         self.xai_api_key = self.single_speaker_provider_runtime["xai"].api_key
         self.gemini_api_key = self.single_speaker_provider_runtime["gemini_tts"].api_key
@@ -96,6 +97,9 @@ class AudioBriefingTTSService:
         self.elevenlabs_api_key = self.single_speaker_provider_runtime["elevenlabs"].api_key
         self.elevenlabs_timeout_sec = self.single_speaker_provider_runtime["elevenlabs"].timeout_sec
         self.openai_api_key = self.single_speaker_provider_runtime["openai"].api_key
+        self.azure_speech_api_key = self.single_speaker_provider_runtime["azure_speech"].api_key
+        self.azure_speech_region = self.single_speaker_provider_runtime["azure_speech"].region
+        self.azure_speech_timeout_sec = self.single_speaker_provider_runtime["azure_speech"].timeout_sec
         self.heartbeat_interval_sec = max(_env_float("AUDIO_BRIEFING_HEARTBEAT_INTERVAL_SEC", 20.0), 1.0)
         self.heartbeat_timeout_sec = max(_env_float("AUDIO_BRIEFING_HEARTBEAT_TIMEOUT_SEC", 10.0), 1.0)
         self.aivis = AivisSpeechService()
@@ -126,6 +130,8 @@ class AudioBriefingTTSService:
         elevenlabs_api_key: str | None = None,
         xai_api_key: str | None = None,
         openai_api_key: str | None = None,
+        azure_speech_api_key: str | None = None,
+        azure_speech_region: str | None = None,
     ) -> tuple[str, int]:
         _ = (chunk_id or "").strip()
         heartbeat = AudioBriefingHeartbeatLoop(
@@ -154,7 +160,7 @@ class AudioBriefingTTSService:
                     user_dictionary_uuid=user_dictionary_uuid,
                     api_key_override=aivis_api_key,
                 )
-            elif provider in {"xai", "gemini_tts", "fish", "elevenlabs", "openai"}:
+            elif provider in {"xai", "gemini_tts", "fish", "elevenlabs", "openai", "azure_speech"}:
                 payload, content_type, suffix, duration_sec = self.synthesize_single_speaker_audio(
                     provider=provider,
                     persona=persona,
@@ -163,11 +169,15 @@ class AudioBriefingTTSService:
                     text=text,
                     speech_rate=speech_rate,
                     volume_gain=volume_gain,
+                    line_break_silence_seconds=line_break_silence_seconds,
+                    pitch=pitch,
                     google_api_key=google_api_key,
                     fish_api_key=fish_api_key,
                     elevenlabs_api_key=elevenlabs_api_key,
                     xai_api_key=xai_api_key,
                     openai_api_key=openai_api_key,
+                    azure_speech_api_key=azure_speech_api_key,
+                    azure_speech_region=azure_speech_region,
                 )
             else:
                 raise RuntimeError(f"unsupported tts provider: {provider}")
@@ -211,6 +221,39 @@ class AudioBriefingTTSService:
             model=tts_model,
             turns=dialogue_turns,
             timeout_sec=self.elevenlabs_timeout_sec,
+        )
+        if not output_object_key.endswith(suffix):
+            output_object_key = output_object_key + suffix
+        self.upload_bytes(output_object_key, payload, content_type)
+        return output_object_key, duration_sec
+
+    def synthesize_azure_speech_duo_and_upload(
+        self,
+        *,
+        host_voice_model: str,
+        partner_voice_model: str,
+        turns: list[dict[str, str]],
+        preprocessed_text: str | None = None,
+        output_object_key: str,
+        speech_rate: float,
+        line_break_silence_seconds: float,
+        pitch: float,
+        volume_gain: float,
+        api_key_override: str | None = None,
+        region_override: str | None = None,
+    ) -> tuple[str, int]:
+        payload, content_type, suffix, duration_sec = synthesize_azure_speech_duo_tts(
+            region=(region_override or "").strip() or self.azure_speech_region,
+            api_key=(api_key_override or "").strip() or self.azure_speech_api_key,
+            host_voice_name=host_voice_model,
+            partner_voice_name=partner_voice_model,
+            turns=turns,
+            preprocessed_text=preprocessed_text,
+            speech_rate=speech_rate,
+            line_break_silence_seconds=line_break_silence_seconds,
+            pitch=pitch,
+            volume_gain=volume_gain,
+            timeout_sec=self.azure_speech_timeout_sec,
         )
         if not output_object_key.endswith(suffix):
             output_object_key = output_object_key + suffix
@@ -433,17 +476,22 @@ class AudioBriefingTTSService:
         text: str,
         speech_rate: float,
         volume_gain: float,
+        line_break_silence_seconds: float = 0.4,
+        pitch: float = 0.0,
         google_api_key: str | None = None,
         fish_api_key: str | None = None,
         elevenlabs_api_key: str | None = None,
         xai_api_key: str | None = None,
         openai_api_key: str | None = None,
+        azure_speech_api_key: str | None = None,
+        azure_speech_region: str | None = None,
     ) -> tuple[bytes, str, str, int]:
         normalized_provider = (provider or "").strip().lower()
         if normalized_provider not in self.single_speaker_provider_runtime:
             raise RuntimeError(f"unsupported single-speaker tts provider: {provider}")
         runtime = self.single_speaker_provider_runtime[normalized_provider]
         api_key = runtime.api_key
+        region = runtime.region
         if normalized_provider == "xai":
             api_key = (xai_api_key or "").strip() or api_key
         elif normalized_provider == "gemini_tts":
@@ -454,10 +502,17 @@ class AudioBriefingTTSService:
             api_key = (elevenlabs_api_key or "").strip() or api_key
         elif normalized_provider == "openai":
             api_key = (openai_api_key or "").strip() or api_key
+        elif normalized_provider == "azure_speech":
+            api_key = (azure_speech_api_key or "").strip() or api_key
+            runtime = self.single_speaker_provider_runtime[normalized_provider]
+            region = (azure_speech_region or "").strip() or runtime.region
+        else:
+            region = runtime.region
         return synthesize_single_speaker_tts(
             normalized_provider,
             endpoint=runtime.endpoint,
             api_key=api_key,
+            region=region,
             voice_id=voice_id,
             tts_model=tts_model,
             text=text,
@@ -465,6 +520,8 @@ class AudioBriefingTTSService:
             timeout_sec=runtime.timeout_sec,
             persona=persona,
             volume_gain=volume_gain,
+            line_break_silence_seconds=line_break_silence_seconds,
+            pitch=pitch,
         )
 
 def synthesize_mock_audio(text: str, speech_rate: float) -> tuple[bytes, str, str, int]:

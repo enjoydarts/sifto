@@ -23,6 +23,9 @@ class PromptTemplateDefaultsTest(unittest.TestCase):
             "xai.summary_preprocess",
             "xai.audio_briefing_single_preprocess",
             "xai.audio_briefing_duo_preprocess",
+            "azure_speech.summary_preprocess",
+            "azure_speech.audio_briefing_single_preprocess",
+            "azure_speech.audio_briefing_duo_preprocess",
         ]:
             template = get_default_prompt_template(prompt_key)
             self.assertEqual(template["prompt_key"], prompt_key)

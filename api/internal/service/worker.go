@@ -1023,6 +1023,7 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 	voiceModel string,
 	voiceStyle string,
 	ttsModel string,
+	azureSpeechRegion string,
 	persona string,
 	text string,
 	speechRate float64,
@@ -1043,6 +1044,7 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 	googleAPIKey *string,
 	xaiAPIKey *string,
 	openAIAPIKey *string,
+	azureSpeechAPIKey *string,
 ) (*AudioBriefingSynthesizeUploadResponse, error) {
 	if _, ok := ctx.Deadline(); !ok && w.audioBriefingTimeout > 0 {
 		var cancel context.CancelFunc
@@ -1054,6 +1056,7 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 		"voice_model":                    voiceModel,
 		"voice_style":                    voiceStyle,
 		"tts_model":                      ttsModel,
+		"azure_speech_region":            strings.TrimSpace(azureSpeechRegion),
 		"persona":                        persona,
 		"text":                           text,
 		"speech_rate":                    speechRate,
@@ -1071,7 +1074,14 @@ func (w *WorkerClient) SynthesizeAudioBriefingUpload(
 	if uuid := strings.TrimSpace(derefString(aivisUserDictionaryUUID)); uuid != "" {
 		requestBody["user_dictionary_uuid"] = uuid
 	}
-	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload", requestBody, workerHeaders(nil, googleAPIKey, nil, nil, nil, nil, xaiAPIKey, nil, nil, openAIAPIKey, aivisAPIKey, fishAudioAPIKey, elevenLabsAPIKey, w.internalSecret))
+	headers := workerHeaders(nil, googleAPIKey, nil, nil, nil, nil, xaiAPIKey, nil, nil, openAIAPIKey, aivisAPIKey, fishAudioAPIKey, elevenLabsAPIKey, w.internalSecret)
+	if azureSpeechAPIKey != nil && strings.TrimSpace(*azureSpeechAPIKey) != "" {
+		if headers == nil {
+			headers = map[string]string{}
+		}
+		headers["X-Azure-Speech-Api-Key"] = strings.TrimSpace(*azureSpeechAPIKey)
+	}
+	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload", requestBody, headers)
 }
 
 func (w *WorkerClient) SynthesizeAudioBriefingGeminiDuoUpload(
@@ -1168,12 +1178,58 @@ func (w *WorkerClient) SynthesizeAudioBriefingElevenLabsDuoUpload(
 	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload-elevenlabs-duo", requestBody, workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, elevenLabsAPIKey, w.internalSecret))
 }
 
+func (w *WorkerClient) SynthesizeAudioBriefingAzureSpeechDuoUpload(
+	ctx context.Context,
+	hostVoiceModel string,
+	partnerVoiceModel string,
+	sectionType string,
+	turns []AudioBriefingGeminiDuoTurn,
+	preprocessedText string,
+	outputObjectKey string,
+	speechRate float64,
+	lineBreakSilenceSeconds float64,
+	pitch float64,
+	volumeGain float64,
+	azureSpeechRegion string,
+	azureSpeechAPIKey *string,
+) (*AudioBriefingSynthesizeUploadResponse, error) {
+	if _, ok := ctx.Deadline(); !ok && w.audioBriefingTimeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, w.audioBriefingTimeout)
+		defer cancel()
+	}
+	requestBody := map[string]any{
+		"host_voice_model":           strings.TrimSpace(hostVoiceModel),
+		"partner_voice_model":        strings.TrimSpace(partnerVoiceModel),
+		"section_type":               strings.TrimSpace(sectionType),
+		"turns":                      turns,
+		"output_object_key":          outputObjectKey,
+		"speech_rate":                speechRate,
+		"line_break_silence_seconds": lineBreakSilenceSeconds,
+		"pitch":                      pitch,
+		"volume_gain":                volumeGain,
+		"azure_speech_region":        strings.TrimSpace(azureSpeechRegion),
+	}
+	if strings.TrimSpace(preprocessedText) != "" {
+		requestBody["preprocessed_text"] = strings.TrimSpace(preprocessedText)
+	}
+	headers := workerHeaders(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, w.internalSecret)
+	if azureSpeechAPIKey != nil && strings.TrimSpace(*azureSpeechAPIKey) != "" {
+		if headers == nil {
+			headers = map[string]string{}
+		}
+		headers["X-Azure-Speech-Api-Key"] = strings.TrimSpace(*azureSpeechAPIKey)
+	}
+	return postWithHeaders[AudioBriefingSynthesizeUploadResponse](ctx, w, "/audio-briefing/synthesize-upload-azure-speech-duo", requestBody, headers)
+}
+
 func (w *WorkerClient) SynthesizeSummaryAudio(
 	ctx context.Context,
 	provider string,
 	voiceModel string,
 	voiceStyle string,
 	ttsModel string,
+	azureSpeechRegion string,
 	text string,
 	speechRate float64,
 	emotionalIntensity float64,
@@ -1189,6 +1245,7 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 	googleAPIKey *string,
 	xaiAPIKey *string,
 	openAIAPIKey *string,
+	azureSpeechAPIKey *string,
 ) (*SummaryAudioSynthesizeResponse, error) {
 	if _, ok := ctx.Deadline(); !ok && w.audioBriefingTimeout > 0 {
 		var cancel context.CancelFunc
@@ -1200,6 +1257,7 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 		"voice_model":                    voiceModel,
 		"voice_style":                    voiceStyle,
 		"tts_model":                      ttsModel,
+		"azure_speech_region":            strings.TrimSpace(azureSpeechRegion),
 		"text":                           text,
 		"speech_rate":                    speechRate,
 		"emotional_intensity":            emotionalIntensity,
@@ -1212,7 +1270,14 @@ func (w *WorkerClient) SynthesizeSummaryAudio(
 	if uuid := strings.TrimSpace(derefString(aivisUserDictionaryUUID)); uuid != "" {
 		requestBody["user_dictionary_uuid"] = uuid
 	}
-	return postWithHeaders[SummaryAudioSynthesizeResponse](ctx, w, "/summary-audio/synthesize", requestBody, workerHeaders(nil, googleAPIKey, nil, nil, nil, nil, xaiAPIKey, nil, nil, openAIAPIKey, aivisAPIKey, fishAudioAPIKey, elevenLabsAPIKey, w.internalSecret))
+	headers := workerHeaders(nil, googleAPIKey, nil, nil, nil, nil, xaiAPIKey, nil, nil, openAIAPIKey, aivisAPIKey, fishAudioAPIKey, elevenLabsAPIKey, w.internalSecret)
+	if azureSpeechAPIKey != nil && strings.TrimSpace(*azureSpeechAPIKey) != "" {
+		if headers == nil {
+			headers = map[string]string{}
+		}
+		headers["X-Azure-Speech-Api-Key"] = strings.TrimSpace(*azureSpeechAPIKey)
+	}
+	return postWithHeaders[SummaryAudioSynthesizeResponse](ctx, w, "/summary-audio/synthesize", requestBody, headers)
 }
 
 func (w *WorkerClient) PreprocessTTSMarkupText(

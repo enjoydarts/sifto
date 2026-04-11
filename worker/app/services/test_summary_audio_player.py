@@ -144,12 +144,15 @@ class SummaryAudioPlayerTests(unittest.TestCase):
             "fish",
             endpoint="",
             api_key="fish-key",
+            region="",
             voice_id="fish-model-1",
             tts_model="s2-pro",
             text="summary text",
             speech_rate=1.1,
             timeout_sec=service.fish_timeout_sec,
             volume_gain=0.4,
+            line_break_silence_seconds=0.4,
+            pitch=0.0,
         )
         self.assertEqual(audio_base64, "YXVkaW8=")
         self.assertEqual(content_type, "audio/mpeg")
@@ -184,12 +187,15 @@ class SummaryAudioPlayerTests(unittest.TestCase):
             "gemini_tts",
             endpoint=service.gemini_tts_endpoint,
             api_key="",
+            region="",
             voice_id="Kore",
             tts_model="gemini-2.5-flash-tts",
             text="summary text",
             speech_rate=1.0,
             timeout_sec=service.gemini_timeout_sec,
             volume_gain=0.0,
+            line_break_silence_seconds=0.4,
+            pitch=0.0,
         )
         self.assertEqual(audio_base64, "YXVkaW8=")
         self.assertEqual(content_type, "audio/mpeg")
@@ -225,16 +231,64 @@ class SummaryAudioPlayerTests(unittest.TestCase):
             "elevenlabs",
             endpoint=service.elevenlabs_tts_endpoint,
             api_key="eleven-key",
+            region="",
             voice_id="voice-1",
             tts_model="eleven_multilingual_v2",
             text="summary text",
             speech_rate=1.0,
             timeout_sec=service.elevenlabs_timeout_sec,
             volume_gain=0.0,
+            line_break_silence_seconds=0.4,
+            pitch=0.0,
         )
         self.assertEqual(audio_base64, "YXVkaW8=")
         self.assertEqual(content_type, "audio/mpeg")
         self.assertEqual(duration_sec, 6)
+        self.assertEqual(resolved_text, "summary text")
+
+    def test_synthesize_uses_azure_speech_provider(self):
+        service = summary_audio_player.SummaryAudioPlayerService()
+
+        with patch("app.services.summary_audio_player.synthesize_single_speaker_tts", return_value=(b"audio", "audio/mpeg", ".mp3", 7)) as synth:
+            audio_base64, content_type, duration_sec, resolved_text = service.synthesize(
+                provider="azure_speech",
+                voice_model="ja-JP-NanamiNeural",
+                voice_style="",
+                tts_model="",
+                text="summary text",
+                speech_rate=1.05,
+                emotional_intensity=1.0,
+                tempo_dynamics=1.0,
+                line_break_silence_seconds=0.5,
+                chunk_trailing_silence_seconds=1.25,
+                pitch=0.2,
+                volume_gain=0.1,
+                user_dictionary_uuid=None,
+                aivis_api_key=None,
+                google_api_key=None,
+                xai_api_key=None,
+                openai_api_key=None,
+                azure_speech_api_key="azure-key",
+                azure_speech_region="japaneast",
+            )
+
+        synth.assert_called_once_with(
+            "azure_speech",
+            endpoint="",
+            api_key="azure-key",
+            region="japaneast",
+            voice_id="ja-JP-NanamiNeural",
+            tts_model="",
+            text="summary text",
+            speech_rate=1.05,
+            timeout_sec=service.single_speaker_provider_runtime["azure_speech"].timeout_sec,
+            volume_gain=0.1,
+            line_break_silence_seconds=0.5,
+            pitch=0.2,
+        )
+        self.assertEqual(audio_base64, "YXVkaW8=")
+        self.assertEqual(content_type, "audio/mpeg")
+        self.assertEqual(duration_sec, 7)
         self.assertEqual(resolved_text, "summary text")
 
     def test_synthesize_dispatches_by_provider_key(self):

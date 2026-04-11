@@ -34,6 +34,17 @@ var ttsProviderMetadataByProvider = map[string]TTSProviderMetadata{
 		AudioBriefingDuoPreprocessPromptKey:    xaiAudioBriefingDuoPreprocessPromptKey,
 		PreprocessUsagePurpose:                 xaiTTSPreprocessPurpose,
 	},
+	"azure_speech": {
+		Capabilities: TTSProviderCapabilities{
+			SupportsCatalogPicker: true,
+			RequiresUserAPIKey:    true,
+			RequiresRegion:        true,
+		},
+		SummaryPreprocessPromptKey:             azureSpeechSummaryPreprocessPromptKey,
+		AudioBriefingSinglePreprocessPromptKey: azureSpeechAudioBriefingSinglePreprocessPromptKey,
+		AudioBriefingDuoPreprocessPromptKey:    azureSpeechAudioBriefingDuoPreprocessPromptKey,
+		PreprocessUsagePurpose:                 azureSpeechTTSPreprocessPurpose,
+	},
 	"openai": {
 		Capabilities: TTSProviderCapabilities{
 			SupportsCatalogPicker:    true,

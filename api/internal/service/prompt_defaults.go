@@ -200,10 +200,24 @@ func defaultPromptVariablesSchema(promptKey string) json.RawMessage {
 		return mustRawJSON(`{
   "text": {"type": "string"}
 }`)
+	case "azure_speech.summary_preprocess":
+		return mustRawJSON(`{
+  "voice_name": {"type": "string"},
+  "voice_locale": {"type": "string"},
+  "text": {"type": "string"}
+}`)
 	case "fish.audio_briefing_single_preprocess", "gemini.audio_briefing_single_preprocess", "elevenlabs.audio_briefing_single_preprocess", "xai.audio_briefing_single_preprocess":
 		return mustRawJSON(`{
   "persona_name": {"type": "string"},
   "tone_prompt": {"type": "string"},
+  "text": {"type": "string"}
+}`)
+	case "azure_speech.audio_briefing_single_preprocess":
+		return mustRawJSON(`{
+  "persona_name": {"type": "string"},
+  "tone_prompt": {"type": "string"},
+  "voice_name": {"type": "string"},
+  "voice_locale": {"type": "string"},
   "text": {"type": "string"}
 }`)
 	case "fish.audio_briefing_duo_preprocess", "gemini.audio_briefing_duo_preprocess", "elevenlabs.audio_briefing_duo_preprocess", "xai.audio_briefing_duo_preprocess":
@@ -212,6 +226,17 @@ func defaultPromptVariablesSchema(promptKey string) json.RawMessage {
   "host_tone_prompt": {"type": "string"},
   "partner_persona_name": {"type": "string"},
   "partner_tone_prompt": {"type": "string"},
+  "text": {"type": "string"}
+}`)
+	case "azure_speech.audio_briefing_duo_preprocess":
+		return mustRawJSON(`{
+  "host_persona_name": {"type": "string"},
+  "host_tone_prompt": {"type": "string"},
+  "partner_persona_name": {"type": "string"},
+  "partner_tone_prompt": {"type": "string"},
+  "host_voice_name": {"type": "string"},
+  "partner_voice_name": {"type": "string"},
+  "voice_locale": {"type": "string"},
   "text": {"type": "string"}
 }`)
 	default:

@@ -84,6 +84,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var togetherAPIKeyEnc *string
 	var poeAPIKeyEnc *string
 	var siliconflowAPIKeyEnc *string
+	var azureSpeechAPIKeyEnc *string
 	var openrouterAPIKeyEnc *string
 	var aivisAPIKeyEnc *string
 	var fishAPIKeyEnc *string
@@ -119,6 +120,9 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       poe_api_key_last4,
 		       siliconflow_api_key_enc,
 		       siliconflow_api_key_last4,
+		       azure_speech_api_key_enc,
+		       azure_speech_api_key_last4,
+		       azure_speech_region,
 		       openrouter_api_key_enc,
 		       openrouter_api_key_last4,
 		       aivis_api_key_enc,
@@ -211,6 +215,9 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.PoeAPIKeyLast4,
 		&siliconflowAPIKeyEnc,
 		&v.SiliconFlowAPIKeyLast4,
+		&azureSpeechAPIKeyEnc,
+		&v.AzureSpeechAPIKeyLast4,
+		&v.AzureSpeechRegion,
 		&openrouterAPIKeyEnc,
 		&v.OpenRouterAPIKeyLast4,
 		&aivisAPIKeyEnc,
@@ -288,6 +295,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasTogetherAPIKey = togetherAPIKeyEnc != nil && *togetherAPIKeyEnc != ""
 	v.HasPoeAPIKey = poeAPIKeyEnc != nil && *poeAPIKeyEnc != ""
 	v.HasSiliconFlowAPIKey = siliconflowAPIKeyEnc != nil && *siliconflowAPIKeyEnc != ""
+	v.HasAzureSpeechAPIKey = azureSpeechAPIKeyEnc != nil && *azureSpeechAPIKeyEnc != ""
 	v.HasOpenRouterAPIKey = openrouterAPIKeyEnc != nil && *openrouterAPIKeyEnc != ""
 	v.HasAivisAPIKey = aivisAPIKeyEnc != nil && *aivisAPIKeyEnc != ""
 	v.HasFishAudioAPIKey = fishAPIKeyEnc != nil && *fishAPIKeyEnc != ""
@@ -935,6 +943,45 @@ func (r *UserSettingsRepo) GetElevenLabsAPIKeyEncrypted(ctx context.Context, use
 	return v, nil
 }
 
+func (r *UserSettingsRepo) GetAzureSpeechAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT azure_speech_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1
+	`, userID).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
+func (r *UserSettingsRepo) GetAzureSpeechRegion(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT azure_speech_region
+		FROM user_settings
+		WHERE user_id = $1
+	`, userID).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if v == nil || strings.TrimSpace(*v) == "" {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*v)
+	return &trimmed, nil
+}
+
 func (r *UserSettingsRepo) GetAivisUserDictionaryUUID(ctx context.Context, userID string) (*string, error) {
 	var v *string
 	err := r.db.QueryRow(ctx, `
@@ -1189,6 +1236,37 @@ func (r *UserSettingsRepo) SetTogetherAPIKey(ctx context.Context, userID, encryp
 		    together_api_key_last4 = EXCLUDED.together_api_key_last4,
 		    updated_at = NOW()`,
 		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) SetAzureSpeechAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, azure_speech_api_key_enc, azure_speech_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET azure_speech_api_key_enc = EXCLUDED.azure_speech_api_key_enc,
+		    azure_speech_api_key_last4 = EXCLUDED.azure_speech_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) SetAzureSpeechRegion(ctx context.Context, userID, region string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, azure_speech_region)
+		VALUES ($1, $2)
+		ON CONFLICT (user_id) DO UPDATE
+		SET azure_speech_region = EXCLUDED.azure_speech_region,
+		    updated_at = NOW()`,
+		userID, region,
 	)
 	if err != nil {
 		return nil, err
@@ -1490,6 +1568,37 @@ func (r *UserSettingsRepo) ClearTogetherAPIKey(ctx context.Context, userID strin
 		ON CONFLICT (user_id) DO UPDATE
 		SET together_api_key_enc = NULL,
 		    together_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearAzureSpeechAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, azure_speech_api_key_enc, azure_speech_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET azure_speech_api_key_enc = NULL,
+		    azure_speech_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearAzureSpeechRegion(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, azure_speech_region)
+		VALUES ($1, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET azure_speech_region = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

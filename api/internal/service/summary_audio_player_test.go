@@ -20,6 +20,7 @@ func (s *summaryAudioSynthStub) SynthesizeSummaryAudio(
 	_ string,
 	_ string,
 	_ string,
+	_ string,
 	text string,
 	_ float64,
 	_ float64,
@@ -28,6 +29,7 @@ func (s *summaryAudioSynthStub) SynthesizeSummaryAudio(
 	_ float64,
 	_ float64,
 	_ float64,
+	_ *string,
 	_ *string,
 	_ *string,
 	_ *string,
@@ -67,6 +69,17 @@ func (s *summaryAudioPreprocessStub) PreprocessSummaryAudioText(_ context.Contex
 }
 
 func (s *summaryAudioPreprocessStub) PreprocessSummaryAudioTextForProvider(_ context.Context, userID, itemID, provider, text string) (*TTSMarkupPreprocessResult, error) {
+	s.gotUserID = userID
+	s.gotItemID = itemID
+	s.gotProvider = provider
+	s.gotText = text
+	if s.resp != nil {
+		return s.resp, nil
+	}
+	return &TTSMarkupPreprocessResult{Text: text}, nil
+}
+
+func (s *summaryAudioPreprocessStub) PreprocessSummaryAudioTextForProviderWithVariables(_ context.Context, userID, itemID, provider, text string, _ map[string]string) (*TTSMarkupPreprocessResult, error) {
 	s.gotUserID = userID
 	s.gotItemID = itemID
 	s.gotProvider = provider

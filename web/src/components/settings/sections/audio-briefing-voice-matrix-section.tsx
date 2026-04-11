@@ -14,6 +14,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import type {
   AivisModelSnapshot,
   AudioBriefingPersonaVoice,
+  AzureSpeechVoiceCatalogEntry,
   ElevenLabsVoiceCatalogEntry,
   GeminiTTSVoiceCatalogEntry,
   OpenAITTSVoiceSnapshot,
@@ -50,6 +51,8 @@ export default function AudioBriefingVoiceMatrixSection({
     needsFishAPIKey: boolean;
     needsElevenLabsAPIKey: boolean;
     needsOpenAIAPIKey: boolean;
+    needsAzureSpeechAPIKey: boolean;
+    needsAzureSpeechRegion: boolean;
     needsGeminiAccess: boolean;
     aivisLatestSyncedAt?: string;
     openAITTSLatestSyncedAt?: string;
@@ -63,6 +66,7 @@ export default function AudioBriefingVoiceMatrixSection({
     hasUserXAIAPIKey: boolean;
     hasUserOpenAIAPIKey: boolean;
     hasUserElevenLabsAPIKey: boolean;
+    hasUserAzureSpeechAPIKey: boolean;
     geminiTTSEnabled: boolean;
   };
   catalogs: {
@@ -70,12 +74,14 @@ export default function AudioBriefingVoiceMatrixSection({
     audioBriefingXAIVoices: XAIVoiceSnapshot[];
     audioBriefingOpenAITTSVoices: OpenAITTSVoiceSnapshot[];
     audioBriefingGeminiTTSVoices: GeminiTTSVoiceCatalogEntry[];
+    audioBriefingAzureSpeechVoices: AzureSpeechVoiceCatalogEntry[];
     audioBriefingElevenLabsVoices: ElevenLabsVoiceCatalogEntry[];
     audioBriefingVoiceInputDrafts: AudioBriefingVoiceInputDrafts;
     aivisModelsSyncing: boolean;
     xaiVoicesSyncing: boolean;
     openAITTSVoicesSyncing: boolean;
     geminiTTSVoicesLoading: boolean;
+    azureSpeechVoicesLoading: boolean;
   };
   actions: {
     onOpenSystemForProvider: (provider: string) => void;
@@ -87,12 +93,14 @@ export default function AudioBriefingVoiceMatrixSection({
     onOpenXAIPicker: (persona: string) => void;
     onOpenOpenAITTSPicker: (persona: string) => void;
     onOpenGeminiTTSPicker: (persona: string) => void;
+    onOpenAzureSpeechPicker: (persona: string) => void;
     onOpenElevenLabsPicker: (persona: string) => void;
     onUpdateVoiceNumberInput: (persona: string, field: AudioBriefingNumericInputField, raw: string) => void;
     onResetVoiceNumberInput: (persona: string, field: AudioBriefingNumericInputField) => void;
     onSyncXAIVoices: () => void;
     onSyncOpenAITTSVoices: () => void;
     onLoadGeminiTTSVoices: () => void;
+    onLoadAzureSpeechVoices: () => void;
   };
 }) {
   const { onSubmit, saving, onPersistAudioBriefingVoices } = form;
@@ -110,6 +118,8 @@ export default function AudioBriefingVoiceMatrixSection({
     needsFishAPIKey,
     needsElevenLabsAPIKey,
     needsOpenAIAPIKey,
+    needsAzureSpeechAPIKey,
+    needsAzureSpeechRegion,
     needsGeminiAccess,
     aivisLatestSyncedAt,
     openAITTSLatestSyncedAt,
@@ -123,6 +133,7 @@ export default function AudioBriefingVoiceMatrixSection({
     hasUserXAIAPIKey,
     hasUserOpenAIAPIKey,
     hasUserElevenLabsAPIKey,
+    hasUserAzureSpeechAPIKey,
     geminiTTSEnabled,
   } = availability;
   const {
@@ -130,12 +141,14 @@ export default function AudioBriefingVoiceMatrixSection({
     audioBriefingXAIVoices,
     audioBriefingOpenAITTSVoices,
     audioBriefingGeminiTTSVoices,
+    audioBriefingAzureSpeechVoices,
     audioBriefingElevenLabsVoices,
     audioBriefingVoiceInputDrafts,
     aivisModelsSyncing,
     xaiVoicesSyncing,
     openAITTSVoicesSyncing,
     geminiTTSVoicesLoading,
+    azureSpeechVoicesLoading,
   } = catalogs;
   const {
     onOpenSystemForProvider,
@@ -147,12 +160,14 @@ export default function AudioBriefingVoiceMatrixSection({
     onOpenXAIPicker,
     onOpenOpenAITTSPicker,
     onOpenGeminiTTSPicker,
+    onOpenAzureSpeechPicker,
     onOpenElevenLabsPicker,
     onUpdateVoiceNumberInput,
     onResetVoiceNumberInput,
     onSyncXAIVoices,
     onSyncOpenAITTSVoices,
     onLoadGeminiTTSVoices,
+    onLoadAzureSpeechVoices,
   } = actions;
   const renderWarning = (
     show: boolean,
@@ -249,6 +264,8 @@ export default function AudioBriefingVoiceMatrixSection({
         {renderWarning(needsFishAPIKey, t("settings.audioBriefing.fishApiKeyWarningTitle"), t("settings.audioBriefing.fishApiKeyWarningDetail"), "fish")}
         {renderWarning(needsElevenLabsAPIKey, t("settings.audioBriefing.elevenlabsApiKeyWarningTitle"), t("settings.audioBriefing.elevenlabsApiKeyWarningDetail"), "elevenlabs")}
         {renderWarning(needsOpenAIAPIKey, t("settings.audioBriefing.openAIApiKeyWarningTitle"), t("settings.audioBriefing.openAIApiKeyWarningDetail"), "openai")}
+        {renderWarning(needsAzureSpeechAPIKey, t("settings.audioBriefing.azureSpeechApiKeyWarningTitle"), t("settings.audioBriefing.azureSpeechApiKeyWarningDetail"), "azure_speech")}
+        {renderWarning(needsAzureSpeechRegion, t("settings.audioBriefing.azureSpeechRegionWarningTitle"), t("settings.audioBriefing.azureSpeechRegionWarningDetail"), "azure_speech")}
         {renderWarning(needsGeminiAccess, t("settings.audioBriefing.geminiAccessWarningTitle"), t("settings.audioBriefing.geminiAccessWarningDetail"))}
 
         <div className="space-y-3">
@@ -265,17 +282,20 @@ export default function AudioBriefingVoiceMatrixSection({
               hasUserXAIAPIKey={hasUserXAIAPIKey}
               hasUserOpenAIAPIKey={hasUserOpenAIAPIKey}
               hasUserElevenLabsAPIKey={hasUserElevenLabsAPIKey}
+              hasUserAzureSpeechAPIKey={hasUserAzureSpeechAPIKey}
               geminiTTSEnabled={geminiTTSEnabled}
               audioBriefingAivisModels={audioBriefingAivisModels}
               audioBriefingXAIVoices={audioBriefingXAIVoices}
               audioBriefingOpenAITTSVoices={audioBriefingOpenAITTSVoices}
               audioBriefingGeminiTTSVoices={audioBriefingGeminiTTSVoices}
+              audioBriefingAzureSpeechVoices={audioBriefingAzureSpeechVoices}
               audioBriefingElevenLabsVoices={audioBriefingElevenLabsVoices}
               audioBriefingVoiceInputDrafts={audioBriefingVoiceInputDrafts}
               aivisModelsSyncing={aivisModelsSyncing}
               xaiVoicesSyncing={xaiVoicesSyncing}
               openAITTSVoicesSyncing={openAITTSVoicesSyncing}
               geminiTTSVoicesLoading={geminiTTSVoicesLoading}
+              azureSpeechVoicesLoading={azureSpeechVoicesLoading}
               saving={saving}
               onTogglePersona={onTogglePersona}
               onUpdateVoice={onUpdateVoice}
@@ -284,6 +304,7 @@ export default function AudioBriefingVoiceMatrixSection({
               onOpenXAIPicker={onOpenXAIPicker}
               onOpenOpenAITTSPicker={onOpenOpenAITTSPicker}
               onOpenGeminiTTSPicker={onOpenGeminiTTSPicker}
+              onOpenAzureSpeechPicker={onOpenAzureSpeechPicker}
               onOpenElevenLabsPicker={onOpenElevenLabsPicker}
               onUpdateVoiceNumberInput={onUpdateVoiceNumberInput}
               onResetVoiceNumberInput={onResetVoiceNumberInput}
@@ -291,6 +312,7 @@ export default function AudioBriefingVoiceMatrixSection({
               onSyncXAIVoices={onSyncXAIVoices}
               onSyncOpenAITTSVoices={onSyncOpenAITTSVoices}
               onLoadGeminiTTSVoices={onLoadGeminiTTSVoices}
+              onLoadAzureSpeechVoices={onLoadAzureSpeechVoices}
               onPersistAudioBriefingVoices={onPersistAudioBriefingVoices}
               conversationMode={conversationMode}
             />

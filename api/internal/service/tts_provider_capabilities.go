@@ -6,6 +6,7 @@ type TTSProviderCapabilities struct {
 	SupportsSeparateTTSModel bool
 	SupportsSpeechTuning     bool
 	RequiresUserAPIKey       bool
+	RequiresRegion           bool
 }
 
 func LookupTTSProviderCapabilities(provider string) TTSProviderCapabilities {

@@ -51,6 +51,9 @@ type UserSettings struct {
 	HasPoeAPIKey                     bool       `json:"has_poe_api_key"`
 	SiliconFlowAPIKeyLast4           *string    `json:"siliconflow_api_key_last4,omitempty"`
 	HasSiliconFlowAPIKey             bool       `json:"has_siliconflow_api_key"`
+	AzureSpeechAPIKeyLast4           *string    `json:"azure_speech_api_key_last4,omitempty"`
+	HasAzureSpeechAPIKey             bool       `json:"has_azure_speech_api_key"`
+	AzureSpeechRegion                *string    `json:"azure_speech_region,omitempty"`
 	OpenRouterAPIKeyLast4            *string    `json:"openrouter_api_key_last4,omitempty"`
 	HasOpenRouterAPIKey              bool       `json:"has_openrouter_api_key"`
 	AivisAPIKeyLast4                 *string    `json:"aivis_api_key_last4,omitempty"`

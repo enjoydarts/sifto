@@ -175,6 +175,33 @@ class TTSMarkupPreprocessServiceTests(unittest.TestCase):
         self.assertEqual(result["text"], "[pause]整形済み")
         self.assertEqual(result["llm"]["provider"], "xai")
 
+    def test_preprocess_uses_azure_speech_purpose_mapping(self):
+        service = TTSMarkupPreprocessService()
+
+        with (
+            patch(
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
+                return_value={
+                    "system_instruction": "SYSTEM",
+                    "prompt_text": "{{text}}",
+                },
+            ),
+            patch(
+                "app.services.tts_markup_preprocess.openai_chat_json",
+                return_value=("<speak></speak>", {"input_tokens": 9, "output_tokens": 18}),
+            ) as chat_json,
+        ):
+            result = service.preprocess(
+                text="元テキスト",
+                model="gpt-5.4-mini",
+                api_key="openai-key",
+                prompt_key="azure_speech.summary_preprocess",
+            )
+
+        chat_json.assert_called_once()
+        self.assertEqual(result["text"], "<speak></speak>")
+        self.assertEqual(result["llm"]["provider"], "openai")
+
     def test_preprocess_uses_anthropic_transport(self):
         service = TTSMarkupPreprocessService()
         message = type(

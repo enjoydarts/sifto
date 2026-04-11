@@ -4,6 +4,7 @@ import type {
   ElevenLabsVoiceCatalogEntry,
   GeminiTTSVoiceCatalogEntry,
   OpenAITTSVoiceSnapshot,
+  AzureSpeechVoiceCatalogEntry,
   XAIVoiceSnapshot,
 } from "@/lib/api";
 import {
@@ -26,6 +27,7 @@ type ResolveTTSVoiceDisplayArgs = {
   openAIResolved?: OpenAITTSVoiceSnapshot | null;
   geminiResolved?: GeminiTTSVoiceCatalogEntry | null;
   elevenLabsResolved?: ElevenLabsVoiceCatalogEntry | null;
+  azureSpeechResolved?: AzureSpeechVoiceCatalogEntry | null;
 };
 
 export function resolveTTSVoiceDisplay({
@@ -41,6 +43,7 @@ export function resolveTTSVoiceDisplay({
   openAIResolved,
   geminiResolved,
   elevenLabsResolved,
+  azureSpeechResolved,
 }: ResolveTTSVoiceDisplayArgs): { label: string; detail: string } {
   const normalizedProvider = provider.trim().toLowerCase();
   if (normalizedProvider == "aivis") {
@@ -79,6 +82,12 @@ export function resolveTTSVoiceDisplay({
     return {
       label: elevenLabsResolved?.name || providerVoiceLabel || voiceModel || unsetText,
       detail: elevenLabsResolved?.description || providerVoiceDescription || voiceModel || unsetText,
+    };
+  }
+  if (normalizedProvider == "azure_speech") {
+    return {
+      label: azureSpeechResolved?.label || providerVoiceLabel || voiceModel || unsetText,
+      detail: azureSpeechResolved?.description || providerVoiceDescription || voiceModel || unsetText,
     };
   }
   return {

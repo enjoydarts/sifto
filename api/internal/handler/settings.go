@@ -934,6 +934,74 @@ func (h *SettingsHandler) deleteAPIKey(w http.ResponseWriter, r *http.Request, p
 	writeJSON(w, resp)
 }
 
+func (h *SettingsHandler) SetAzureSpeechConfig(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	var body struct {
+		APIKey string `json:"api_key"`
+		Region string `json:"region"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	apiKey := strings.TrimSpace(body.APIKey)
+	region := strings.TrimSpace(body.Region)
+	if apiKey == "" {
+		http.Error(w, "api_key is required", http.StatusBadRequest)
+		return
+	}
+	if region == "" {
+		http.Error(w, "region is required", http.StatusBadRequest)
+		return
+	}
+	settings, err := h.settings.SetAPIKey(r.Context(), userID, "azure_speech", apiKey)
+	if err != nil {
+		if err.Error() == "user secret encryption is not configured" {
+			http.Error(w, "user secret encryption is not configured", http.StatusInternalServerError)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	settings, err = h.settings.SetAzureSpeechRegion(r.Context(), userID, region)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
+	writeJSON(w, map[string]any{
+		"user_id":                    settings.UserID,
+		"has_azure_speech_api_key":   settings.HasAzureSpeechAPIKey,
+		"azure_speech_api_key_last4": settings.AzureSpeechAPIKeyLast4,
+		"azure_speech_region":        settings.AzureSpeechRegion,
+	})
+}
+
+func (h *SettingsHandler) DeleteAzureSpeechConfig(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r)
+	settings, err := h.settings.DeleteAPIKey(r.Context(), userID, "azure_speech")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	settings, err = h.settings.ClearAzureSpeechRegion(r.Context(), userID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := h.bumpUserSettingsVersion(r.Context(), userID); err != nil {
+		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
+	}
+	writeJSON(w, map[string]any{
+		"user_id":                    settings.UserID,
+		"has_azure_speech_api_key":   settings.HasAzureSpeechAPIKey,
+		"azure_speech_api_key_last4": settings.AzureSpeechAPIKeyLast4,
+		"azure_speech_region":        settings.AzureSpeechRegion,
+	})
+}
+
 func (h *SettingsHandler) SetAnthropicAPIKey(w http.ResponseWriter, r *http.Request) {
 	h.setAPIKey(w, r, "anthropic", map[string]func(*model.UserSettings) any{
 		"has_anthropic_api_key":   func(s *model.UserSettings) any { return s.HasAnthropicAPIKey },

@@ -50,6 +50,13 @@ export function getSummaryAudioReadiness(settings: UserSettings | null | undefin
       return settings?.has_openai_api_key
         ? { ready: true, reasonKey: null }
         : { ready: false, reasonKey: "summaryAudio.playbackBlocked.openaiApiKeyMissing" };
+    case "azure_speech":
+      if (!settings?.has_azure_speech_api_key) {
+        return { ready: false, reasonKey: "summaryAudio.playbackBlocked.azureSpeechApiKeyMissing" };
+      }
+      return settings?.azure_speech_region?.trim()
+        ? { ready: true, reasonKey: null }
+        : { ready: false, reasonKey: "summaryAudio.playbackBlocked.azureSpeechRegionMissing" };
     case "gemini_tts":
       return settings?.gemini_tts_enabled
         ? { ready: true, reasonKey: null }

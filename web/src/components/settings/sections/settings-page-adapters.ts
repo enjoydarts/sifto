@@ -69,6 +69,8 @@ export function buildAudioBriefingVoiceMatrixStatus<T extends {
   needsFishAPIKey: boolean;
   needsElevenLabsAPIKey: boolean;
   needsOpenAIAPIKey: boolean;
+  needsAzureSpeechAPIKey: boolean;
+  needsAzureSpeechRegion: boolean;
   needsGeminiAccess: boolean;
   aivisLatestSyncedAt?: string;
   openAITTSLatestSyncedAt?: string;
@@ -84,6 +86,7 @@ export function buildAudioBriefingVoiceMatrixAvailability<T extends {
   hasUserXAIAPIKey: boolean;
   hasUserOpenAIAPIKey: boolean;
   hasUserElevenLabsAPIKey: boolean;
+  hasUserAzureSpeechAPIKey: boolean;
   geminiTTSEnabled: boolean;
 }>(params: T): T {
   return { ...params };
@@ -94,12 +97,14 @@ export function buildAudioBriefingVoiceMatrixCatalogs<T extends {
   audioBriefingXAIVoices: unknown[];
   audioBriefingOpenAITTSVoices: unknown[];
   audioBriefingGeminiTTSVoices: unknown[];
+  audioBriefingAzureSpeechVoices: unknown[];
   audioBriefingElevenLabsVoices: unknown[];
   audioBriefingVoiceInputDrafts: Record<string, unknown>;
   aivisModelsSyncing: boolean;
   xaiVoicesSyncing: boolean;
   openAITTSVoicesSyncing: boolean;
   geminiTTSVoicesLoading: boolean;
+  azureSpeechVoicesLoading: boolean;
 }>(params: T): T {
   return { ...params };
 }

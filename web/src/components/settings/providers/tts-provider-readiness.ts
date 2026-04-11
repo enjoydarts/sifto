@@ -8,6 +8,7 @@ import type {
   GeminiTTSVoiceCatalogEntry,
   OpenAITTSVoiceSnapshot,
   SummaryAudioVoiceSettings,
+  AzureSpeechVoiceCatalogEntry,
   XAIVoiceSnapshot,
 } from "@/lib/api";
 import { getAudioBriefingProviderCapabilities, type TTSProviderCapabilities } from "@/components/settings/providers/tts-provider-metadata";
@@ -75,6 +76,10 @@ export function resolveElevenLabsVoiceSelection(voices: ElevenLabsVoiceCatalogEn
   return voices.find((item) => item.voice_id === voice.voice_model) ?? null;
 }
 
+export function resolveAzureSpeechVoiceSelection(voices: AzureSpeechVoiceCatalogEntry[], voice: VoiceModelSelection) {
+  return voices.find((item) => item.voice_id === voice.voice_model) ?? null;
+}
+
 export function isAudioBriefingVoiceConfigured(voice: AudioBriefingPersonaVoice) {
   const capabilities = getAudioBriefingProviderCapabilities(voice.tts_provider);
   if (!voice.voice_model.trim()) return false;
@@ -90,11 +95,14 @@ export function getAudioBriefingVoiceStatus(
   openAIVoices: OpenAITTSVoiceSnapshot[],
   geminiVoices: GeminiTTSVoiceCatalogEntry[],
   elevenLabsVoices: ElevenLabsVoiceCatalogEntry[],
+  azureSpeechVoices: AzureSpeechVoiceCatalogEntry[],
   hasAivisAPIKey: boolean,
   hasFishAPIKey: boolean,
   hasXAIAPIKey: boolean,
   hasOpenAIAPIKey: boolean,
   hasElevenLabsAPIKey: boolean,
+  hasAzureSpeechAPIKey: boolean,
+  azureSpeechRegion: string,
   geminiTTSEnabled: boolean,
   conversationMode: "single" | "duo",
   t: Translate,
@@ -169,6 +177,19 @@ export function getAudioBriefingVoiceStatus(
     }
     return { tone: "ok", label: t("settings.audioBriefing.status.elevenlabsReady"), detail: resolved?.description || t("settings.audioBriefing.status.elevenlabsReadyDetail"), configured: true };
   }
+  if (provider === "azure_speech") {
+    const resolved = resolveAzureSpeechVoiceSelection(azureSpeechVoices, voice);
+    if (!hasAzureSpeechAPIKey) {
+      return { tone: "warn", label: t("settings.audioBriefing.status.azureSpeechApiKeyMissing"), detail: t("settings.audioBriefing.status.azureSpeechApiKeyMissingDetail"), configured: true };
+    }
+    if (!azureSpeechRegion.trim()) {
+      return { tone: "warn", label: t("settings.audioBriefing.status.azureSpeechRegionMissing"), detail: t("settings.audioBriefing.status.azureSpeechRegionMissingDetail"), configured: true };
+    }
+    if (!resolved) {
+      return { tone: "warn", label: t("settings.audioBriefing.status.azureSpeechVoiceMissing"), detail: t("settings.audioBriefing.status.azureSpeechVoiceMissingDetail"), configured: true };
+    }
+    return { tone: "ok", label: t("settings.audioBriefing.status.azureSpeechReady"), detail: resolved.description || t("settings.audioBriefing.status.azureSpeechReadyDetail"), configured: true };
+  }
   if (provider !== "aivis") {
     return { tone: "muted", label: t("settings.audioBriefing.status.customProvider"), detail: t("settings.audioBriefing.status.customProviderDetail").replace("{{provider}}", voice.tts_provider), configured: true };
   }
@@ -200,11 +221,14 @@ export function getSummaryAudioVoiceStatus(
   openAIVoices: OpenAITTSVoiceSnapshot[],
   geminiVoices: GeminiTTSVoiceCatalogEntry[],
   elevenLabsVoices: ElevenLabsVoiceCatalogEntry[],
+  azureSpeechVoices: AzureSpeechVoiceCatalogEntry[],
   hasAivisAPIKey: boolean,
   hasFishAPIKey: boolean,
   hasXAIAPIKey: boolean,
   hasOpenAIAPIKey: boolean,
   hasElevenLabsAPIKey: boolean,
+  hasAzureSpeechAPIKey: boolean,
+  azureSpeechRegion: string,
   geminiTTSEnabled: boolean,
   t: Translate,
 ): VoiceStatus {
@@ -272,6 +296,19 @@ export function getSummaryAudioVoiceStatus(
       return { tone: "warn", label: t("settings.summaryAudio.status.elevenlabsVoiceMissing"), detail: t("settings.summaryAudio.status.elevenlabsVoiceMissingDetail"), configured: true };
     }
     return { tone: "ok", label: t("settings.summaryAudio.status.elevenlabsReady"), detail: resolved.description || t("settings.summaryAudio.status.elevenlabsReadyDetail"), configured: true };
+  }
+  if (provider === "azure_speech") {
+    const resolved = resolveAzureSpeechVoiceSelection(azureSpeechVoices, voice);
+    if (!hasAzureSpeechAPIKey) {
+      return { tone: "warn", label: t("settings.summaryAudio.status.azureSpeechApiKeyMissing"), detail: t("settings.summaryAudio.status.azureSpeechApiKeyMissingDetail"), configured: true };
+    }
+    if (!azureSpeechRegion.trim()) {
+      return { tone: "warn", label: t("settings.summaryAudio.status.azureSpeechRegionMissing"), detail: t("settings.summaryAudio.status.azureSpeechRegionMissingDetail"), configured: true };
+    }
+    if (!voice.voice_model.trim() || !resolved) {
+      return { tone: "warn", label: t("settings.summaryAudio.status.azureSpeechVoiceMissing"), detail: t("settings.summaryAudio.status.azureSpeechVoiceMissingDetail"), configured: true };
+    }
+    return { tone: "ok", label: t("settings.summaryAudio.status.azureSpeechReady"), detail: resolved.description || t("settings.summaryAudio.status.azureSpeechReadyDetail"), configured: true };
   }
   if (provider !== "aivis") {
     return { tone: "muted", label: t("settings.summaryAudio.status.customProvider"), detail: t("settings.summaryAudio.status.customProviderDetail").replace("{{provider}}", voice.tts_provider), configured: true };

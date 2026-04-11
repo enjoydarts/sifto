@@ -4,6 +4,7 @@ import {
   AudioBriefingPersonaVoice,
   AudioBriefingPreset,
   AivisModelSnapshot,
+  AzureSpeechVoiceCatalogEntry,
   ElevenLabsVoiceCatalogEntry,
   GeminiTTSVoiceCatalogEntry,
   LLMCatalogModel,
@@ -13,6 +14,7 @@ import {
 import AivisVoicePickerModal from "@/components/settings/aivis-voice-picker-modal";
 import AudioBriefingPresetApplyModal from "@/components/settings/audio-briefing-preset-apply-modal";
 import AudioBriefingPresetSaveModal from "@/components/settings/audio-briefing-preset-save-modal";
+import AzureSpeechVoicePickerModal from "@/components/settings/azure-speech-voice-picker-modal";
 import ElevenLabsVoicePickerModalExternal from "@/components/settings/elevenlabs-voice-picker-modal";
 import FishVoicePickerModal from "@/components/settings/fish-voice-picker-modal";
 import GeminiTTSVoicePickerModal from "@/components/settings/gemini-tts-voice-picker-modal";
@@ -30,11 +32,13 @@ type AudioBriefingVoicePickerStackProps = {
     openAITTPickerPersona: string | null;
     elevenLabsPickerPersona: string | null;
     geminiTTSPickerPersona: string | null;
+    azureSpeechPickerPersona: string | null;
     activeAivisVoice: AudioBriefingPersonaVoice | null;
     activeXAIVoice: AudioBriefingPersonaVoice | null;
     activeOpenAITTSVoice: AudioBriefingPersonaVoice | null;
     activeElevenLabsVoice: AudioBriefingPersonaVoice | null;
     activeGeminiTTSVoice: AudioBriefingPersonaVoice | null;
+    activeAzureSpeechVoice: AudioBriefingPersonaVoice | null;
     audioBriefingVoices: AudioBriefingPersonaVoice[];
   };
   catalogs: {
@@ -56,6 +60,9 @@ type AudioBriefingVoicePickerStackProps = {
     geminiTTSVoices: GeminiTTSVoiceCatalogEntry[];
     geminiTTSVoicesLoading: boolean;
     geminiTTSVoicesError: string | null;
+    azureSpeechVoices: AzureSpeechVoiceCatalogEntry[];
+    azureSpeechVoicesLoading: boolean;
+    azureSpeechVoicesError: string | null;
   };
   actions: {
     onCloseAivis: () => void;
@@ -64,17 +71,20 @@ type AudioBriefingVoicePickerStackProps = {
     onCloseOpenAI: () => void;
     onCloseElevenLabs: () => void;
     onCloseGemini: () => void;
+    onCloseAzureSpeech: () => void;
     onSyncAivis: () => void;
     onSyncXAI: () => void;
     onSyncOpenAI: () => void;
     onRefreshElevenLabs: () => void;
     onRefreshGemini: () => void;
+    onRefreshAzureSpeech: () => void;
     onSelectAivis: (selection: { voice_model: string; voice_style: string }) => void;
     onSelectFish: (selection: { voice_model: string; provider_voice_label: string; provider_voice_description: string }) => void;
     onSelectXAI: (selection: { voice_id: string }) => void;
     onSelectOpenAI: (selection: { voice_id: string }) => void;
     onSelectElevenLabs: (selection: { voice_id: string; label: string; description: string }) => void;
     onSelectGemini: (selection: { voice_name: string }) => void;
+    onSelectAzureSpeech: (selection: { voice_id: string; label: string; description: string }) => void;
   };
 };
 
@@ -146,6 +156,17 @@ export function AudioBriefingVoicePickerStack({ pickerState, catalogs, actions }
         onRefresh={actions.onRefreshGemini}
         onSelect={actions.onSelectGemini}
       />
+
+      <AzureSpeechVoicePickerModal
+        open={Boolean(pickerState.azureSpeechPickerPersona)}
+        loading={catalogs.azureSpeechVoicesLoading}
+        error={catalogs.azureSpeechVoicesError}
+        voices={catalogs.azureSpeechVoices}
+        currentVoiceID={pickerState.activeAzureSpeechVoice?.voice_model ?? ""}
+        onClose={actions.onCloseAzureSpeech}
+        onRefresh={actions.onRefreshAzureSpeech}
+        onSelect={actions.onSelectAzureSpeech}
+      />
     </>
   );
 }
@@ -158,6 +179,7 @@ type SummaryAudioVoicePickerStackProps = {
     summaryAudioXAIPickerOpen: boolean;
     summaryAudioOpenAITTPickerOpen: boolean;
     summaryAudioGeminiTTSPickerOpen: boolean;
+    summaryAudioAzureSpeechPickerOpen: boolean;
     summaryAudioVoiceModel: string;
     summaryAudioVoiceStyle: string;
   };
@@ -180,6 +202,9 @@ type SummaryAudioVoicePickerStackProps = {
     geminiTTSVoices: GeminiTTSVoiceCatalogEntry[];
     geminiTTSVoicesLoading: boolean;
     geminiTTSVoicesError: string | null;
+    azureSpeechVoices: AzureSpeechVoiceCatalogEntry[];
+    azureSpeechVoicesLoading: boolean;
+    azureSpeechVoicesError: string | null;
   };
   actions: {
     onCloseAivis: () => void;
@@ -188,17 +213,20 @@ type SummaryAudioVoicePickerStackProps = {
     onCloseXAI: () => void;
     onCloseOpenAI: () => void;
     onCloseGemini: () => void;
+    onCloseAzureSpeech: () => void;
     onSyncAivis: () => void;
     onSyncXAI: () => void;
     onSyncOpenAI: () => void;
     onRefreshElevenLabs: () => void;
     onRefreshGemini: () => void;
+    onRefreshAzureSpeech: () => void;
     onSelectAivis: (selection: { voice_model: string; voice_style: string }) => void;
     onSelectFish: (selection: { voice_model: string; provider_voice_label: string; provider_voice_description: string }) => void;
     onSelectElevenLabs: (selection: { voice_id: string; label: string; description: string }) => void;
     onSelectXAI: (selection: { voice_id: string }) => void;
     onSelectOpenAI: (selection: { voice_id: string }) => void;
     onSelectGemini: (selection: { voice_name: string }) => void;
+    onSelectAzureSpeech: (selection: { voice_id: string; label: string; description: string }) => void;
   };
 };
 
@@ -269,6 +297,17 @@ export function SummaryAudioVoicePickerStack({ pickerState, catalogs, actions }:
         onClose={actions.onCloseGemini}
         onRefresh={actions.onRefreshGemini}
         onSelect={actions.onSelectGemini}
+      />
+
+      <AzureSpeechVoicePickerModal
+        open={pickerState.summaryAudioAzureSpeechPickerOpen}
+        loading={catalogs.azureSpeechVoicesLoading}
+        error={catalogs.azureSpeechVoicesError}
+        voices={catalogs.azureSpeechVoices}
+        currentVoiceID={pickerState.summaryAudioVoiceModel}
+        onClose={actions.onCloseAzureSpeech}
+        onRefresh={actions.onRefreshAzureSpeech}
+        onSelect={actions.onSelectAzureSpeech}
       />
     </>
   );

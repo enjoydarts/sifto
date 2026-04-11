@@ -27,6 +27,7 @@ export function buildApiKeyCardLabels(t: (key: string, fallback?: string) => str
   return {
     configured: t("settings.configured"),
     newApiKey: t("settings.newApiKey"),
+    region: t("settings.azureSpeechRegionLabel"),
     saveOrUpdate: t("settings.saveOrUpdate"),
     saving: t("common.saving"),
     deleteKey: t("settings.deleteKey"),

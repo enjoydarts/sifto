@@ -13,6 +13,11 @@ type AccessCard = {
   description: string;
   configured: boolean;
   last4: string | null | undefined;
+  secondaryValue?: string;
+  onSecondaryChange?: (value: string) => void;
+  secondaryLabel?: string;
+  secondaryPlaceholder?: string;
+  secondaryStatusText?: string | null;
   value: string;
   onChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -26,6 +31,7 @@ type AccessCard = {
 type ApiKeyCardLabels = {
   configured: string;
   newApiKey: string;
+  region: string;
   saveOrUpdate: string;
   saving: string;
   deleteKey: string;
@@ -201,6 +207,11 @@ export default function SystemSettingsSection({
           description={activeAccessCard.description}
           configured={activeAccessCard.configured}
           last4={activeAccessCard.last4}
+          secondaryValue={activeAccessCard.secondaryValue}
+          onSecondaryChange={activeAccessCard.onSecondaryChange}
+          secondaryLabel={activeAccessCard.secondaryLabel}
+          secondaryPlaceholder={activeAccessCard.secondaryPlaceholder}
+          secondaryStatusText={activeAccessCard.secondaryStatusText}
           value={activeAccessCard.value}
           onChange={activeAccessCard.onChange}
           onSubmit={activeAccessCard.onSubmit}

@@ -61,6 +61,9 @@ type SettingsGetPayload struct {
 	PoeAPIKeyLast4          *string          `json:"poe_api_key_last4,omitempty"`
 	HasSiliconFlowAPIKey    bool             `json:"has_siliconflow_api_key"`
 	SiliconFlowAPIKeyLast4  *string          `json:"siliconflow_api_key_last4,omitempty"`
+	HasAzureSpeechAPIKey    bool             `json:"has_azure_speech_api_key"`
+	AzureSpeechAPIKeyLast4  *string          `json:"azure_speech_api_key_last4,omitempty"`
+	AzureSpeechRegion       *string          `json:"azure_speech_region,omitempty"`
 	HasOpenRouterAPIKey     bool             `json:"has_openrouter_api_key"`
 	OpenRouterAPIKeyLast4   *string          `json:"openrouter_api_key_last4,omitempty"`
 	HasAivisAPIKey          bool             `json:"has_aivis_api_key"`
@@ -574,6 +577,9 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		PoeAPIKeyLast4:          settings.PoeAPIKeyLast4,
 		HasSiliconFlowAPIKey:    settings.HasSiliconFlowAPIKey,
 		SiliconFlowAPIKeyLast4:  settings.SiliconFlowAPIKeyLast4,
+		HasAzureSpeechAPIKey:    settings.HasAzureSpeechAPIKey,
+		AzureSpeechAPIKeyLast4:  settings.AzureSpeechAPIKeyLast4,
+		AzureSpeechRegion:       settings.AzureSpeechRegion,
 		HasOpenRouterAPIKey:     settings.HasOpenRouterAPIKey,
 		OpenRouterAPIKeyLast4:   settings.OpenRouterAPIKeyLast4,
 		HasAivisAPIKey:          settings.HasAivisAPIKey,
@@ -739,9 +745,7 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 		caps := LookupTTSProviderCapabilities(provider)
 		providerVoiceLabel := strings.TrimSpace(row.ProviderVoiceLabel)
 		providerVoiceDescription := strings.TrimSpace(row.ProviderVoiceDescription)
-		switch provider {
-		case "aivis", "mock", "xai", "openai", "gemini_tts", "fish", "elevenlabs":
-		default:
+		if LookupTTSProviderMetadata(provider) == (TTSProviderMetadata{}) {
 			return nil, fmt.Errorf("invalid tts_provider for %s", persona)
 		}
 		voiceModel := strings.TrimSpace(row.VoiceModel)
@@ -849,9 +853,7 @@ func normalizeSummaryAudioVoiceSettingsInput(in UpdateSummaryAudioVoiceSettingsI
 		in.Pitch == 0 && in.VolumeGain == 0 {
 		return &model.SummaryAudioVoiceSettings{}, nil
 	}
-	switch provider {
-	case "aivis", "mock", "xai", "openai", "gemini_tts", "fish", "elevenlabs":
-	default:
+	if LookupTTSProviderMetadata(provider) == (TTSProviderMetadata{}) {
 		return nil, fmt.Errorf("invalid tts_provider")
 	}
 	if voiceModel == "" {
@@ -1425,6 +1427,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetPoeAPIKey(ctx, userID, enc, last4)
 	case "siliconflow":
 		return s.repo.SetSiliconFlowAPIKey(ctx, userID, enc, last4)
+	case "azure_speech":
+		return s.repo.SetAzureSpeechAPIKey(ctx, userID, enc, last4)
 	case "openrouter":
 		return s.repo.SetOpenRouterAPIKey(ctx, userID, enc, last4)
 	case "aivis":
@@ -1468,6 +1472,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearPoeAPIKey(ctx, userID)
 	case "siliconflow":
 		return s.repo.ClearSiliconFlowAPIKey(ctx, userID)
+	case "azure_speech":
+		return s.repo.ClearAzureSpeechAPIKey(ctx, userID)
 	case "openrouter":
 		return s.repo.ClearOpenRouterAPIKey(ctx, userID)
 	case "aivis":
@@ -1479,4 +1485,16 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 	default:
 		return nil, fmt.Errorf("unsupported provider")
 	}
+}
+
+func (s *SettingsService) SetAzureSpeechRegion(ctx context.Context, userID, region string) (*model.UserSettings, error) {
+	normalized := strings.TrimSpace(region)
+	if normalized == "" {
+		return nil, fmt.Errorf("azure_speech_region is required")
+	}
+	return s.repo.SetAzureSpeechRegion(ctx, userID, normalized)
+}
+
+func (s *SettingsService) ClearAzureSpeechRegion(ctx context.Context, userID string) (*model.UserSettings, error) {
+	return s.repo.ClearAzureSpeechRegion(ctx, userID)
 }

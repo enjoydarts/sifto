@@ -5,6 +5,7 @@ export type TTSProviderCapabilities = {
   supportsCatalogPicker: boolean;
   supportsSeparateTTSModel: boolean;
   supportsSpeechTuning: boolean;
+  requiresRegion: boolean;
 };
 
 export type TTSProviderMetadata = {
@@ -17,6 +18,7 @@ const DEFAULT_TTS_PROVIDER_CAPABILITIES: TTSProviderCapabilities = {
   supportsCatalogPicker: false,
   supportsSeparateTTSModel: false,
   supportsSpeechTuning: false,
+  requiresRegion: false,
 };
 
 export const TTS_PROVIDER_METADATA: Record<string, TTSProviderMetadata> = {
@@ -26,6 +28,7 @@ export const TTS_PROVIDER_METADATA: Record<string, TTSProviderMetadata> = {
       supportsCatalogPicker: true,
       supportsSeparateTTSModel: false,
       supportsSpeechTuning: true,
+      requiresRegion: false,
     },
     defaultTTSModel: "",
   },
@@ -35,6 +38,7 @@ export const TTS_PROVIDER_METADATA: Record<string, TTSProviderMetadata> = {
       supportsCatalogPicker: true,
       supportsSeparateTTSModel: true,
       supportsSpeechTuning: false,
+      requiresRegion: false,
     },
     defaultTTSModel: "eleven_flash_v2_5",
   },
@@ -44,6 +48,17 @@ export const TTS_PROVIDER_METADATA: Record<string, TTSProviderMetadata> = {
       supportsCatalogPicker: true,
       supportsSeparateTTSModel: false,
       supportsSpeechTuning: false,
+      requiresRegion: false,
+    },
+    defaultTTSModel: "",
+  },
+  azure_speech: {
+    capabilities: {
+      requiresVoiceStyle: false,
+      supportsCatalogPicker: true,
+      supportsSeparateTTSModel: false,
+      supportsSpeechTuning: false,
+      requiresRegion: true,
     },
     defaultTTSModel: "",
   },
@@ -53,6 +68,7 @@ export const TTS_PROVIDER_METADATA: Record<string, TTSProviderMetadata> = {
       supportsCatalogPicker: true,
       supportsSeparateTTSModel: true,
       supportsSpeechTuning: false,
+      requiresRegion: false,
     },
     defaultTTSModel: "s2-pro",
   },
@@ -62,6 +78,7 @@ export const TTS_PROVIDER_METADATA: Record<string, TTSProviderMetadata> = {
       supportsCatalogPicker: true,
       supportsSeparateTTSModel: true,
       supportsSpeechTuning: false,
+      requiresRegion: false,
     },
     defaultTTSModel: "gpt-4o-mini-tts",
   },
@@ -71,6 +88,7 @@ export const TTS_PROVIDER_METADATA: Record<string, TTSProviderMetadata> = {
       supportsCatalogPicker: true,
       supportsSeparateTTSModel: true,
       supportsSpeechTuning: false,
+      requiresRegion: false,
     },
     defaultTTSModel: "gemini-2.5-flash-tts",
   },
@@ -80,6 +98,7 @@ export const TTS_PROVIDER_METADATA: Record<string, TTSProviderMetadata> = {
       supportsCatalogPicker: false,
       supportsSeparateTTSModel: false,
       supportsSpeechTuning: false,
+      requiresRegion: false,
     },
     defaultTTSModel: "",
   },
@@ -95,6 +114,8 @@ export function formatTTSProviderLabel(provider: string, t: Translate): string {
       return t("settings.summaryAudio.provider.fish");
     case "xai":
       return t("settings.summaryAudio.provider.xai");
+    case "azure_speech":
+      return t("settings.summaryAudio.provider.azure_speech");
     case "openai":
       return t("settings.summaryAudio.provider.openai");
     case "gemini_tts":

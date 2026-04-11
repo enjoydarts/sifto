@@ -592,6 +592,87 @@ func TestTTSMarkupPreprocessElevenLabsPromptUsesElevenLabsPurpose(t *testing.T) 
 	}
 }
 
+func TestTTSMarkupPreprocessAzureSpeechPromptUsesAzurePurpose(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "tts-markup-preprocess-azure-purpose-test-key")
+	db, err := repository.NewPool(context.Background())
+	if err != nil {
+		t.Fatalf("NewPool() error = %v", err)
+	}
+	t.Cleanup(db.Close)
+	lockSettingsServiceTestDB(t, db)
+
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000030"
+	if _, err := db.Exec(ctx, `DELETE FROM llm_usage_logs WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset llm_usage_logs: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM user_settings WHERE user_id = $1`, userID); err != nil {
+		t.Fatalf("reset user_settings: %v", err)
+	}
+	if _, err := db.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
+		t.Fatalf("reset users: %v", err)
+	}
+	if _, err := db.Exec(ctx, `INSERT INTO users (id, email, name) VALUES ($1, $2, $3)`, userID, "tts-markup-preprocess-azure@example.com", "TTS Markup Preprocess"); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	repo := repository.NewUserSettingsRepo(db)
+	modelName := strptr("gpt-5.4-mini")
+	if _, err := repo.UpsertLLMModelConfig(ctx, userID,
+		nil, nil, 0, nil, nil, nil, 0, nil, nil, nil, nil, nil, nil, nil, nil,
+		false, false, "", "", nil, nil, nil, nil, nil, nil, modelName,
+	); err != nil {
+		t.Fatalf("UpsertLLMModelConfig() error = %v", err)
+	}
+	cipher := NewSecretCipher()
+	enc, err := cipher.EncryptString("openai-secret")
+	if err != nil {
+		t.Fatalf("EncryptString(openai): %v", err)
+	}
+	if _, err := repo.SetOpenAIAPIKey(ctx, userID, enc, "cret"); err != nil {
+		t.Fatalf("SetOpenAIAPIKey() error = %v", err)
+	}
+
+	worker := &ttsMarkupPreprocessWorkerStub{
+		response: &TTSMarkupPreprocessResponse{
+			Text: `<speak version="1.0" xml:lang="ja-JP"></speak>`,
+			LLM: &LLMUsage{
+				Provider:           "openai",
+				Model:              "gpt-5.4-mini",
+				RequestedModel:     "gpt-5.4-mini",
+				ResolvedModel:      "gpt-5.4-mini",
+				PricingModelFamily: "openai",
+				PricingSource:      "openai",
+				InputTokens:        10,
+				OutputTokens:       4,
+				EstimatedCostUSD:   0.001,
+			},
+		},
+	}
+	service := NewTTSMarkupPreprocessService(repo, cipher, worker, repository.NewLLMUsageLogRepo(db), NoopJSONCache{})
+
+	if _, err := service.PreprocessSummaryAudioTextForProviderWithVariables(ctx, userID, "", "azure_speech", "元テキスト", map[string]string{
+		"voice_name":   "ja-JP-AoiNeural",
+		"voice_locale": "ja-JP",
+	}); err != nil {
+		t.Fatalf("PreprocessSummaryAudioTextForProviderWithVariables() error = %v", err)
+	}
+
+	var (
+		purpose   string
+		promptKey string
+	)
+	if err := db.QueryRow(ctx, `SELECT purpose, prompt_key FROM llm_usage_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`, userID).Scan(&purpose, &promptKey); err != nil {
+		t.Fatalf("select llm_usage_logs: %v", err)
+	}
+	if purpose != azureSpeechTTSPreprocessPurpose {
+		t.Fatalf("purpose = %q, want %q", purpose, azureSpeechTTSPreprocessPurpose)
+	}
+	if promptKey != azureSpeechSummaryPreprocessPromptKey {
+		t.Fatalf("prompt_key = %q, want %q", promptKey, azureSpeechSummaryPreprocessPromptKey)
+	}
+}
+
 func TestTTSMarkupPreprocessElevenLabsAudioBriefingSingleUsesPromptKeyAndPersonaVariables(t *testing.T) {
 	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "tts-markup-preprocess-elevenlabs-single-test-key")
 	db, err := repository.NewPool(context.Background())
@@ -797,6 +878,13 @@ func TestTTSMarkupPreprocessPromptKeyFamiliesByProvider(t *testing.T) {
 			wantSingle:  xaiAudioBriefingSinglePreprocessPromptKey,
 			wantDuo:     xaiAudioBriefingDuoPreprocessPromptKey,
 		},
+		{
+			name:        "azure_speech",
+			provider:    "azure_speech",
+			wantSummary: azureSpeechSummaryPreprocessPromptKey,
+			wantSingle:  azureSpeechAudioBriefingSinglePreprocessPromptKey,
+			wantDuo:     azureSpeechAudioBriefingDuoPreprocessPromptKey,
+		},
 	}
 
 	for _, tt := range tests {
@@ -838,6 +926,7 @@ func TestTTSMarkupPreprocessPurposeRoutingByPromptFamily(t *testing.T) {
 		{name: "gemini summary", promptKey: geminiSummaryPreprocessPromptKey, want: geminiTTSPreprocessPurpose},
 		{name: "elevenlabs summary", promptKey: elevenLabsSummaryPreprocessPromptKey, want: elevenLabsTTSPreprocessPurpose},
 		{name: "xai summary", promptKey: xaiSummaryPreprocessPromptKey, want: xaiTTSPreprocessPurpose},
+		{name: "azure summary", promptKey: azureSpeechSummaryPreprocessPromptKey, want: azureSpeechTTSPreprocessPurpose},
 	}
 
 	for _, tt := range tests {

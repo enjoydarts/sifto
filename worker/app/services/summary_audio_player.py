@@ -23,7 +23,7 @@ class SummaryAudioPlayerService:
         self.aivis = AivisSpeechService()
         self.single_speaker_provider_runtime = {
             provider: load_single_speaker_tts_provider_runtime_metadata(provider)
-            for provider in ("xai", "gemini_tts", "fish", "elevenlabs", "openai")
+            for provider in ("xai", "gemini_tts", "fish", "elevenlabs", "openai", "azure_speech")
         }
         self.gemini_tts_endpoint = self.single_speaker_provider_runtime["gemini_tts"].endpoint
         self.gemini_timeout_sec = self.single_speaker_provider_runtime["gemini_tts"].timeout_sec
@@ -55,6 +55,8 @@ class SummaryAudioPlayerService:
         elevenlabs_api_key: str | None = None,
         xai_api_key: str | None = None,
         openai_api_key: str | None = None,
+        azure_speech_api_key: str | None = None,
+        azure_speech_region: str | None = None,
     ) -> tuple[str, str, int, str]:
         normalized_provider = (provider or "").strip().lower()
         if normalized_provider == "mock":
@@ -74,9 +76,10 @@ class SummaryAudioPlayerService:
                 user_dictionary_uuid=user_dictionary_uuid,
                 api_key_override=aivis_api_key,
             )
-        elif normalized_provider in {"xai", "gemini_tts", "fish", "elevenlabs", "openai"}:
+        elif normalized_provider in {"xai", "gemini_tts", "fish", "elevenlabs", "openai", "azure_speech"}:
             runtime = self.single_speaker_provider_runtime[normalized_provider]
             api_key = runtime.api_key
+            region = runtime.region
             if normalized_provider == "xai":
                 api_key = (xai_api_key or "").strip() or api_key
             elif normalized_provider == "gemini_tts":
@@ -87,16 +90,22 @@ class SummaryAudioPlayerService:
                 api_key = (elevenlabs_api_key or "").strip() or api_key
             elif normalized_provider == "openai":
                 api_key = (openai_api_key or "").strip() or api_key
+            elif normalized_provider == "azure_speech":
+                api_key = (azure_speech_api_key or "").strip() or api_key
+                region = (azure_speech_region or "").strip() or region
             audio_bytes, content_type, _, duration_sec = synthesize_single_speaker_tts(
                 normalized_provider,
                 endpoint=runtime.endpoint,
                 api_key=api_key,
+                region=region,
                 voice_id=voice_model,
                 tts_model=tts_model,
                 text=text,
                 speech_rate=speech_rate,
                 timeout_sec=runtime.timeout_sec,
                 volume_gain=volume_gain,
+                line_break_silence_seconds=line_break_silence_seconds,
+                pitch=pitch,
             )
         else:
             raise RuntimeError(f"unsupported summary audio provider: {provider}")

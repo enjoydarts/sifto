@@ -20,6 +20,7 @@ class SummaryAudioSynthesizeRequest(BaseModel):
     pitch: float = 0.0
     volume_gain: float = 0.0
     user_dictionary_uuid: str | None = None
+    azure_speech_region: str | None = None
 
 
 class SummaryAudioSynthesizeResponse(BaseModel):
@@ -38,6 +39,7 @@ def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Reques
         fish_api_key = request.headers.get("x-fish-api-key", "").strip() or None
         elevenlabs_api_key = request.headers.get("x-elevenlabs-api-key", "").strip() or None
         xai_api_key = request.headers.get("x-xai-api-key", "").strip() or None
+        azure_speech_api_key = request.headers.get("x-azure-speech-api-key", "").strip() or None
         audio_base64, content_type, duration_sec, resolved_text = service.synthesize(
             provider=req.provider,
             voice_model=req.voice_model,
@@ -58,6 +60,8 @@ def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Reques
             elevenlabs_api_key=elevenlabs_api_key,
             xai_api_key=xai_api_key,
             openai_api_key=request.headers.get("x-openai-api-key", "").strip() or None,
+            azure_speech_api_key=azure_speech_api_key,
+            azure_speech_region=(req.azure_speech_region or "").strip() or None,
         )
         return SummaryAudioSynthesizeResponse(
             audio_base64=audio_base64,

@@ -357,6 +357,23 @@ export interface ElevenLabsVoicesResponse {
   voices: ElevenLabsVoiceCatalogEntry[];
 }
 
+export interface AzureSpeechVoiceCatalogEntry {
+  voice_id: string;
+  label: string;
+  description: string;
+  locale: string;
+  gender: string;
+  local_name: string;
+  styles?: string[];
+}
+
+export interface AzureSpeechVoicesResponse {
+  provider: string;
+  source: string;
+  region: string;
+  voices: AzureSpeechVoiceCatalogEntry[];
+}
+
 export interface GeminiTTSVoiceCatalogEntry {
   voice_name: string;
   label: string;
@@ -1510,6 +1527,9 @@ export interface UserSettings {
   poe_api_key_last4: string | null;
   has_siliconflow_api_key: boolean;
   siliconflow_api_key_last4: string | null;
+  has_azure_speech_api_key?: boolean;
+  azure_speech_api_key_last4?: string | null;
+  azure_speech_region?: string | null;
   has_openrouter_api_key: boolean;
   openrouter_api_key_last4: string | null;
   has_aivis_api_key: boolean;
@@ -2860,6 +2880,16 @@ export const api = {
       "/settings/siliconflow-key",
       { method: "DELETE" }
     ),
+  setAzureSpeechConfig: (apiKey: string, region: string) =>
+    apiFetch<{ user_id: string; has_azure_speech_api_key: boolean; azure_speech_api_key_last4: string | null; azure_speech_region: string | null }>(
+      "/settings/azure-speech-config",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey, region }) }
+    ),
+  deleteAzureSpeechConfig: () =>
+    apiFetch<{ user_id: string; has_azure_speech_api_key: boolean; azure_speech_api_key_last4: string | null; azure_speech_region: string | null }>(
+      "/settings/azure-speech-config",
+      { method: "DELETE" }
+    ),
   setOpenRouterApiKey: (apiKey: string) =>
     apiFetch<{ user_id: string; has_openrouter_api_key: boolean; openrouter_api_key_last4: string | null }>(
       "/settings/openrouter-key",
@@ -3014,6 +3044,8 @@ export const api = {
     apiFetch<OpenAITTSVoicesResponse>("/openai-tts-voices/sync", { method: "POST" }),
   getElevenLabsVoices: () =>
     apiFetch<ElevenLabsVoicesResponse>("/elevenlabs-voices"),
+  getAzureSpeechVoices: () =>
+    apiFetch<AzureSpeechVoicesResponse>("/azure-speech-voices"),
   getGeminiTTSVoices: () =>
     apiFetch<GeminiTTSVoicesResponse>("/gemini-tts-voices"),
   deleteInoreaderOAuth: () =>

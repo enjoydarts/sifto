@@ -149,6 +149,8 @@ func main() {
 	xaiVoicesH := handler.NewXAIVoicesHandler(xaiVoiceRepo, userSettingsRepo, providerModelUpdateRepo, secretCipher, xaiVoiceCatalogSvc)
 	elevenLabsVoiceCatalogSvc := service.NewElevenLabsVoiceCatalogService()
 	elevenLabsVoicesH := handler.NewElevenLabsVoicesHandler(userSettingsRepo, secretCipher, elevenLabsVoiceCatalogSvc)
+	azureSpeechVoiceCatalogSvc := service.NewAzureSpeechVoiceCatalogService()
+	azureSpeechVoicesH := handler.NewAzureSpeechVoicesHandler(userSettingsRepo, secretCipher, azureSpeechVoiceCatalogSvc)
 	openAITTSVoiceRepo := repository.NewOpenAITTSVoiceRepo(db)
 	openAITTSVoiceCatalogSvc := service.NewOpenAITTSVoiceCatalogService()
 	openAITTSVoicesH := handler.NewOpenAITTSVoicesHandler(openAITTSVoiceRepo, providerModelUpdateRepo, openAITTSVoiceCatalogSvc)
@@ -346,6 +348,9 @@ func main() {
 		r.Route("/elevenlabs-voices", func(r chi.Router) {
 			r.Get("/", elevenLabsVoicesH.List)
 		})
+		r.Route("/azure-speech-voices", func(r chi.Router) {
+			r.Get("/", azureSpeechVoicesH.List)
+		})
 		r.Route("/openai-tts-voices", func(r chi.Router) {
 			r.Get("/", openAITTSVoicesH.List)
 			r.Get("/status", openAITTSVoicesH.Status)
@@ -460,6 +465,8 @@ func main() {
 			r.Delete("/poe-key", settingsH.DeletePoeAPIKey)
 			r.Post("/siliconflow-key", settingsH.SetSiliconFlowAPIKey)
 			r.Delete("/siliconflow-key", settingsH.DeleteSiliconFlowAPIKey)
+			r.Post("/azure-speech-config", settingsH.SetAzureSpeechConfig)
+			r.Delete("/azure-speech-config", settingsH.DeleteAzureSpeechConfig)
 			r.Post("/openrouter-key", settingsH.SetOpenRouterAPIKey)
 			r.Delete("/openrouter-key", settingsH.DeleteOpenRouterAPIKey)
 			r.Post("/aivis-key", settingsH.SetAivisAPIKey)

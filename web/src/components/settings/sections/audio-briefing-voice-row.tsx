@@ -15,6 +15,7 @@ import {
   formatAivisVoiceStyleLabel,
   getAudioBriefingProviderCapabilities,
   resolveAivisVoiceSelection,
+  resolveAzureSpeechVoiceSelection,
   resolveElevenLabsVoiceSelection,
   resolveGeminiTTSVoiceSelection,
   resolveOpenAITTSVoiceSelection,
@@ -25,6 +26,7 @@ import { resolveTTSVoiceDisplay } from "@/components/settings/providers/tts-voic
 import type {
   AivisModelSnapshot,
   AudioBriefingPersonaVoice,
+  AzureSpeechVoiceCatalogEntry,
   ElevenLabsVoiceCatalogEntry,
   GeminiTTSVoiceCatalogEntry,
   OpenAITTSVoiceSnapshot,
@@ -53,17 +55,20 @@ export default function AudioBriefingVoiceRow({
   hasUserXAIAPIKey,
   hasUserOpenAIAPIKey,
   hasUserElevenLabsAPIKey,
+  hasUserAzureSpeechAPIKey,
   geminiTTSEnabled,
   audioBriefingAivisModels,
   audioBriefingXAIVoices,
   audioBriefingOpenAITTSVoices,
   audioBriefingGeminiTTSVoices,
+  audioBriefingAzureSpeechVoices,
   audioBriefingElevenLabsVoices,
   audioBriefingVoiceInputDrafts,
   aivisModelsSyncing,
   xaiVoicesSyncing,
   openAITTSVoicesSyncing,
   geminiTTSVoicesLoading,
+  azureSpeechVoicesLoading,
   saving,
   onTogglePersona,
   onUpdateVoice,
@@ -72,6 +77,7 @@ export default function AudioBriefingVoiceRow({
   onOpenXAIPicker,
   onOpenOpenAITTSPicker,
   onOpenGeminiTTSPicker,
+  onOpenAzureSpeechPicker,
   onOpenElevenLabsPicker,
   onUpdateVoiceNumberInput,
   onResetVoiceNumberInput,
@@ -79,6 +85,7 @@ export default function AudioBriefingVoiceRow({
   onSyncXAIVoices,
   onSyncOpenAITTSVoices,
   onLoadGeminiTTSVoices,
+  onLoadAzureSpeechVoices,
   onPersistAudioBriefingVoices,
   conversationMode,
 }: {
@@ -92,17 +99,20 @@ export default function AudioBriefingVoiceRow({
   hasUserXAIAPIKey: boolean;
   hasUserOpenAIAPIKey: boolean;
   hasUserElevenLabsAPIKey: boolean;
+  hasUserAzureSpeechAPIKey: boolean;
   geminiTTSEnabled: boolean;
   audioBriefingAivisModels: AivisModelSnapshot[];
   audioBriefingXAIVoices: XAIVoiceSnapshot[];
   audioBriefingOpenAITTSVoices: OpenAITTSVoiceSnapshot[];
   audioBriefingGeminiTTSVoices: GeminiTTSVoiceCatalogEntry[];
+  audioBriefingAzureSpeechVoices: AzureSpeechVoiceCatalogEntry[];
   audioBriefingElevenLabsVoices: ElevenLabsVoiceCatalogEntry[];
   audioBriefingVoiceInputDrafts: AudioBriefingVoiceInputDrafts;
   aivisModelsSyncing: boolean;
   xaiVoicesSyncing: boolean;
   openAITTSVoicesSyncing: boolean;
   geminiTTSVoicesLoading: boolean;
+  azureSpeechVoicesLoading: boolean;
   saving: boolean;
   onTogglePersona: (persona: string) => void;
   onUpdateVoice: (persona: string, patch: Partial<AudioBriefingPersonaVoice>) => void;
@@ -111,6 +121,7 @@ export default function AudioBriefingVoiceRow({
   onOpenXAIPicker: (persona: string) => void;
   onOpenOpenAITTSPicker: (persona: string) => void;
   onOpenGeminiTTSPicker: (persona: string) => void;
+  onOpenAzureSpeechPicker: (persona: string) => void;
   onOpenElevenLabsPicker: (persona: string) => void;
   onUpdateVoiceNumberInput: (persona: string, field: AudioBriefingNumericInputField, raw: string) => void;
   onResetVoiceNumberInput: (persona: string, field: AudioBriefingNumericInputField) => void;
@@ -118,6 +129,7 @@ export default function AudioBriefingVoiceRow({
   onSyncXAIVoices: () => void;
   onSyncOpenAITTSVoices: () => void;
   onLoadGeminiTTSVoices: () => void;
+  onLoadAzureSpeechVoices: () => void;
   onPersistAudioBriefingVoices: () => void;
   conversationMode: "single" | "duo";
 }) {
@@ -128,11 +140,13 @@ export default function AudioBriefingVoiceRow({
   const isOpenAIProvider = voice.tts_provider === "openai";
   const isGeminiProvider = voice.tts_provider === "gemini_tts";
   const isElevenLabsProvider = voice.tts_provider === "elevenlabs";
+  const isAzureSpeechProvider = voice.tts_provider === "azure_speech";
   const aivisResolved = isAivisProvider ? resolveAivisVoiceSelection(audioBriefingAivisModels, voice) : null;
   const xaiResolved = isXAIProvider ? resolveXAIVoiceSelection(audioBriefingXAIVoices, voice) : null;
   const elevenLabsResolved = isElevenLabsProvider ? resolveElevenLabsVoiceSelection(audioBriefingElevenLabsVoices, voice) : null;
   const openAIResolved = isOpenAIProvider ? resolveOpenAITTSVoiceSelection(audioBriefingOpenAITTSVoices, voice) : null;
   const geminiResolved = isGeminiProvider ? resolveGeminiTTSVoiceSelection(audioBriefingGeminiTTSVoices, voice) : null;
+  const azureSpeechResolved = isAzureSpeechProvider ? resolveAzureSpeechVoiceSelection(audioBriefingAzureSpeechVoices, voice) : null;
   const selectedVoiceDisplay = resolveTTSVoiceDisplay({
     provider: voice.tts_provider,
     voiceModel: voice.voice_model,
@@ -146,6 +160,7 @@ export default function AudioBriefingVoiceRow({
     openAIResolved,
     geminiResolved,
     elevenLabsResolved,
+    azureSpeechResolved,
   });
   const selectedVoiceLabel = selectedVoiceDisplay.label;
   const selectedVoiceDetail = selectedVoiceDisplay.detail;
@@ -229,6 +244,7 @@ export default function AudioBriefingVoiceRow({
                   hasUserXAIAPIKey || voice.tts_provider === "xai" ? "xai" : null,
                   hasUserOpenAIAPIKey || voice.tts_provider === "openai" ? "openai" : null,
                   geminiTTSEnabled || voice.tts_provider === "gemini_tts" ? "gemini_tts" : null,
+                  "azure_speech",
                   "elevenlabs",
                   "mock",
                 ].filter(Boolean) as string[])).map((provider) => (
@@ -257,6 +273,8 @@ export default function AudioBriefingVoiceRow({
                             ? t("settings.audioBriefing.pickOpenAITTSVoice")
                             : isGeminiProvider
                               ? t("settings.audioBriefing.pickGeminiTTSVoice")
+                              : isAzureSpeechProvider
+                                ? t("settings.audioBriefing.pickAzureSpeechVoice")
                               : isElevenLabsProvider
                                 ? t("settings.audioBriefing.pickElevenLabsVoice")
                                 : undefined
@@ -272,8 +290,10 @@ export default function AudioBriefingVoiceRow({
                           ? () => onOpenXAIPicker(voice.persona)
                           : isOpenAIProvider
                             ? () => onOpenOpenAITTSPicker(voice.persona)
-                            : isGeminiProvider
-                              ? () => onOpenGeminiTTSPicker(voice.persona)
+                              : isGeminiProvider
+                                ? () => onOpenGeminiTTSPicker(voice.persona)
+                                : isAzureSpeechProvider
+                                  ? () => onOpenAzureSpeechPicker(voice.persona)
                               : isElevenLabsProvider
                                 ? () => onOpenElevenLabsPicker(voice.persona)
                                 : undefined
@@ -284,8 +304,10 @@ export default function AudioBriefingVoiceRow({
                     ? !hasUserXAIAPIKey && !audioBriefingXAIVoices.length
                     : isOpenAIProvider
                       ? !hasUserOpenAIAPIKey && !audioBriefingOpenAITTSVoices.length
-                      : isGeminiProvider
-                        ? geminiTTSVoicesLoading && !audioBriefingGeminiTTSVoices.length
+                        : isGeminiProvider
+                          ? geminiTTSVoicesLoading && !audioBriefingGeminiTTSVoices.length
+                        : isAzureSpeechProvider
+                          ? !hasUserAzureSpeechAPIKey && !audioBriefingAzureSpeechVoices.length
                         : isElevenLabsProvider
                           ? !hasUserElevenLabsAPIKey && !audioBriefingElevenLabsVoices.length
                           : false
@@ -338,6 +360,25 @@ export default function AudioBriefingVoiceRow({
                 label={t("settings.audioBriefing.elevenlabsVoice")}
                 selectedLabel={selectedVoiceLabel || t("settings.audioBriefing.elevenlabsVoiceEmpty")}
                 selectedDetail={selectedVoiceDetail || t("settings.audioBriefing.elevenlabsVoiceEmpty")}
+              />
+            </div>
+          ) : isAzureSpeechProvider ? (
+            <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.85fr)]">
+              <ProviderVoiceSelectionCard
+                label={t("settings.audioBriefing.azureSpeechVoice")}
+                selectedLabel={selectedVoiceLabel || t("settings.audioBriefing.azureSpeechVoiceEmpty")}
+                selectedDetail={selectedVoiceDetail || t("settings.audioBriefing.azureSpeechVoiceEmpty")}
+                actionLabel={t("settings.audioBriefing.pickAzureSpeechVoice")}
+                onAction={() => onOpenAzureSpeechPicker(voice.persona)}
+                actionDisabled={azureSpeechVoicesLoading && !audioBriefingAzureSpeechVoices.length}
+              />
+              <ProviderVoiceSelectionCard
+                label={t("settings.audioBriefing.azureSpeechCatalog")}
+                selectedLabel={azureSpeechResolved?.locale || t("settings.audioBriefing.azureSpeechVoiceEmpty")}
+                selectedDetail={azureSpeechResolved?.voice_id || voice.voice_model || t("settings.audioBriefing.azureSpeechVoiceEmpty")}
+                actionLabel={t("settings.audioBriefing.refreshAzureSpeechCatalog")}
+                onAction={onLoadAzureSpeechVoices}
+                actionDisabled={azureSpeechVoicesLoading}
               />
             </div>
           ) : (

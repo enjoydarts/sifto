@@ -491,11 +491,15 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
             text="hello",
             speech_rate=1.0,
             volume_gain=0.25,
+            line_break_silence_seconds=0.0,
+            pitch=0.0,
             google_api_key=None,
             fish_api_key="fish-key",
             elevenlabs_api_key=None,
             xai_api_key=None,
             openai_api_key=None,
+            azure_speech_api_key=None,
+            azure_speech_region=None,
         )
         upload.assert_called_once()
         self.assertEqual(duration_sec, 12)
@@ -531,11 +535,15 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
             text="hello",
             speech_rate=1.0,
             volume_gain=0.0,
+            line_break_silence_seconds=0.0,
+            pitch=0.0,
             google_api_key=None,
             fish_api_key=None,
             elevenlabs_api_key="eleven-key",
             xai_api_key=None,
             openai_api_key=None,
+            azure_speech_api_key=None,
+            azure_speech_region=None,
         )
         upload.assert_called_once()
         self.assertEqual(duration_sec, 14)
@@ -758,11 +766,15 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
             text="hello",
             speech_rate=1.0,
             volume_gain=0.0,
+            line_break_silence_seconds=0.0,
+            pitch=0.0,
             google_api_key=None,
             fish_api_key=None,
             elevenlabs_api_key=None,
             xai_api_key=None,
             openai_api_key=None,
+            azure_speech_api_key=None,
+            azure_speech_region=None,
         )
         upload.assert_called_once()
         self.assertEqual(duration_sec, 12)
@@ -884,6 +896,92 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
         )
         upload.assert_called_once()
         self.assertEqual(duration_sec, 18)
+        self.assertTrue(object_key.endswith(".mp3"))
+
+    def test_synthesize_and_upload_uses_azure_speech_provider(self):
+        service = AudioBriefingTTSService()
+
+        with patch.object(service, "synthesize_single_speaker_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 11)) as synth:
+            with patch.object(service, "upload_bytes") as upload:
+                object_key, duration_sec = service.synthesize_and_upload(
+                    provider="azure_speech",
+                    voice_model="ja-JP-NanamiNeural",
+                    voice_style="",
+                    tts_model="",
+                    text="hello",
+                    speech_rate=1.05,
+                    emotional_intensity=1.0,
+                    tempo_dynamics=1.0,
+                    line_break_silence_seconds=0.5,
+                    chunk_trailing_silence_seconds=0.0,
+                    pitch=0.2,
+                    volume_gain=0.1,
+                    output_object_key="audio/test",
+                    azure_speech_api_key="azure-key",
+                    azure_speech_region="japaneast",
+                )
+
+        synth.assert_called_once_with(
+            provider="azure_speech",
+            persona="",
+            voice_id="ja-JP-NanamiNeural",
+            tts_model="",
+            text="hello",
+            speech_rate=1.05,
+            volume_gain=0.1,
+            line_break_silence_seconds=0.5,
+            pitch=0.2,
+            google_api_key=None,
+            fish_api_key=None,
+            elevenlabs_api_key=None,
+            xai_api_key=None,
+            openai_api_key=None,
+            azure_speech_api_key="azure-key",
+            azure_speech_region="japaneast",
+        )
+        upload.assert_called_once()
+        self.assertEqual(duration_sec, 11)
+        self.assertTrue(object_key.endswith(".mp3"))
+
+    def test_synthesize_azure_speech_duo_and_upload_uses_duo_payload(self):
+        service = AudioBriefingTTSService()
+
+        with patch("app.services.audio_briefing_tts.synthesize_azure_speech_duo_tts", return_value=(b"mp3", "audio/mpeg", ".mp3", 19)) as synth:
+            with patch.object(service, "upload_bytes") as upload:
+                object_key, duration_sec = service.synthesize_azure_speech_duo_and_upload(
+                    host_voice_model="ja-JP-NanamiNeural",
+                    partner_voice_model="ja-JP-KeitaNeural",
+                    turns=[
+                        {"speaker": "host", "text": "冒頭です"},
+                        {"speaker": "partner", "text": "補足です"},
+                    ],
+                    output_object_key="audio/test",
+                    speech_rate=1.05,
+                    line_break_silence_seconds=0.5,
+                    pitch=0.2,
+                    volume_gain=0.1,
+                    api_key_override="azure-key",
+                    region_override="japaneast",
+                )
+
+        synth.assert_called_once_with(
+            region="japaneast",
+            api_key="azure-key",
+            host_voice_name="ja-JP-NanamiNeural",
+            partner_voice_name="ja-JP-KeitaNeural",
+            turns=[
+                {"speaker": "host", "text": "冒頭です"},
+                {"speaker": "partner", "text": "補足です"},
+            ],
+            preprocessed_text=None,
+            speech_rate=1.05,
+            line_break_silence_seconds=0.5,
+            pitch=0.2,
+            volume_gain=0.1,
+            timeout_sec=service.azure_speech_timeout_sec,
+        )
+        upload.assert_called_once()
+        self.assertEqual(duration_sec, 19)
         self.assertTrue(object_key.endswith(".mp3"))
 
     def test_synthesize_aivis_audio_uses_exponential_backoff_after_429(self):

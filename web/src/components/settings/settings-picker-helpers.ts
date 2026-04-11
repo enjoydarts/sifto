@@ -3,6 +3,7 @@
 import type {
   AudioBriefingPersonaVoice,
   AivisModelsResponse,
+  AzureSpeechVoicesResponse,
   ElevenLabsVoicesResponse,
   GeminiTTSVoicesResponse,
   OpenAITTSVoicesResponse,
@@ -21,23 +22,27 @@ export function buildVoicePickerCatalogData(
   elevenLabsVoicesData: ElevenLabsVoicesResponse | null,
   openAITTSVoicesData: OpenAITTSVoicesResponse | null,
   geminiTTSVoicesData: GeminiTTSVoicesResponse | null,
+  azureSpeechVoicesData: AzureSpeechVoicesResponse | null,
 ) {
   const audioBriefingAivisModels = aivisModelsData?.models ?? [];
   const audioBriefingXAIVoices = xaiVoicesData?.voices ?? [];
   const audioBriefingElevenLabsVoices = elevenLabsVoicesData?.voices ?? [];
   const audioBriefingOpenAITTSVoices = openAITTSVoicesData?.voices ?? [];
   const audioBriefingGeminiTTSVoices = geminiTTSVoicesData?.voices ?? [];
+  const audioBriefingAzureSpeechVoices = azureSpeechVoicesData?.voices ?? [];
   return {
     audioBriefingAivisModels,
     audioBriefingXAIVoices,
     audioBriefingElevenLabsVoices,
     audioBriefingOpenAITTSVoices,
     audioBriefingGeminiTTSVoices,
+    audioBriefingAzureSpeechVoices,
     summaryAudioAivisModels: audioBriefingAivisModels,
     summaryAudioXAIVoices: audioBriefingXAIVoices,
     summaryAudioElevenLabsVoices: audioBriefingElevenLabsVoices,
     summaryAudioOpenAITTSVoices: audioBriefingOpenAITTSVoices,
     summaryAudioGeminiTTSVoices: audioBriefingGeminiTTSVoices,
+    summaryAudioAzureSpeechVoices: audioBriefingAzureSpeechVoices,
   };
 }
 
@@ -48,6 +53,7 @@ type AudioBriefingPickerState = {
   elevenLabsPickerPersona: string | null;
   openAITTPickerPersona: string | null;
   geminiTTSPickerPersona: string | null;
+  azureSpeechPickerPersona: string | null;
 };
 
 type AudioBriefingPickerOpeners = {
@@ -57,6 +63,7 @@ type AudioBriefingPickerOpeners = {
   setElevenLabsPickerPersona: (persona: string | null) => void;
   setOpenAITTPickerPersona: (persona: string | null) => void;
   setGeminiTTSPickerPersona: (persona: string | null) => void;
+  setAzureSpeechPickerPersona: (persona: string | null) => void;
 };
 
 export function buildAudioBriefingPickerOpeners(params: {
@@ -66,11 +73,13 @@ export function buildAudioBriefingPickerOpeners(params: {
   elevenLabsVoicesData: ElevenLabsVoicesResponse | null;
   openAITTSVoicesData: OpenAITTSVoicesResponse | null;
   geminiTTSVoicesData: GeminiTTSVoicesResponse | null;
+  azureSpeechVoicesData: AzureSpeechVoicesResponse | null;
   loadAivisModels: () => Promise<unknown>;
   loadXAIVoices: () => Promise<unknown>;
   loadElevenLabsVoices: () => Promise<unknown>;
   loadOpenAITTSVoices: () => Promise<unknown>;
   loadGeminiTTSVoices: () => Promise<unknown>;
+  loadAzureSpeechVoices: () => Promise<unknown>;
 }) {
   return {
     openAivisPicker: async (persona: string) => {
@@ -126,6 +135,16 @@ export function buildAudioBriefingPickerOpeners(params: {
         }
       }
     },
+    openAzureSpeechPicker: async (persona: string) => {
+      params.pickers.setAzureSpeechPickerPersona(persona);
+      if (params.azureSpeechVoicesData == null) {
+        try {
+          await params.loadAzureSpeechVoices();
+        } catch {
+          return;
+        }
+      }
+    },
   };
 }
 
@@ -138,17 +157,20 @@ export function buildSummaryAudioPickerOpenAction(params: {
     setSummaryAudioXAIPickerOpen: (open: boolean) => void;
     setSummaryAudioOpenAITTPickerOpen: (open: boolean) => void;
     setSummaryAudioGeminiTTSPickerOpen: (open: boolean) => void;
+    setSummaryAudioAzureSpeechPickerOpen: (open: boolean) => void;
   };
   aivisModelsData: AivisModelsResponse | null;
   xaiVoicesData: XAIVoicesResponse | null;
   elevenLabsVoicesData: ElevenLabsVoicesResponse | null;
   openAITTSVoicesData: OpenAITTSVoicesResponse | null;
   geminiTTSVoicesData: GeminiTTSVoicesResponse | null;
+  azureSpeechVoicesData: AzureSpeechVoicesResponse | null;
   loadAivisModels: () => Promise<unknown>;
   loadXAIVoices: () => Promise<unknown>;
   loadElevenLabsVoices: () => Promise<unknown>;
   loadOpenAITTSVoices: () => Promise<unknown>;
   loadGeminiTTSVoices: () => Promise<unknown>;
+  loadAzureSpeechVoices: () => Promise<unknown>;
 }) {
   return () => {
     if (params.provider === "aivis") {
@@ -168,6 +190,9 @@ export function buildSummaryAudioPickerOpenAction(params: {
     } else if (params.provider === "gemini_tts") {
       params.openers.setSummaryAudioGeminiTTSPickerOpen(true);
       if (params.geminiTTSVoicesData == null) void params.loadGeminiTTSVoices().catch(() => undefined);
+    } else if (params.provider === "azure_speech") {
+      params.openers.setSummaryAudioAzureSpeechPickerOpen(true);
+      if (params.azureSpeechVoicesData == null) void params.loadAzureSpeechVoices().catch(() => undefined);
     }
   };
 }
@@ -241,6 +266,16 @@ export function buildAudioBriefingPickerSelectActions(params: {
         voice_style: "",
       });
     },
+    onSelectAzureSpeech: (selection: { voice_id: string; label: string; description: string }) => {
+      if (!params.pickers.azureSpeechPickerPersona) return;
+      params.updateAudioBriefingVoice(params.pickers.azureSpeechPickerPersona, {
+        tts_provider: "azure_speech",
+        voice_model: selection.voice_id,
+        voice_style: "",
+        provider_voice_label: selection.label,
+        provider_voice_description: selection.description,
+      });
+    },
   };
 }
 
@@ -297,6 +332,13 @@ export function buildSummaryAudioPickerSelectActions(params: {
       params.setSummaryAudioVoiceStyle("");
       params.setSummaryAudioProviderVoiceLabel("");
       params.setSummaryAudioProviderVoiceDescription("");
+    },
+    onSelectAzureSpeech: (selection: { voice_id: string; label: string; description: string }) => {
+      params.setSummaryAudioProvider("azure_speech");
+      params.setSummaryAudioVoiceModel(selection.voice_id);
+      params.setSummaryAudioVoiceStyle("");
+      params.setSummaryAudioProviderVoiceLabel(selection.label);
+      params.setSummaryAudioProviderVoiceDescription(selection.description);
     },
   };
 }

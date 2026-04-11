@@ -119,7 +119,7 @@ type CreateAPIKeyActionHandlersArgs = {
   confirmLabel: string;
   reload: () => Promise<unknown>;
   showToast: (message: string, tone: ToastTone) => void;
-  definitions: Record<AccessProviderID, APIKeyActionDefinition>;
+  definitions: Partial<Record<AccessProviderID, APIKeyActionDefinition>>;
 };
 
 export function createAPIKeyActionHandlers({
@@ -128,7 +128,7 @@ export function createAPIKeyActionHandlers({
   reload,
   showToast,
   definitions,
-}: CreateAPIKeyActionHandlersArgs): APIKeyActionHandlerMap {
+}: CreateAPIKeyActionHandlersArgs): Partial<APIKeyActionHandlerMap> {
   return Object.fromEntries(
     Object.entries(definitions).map(([provider, definition]) => [
       provider,
@@ -163,5 +163,5 @@ export function createAPIKeyActionHandlers({
         },
       },
     ]),
-  ) as APIKeyActionHandlerMap;
+  ) as Partial<APIKeyActionHandlerMap>;
 }

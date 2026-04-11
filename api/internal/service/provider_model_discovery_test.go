@@ -69,6 +69,16 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 			baseURL:  "/v1/chat/completions",
 			wantPath: "/v1/models",
 		},
+		{
+			name: "together",
+			fetchFunc: func(ctx context.Context, svc *ProviderModelDiscoveryService) ([]string, error) {
+				return svc.fetchTogetherModels(ctx)
+			},
+			apiKey:   "test-together-key",
+			baseKey:  "TOGETHER_API_BASE_URL",
+			baseURL:  "/v1",
+			wantPath: "/v1/models",
+		},
 	}
 
 	for _, c := range cases {
@@ -108,6 +118,28 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 			}
 			if len(models) != 2 || models[0] != c.name+"-model-1" || models[1] != c.name+"-model-2" {
 				t.Fatalf("models = %#v, want sorted unique two models", models)
+			}
+		})
+	}
+}
+
+func TestNormalizeTogetherAPIBaseURL(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "empty", raw: "", want: "https://api.together.xyz"},
+		{name: "base", raw: "https://api.together.xyz", want: "https://api.together.xyz"},
+		{name: "v1", raw: "https://api.together.xyz/v1", want: "https://api.together.xyz"},
+		{name: "chat completions", raw: "https://api.together.xyz/chat/completions", want: "https://api.together.xyz"},
+		{name: "v1 chat completions", raw: "https://api.together.xyz/v1/chat/completions", want: "https://api.together.xyz"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeTogetherAPIBaseURL(tt.raw); got != tt.want {
+				t.Fatalf("normalizeTogetherAPIBaseURL(%q) = %q, want %q", tt.raw, got, tt.want)
 			}
 		})
 	}

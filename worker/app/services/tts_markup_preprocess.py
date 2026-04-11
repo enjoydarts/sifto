@@ -39,6 +39,20 @@ ELEVENLABS_TTS_PREPROCESS_PURPOSE = "elevenlabs_tts_preprocess"
 XAI_TTS_PREPROCESS_PURPOSE = "xai_tts_preprocess"
 DEFAULT_TTS_MARKUP_PREPROCESS_PROMPT_KEY = "fish.summary_preprocess"
 _MAX_OUTPUT_TOKENS = 3200
+_PURPOSE_BY_PROMPT_KEY = {
+    "fish.summary_preprocess": FISH_PREPROCESS_PURPOSE,
+    "fish.audio_briefing_single_preprocess": FISH_PREPROCESS_PURPOSE,
+    "fish.audio_briefing_duo_preprocess": FISH_PREPROCESS_PURPOSE,
+    "gemini.summary_preprocess": GEMINI_TTS_PREPROCESS_PURPOSE,
+    "gemini.audio_briefing_single_preprocess": GEMINI_TTS_PREPROCESS_PURPOSE,
+    "gemini.audio_briefing_duo_preprocess": GEMINI_TTS_PREPROCESS_PURPOSE,
+    "elevenlabs.summary_preprocess": ELEVENLABS_TTS_PREPROCESS_PURPOSE,
+    "elevenlabs.audio_briefing_single_preprocess": ELEVENLABS_TTS_PREPROCESS_PURPOSE,
+    "elevenlabs.audio_briefing_duo_preprocess": ELEVENLABS_TTS_PREPROCESS_PURPOSE,
+    "xai.summary_preprocess": XAI_TTS_PREPROCESS_PURPOSE,
+    "xai.audio_briefing_single_preprocess": XAI_TTS_PREPROCESS_PURPOSE,
+    "xai.audio_briefing_duo_preprocess": XAI_TTS_PREPROCESS_PURPOSE,
+}
 
 
 class TTSMarkupPreprocessService:
@@ -127,13 +141,11 @@ class TTSMarkupPreprocessService:
         return enriched
 
     def _purpose_for_prompt_key(self, prompt_key: str) -> str:
-        if str(prompt_key or "").strip().startswith("gemini."):
-            return GEMINI_TTS_PREPROCESS_PURPOSE
-        if str(prompt_key or "").strip().startswith("elevenlabs."):
-            return ELEVENLABS_TTS_PREPROCESS_PURPOSE
-        if str(prompt_key or "").strip().startswith("xai."):
-            return XAI_TTS_PREPROCESS_PURPOSE
-        return FISH_PREPROCESS_PURPOSE
+        normalized = str(prompt_key or "").strip()
+        purpose = _PURPOSE_BY_PROMPT_KEY.get(normalized)
+        if purpose is None:
+            raise RuntimeError(f"unsupported tts markup preprocess prompt key: {normalized}")
+        return purpose
 
     def _preprocess_openai_compat(self, chat_json, llm_meta, model: str, api_key: str, system_instruction: str, prompt: str, purpose: str) -> dict:
         text, usage = chat_json(

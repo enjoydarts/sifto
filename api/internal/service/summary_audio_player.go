@@ -120,6 +120,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 	voiceModel := strings.TrimSpace(settings.VoiceModel)
 	voiceStyle := strings.TrimSpace(settings.VoiceStyle)
 	ttsModel := strings.TrimSpace(settings.TTSModel)
+	providerMetadata := LookupTTSProviderMetadata(provider)
 	if provider == "" || voiceModel == "" {
 		return nil, ErrSummaryAudioMissingVoice
 	}
@@ -152,7 +153,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 			narration = preprocessed.Text
 		}
 	} else if strings.EqualFold(provider, "fish") {
-		if ttsModel == "" {
+		if providerMetadata.SummaryRequiresTTSModel && ttsModel == "" {
 			return nil, ErrSummaryAudioMissingModel
 		}
 		fishAudioAPIKey, err = loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetFishAudioAPIKeyEncrypted, s.cipher, userID, "fish api key is not configured")
@@ -168,7 +169,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 			narration = preprocessed.Text
 		}
 	} else if strings.EqualFold(provider, "gemini_tts") {
-		if ttsModel == "" {
+		if providerMetadata.SummaryRequiresTTSModel && ttsModel == "" {
 			return nil, ErrSummaryAudioMissingModel
 		}
 		if err := EnsureGeminiTTSEnabledForUser(ctx, s.userRepo, userID); err != nil {
@@ -183,7 +184,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 			narration = preprocessed.Text
 		}
 	} else if strings.EqualFold(provider, "elevenlabs") {
-		if ttsModel == "" {
+		if providerMetadata.SummaryRequiresTTSModel && ttsModel == "" {
 			return nil, ErrSummaryAudioMissingModel
 		}
 		elevenLabsAPIKey, err = loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetElevenLabsAPIKeyEncrypted, s.cipher, userID, "elevenlabs api key is not configured")
@@ -199,7 +200,7 @@ func (s *SummaryAudioPlayerService) Synthesize(ctx context.Context, userID, item
 			narration = preprocessed.Text
 		}
 	} else if strings.EqualFold(provider, "openai") {
-		if ttsModel == "" {
+		if providerMetadata.SummaryRequiresTTSModel && ttsModel == "" {
 			return nil, ErrSummaryAudioMissingModel
 		}
 		openAIAPIKey, err = loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetOpenAIAPIKeyEncrypted, s.cipher, userID, "openai api key is not configured")

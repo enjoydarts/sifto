@@ -182,7 +182,7 @@ def _chat_json(
         prompt,
         model,
         api_key,
-        url=os.getenv("TOGETHER_API_BASE_URL", "https://api.together.xyz/v1/chat/completions"),
+        url=_chat_completions_url(os.getenv("TOGETHER_API_BASE_URL", "")),
         normalize_model_name=_normalize_model_name,
         supports_strict_schema=_supports_strict_schema,
         timeout_sec=req_timeout,
@@ -198,6 +198,17 @@ def _chat_json(
         temperature=_normalize_temperature(model, temperature),
         top_p=_normalize_top_p(top_p),
     )
+
+
+def _chat_completions_url(raw_base_url: str) -> str:
+    base = (raw_base_url or "").strip().rstrip("/")
+    if not base:
+        return "https://api.together.xyz/v1/chat/completions"
+    if base.endswith("/v1/chat/completions") or base.endswith("/chat/completions"):
+        return base
+    if base.endswith("/v1"):
+        return f"{base}/chat/completions"
+    return f"{base}/v1/chat/completions"
 
 
 def _translate_title_to_ja(title: str, model: str, api_key: str) -> str:

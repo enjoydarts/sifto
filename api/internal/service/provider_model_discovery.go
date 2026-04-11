@@ -300,14 +300,7 @@ func (s *ProviderModelDiscoveryService) fetchTogetherModels(ctx context.Context)
 	if apiKey == "" {
 		return nil, fmt.Errorf("api key is required")
 	}
-	base := strings.TrimRight(strings.TrimSpace(os.Getenv("TOGETHER_API_BASE_URL")), "/")
-	if base == "" {
-		base = "https://api.together.xyz"
-	} else if strings.HasSuffix(base, "/v1/chat/completions") {
-		base = strings.TrimSuffix(base, "/v1/chat/completions")
-	} else if strings.HasSuffix(base, "/chat/completions") {
-		base = strings.TrimSuffix(base, "/chat/completions")
-	}
+	base := normalizeTogetherAPIBaseURL(os.Getenv("TOGETHER_API_BASE_URL"))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/models", nil)
 	if err != nil {
 		return nil, err
@@ -318,6 +311,19 @@ func (s *ProviderModelDiscoveryService) fetchTogetherModels(ctx context.Context)
 		return nil, err
 	}
 	return readModelsListResponse(resp)
+}
+
+func normalizeTogetherAPIBaseURL(raw string) string {
+	base := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if base == "" {
+		return "https://api.together.xyz"
+	}
+	for _, suffix := range []string{"/v1/chat/completions", "/chat/completions", "/v1"} {
+		if strings.HasSuffix(base, suffix) {
+			return strings.TrimSuffix(base, suffix)
+		}
+	}
+	return base
 }
 
 func (s *ProviderModelDiscoveryService) fetchDeepSeekModels(ctx context.Context) ([]string, error) {

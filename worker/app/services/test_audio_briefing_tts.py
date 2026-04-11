@@ -411,7 +411,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
     def test_synthesize_and_upload_uses_xai_provider(self):
         service = AudioBriefingTTSService()
 
-        with patch.object(service, "synthesize_xai_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 12)) as synth:
+        with patch.object(service, "synthesize_single_speaker_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 12)) as synth:
             with patch.object(service, "upload_bytes") as upload:
                 object_key, duration_sec = service.synthesize_and_upload(
                     provider="xai",
@@ -437,7 +437,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
     def test_synthesize_and_upload_uses_openai_provider(self):
         service = AudioBriefingTTSService()
 
-        with patch.object(service, "synthesize_openai_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 12)) as synth:
+        with patch.object(service, "synthesize_single_speaker_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 12)) as synth:
             with patch.object(service, "upload_bytes") as upload:
                 object_key, duration_sec = service.synthesize_and_upload(
                     provider="openai",
@@ -464,7 +464,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
     def test_synthesize_and_upload_uses_fish_provider(self):
         service = AudioBriefingTTSService()
 
-        with patch.object(service, "synthesize_fish_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 12)) as synth:
+        with patch.object(service, "synthesize_single_speaker_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 12)) as synth:
             with patch.object(service, "upload_bytes") as upload:
                 object_key, duration_sec = service.synthesize_and_upload(
                     provider="fish",
@@ -484,12 +484,18 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
                 )
 
         synth.assert_called_once_with(
+            provider="fish",
+            persona="",
             voice_id="fish-model-1",
             tts_model="s2-pro",
             text="hello",
             speech_rate=1.0,
             volume_gain=0.25,
-            api_key_override="fish-key",
+            google_api_key=None,
+            fish_api_key="fish-key",
+            elevenlabs_api_key=None,
+            xai_api_key=None,
+            openai_api_key=None,
         )
         upload.assert_called_once()
         self.assertEqual(duration_sec, 12)
@@ -498,7 +504,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
     def test_synthesize_and_upload_uses_elevenlabs_provider(self):
         service = AudioBriefingTTSService()
 
-        with patch.object(service, "synthesize_elevenlabs_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 14)) as synth:
+        with patch.object(service, "synthesize_single_speaker_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 14)) as synth:
             with patch.object(service, "upload_bytes") as upload:
                 object_key, duration_sec = service.synthesize_and_upload(
                     provider="elevenlabs",
@@ -518,14 +524,88 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
                 )
 
         synth.assert_called_once_with(
+            provider="elevenlabs",
+            persona="",
             voice_id="voice-1",
             tts_model="eleven_multilingual_v2",
             text="hello",
-            api_key_override="eleven-key",
+            speech_rate=1.0,
+            volume_gain=0.0,
+            google_api_key=None,
+            fish_api_key=None,
+            elevenlabs_api_key="eleven-key",
+            xai_api_key=None,
+            openai_api_key=None,
         )
         upload.assert_called_once()
         self.assertEqual(duration_sec, 14)
         self.assertTrue(object_key.endswith(".mp3"))
+
+    def test_synthesize_and_upload_dispatches_by_provider_key(self):
+        service = AudioBriefingTTSService()
+        cases = [
+            {
+                "provider": "xai",
+                "voice_model": "voice-1",
+                "tts_model": "",
+                "patch_name": "synthesize_single_speaker_audio",
+                "call_kwargs": {"xai_api_key": "xai-key"},
+            },
+            {
+                "provider": "openai",
+                "voice_model": "alloy",
+                "tts_model": "gpt-4o-mini-tts",
+                "patch_name": "synthesize_single_speaker_audio",
+                "call_kwargs": {"openai_api_key": "openai-key"},
+            },
+            {
+                "provider": "gemini_tts",
+                "voice_model": "Kore",
+                "tts_model": "gemini-2.5-flash-preview-tts",
+                "patch_name": "synthesize_single_speaker_audio",
+                "call_kwargs": {"google_api_key": "google-key"},
+            },
+            {
+                "provider": "fish",
+                "voice_model": "fish-model-1",
+                "tts_model": "s2-pro",
+                "patch_name": "synthesize_single_speaker_audio",
+                "call_kwargs": {"fish_api_key": "fish-key"},
+            },
+            {
+                "provider": "elevenlabs",
+                "voice_model": "voice-1",
+                "tts_model": "eleven_multilingual_v2",
+                "patch_name": "synthesize_single_speaker_audio",
+                "call_kwargs": {"elevenlabs_api_key": "eleven-key"},
+            },
+        ]
+
+        for case in cases:
+            with self.subTest(provider=case["provider"]):
+                with patch.object(service, case["patch_name"], return_value=(b"mp3", "audio/mpeg", ".mp3", 12)) as synth:
+                    with patch.object(service, "upload_bytes") as upload:
+                        object_key, duration_sec = service.synthesize_and_upload(
+                            provider=case["provider"],
+                            voice_model=case["voice_model"],
+                            voice_style="",
+                            tts_model=case["tts_model"],
+                            text="hello",
+                            speech_rate=1.0,
+                            emotional_intensity=1.0,
+                            tempo_dynamics=1.0,
+                            line_break_silence_seconds=0.0,
+                            chunk_trailing_silence_seconds=0.0,
+                            pitch=0.0,
+                            volume_gain=0.0,
+                            output_object_key="audio/test",
+                            **case["call_kwargs"],
+                        )
+
+                synth.assert_called_once()
+                upload.assert_called_once()
+                self.assertEqual(duration_sec, 12)
+                self.assertTrue(object_key.endswith(".mp3"))
 
     def test_synthesize_elevenlabs_duo_and_upload_requires_eleven_v3(self):
         service = AudioBriefingTTSService()
@@ -593,12 +673,15 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
             return httpx.Response(200, content=b"audio", request=request)
 
         with patch("app.services.openai_tts.httpx.post", side_effect=fake_post):
-            audio_bytes, content_type, suffix, duration_sec = service.synthesize_openai_audio(
+            audio_bytes, content_type, suffix, duration_sec = service.synthesize_single_speaker_audio(
+                provider="openai",
+                persona="",
                 voice_id="alloy",
                 tts_model="gpt-4o-mini-tts",
                 text="summary text",
                 speech_rate=1.0,
-                api_key_override="openai-key",
+                volume_gain=0.0,
+                openai_api_key="openai-key",
             )
 
         self.assertEqual(audio_bytes, b"audio")
@@ -619,16 +702,17 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
         )
 
     def test_synthesize_gemini_audio_uses_gemini_speech_generation_payload(self):
-        captured: dict[str, object] = {}
         service = AudioBriefingTTSService()
         with patch("app.services.gemini_tts.synthesize_gemini_cloud_tts", return_value=(b"mp3", "audio/mpeg", ".mp3", 1)) as synth:
-            audio_bytes, content_type, suffix, duration_sec = service.synthesize_gemini_audio(
+            audio_bytes, content_type, suffix, duration_sec = service.synthesize_single_speaker_audio(
+                provider="gemini_tts",
                 persona="editor",
                 voice_id="Kore",
                 tts_model="gemini-2.5-flash-tts",
                 text="summary text",
                 speech_rate=0.95,
-                api_key_override=None,
+                volume_gain=0.0,
+                google_api_key=None,
             )
 
         synth.assert_called_once_with(
@@ -646,7 +730,7 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
     def test_synthesize_and_upload_uses_gemini_provider_with_persona(self):
         service = AudioBriefingTTSService()
 
-        with patch.object(service, "synthesize_gemini_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 12)) as synth:
+        with patch.object(service, "synthesize_single_speaker_audio", return_value=(b"mp3", "audio/mpeg", ".mp3", 12)) as synth:
             with patch.object(service, "upload_bytes") as upload:
                 object_key, duration_sec = service.synthesize_and_upload(
                     provider="gemini_tts",
@@ -667,12 +751,18 @@ class AudioBriefingTTSServiceTests(unittest.TestCase):
                 )
 
         synth.assert_called_once_with(
+            provider="gemini_tts",
             persona="editor",
             voice_id="Kore",
             tts_model="gemini-2.5-flash-tts",
             text="hello",
             speech_rate=1.0,
-            api_key_override=None,
+            volume_gain=0.0,
+            google_api_key=None,
+            fish_api_key=None,
+            elevenlabs_api_key=None,
+            xai_api_key=None,
+            openai_api_key=None,
         )
         upload.assert_called_once()
         self.assertEqual(duration_sec, 12)

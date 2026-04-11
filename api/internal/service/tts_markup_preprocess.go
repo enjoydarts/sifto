@@ -139,7 +139,10 @@ func (s *TTSMarkupPreprocessService) Preprocess(ctx context.Context, userID, ite
 	if promptKey == "" {
 		promptKey = fishSummaryPreprocessPromptKey
 	}
-	purpose := preprocessPurposeForPromptKey(promptKey)
+	purpose, ok := preprocessPurposeForPromptKey(promptKey)
+	if !ok {
+		return nil, fmt.Errorf("unsupported tts markup preprocess prompt key: %s", promptKey)
+	}
 
 	apiKey, err := s.loadProviderKey(ctx, userID, provider)
 	if err != nil {
@@ -203,51 +206,19 @@ func (s *TTSMarkupPreprocessService) loadProviderKey(ctx context.Context, userID
 }
 
 func summaryPreprocessPromptKeyForProvider(provider string) string {
-	switch strings.TrimSpace(strings.ToLower(provider)) {
-	case "gemini_tts":
-		return geminiSummaryPreprocessPromptKey
-	case "elevenlabs":
-		return elevenLabsSummaryPreprocessPromptKey
-	case "xai":
-		return xaiSummaryPreprocessPromptKey
-	}
-	return fishSummaryPreprocessPromptKey
+	return strings.TrimSpace(LookupTTSProviderMetadata(provider).SummaryPreprocessPromptKey)
 }
 
 func audioBriefingSinglePreprocessPromptKeyForProvider(provider string) string {
-	switch strings.TrimSpace(strings.ToLower(provider)) {
-	case "gemini_tts":
-		return geminiAudioBriefingSinglePreprocessPromptKey
-	case "elevenlabs":
-		return elevenLabsAudioBriefingSinglePreprocessPromptKey
-	case "xai":
-		return xaiAudioBriefingSinglePreprocessPromptKey
-	}
-	return fishAudioBriefingSinglePreprocessPromptKey
+	return strings.TrimSpace(LookupTTSProviderMetadata(provider).AudioBriefingSinglePreprocessPromptKey)
 }
 
 func audioBriefingDuoPreprocessPromptKeyForProvider(provider string) string {
-	switch strings.TrimSpace(strings.ToLower(provider)) {
-	case "gemini_tts":
-		return geminiAudioBriefingDuoPreprocessPromptKey
-	case "elevenlabs":
-		return elevenLabsAudioBriefingDuoPreprocessPromptKey
-	case "xai":
-		return xaiAudioBriefingDuoPreprocessPromptKey
-	}
-	return fishAudioBriefingDuoPreprocessPromptKey
+	return strings.TrimSpace(LookupTTSProviderMetadata(provider).AudioBriefingDuoPreprocessPromptKey)
 }
 
-func preprocessPurposeForPromptKey(promptKey string) string {
-	switch {
-	case strings.HasPrefix(strings.TrimSpace(promptKey), "gemini."):
-		return geminiTTSPreprocessPurpose
-	case strings.HasPrefix(strings.TrimSpace(promptKey), "elevenlabs."):
-		return elevenLabsTTSPreprocessPurpose
-	case strings.HasPrefix(strings.TrimSpace(promptKey), "xai."):
-		return xaiTTSPreprocessPurpose
-	}
-	return fishPreprocessPurpose
+func preprocessPurposeForPromptKey(promptKey string) (string, bool) {
+	return preprocessPurposeForKnownPromptKey(promptKey)
 }
 
 func hasFishPreprocessProviderKey(settings *model.UserSettings, provider string) bool {

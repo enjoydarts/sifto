@@ -760,3 +760,101 @@ func TestTTSMarkupPreprocessElevenLabsAudioBriefingDuoUsesPersonaVariables(t *te
 		t.Fatalf("prompt_key = %q, want %q", promptKey, elevenLabsAudioBriefingDuoPreprocessPromptKey)
 	}
 }
+
+func TestTTSMarkupPreprocessPromptKeyFamiliesByProvider(t *testing.T) {
+	tests := []struct {
+		name        string
+		provider    string
+		wantSummary string
+		wantSingle  string
+		wantDuo     string
+	}{
+		{
+			name:        "fish",
+			provider:    "fish",
+			wantSummary: fishSummaryPreprocessPromptKey,
+			wantSingle:  fishAudioBriefingSinglePreprocessPromptKey,
+			wantDuo:     fishAudioBriefingDuoPreprocessPromptKey,
+		},
+		{
+			name:        "gemini_tts",
+			provider:    "gemini_tts",
+			wantSummary: geminiSummaryPreprocessPromptKey,
+			wantSingle:  geminiAudioBriefingSinglePreprocessPromptKey,
+			wantDuo:     geminiAudioBriefingDuoPreprocessPromptKey,
+		},
+		{
+			name:        "elevenlabs",
+			provider:    "elevenlabs",
+			wantSummary: elevenLabsSummaryPreprocessPromptKey,
+			wantSingle:  elevenLabsAudioBriefingSinglePreprocessPromptKey,
+			wantDuo:     elevenLabsAudioBriefingDuoPreprocessPromptKey,
+		},
+		{
+			name:        "xai",
+			provider:    "xai",
+			wantSummary: xaiSummaryPreprocessPromptKey,
+			wantSingle:  xaiAudioBriefingSinglePreprocessPromptKey,
+			wantDuo:     xaiAudioBriefingDuoPreprocessPromptKey,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := summaryPreprocessPromptKeyForProvider(tt.provider); got != tt.wantSummary {
+				t.Fatalf("summaryPreprocessPromptKeyForProvider(%q) = %q, want %q", tt.provider, got, tt.wantSummary)
+			}
+			if got := audioBriefingSinglePreprocessPromptKeyForProvider(tt.provider); got != tt.wantSingle {
+				t.Fatalf("audioBriefingSinglePreprocessPromptKeyForProvider(%q) = %q, want %q", tt.provider, got, tt.wantSingle)
+			}
+			if got := audioBriefingDuoPreprocessPromptKeyForProvider(tt.provider); got != tt.wantDuo {
+				t.Fatalf("audioBriefingDuoPreprocessPromptKeyForProvider(%q) = %q, want %q", tt.provider, got, tt.wantDuo)
+			}
+		})
+	}
+}
+
+func TestTTSMarkupPreprocessPromptKeyFamilyUnknownProviderReturnsEmptyPromptKey(t *testing.T) {
+	if got := summaryPreprocessPromptKeyForProvider("custom"); got != "" {
+		t.Fatalf("summaryPreprocessPromptKeyForProvider(custom) = %q, want empty", got)
+	}
+	if got := audioBriefingSinglePreprocessPromptKeyForProvider("custom"); got != "" {
+		t.Fatalf("audioBriefingSinglePreprocessPromptKeyForProvider(custom) = %q, want empty", got)
+	}
+	if got := audioBriefingDuoPreprocessPromptKeyForProvider("custom"); got != "" {
+		t.Fatalf("audioBriefingDuoPreprocessPromptKeyForProvider(custom) = %q, want empty", got)
+	}
+}
+
+func TestTTSMarkupPreprocessPurposeRoutingByPromptFamily(t *testing.T) {
+	tests := []struct {
+		name      string
+		promptKey string
+		want      string
+	}{
+		{name: "fish summary", promptKey: fishSummaryPreprocessPromptKey, want: fishPreprocessPurpose},
+		{name: "fish briefing single", promptKey: fishAudioBriefingSinglePreprocessPromptKey, want: fishPreprocessPurpose},
+		{name: "fish briefing duo", promptKey: fishAudioBriefingDuoPreprocessPromptKey, want: fishPreprocessPurpose},
+		{name: "gemini summary", promptKey: geminiSummaryPreprocessPromptKey, want: geminiTTSPreprocessPurpose},
+		{name: "elevenlabs summary", promptKey: elevenLabsSummaryPreprocessPromptKey, want: elevenLabsTTSPreprocessPurpose},
+		{name: "xai summary", promptKey: xaiSummaryPreprocessPromptKey, want: xaiTTSPreprocessPurpose},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := preprocessPurposeForPromptKey(tt.promptKey)
+			if !ok {
+				t.Fatalf("preprocessPurposeForPromptKey(%q) reported unknown prompt key", tt.promptKey)
+			}
+			if got != tt.want {
+				t.Fatalf("preprocessPurposeForPromptKey(%q) = %q, want %q", tt.promptKey, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTTSMarkupPreprocessPurposeRoutingRejectsUnknownPromptFamily(t *testing.T) {
+	if got, ok := preprocessPurposeForPromptKey("custom.summary_preprocess"); ok || got != "" {
+		t.Fatalf("preprocessPurposeForPromptKey(custom.summary_preprocess) = (%q, %v), want empty,false", got, ok)
+	}
+}

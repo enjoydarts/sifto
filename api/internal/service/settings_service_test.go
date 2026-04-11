@@ -573,6 +573,62 @@ func TestUpdateSummaryAudioVoiceSettingsRequiresTTSModelForGeminiTTS(t *testing.
 	}
 }
 
+func TestUpdateSummaryAudioVoiceSettingsTTSModelRequirementsByProvider(t *testing.T) {
+	tests := []struct {
+		name       string
+		provider   string
+		ttsModel   string
+		voiceModel string
+		wantErr    string
+	}{
+		{name: "xai does not require tts model", provider: "xai", voiceModel: "alloy"},
+		{name: "openai requires tts model", provider: "openai", voiceModel: "alloy", wantErr: "invalid tts_model"},
+		{name: "fish requires tts model", provider: "fish", voiceModel: "fish-voice", wantErr: "invalid tts_model"},
+		{name: "gemini_tts requires tts model", provider: "gemini_tts", voiceModel: "Kore", wantErr: "invalid tts_model"},
+		{name: "elevenlabs requires tts model", provider: "elevenlabs", voiceModel: "voice-1", wantErr: "invalid tts_model"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := newSettingsServiceForTest(t)
+			row, err := svc.UpdateSummaryAudioVoiceSettings(context.Background(), "00000000-0000-4000-8000-000000000021", UpdateSummaryAudioVoiceSettingsInput{
+				TTSProvider:             tt.provider,
+				TTSModel:                tt.ttsModel,
+				VoiceModel:              tt.voiceModel,
+				VoiceStyle:              "",
+				SpeechRate:              1.0,
+				EmotionalIntensity:      1.0,
+				TempoDynamics:           1.0,
+				LineBreakSilenceSeconds: 0.4,
+				Pitch:                   0.0,
+				VolumeGain:              0.0,
+				AivisUserDictionaryUUID: nil,
+			})
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("UpdateSummaryAudioVoiceSettings() error = %v, want %q", err, tt.wantErr)
+				}
+				if row != nil {
+					t.Fatalf("UpdateSummaryAudioVoiceSettings() row = %#v, want nil", row)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("UpdateSummaryAudioVoiceSettings() error = %v", err)
+			}
+			if row == nil {
+				t.Fatal("UpdateSummaryAudioVoiceSettings() = nil, want row")
+			}
+			if row.TTSProvider != tt.provider {
+				t.Fatalf("TTSProvider = %q, want %q", row.TTSProvider, tt.provider)
+			}
+			if row.TTSModel != tt.ttsModel {
+				t.Fatalf("TTSModel = %q, want %q", row.TTSModel, tt.ttsModel)
+			}
+		})
+	}
+}
+
 func TestPodcastSettingsPayloadSupportsPodcastFields(t *testing.T) {
 	slug := "p_123"
 	payload := PodcastSettingsPayload(&model.UserSettings{

@@ -8,21 +8,12 @@ import wave
 import boto3
 import httpx
 from app.services.aivis_speech import AIVIS_RATE_LIMITER, AivisRateLimiter, AivisRedisRateLimiter, AivisSpeechService, build_aivis_payload
-from app.services.elevenlabs_tts import synthesize_elevenlabs_dialogue_tts, synthesize_elevenlabs_tts
-from app.services.fish_tts import synthesize_fish_multi_speaker_tts, synthesize_fish_tts
-from app.services.gemini_tts import synthesize_gemini_multi_speaker_tts, synthesize_gemini_tts
-from app.services.tts_provider_registry import synthesize_catalog_tts
-
-
-def _env_float(name: str, default: float) -> float:
-    raw = os.getenv(name, "").strip()
-    if not raw:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        return default
-
+from app.services.elevenlabs_tts import synthesize_elevenlabs_dialogue_tts
+from app.services.fish_tts import synthesize_fish_multi_speaker_tts
+from app.services.gemini_tts import synthesize_gemini_multi_speaker_tts
+from app.services.tts_provider_metadata import _env_float
+from app.services.tts_provider_metadata import load_single_speaker_tts_provider_runtime_metadata
+from app.services.tts_provider_registry import synthesize_single_speaker_tts
 
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name, "").strip()
@@ -93,20 +84,18 @@ class AudioBriefingTTSService:
         self.aivis_retry_attempts = max(_env_int("AIVIS_TTS_RETRY_ATTEMPTS", 2), 1)
         self.aivis_retry_fallback_sec = max(_env_float("AIVIS_TTS_RETRY_FALLBACK_SEC", 9.0), 0.0)
         self.aivis_timeout_sec = max(_env_float("AIVIS_TTS_TIMEOUT_SEC", 300.0), 1.0)
-        self.xai_tts_endpoint = (os.getenv("XAI_TTS_ENDPOINT", "https://api.x.ai").strip() or "https://api.x.ai").rstrip("/")
-        self.xai_api_key = os.getenv("XAI_API_KEY", "").strip()
-        self.xai_timeout_sec = max(_env_float("XAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
-        self.gemini_tts_endpoint = (os.getenv("GEMINI_TTS_ENDPOINT", "https://generativelanguage.googleapis.com").strip() or "https://generativelanguage.googleapis.com").rstrip("/")
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        self.gemini_timeout_sec = max(_env_float("GEMINI_TTS_TIMEOUT_SEC", 300.0), 1.0)
-        self.fish_api_key = os.getenv("FISH_API_KEY", "").strip()
-        self.fish_timeout_sec = max(_env_float("FISH_TTS_TIMEOUT_SEC", 300.0), 1.0)
-        self.elevenlabs_tts_endpoint = (os.getenv("ELEVENLABS_TTS_ENDPOINT", "https://api.elevenlabs.io").strip() or "https://api.elevenlabs.io").rstrip("/")
-        self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
-        self.elevenlabs_timeout_sec = max(_env_float("ELEVENLABS_TTS_TIMEOUT_SEC", 300.0), 1.0)
-        self.openai_tts_endpoint = (os.getenv("OPENAI_TTS_ENDPOINT", "https://api.openai.com").strip() or "https://api.openai.com").rstrip("/")
-        self.openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
-        self.openai_timeout_sec = max(_env_float("OPENAI_TTS_TIMEOUT_SEC", 300.0), 1.0)
+        self.single_speaker_provider_runtime = {
+            provider: load_single_speaker_tts_provider_runtime_metadata(provider)
+            for provider in ("xai", "gemini_tts", "fish", "elevenlabs", "openai")
+        }
+        self.xai_api_key = self.single_speaker_provider_runtime["xai"].api_key
+        self.gemini_api_key = self.single_speaker_provider_runtime["gemini_tts"].api_key
+        self.fish_api_key = self.single_speaker_provider_runtime["fish"].api_key
+        self.fish_timeout_sec = self.single_speaker_provider_runtime["fish"].timeout_sec
+        self.elevenlabs_tts_endpoint = self.single_speaker_provider_runtime["elevenlabs"].endpoint
+        self.elevenlabs_api_key = self.single_speaker_provider_runtime["elevenlabs"].api_key
+        self.elevenlabs_timeout_sec = self.single_speaker_provider_runtime["elevenlabs"].timeout_sec
+        self.openai_api_key = self.single_speaker_provider_runtime["openai"].api_key
         self.heartbeat_interval_sec = max(_env_float("AUDIO_BRIEFING_HEARTBEAT_INTERVAL_SEC", 20.0), 1.0)
         self.heartbeat_timeout_sec = max(_env_float("AUDIO_BRIEFING_HEARTBEAT_TIMEOUT_SEC", 10.0), 1.0)
         self.aivis = AivisSpeechService()
@@ -165,45 +154,20 @@ class AudioBriefingTTSService:
                     user_dictionary_uuid=user_dictionary_uuid,
                     api_key_override=aivis_api_key,
                 )
-            elif provider == "xai":
-                payload, content_type, suffix, duration_sec = self.synthesize_xai_audio(
-                    voice_id=voice_model,
-                    text=text,
-                    speech_rate=speech_rate,
-                    api_key_override=xai_api_key,
-                )
-            elif provider == "gemini_tts":
-                payload, content_type, suffix, duration_sec = self.synthesize_gemini_audio(
+            elif provider in {"xai", "gemini_tts", "fish", "elevenlabs", "openai"}:
+                payload, content_type, suffix, duration_sec = self.synthesize_single_speaker_audio(
+                    provider=provider,
                     persona=persona,
                     voice_id=voice_model,
                     tts_model=tts_model,
                     text=text,
                     speech_rate=speech_rate,
-                    api_key_override=google_api_key,
-                )
-            elif provider == "fish":
-                payload, content_type, suffix, duration_sec = self.synthesize_fish_audio(
-                    voice_id=voice_model,
-                    tts_model=tts_model,
-                    text=text,
-                    speech_rate=speech_rate,
                     volume_gain=volume_gain,
-                    api_key_override=fish_api_key,
-                )
-            elif provider == "elevenlabs":
-                payload, content_type, suffix, duration_sec = self.synthesize_elevenlabs_audio(
-                    voice_id=voice_model,
-                    tts_model=tts_model,
-                    text=text,
-                    api_key_override=elevenlabs_api_key,
-                )
-            elif provider == "openai":
-                payload, content_type, suffix, duration_sec = self.synthesize_openai_audio(
-                    voice_id=voice_model,
-                    tts_model=tts_model,
-                    text=text,
-                    speech_rate=speech_rate,
-                    api_key_override=openai_api_key,
+                    google_api_key=google_api_key,
+                    fish_api_key=fish_api_key,
+                    elevenlabs_api_key=elevenlabs_api_key,
+                    xai_api_key=xai_api_key,
+                    openai_api_key=openai_api_key,
                 )
             else:
                 raise RuntimeError(f"unsupported tts provider: {provider}")
@@ -459,110 +423,49 @@ class AudioBriefingTTSService:
             api_key_override=api_key_override,
         )
 
-    def synthesize_xai_audio(
+    def synthesize_single_speaker_audio(
         self,
         *,
-        voice_id: str,
-        text: str,
-        speech_rate: float,
-        api_key_override: str | None = None,
-    ) -> tuple[bytes, str, str, int]:
-        return synthesize_catalog_tts(
-            "xai",
-            endpoint=self.xai_tts_endpoint,
-            api_key=(api_key_override or "").strip() or self.xai_api_key,
-            voice_id=voice_id,
-            tts_model="",
-            text=text,
-            speech_rate=speech_rate,
-            timeout_sec=self.xai_timeout_sec,
-        )
-
-    def synthesize_gemini_audio(
-        self,
-        *,
+        provider: str,
         persona: str,
         voice_id: str,
         tts_model: str,
         text: str,
         speech_rate: float,
-        api_key_override: str | None = None,
-    ) -> tuple[bytes, str, str, int]:
-        normalized_tts_model = (tts_model or "").strip()
-        if not normalized_tts_model:
-            raise RuntimeError("gemini tts model is required")
-        return synthesize_gemini_tts(
-            model=normalized_tts_model,
-            voice_name=voice_id,
-            persona=persona,
-            text=text,
-            speech_rate=speech_rate,
-            api_key=api_key_override,
-        )
-
-    def synthesize_fish_audio(
-        self,
-        *,
-        voice_id: str,
-        tts_model: str,
-        text: str,
-        speech_rate: float,
         volume_gain: float,
-        api_key_override: str | None = None,
+        google_api_key: str | None = None,
+        fish_api_key: str | None = None,
+        elevenlabs_api_key: str | None = None,
+        xai_api_key: str | None = None,
+        openai_api_key: str | None = None,
     ) -> tuple[bytes, str, str, int]:
-        normalized_tts_model = (tts_model or "").strip()
-        if not normalized_tts_model:
-            raise RuntimeError("fish tts model is required")
-        return synthesize_fish_tts(
-            model=normalized_tts_model,
-            voice_name=voice_id,
+        normalized_provider = (provider or "").strip().lower()
+        if normalized_provider not in self.single_speaker_provider_runtime:
+            raise RuntimeError(f"unsupported single-speaker tts provider: {provider}")
+        runtime = self.single_speaker_provider_runtime[normalized_provider]
+        api_key = runtime.api_key
+        if normalized_provider == "xai":
+            api_key = (xai_api_key or "").strip() or api_key
+        elif normalized_provider == "gemini_tts":
+            api_key = (google_api_key or "").strip() or api_key
+        elif normalized_provider == "fish":
+            api_key = (fish_api_key or "").strip() or api_key
+        elif normalized_provider == "elevenlabs":
+            api_key = (elevenlabs_api_key or "").strip() or api_key
+        elif normalized_provider == "openai":
+            api_key = (openai_api_key or "").strip() or api_key
+        return synthesize_single_speaker_tts(
+            normalized_provider,
+            endpoint=runtime.endpoint,
+            api_key=api_key,
+            voice_id=voice_id,
+            tts_model=tts_model,
             text=text,
             speech_rate=speech_rate,
+            timeout_sec=runtime.timeout_sec,
+            persona=persona,
             volume_gain=volume_gain,
-            api_key=(api_key_override or "").strip() or self.fish_api_key,
-            timeout_sec=self.fish_timeout_sec,
         )
-
-    def synthesize_openai_audio(
-        self,
-        *,
-        voice_id: str,
-        tts_model: str,
-        text: str,
-        speech_rate: float,
-        api_key_override: str | None = None,
-    ) -> tuple[bytes, str, str, int]:
-        normalized_tts_model = (tts_model or "").strip()
-        if not normalized_tts_model:
-            raise RuntimeError("openai tts model is required")
-        return synthesize_catalog_tts(
-            "openai",
-            endpoint=self.openai_tts_endpoint,
-            api_key=(api_key_override or "").strip() or self.openai_api_key,
-            voice_id=voice_id,
-            tts_model=normalized_tts_model,
-            text=text,
-            speech_rate=speech_rate,
-            timeout_sec=self.openai_timeout_sec,
-        )
-
-    def synthesize_elevenlabs_audio(
-        self,
-        *,
-        voice_id: str,
-        tts_model: str,
-        text: str,
-        api_key_override: str | None = None,
-    ) -> tuple[bytes, str, str, int]:
-        return synthesize_elevenlabs_tts(
-            endpoint=self.elevenlabs_tts_endpoint,
-            api_key=(api_key_override or "").strip() or self.elevenlabs_api_key,
-            model=tts_model,
-            voice_id=voice_id,
-            text=text,
-            timeout_sec=self.elevenlabs_timeout_sec,
-        )
-
 
 def synthesize_mock_audio(text: str, speech_rate: float) -> tuple[bytes, str, str, int]:
     speech_rate = speech_rate if speech_rate > 0 else 1.0

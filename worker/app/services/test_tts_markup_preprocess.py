@@ -505,6 +505,33 @@ class TTSMarkupPreprocessServiceTests(unittest.TestCase):
         llm_meta.assert_called_once_with("grok-4-fast-non-reasoning", XAI_TTS_PREPROCESS_PURPOSE, {"input_tokens": 1, "output_tokens": 1})
         self.assertEqual(result["llm"]["purpose"], XAI_TTS_PREPROCESS_PURPOSE)
 
+    def test_prompt_family_routing_by_prompt_key(self):
+        service = TTSMarkupPreprocessService()
+        cases = [
+            ("fish.summary_preprocess", FISH_PREPROCESS_PURPOSE),
+            ("fish.audio_briefing_single_preprocess", FISH_PREPROCESS_PURPOSE),
+            ("fish.audio_briefing_duo_preprocess", FISH_PREPROCESS_PURPOSE),
+            ("gemini.summary_preprocess", GEMINI_TTS_PREPROCESS_PURPOSE),
+            ("gemini.audio_briefing_single_preprocess", GEMINI_TTS_PREPROCESS_PURPOSE),
+            ("gemini.audio_briefing_duo_preprocess", GEMINI_TTS_PREPROCESS_PURPOSE),
+            ("elevenlabs.summary_preprocess", ELEVENLABS_TTS_PREPROCESS_PURPOSE),
+            ("elevenlabs.audio_briefing_single_preprocess", ELEVENLABS_TTS_PREPROCESS_PURPOSE),
+            ("elevenlabs.audio_briefing_duo_preprocess", ELEVENLABS_TTS_PREPROCESS_PURPOSE),
+            ("xai.summary_preprocess", XAI_TTS_PREPROCESS_PURPOSE),
+            ("xai.audio_briefing_single_preprocess", XAI_TTS_PREPROCESS_PURPOSE),
+            ("xai.audio_briefing_duo_preprocess", XAI_TTS_PREPROCESS_PURPOSE),
+        ]
+
+        for prompt_key, want in cases:
+            with self.subTest(prompt_key=prompt_key):
+                self.assertEqual(service._purpose_for_prompt_key(prompt_key), want)
+
+    def test_prompt_family_routing_rejects_unknown_prompt_key(self):
+        service = TTSMarkupPreprocessService()
+
+        with self.assertRaisesRegex(RuntimeError, "unsupported tts markup preprocess prompt key"):
+            service._purpose_for_prompt_key("custom.summary_preprocess")
+
 
 if __name__ == "__main__":
     unittest.main()

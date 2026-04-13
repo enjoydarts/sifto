@@ -26,71 +26,72 @@ type SettingsService struct {
 	obsidianRepo            *repository.ObsidianExportRepo
 	llmUsageRepo            *repository.LLMUsageLogRepo
 	openRouterOverrideRepo  *repository.OpenRouterModelOverrideRepo
+	notificationRuleRepo    *repository.NotificationPriorityRepo
 	uiFontCatalog           *UIFontCatalogService
 	cipher                  *SecretCipher
 	githubApp               *GitHubAppClient
 }
 
 type SettingsGetPayload struct {
-	UserID                  string           `json:"user_id"`
-	HasAnthropicAPIKey      bool             `json:"has_anthropic_api_key"`
-	AnthropicAPIKeyLast4    *string          `json:"anthropic_api_key_last4,omitempty"`
-	HasOpenAIAPIKey         bool             `json:"has_openai_api_key"`
-	OpenAIAPIKeyLast4       *string          `json:"openai_api_key_last4,omitempty"`
-	HasGoogleAPIKey         bool             `json:"has_google_api_key"`
-	GoogleAPIKeyLast4       *string          `json:"google_api_key_last4,omitempty"`
-	HasGroqAPIKey           bool             `json:"has_groq_api_key"`
-	GroqAPIKeyLast4         *string          `json:"groq_api_key_last4,omitempty"`
-	HasDeepSeekAPIKey       bool             `json:"has_deepseek_api_key"`
-	DeepSeekAPIKeyLast4     *string          `json:"deepseek_api_key_last4,omitempty"`
-	HasAlibabaAPIKey        bool             `json:"has_alibaba_api_key"`
-	AlibabaAPIKeyLast4      *string          `json:"alibaba_api_key_last4,omitempty"`
-	HasMistralAPIKey        bool             `json:"has_mistral_api_key"`
-	MistralAPIKeyLast4      *string          `json:"mistral_api_key_last4,omitempty"`
-	HasMoonshotAPIKey       bool             `json:"has_moonshot_api_key"`
-	MoonshotAPIKeyLast4     *string          `json:"moonshot_api_key_last4,omitempty"`
-	HasXAIAPIKey            bool             `json:"has_xai_api_key"`
-	XAIAPIKeyLast4          *string          `json:"xai_api_key_last4,omitempty"`
-	HasZAIAPIKey            bool             `json:"has_zai_api_key"`
-	ZAIAPIKeyLast4          *string          `json:"zai_api_key_last4,omitempty"`
-	HasFireworksAPIKey      bool             `json:"has_fireworks_api_key"`
-	FireworksAPIKeyLast4    *string          `json:"fireworks_api_key_last4,omitempty"`
-	HasTogetherAPIKey       bool             `json:"has_together_api_key"`
-	TogetherAPIKeyLast4     *string          `json:"together_api_key_last4,omitempty"`
-	HasPoeAPIKey            bool             `json:"has_poe_api_key"`
-	PoeAPIKeyLast4          *string          `json:"poe_api_key_last4,omitempty"`
-	HasSiliconFlowAPIKey    bool             `json:"has_siliconflow_api_key"`
-	SiliconFlowAPIKeyLast4  *string          `json:"siliconflow_api_key_last4,omitempty"`
-	HasAzureSpeechAPIKey    bool             `json:"has_azure_speech_api_key"`
-	AzureSpeechAPIKeyLast4  *string          `json:"azure_speech_api_key_last4,omitempty"`
-	AzureSpeechRegion       *string          `json:"azure_speech_region,omitempty"`
-	HasOpenRouterAPIKey     bool             `json:"has_openrouter_api_key"`
-	OpenRouterAPIKeyLast4   *string          `json:"openrouter_api_key_last4,omitempty"`
-	HasAivisAPIKey          bool             `json:"has_aivis_api_key"`
-	AivisAPIKeyLast4        *string          `json:"aivis_api_key_last4,omitempty"`
-	HasFishAudioAPIKey      bool             `json:"has_fish_api_key"`
-	FishAudioAPIKeyLast4    *string          `json:"fish_api_key_last4,omitempty"`
-	HasElevenLabsAPIKey     bool             `json:"has_elevenlabs_api_key"`
-	ElevenLabsAPIKeyLast4   *string          `json:"elevenlabs_api_key_last4,omitempty"`
-	AivisUserDictionaryUUID *string          `json:"aivis_user_dictionary_uuid,omitempty"`
-	GeminiTTSEnabled        bool             `json:"gemini_tts_enabled"`
-	Podcast                 map[string]any   `json:"podcast"`
-	HasInoreaderOAuth       bool             `json:"has_inoreader_oauth"`
-	InoreaderTokenExpiresAt *time.Time       `json:"inoreader_token_expires_at,omitempty"`
-	MonthlyBudgetUSD        *float64         `json:"monthly_budget_usd,omitempty"`
-	BudgetAlertEnabled      bool             `json:"budget_alert_enabled"`
-	BudgetAlertThresholdPct int              `json:"budget_alert_threshold_pct"`
-	DigestEmailEnabled      bool             `json:"digest_email_enabled"`
-	ReadingPlan             map[string]any   `json:"reading_plan"`
-	LLMModels               map[string]any   `json:"llm_models"`
-	AudioBriefing           map[string]any   `json:"audio_briefing"`
-	AudioBriefingVoices     []map[string]any `json:"audio_briefing_persona_voices"`
-	SummaryAudio            map[string]any   `json:"summary_audio"`
-	UIFontSansKey           string           `json:"ui_font_sans_key"`
-	UIFontSerifKey          string           `json:"ui_font_serif_key"`
-	CurrentMonth            map[string]any   `json:"current_month"`
-	ObsidianExport          map[string]any   `json:"obsidian_export"`
-	NotificationPriority    map[string]any   `json:"notification_priority"`
+	UserID                  string                          `json:"user_id"`
+	HasAnthropicAPIKey      bool                            `json:"has_anthropic_api_key"`
+	AnthropicAPIKeyLast4    *string                         `json:"anthropic_api_key_last4,omitempty"`
+	HasOpenAIAPIKey         bool                            `json:"has_openai_api_key"`
+	OpenAIAPIKeyLast4       *string                         `json:"openai_api_key_last4,omitempty"`
+	HasGoogleAPIKey         bool                            `json:"has_google_api_key"`
+	GoogleAPIKeyLast4       *string                         `json:"google_api_key_last4,omitempty"`
+	HasGroqAPIKey           bool                            `json:"has_groq_api_key"`
+	GroqAPIKeyLast4         *string                         `json:"groq_api_key_last4,omitempty"`
+	HasDeepSeekAPIKey       bool                            `json:"has_deepseek_api_key"`
+	DeepSeekAPIKeyLast4     *string                         `json:"deepseek_api_key_last4,omitempty"`
+	HasAlibabaAPIKey        bool                            `json:"has_alibaba_api_key"`
+	AlibabaAPIKeyLast4      *string                         `json:"alibaba_api_key_last4,omitempty"`
+	HasMistralAPIKey        bool                            `json:"has_mistral_api_key"`
+	MistralAPIKeyLast4      *string                         `json:"mistral_api_key_last4,omitempty"`
+	HasMoonshotAPIKey       bool                            `json:"has_moonshot_api_key"`
+	MoonshotAPIKeyLast4     *string                         `json:"moonshot_api_key_last4,omitempty"`
+	HasXAIAPIKey            bool                            `json:"has_xai_api_key"`
+	XAIAPIKeyLast4          *string                         `json:"xai_api_key_last4,omitempty"`
+	HasZAIAPIKey            bool                            `json:"has_zai_api_key"`
+	ZAIAPIKeyLast4          *string                         `json:"zai_api_key_last4,omitempty"`
+	HasFireworksAPIKey      bool                            `json:"has_fireworks_api_key"`
+	FireworksAPIKeyLast4    *string                         `json:"fireworks_api_key_last4,omitempty"`
+	HasTogetherAPIKey       bool                            `json:"has_together_api_key"`
+	TogetherAPIKeyLast4     *string                         `json:"together_api_key_last4,omitempty"`
+	HasPoeAPIKey            bool                            `json:"has_poe_api_key"`
+	PoeAPIKeyLast4          *string                         `json:"poe_api_key_last4,omitempty"`
+	HasSiliconFlowAPIKey    bool                            `json:"has_siliconflow_api_key"`
+	SiliconFlowAPIKeyLast4  *string                         `json:"siliconflow_api_key_last4,omitempty"`
+	HasAzureSpeechAPIKey    bool                            `json:"has_azure_speech_api_key"`
+	AzureSpeechAPIKeyLast4  *string                         `json:"azure_speech_api_key_last4,omitempty"`
+	AzureSpeechRegion       *string                         `json:"azure_speech_region,omitempty"`
+	HasOpenRouterAPIKey     bool                            `json:"has_openrouter_api_key"`
+	OpenRouterAPIKeyLast4   *string                         `json:"openrouter_api_key_last4,omitempty"`
+	HasAivisAPIKey          bool                            `json:"has_aivis_api_key"`
+	AivisAPIKeyLast4        *string                         `json:"aivis_api_key_last4,omitempty"`
+	HasFishAudioAPIKey      bool                            `json:"has_fish_api_key"`
+	FishAudioAPIKeyLast4    *string                         `json:"fish_api_key_last4,omitempty"`
+	HasElevenLabsAPIKey     bool                            `json:"has_elevenlabs_api_key"`
+	ElevenLabsAPIKeyLast4   *string                         `json:"elevenlabs_api_key_last4,omitempty"`
+	AivisUserDictionaryUUID *string                         `json:"aivis_user_dictionary_uuid,omitempty"`
+	GeminiTTSEnabled        bool                            `json:"gemini_tts_enabled"`
+	Podcast                 PodcastView                     `json:"podcast"`
+	HasInoreaderOAuth       bool                            `json:"has_inoreader_oauth"`
+	InoreaderTokenExpiresAt *time.Time                      `json:"inoreader_token_expires_at,omitempty"`
+	MonthlyBudgetUSD        *float64                        `json:"monthly_budget_usd,omitempty"`
+	BudgetAlertEnabled      bool                            `json:"budget_alert_enabled"`
+	BudgetAlertThresholdPct int                             `json:"budget_alert_threshold_pct"`
+	DigestEmailEnabled      bool                            `json:"digest_email_enabled"`
+	ReadingPlan             ReadingPlanView                 `json:"reading_plan"`
+	LLMModels               LLMModelsView                   `json:"llm_models"`
+	AudioBriefing           AudioBriefingView               `json:"audio_briefing"`
+	AudioBriefingVoices     []AudioBriefingPersonaVoiceView `json:"audio_briefing_persona_voices"`
+	SummaryAudio            SummaryAudioView                `json:"summary_audio"`
+	UIFontSansKey           string                          `json:"ui_font_sans_key"`
+	UIFontSerifKey          string                          `json:"ui_font_serif_key"`
+	CurrentMonth            CurrentMonthView                `json:"current_month"`
+	ObsidianExport          ObsidianExportView              `json:"obsidian_export"`
+	NotificationPriority    *NotificationPriorityView       `json:"notification_priority"`
 }
 
 type UpdateLLMModelsInput struct {
@@ -273,166 +274,39 @@ func (s *SettingsService) SetAudioBriefingPresetRepo(repo *repository.AudioBrief
 	s.audioBriefingPresetRepo = repo
 }
 
-func obsidianExportPayload(settings *model.ObsidianExportSettings, githubApp *GitHubAppClient) map[string]any {
-	out := map[string]any{
-		"enabled":                settings.Enabled,
-		"github_installation_id": settings.GitHubInstallationID,
-		"github_repo_owner":      settings.GitHubRepoOwner,
-		"github_repo_name":       settings.GitHubRepoName,
-		"github_repo_branch":     settings.GitHubRepoBranch,
-		"vault_root_path":        settings.VaultRootPath,
-		"keyword_link_mode":      settings.KeywordLinkMode,
-		"last_run_at":            settings.LastRunAt,
-		"last_success_at":        settings.LastSuccessAt,
+func (s *SettingsService) SetNotificationRuleRepo(repo *repository.NotificationPriorityRepo) {
+	if s == nil {
+		return
 	}
-	if githubApp != nil {
-		out["github_app_enabled"] = githubApp.Enabled()
-		out["github_app_install_url"] = githubApp.InstallURL()
-	}
-	return out
+	s.notificationRuleRepo = repo
 }
 
-func LLMModelSettingsPayload(settings *model.UserSettings) map[string]any {
-	return map[string]any{
-		"facts":                          settings.FactsModel,
-		"facts_secondary":                settings.FactsSecondaryModel,
-		"facts_secondary_rate_percent":   settings.FactsSecondaryRatePercent,
-		"facts_fallback":                 settings.FactsFallbackModel,
-		"summary":                        settings.SummaryModel,
-		"summary_secondary":              settings.SummarySecondaryModel,
-		"summary_secondary_rate_percent": settings.SummarySecondaryRatePercent,
-		"summary_fallback":               settings.SummaryFallbackModel,
-		"digest_cluster":                 settings.DigestClusterModel,
-		"digest":                         settings.DigestModel,
-		"ask":                            settings.AskModel,
-		"source_suggestion":              settings.SourceSuggestionModel,
-		"embedding":                      settings.EmbeddingModel,
-		"facts_check":                    settings.FactsCheckModel,
-		"faithfulness_check":             settings.FaithfulnessCheckModel,
-		"navigator_enabled":              settings.NavigatorEnabled,
-		"ai_navigator_brief_enabled":     settings.AINavigatorBriefEnabled,
-		"navigator_persona_mode":         NormalizePersonaMode(&settings.NavigatorPersonaMode),
-		"navigator_persona":              settings.NavigatorPersona,
-		"navigator":                      settings.NavigatorModel,
-		"navigator_fallback":             settings.NavigatorFallbackModel,
-		"ai_navigator_brief":             settings.AINavigatorBriefModel,
-		"ai_navigator_brief_fallback":    settings.AINavigatorBriefFallbackModel,
-		"audio_briefing_script":          settings.AudioBriefingScriptModel,
-		"audio_briefing_script_fallback": settings.AudioBriefingScriptFallbackModel,
-		"tts_markup_preprocess_model":    settings.TTSMarkupPreprocessModel,
-	}
+func obsidianExportPayload(settings *model.ObsidianExportSettings, githubApp *GitHubAppClient) ObsidianExportView {
+	return NewObsidianExportView(settings, githubApp)
 }
 
-func readingPlanPayload(settings *model.UserSettings) map[string]any {
-	return map[string]any{
-		"window":           settings.ReadingPlanWindow,
-		"size":             settings.ReadingPlanSize,
-		"diversify_topics": settings.ReadingPlanDiversifyTopics,
-		"exclude_read":     settings.ReadingPlanExcludeRead,
-	}
+func LLMModelSettingsPayload(settings *model.UserSettings) LLMModelsView {
+	return NewLLMModelsView(settings)
 }
 
-func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) map[string]any {
-	if settings == nil {
-		return map[string]any{
-			"enabled":                        false,
-			"schedule_mode":                  AudioBriefingScheduleModeInterval,
-			"interval_hours":                 6,
-			"articles_per_episode":           5,
-			"target_duration_minutes":        20,
-			"chunk_trailing_silence_seconds": 1.0,
-			"program_name":                   nil,
-			"default_persona_mode":           PersonaModeFixed,
-			"default_persona":                "editor",
-			"conversation_mode":              "single",
-			"bgm_enabled":                    false,
-			"bgm_r2_prefix":                  nil,
-		}
-	}
-	return map[string]any{
-		"enabled":                        settings.Enabled,
-		"schedule_mode":                  NormalizeAudioBriefingScheduleMode(settings.ScheduleMode),
-		"interval_hours":                 settings.IntervalHours,
-		"articles_per_episode":           settings.ArticlesPerEpisode,
-		"target_duration_minutes":        settings.TargetDurationMinutes,
-		"chunk_trailing_silence_seconds": settings.ChunkTrailingSilenceSeconds,
-		"program_name":                   settings.ProgramName,
-		"default_persona_mode":           NormalizePersonaMode(&settings.DefaultPersonaMode),
-		"default_persona":                settings.DefaultPersona,
-		"conversation_mode":              normalizeAudioBriefingConversationMode(&settings.ConversationMode),
-		"bgm_enabled":                    settings.BGMEnabled,
-		"bgm_r2_prefix":                  settings.BGMR2Prefix,
-	}
+func readingPlanPayload(settings *model.UserSettings) ReadingPlanView {
+	return NewReadingPlanView(settings)
 }
 
-func AudioBriefingPersonaVoicesPayload(rows []model.AudioBriefingPersonaVoice) []map[string]any {
-	out := make([]map[string]any, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, map[string]any{
-			"persona":                    row.Persona,
-			"tts_provider":               row.TTSProvider,
-			"tts_model":                  row.TTSModel,
-			"voice_model":                row.VoiceModel,
-			"voice_style":                row.VoiceStyle,
-			"provider_voice_label":       row.ProviderVoiceLabel,
-			"provider_voice_description": row.ProviderVoiceDescription,
-			"speech_rate":                row.SpeechRate,
-			"emotional_intensity":        row.EmotionalIntensity,
-			"tempo_dynamics":             row.TempoDynamics,
-			"line_break_silence_seconds": row.LineBreakSilenceSeconds,
-			"pitch":                      row.Pitch,
-			"volume_gain":                row.VolumeGain,
-		})
-	}
-	return out
+func AudioBriefingSettingsPayload(settings *model.AudioBriefingSettings) AudioBriefingView {
+	return NewAudioBriefingView(settings)
 }
 
-func AudioBriefingPresetPayload(p model.AudioBriefingPreset) map[string]any {
-	return map[string]any{
-		"id":                   p.ID,
-		"name":                 p.Name,
-		"default_persona_mode": NormalizePersonaMode(&p.DefaultPersonaMode),
-		"default_persona":      p.DefaultPersona,
-		"conversation_mode":    normalizeAudioBriefingConversationMode(&p.ConversationMode),
-		"voices":               AudioBriefingPersonaVoicesPayload(p.Voices),
-		"created_at":           p.CreatedAt,
-		"updated_at":           p.UpdatedAt,
-	}
+func AudioBriefingPersonaVoicesPayload(rows []model.AudioBriefingPersonaVoice) []AudioBriefingPersonaVoiceView {
+	return NewAudioBriefingPersonaVoiceViews(rows)
 }
 
-func SummaryAudioVoiceSettingsPayload(settings *model.SummaryAudioVoiceSettings) map[string]any {
-	if settings == nil {
-		return map[string]any{
-			"tts_provider":               "",
-			"tts_model":                  "",
-			"voice_model":                "",
-			"voice_style":                "",
-			"provider_voice_label":       "",
-			"provider_voice_description": "",
-			"speech_rate":                0,
-			"emotional_intensity":        0,
-			"tempo_dynamics":             0,
-			"line_break_silence_seconds": 0,
-			"pitch":                      0,
-			"volume_gain":                0,
-			"aivis_user_dictionary_uuid": nil,
-		}
-	}
-	return map[string]any{
-		"tts_provider":               settings.TTSProvider,
-		"tts_model":                  settings.TTSModel,
-		"voice_model":                settings.VoiceModel,
-		"voice_style":                settings.VoiceStyle,
-		"provider_voice_label":       settings.ProviderVoiceLabel,
-		"provider_voice_description": settings.ProviderVoiceDescription,
-		"speech_rate":                settings.SpeechRate,
-		"emotional_intensity":        settings.EmotionalIntensity,
-		"tempo_dynamics":             settings.TempoDynamics,
-		"line_break_silence_seconds": settings.LineBreakSilenceSeconds,
-		"pitch":                      settings.Pitch,
-		"volume_gain":                settings.VolumeGain,
-		"aivis_user_dictionary_uuid": settings.AivisUserDictionaryUUID,
-	}
+func AudioBriefingPresetPayload(p model.AudioBriefingPreset) AudioBriefingPresetView {
+	return NewAudioBriefingPresetView(p)
+}
+
+func SummaryAudioVoiceSettingsPayload(settings *model.SummaryAudioVoiceSettings) SummaryAudioView {
+	return NewSummaryAudioView(settings)
 }
 
 func podcastFeedBaseURL() string {
@@ -464,44 +338,8 @@ func podcastRSSURL(slug *string) *string {
 	return &v
 }
 
-func PodcastSettingsPayload(settings *model.UserSettings) map[string]any {
-	var artworkURL *string
-	if settings != nil {
-		artworkURL = settings.PodcastArtworkURL
-	}
-	if artworkURL == nil {
-		artworkURL = podcastDefaultArtworkURL()
-	}
-	if settings == nil {
-		return map[string]any{
-			"enabled":              false,
-			"feed_slug":            nil,
-			"rss_url":              nil,
-			"title":                nil,
-			"description":          nil,
-			"author":               nil,
-			"language":             "ja",
-			"category":             nil,
-			"subcategory":          nil,
-			"available_categories": PodcastCategoryDefinitions(),
-			"explicit":             false,
-			"artwork_url":          artworkURL,
-		}
-	}
-	return map[string]any{
-		"enabled":              settings.PodcastEnabled,
-		"feed_slug":            settings.PodcastFeedSlug,
-		"rss_url":              podcastRSSURL(settings.PodcastFeedSlug),
-		"title":                settings.PodcastTitle,
-		"description":          settings.PodcastDescription,
-		"author":               settings.PodcastAuthor,
-		"language":             settings.PodcastLanguage,
-		"category":             settings.PodcastCategory,
-		"subcategory":          settings.PodcastSubcategory,
-		"available_categories": PodcastCategoryDefinitions(),
-		"explicit":             settings.PodcastExplicit,
-		"artwork_url":          artworkURL,
-	}
+func PodcastSettingsPayload(settings *model.UserSettings) PodcastView {
+	return NewPodcastView(settings)
 }
 
 func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetPayload, error) {
@@ -547,7 +385,7 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		p := (v / *settings.MonthlyBudgetUSD) * 100
 		remainingPct = &p
 	}
-	return &SettingsGetPayload{
+	payload := &SettingsGetPayload{
 		UserID:                  settings.UserID,
 		HasAnthropicAPIKey:      settings.HasAnthropicAPIKey,
 		AnthropicAPIKeyLast4:    settings.AnthropicAPIKeyLast4,
@@ -590,30 +428,37 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		ElevenLabsAPIKeyLast4:   settings.ElevenLabsAPIKeyLast4,
 		AivisUserDictionaryUUID: settings.AivisUserDictionaryUUID,
 		GeminiTTSEnabled:        GeminiTTSEnabledForUser(ctx, s.userRepo, userID),
-		Podcast:                 PodcastSettingsPayload(settings),
+		Podcast:                 NewPodcastView(settings),
 		HasInoreaderOAuth:       settings.HasInoreaderOAuth,
 		InoreaderTokenExpiresAt: settings.InoreaderTokenExpiresAt,
 		MonthlyBudgetUSD:        settings.MonthlyBudgetUSD,
 		BudgetAlertEnabled:      settings.BudgetAlertEnabled,
 		BudgetAlertThresholdPct: settings.BudgetAlertThresholdPct,
 		DigestEmailEnabled:      settings.DigestEmailEnabled,
-		ReadingPlan:             readingPlanPayload(settings),
-		LLMModels:               LLMModelSettingsPayload(settings),
-		AudioBriefing:           AudioBriefingSettingsPayload(audioBriefingSettings),
-		AudioBriefingVoices:     AudioBriefingPersonaVoicesPayload(audioBriefingVoices),
-		SummaryAudio:            SummaryAudioVoiceSettingsPayload(summaryAudioSettings),
+		ReadingPlan:             NewReadingPlanView(settings),
+		LLMModels:               NewLLMModelsView(settings),
+		AudioBriefing:           NewAudioBriefingView(audioBriefingSettings),
+		AudioBriefingVoices:     NewAudioBriefingPersonaVoiceViews(audioBriefingVoices),
+		SummaryAudio:            NewSummaryAudioView(summaryAudioSettings),
 		UIFontSansKey:           normalizeUIFontKeyOrDefault(settings.UIFontSansKey, DefaultUIFontSansKey),
 		UIFontSerifKey:          normalizeUIFontKeyOrDefault(settings.UIFontSerifKey, DefaultUIFontSerifKey),
-		ObsidianExport:          obsidianExportPayload(obsidianSettings, s.githubApp),
-		CurrentMonth: map[string]any{
-			"month_jst":            monthStart.Format("2006-01"),
-			"period_start_jst":     monthStart.Format(time.RFC3339),
-			"period_end_jst":       nextMonth.Format(time.RFC3339),
-			"estimated_cost_usd":   usedCostUSD,
-			"remaining_budget_usd": remainingBudgetUSD,
-			"remaining_budget_pct": remainingPct,
-		},
-	}, nil
+		ObsidianExport:          NewObsidianExportView(obsidianSettings, s.githubApp),
+		CurrentMonth:            NewCurrentMonthView(monthStart, nextMonth, usedCostUSD, remainingBudgetUSD, remainingPct),
+	}
+	s.populateNotificationPriority(ctx, userID, payload)
+	return payload, nil
+}
+
+func (s *SettingsService) populateNotificationPriority(ctx context.Context, userID string, payload *SettingsGetPayload) {
+	if s.notificationRuleRepo == nil {
+		return
+	}
+	rule, err := s.notificationRuleRepo.EnsureDefaults(ctx, userID)
+	if err != nil {
+		return
+	}
+	view := NewNotificationPriorityView(rule)
+	payload.NotificationPriority = &view
 }
 
 func normalizeUIFontKeyOrDefault(raw, fallback string) string {
@@ -665,7 +510,7 @@ func (s *SettingsService) UpdateSummaryAudioVoiceSettings(ctx context.Context, u
 			return nil, err
 		}
 		if latestRun == nil || len(snapshots) == 0 {
-			return nil, fmt.Errorf("aivis models are not synced")
+			return nil, ErrAivisModelsNotSynced
 		}
 		if err := validateAivisVoiceSelectionAgainstSnapshots(snapshots, normalized.VoiceModel, normalized.VoiceStyle); err != nil {
 			return nil, fmt.Errorf("invalid aivis voice for summary_audio: %w", err)
@@ -692,7 +537,7 @@ func (s *SettingsService) UpdateSummaryAudioVoiceSettings(ctx context.Context, u
 func (s *SettingsService) SetAivisUserDictionaryUUID(ctx context.Context, userID, uuid string) (*model.UserSettings, error) {
 	uuid = strings.TrimSpace(uuid)
 	if uuid == "" {
-		return nil, fmt.Errorf("aivis_user_dictionary_uuid is required")
+		return nil, ErrAivisDictionaryUUIDRequired
 	}
 	return s.repo.SetAivisUserDictionaryUUID(ctx, userID, uuid)
 }
@@ -738,7 +583,7 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 	for _, row := range rows {
 		persona := normalizeAudioBriefingDefaultPersona(&row.Persona)
 		if _, ok := seen[persona]; ok {
-			return nil, fmt.Errorf("duplicate persona voice: %s", persona)
+			return nil, &DuplicatePersonaVoiceError{Persona: persona}
 		}
 		seen[persona] = struct{}{}
 		provider := strings.TrimSpace(strings.ToLower(row.TTSProvider))
@@ -746,7 +591,7 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 		providerVoiceLabel := strings.TrimSpace(row.ProviderVoiceLabel)
 		providerVoiceDescription := strings.TrimSpace(row.ProviderVoiceDescription)
 		if LookupTTSProviderMetadata(provider) == (TTSProviderMetadata{}) {
-			return nil, fmt.Errorf("invalid tts_provider for %s", persona)
+			return nil, &ValidationError{Field: "tts_provider", Message: fmt.Sprintf("invalid tts_provider for %s", persona)}
 		}
 		voiceModel := strings.TrimSpace(row.VoiceModel)
 		voiceStyle := strings.TrimSpace(row.VoiceStyle)
@@ -757,32 +602,32 @@ func validateAudioBriefingPersonaVoiceInputs(rows []UpdateAudioBriefingPersonaVo
 			continue
 		}
 		if voiceModel == "" {
-			return nil, fmt.Errorf("invalid voice_model for %s", persona)
+			return nil, &ValidationError{Field: "voice_model", Message: fmt.Sprintf("invalid voice_model for %s", persona)}
 		}
 		if caps.SupportsSeparateTTSModel && ttsModel == "" {
-			return nil, fmt.Errorf("invalid tts_model for %s", persona)
+			return nil, &ValidationError{Field: "tts_model", Message: fmt.Sprintf("invalid tts_model for %s", persona)}
 		}
 		if caps.RequiresVoiceStyle && voiceStyle == "" {
-			return nil, fmt.Errorf("invalid voice_style for %s", persona)
+			return nil, &ValidationError{Field: "voice_style", Message: fmt.Sprintf("invalid voice_style for %s", persona)}
 		}
 		if caps.SupportsSpeechTuning && (row.SpeechRate != 0 || provider == "aivis") {
 			if row.SpeechRate < 0.5 || row.SpeechRate > 2.0 {
-				return nil, fmt.Errorf("invalid speech_rate for %s", persona)
+				return nil, &ValidationError{Field: "speech_rate", Message: fmt.Sprintf("invalid speech_rate for %s", persona)}
 			}
 			if row.EmotionalIntensity < 0 || row.EmotionalIntensity > 2.0 {
-				return nil, fmt.Errorf("invalid emotional_intensity for %s", persona)
+				return nil, &ValidationError{Field: "emotional_intensity", Message: fmt.Sprintf("invalid emotional_intensity for %s", persona)}
 			}
 			if row.TempoDynamics < 0 || row.TempoDynamics > 2.0 {
-				return nil, fmt.Errorf("invalid tempo_dynamics for %s", persona)
+				return nil, &ValidationError{Field: "tempo_dynamics", Message: fmt.Sprintf("invalid tempo_dynamics for %s", persona)}
 			}
 			if row.LineBreakSilenceSeconds < 0 || row.LineBreakSilenceSeconds > 5.0 {
-				return nil, fmt.Errorf("invalid line_break_silence_seconds for %s", persona)
+				return nil, &ValidationError{Field: "line_break_silence_seconds", Message: fmt.Sprintf("invalid line_break_silence_seconds for %s", persona)}
 			}
 			if row.Pitch < -12 || row.Pitch > 12 {
-				return nil, fmt.Errorf("invalid pitch for %s", persona)
+				return nil, &ValidationError{Field: "pitch", Message: fmt.Sprintf("invalid pitch for %s", persona)}
 			}
 			if row.VolumeGain < -24 || row.VolumeGain > 24 {
-				return nil, fmt.Errorf("invalid volume_gain for %s", persona)
+				return nil, &ValidationError{Field: "volume_gain", Message: fmt.Sprintf("invalid volume_gain for %s", persona)}
 			}
 		}
 		out = append(out, model.AudioBriefingPersonaVoice{
@@ -827,7 +672,7 @@ func (s *SettingsService) validateAudioBriefingPersonaVoiceInputsWithAivis(ctx c
 		return nil, err
 	}
 	if latestRun == nil || len(snapshots) == 0 {
-		return nil, fmt.Errorf("aivis models are not synced")
+		return nil, ErrAivisModelsNotSynced
 	}
 	for _, row := range normalizedRows {
 		if !strings.EqualFold(strings.TrimSpace(row.TTSProvider), "aivis") {
@@ -854,36 +699,36 @@ func normalizeSummaryAudioVoiceSettingsInput(in UpdateSummaryAudioVoiceSettingsI
 		return &model.SummaryAudioVoiceSettings{}, nil
 	}
 	if LookupTTSProviderMetadata(provider) == (TTSProviderMetadata{}) {
-		return nil, fmt.Errorf("invalid tts_provider")
+		return nil, &ValidationError{Field: "tts_provider"}
 	}
 	if voiceModel == "" {
-		return nil, fmt.Errorf("invalid voice_model")
+		return nil, &ValidationError{Field: "voice_model"}
 	}
 	caps := LookupTTSProviderCapabilities(provider)
 	if caps.SupportsSeparateTTSModel && ttsModel == "" {
-		return nil, fmt.Errorf("invalid tts_model")
+		return nil, &ValidationError{Field: "tts_model"}
 	}
 	if caps.RequiresVoiceStyle && voiceStyle == "" {
-		return nil, fmt.Errorf("invalid voice_style")
+		return nil, &ValidationError{Field: "voice_style"}
 	}
 	if caps.SupportsSpeechTuning && (in.SpeechRate != 0 || provider == "aivis") {
 		if in.SpeechRate < 0.5 || in.SpeechRate > 2.0 {
-			return nil, fmt.Errorf("invalid speech_rate")
+			return nil, &ValidationError{Field: "speech_rate"}
 		}
 		if in.EmotionalIntensity < 0 || in.EmotionalIntensity > 2.0 {
-			return nil, fmt.Errorf("invalid emotional_intensity")
+			return nil, &ValidationError{Field: "emotional_intensity"}
 		}
 		if in.TempoDynamics < 0 || in.TempoDynamics > 2.0 {
-			return nil, fmt.Errorf("invalid tempo_dynamics")
+			return nil, &ValidationError{Field: "tempo_dynamics"}
 		}
 		if in.LineBreakSilenceSeconds < 0 || in.LineBreakSilenceSeconds > 5.0 {
-			return nil, fmt.Errorf("invalid line_break_silence_seconds")
+			return nil, &ValidationError{Field: "line_break_silence_seconds"}
 		}
 		if in.Pitch < -12 || in.Pitch > 12 {
-			return nil, fmt.Errorf("invalid pitch")
+			return nil, &ValidationError{Field: "pitch"}
 		}
 		if in.VolumeGain < -24 || in.VolumeGain > 24 {
-			return nil, fmt.Errorf("invalid volume_gain")
+			return nil, &ValidationError{Field: "volume_gain"}
 		}
 	}
 	return &model.SummaryAudioVoiceSettings{
@@ -999,7 +844,7 @@ func validateCatalogModelForPurpose(catalog *LLMCatalog, model *string, purpose,
 		return nil
 	}
 	if !CatalogModelSupportsPurposeInCatalog(catalog, *model, purpose) {
-		return fmt.Errorf("invalid model for %s", settingKey)
+		return &ModelValidationError{SettingKey: settingKey}
 	}
 	return nil
 }
@@ -1010,7 +855,7 @@ func validateCatalogModelCapabilities(catalog *LLMCatalog, model *string, settin
 	}
 	for _, capability := range modelSettingRequiredCapabilities[settingKey] {
 		if !CatalogModelSupportsCapabilityInCatalog(catalog, *model, capability) {
-			return fmt.Errorf("model missing required capability for %s", settingKey)
+			return &ModelValidationError{SettingKey: settingKey, Missing: true}
 		}
 	}
 	return nil
@@ -1021,7 +866,7 @@ func validateCatalogChatModel(catalog *LLMCatalog, model *string, settingKey str
 		return nil
 	}
 	if CatalogChatModelByIDInCatalog(catalog, *model) == nil {
-		return fmt.Errorf("invalid model for %s", settingKey)
+		return &ModelValidationError{SettingKey: settingKey}
 	}
 	return nil
 }
@@ -1075,7 +920,7 @@ func (s *SettingsService) UpdateLLMModels(ctx context.Context, userID string, in
 	}
 	embeddingModel := normalized["embedding"]
 	if embeddingModel != nil && !CatalogIsEmbeddingModelInCatalog(catalog, *embeddingModel) {
-		return nil, fmt.Errorf("invalid embedding model")
+		return nil, ErrInvalidEmbeddingModel
 	}
 	if err := validateCatalogChatModel(catalog, normalized["tts_markup_preprocess_model"], "tts_markup_preprocess_model"); err != nil {
 		return nil, err
@@ -1132,7 +977,7 @@ func (s *SettingsService) UpdateAudioBriefingSettings(ctx context.Context, userI
 	switch rawScheduleMode {
 	case "", AudioBriefingScheduleModeInterval:
 		if in.IntervalHours != 3 && in.IntervalHours != 6 {
-			return nil, fmt.Errorf("invalid interval_hours")
+			return nil, &ValidationError{Field: "interval_hours"}
 		}
 		rawScheduleMode = AudioBriefingScheduleModeInterval
 	case AudioBriefingScheduleModeFixedSlots3x:
@@ -1140,25 +985,25 @@ func (s *SettingsService) UpdateAudioBriefingSettings(ctx context.Context, userI
 			in.IntervalHours = 6
 		}
 	default:
-		return nil, fmt.Errorf("invalid schedule_mode")
+		return nil, &ValidationError{Field: "schedule_mode"}
 	}
 	scheduleMode := NormalizeAudioBriefingScheduleMode(rawScheduleMode)
 	if in.ArticlesPerEpisode < 1 || in.ArticlesPerEpisode > 30 {
-		return nil, fmt.Errorf("invalid articles_per_episode")
+		return nil, &ValidationError{Field: "articles_per_episode"}
 	}
 	if in.TargetDurationMinutes < 5 || in.TargetDurationMinutes > 60 {
-		return nil, fmt.Errorf("invalid target_duration_minutes")
+		return nil, &ValidationError{Field: "target_duration_minutes"}
 	}
 	if in.ChunkTrailingSilenceSeconds < 0 || in.ChunkTrailingSilenceSeconds > 5 {
-		return nil, fmt.Errorf("invalid chunk_trailing_silence_seconds")
+		return nil, &ValidationError{Field: "chunk_trailing_silence_seconds"}
 	}
 	programName := normalizeAudioBriefingProgramName(in.ProgramName)
 	if programName != nil && len([]rune(*programName)) > 120 {
-		return nil, fmt.Errorf("invalid program_name")
+		return nil, &ValidationError{Field: "program_name"}
 	}
 	bgmPrefix := normalizeOptionalString(in.BGMR2Prefix)
 	if in.BGMEnabled && bgmPrefix == nil {
-		return nil, fmt.Errorf("invalid bgm_r2_prefix")
+		return nil, &ValidationError{Field: "bgm_r2_prefix"}
 	}
 	return s.audioBriefingRepo.UpsertSettings(
 		ctx,
@@ -1365,7 +1210,7 @@ func (s *SettingsService) UpdateObsidianExport(ctx context.Context, userID strin
 	vaultRootPath := normalizeOptionalString(in.VaultRootPath)
 	keywordLinkMode := normalizeOptionalString(in.KeywordLinkMode)
 	if keywordLinkMode != nil && *keywordLinkMode != "topics_only" {
-		return nil, fmt.Errorf("invalid keyword_link_mode")
+		return nil, ErrInvalidKeywordLinkMode
 	}
 	return s.obsidianRepo.UpsertConfig(ctx, userID, in.Enabled, repoOwner, repoName, repoBranch, vaultRootPath, keywordLinkMode)
 }
@@ -1387,7 +1232,7 @@ func (s *SettingsService) UpsertObsidianGitHubInstallation(ctx context.Context, 
 
 func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKey string) (*model.UserSettings, error) {
 	if s.cipher == nil || !s.cipher.Enabled() {
-		return nil, fmt.Errorf("user secret encryption is not configured")
+		return nil, ErrSecretEncryptionNotConfigured
 	}
 	key := strings.TrimSpace(apiKey)
 	enc, err := s.cipher.EncryptString(key)

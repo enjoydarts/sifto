@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Star, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { api, ItemDetail } from "@/lib/api";
+import { patchItemsInFeedCaches } from "@/lib/query-cache-helpers";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
 import { CheckStatusBadges } from "@/components/items/check-status-badges";
@@ -92,50 +93,7 @@ export function InlineReader({
   }
 
   function syncFeedbackInFeeds(itemIdVal: string, isFavorite: boolean, rating: number) {
-    queryClient.setQueriesData({ queryKey: ["items-feed"] }, (prev: unknown) => {
-      if (!prev || typeof prev !== "object") return prev;
-      const data = prev as {
-        items?: Array<Record<string, unknown>>;
-        planClusters?: Array<Record<string, unknown>>;
-      };
-      const patchItem = (v: Record<string, unknown>) =>
-        v.id === itemIdVal
-          ? { ...v, is_favorite: isFavorite, feedback_rating: rating }
-          : v;
-      let changed = false;
-      const next: Record<string, unknown> = { ...(data as Record<string, unknown>) };
-      if (Array.isArray(data.items)) {
-        next.items = data.items.map((v) => {
-          const nv = patchItem(v);
-          if (nv !== v) changed = true;
-          return nv;
-        });
-      }
-      if (Array.isArray(data.planClusters)) {
-        next.planClusters = data.planClusters.map((cluster) => {
-          const c = { ...cluster } as Record<string, unknown>;
-          const rep = c.representative;
-          if (rep && typeof rep === "object") {
-            const nr = patchItem(rep as Record<string, unknown>);
-            if (nr !== rep) {
-              c.representative = nr;
-              changed = true;
-            }
-          }
-          const items = c.items;
-          if (Array.isArray(items)) {
-            c.items = items.map((v) => {
-              if (!v || typeof v !== "object") return v;
-              const nv = patchItem(v as Record<string, unknown>);
-              if (nv !== v) changed = true;
-              return nv;
-            });
-          }
-          return c;
-        });
-      }
-      return changed ? next : prev;
-    });
+    patchItemsInFeedCaches(queryClient, itemIdVal, { is_favorite: isFavorite, feedback_rating: rating });
   }
 
   async function updateFeedback(current: ItemDetail, patch: { rating?: -1 | 0 | 1; is_favorite?: boolean }) {

@@ -248,7 +248,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
               <div className="flex flex-col gap-0.5">
                 <span className="font-serif text-[22px] leading-none tracking-[0.03em] text-[var(--color-editorial-ink)]">Sifto</span>
                 <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-                  Intelligence Desk
+                  {t("nav.intelligenceDesk")}
                 </span>
               </div>
             </Link>

@@ -1,23 +1,10 @@
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from app.services.alibaba_service import rank_feed_suggestions as rank_feed_suggestions_alibaba
 from app.services.claude_service import rank_feed_suggestions
-from app.services.deepseek_service import rank_feed_suggestions as rank_feed_suggestions_deepseek
-from app.services.fireworks_service import rank_feed_suggestions as rank_feed_suggestions_fireworks
-from app.services.gemini_service import rank_feed_suggestions as rank_feed_suggestions_gemini
-from app.services.groq_service import rank_feed_suggestions as rank_feed_suggestions_groq
-from app.services.llm_dispatch import dispatch_by_model
-from app.services.mistral_service import rank_feed_suggestions as rank_feed_suggestions_mistral
-from app.services.moonshot_service import rank_feed_suggestions as rank_feed_suggestions_moonshot
-from app.services.openai_service import rank_feed_suggestions as rank_feed_suggestions_openai
-from app.services.openrouter_service import rank_feed_suggestions as rank_feed_suggestions_openrouter
-from app.services.poe_service import rank_feed_suggestions as rank_feed_suggestions_poe
-from app.services.siliconflow_service import rank_feed_suggestions as rank_feed_suggestions_siliconflow
-from app.services.together_service import rank_feed_suggestions as rank_feed_suggestions_together
-from app.services.xai_service import rank_feed_suggestions as rank_feed_suggestions_xai
-from app.services.zai_service import rank_feed_suggestions as rank_feed_suggestions_zai
-from app.services.router_observe import llm_usage_summary, run_observed_request
+from app.services.llm_dispatch import dispatch_by_model_async
+from app.services.router_observe import llm_usage_summary, run_observed_request_async
+from app.auto_dispatch import build_handler_map_async
 
 router = APIRouter()
 
@@ -63,7 +50,7 @@ class FeedSuggestionRankResponse(BaseModel):
 
 
 @router.post("/rank-feed-suggestions", response_model=FeedSuggestionRankResponse)
-def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Request):
+async def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Request):
     existing_sources = [{"title": s.title, "url": s.url} for s in req.existing_sources]
     candidates = [
         {
@@ -77,150 +64,18 @@ def rank_feed_suggestions_endpoint(req: FeedSuggestionRankRequest, request: Requ
     ]
     positive_examples = [{"url": e.url, "title": e.title, "reason": e.reason} for e in req.positive_examples]
     negative_examples = [{"url": e.url, "title": e.title, "reason": e.reason} for e in req.negative_examples]
-    result = run_observed_request(
+    result = await run_observed_request_async(
         request,
         metadata={"model": req.model or "", "existing_sources_count": len(existing_sources), "candidates_count": len(candidates)},
         input_payload={"preferred_topics": req.preferred_topics, "candidates_count": len(candidates), "model": req.model},
-        call=lambda: dispatch_by_model(
+        call=lambda: dispatch_by_model_async(
             request,
             req.model,
-            handlers={
-                "anthropic": lambda api_key: rank_feed_suggestions(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    api_key=api_key,
-                    model=req.model,
-                ),
-                "google": lambda api_key: rank_feed_suggestions_gemini(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "fireworks": lambda api_key: rank_feed_suggestions_fireworks(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "groq": lambda api_key: rank_feed_suggestions_groq(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "deepseek": lambda api_key: rank_feed_suggestions_deepseek(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "alibaba": lambda api_key: rank_feed_suggestions_alibaba(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "mistral": lambda api_key: rank_feed_suggestions_mistral(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "together": lambda api_key: rank_feed_suggestions_together(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "moonshot": lambda api_key: rank_feed_suggestions_moonshot(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "xai": lambda api_key: rank_feed_suggestions_xai(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "zai": lambda api_key: rank_feed_suggestions_zai(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "openrouter": lambda api_key: rank_feed_suggestions_openrouter(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "poe": lambda api_key: rank_feed_suggestions_poe(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "siliconflow": lambda api_key: rank_feed_suggestions_siliconflow(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "openai": lambda api_key: rank_feed_suggestions_openai(
-                    existing_sources=existing_sources,
-                    preferred_topics=req.preferred_topics,
-                    candidates=candidates,
-                    positive_examples=positive_examples,
-                    negative_examples=negative_examples,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-            },
+            handlers=build_handler_map_async(
+                "rank_feed_suggestions",
+                args_fn=lambda func, api_key: func(existing_sources=existing_sources, preferred_topics=req.preferred_topics, candidates=candidates, positive_examples=positive_examples, negative_examples=negative_examples, model=str(req.model), api_key=api_key or ""),
+                anthropic_args_fn=lambda func, api_key: func(existing_sources=existing_sources, preferred_topics=req.preferred_topics, candidates=candidates, positive_examples=positive_examples, negative_examples=negative_examples, api_key=api_key, model=req.model),
+            ),
         ),
         output_builder=lambda result: {"items_count": len(result.get("items") or []), **llm_usage_summary(result)},
     )

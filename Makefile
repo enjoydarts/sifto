@@ -8,7 +8,7 @@ GOFMT_FILES := $(shell find api -type f -name '*.go')
 .PHONY: build build-api build-web build-worker build-audio-concat-local up up-core down restart ps logs logs-api logs-worker logs-web logs-db logs-audio-concat-local
 .PHONY: web-build web-lint api-shell web-shell worker-shell psql
 .PHONY: migrate-up migrate-down migrate-version
-.PHONY: fmt-go fmt-go-check check-worker check check-fast check-web
+.PHONY: fmt-go fmt-go-check check-worker test-worker check-worker-full check check-fast check-web
 
 help:
 	@printf '%s\n' \
@@ -22,6 +22,8 @@ help:
 	  '  make web-lint      # Run ESLint in web container' \
 	  '  make web-build     # Run Next.js production build in web container' \
 	  '  make check-worker  # Python syntax check for worker app' \
+	  '  make test-worker   # Run pytest in worker container' \
+	  '  make check-worker-full # Syntax check + pytest for worker' \
 	  '  make check-fast    # Fast checks (gofmt + worker syntax)' \
 	  '  make check-web     # Web lint + production build' \
 	  '  make check         # PR前チェック一式' \
@@ -111,7 +113,7 @@ check-fast: fmt-go-check check-worker
 
 check-web: web-lint web-build
 
-check: check-fast check-web
+check: check-fast test-worker check-web
 
 fmt-go:
 	@if $(COMPOSE) ps api >/dev/null 2>&1; then \
@@ -142,3 +144,8 @@ fmt-go-check:
 		echo "gofmt not found. Start the api container (make up) or install Go locally."; \
 		exit 1; \
 	fi
+
+test-worker:
+	$(COMPOSE) exec -T worker sh -lc 'python -m pytest tests/ -v'
+
+check-worker-full: check-worker test-worker

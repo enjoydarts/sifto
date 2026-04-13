@@ -1,37 +1,25 @@
 from __future__ import annotations
 
-from app.services.alibaba_service import _chat_json as alibaba_chat_json
-from app.services.alibaba_service import _llm_meta as alibaba_llm_meta
+from app.services.alibaba_service import _p as alibaba_provider
 from app.services.claude_service import _call_with_model_fallback as anthropic_call_with_model_fallback
 from app.services.claude_service import _llm_meta as anthropic_llm_meta
-from app.services.deepseek_service import _chat_json as deepseek_chat_json
-from app.services.deepseek_service import _llm_meta as deepseek_llm_meta
-from app.services.fireworks_service import _chat_json as fireworks_chat_json
-from app.services.fireworks_service import _llm_meta as fireworks_llm_meta
+from app.services.deepseek_service import _p as deepseek_provider
+from app.services.fireworks_service import _p as fireworks_provider
 from app.services.gemini_tts import resolve_audio_briefing_persona_prompts
 from app.services.gemini_service import _generate_content as gemini_generate_content
 from app.services.gemini_service import _llm_meta as gemini_llm_meta
-from app.services.groq_service import _chat_json as groq_chat_json
-from app.services.groq_service import _llm_meta as groq_llm_meta
+from app.services.groq_service import _p as groq_provider
 from app.services.llm_catalog import provider_for_model
-from app.services.mistral_service import _chat_json as mistral_chat_json
-from app.services.mistral_service import _llm_meta as mistral_llm_meta
-from app.services.moonshot_service import _chat_json as moonshot_chat_json
-from app.services.moonshot_service import _llm_meta as moonshot_llm_meta
-from app.services.openai_service import _chat_json as openai_chat_json
-from app.services.openai_service import _llm_meta as openai_llm_meta
-from app.services.openrouter_service import _chat_json as openrouter_chat_json
-from app.services.openrouter_service import _llm_meta as openrouter_llm_meta
-from app.services.poe_service import _chat_json as poe_chat_json
-from app.services.poe_service import _llm_meta as poe_llm_meta
+from app.services.mistral_service import _p as mistral_provider
+from app.services.moonshot_service import _p as moonshot_provider
+from app.services.openai_service import _p as openai_provider
+from app.services.openrouter_service import _p as openrouter_provider
+from app.services.poe_service import _p as poe_provider
 from app.services.prompt_template_defaults import get_default_prompt_template, render_prompt_template
-from app.services.siliconflow_service import _chat_json as siliconflow_chat_json
-from app.services.siliconflow_service import _llm_meta as siliconflow_llm_meta
+from app.services.siliconflow_service import _p as siliconflow_provider
 from app.services.task_transport_common import with_execution_failures
-from app.services.xai_service import _chat_json as xai_chat_json
-from app.services.xai_service import _llm_meta as xai_llm_meta
-from app.services.zai_service import _chat_json as zai_chat_json
-from app.services.zai_service import _llm_meta as zai_llm_meta
+from app.services.xai_service import _p as xai_provider
+from app.services.zai_service import _p as zai_provider
 
 FISH_PREPROCESS_PURPOSE = "fish_preprocess"
 GEMINI_TTS_PREPROCESS_PURPOSE = "gemini_tts_preprocess"
@@ -57,6 +45,13 @@ _PURPOSE_BY_PROMPT_KEY = {
     "azure_speech.audio_briefing_single_preprocess": AZURE_SPEECH_TTS_PREPROCESS_PURPOSE,
     "azure_speech.audio_briefing_duo_preprocess": AZURE_SPEECH_TTS_PREPROCESS_PURPOSE,
 }
+
+openai_chat_json = openai_provider._chat_json
+openai_llm_meta = openai_provider._llm_meta
+openrouter_chat_json = openrouter_provider._chat_json
+openrouter_llm_meta = openrouter_provider._llm_meta
+xai_chat_json = xai_provider._chat_json
+xai_llm_meta = xai_provider._llm_meta
 
 
 class TTSMarkupPreprocessService:
@@ -87,18 +82,18 @@ class TTSMarkupPreprocessService:
         handlers = {
             "anthropic": lambda key: self._preprocess_anthropic(model_name, key, system_instruction, prompt, purpose),
             "google": lambda key: self._preprocess_gemini(model_name, key, system_instruction, prompt, purpose),
-            "groq": lambda key: self._preprocess_openai_compat(groq_chat_json, groq_llm_meta, model_name, key, system_instruction, prompt, purpose),
-            "deepseek": lambda key: self._preprocess_openai_compat(deepseek_chat_json, deepseek_llm_meta, model_name, key, system_instruction, prompt, purpose),
-            "alibaba": lambda key: self._preprocess_openai_compat(alibaba_chat_json, alibaba_llm_meta, model_name, key, system_instruction, prompt, purpose),
-            "mistral": lambda key: self._preprocess_openai_compat(mistral_chat_json, mistral_llm_meta, model_name, key, system_instruction, prompt, purpose),
-            "moonshot": lambda key: self._preprocess_openai_compat(moonshot_chat_json, moonshot_llm_meta, model_name, key, system_instruction, prompt, purpose),
+            "groq": lambda key: self._preprocess_openai_compat(groq_provider._chat_json, groq_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
+            "deepseek": lambda key: self._preprocess_openai_compat(deepseek_provider._chat_json, deepseek_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
+            "alibaba": lambda key: self._preprocess_openai_compat(alibaba_provider._chat_json, alibaba_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
+            "mistral": lambda key: self._preprocess_openai_compat(mistral_provider._chat_json, mistral_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
+            "moonshot": lambda key: self._preprocess_openai_compat(moonshot_provider._chat_json, moonshot_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
             "xai": lambda key: self._preprocess_openai_compat(xai_chat_json, xai_llm_meta, model_name, key, system_instruction, prompt, purpose),
-            "zai": lambda key: self._preprocess_openai_compat(zai_chat_json, zai_llm_meta, model_name, key, system_instruction, prompt, purpose),
-            "fireworks": lambda key: self._preprocess_openai_compat(fireworks_chat_json, fireworks_llm_meta, model_name, key, system_instruction, prompt, purpose),
+            "zai": lambda key: self._preprocess_openai_compat(zai_provider._chat_json, zai_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
+            "fireworks": lambda key: self._preprocess_openai_compat(fireworks_provider._chat_json, fireworks_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
             "openai": lambda key: self._preprocess_openai_compat(openai_chat_json, openai_llm_meta, model_name, key, system_instruction, prompt, purpose),
             "openrouter": lambda key: self._preprocess_openai_compat(openrouter_chat_json, openrouter_llm_meta, model_name, key, system_instruction, prompt, purpose),
-            "poe": lambda key: self._preprocess_openai_compat(poe_chat_json, poe_llm_meta, model_name, key, system_instruction, prompt, purpose),
-            "siliconflow": lambda key: self._preprocess_openai_compat(siliconflow_chat_json, siliconflow_llm_meta, model_name, key, system_instruction, prompt, purpose),
+            "poe": lambda key: self._preprocess_openai_compat(poe_provider._chat_json, poe_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
+            "siliconflow": lambda key: self._preprocess_openai_compat(siliconflow_provider._chat_json, siliconflow_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
         }
         handler = handlers.get(provider)
         if handler is None:

@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -267,6 +269,109 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 		if got[i] != want[i] {
 			t.Fatalf("providers = %#v, want %#v", got, want)
 		}
+	}
+}
+
+func TestProviderModelDiscoveryFetchAlibabaModelsRetriesTransientServerError(t *testing.T) {
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/compatible-mode/v1/models" {
+			t.Fatalf("path = %s, want %s", r.URL.Path, "/compatible-mode/v1/models")
+		}
+		current := attempts.Add(1)
+		if current < 2 {
+			http.Error(w, `{"error":"temporary"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]string{{"id": "qwen-max"}},
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("ALIBABA_API_KEY", "test-alibaba-key")
+	t.Setenv("ALIBABA_API_BASE_URL", server.URL+"/compatible-mode/v1/chat/completions")
+
+	svc := NewProviderModelDiscoveryService()
+	svc.http = server.Client()
+
+	models, err := svc.fetchAlibabaModels(context.Background())
+	if err != nil {
+		t.Fatalf("fetchAlibabaModels failed: %v", err)
+	}
+	if attempts.Load() != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts.Load())
+	}
+	if len(models) != 1 || models[0] != "qwen-max" {
+		t.Fatalf("models = %#v, want %#v", models, []string{"qwen-max"})
+	}
+}
+
+func TestProviderModelDiscoveryDiscoverAllReturnsProviderErrorsWithoutFailingWholeSync(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/compatible-mode/v1/models":
+			http.Error(w, `{"error":"temporary"}`, http.StatusInternalServerError)
+		case "/v1/models":
+			switch r.Header.Get("Authorization") {
+			case "Bearer test-moonshot-key":
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"data": []map[string]string{{"id": "moonshot-model-1"}},
+				})
+			default:
+				t.Fatalf("unexpected authorization for /v1/models: %q", r.Header.Get("Authorization"))
+			}
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("ALIBABA_API_KEY", "test-alibaba-key")
+	t.Setenv("ALIBABA_API_BASE_URL", server.URL+"/compatible-mode/v1/chat/completions")
+	t.Setenv("MOONSHOT_API_KEY", "test-moonshot-key")
+	t.Setenv("MOONSHOT_API_BASE_URL", server.URL+"/v1/chat/completions")
+
+	svc := NewProviderModelDiscoveryService()
+	svc.http = server.Client()
+
+	results, err := svc.DiscoverAll(context.Background())
+	if err != nil {
+		t.Fatalf("DiscoverAll failed: %v", err)
+	}
+
+	resultByProvider := make(map[string]ProviderModelsResult, len(results))
+	for _, result := range results {
+		resultByProvider[result.Provider] = result
+	}
+
+	if moonshot, ok := resultByProvider["moonshot"]; !ok {
+		t.Fatal("moonshot result missing")
+	} else if moonshot.Error != nil || len(moonshot.Models) != 1 || moonshot.Models[0] != "moonshot-model-1" {
+		t.Fatalf("moonshot result = %#v, want successful discovery", moonshot)
+	}
+
+	alibaba, ok := resultByProvider["alibaba"]
+	if !ok {
+		t.Fatal("alibaba result missing")
+	}
+	if alibaba.Error == nil {
+		t.Fatal("alibaba error = nil, want provider error")
+	}
+	if !strings.Contains(*alibaba.Error, "alibaba model discovery: status 500") {
+		t.Fatalf("alibaba error = %q, want status 500 detail", *alibaba.Error)
+	}
+	if len(alibaba.Models) != 0 {
+		t.Fatalf("alibaba models = %#v, want empty on failure", alibaba.Models)
+	}
+}
+
+func TestProviderModelDiscoveryHTTPStatus(t *testing.T) {
+	status, ok := providerModelDiscoveryHTTPStatus(fmt.Errorf("status 502 body=boom"))
+	if !ok || status != 502 {
+		t.Fatalf("status = %d, ok = %v, want 502/true", status, ok)
 	}
 }
 

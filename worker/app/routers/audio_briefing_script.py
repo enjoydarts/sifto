@@ -1,25 +1,12 @@
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from app.services.alibaba_service import generate_audio_briefing_script as generate_audio_briefing_script_alibaba
 from app.services.claude_service import generate_audio_briefing_script
-from app.services.deepseek_service import generate_audio_briefing_script as generate_audio_briefing_script_deepseek
-from app.services.fireworks_service import generate_audio_briefing_script as generate_audio_briefing_script_fireworks
-from app.services.gemini_service import generate_audio_briefing_script as generate_audio_briefing_script_gemini
-from app.services.groq_service import generate_audio_briefing_script as generate_audio_briefing_script_groq
 from app.services.feed_task_common import is_audio_briefing_script_retryable_validation_error
-from app.services.llm_dispatch import dispatch_by_model
-from app.services.mistral_service import generate_audio_briefing_script as generate_audio_briefing_script_mistral
-from app.services.moonshot_service import generate_audio_briefing_script as generate_audio_briefing_script_moonshot
-from app.services.openai_service import generate_audio_briefing_script as generate_audio_briefing_script_openai
-from app.services.openrouter_service import generate_audio_briefing_script as generate_audio_briefing_script_openrouter
-from app.services.poe_service import generate_audio_briefing_script as generate_audio_briefing_script_poe
+from app.services.llm_dispatch import dispatch_by_model_async
 from app.services.runtime_prompt_overrides import bind_prompt_override
-from app.services.siliconflow_service import generate_audio_briefing_script as generate_audio_briefing_script_siliconflow
-from app.services.together_service import generate_audio_briefing_script as generate_audio_briefing_script_together
-from app.services.router_observe import llm_usage_summary, run_observed_request
-from app.services.xai_service import generate_audio_briefing_script as generate_audio_briefing_script_xai
-from app.services.zai_service import generate_audio_briefing_script as generate_audio_briefing_script_zai
+from app.services.router_observe import llm_usage_summary, run_observed_request_async
+from app.auto_dispatch import build_handler_map_async
 
 router = APIRouter()
 
@@ -75,7 +62,7 @@ class AudioBriefingScriptResponse(BaseModel):
 
 
 @router.post("/audio-briefing-script", response_model=AudioBriefingScriptResponse)
-def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, request: Request):
+async def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, request: Request):
     intro_context = dict(req.intro_context or {})
     intro_context["audio_briefing_conversation_mode"] = req.conversation_mode
     if req.host_persona:
@@ -95,225 +82,34 @@ def generate_audio_briefing_script_endpoint(req: AudioBriefingScriptRequest, req
     ]
     try:
         with bind_prompt_override((req.prompt or {}).get("prompt_key"), (req.prompt or {}).get("prompt_text"), (req.prompt or {}).get("system_instruction")):
-            result = run_observed_request(
+            result = await run_observed_request_async(
                 request,
                 metadata={"model": req.model or "", "persona": req.persona, "conversation_mode": req.conversation_mode, "articles_count": len(articles)},
                 input_payload={"persona": req.persona, "conversation_mode": req.conversation_mode, "articles_count": len(articles), "model": req.model, "target_chars": req.target_chars},
-                call=lambda: dispatch_by_model(
+                call=lambda: dispatch_by_model_async(
                     request,
                     req.model,
-                    handlers={
-                "anthropic": lambda api_key: generate_audio_briefing_script(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    api_key=api_key,
-                    model=req.model,
-                ),
-                "google": lambda api_key: generate_audio_briefing_script_gemini(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "fireworks": lambda api_key: generate_audio_briefing_script_fireworks(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "groq": lambda api_key: generate_audio_briefing_script_groq(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "deepseek": lambda api_key: generate_audio_briefing_script_deepseek(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "alibaba": lambda api_key: generate_audio_briefing_script_alibaba(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "mistral": lambda api_key: generate_audio_briefing_script_mistral(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "together": lambda api_key: generate_audio_briefing_script_together(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "moonshot": lambda api_key: generate_audio_briefing_script_moonshot(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "xai": lambda api_key: generate_audio_briefing_script_xai(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "zai": lambda api_key: generate_audio_briefing_script_zai(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "openrouter": lambda api_key: generate_audio_briefing_script_openrouter(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "poe": lambda api_key: generate_audio_briefing_script_poe(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "siliconflow": lambda api_key: generate_audio_briefing_script_siliconflow(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                "openai": lambda api_key: generate_audio_briefing_script_openai(
-                    persona=req.persona,
-                    articles=articles,
-                    intro_context=intro_context,
-                    target_duration_minutes=req.target_duration_minutes,
-                    target_chars=req.target_chars,
-                    chars_per_minute=req.chars_per_minute,
-                    include_opening=req.include_opening,
-                    include_overall_summary=req.include_overall_summary,
-                    include_article_segments=req.include_article_segments,
-                    include_ending=req.include_ending,
-                    model=str(req.model),
-                    api_key=api_key or "",
-                ),
-                    },
+                    handlers=build_handler_map_async(
+                        "generate_audio_briefing_script",
+                        args_fn=lambda func, api_key: func(
+                            persona=req.persona, articles=articles, intro_context=intro_context,
+                            target_duration_minutes=req.target_duration_minutes, target_chars=req.target_chars,
+                            chars_per_minute=req.chars_per_minute, include_opening=req.include_opening,
+                            include_overall_summary=req.include_overall_summary,
+                            include_article_segments=req.include_article_segments,
+                            include_ending=req.include_ending,
+                            model=str(req.model), api_key=api_key or "",
+                        ),
+                        anthropic_args_fn=lambda func, api_key: func(
+                            persona=req.persona, articles=articles, intro_context=intro_context,
+                            target_duration_minutes=req.target_duration_minutes, target_chars=req.target_chars,
+                            chars_per_minute=req.chars_per_minute, include_opening=req.include_opening,
+                            include_overall_summary=req.include_overall_summary,
+                            include_article_segments=req.include_article_segments,
+                            include_ending=req.include_ending,
+                            api_key=api_key, model=req.model,
+                        ),
+                    ),
                 ),
                 output_builder=lambda result: {"items_count": len(result.get("article_segments") or []), **llm_usage_summary(result)},
             )

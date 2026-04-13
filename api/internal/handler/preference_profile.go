@@ -48,26 +48,13 @@ func (h *SettingsHandler) GetPreferenceProfile(w http.ResponseWriter, r *http.Re
 	if cacheKeyErr != nil {
 		log.Printf("preference profile cache key failed user_id=%s err=%v", userID, cacheKeyErr)
 	}
-	if h.cache != nil && cacheKeyErr == nil && r.URL.Query().Get("cache_bust") != "1" {
-		var cached model.PreferenceProfileResponse
-		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
-			writeJSON(w, &cached)
-			return
-		} else if err != nil {
-			log.Printf("preference profile cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
-		}
-	}
-
-	payload, err := h.prefProfileRepo.GetProfileView(r.Context(), userID)
+	payload, err := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, preferenceProfileCacheTTL, func() (*model.PreferenceProfileResponse, error) {
+		return h.prefProfileRepo.GetProfileView(r.Context(), userID)
+	}, cacheFetchOptions{cacheBust: r.URL.Query().Get("cache_bust") == "1", cacheKeyErr: cacheKeyErr, logKeyPrefix: "preference profile"})
 	if err != nil {
 		log.Printf("preference profile load failed user_id=%s err=%v", userID, err)
 		writeRepoError(w, err)
 		return
-	}
-	if h.cache != nil && cacheKeyErr == nil {
-		if err := h.cache.SetJSON(r.Context(), cacheKey, payload, preferenceProfileCacheTTL); err != nil {
-			log.Printf("preference profile cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
-		}
 	}
 	writeJSON(w, payload)
 }
@@ -82,26 +69,13 @@ func (h *SettingsHandler) GetPreferenceProfileSummary(w http.ResponseWriter, r *
 	if cacheKeyErr != nil {
 		log.Printf("preference profile summary cache key failed user_id=%s err=%v", userID, cacheKeyErr)
 	}
-	if h.cache != nil && cacheKeyErr == nil && r.URL.Query().Get("cache_bust") != "1" {
-		var cached model.PreferenceProfileSummaryResponse
-		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
-			writeJSON(w, &cached)
-			return
-		} else if err != nil {
-			log.Printf("preference profile summary cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
-		}
-	}
-
-	payload, err := h.prefProfileRepo.GetProfileSummary(r.Context(), userID)
+	payload, err := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, preferenceProfileSummaryCacheTTL, func() (*model.PreferenceProfileSummaryResponse, error) {
+		return h.prefProfileRepo.GetProfileSummary(r.Context(), userID)
+	}, cacheFetchOptions{cacheBust: r.URL.Query().Get("cache_bust") == "1", cacheKeyErr: cacheKeyErr, logKeyPrefix: "preference profile summary"})
 	if err != nil {
 		log.Printf("preference profile summary load failed user_id=%s err=%v", userID, err)
 		writeRepoError(w, err)
 		return
-	}
-	if h.cache != nil && cacheKeyErr == nil {
-		if err := h.cache.SetJSON(r.Context(), cacheKey, payload, preferenceProfileSummaryCacheTTL); err != nil {
-			log.Printf("preference profile summary cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
-		}
 	}
 	writeJSON(w, payload)
 }

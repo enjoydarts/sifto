@@ -1,3 +1,25 @@
+const PROVIDER_LABELS: Record<string, string> = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  google: "Google",
+  groq: "Groq",
+  deepseek: "DeepSeek",
+  alibaba: "Alibaba",
+  mistral: "Mistral",
+  together: "Together AI",
+  xai: "xAI",
+  zai: "Z.ai",
+  fireworks: "Fireworks",
+  moonshot: "Moonshot",
+  openrouter: "OpenRouter",
+  poe: "Poe",
+  siliconflow: "SiliconFlow",
+};
+
+export function providerLabel(provider: string): string {
+  return PROVIDER_LABELS[provider] ?? provider;
+}
+
 export function formatModelDisplayName(model: string): string {
   const raw = model.startsWith("openrouter::")
     ? model.slice("openrouter::".length)

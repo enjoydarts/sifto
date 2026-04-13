@@ -776,6 +776,10 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 	alibabaAPIKey *string,
 	mistralAPIKey *string,
 	togetherAPIKey *string,
+	moonshotAPIKey *string,
+	openRouterAPIKey *string,
+	poeAPIKey *string,
+	siliconFlowAPIKey *string,
 	xaiAPIKey *string,
 	zaiAPIKey *string,
 	fireworksAPIKey *string,
@@ -789,7 +793,7 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 		"positive_examples": positiveExamples,
 		"negative_examples": negativeExamples,
 		"model":             model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, selectOpenAICompatibleKey(model, togetherAPIKey, openAIAPIKey), nil, nil, nil, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, selectOpenAICompatibleKey(model, togetherAPIKey, moonshotAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, openAIAPIKey), nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) SuggestFeedSeedSites(
@@ -831,6 +835,10 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 	alibabaAPIKey *string,
 	mistralAPIKey *string,
 	togetherAPIKey *string,
+	moonshotAPIKey *string,
+	openRouterAPIKey *string,
+	poeAPIKey *string,
+	siliconFlowAPIKey *string,
 	xaiAPIKey *string,
 	zaiAPIKey *string,
 	fireworksAPIKey *string,
@@ -843,7 +851,7 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 		"positive_examples": positiveExamples,
 		"negative_examples": negativeExamples,
 		"model":             model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, selectOpenAICompatibleKey(model, togetherAPIKey, openAIAPIKey), nil, nil, nil, w.internalSecret))
+	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, selectOpenAICompatibleKey(model, togetherAPIKey, moonshotAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, openAIAPIKey), nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) GenerateBriefingNavigatorWithModel(
@@ -1422,9 +1430,28 @@ func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *st
 	return headers
 }
 
-func selectOpenAICompatibleKey(model *string, togetherAPIKey *string, openAIAPIKey *string) *string {
-	if LLMProviderForModel(model) == "together" && togetherAPIKey != nil && strings.TrimSpace(*togetherAPIKey) != "" {
-		return togetherAPIKey
+func selectOpenAICompatibleKey(model *string, togetherAPIKey *string, moonshotAPIKey *string, openRouterAPIKey *string, poeAPIKey *string, siliconFlowAPIKey *string, openAIAPIKey *string) *string {
+	switch LLMProviderForModel(model) {
+	case "together":
+		if togetherAPIKey != nil && strings.TrimSpace(*togetherAPIKey) != "" {
+			return togetherAPIKey
+		}
+	case "moonshot":
+		if moonshotAPIKey != nil && strings.TrimSpace(*moonshotAPIKey) != "" {
+			return moonshotAPIKey
+		}
+	case "openrouter":
+		if openRouterAPIKey != nil && strings.TrimSpace(*openRouterAPIKey) != "" {
+			return openRouterAPIKey
+		}
+	case "poe":
+		if poeAPIKey != nil && strings.TrimSpace(*poeAPIKey) != "" {
+			return poeAPIKey
+		}
+	case "siliconflow":
+		if siliconFlowAPIKey != nil && strings.TrimSpace(*siliconFlowAPIKey) != "" {
+			return siliconFlowAPIKey
+		}
 	}
 	return openAIAPIKey
 }

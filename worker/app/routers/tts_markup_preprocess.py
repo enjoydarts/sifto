@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from app.services.tts_markup_preprocess import DEFAULT_TTS_MARKUP_PREPROCESS_PROMPT_KEY, TTSMarkupPreprocessService
@@ -6,6 +6,7 @@ from app.services.llm_catalog import provider_api_key_header, provider_for_model
 from app.services.router_observe import llm_usage_summary, run_observed_request
 
 router = APIRouter()
+_service = TTSMarkupPreprocessService()
 
 
 class TTSMarkupPreprocessRequest(BaseModel):
@@ -22,39 +23,35 @@ class TTSMarkupPreprocessResponse(BaseModel):
 
 @router.post("/tts/preprocess-text", response_model=TTSMarkupPreprocessResponse)
 def preprocess_tts_markup_text(req: TTSMarkupPreprocessRequest, request: Request):
-    try:
-        service = TTSMarkupPreprocessService()
-        provider = provider_for_model(req.model)
-        if not provider:
-            raise RuntimeError(f"unsupported tts markup preprocess model provider: {req.model}")
-        api_key_header = provider_api_key_header(provider)
-        api_key = request.headers.get(api_key_header, "").strip() if api_key_header else ""
-        result = run_observed_request(
-            request,
-            metadata={
-                "model": req.model,
-                "provider": provider,
-                "prompt_key": req.prompt_key,
-                "text_chars": len(req.text or ""),
-            },
-            input_payload={
-                "model": req.model,
-                "provider": provider,
-                "prompt_key": req.prompt_key,
-                "text_chars": len(req.text or ""),
-            },
-            call=lambda: service.preprocess(
-                text=req.text,
-                model=req.model,
-                api_key=api_key,
-                prompt_key=req.prompt_key,
-                variables=req.variables or {},
-            ),
-            output_builder=lambda result: {
-                "text_chars": len(result.get("text") or ""),
-                **llm_usage_summary(result),
-            },
-        )
-        return TTSMarkupPreprocessResponse(**result)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"tts markup preprocess failed: {exc}")
+    provider = provider_for_model(req.model)
+    if not provider:
+        raise RuntimeError(f"unsupported tts markup preprocess model provider: {req.model}")
+    api_key_header = provider_api_key_header(provider)
+    api_key = request.headers.get(api_key_header, "").strip() if api_key_header else ""
+    result = run_observed_request(
+        request,
+        metadata={
+            "model": req.model,
+            "provider": provider,
+            "prompt_key": req.prompt_key,
+            "text_chars": len(req.text or ""),
+        },
+        input_payload={
+            "model": req.model,
+            "provider": provider,
+            "prompt_key": req.prompt_key,
+            "text_chars": len(req.text or ""),
+        },
+        call=lambda: _service.preprocess(
+            text=req.text,
+            model=req.model,
+            api_key=api_key,
+            prompt_key=req.prompt_key,
+            variables=req.variables or {},
+        ),
+        output_builder=lambda result: {
+            "text_chars": len(result.get("text") or ""),
+            **llm_usage_summary(result),
+        },
+    )
+    return TTSMarkupPreprocessResponse(**result)

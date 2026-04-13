@@ -87,6 +87,25 @@ def run_observed_request(
         )
 
 
+async def run_observed_request_async(
+    request,
+    *,
+    metadata: dict | None = None,
+    input_payload: dict | None = None,
+    call,
+    output_builder=None,
+    include_llm_result: bool = True,
+):
+    with bind_request_span(request):
+        observe_request_input(metadata=metadata, input_payload=input_payload)
+        result = await call()
+        return observe_result(
+            result,
+            output_builder=output_builder,
+            include_llm_result=include_llm_result,
+        )
+
+
 @contextmanager
 def bind_request_span(request) -> None:
     with bind_span(getattr(getattr(request, "state", None), "langfuse_span", None)):

@@ -1,23 +1,9 @@
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
-
-from app.services.alibaba_service import generate_ask_navigator as generate_ask_navigator_alibaba
 from app.services.claude_service import generate_ask_navigator
-from app.services.deepseek_service import generate_ask_navigator as generate_ask_navigator_deepseek
-from app.services.fireworks_service import generate_ask_navigator as generate_ask_navigator_fireworks
-from app.services.gemini_service import generate_ask_navigator as generate_ask_navigator_gemini
-from app.services.groq_service import generate_ask_navigator as generate_ask_navigator_groq
-from app.services.llm_dispatch import dispatch_by_model
-from app.services.mistral_service import generate_ask_navigator as generate_ask_navigator_mistral
-from app.services.moonshot_service import generate_ask_navigator as generate_ask_navigator_moonshot
-from app.services.openai_service import generate_ask_navigator as generate_ask_navigator_openai
-from app.services.openrouter_service import generate_ask_navigator as generate_ask_navigator_openrouter
-from app.services.poe_service import generate_ask_navigator as generate_ask_navigator_poe
-from app.services.siliconflow_service import generate_ask_navigator as generate_ask_navigator_siliconflow
-from app.services.together_service import generate_ask_navigator as generate_ask_navigator_together
-from app.services.router_observe import llm_usage_summary, run_observed_request
-from app.services.xai_service import generate_ask_navigator as generate_ask_navigator_xai
-from app.services.zai_service import generate_ask_navigator as generate_ask_navigator_zai
+from app.services.llm_dispatch import dispatch_by_model_async
+from app.services.router_observe import llm_usage_summary, run_observed_request_async
+from app.auto_dispatch import build_handler_map_async
 
 router = APIRouter()
 
@@ -63,7 +49,7 @@ class AskNavigatorResponse(BaseModel):
 
 
 @router.post("/ask-navigator", response_model=AskNavigatorResponse)
-def generate_ask_navigator_endpoint(req: AskNavigatorRequest, request: Request):
+async def generate_ask_navigator_endpoint(req: AskNavigatorRequest, request: Request):
     ask_input = {
         "query": req.input.query,
         "answer": req.input.answer,
@@ -71,30 +57,18 @@ def generate_ask_navigator_endpoint(req: AskNavigatorRequest, request: Request):
         "citations": [citation.model_dump() for citation in req.input.citations],
         "related_items": [item.model_dump() for item in req.input.related_items],
     }
-    result = run_observed_request(
+    result = await run_observed_request_async(
         request,
         metadata={"model": req.model or "", "persona": req.persona},
         input_payload={"persona": req.persona, "query": req.input.query, "model": req.model},
-        call=lambda: dispatch_by_model(
+        call=lambda: dispatch_by_model_async(
             request,
             req.model,
-            handlers={
-                "anthropic": lambda api_key: generate_ask_navigator(persona=req.persona, ask_input=ask_input, api_key=api_key, model=req.model),
-                "google": lambda api_key: generate_ask_navigator_gemini(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "fireworks": lambda api_key: generate_ask_navigator_fireworks(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "groq": lambda api_key: generate_ask_navigator_groq(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "deepseek": lambda api_key: generate_ask_navigator_deepseek(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "alibaba": lambda api_key: generate_ask_navigator_alibaba(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "mistral": lambda api_key: generate_ask_navigator_mistral(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "together": lambda api_key: generate_ask_navigator_together(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "moonshot": lambda api_key: generate_ask_navigator_moonshot(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "xai": lambda api_key: generate_ask_navigator_xai(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "zai": lambda api_key: generate_ask_navigator_zai(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "openrouter": lambda api_key: generate_ask_navigator_openrouter(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "poe": lambda api_key: generate_ask_navigator_poe(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "siliconflow": lambda api_key: generate_ask_navigator_siliconflow(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-                "openai": lambda api_key: generate_ask_navigator_openai(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
-            },
+            handlers=build_handler_map_async(
+                "generate_ask_navigator",
+                args_fn=lambda func, api_key: func(persona=req.persona, ask_input=ask_input, model=str(req.model), api_key=api_key or ""),
+                anthropic_args_fn=lambda func, api_key: func(persona=req.persona, ask_input=ask_input, api_key=api_key, model=req.model),
+            ),
         ),
         output_builder=lambda result: {"has_commentary": bool(result.get("commentary")), **llm_usage_summary(result)},
     )

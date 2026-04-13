@@ -1,3 +1,4 @@
+import asyncio
 import json
 import hashlib
 import logging
@@ -11,6 +12,7 @@ from app.services.gemini_transport import (
     env_int as _env_int,
     env_timeout_seconds as _env_timeout_seconds,
     generate_content as _gemini_generate_content,
+    generate_content_async as _gemini_generate_content_async,
     summary_context_cache_enabled as _summary_context_cache_enabled,
 )
 from app.services.llm_text_utils import (
@@ -100,6 +102,10 @@ _LEGACY_MODEL_PRICING = {
 
 def _generate_content(*args, **kwargs):
     return _gemini_generate_content(*args, normalize_model_name=_normalize_model_name, logger=_log, **kwargs)
+
+
+async def _generate_content_async(*args, **kwargs):
+    return await _gemini_generate_content_async(*args, normalize_model_name=_normalize_model_name, logger=_log, **kwargs)
 
 def _digest_primary_topic(item: dict) -> str:
     topics = item.get("topics") or []
@@ -768,6 +774,466 @@ def compose_digest_cluster_draft(
 ) -> dict:
     task = build_cluster_draft_task(cluster_label, item_count, topics, source_lines)
     text, usage = _generate_content(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=DIGEST_CLUSTER_DRAFT_MAX_OUTPUT_TOKENS,
+        system_instruction=task["system_instruction"],
+        response_schema=task["schema"],
+    )
+    summary = parse_cluster_draft_result(text, task["source_lines"])
+    return {
+        "draft_summary": summary,
+        "llm": _llm_meta(model, "digest_cluster_draft", usage),
+    }
+
+
+async def rank_feed_suggestions_async(
+    existing_sources: list[dict],
+    preferred_topics: list[str],
+    candidates: list[dict],
+    positive_examples: list[dict] | None,
+    negative_examples: list[dict] | None,
+    model: str,
+    api_key: str,
+) -> dict:
+    task = build_rank_feed_task(existing_sources, preferred_topics, candidates, positive_examples, negative_examples)
+    text, usage = await _generate_content_async(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=2800,
+        response_schema=task["schema"],
+    )
+    out = parse_rank_feed_result(text, task["candidates"])
+    if len(out) == 0 and len(task["candidates"]) > 0:
+        rescue_prompt = f"""候補フィードを優先度順に再提示してください。必ず最低10件は返してください。
+JSONのみ:
+{{
+  "items":[{{"id":"c001","reason":"短い理由","confidence":0.0-1.0}}]
+}}
+
+興味トピック:
+{json.dumps(task["preferred_topics"], ensure_ascii=False)}
+
+候補フィード:
+{json.dumps(task["candidates"], ensure_ascii=False)}
+"""
+        rescue_text, rescue_usage = await _generate_content_async(
+            rescue_prompt,
+            model=model,
+            api_key=api_key,
+            max_output_tokens=1800,
+            response_schema=task["schema"],
+        )
+        out.extend(parse_rank_feed_result(rescue_text, task["candidates"]))
+        usage["input_tokens"] = int(usage.get("input_tokens", 0)) + int(rescue_usage.get("input_tokens", 0))
+        usage["output_tokens"] = int(usage.get("output_tokens", 0)) + int(rescue_usage.get("output_tokens", 0))
+    return {"items": out, "llm": _llm_meta(model, "source_suggestion", usage)}
+
+
+async def generate_briefing_navigator_async(persona: str, candidates: list[dict], intro_context: dict, model: str, api_key: str) -> dict:
+    task = build_briefing_navigator_task(persona, candidates, intro_context)
+    text, usage = await _generate_content_async(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=1800,
+        response_schema=task["schema"],
+        temperature=task["sampling_profile"]["temperature"],
+        top_p=task["sampling_profile"]["top_p"],
+    )
+    out = parse_briefing_navigator_result(text, task["candidates"])
+    return {"intro": out["intro"], "picks": out["picks"], "llm": _llm_meta(model, "briefing_navigator", usage)}
+
+
+async def compose_ai_navigator_brief_async(persona: str, candidates: list[dict], intro_context: dict, model: str, api_key: str) -> dict:
+    task = build_ai_navigator_brief_task(persona, candidates, intro_context)
+    text, usage = await _generate_content_async(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=3200,
+        response_schema=task["schema"],
+        temperature=task["sampling_profile"]["temperature"],
+        top_p=task["sampling_profile"]["top_p"],
+    )
+    out = parse_ai_navigator_brief_result(text, task["candidates"], intro_context)
+    return {"title": out["title"], "intro": out["intro"], "summary": out["summary"], "ending": out["ending"], "items": out["items"], "llm": _llm_meta(model, "ai_navigator_brief", usage)}
+
+
+async def generate_item_navigator_async(persona: str, article: dict, model: str, api_key: str) -> dict:
+    task = build_item_navigator_task(persona, article)
+    text, usage = await _generate_content_async(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=2200,
+        response_schema=task["schema"],
+        temperature=task["sampling_profile"]["temperature"],
+        top_p=task["sampling_profile"]["top_p"],
+    )
+    out = parse_item_navigator_result(text, task["article"])
+    return {"headline": out["headline"], "commentary": out["commentary"], "stance_tags": out["stance_tags"], "llm": _llm_meta(model, "item_navigator", usage)}
+
+
+async def generate_audio_briefing_script_async(
+    persona: str,
+    articles: list[dict],
+    intro_context: dict,
+    target_duration_minutes: int,
+    target_chars: int,
+    chars_per_minute: int,
+    include_opening: bool,
+    include_overall_summary: bool,
+    include_article_segments: bool,
+    include_ending: bool,
+    model: str,
+    api_key: str,
+) -> dict:
+    task = build_audio_briefing_script_task(
+        persona,
+        articles,
+        intro_context,
+        target_duration_minutes=target_duration_minutes,
+        target_chars=target_chars,
+        chars_per_minute=chars_per_minute,
+        include_opening=include_opening,
+        include_overall_summary=include_overall_summary,
+        include_article_segments=include_article_segments,
+        include_ending=include_ending,
+    )
+    api_key_hash = hashlib.sha256((api_key or "").encode("utf-8")).hexdigest()[:16]
+    cache_key = None
+    if _audio_briefing_script_context_cache_enabled():
+        cache_key = _cache_key_hash(
+            [
+                _normalize_model_name(model),
+                "audio-briefing-script-v1",
+                api_key_hash,
+                task["system_instruction"],
+            ]
+        )
+    text, usage = await _generate_content_async(
+        task["user_prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=_audio_briefing_script_max_tokens(task["target_chars"], str((intro_context or {}).get("audio_briefing_conversation_mode") or "single")),
+        system_instruction=task["system_instruction"],
+        context_cache_key=cache_key,
+        response_schema=task["schema"],
+    )
+    out = parse_audio_briefing_script_result(
+        text,
+        task["articles"],
+        persona,
+        conversation_mode=str((intro_context or {}).get("audio_briefing_conversation_mode") or "single"),
+        target_chars=target_chars,
+        include_opening=include_opening,
+        include_overall_summary=include_overall_summary,
+        include_article_segments=include_article_segments,
+        include_ending=include_ending,
+    )
+    return {
+        "opening": out["opening"],
+        "overall_summary": out["overall_summary"],
+        "article_segments": out["article_segments"],
+        "turns": out["turns"],
+        "ending": out["ending"],
+        "llm": _llm_meta(model, "audio_briefing_script", usage),
+    }
+
+
+async def generate_ask_navigator_async(persona: str, ask_input: dict, model: str, api_key: str) -> dict:
+    task = build_ask_navigator_task(persona, ask_input)
+    text, usage = await _generate_content_async(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=2400,
+        response_schema=task["schema"],
+        temperature=task["sampling_profile"]["temperature"],
+        top_p=task["sampling_profile"]["top_p"],
+    )
+    out = parse_ask_navigator_result(text, task["input"])
+    return {"headline": out["headline"], "commentary": out["commentary"], "next_angles": out["next_angles"], "llm": _llm_meta(model, "ask_navigator", usage)}
+
+
+async def generate_source_navigator_async(persona: str, candidates: list[dict], model: str, api_key: str) -> dict:
+    task = build_source_navigator_task(persona, candidates)
+    text, usage = await _generate_content_async(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=2600,
+        response_schema=task["schema"],
+        temperature=task["sampling_profile"]["temperature"],
+        top_p=task["sampling_profile"]["top_p"],
+    )
+    out = parse_source_navigator_result(text, task["candidates"])
+    return {"overview": out["overview"], "keep": out["keep"], "watch": out["watch"], "standout": out["standout"], "llm": _llm_meta(model, "source_navigator", usage)}
+
+
+async def suggest_feed_seed_sites_async(
+    existing_sources: list[dict],
+    preferred_topics: list[str],
+    positive_examples: list[dict] | None,
+    negative_examples: list[dict] | None,
+    model: str,
+    api_key: str,
+) -> dict:
+    task = build_seed_sites_task(existing_sources, preferred_topics, positive_examples, negative_examples)
+    text, usage = await _generate_content_async(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=2200,
+        response_schema=task["schema"],
+    )
+    out = parse_seed_sites_result(text, task["existing_sources"])
+    if len(out) == 0:
+        rescue_prompt = f"""既存ソースと重複しないサイトURL候補を必ず10件以上返してください。JSONのみ。
+{{
+  "items": [
+    {{"url":"https://...", "reason":"..."}}
+  ]
+}}
+既存ソース:
+{json.dumps(task["existing_sources"], ensure_ascii=False)}
+興味トピック:
+{json.dumps(task["preferred_topics"], ensure_ascii=False)}
+"""
+        rescue_text, rescue_usage = await _generate_content_async(
+            rescue_prompt,
+            model=model,
+            api_key=api_key,
+            max_output_tokens=1800,
+            response_schema=task["schema"],
+        )
+        out.extend(parse_seed_sites_result(rescue_text, task["existing_sources"]))
+        usage["input_tokens"] = int(usage.get("input_tokens", 0)) + int(rescue_usage.get("input_tokens", 0))
+        usage["output_tokens"] = int(usage.get("output_tokens", 0)) + int(rescue_usage.get("output_tokens", 0))
+    return {"items": out, "llm": _llm_meta(model, "source_suggestion", usage)}
+
+
+async def extract_facts_async(title: str | None, content: str, model: str, api_key: str) -> dict:
+    task = build_facts_task(title, content, output_mode="array")
+    text, usage = await _generate_content_async(task["prompt"], model=model, api_key=api_key, max_output_tokens=1500, system_instruction=task["system_instruction"])
+    facts = parse_facts_result(text)
+    localization_llm = None
+    if not facts:
+        raise RuntimeError(f"gemini extract_facts parse failed: response_snippet={text[:500]}")
+    if _facts_need_japanese_localization(facts):
+        localize_task = build_facts_localization_task(title, facts)
+        localized_text, localized_usage = await _generate_content_async(
+            localize_task["prompt"],
+            model=model,
+            api_key=api_key,
+            max_output_tokens=1200,
+            system_instruction=localize_task["system_instruction"],
+            response_schema=localize_task["schema"],
+        )
+        localized_facts = parse_facts_result(localized_text)
+        if localized_facts:
+            facts = localized_facts
+            localization_llm = _llm_meta(model, "facts_localization", localized_usage)
+    return {"facts": facts, "llm": _llm_meta(model, "facts", usage), "facts_localization_llm": localization_llm}
+
+
+async def summarize_async(
+    title: str | None,
+    facts: list[str],
+    source_text_chars: int | None = None,
+    model: str = "gemini-2.5-flash",
+    api_key: str = "",
+) -> dict:
+    task = build_summary_task(title, facts, source_text_chars)
+    max_tokens = _summary_max_tokens(task["target_chars"])
+    api_key_hash = hashlib.sha256((api_key or "").encode("utf-8")).hexdigest()[:16]
+    cache_key = None
+    if _summary_context_cache_enabled():
+        cache_key = _cache_key_hash([_normalize_model_name(model), "summary-v2", api_key_hash, task["system_instruction"]])
+    text, usage = await _generate_content_async(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=max_tokens,
+        system_instruction=task["system_instruction"],
+        context_cache_key=cache_key,
+    )
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    try:
+        data = json.loads(text[start:end])
+    except Exception:
+        data = {}
+    topics = data.get("topics", [])
+    if not isinstance(topics, list):
+        topics = []
+    return await asyncio.to_thread(
+        finalize_summary_result,
+        title=title,
+        summary_text=str(data.get("summary", "")).strip(),
+        topics=topics,
+        raw_score_breakdown=data.get("score_breakdown") if isinstance(data.get("score_breakdown"), dict) else {},
+        score_reason=str(data.get("score_reason") or "").strip(),
+        translated_title=str(data.get("translated_title") or "").strip(),
+        translate_func=lambda raw_title: _translate_title_to_ja(raw_title, model=model, api_key=api_key),
+        llm=_llm_meta(model, "summary", usage),
+        error_prefix="gemini summarize parse failed",
+        response_text=text,
+    )
+
+
+async def check_summary_faithfulness_async(title: str | None, facts: list[str], summary: str, model: str, api_key: str) -> dict:
+    return await asyncio.to_thread(
+        run_summary_faithfulness_check,
+        lambda: wrap_usage_transport(
+            lambda: _generate_content(
+                summary_faithfulness_prompt(title, facts, summary),
+                model=model,
+                api_key=api_key,
+                max_output_tokens=320,
+                system_instruction=summary_faithfulness_system_instruction(),
+                response_schema=SUMMARY_FAITHFULNESS_SCHEMA,
+            ),
+            lambda usage: _llm_meta(model, "faithfulness_check", usage),
+        ),
+        retry_call=lambda: wrap_usage_transport(
+            lambda: _generate_content(
+                summary_faithfulness_retry_prompt(title, facts, summary),
+                model=model,
+                api_key=api_key,
+                max_output_tokens=120,
+                system_instruction="pass / warn / fail のいずれか1語のみを返す。",
+                response_schema=None,
+                response_mime_type="text/plain",
+            ),
+            lambda usage: _llm_meta(model, "faithfulness_check", usage),
+        ),
+    )
+
+
+async def check_facts_async(title: str | None, content: str, facts: list[str], model: str, api_key: str) -> dict:
+    return await asyncio.to_thread(
+        run_facts_check,
+        lambda: wrap_usage_transport(
+            lambda: _generate_content(
+                facts_check_prompt(title, content, facts),
+                model=model,
+                api_key=api_key,
+                max_output_tokens=320,
+                system_instruction=facts_check_system_instruction(),
+                response_schema=FACTS_CHECK_SCHEMA,
+            ),
+            lambda usage: _llm_meta(model, "facts_check", usage),
+        ),
+        retry_call=lambda: wrap_usage_transport(
+            lambda: _generate_content(
+                facts_check_retry_prompt(title, content, facts),
+                model=model,
+                api_key=api_key,
+                max_output_tokens=220,
+                system_instruction=facts_check_system_instruction(),
+                response_schema=FACTS_CHECK_SCHEMA,
+            ),
+            lambda usage: _llm_meta(model, "facts_check", usage),
+        ),
+    )
+
+
+async def translate_title_async(title: str, model: str = "gemini-2.5-flash", api_key: str = "") -> dict:
+    src = (title or "").strip()
+    if not src:
+        return {"translated_title": "", "llm": None}
+    try:
+        translated = await asyncio.to_thread(_translate_title_to_ja, src, model, api_key)
+    except Exception as e:
+        fallback_model = "gemini-2.5-flash-lite"
+        if _normalize_model_family(model) == fallback_model:
+            raise
+        _log.warning("gemini translate_title failed with model=%s, fallback=%s, err=%s", model, fallback_model, e)
+        translated = await asyncio.to_thread(_translate_title_to_ja, src, fallback_model, api_key)
+    return {
+        "translated_title": translated[:300],
+        "llm": None,
+    }
+
+
+async def compose_digest_async(digest_date: str, items: list[dict], model: str, api_key: str) -> dict:
+    if not items:
+        return {
+            "subject": f"Sifto Digest - {digest_date}",
+            "body": "本日のダイジェスト対象記事はありませんでした。",
+            "llm": _llm_meta(model, "digest", {"input_tokens": 0, "output_tokens": 0}),
+        }
+    input_mode, digest_input = _build_digest_input_sections(items)
+    task = build_digest_task(digest_date, len(items), digest_input, input_mode=input_mode)
+
+    compose_timeout = _env_timeout_seconds("GEMINI_COMPOSE_DIGEST_TIMEOUT_SEC", 300.0)
+    last_text = ""
+    last_error = "unknown"
+    for max_tokens in (10000, 15000):
+        text, usage = await _generate_content_async(
+            task["prompt"],
+            model=model,
+            api_key=api_key,
+            max_output_tokens=max_tokens,
+            response_schema=task["schema"],
+            timeout_sec=compose_timeout,
+            system_instruction=task["system_instruction"],
+        )
+        last_text = text
+        try:
+            subject, body = parse_digest_result(text, error_prefix="gemini compose_digest parse failed")
+        except Exception:
+            last_error = "missing subject/body"
+            continue
+        if len(body) < 80:
+            last_error = f"body too short: len={len(body)}"
+            continue
+        return {
+            "subject": subject,
+            "body": body,
+            "llm": _llm_meta(model, "digest", usage),
+        }
+
+    snippet = last_text[:500].replace("\n", "\\n")
+    raise RuntimeError(f"gemini compose_digest parse failed: {last_error}; response_snippet={snippet}")
+
+
+async def ask_question_async(query: str, candidates: list[dict], model: str, api_key: str) -> dict:
+    if not candidates:
+        return {
+            "answer": "該当する記事は見つかりませんでした。",
+            "bullets": [],
+            "citations": [],
+            "llm": _llm_meta(model, "ask", {"input_tokens": 0, "output_tokens": 0}),
+        }
+    task = build_ask_task(query, candidates)
+    text, usage = await _generate_content_async(
+        task["prompt"],
+        model=model,
+        api_key=api_key,
+        max_output_tokens=3200,
+        response_schema=task["schema"],
+        timeout_sec=_env_timeout_seconds("GEMINI_TIMEOUT_SEC", 300.0),
+        system_instruction=task["system_instruction"],
+    )
+    result = parse_ask_result(text, candidates, error_prefix="gemini ask missing answer")
+    return {**result, "llm": _llm_meta(model, "ask", usage)}
+
+
+async def compose_digest_cluster_draft_async(
+    cluster_label: str,
+    item_count: int,
+    topics: list[str],
+    source_lines: list[str],
+    model: str,
+    api_key: str,
+) -> dict:
+    task = build_cluster_draft_task(cluster_label, item_count, topics, source_lines)
+    text, usage = await _generate_content_async(
         task["prompt"],
         model=model,
         api_key=api_key,

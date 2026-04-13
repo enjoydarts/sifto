@@ -85,15 +85,14 @@ func TestAudioBriefingPresetPayloadIncludesVoices(t *testing.T) {
 	}
 
 	got := AudioBriefingPresetPayload(preset)
-	if got["name"] != "Morning Briefing" {
-		t.Fatalf("name = %v, want Morning Briefing", got["name"])
+	if got.Name != "Morning Briefing" {
+		t.Fatalf("name = %v, want Morning Briefing", got.Name)
 	}
-	if got["conversation_mode"] != "duo" {
-		t.Fatalf("conversation_mode = %v, want duo", got["conversation_mode"])
+	if got.ConversationMode != "duo" {
+		t.Fatalf("conversation_mode = %v, want duo", got.ConversationMode)
 	}
-	voices, ok := got["voices"].([]map[string]any)
-	if !ok || len(voices) != 1 {
-		t.Fatalf("voices = %#v, want 1 voice", got["voices"])
+	if len(got.Voices) != 1 {
+		t.Fatalf("voices = %d, want 1 voice", len(got.Voices))
 	}
 }
 
@@ -312,41 +311,41 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 
 	got := LLMModelSettingsPayload(settings)
 
-	if gotFactsFallback, _ := got["facts_fallback"].(*string); gotFactsFallback == nil || *gotFactsFallback != "google/gemini-2.5-flash" {
-		t.Fatalf("facts_fallback = %v, want %q", got["facts_fallback"], "google/gemini-2.5-flash")
+	if got.FactsFallback == nil || *got.FactsFallback != "google/gemini-2.5-flash" {
+		t.Fatalf("facts_fallback = %v, want %q", got.FactsFallback, "google/gemini-2.5-flash")
 	}
-	if gotFactsSecondary, _ := got["facts_secondary"].(*string); gotFactsSecondary == nil || *gotFactsSecondary != "google/gemini-2.5-flash" {
-		t.Fatalf("facts_secondary = %v, want %q", got["facts_secondary"], "google/gemini-2.5-flash")
+	if got.FactsSecondary == nil || *got.FactsSecondary != "google/gemini-2.5-flash" {
+		t.Fatalf("facts_secondary = %v, want %q", got.FactsSecondary, "google/gemini-2.5-flash")
 	}
-	if gotFactsSecondaryRate, _ := got["facts_secondary_rate_percent"].(int); gotFactsSecondaryRate != 33 {
-		t.Fatalf("facts_secondary_rate_percent = %v, want 33", got["facts_secondary_rate_percent"])
+	if got.FactsSecondaryRatePercent != 33 {
+		t.Fatalf("facts_secondary_rate_percent = %v, want 33", got.FactsSecondaryRatePercent)
 	}
-	if gotSummaryFallback, _ := got["summary_fallback"].(*string); gotSummaryFallback == nil || *gotSummaryFallback != "openrouter::openai/gpt-oss-120b" {
-		t.Fatalf("summary_fallback = %v, want %q", got["summary_fallback"], "openrouter::openai/gpt-oss-120b")
+	if got.SummaryFallback == nil || *got.SummaryFallback != "openrouter::openai/gpt-oss-120b" {
+		t.Fatalf("summary_fallback = %v, want %q", got.SummaryFallback, "openrouter::openai/gpt-oss-120b")
 	}
-	if gotSummarySecondary, _ := got["summary_secondary"].(*string); gotSummarySecondary == nil || *gotSummarySecondary != "openrouter::openai/gpt-oss-120b" {
-		t.Fatalf("summary_secondary = %v, want %q", got["summary_secondary"], "openrouter::openai/gpt-oss-120b")
+	if got.SummarySecondary == nil || *got.SummarySecondary != "openrouter::openai/gpt-oss-120b" {
+		t.Fatalf("summary_secondary = %v, want %q", got.SummarySecondary, "openrouter::openai/gpt-oss-120b")
 	}
-	if gotSummarySecondaryRate, _ := got["summary_secondary_rate_percent"].(int); gotSummarySecondaryRate != 25 {
-		t.Fatalf("summary_secondary_rate_percent = %v, want 25", got["summary_secondary_rate_percent"])
+	if got.SummarySecondaryRatePercent != 25 {
+		t.Fatalf("summary_secondary_rate_percent = %v, want 25", got.SummarySecondaryRatePercent)
 	}
-	if gotAudioBriefingScript, _ := got["audio_briefing_script"].(*string); gotAudioBriefingScript == nil || *gotAudioBriefingScript != "gpt-5.4" {
-		t.Fatalf("audio_briefing_script = %v, want %q", got["audio_briefing_script"], "gpt-5.4")
+	if got.AudioBriefingScript == nil || *got.AudioBriefingScript != "gpt-5.4" {
+		t.Fatalf("audio_briefing_script = %v, want %q", got.AudioBriefingScript, "gpt-5.4")
 	}
-	if gotAudioBriefingScriptFallback, _ := got["audio_briefing_script_fallback"].(*string); gotAudioBriefingScriptFallback == nil || *gotAudioBriefingScriptFallback != "google/gemini-2.5-flash" {
-		t.Fatalf("audio_briefing_script_fallback = %v, want %q", got["audio_briefing_script_fallback"], "google/gemini-2.5-flash")
+	if got.AudioBriefingScriptFallback == nil || *got.AudioBriefingScriptFallback != "google/gemini-2.5-flash" {
+		t.Fatalf("audio_briefing_script_fallback = %v, want %q", got.AudioBriefingScriptFallback, "google/gemini-2.5-flash")
 	}
-	if gotTTSMarkupPreprocessModel, _ := got["tts_markup_preprocess_model"].(*string); gotTTSMarkupPreprocessModel == nil || *gotTTSMarkupPreprocessModel != "gpt-5.4-mini" {
-		t.Fatalf("tts_markup_preprocess_model = %v, want %q", got["tts_markup_preprocess_model"], "gpt-5.4-mini")
+	if got.TTSMarkupPreprocessModel == nil || *got.TTSMarkupPreprocessModel != "gpt-5.4-mini" {
+		t.Fatalf("tts_markup_preprocess_model = %v, want %q", got.TTSMarkupPreprocessModel, "gpt-5.4-mini")
 	}
-	if gotNavigatorPersonaMode, _ := got["navigator_persona_mode"].(string); gotNavigatorPersonaMode != PersonaModeRandom {
-		t.Fatalf("navigator_persona_mode = %v, want %q", got["navigator_persona_mode"], PersonaModeRandom)
+	if got.NavigatorPersonaMode != PersonaModeRandom {
+		t.Fatalf("navigator_persona_mode = %v, want %q", got.NavigatorPersonaMode, PersonaModeRandom)
 	}
-	if gotBriefModel, _ := got["ai_navigator_brief"].(*string); gotBriefModel == nil || *gotBriefModel != "kimi-k2.5" {
-		t.Fatalf("ai_navigator_brief = %v, want %q", got["ai_navigator_brief"], "kimi-k2.5")
+	if got.AINavigatorBrief == nil || *got.AINavigatorBrief != "kimi-k2.5" {
+		t.Fatalf("ai_navigator_brief = %v, want %q", got.AINavigatorBrief, "kimi-k2.5")
 	}
-	if gotBriefFallback, _ := got["ai_navigator_brief_fallback"].(*string); gotBriefFallback == nil || *gotBriefFallback != "google/gemini-2.5-flash" {
-		t.Fatalf("ai_navigator_brief_fallback = %v, want %q", got["ai_navigator_brief_fallback"], "google/gemini-2.5-flash")
+	if got.AINavigatorBriefFallback == nil || *got.AINavigatorBriefFallback != "google/gemini-2.5-flash" {
+		t.Fatalf("ai_navigator_brief_fallback = %v, want %q", got.AINavigatorBriefFallback, "google/gemini-2.5-flash")
 	}
 }
 
@@ -365,8 +364,8 @@ func TestUpdateLLMModelsAcceptsTTSMarkupPreprocessModel(t *testing.T) {
 		t.Fatalf("TTSMarkupPreprocessModel = %v, want gpt-5.4-mini", settings.TTSMarkupPreprocessModel)
 	}
 	got := LLMModelSettingsPayload(settings)
-	if gotTTSMarkupPreprocessModel, _ := got["tts_markup_preprocess_model"].(*string); gotTTSMarkupPreprocessModel == nil || *gotTTSMarkupPreprocessModel != "gpt-5.4-mini" {
-		t.Fatalf("tts_markup_preprocess_model payload = %v, want gpt-5.4-mini", got["tts_markup_preprocess_model"])
+	if got.TTSMarkupPreprocessModel == nil || *got.TTSMarkupPreprocessModel != "gpt-5.4-mini" {
+		t.Fatalf("tts_markup_preprocess_model payload = %v, want gpt-5.4-mini", got.TTSMarkupPreprocessModel)
 	}
 }
 
@@ -498,20 +497,17 @@ func TestSettingsGetPayloadSupportsAivisFields(t *testing.T) {
 func TestSummaryAudioVoiceSettingsPayloadDefaults(t *testing.T) {
 	got := SummaryAudioVoiceSettingsPayload(nil)
 
-	if got == nil {
-		t.Fatal("SummaryAudioVoiceSettingsPayload(nil) = nil, want map")
+	if got.TTSProvider != "" {
+		t.Fatalf("tts_provider = %v, want empty", got.TTSProvider)
 	}
-	if provider, _ := got["tts_provider"].(string); provider != "" {
-		t.Fatalf("tts_provider = %v, want empty", got["tts_provider"])
+	if got.TTSModel != "" {
+		t.Fatalf("tts_model = %v, want empty", got.TTSModel)
 	}
-	if model, _ := got["tts_model"].(string); model != "" {
-		t.Fatalf("tts_model = %v, want empty", got["tts_model"])
+	if got.VoiceModel != "" {
+		t.Fatalf("voice_model = %v, want empty", got.VoiceModel)
 	}
-	if voice, _ := got["voice_model"].(string); voice != "" {
-		t.Fatalf("voice_model = %v, want empty", got["voice_model"])
-	}
-	if dict, ok := got["aivis_user_dictionary_uuid"]; ok && dict != nil {
-		t.Fatalf("aivis_user_dictionary_uuid = %v, want nil", dict)
+	if got.AivisUserDictionaryUUID != nil {
+		t.Fatalf("aivis_user_dictionary_uuid = %v, want nil", got.AivisUserDictionaryUUID)
 	}
 }
 
@@ -522,11 +518,8 @@ func TestSettingsGetIncludesSummaryAudio(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	if payload.SummaryAudio == nil {
-		t.Fatal("SummaryAudio should not be nil")
-	}
-	if provider, _ := payload.SummaryAudio["tts_provider"].(string); provider != "" {
-		t.Fatalf("tts_provider = %v, want empty", payload.SummaryAudio["tts_provider"])
+	if payload.SummaryAudio.TTSProvider != "" {
+		t.Fatalf("tts_provider = %v, want empty", payload.SummaryAudio.TTSProvider)
 	}
 }
 
@@ -643,20 +636,20 @@ func TestPodcastSettingsPayloadSupportsPodcastFields(t *testing.T) {
 		PodcastArtworkURL:  strptr("https://audio.example.com/podcasts/artwork/u1/current.jpg"),
 	})
 
-	if enabled, _ := payload["enabled"].(bool); !enabled {
-		t.Fatalf("enabled = %v, want true", payload["enabled"])
+	if !payload.Enabled {
+		t.Fatalf("enabled = %v, want true", payload.Enabled)
 	}
-	if gotSlug, _ := payload["feed_slug"].(*string); gotSlug == nil || *gotSlug != "p_123" {
-		t.Fatalf("feed_slug = %v, want p_123", payload["feed_slug"])
+	if payload.FeedSlug == nil || *payload.FeedSlug != "p_123" {
+		t.Fatalf("feed_slug = %v, want p_123", payload.FeedSlug)
 	}
-	if gotLanguage, _ := payload["language"].(string); gotLanguage != "ja" {
-		t.Fatalf("language = %v, want ja", payload["language"])
+	if payload.Language != "ja" {
+		t.Fatalf("language = %v, want ja", payload.Language)
 	}
-	if gotCategory, _ := payload["category"].(*string); gotCategory == nil || *gotCategory != "Technology" {
-		t.Fatalf("category = %v, want Technology", payload["category"])
+	if payload.Category == nil || *payload.Category != "Technology" {
+		t.Fatalf("category = %v, want Technology", payload.Category)
 	}
-	if gotDefs, _ := payload["available_categories"].([]PodcastCategoryDefinition); len(gotDefs) == 0 {
-		t.Fatalf("available_categories = %v, want non-empty", payload["available_categories"])
+	if len(payload.AvailableCategories) == 0 {
+		t.Fatalf("available_categories = %v, want non-empty", payload.AvailableCategories)
 	}
 }
 
@@ -701,33 +694,33 @@ func TestAudioBriefingSettingsPayload(t *testing.T) {
 
 	got := AudioBriefingSettingsPayload(settings)
 
-	if enabled, _ := got["enabled"].(bool); !enabled {
-		t.Fatalf("enabled = %v, want true", got["enabled"])
+	if !got.Enabled {
+		t.Fatalf("enabled = %v, want true", got.Enabled)
 	}
-	if scheduleMode, _ := got["schedule_mode"].(string); scheduleMode != "fixed_slots_3x" {
-		t.Fatalf("schedule_mode = %v, want fixed_slots_3x", got["schedule_mode"])
+	if got.ScheduleMode != "fixed_slots_3x" {
+		t.Fatalf("schedule_mode = %v, want fixed_slots_3x", got.ScheduleMode)
 	}
-	if interval, _ := got["interval_hours"].(int); interval != 3 {
-		t.Fatalf("interval_hours = %v, want 3", got["interval_hours"])
+	if got.IntervalHours != 3 {
+		t.Fatalf("interval_hours = %v, want 3", got.IntervalHours)
 	}
-	if persona, _ := got["default_persona"].(string); persona != "editor" {
-		t.Fatalf("default_persona = %v, want editor", got["default_persona"])
+	if got.DefaultPersona != "editor" {
+		t.Fatalf("default_persona = %v, want editor", got.DefaultPersona)
 	}
-	if programName, _ := got["program_name"].(*string); programName == nil || *programName != "Morning Sifto" {
-		t.Fatalf("program_name = %v, want Morning Sifto", got["program_name"])
+	if got.ProgramName == nil || *got.ProgramName != "Morning Sifto" {
+		t.Fatalf("program_name = %v, want Morning Sifto", got.ProgramName)
 	}
-	if bgmEnabled, _ := got["bgm_enabled"].(bool); !bgmEnabled {
-		t.Fatalf("bgm_enabled = %v, want true", got["bgm_enabled"])
+	if !got.BGMEnabled {
+		t.Fatalf("bgm_enabled = %v, want true", got.BGMEnabled)
 	}
-	if bgmPrefix, _ := got["bgm_r2_prefix"].(*string); bgmPrefix == nil || *bgmPrefix != "audio/bgm" {
-		t.Fatalf("bgm_r2_prefix = %v, want audio/bgm", got["bgm_r2_prefix"])
+	if got.BGMR2Prefix == nil || *got.BGMR2Prefix != "audio/bgm" {
+		t.Fatalf("bgm_r2_prefix = %v, want audio/bgm", got.BGMR2Prefix)
 	}
 }
 
 func TestAudioBriefingSettingsPayloadDefaultsScheduleMode(t *testing.T) {
 	got := AudioBriefingSettingsPayload(nil)
-	if scheduleMode, _ := got["schedule_mode"].(string); scheduleMode != AudioBriefingScheduleModeInterval {
-		t.Fatalf("schedule_mode = %v, want %q", got["schedule_mode"], AudioBriefingScheduleModeInterval)
+	if got.ScheduleMode != AudioBriefingScheduleModeInterval {
+		t.Fatalf("schedule_mode = %v, want %q", got.ScheduleMode, AudioBriefingScheduleModeInterval)
 	}
 }
 
@@ -795,26 +788,26 @@ func TestAudioBriefingPersonaVoicesPayload(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("len(AudioBriefingPersonaVoicesPayload) = %d, want 2", len(got))
 	}
-	if got[0]["persona"] != "editor" {
-		t.Fatalf("persona = %v, want editor", got[0]["persona"])
+	if got[0].Persona != "editor" {
+		t.Fatalf("persona = %v, want editor", got[0].Persona)
 	}
-	if got[0]["tts_provider"] != "aivis" {
-		t.Fatalf("tts_provider = %v, want aivis", got[0]["tts_provider"])
+	if got[0].TTSProvider != "aivis" {
+		t.Fatalf("tts_provider = %v, want aivis", got[0].TTSProvider)
 	}
-	if got[0]["tts_model"] != "" {
-		t.Fatalf("tts_model = %v, want empty", got[0]["tts_model"])
+	if got[0].TTSModel != "" {
+		t.Fatalf("tts_model = %v, want empty", got[0].TTSModel)
 	}
-	if got[1]["persona"] != "snark" {
-		t.Fatalf("persona = %v, want snark", got[1]["persona"])
+	if got[1].Persona != "snark" {
+		t.Fatalf("persona = %v, want snark", got[1].Persona)
 	}
-	if got[1]["tts_provider"] != "gemini_tts" {
-		t.Fatalf("tts_provider = %v, want gemini_tts", got[1]["tts_provider"])
+	if got[1].TTSProvider != "gemini_tts" {
+		t.Fatalf("tts_provider = %v, want gemini_tts", got[1].TTSProvider)
 	}
-	if got[1]["tts_model"] != "gemini-2.5-flash-tts" {
-		t.Fatalf("tts_model = %v, want gemini-2.5-flash-tts", got[1]["tts_model"])
+	if got[1].TTSModel != "gemini-2.5-flash-tts" {
+		t.Fatalf("tts_model = %v, want gemini-2.5-flash-tts", got[1].TTSModel)
 	}
-	if got[1]["voice_model"] != "Kore" {
-		t.Fatalf("voice_model = %v, want Kore", got[1]["voice_model"])
+	if got[1].VoiceModel != "Kore" {
+		t.Fatalf("voice_model = %v, want Kore", got[1].VoiceModel)
 	}
 }
 
@@ -840,8 +833,8 @@ func TestAudioBriefingSettingsPayloadIncludesPersonaMode(t *testing.T) {
 		DefaultPersona:        "editor",
 	})
 
-	if gotMode, _ := got["default_persona_mode"].(string); gotMode != PersonaModeRandom {
-		t.Fatalf("default_persona_mode = %v, want %q", got["default_persona_mode"], PersonaModeRandom)
+	if got.DefaultPersonaMode != PersonaModeRandom {
+		t.Fatalf("default_persona_mode = %v, want %q", got.DefaultPersonaMode, PersonaModeRandom)
 	}
 }
 
@@ -856,8 +849,8 @@ func TestAudioBriefingSettingsPayloadIncludesConversationMode(t *testing.T) {
 		ConversationMode:      "duo",
 	})
 
-	if gotMode, _ := got["conversation_mode"].(string); gotMode != "duo" {
-		t.Fatalf("conversation_mode = %v, want %q", got["conversation_mode"], "duo")
+	if got.ConversationMode != "duo" {
+		t.Fatalf("conversation_mode = %v, want %q", got.ConversationMode, "duo")
 	}
 }
 
@@ -880,8 +873,8 @@ func TestUpdateAudioBriefingSettingsPersistsScheduleMode(t *testing.T) {
 		t.Fatalf("ScheduleMode = %q, want fixed_slots_3x", got.ScheduleMode)
 	}
 	payload := AudioBriefingSettingsPayload(got)
-	if scheduleMode, _ := payload["schedule_mode"].(string); scheduleMode != "fixed_slots_3x" {
-		t.Fatalf("payload schedule_mode = %v, want fixed_slots_3x", payload["schedule_mode"])
+	if payload.ScheduleMode != "fixed_slots_3x" {
+		t.Fatalf("payload schedule_mode = %v, want fixed_slots_3x", payload.ScheduleMode)
 	}
 }
 

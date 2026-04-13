@@ -1,7 +1,7 @@
 "use client";
 
 import Pagination from "@/components/pagination";
-import { formatModelDisplayName } from "@/lib/model-display";
+import { formatModelDisplayName, providerLabel } from "@/lib/model-display";
 import type {
   LLMExecutionCurrentMonthSummary,
   LLMUsageDailySummary,
@@ -9,43 +9,6 @@ import type {
   LLMUsageProviderMonthSummary,
   LLMUsagePurposeMonthSummary,
 } from "@/lib/api";
-
-function providerLabel(provider: string) {
-  switch (provider) {
-    case "openai":
-      return "OpenAI";
-    case "anthropic":
-      return "Anthropic";
-    case "google":
-      return "Google";
-    case "groq":
-      return "Groq";
-    case "deepseek":
-      return "DeepSeek";
-    case "alibaba":
-      return "Alibaba";
-    case "mistral":
-      return "Mistral";
-    case "together":
-      return "Together AI";
-    case "xai":
-      return "xAI";
-    case "zai":
-      return "Z.ai";
-    case "fireworks":
-      return "Fireworks";
-    case "moonshot":
-      return "Moonshot";
-    case "openrouter":
-      return "OpenRouter";
-    case "poe":
-      return "Poe";
-    case "siliconflow":
-      return "SiliconFlow";
-    default:
-      return provider;
-  }
-}
 
 export function MetricCard({ label, value, className = "" }: { label: string; value: string; className?: string }) {
   return (

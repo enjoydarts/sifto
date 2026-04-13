@@ -27,6 +27,7 @@ type AskHandler struct {
 	worker       *service.WorkerClient
 	openAI       *service.OpenAIClient
 	cache        service.JSONCache
+	keyProvider  *service.UserKeyProvider
 }
 
 func NewAskHandler(
@@ -37,6 +38,7 @@ func NewAskHandler(
 	worker *service.WorkerClient,
 	openAI *service.OpenAIClient,
 	cache service.JSONCache,
+	keyProvider *service.UserKeyProvider,
 ) *AskHandler {
 	return &AskHandler{
 		itemRepo:     itemRepo,
@@ -46,6 +48,7 @@ func NewAskHandler(
 		worker:       worker,
 		openAI:       openAI,
 		cache:        cache,
+		keyProvider:  keyProvider,
 	}
 }
 
@@ -130,9 +133,17 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		askCacheCounter.bypass.Add(1)
 		incrCacheMetric(r.Context(), h.cache, userID, "ask.bypass")
 	}
-	openAIKey, err := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "user openai api key is required")
+	openAIKey, err := h.keyProvider.GetAPIKey(r.Context(), userID, "openai")
 	if err != nil {
+		if errors.Is(err, service.ErrSecretEncryptionNotConfigured) {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if openAIKey == nil || *openAIKey == "" {
+		http.Error(w, "user openai api key is required", http.StatusBadRequest)
 		return
 	}
 	embResp, err := h.openAI.CreateEmbedding(r.Context(), *openAIKey, embeddingModel, query)
@@ -157,37 +168,25 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	anthropicKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAnthropicAPIKeyEncrypted, h.cipher, userID, "")
-	googleKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGoogleAPIKeyEncrypted, h.cipher, userID, "")
-	groqKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGroqAPIKeyEncrypted, h.cipher, userID, "")
-	fireworksKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetFireworksAPIKeyEncrypted, h.cipher, userID, "")
-	deepseekKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
-	alibabaKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
-	mistralKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
-	togetherKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetTogetherAPIKeyEncrypted, h.cipher, userID, "")
-	moonshotKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetMoonshotAPIKeyEncrypted, h.cipher, userID, "")
-	xaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
-	zaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
-	openRouterKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
-	poeKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
-	siliconFlowKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetSiliconFlowAPIKeyEncrypted, h.cipher, userID, "")
-	openAIChatKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
-	modelName = chooseAskModel(settings, anthropicKey != nil, googleKey != nil, fireworksKey != nil, groqKey != nil, deepseekKey != nil, alibabaKey != nil, mistralKey != nil, togetherKey != nil, moonshotKey != nil, xaiKey != nil, zaiKey != nil, openRouterKey != nil, poeKey != nil, siliconFlowKey != nil, openAIChatKey != nil)
+	allKeys := h.keyProvider.GetAllKeys(r.Context(), userID)
+	navKeys := navigatorKeys{
+		anthropicKey: allKeys["anthropic"],
+		googleKey:    allKeys["google"],
+		groqKey:      allKeys["groq"],
+		fireworksKey: allKeys["fireworks"],
+		deepseekKey:  allKeys["deepseek"],
+		alibabaKey:   allKeys["alibaba"],
+		mistralKey:   allKeys["mistral"],
+		xaiKey:       allKeys["xai"],
+		zaiKey:       allKeys["zai"],
+		openAIKey:    h.keyProvider.ResolveOpenAIKey(allKeys, nil),
+	}
+	modelName = chooseAskModel(settings, navKeys.anthropicKey != nil, navKeys.googleKey != nil, navKeys.fireworksKey != nil, navKeys.groqKey != nil, navKeys.deepseekKey != nil, navKeys.alibabaKey != nil, navKeys.mistralKey != nil, allKeys["together"] != nil, allKeys["moonshot"] != nil, navKeys.xaiKey != nil, navKeys.zaiKey != nil, allKeys["openrouter"] != nil, allKeys["poe"] != nil, allKeys["siliconflow"] != nil, allKeys["openai"] != nil)
 	if modelName == nil {
 		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
 		return
 	}
-	if service.LLMProviderForModel(modelName) == "openrouter" {
-		openAIChatKey = openRouterKey
-	} else if service.LLMProviderForModel(modelName) == "together" {
-		openAIChatKey = togetherKey
-	} else if service.LLMProviderForModel(modelName) == "moonshot" {
-		openAIChatKey = moonshotKey
-	} else if service.LLMProviderForModel(modelName) == "poe" {
-		openAIChatKey = poeKey
-	} else if service.LLMProviderForModel(modelName) == "siliconflow" {
-		openAIChatKey = siliconFlowKey
-	}
+	openAIChatKey := h.keyProvider.ResolveOpenAIKey(allKeys, modelName)
 
 	workerCandidates := make([]service.AskCandidate, 0, len(candidates))
 	for _, c := range candidates {
@@ -208,7 +207,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 			Similarity:      c.Similarity,
 		})
 	}
-	askResp, err := h.worker.AskWithModel(r.Context(), query, workerCandidates, anthropicKey, googleKey, groqKey, deepseekKey, alibabaKey, mistralKey, xaiKey, zaiKey, fireworksKey, openAIChatKey, modelName)
+	askResp, err := h.worker.AskWithModel(r.Context(), query, workerCandidates, navKeys.anthropicKey, navKeys.googleKey, navKeys.groqKey, navKeys.deepseekKey, navKeys.alibabaKey, navKeys.mistralKey, navKeys.xaiKey, navKeys.zaiKey, navKeys.fireworksKey, openAIChatKey, modelName)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("ask worker: %v", err), http.StatusBadGateway)
 		return
@@ -351,33 +350,7 @@ func (h *AskHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	anthropicKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAnthropicAPIKeyEncrypted, h.cipher, userID, "")
-	googleKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGoogleAPIKeyEncrypted, h.cipher, userID, "")
-	groqKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetGroqAPIKeyEncrypted, h.cipher, userID, "")
-	fireworksKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetFireworksAPIKeyEncrypted, h.cipher, userID, "")
-	deepseekKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
-	alibabaKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
-	mistralKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
-	togetherKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetTogetherAPIKeyEncrypted, h.cipher, userID, "")
-	moonshotKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetMoonshotAPIKeyEncrypted, h.cipher, userID, "")
-	xaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
-	zaiKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
-	openRouterKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
-	poeKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
-	siliconFlowKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetSiliconFlowAPIKeyEncrypted, h.cipher, userID, "")
-	openAIKey, _ := loadAndDecryptUserSecret(r.Context(), h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
-	switch service.LLMProviderForModel(modelName) {
-	case "openrouter":
-		openAIKey = openRouterKey
-	case "together":
-		openAIKey = togetherKey
-	case "moonshot":
-		openAIKey = moonshotKey
-	case "poe":
-		openAIKey = poeKey
-	case "siliconflow":
-		openAIKey = siliconFlowKey
-	}
+	navKeys := loadNavigatorKeys(r.Context(), h.keyProvider, userID, modelName)
 
 	workerCitations := make([]service.AskNavigatorCitation, 0, len(body.Citations))
 	for _, citation := range body.Citations {
@@ -419,16 +392,16 @@ func (h *AskHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 			Citations:    workerCitations,
 			RelatedItems: workerRelated,
 		},
-		anthropicKey,
-		googleKey,
-		groqKey,
-		deepseekKey,
-		alibabaKey,
-		mistralKey,
-		xaiKey,
-		zaiKey,
-		fireworksKey,
-		openAIKey,
+		navKeys.anthropicKey,
+		navKeys.googleKey,
+		navKeys.groqKey,
+		navKeys.deepseekKey,
+		navKeys.alibabaKey,
+		navKeys.mistralKey,
+		navKeys.xaiKey,
+		navKeys.zaiKey,
+		navKeys.fireworksKey,
+		navKeys.openAIKey,
 		modelName,
 	)
 	if err != nil {

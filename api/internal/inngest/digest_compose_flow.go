@@ -45,7 +45,7 @@ func composeDigestEmailCopy(
 	if userModelSettings != nil {
 		clusterDraftModel = ptrStringOrNil(userModelSettings.DigestClusterModel)
 	}
-	clusterDraftRuntime, keyErr := resolveLLMRuntime(ctx, userSettingsRepo, workerDeps.secretCipher, &data.UserID, clusterDraftModel, "digest_cluster_draft")
+	clusterDraftRuntime, keyErr := resolveLLMRuntime(ctx, workerDeps.keyProvider, &data.UserID, clusterDraftModel, "digest_cluster_draft")
 	if keyErr != nil {
 		return keyErr
 	}
@@ -161,7 +161,7 @@ func composeDigestEmailCopy(
 	if userModelSettings != nil {
 		modelOverride = ptrStringOrNil(userModelSettings.DigestModel)
 	}
-	digestRuntime, keyErr := resolveLLMRuntime(ctx, userSettingsRepo, workerDeps.secretCipher, &data.UserID, modelOverride, "digest")
+	digestRuntime, keyErr := resolveLLMRuntime(ctx, workerDeps.keyProvider, &data.UserID, modelOverride, "digest")
 	if keyErr != nil {
 		return keyErr
 	}

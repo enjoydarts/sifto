@@ -4,14 +4,7 @@ import "strings"
 
 var costEfficientProviderPriority = []string{"groq", "zai", "fireworks", "together", "moonshot", "alibaba", "google", "mistral", "xai", "deepseek", "siliconflow", "openrouter", "openai", "anthropic"}
 
-func IsGeminiModel(model *string) bool {
-	if model == nil {
-		return false
-	}
-	return CatalogProviderForModel(strings.TrimSpace(*model)) == "google"
-}
-
-func IsGroqModel(model *string) bool {
+func isModelByProvider(model *string, provider string) bool {
 	if model == nil {
 		return false
 	}
@@ -19,63 +12,16 @@ func IsGroqModel(model *string) bool {
 	if v == "" {
 		return false
 	}
-	return CatalogProviderForModel(v) == "groq"
+	return CatalogProviderForModel(v) == provider
 }
 
-func IsDeepSeekModel(model *string) bool {
-	if model == nil {
-		return false
-	}
-	v := strings.ToLower(strings.TrimSpace(*model))
-	if v == "" {
-		return false
-	}
-	return CatalogProviderForModel(v) == "deepseek"
-}
-
-func IsAlibabaModel(model *string) bool {
-	if model == nil {
-		return false
-	}
-	v := strings.ToLower(strings.TrimSpace(*model))
-	if v == "" {
-		return false
-	}
-	return CatalogProviderForModel(v) == "alibaba"
-}
-
-func IsMistralModel(model *string) bool {
-	if model == nil {
-		return false
-	}
-	v := strings.ToLower(strings.TrimSpace(*model))
-	if v == "" {
-		return false
-	}
-	return CatalogProviderForModel(v) == "mistral"
-}
-
-func IsXAIModel(model *string) bool {
-	if model == nil {
-		return false
-	}
-	v := strings.ToLower(strings.TrimSpace(*model))
-	if v == "" {
-		return false
-	}
-	return CatalogProviderForModel(v) == "xai"
-}
-
-func IsOpenAIModel(model *string) bool {
-	if model == nil {
-		return false
-	}
-	v := strings.ToLower(strings.TrimSpace(*model))
-	if v == "" {
-		return false
-	}
-	return CatalogProviderForModel(v) == "openai"
-}
+func IsGeminiModel(model *string) bool   { return isModelByProvider(model, "google") }
+func IsGroqModel(model *string) bool     { return isModelByProvider(model, "groq") }
+func IsDeepSeekModel(model *string) bool { return isModelByProvider(model, "deepseek") }
+func IsAlibabaModel(model *string) bool  { return isModelByProvider(model, "alibaba") }
+func IsMistralModel(model *string) bool  { return isModelByProvider(model, "mistral") }
+func IsXAIModel(model *string) bool      { return isModelByProvider(model, "xai") }
+func IsOpenAIModel(model *string) bool   { return isModelByProvider(model, "openai") }
 
 func LLMProviderForModel(model *string) string {
 	if model == nil {

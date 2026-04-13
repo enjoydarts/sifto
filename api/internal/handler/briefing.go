@@ -31,6 +31,7 @@ type BriefingHandler struct {
 	cipher       *service.SecretCipher
 	worker       *service.WorkerClient
 	cache        service.JSONCache
+	keyProvider  *service.UserKeyProvider
 }
 
 type briefingNavigatorIntroContext = service.BriefingNavigatorIntroContext
@@ -44,6 +45,7 @@ func NewBriefingHandler(
 	cipher *service.SecretCipher,
 	worker *service.WorkerClient,
 	cache service.JSONCache,
+	keyProvider *service.UserKeyProvider,
 ) *BriefingHandler {
 	return &BriefingHandler{
 		itemRepo:     itemRepo,
@@ -54,6 +56,7 @@ func NewBriefingHandler(
 		cipher:       cipher,
 		worker:       worker,
 		cache:        cache,
+		keyProvider:  keyProvider,
 	}
 }
 
@@ -249,7 +252,7 @@ func loadBriefingSnapshotMaxAge() time.Duration {
 }
 
 func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, generatedAt time.Time, persona string) *model.BriefingNavigator {
-	if h.itemRepo == nil || h.settingsRepo == nil || h.worker == nil || h.cipher == nil {
+	if h.itemRepo == nil || h.settingsRepo == nil || h.worker == nil || h.keyProvider == nil {
 		return nil
 	}
 	settings, err := h.settingsRepo.EnsureDefaults(ctx, userID)
@@ -269,33 +272,7 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 		log.Printf("briefing navigator candidates user=%s: %v", userID, err)
 		return nil
 	}
-	anthropicKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAnthropicAPIKeyEncrypted, h.cipher, userID, "")
-	googleKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetGoogleAPIKeyEncrypted, h.cipher, userID, "")
-	groqKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetGroqAPIKeyEncrypted, h.cipher, userID, "")
-	fireworksKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetFireworksAPIKeyEncrypted, h.cipher, userID, "")
-	deepseekKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
-	alibabaKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
-	mistralKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
-	togetherKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetTogetherAPIKeyEncrypted, h.cipher, userID, "")
-	moonshotKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMoonshotAPIKeyEncrypted, h.cipher, userID, "")
-	xaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
-	zaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
-	openRouterKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
-	poeKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
-	siliconFlowKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetSiliconFlowAPIKeyEncrypted, h.cipher, userID, "")
-	openAIKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
-	switch service.LLMProviderForModel(modelName) {
-	case "openrouter":
-		openAIKey = openRouterKey
-	case "together":
-		openAIKey = togetherKey
-	case "moonshot":
-		openAIKey = moonshotKey
-	case "poe":
-		openAIKey = poeKey
-	case "siliconflow":
-		openAIKey = siliconFlowKey
-	}
+	nk := loadNavigatorKeys(ctx, h.keyProvider, userID, modelName)
 
 	introContext := buildBriefingNavigatorIntroContext(generatedAt)
 	workerCandidates := make([]service.BriefingNavigatorCandidate, 0, len(candidates))
@@ -325,16 +302,16 @@ func (h *BriefingHandler) buildNavigator(ctx context.Context, userID string, gen
 		persona,
 		workerCandidates,
 		introContext,
-		anthropicKey,
-		googleKey,
-		groqKey,
-		deepseekKey,
-		alibabaKey,
-		mistralKey,
-		xaiKey,
-		zaiKey,
-		fireworksKey,
-		openAIKey,
+		nk.anthropicKey,
+		nk.googleKey,
+		nk.groqKey,
+		nk.deepseekKey,
+		nk.alibabaKey,
+		nk.mistralKey,
+		nk.xaiKey,
+		nk.zaiKey,
+		nk.fireworksKey,
+		nk.openAIKey,
 		modelName,
 	)
 	if err != nil {
@@ -623,6 +600,8 @@ func hasNavigatorProviderKey(settings *model.UserSettings, provider string) bool
 		return settings.HasOpenRouterAPIKey
 	case "poe":
 		return settings.HasPoeAPIKey
+	case "siliconflow":
+		return settings.HasSiliconFlowAPIKey
 	default:
 		return settings.HasAnthropicAPIKey
 	}

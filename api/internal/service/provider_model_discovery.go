@@ -21,6 +21,7 @@ type ProviderModelDiscoveryService struct {
 type ProviderModelsResult struct {
 	Provider string
 	Models   []string
+	Error    *string
 }
 
 type ProviderModelDiscoveryKeys struct {
@@ -42,13 +43,13 @@ type ProviderModelDiscoveryKeys struct {
 
 func NewProviderModelDiscoveryService() *ProviderModelDiscoveryService {
 	return &ProviderModelDiscoveryService{
-		http: &http.Client{Timeout: 30 * time.Second},
+		http: &http.Client{Timeout: 8 * time.Second},
 	}
 }
 
 func NewProviderModelDiscoveryServiceWithKeys(keys ProviderModelDiscoveryKeys) *ProviderModelDiscoveryService {
 	return &ProviderModelDiscoveryService{
-		http: &http.Client{Timeout: 30 * time.Second},
+		http: &http.Client{Timeout: 8 * time.Second},
 		keys: keys,
 	}
 }
@@ -80,11 +81,67 @@ func (s *ProviderModelDiscoveryService) DiscoverAll(ctx context.Context) ([]Prov
 			if strings.Contains(err.Error(), "api key is required") {
 				continue
 			}
-			return nil, fmt.Errorf("%s model discovery: %w", p.name, err)
+			msg := fmt.Sprintf("%s model discovery: %v", p.name, err)
+			out = append(out, ProviderModelsResult{Provider: p.name, Error: &msg})
+			continue
 		}
 		out = append(out, ProviderModelsResult{Provider: p.name, Models: models})
 	}
 	return out, nil
+}
+
+func providerModelDiscoveryRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errorsIsContext(err) {
+		return false
+	}
+	status, ok := providerModelDiscoveryHTTPStatus(err)
+	if ok {
+		return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
+	}
+	return true
+}
+
+func providerModelDiscoveryHTTPStatus(err error) (int, bool) {
+	var status int
+	if _, scanErr := fmt.Sscanf(err.Error(), "status %d", &status); scanErr == nil {
+		return status, true
+	}
+	return 0, false
+}
+
+func errorsIsContext(err error) bool {
+	return err == context.Canceled || err == context.DeadlineExceeded
+}
+
+func (s *ProviderModelDiscoveryService) doDiscoveryRequest(
+	ctx context.Context,
+	req *http.Request,
+	decode func(*http.Response) error,
+) error {
+	const maxAttempts = 2
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		resp, err := s.http.Do(req.Clone(ctx))
+		if err == nil {
+			err = decode(resp)
+		}
+		if err == nil {
+			return nil
+		}
+		if !providerModelDiscoveryRetryable(err) || attempt == maxAttempts-1 {
+			return err
+		}
+		timer := time.NewTimer(time.Duration(attempt+1) * 200 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return nil
 }
 
 func normalizeModelIDs(models []string) []string {
@@ -306,11 +363,15 @@ func (s *ProviderModelDiscoveryService) fetchTogetherModels(ctx context.Context)
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	resp, err := s.http.Do(req)
-	if err != nil {
+	var models []string
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		var err error
+		models, err = readModelsListResponse(resp)
+		return err
+	}); err != nil {
 		return nil, err
 	}
-	return readModelsListResponse(resp)
+	return models, nil
 }
 
 func normalizeTogetherAPIBaseURL(raw string) string {
@@ -344,11 +405,9 @@ func (s *ProviderModelDiscoveryService) fetchDeepSeekModels(ctx context.Context)
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	resp, err := s.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if err := readJSONResponse(resp, &decoded); err != nil {
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		return readJSONResponse(resp, &decoded)
+	}); err != nil {
 		return nil, err
 	}
 	models := make([]string, 0, len(decoded.Data))
@@ -382,11 +441,9 @@ func (s *ProviderModelDiscoveryService) fetchAlibabaModels(ctx context.Context) 
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	resp, err := s.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if err := readJSONResponse(resp, &decoded); err != nil {
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		return readJSONResponse(resp, &decoded)
+	}); err != nil {
 		return nil, err
 	}
 	models := make([]string, 0, len(decoded.Data))
@@ -420,11 +477,9 @@ func (s *ProviderModelDiscoveryService) fetchMoonshotModels(ctx context.Context)
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	resp, err := s.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if err := readJSONResponse(resp, &decoded); err != nil {
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		return readJSONResponse(resp, &decoded)
+	}); err != nil {
 		return nil, err
 	}
 	models := make([]string, 0, len(decoded.Data))
@@ -458,11 +513,9 @@ func (s *ProviderModelDiscoveryService) fetchSiliconFlowModels(ctx context.Conte
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	resp, err := s.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if err := readJSONResponse(resp, &decoded); err != nil {
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		return readJSONResponse(resp, &decoded)
+	}); err != nil {
 		return nil, err
 	}
 	models := make([]string, 0, len(decoded.Data))
@@ -490,11 +543,9 @@ func (s *ProviderModelDiscoveryService) fetchPoeModels(ctx context.Context) ([]s
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	resp, err := s.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if err := readJSONResponse(resp, &decoded); err != nil {
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		return readJSONResponse(resp, &decoded)
+	}); err != nil {
 		return nil, err
 	}
 	models := make([]string, 0, len(decoded.Data))
@@ -528,11 +579,9 @@ func (s *ProviderModelDiscoveryService) fetchZAIModels(ctx context.Context) ([]s
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	resp, err := s.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if err := readJSONResponse(resp, &decoded); err != nil {
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		return readJSONResponse(resp, &decoded)
+	}); err != nil {
 		return nil, err
 	}
 	models := make([]string, 0, len(decoded.Data))
@@ -566,11 +615,9 @@ func (s *ProviderModelDiscoveryService) fetchMistralModels(ctx context.Context) 
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	resp, err := s.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if err := readJSONResponse(resp, &decoded); err != nil {
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		return readJSONResponse(resp, &decoded)
+	}); err != nil {
 		return nil, err
 	}
 	models := make([]string, 0, len(decoded.Data))
@@ -604,11 +651,9 @@ func (s *ProviderModelDiscoveryService) fetchXAIModels(ctx context.Context) ([]s
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	resp, err := s.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if err := readJSONResponse(resp, &decoded); err != nil {
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		return readJSONResponse(resp, &decoded)
+	}); err != nil {
 		return nil, err
 	}
 	models := make([]string, 0, len(decoded.Data))

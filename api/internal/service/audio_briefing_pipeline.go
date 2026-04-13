@@ -1977,6 +1977,8 @@ func hasAudioBriefingProviderKey(settings *model.UserSettings, provider string) 
 		return settings.HasOpenRouterAPIKey
 	case "poe":
 		return settings.HasPoeAPIKey
+	case "siliconflow":
+		return settings.HasSiliconFlowAPIKey
 	default:
 		return settings.HasAnthropicAPIKey
 	}

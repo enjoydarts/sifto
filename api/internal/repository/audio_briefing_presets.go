@@ -100,10 +100,14 @@ func (r *AudioBriefingPresetRepo) Create(ctx context.Context, preset model.Audio
 		INSERT INTO audio_briefing_presets (
 			user_id, name, default_persona_mode, default_persona, conversation_mode
 		) VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (user_id, name) DO NOTHING
 		RETURNING id, user_id, name, default_persona_mode, default_persona, conversation_mode, created_at, updated_at
 	`, preset.UserID, preset.Name, preset.DefaultPersonaMode, preset.DefaultPersona, preset.ConversationMode)
 	stored, err := scanAudioBriefingPresetRow(row)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrConflict
+		}
 		return nil, mapDBError(err)
 	}
 	if err := r.upsertPresetVoicesTx(ctx, tx, stored.ID, preset.Voices); err != nil {

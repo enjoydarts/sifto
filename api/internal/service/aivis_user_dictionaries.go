@@ -53,10 +53,10 @@ func (s *AivisUserDictionaryService) List(ctx context.Context, userID string) ([
 		return nil, err
 	}
 	if enc == nil || strings.TrimSpace(*enc) == "" {
-		return nil, fmt.Errorf("aivis api key is not configured")
+		return nil, ErrAivisAPIKeyNotConfigured
 	}
 	if s.cipher == nil || !s.cipher.Enabled() {
-		return nil, fmt.Errorf("user secret encryption is not configured")
+		return nil, ErrSecretEncryptionNotConfigured
 	}
 	token, err := s.cipher.DecryptString(*enc)
 	if err != nil {

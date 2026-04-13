@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.services.summary_audio_player import SummaryAudioPlayerService
 
 router = APIRouter()
+_service = SummaryAudioPlayerService()
 
 
 class SummaryAudioSynthesizeRequest(BaseModel):
@@ -32,42 +33,38 @@ class SummaryAudioSynthesizeResponse(BaseModel):
 
 @router.post("/summary-audio/synthesize", response_model=SummaryAudioSynthesizeResponse)
 def synthesize_summary_audio(req: SummaryAudioSynthesizeRequest, request: Request):
-    try:
-        service = SummaryAudioPlayerService()
-        aivis_api_key = request.headers.get("x-aivis-api-key", "").strip() or None
-        google_api_key = request.headers.get("x-google-api-key", "").strip() or None
-        fish_api_key = request.headers.get("x-fish-api-key", "").strip() or None
-        elevenlabs_api_key = request.headers.get("x-elevenlabs-api-key", "").strip() or None
-        xai_api_key = request.headers.get("x-xai-api-key", "").strip() or None
-        azure_speech_api_key = request.headers.get("x-azure-speech-api-key", "").strip() or None
-        audio_base64, content_type, duration_sec, resolved_text = service.synthesize(
-            provider=req.provider,
-            voice_model=req.voice_model,
-            voice_style=req.voice_style,
-            tts_model=req.tts_model,
-            text=req.text,
-            speech_rate=req.speech_rate,
-            emotional_intensity=req.emotional_intensity,
-            tempo_dynamics=req.tempo_dynamics,
-            line_break_silence_seconds=req.line_break_silence_seconds,
-            chunk_trailing_silence_seconds=req.chunk_trailing_silence_seconds,
-            pitch=req.pitch,
-            volume_gain=req.volume_gain,
-            user_dictionary_uuid=req.user_dictionary_uuid,
-            aivis_api_key=aivis_api_key,
-            google_api_key=google_api_key,
-            fish_api_key=fish_api_key,
-            elevenlabs_api_key=elevenlabs_api_key,
-            xai_api_key=xai_api_key,
-            openai_api_key=request.headers.get("x-openai-api-key", "").strip() or None,
-            azure_speech_api_key=azure_speech_api_key,
-            azure_speech_region=(req.azure_speech_region or "").strip() or None,
-        )
-        return SummaryAudioSynthesizeResponse(
-            audio_base64=audio_base64,
-            content_type=content_type,
-            duration_sec=duration_sec,
-            resolved_text=resolved_text,
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"summary audio synth failed: {exc}")
+    aivis_api_key = request.headers.get("x-aivis-api-key", "").strip() or None
+    google_api_key = request.headers.get("x-google-api-key", "").strip() or None
+    fish_api_key = request.headers.get("x-fish-api-key", "").strip() or None
+    elevenlabs_api_key = request.headers.get("x-elevenlabs-api-key", "").strip() or None
+    xai_api_key = request.headers.get("x-xai-api-key", "").strip() or None
+    azure_speech_api_key = request.headers.get("x-azure-speech-api-key", "").strip() or None
+    audio_base64, content_type, duration_sec, resolved_text = _service.synthesize(
+        provider=req.provider,
+        voice_model=req.voice_model,
+        voice_style=req.voice_style,
+        tts_model=req.tts_model,
+        text=req.text,
+        speech_rate=req.speech_rate,
+        emotional_intensity=req.emotional_intensity,
+        tempo_dynamics=req.tempo_dynamics,
+        line_break_silence_seconds=req.line_break_silence_seconds,
+        chunk_trailing_silence_seconds=req.chunk_trailing_silence_seconds,
+        pitch=req.pitch,
+        volume_gain=req.volume_gain,
+        user_dictionary_uuid=req.user_dictionary_uuid,
+        aivis_api_key=aivis_api_key,
+        google_api_key=google_api_key,
+        fish_api_key=fish_api_key,
+        elevenlabs_api_key=elevenlabs_api_key,
+        xai_api_key=xai_api_key,
+        openai_api_key=request.headers.get("x-openai-api-key", "").strip() or None,
+        azure_speech_api_key=azure_speech_api_key,
+        azure_speech_region=(req.azure_speech_region or "").strip() or None,
+    )
+    return SummaryAudioSynthesizeResponse(
+        audio_base64=audio_base64,
+        content_type=content_type,
+        duration_sec=duration_sec,
+        resolved_text=resolved_text,
+    )

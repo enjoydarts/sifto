@@ -54,7 +54,7 @@ func (s *InoreaderOAuthService) Enabled() bool {
 
 func (s *InoreaderOAuthService) BuildConnect(r *http.Request) (*InoreaderConnectResult, error) {
 	if !s.Enabled() {
-		return nil, fmt.Errorf("inoreader oauth is not configured")
+		return nil, ErrInoreaderOAuthNotConfigured
 	}
 	state, err := randomOAuthState()
 	if err != nil {

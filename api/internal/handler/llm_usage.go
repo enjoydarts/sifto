@@ -78,20 +78,12 @@ func (h *LLMUsageHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageListVersioned(userID, 0, limit))
-	if err == nil && h.cache != nil && !cacheBust {
-		var cached []service.LLMUsageLogView
-		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
-			writeJSON(w, cached)
-			return
-		}
-	}
-	rows, err := h.usage.List(r.Context(), userID, limit)
-	if err != nil {
-		writeRepoError(w, err)
+	rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageListCacheTTL, func() ([]service.LLMUsageLogView, error) {
+		return h.usage.List(r.Context(), userID, limit)
+	}, cacheFetchOptions{cacheBust: cacheBust, cacheKeyErr: err})
+	if fetchErr != nil {
+		writeRepoError(w, fetchErr)
 		return
-	}
-	if err == nil && h.cache != nil {
-		_ = h.cache.SetJSON(r.Context(), cacheKey, rows, llmUsageListCacheTTL)
 	}
 	writeJSON(w, rows)
 }
@@ -105,20 +97,12 @@ func (h *LLMUsageHandler) DailySummary(w http.ResponseWriter, r *http.Request) {
 	}
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageDailySummaryVersioned(userID, 0, days))
-	if err == nil && h.cache != nil && !cacheBust {
-		var cached []service.LLMUsageDailySummaryView
-		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
-			writeJSON(w, cached)
-			return
-		}
-	}
-	rows, err := h.usage.DailySummary(r.Context(), userID, days)
-	if err != nil {
-		writeRepoError(w, err)
+	rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageDailySummaryCacheTTL, func() ([]service.LLMUsageDailySummaryView, error) {
+		return h.usage.DailySummary(r.Context(), userID, days)
+	}, cacheFetchOptions{cacheBust: cacheBust, cacheKeyErr: err})
+	if fetchErr != nil {
+		writeRepoError(w, fetchErr)
 		return
-	}
-	if err == nil && h.cache != nil {
-		_ = h.cache.SetJSON(r.Context(), cacheKey, rows, llmUsageDailySummaryCacheTTL)
 	}
 	writeJSON(w, rows)
 }
@@ -132,20 +116,12 @@ func (h *LLMUsageHandler) ModelSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageModelSummaryVersioned(userID, 0, days))
-	if err == nil && h.cache != nil && !cacheBust {
-		var cached []service.LLMUsageModelSummaryView
-		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
-			writeJSON(w, cached)
-			return
-		}
-	}
-	rows, err := h.usage.ModelSummary(r.Context(), userID, days)
-	if err != nil {
-		writeRepoError(w, err)
+	rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageModelSummaryCacheTTL, func() ([]service.LLMUsageModelSummaryView, error) {
+		return h.usage.ModelSummary(r.Context(), userID, days)
+	}, cacheFetchOptions{cacheBust: cacheBust, cacheKeyErr: err})
+	if fetchErr != nil {
+		writeRepoError(w, fetchErr)
 		return
-	}
-	if err == nil && h.cache != nil {
-		_ = h.cache.SetJSON(r.Context(), cacheKey, rows, llmUsageModelSummaryCacheTTL)
 	}
 	writeJSON(w, rows)
 }
@@ -159,20 +135,12 @@ func (h *LLMUsageHandler) AnalysisSummary(w http.ResponseWriter, r *http.Request
 	}
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageAnalysisVersioned(userID, 0, days))
-	if err == nil && h.cache != nil && !cacheBust {
-		var cached []service.LLMUsageAnalysisSummaryView
-		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
-			writeJSON(w, cached)
-			return
-		}
-	}
-	rows, err := h.usage.AnalysisSummary(r.Context(), userID, days)
-	if err != nil {
-		writeRepoError(w, err)
+	rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageModelSummaryCacheTTL, func() ([]service.LLMUsageAnalysisSummaryView, error) {
+		return h.usage.AnalysisSummary(r.Context(), userID, days)
+	}, cacheFetchOptions{cacheBust: cacheBust, cacheKeyErr: err})
+	if fetchErr != nil {
+		writeRepoError(w, fetchErr)
 		return
-	}
-	if err == nil && h.cache != nil {
-		_ = h.cache.SetJSON(r.Context(), cacheKey, rows, llmUsageModelSummaryCacheTTL)
 	}
 	writeJSON(w, rows)
 }
@@ -181,20 +149,12 @@ func (h *LLMUsageHandler) ProviderSummaryCurrentMonth(w http.ResponseWriter, r *
 	userID := middleware.GetUserID(r)
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageProviderCurrentMonthVersioned(userID, 0))
-	if err == nil && h.cache != nil && !cacheBust {
-		var cached []service.LLMUsageProviderMonthSummaryView
-		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
-			writeJSON(w, cached)
-			return
-		}
-	}
-	rows, err := h.usage.ProviderSummaryCurrentMonth(r.Context(), userID)
-	if err != nil {
-		writeRepoError(w, err)
+	rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageCurrentMonthSummaryCacheTTL, func() ([]service.LLMUsageProviderMonthSummaryView, error) {
+		return h.usage.ProviderSummaryCurrentMonth(r.Context(), userID)
+	}, cacheFetchOptions{cacheBust: cacheBust, cacheKeyErr: err})
+	if fetchErr != nil {
+		writeRepoError(w, fetchErr)
 		return
-	}
-	if err == nil && h.cache != nil {
-		_ = h.cache.SetJSON(r.Context(), cacheKey, rows, llmUsageCurrentMonthSummaryCacheTTL)
 	}
 	writeJSON(w, rows)
 }
@@ -203,20 +163,12 @@ func (h *LLMUsageHandler) PurposeSummaryCurrentMonth(w http.ResponseWriter, r *h
 	userID := middleware.GetUserID(r)
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsagePurposeCurrentMonthVersioned(userID, 0))
-	if err == nil && h.cache != nil && !cacheBust {
-		var cached []service.LLMUsagePurposeMonthSummaryView
-		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
-			writeJSON(w, cached)
-			return
-		}
-	}
-	rows, err := h.usage.PurposeSummaryCurrentMonth(r.Context(), userID)
-	if err != nil {
-		writeRepoError(w, err)
+	rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageCurrentMonthSummaryCacheTTL, func() ([]service.LLMUsagePurposeMonthSummaryView, error) {
+		return h.usage.PurposeSummaryCurrentMonth(r.Context(), userID)
+	}, cacheFetchOptions{cacheBust: cacheBust, cacheKeyErr: err})
+	if fetchErr != nil {
+		writeRepoError(w, fetchErr)
 		return
-	}
-	if err == nil && h.cache != nil {
-		_ = h.cache.SetJSON(r.Context(), cacheKey, rows, llmUsageCurrentMonthSummaryCacheTTL)
 	}
 	writeJSON(w, rows)
 }
@@ -232,40 +184,24 @@ func (h *LLMUsageHandler) ExecutionSummaryCurrentMonth(w http.ResponseWriter, r 
 		}
 		cacheBust := r.URL.Query().Get("cache_bust") == "1"
 		cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageExecutionSummaryVersioned(userID, 0, days))
-		if err == nil && h.cache != nil && !cacheBust {
-			var cached []service.LLMExecutionCurrentMonthSummaryView
-			if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
-				writeJSON(w, cached)
-				return
-			}
-		}
-		rows, err := h.usage.ExecutionSummary(r.Context(), userID, days)
-		if err != nil {
-			writeRepoError(w, err)
+		rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageModelSummaryCacheTTL, func() ([]service.LLMExecutionCurrentMonthSummaryView, error) {
+			return h.usage.ExecutionSummary(r.Context(), userID, days)
+		}, cacheFetchOptions{cacheBust: cacheBust, cacheKeyErr: err})
+		if fetchErr != nil {
+			writeRepoError(w, fetchErr)
 			return
-		}
-		if err == nil && h.cache != nil {
-			_ = h.cache.SetJSON(r.Context(), cacheKey, rows, llmUsageModelSummaryCacheTTL)
 		}
 		writeJSON(w, rows)
 		return
 	}
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageExecutionCurrentMonthVersioned(userID, 0))
-	if err == nil && h.cache != nil && !cacheBust {
-		var cached []service.LLMExecutionCurrentMonthSummaryView
-		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
-			writeJSON(w, cached)
-			return
-		}
-	}
-	rows, err := h.usage.ExecutionSummaryCurrentMonth(r.Context(), userID)
-	if err != nil {
-		writeRepoError(w, err)
+	rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageCurrentMonthSummaryCacheTTL, func() ([]service.LLMExecutionCurrentMonthSummaryView, error) {
+		return h.usage.ExecutionSummaryCurrentMonth(r.Context(), userID)
+	}, cacheFetchOptions{cacheBust: cacheBust, cacheKeyErr: err})
+	if fetchErr != nil {
+		writeRepoError(w, fetchErr)
 		return
-	}
-	if err == nil && h.cache != nil {
-		_ = h.cache.SetJSON(r.Context(), cacheKey, rows, llmUsageCurrentMonthSummaryCacheTTL)
 	}
 	writeJSON(w, rows)
 }
@@ -274,20 +210,12 @@ func (h *LLMUsageHandler) ValueMetricsCurrentMonth(w http.ResponseWriter, r *htt
 	userID := middleware.GetUserID(r)
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageValueMetricsCurrentMonthVersioned(userID, 0))
-	if err == nil && h.cache != nil && !cacheBust {
-		var cached []service.LLMValueMetricView
-		if ok, cacheErr := h.cache.GetJSON(r.Context(), cacheKey, &cached); cacheErr == nil && ok {
-			writeJSON(w, cached)
-			return
-		}
-	}
-	rows, err := h.usage.ValueMetricsCurrentMonth(r.Context(), userID)
-	if err != nil {
-		writeRepoError(w, err)
+	rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageCurrentMonthSummaryCacheTTL, func() ([]service.LLMValueMetricView, error) {
+		return h.usage.ValueMetricsCurrentMonth(r.Context(), userID)
+	}, cacheFetchOptions{cacheBust: cacheBust, cacheKeyErr: err})
+	if fetchErr != nil {
+		writeRepoError(w, fetchErr)
 		return
-	}
-	if err == nil && h.cache != nil {
-		_ = h.cache.SetJSON(r.Context(), cacheKey, rows, llmUsageCurrentMonthSummaryCacheTTL)
 	}
 	writeJSON(w, rows)
 }

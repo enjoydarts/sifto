@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Bell, BookOpen, Flame, Sparkles, X } from "lucide-react";
 import { api, BriefingCluster, Item, NavigatorLLM, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 import { ReadingGoalsPanel } from "@/components/briefing/reading-goals-panel";
 import { DueReviewPanel } from "@/components/reviews/due-review-panel";
 import { WeeklyReviewPanel } from "@/components/reviews/weekly-review-panel";
@@ -50,7 +51,7 @@ export default function BriefingPage() {
     return window.localStorage.getItem(MODEL_UPDATES_DISMISSED_AT_KEY);
   });
   const briefingQuery = useQuery({
-    queryKey: ["briefing-today", 18] as const,
+    queryKey: queryKeys.briefing.today(18),
     queryFn: () => api.getBriefingToday({ size: 18 }),
     staleTime: 15_000,
     refetchInterval: 60_000,
@@ -59,13 +60,13 @@ export default function BriefingPage() {
   });
   const navigatorPreview = searchParams.get("navigator_preview") === "1";
   const settingsQuery = useQuery({
-    queryKey: ["settings"] as const,
+    queryKey: queryKeys.settings.all(),
     queryFn: () => api.getSettings(),
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
   const navigatorQuery = useQuery({
-    queryKey: ["briefing-navigator", navigatorPreview, settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor"] as const,
+    queryKey: queryKeys.briefing.navigator(navigatorPreview, settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor"),
     queryFn: () => api.getBriefingNavigator({ navigator_preview: navigatorPreview }),
     enabled: settingsQuery.isSuccess,
     staleTime: 30 * 60 * 1000,
@@ -74,7 +75,7 @@ export default function BriefingPage() {
     placeholderData: (prev) => prev,
   });
   const modelUpdatesQuery = useQuery({
-    queryKey: ["provider-model-updates", 7] as const,
+    queryKey: queryKeys.providerModelUpdates(7),
     queryFn: () => api.getProviderModelUpdates({ days: 7, limit: 6 }),
     staleTime: 60_000,
     placeholderData: (prev) => prev,
@@ -309,7 +310,7 @@ export default function BriefingPage() {
         <SectionCard className="p-5 sm:p-6">
           <div className="min-w-0">
               <div className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-accent)]">
-                Morning Briefing
+                {t("briefing.eyebrow.morningBriefing")}
               </div>
               <h1 className="mt-2.5 font-serif text-[2.25rem] leading-[1.05] tracking-[-0.03em] text-[var(--color-editorial-ink)] sm:text-[2.75rem]">
                 {greetingLabel}
@@ -384,7 +385,7 @@ export default function BriefingPage() {
                 <div className="rounded-[18px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] p-3.5">
                   <div className="inline-flex items-center gap-1 font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
                     <Flame className="size-3.5 text-[var(--warning)]" aria-hidden="true" />
-                    <span>Reading Streak</span>
+                    <span>{t("briefing.streak.readingStreak")}</span>
                   </div>
                   <div className="mt-2.5 text-[2.1rem] leading-none tracking-[-0.04em] text-[var(--color-editorial-ink)]">
                     {data.stats.streak_days}{t("briefing.kpi.streakUnit")}
@@ -447,7 +448,7 @@ export default function BriefingPage() {
                     </div>
                     <div>
                       <div className="flex flex-wrap gap-x-4 gap-y-2 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">
-                        <span className="min-w-0 max-w-full break-all break-words">{nowReading.source_title || "Source"}</span>
+                             <span className="min-w-0 max-w-full break-all break-words">{nowReading.source_title || t("briefing.source")}</span>
                         <span className="min-w-0 max-w-full break-all break-words">{fmtDate(nowReading.published_at || nowReading.created_at, locale)}</span>
                       </div>
                       <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -521,7 +522,7 @@ export default function BriefingPage() {
                             {item.content_text?.trim() || item.recommendation_reason || item.url}
                           </p>
                           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-editorial-ink-faint)]">
-                            <span className="min-w-0 max-w-full break-all break-words">{item.source_title || "Source"}</span>
+                             <span className="min-w-0 max-w-full break-all break-words">{item.source_title || t("briefing.source")}</span>
                             <span className="min-w-0 max-w-full break-all break-words">{fmtDate(item.published_at || item.created_at, locale)}</span>
                           </div>
                         </div>
@@ -536,7 +537,7 @@ export default function BriefingPage() {
           <aside className="grid gap-6 self-start">
             <SectionCard>
               <div className="font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-                Today Queue
+                {t("briefing.todayQueue.title")}
               </div>
               <h2 className="mt-2 font-serif text-[1.45rem] leading-[1.15] tracking-[-0.03em] text-[var(--color-editorial-ink)]">
                 {t("briefing.todayQueue.title")}
@@ -584,10 +585,10 @@ export default function BriefingPage() {
 
             <SectionCard>
               <div className="font-sans text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-editorial-ink-faint)]">
-                Cluster Watch
+                {t("briefing.eyebrow.clusterWatch")}
               </div>
               <h2 className="mt-2 font-serif text-[1.45rem] leading-[1.15] tracking-[-0.03em] text-[var(--color-editorial-ink)]">
-                あとで見るテーマ
+                {t("briefing.clusterLaterTitle")}
               </h2>
               {clusterRows.length === 0 ? (
                 <p className="mt-4 text-sm text-[var(--color-editorial-ink-soft)]">{t("briefing.emptyClusters")}</p>
@@ -602,7 +603,7 @@ export default function BriefingPage() {
                         <p className="mt-2 font-sans text-[13px] leading-6 text-[var(--color-editorial-ink-soft)]">{cluster.summary}</p>
                       ) : null}
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <Tag>{cluster.items.length} items</Tag>
+                         <Tag>{cluster.items.length}{t("briefing.clusterItemCount")}</Tag>
                         {cluster.topItems[0]?.source_title ? <Tag>{cluster.topItems[0].source_title}</Tag> : null}
                       </div>
                     </article>

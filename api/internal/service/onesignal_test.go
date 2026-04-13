@@ -9,13 +9,19 @@ import (
 	"testing"
 )
 
+type oneSignalRoundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f oneSignalRoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
 func TestOneSignalSendToExternalIDIncludesTargetURLInData(t *testing.T) {
 	var got map[string]any
 	client := &OneSignalClient{
 		appID:  "app-id",
 		apiKey: "api-key",
 		base:   "https://onesignal.test",
-		http: &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		http: &http.Client{Transport: oneSignalRoundTripperFunc(func(req *http.Request) (*http.Response, error) {
 			if err := json.NewDecoder(req.Body).Decode(&got); err != nil {
 				t.Fatalf("decode request body: %v", err)
 			}

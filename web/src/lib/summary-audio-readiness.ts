@@ -1,5 +1,3 @@
-"use client";
-
 import type { SummaryAudioVoiceSettings, UserSettings } from "@/lib/api";
 
 export type SummaryAudioReadiness = {

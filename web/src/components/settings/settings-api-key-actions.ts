@@ -1,5 +1,3 @@
-"use client";
-
 import { type FormEvent } from "react";
 import type { AccessProviderID } from "@/components/settings/system-access-cards";
 

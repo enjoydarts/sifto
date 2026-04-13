@@ -132,7 +132,7 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	wg.Add(6)
-	go func() {
+	safeGo(func() {
 		defer wg.Done()
 		partKey := cacheKeyDashboardPart(userID, "sources", 0, 0)
 		loadPart("sources", partKey, func() (any, error) {
@@ -142,36 +142,36 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 			}
 			return n, nil
 		}, func(v any) { sourceCnt = v })
-	}()
-	go func() {
+	})
+	safeGo(func() {
 		defer wg.Done()
 		partKey := cacheKeyDashboardPart(userID, "itemstats", 0, 0)
 		loadPart("itemstats", partKey, func() (any, error) {
 			return h.itemRepo.Stats(r.Context(), userID)
 		}, func(v any) { itemStats = v })
-	}()
-	go func() {
+	})
+	safeGo(func() {
 		defer wg.Done()
 		partKey := cacheKeyDashboardPart(userID, "digests", digestLimit, 0)
 		loadPart("digests", partKey, func() (any, error) {
 			return h.digestRepo.ListLimit(r.Context(), userID, digestLimit)
 		}, func(v any) { digests = v })
-	}()
-	go func() {
+	})
+	safeGo(func() {
 		defer wg.Done()
 		partKey := cacheKeyDashboardPart(userID, "llm", llmDays, 0)
 		loadPart("llm", partKey, func() (any, error) {
 			return h.llmUsageRepo.DailySummaryByUser(r.Context(), userID, llmDays)
 		}, func(v any) { llmSummary = v })
-	}()
-	go func() {
+	})
+	safeGo(func() {
 		defer wg.Done()
 		partKey := cacheKeyDashboardPart(userID, "topics", topicLimit, 0)
 		loadPart("topics", partKey, func() (any, error) {
 			return h.itemRepo.TopicTrends(r.Context(), userID, topicLimit)
 		}, func(v any) { topics = v })
-	}()
-	go func() {
+	})
+	safeGo(func() {
 		defer wg.Done()
 		partKey := cacheKeyDashboardPart(userID, "failedpreview", 0, 0)
 		loadPart("failedpreview", partKey, func() (any, error) {
@@ -183,25 +183,25 @@ func (h *DashboardHandler) Get(w http.ResponseWriter, r *http.Request) {
 				PageSize: 5,
 			})
 		}, func(v any) { failedItems = v })
-	}()
+	})
 	wg.Wait()
 	if firstErr != nil {
 		writeRepoError(w, firstErr)
 		return
 	}
 
-	resp := map[string]any{
-		"sources_count": sourceCnt,
-		"item_stats":    itemStats,
-		"digests":       digests,
-		"llm_summary":   llmSummary,
-		"topic_trends": map[string]any{
-			"items":  topics,
-			"limit":  topicLimit,
-			"period": "24h_vs_prev24h",
+	resp := dashboardResponse{
+		SourcesCount: sourceCnt,
+		ItemStats:    itemStats,
+		Digests:      digests,
+		LLMSummary:   llmSummary,
+		TopicTrends: dashboardTopicTrends{
+			Items:  topics,
+			Limit:  topicLimit,
+			Period: "24h_vs_prev24h",
 		},
-		"failed_items_preview": failedItems,
-		"llm_days":             llmDays,
+		FailedItemsPreview: failedItems,
+		LLMDays:            llmDays,
 	}
 	if h.cache != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, dashboardCacheTTL); err != nil {

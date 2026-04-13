@@ -108,11 +108,11 @@ func FindUIFontByKey(catalog *UIFontCatalog, key string) *UIFontCatalogFont {
 func ValidateUIFontSelection(catalog *UIFontCatalog, sansKey, serifKey string) error {
 	sans := FindUIFontByKey(catalog, sansKey)
 	if sans == nil || !sans.SelectableForSans {
-		return fmt.Errorf("invalid ui_font_sans_key")
+		return &ValidationError{Field: "ui_font_sans_key"}
 	}
 	serif := FindUIFontByKey(catalog, serifKey)
 	if serif == nil || !serif.SelectableForSerif {
-		return fmt.Errorf("invalid ui_font_serif_key")
+		return &ValidationError{Field: "ui_font_serif_key"}
 	}
 	return nil
 }

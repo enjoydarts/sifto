@@ -9,6 +9,7 @@ import { useI18n } from "@/components/i18n-provider";
 import { PageTransition } from "@/components/page-transition";
 import { useSharedAudioPlayer } from "@/components/shared-audio-player/provider";
 import { api } from "@/lib/api";
+import { queryKeys } from "@/lib/query-keys";
 import { getSummaryAudioReadiness } from "@/lib/summary-audio-readiness";
 import type { SummaryAudioQueueKind } from "@/components/shared-audio-player/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -32,15 +33,17 @@ export default function SummaryAudioPlayerPage() {
   const player = useSharedAudioPlayer();
   const queueKind = parseQueueKind(searchParams.get("queue"));
   const viewQuery = searchParams.get("view");
-  const autoStartedQueueKindRef = useRef<SummaryAudioQueueKind | null>(null);
+  const autoStartedQueueRef = useRef<string | null>(null);
+  const queueStartInFlightRef = useRef<string | null>(null);
   const [showPreprocessedText, setShowPreprocessedText] = useState(false);
   const settingsQuery = useQuery({
-    queryKey: ["settings", "summary-audio-readiness"],
+    queryKey: queryKeys.settings.summaryAudioReadiness(),
     queryFn: () => api.getSettings(),
   });
   const summaryAudioReadiness = getSummaryAudioReadiness(settingsQuery.data ?? null);
   const summaryAudioSettingsLoaded = settingsQuery.isSuccess;
   const summaryAudioPlaybackBlocked = summaryAudioSettingsLoaded && !summaryAudioReadiness.ready;
+  const queueSignature = queueKind === "view" ? `view:${viewQuery ?? ""}` : queueKind;
 
   const requestQueueStart = useEffectEvent(async () => {
     if (!summaryAudioSettingsLoaded) {
@@ -52,7 +55,7 @@ export default function SummaryAudioPlayerPage() {
     if (summaryAudioPlaybackBlocked) {
       return;
     }
-    if (autoStartedQueueKindRef.current === queueKind) {
+    if (autoStartedQueueRef.current === queueSignature || queueStartInFlightRef.current === queueSignature) {
       return;
     }
     if (
@@ -62,14 +65,22 @@ export default function SummaryAudioPlayerPage() {
     ) {
       return;
     }
-    autoStartedQueueKindRef.current = queueKind;
-    await player.startSummaryQueuePlayback(queueKind, undefined, {
-      queueQuery: queueKind === "view" ? viewQuery : null,
-    });
+    queueStartInFlightRef.current = queueSignature;
+    try {
+      await player.startSummaryQueuePlayback(queueKind, undefined, {
+        queueQuery: queueKind === "view" ? viewQuery : null,
+      });
+      autoStartedQueueRef.current = queueSignature;
+    } finally {
+      if (queueStartInFlightRef.current === queueSignature) {
+        queueStartInFlightRef.current = null;
+      }
+    }
   });
 
   useEffect(() => {
-    autoStartedQueueKindRef.current = null;
+    autoStartedQueueRef.current = null;
+    queueStartInFlightRef.current = null;
     setShowPreprocessedText(false);
   }, [queueKind, viewQuery]);
 
@@ -223,7 +234,12 @@ export default function SummaryAudioPlayerPage() {
                       onClick={() => {
                         if (disabled) return;
                         if (kind === "brief" && player.summaryQueue.queueKind !== "brief") return;
-                        router.replace(`/audio-player?queue=${kind}`);
+                        const params = new URLSearchParams();
+                        params.set("queue", kind);
+                        if (kind === "view" && viewQuery?.trim()) {
+                          params.set("view", viewQuery);
+                        }
+                        router.replace(`/audio-player?${params.toString()}`);
                       }}
                       disabled={disabled}
                       className={`inline-flex min-h-10 items-center justify-center rounded-full border px-4 py-2 text-sm font-medium ${

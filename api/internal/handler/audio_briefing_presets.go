@@ -39,7 +39,7 @@ func (h *AudioBriefingPresetsHandler) List(w http.ResponseWriter, r *http.Reques
 		writeRepoError(w, err)
 		return
 	}
-	out := make([]map[string]any, 0, len(items))
+	out := make([]service.AudioBriefingPresetView, 0, len(items))
 	for _, item := range items {
 		out = append(out, service.AudioBriefingPresetPayload(item))
 	}

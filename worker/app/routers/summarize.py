@@ -1,23 +1,10 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
-from app.services.alibaba_service import summarize as summarize_alibaba
 from app.services.claude_service import summarize
-from app.services.deepseek_service import summarize as summarize_deepseek
-from app.services.fireworks_service import summarize as summarize_fireworks
-from app.services.gemini_service import summarize as summarize_gemini
-from app.services.groq_service import summarize as summarize_groq
-from app.services.llm_dispatch import dispatch_by_model
-from app.services.mistral_service import summarize as summarize_mistral
-from app.services.moonshot_service import summarize as summarize_moonshot
-from app.services.openai_service import summarize as summarize_openai
-from app.services.openrouter_service import summarize as summarize_openrouter
-from app.services.poe_service import summarize as summarize_poe
+from app.services.llm_dispatch import dispatch_by_model_async
 from app.services.runtime_prompt_overrides import bind_prompt_override
-from app.services.siliconflow_service import summarize as summarize_siliconflow
-from app.services.together_service import summarize as summarize_together
-from app.services.xai_service import summarize as summarize_xai
-from app.services.zai_service import summarize as summarize_zai
-from app.services.router_observe import llm_usage_summary, run_observed_request
+from app.services.router_observe import llm_usage_summary, run_observed_request_async
+from app.auto_dispatch import build_handler_map_async
 
 router = APIRouter()
 
@@ -42,131 +29,26 @@ class SummarizeResponse(BaseModel):
 
 
 @router.post("/summarize", response_model=SummarizeResponse)
-def summarize_endpoint(req: SummarizeRequest, request: Request):
-    try:
-        with bind_prompt_override((req.prompt or {}).get("prompt_key"), (req.prompt or {}).get("prompt_text"), (req.prompt or {}).get("system_instruction")):
-            result = run_observed_request(
+async def summarize_endpoint(req: SummarizeRequest, request: Request):
+    with bind_prompt_override((req.prompt or {}).get("prompt_key"), (req.prompt or {}).get("prompt_text"), (req.prompt or {}).get("system_instruction")):
+        result = await run_observed_request_async(
+            request,
+            metadata={"model": req.model or "", "facts_count": len(req.facts or []), "source_text_chars": req.source_text_chars or 0},
+            input_payload={"title": req.title, "facts_count": len(req.facts or []), "model": req.model},
+            call=lambda: dispatch_by_model_async(
                 request,
-                metadata={"model": req.model or "", "facts_count": len(req.facts or []), "source_text_chars": req.source_text_chars or 0},
-                input_payload={"title": req.title, "facts_count": len(req.facts or []), "model": req.model},
-                call=lambda: dispatch_by_model(
-                    request,
-                    req.model,
-                    handlers={
-                    "anthropic": lambda api_key: summarize(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        api_key=api_key,
-                        model=req.model,
-                    ),
-                    "google": lambda api_key: summarize_gemini(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "fireworks": lambda api_key: summarize_fireworks(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "groq": lambda api_key: summarize_groq(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "deepseek": lambda api_key: summarize_deepseek(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "alibaba": lambda api_key: summarize_alibaba(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "mistral": lambda api_key: summarize_mistral(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "together": lambda api_key: summarize_together(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "moonshot": lambda api_key: summarize_moonshot(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "xai": lambda api_key: summarize_xai(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "zai": lambda api_key: summarize_zai(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "openrouter": lambda api_key: summarize_openrouter(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "poe": lambda api_key: summarize_poe(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "siliconflow": lambda api_key: summarize_siliconflow(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    "openai": lambda api_key: summarize_openai(
-                        req.title,
-                        req.facts,
-                        source_text_chars=req.source_text_chars,
-                        model=str(req.model),
-                        api_key=api_key or "",
-                    ),
-                    },
+                req.model,
+                handlers=build_handler_map_async(
+                    "summarize",
+                    args_fn=lambda func, api_key: func(req.title, req.facts, source_text_chars=req.source_text_chars, model=str(req.model), api_key=api_key or ""),
+                    anthropic_args_fn=lambda func, api_key: func(req.title, req.facts, source_text_chars=req.source_text_chars, api_key=api_key, model=req.model),
                 ),
-                output_builder=lambda result: {
-                    "topics_count": len(result.get("topics") or []),
-                    "summary_chars": len(result.get("summary") or ""),
-                    "translated_title_present": bool(result.get("translated_title")),
-                    **llm_usage_summary(result),
-                },
-            )
-        return SummarizeResponse(**result)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"summarize failed: {e}")
+            ),
+            output_builder=lambda result: {
+                "topics_count": len(result.get("topics") or []),
+                "summary_chars": len(result.get("summary") or ""),
+                "translated_title_present": bool(result.get("translated_title")),
+                **llm_usage_summary(result),
+            },
+        )
+    return SummarizeResponse(**result)

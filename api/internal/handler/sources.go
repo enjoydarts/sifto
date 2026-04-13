@@ -10,9 +10,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"path"
-	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -21,13 +18,7 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
 	"github.com/go-chi/chi/v5"
-	"github.com/mmcdole/gofeed"
 )
-
-type FeedCandidate struct {
-	URL   string  `json:"url"`
-	Title *string `json:"title"`
-}
 
 type opmlDocument struct {
 	XMLName xml.Name `xml:"opml"`
@@ -54,81 +45,6 @@ type opmlOutline struct {
 	Outlines []opmlOutline `xml:"outline,omitempty"`
 }
 
-var (
-	reFeedLink1 = regexp.MustCompile(`(?i)<link[^>]+type="application/(rss|atom)\+xml"[^>]+href="([^"]+)"`)
-	reFeedLink2 = regexp.MustCompile(`(?i)<link[^>]+href="([^"]+)"[^>]+type="application/(rss|atom)\+xml"`)
-	reTitleAttr = regexp.MustCompile(`(?i)\btitle="([^"]+)"`)
-)
-
-func discoverRSSFeeds(ctx context.Context, rawURL string) ([]FeedCandidate, error) {
-	// Step 1: Try parsing the URL directly as a feed.
-	fp := gofeed.NewParser()
-	if feed, err := fp.ParseURLWithContext(rawURL, ctx); err == nil {
-		var t *string
-		if feed.Title != "" {
-			t = &feed.Title
-		}
-		return []FeedCandidate{{URL: rawURL, Title: t}}, nil
-	}
-
-	// Step 2: Fetch the URL as HTML and look for RSS/Atom <link> tags.
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Sifto/1.0")
-
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-
-	base, err := url.Parse(rawURL)
-	if err != nil {
-		return nil, err
-	}
-
-	seen := map[string]bool{}
-	var candidates []FeedCandidate
-
-	addCandidate := func(href string, tag []byte) {
-		ref, e := url.Parse(href)
-		if e != nil {
-			return
-		}
-		absURL := base.ResolveReference(ref).String()
-		if seen[absURL] {
-			return
-		}
-		seen[absURL] = true
-		var title *string
-		if m := reTitleAttr.FindSubmatch(tag); m != nil {
-			t := string(m[1])
-			title = &t
-		}
-		candidates = append(candidates, FeedCandidate{URL: absURL, Title: title})
-	}
-
-	for _, m := range reFeedLink1.FindAllSubmatch(body, -1) {
-		addCandidate(string(m[2]), m[0])
-	}
-	for _, m := range reFeedLink2.FindAllSubmatch(body, -1) {
-		addCandidate(string(m[1]), m[0])
-	}
-
-	if len(candidates) == 0 {
-		return nil, errors.New("指定されたURLからRSSフィードが見つかりませんでした")
-	}
-	return candidates, nil
-}
-
 type SourceHandler struct {
 	repo                   *repository.SourceRepo
 	itemRepo               *repository.ItemRepo
@@ -139,6 +55,8 @@ type SourceHandler struct {
 	cipher                 *service.SecretCipher
 	publisher              *service.EventPublisher
 	cache                  service.JSONCache
+	keyProvider            *service.UserKeyProvider
+	suggestionSvc          *service.SourceSuggestionService
 }
 
 func NewSourceHandler(
@@ -151,8 +69,9 @@ func NewSourceHandler(
 	cipher *service.SecretCipher,
 	publisher *service.EventPublisher,
 	cache service.JSONCache,
+	keyProvider *service.UserKeyProvider,
 ) *SourceHandler {
-	return &SourceHandler{
+	h := &SourceHandler{
 		repo:                   repo,
 		itemRepo:               itemRepo,
 		sourceOptimizationRepo: sourceOptimizationRepo,
@@ -162,7 +81,12 @@ func NewSourceHandler(
 		cipher:                 cipher,
 		publisher:              publisher,
 		cache:                  cache,
+		keyProvider:            keyProvider,
 	}
+	h.suggestionSvc = service.NewSourceSuggestionService(
+		repo, itemRepo, settingsRepo, llmUsageRepo, worker, cache, keyProvider,
+	)
+	return h
 }
 
 func (h *SourceHandler) Optimization(w http.ResponseWriter, r *http.Request) {
@@ -201,7 +125,7 @@ func (h *SourceHandler) Optimization(w http.ResponseWriter, r *http.Request) {
 		_ = h.sourceOptimizationRepo.InsertSnapshot(r.Context(), userID, source.ID, windowStart, windowEnd, metrics, decision.Recommendation, decision.Reason)
 		out = append(out, optimizationItem{SourceID: source.ID, Recommendation: decision.Recommendation, Reason: decision.Reason, Metrics: metrics})
 	}
-	writeJSON(w, map[string]any{"items": out})
+	writeJSON(w, sourceListItemsResponse{Items: out})
 }
 
 func (h *SourceHandler) Navigator(w http.ResponseWriter, r *http.Request) {
@@ -252,7 +176,7 @@ func (h *SourceHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string, generatedAt time.Time, persona string) *model.SourceNavigator {
-	if h.repo == nil || h.settingsRepo == nil || h.worker == nil || h.cipher == nil {
+	if h.repo == nil || h.settingsRepo == nil || h.worker == nil || h.keyProvider == nil {
 		return nil
 	}
 	settings, err := h.settingsRepo.EnsureDefaults(ctx, userID)
@@ -273,33 +197,7 @@ func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string,
 		return nil
 	}
 
-	anthropicKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAnthropicAPIKeyEncrypted, h.cipher, userID, "")
-	googleKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetGoogleAPIKeyEncrypted, h.cipher, userID, "")
-	groqKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetGroqAPIKeyEncrypted, h.cipher, userID, "")
-	fireworksKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetFireworksAPIKeyEncrypted, h.cipher, userID, "")
-	deepseekKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
-	alibabaKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
-	mistralKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
-	togetherKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetTogetherAPIKeyEncrypted, h.cipher, userID, "")
-	moonshotKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMoonshotAPIKeyEncrypted, h.cipher, userID, "")
-	xaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
-	zaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
-	openRouterKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
-	poeKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
-	siliconFlowKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetSiliconFlowAPIKeyEncrypted, h.cipher, userID, "")
-	openAIKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
-	switch service.LLMProviderForModel(modelName) {
-	case "openrouter":
-		openAIKey = openRouterKey
-	case "together":
-		openAIKey = togetherKey
-	case "moonshot":
-		openAIKey = moonshotKey
-	case "poe":
-		openAIKey = poeKey
-	case "siliconflow":
-		openAIKey = siliconFlowKey
-	}
+	nk := loadNavigatorKeys(ctx, h.keyProvider, userID, modelName)
 
 	workerCandidates := make([]service.SourceNavigatorCandidate, 0, len(candidates))
 	titleBySourceID := make(map[string]string, len(candidates))
@@ -339,16 +237,16 @@ func (h *SourceHandler) buildSourceNavigator(ctx context.Context, userID string,
 		workerCtx,
 		persona,
 		workerCandidates,
-		derefString(anthropicKey),
-		derefString(googleKey),
-		derefString(groqKey),
-		derefString(deepseekKey),
-		derefString(alibabaKey),
-		derefString(mistralKey),
-		derefString(xaiKey),
-		derefString(zaiKey),
-		derefString(fireworksKey),
-		derefString(openAIKey),
+		derefString(nk.anthropicKey),
+		derefString(nk.googleKey),
+		derefString(nk.groqKey),
+		derefString(nk.deepseekKey),
+		derefString(nk.alibabaKey),
+		derefString(nk.mistralKey),
+		derefString(nk.xaiKey),
+		derefString(nk.zaiKey),
+		derefString(nk.fireworksKey),
+		derefString(nk.openAIKey),
 		modelName,
 	)
 	if err != nil {
@@ -512,9 +410,7 @@ func (h *SourceHandler) Health(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{
-		"items": rows,
-	})
+	writeJSON(w, sourceListItemsResponse{Items: rows})
 }
 
 func (h *SourceHandler) ItemStats(w http.ResponseWriter, r *http.Request) {
@@ -524,9 +420,7 @@ func (h *SourceHandler) ItemStats(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{
-		"items": rows,
-	})
+	writeJSON(w, sourceListItemsResponse{Items: rows})
 }
 
 func (h *SourceHandler) DailyStats(w http.ResponseWriter, r *http.Request) {
@@ -537,9 +431,9 @@ func (h *SourceHandler) DailyStats(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{
-		"items":    rows,
-		"overview": repository.BuildSourcesDailyOverview(rows),
+	writeJSON(w, sourceDailyStatsResponse{
+		Items:    rows,
+		Overview: repository.BuildSourcesDailyOverview(rows),
 	})
 }
 
@@ -550,12 +444,12 @@ func (h *SourceHandler) Recommended(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
-	out, llmMeta, err := h.buildSourceRecommendations(r.Context(), userID, limit)
+	out, llmMeta, err := h.suggestionSvc.BuildSourceRecommendations(r.Context(), userID, limit)
 	if err != nil {
 		writeRepoError(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{"items": out, "limit": limit, "llm": llmMeta})
+	writeJSON(w, sourceRecommendResponse{Items: out, Limit: limit, LLM: llmMeta})
 }
 
 type opmlURLTitle struct {
@@ -599,7 +493,7 @@ func flattenOPMLOutlines(outlines []opmlOutline) []opmlURLTitle {
 	return out
 }
 
-func importURLTitlePairs(ctx context.Context, repo *repository.SourceRepo, userID string, pairs []opmlURLTitle) map[string]any {
+func importURLTitlePairs(ctx context.Context, repo *repository.SourceRepo, userID string, pairs []opmlURLTitle) importResultResponse {
 	added := 0
 	skipped := 0
 	invalid := 0
@@ -633,14 +527,14 @@ func importURLTitlePairs(ctx context.Context, repo *repository.SourceRepo, userI
 		}
 		added++
 	}
-	return map[string]any{
-		"status":       "ok",
-		"total":        len(pairs),
-		"added":        added,
-		"skipped":      skipped,
-		"invalid":      invalid,
-		"error_count":  len(errorsOut),
-		"error_sample": errorsOut,
+	return importResultResponse{
+		Status:      "ok",
+		Total:       len(pairs),
+		Added:       added,
+		Skipped:     skipped,
+		Invalid:     invalid,
+		ErrorCount:  len(errorsOut),
+		ErrorSample: errorsOut,
 	}
 }
 
@@ -747,7 +641,6 @@ func (h *SourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 		log.Printf("search suggestion source upsert enqueue failed source_id=%s err=%v", s.ID, err)
 	}
 
-	// For one-off URLs, seed an item immediately and trigger async processing.
 	if strings.EqualFold(body.Type, "manual") && h.itemRepo != nil {
 		itemID, created, err := h.itemRepo.UpsertFromFeed(r.Context(), s.ID, body.URL, body.Title)
 		if err != nil {
@@ -772,63 +665,13 @@ func (h *SourceHandler) Discover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feeds, err := discoverRSSFeeds(r.Context(), strings.TrimSpace(body.URL))
+	feeds, err := service.DiscoverRSSFeeds(r.Context(), strings.TrimSpace(body.URL))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 
-	writeJSON(w, map[string]any{"feeds": feeds})
-}
-
-type sourceSuggestionResponse struct {
-	URL           string   `json:"url"`
-	Title         *string  `json:"title"`
-	Reasons       []string `json:"reasons"`
-	MatchedTopics []string `json:"matched_topics,omitempty"`
-	AIReason      *string  `json:"ai_reason,omitempty"`
-	AIConfidence  *float64 `json:"ai_confidence,omitempty"`
-	SeedSourceIDs []string `json:"seed_source_ids"`
-}
-
-type sourceSuggestionAgg struct {
-	URL           string
-	Title         *string
-	Reasons       map[string]bool
-	MatchedTopics map[string]bool
-	SeedSourceIDs map[string]bool
-	Score         int
-}
-
-type probeSeed struct {
-	SourceID string
-	ProbeURL string
-	Reason   string
-}
-
-func llmUsageMetaMap(llm *service.LLMUsage, stage string) map[string]any {
-	llm = service.NormalizeCatalogPricedUsage("source_suggestion", llm)
-	if llm == nil {
-		if stage == "" {
-			return nil
-		}
-		return map[string]any{"stage": stage}
-	}
-	meta := map[string]any{
-		"provider":             llm.Provider,
-		"model":                llm.Model,
-		"requested_model":      llm.RequestedModel,
-		"resolved_model":       llm.ResolvedModel,
-		"estimated_cost_usd":   llm.EstimatedCostUSD,
-		"input_tokens":         llm.InputTokens,
-		"output_tokens":        llm.OutputTokens,
-		"pricing_source":       llm.PricingSource,
-		"pricing_model_family": llm.PricingModelFamily,
-	}
-	if stage != "" {
-		meta["stage"] = stage
-	}
-	return meta
+	writeJSON(w, discoverFeedsResponse{Feeds: feeds})
 }
 
 func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
@@ -839,1295 +682,12 @@ func (h *SourceHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid limit", http.StatusBadRequest)
 		return
 	}
-	out, llmMeta, err := h.buildSourceRecommendations(r.Context(), userID, limit)
+	out, llmMeta, err := h.suggestionSvc.BuildSourceRecommendations(r.Context(), userID, limit)
 	if err != nil {
 		writeRepoError(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{"items": out, "limit": limit, "llm": llmMeta})
-}
-
-func (h *SourceHandler) buildSourceRecommendations(ctx context.Context, userID string, limit int) ([]sourceSuggestionResponse, map[string]any, error) {
-	sources, err := h.repo.List(ctx, userID)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(sources) == 0 {
-		return []sourceSuggestionResponse{}, nil, nil
-	}
-	anthropicAPIKey := h.getUserAnthropicAPIKey(ctx, userID)
-	googleAPIKey := h.getUserGoogleAPIKey(ctx, userID)
-	groqAPIKey := h.getUserGroqAPIKey(ctx, userID)
-	fireworksAPIKey := h.getUserFireworksAPIKey(ctx, userID)
-	deepseekAPIKey := h.getUserDeepSeekAPIKey(ctx, userID)
-	alibabaAPIKey := h.getUserAlibabaAPIKey(ctx, userID)
-	mistralAPIKey := h.getUserMistralAPIKey(ctx, userID)
-	togetherAPIKey := h.getUserTogetherAPIKey(ctx, userID)
-	xaiAPIKey := h.getUserXAIAPIKey(ctx, userID)
-	zaiAPIKey := h.getUserZAIAPIKey(ctx, userID)
-	openRouterAPIKey := h.getUserOpenRouterAPIKey(ctx, userID)
-	poeAPIKey := h.getUserPoeAPIKey(ctx, userID)
-	siliconFlowAPIKey := h.getUserSiliconFlowAPIKey(ctx, userID)
-	openAIAPIKey := h.getUserOpenAIAPIKey(ctx, userID)
-	anthropicSourceSuggestionModel := h.getUserSourceSuggestionModel(ctx, userID)
-	anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, openAIAPIKey, anthropicSourceSuggestionModel = selectSourceSuggestionLLM(
-		anthropicAPIKey,
-		googleAPIKey,
-		groqAPIKey,
-		fireworksAPIKey,
-		deepseekAPIKey,
-		alibabaAPIKey,
-		mistralAPIKey,
-		togetherAPIKey,
-		xaiAPIKey,
-		zaiAPIKey,
-		openRouterAPIKey,
-		poeAPIKey,
-		siliconFlowAPIKey,
-		openAIAPIKey,
-		anthropicSourceSuggestionModel,
-	)
-	var preferredTopics []string
-	if h.itemRepo != nil {
-		if topics, err := h.itemRepo.PositiveFeedbackTopics(ctx, userID, 8); err == nil {
-			preferredTopics = topics
-		}
-	}
-	positiveExamples, negativeExamples := h.buildSourceSuggestionFewShotExamples(ctx, userID)
-
-	registered := map[string]bool{}
-	startAt := time.Now()
-	const suggestionMaxLatency = 60 * time.Second
-	isOverBudget := func() bool { return time.Since(startAt) >= suggestionMaxLatency }
-	remainingSuggestionBudget := func() time.Duration {
-		if d := suggestionMaxLatency - time.Since(startAt); d > 0 {
-			return d
-		}
-		return 0
-	}
-	var probes []probeSeed
-	seenProbe := map[string]bool{}
-	for _, s := range sources {
-		registered[normalizeFeedURL(s.URL)] = true
-		for _, p := range suggestionProbeURLs(s.URL) {
-			if seenProbe[p.url] {
-				continue
-			}
-			seenProbe[p.url] = true
-			probes = append(probes, probeSeed{
-				SourceID: s.ID,
-				ProbeURL: p.url,
-				Reason:   p.reason,
-			})
-		}
-	}
-	if len(probes) > 12 {
-		probes = probes[:12]
-	}
-
-	cands := map[string]*sourceSuggestionAgg{}
-	aiReady := (anthropicAPIKey != nil || googleAPIKey != nil || groqAPIKey != nil || fireworksAPIKey != nil || deepseekAPIKey != nil || alibabaAPIKey != nil || mistralAPIKey != nil || xaiAPIKey != nil || zaiAPIKey != nil || openAIAPIKey != nil) && h.worker != nil
-	var seedLLMMeta map[string]any
-	timedOutInAiStep := false
-	if aiReady {
-		seedLLMMeta, timedOutInAiStep = h.expandSourceSuggestionsWithLLMSeeds(
-			ctx,
-			userID,
-			sources,
-			preferredTopics,
-			positiveExamples,
-			negativeExamples,
-			registered,
-			cands,
-			anthropicAPIKey,
-			googleAPIKey,
-			groqAPIKey,
-			fireworksAPIKey,
-			deepseekAPIKey,
-			alibabaAPIKey,
-			mistralAPIKey,
-			togetherAPIKey,
-			xaiAPIKey,
-			zaiAPIKey,
-			openAIAPIKey,
-			anthropicSourceSuggestionModel,
-			remainingSuggestionBudget,
-		)
-	}
-	if !aiReady {
-		populateSourceSuggestionsFromProbes(ctx, probes, preferredTopics, registered, cands, remainingSuggestionBudget, discoverRSSFeeds)
-	}
-
-	out := make([]sourceSuggestionResponse, 0, len(cands))
-	type sortable struct {
-		row   sourceSuggestionResponse
-		score int
-	}
-	rows := make([]sortable, 0, len(cands))
-	for _, a := range cands {
-		reasons := mapKeys(a.Reasons)
-		matchedTopics := mapKeys(a.MatchedTopics)
-		seedIDs := mapKeys(a.SeedSourceIDs)
-		if len(matchedTopics) > 0 {
-			reasons = append([]string{"高評価トピックに近い候補"}, reasons...)
-		}
-		rows = append(rows, sortable{
-			score: a.Score,
-			row: sourceSuggestionResponse{
-				URL:           a.URL,
-				Title:         a.Title,
-				Reasons:       reasons,
-				MatchedTopics: matchedTopics,
-				SeedSourceIDs: seedIDs,
-			},
-		})
-	}
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].score != rows[j].score {
-			return rows[i].score > rows[j].score
-		}
-		if rows[i].row.Title != nil && rows[j].row.Title != nil && *rows[i].row.Title != *rows[j].row.Title {
-			return *rows[i].row.Title < *rows[j].row.Title
-		}
-		return rows[i].row.URL < rows[j].row.URL
-	})
-	poolLimit := limit * 6
-	if poolLimit < 24 {
-		poolLimit = 24
-	}
-	if poolLimit > 120 {
-		poolLimit = 120
-	}
-	if len(rows) > poolLimit {
-		rows = rows[:poolLimit]
-	}
-	for _, r := range rows {
-		out = append(out, r.row)
-	}
-	llmMeta := h.rankSourceSuggestionsWithLLM(
-		ctx,
-		userID,
-		sources,
-		preferredTopics,
-		positiveExamples,
-		negativeExamples,
-		out,
-		anthropicAPIKey,
-		googleAPIKey,
-		groqAPIKey,
-		fireworksAPIKey,
-		deepseekAPIKey,
-		alibabaAPIKey,
-		mistralAPIKey,
-		togetherAPIKey,
-		xaiAPIKey,
-		zaiAPIKey,
-		openAIAPIKey,
-		anthropicSourceSuggestionModel,
-		remainingSuggestionBudget,
-	)
-	if llmMeta == nil && seedLLMMeta != nil {
-		llmMeta = seedLLMMeta
-	}
-	if isOverBudget() {
-		llmMeta = mergeLLMWarning(llmMeta, "source suggestion timed out; partial results returned", "timeout")
-	}
-	if timedOutInAiStep {
-		llmMeta = mergeLLMWarning(llmMeta, "source suggestion timed out during AI seed generation", "seed_generation")
-	}
-	if anthropicSourceSuggestionModel != nil && strings.TrimSpace(*anthropicSourceSuggestionModel) != "" {
-		if llmMeta == nil {
-			llmMeta = map[string]any{}
-		}
-		if _, ok := llmMeta["requested_model"]; !ok {
-			llmMeta["requested_model"] = strings.TrimSpace(*anthropicSourceSuggestionModel)
-		}
-	}
-	if len(out) > limit {
-		out = out[:limit]
-	}
-	return out, llmMeta, nil
-}
-
-type suggestionProbe struct {
-	url    string
-	reason string
-}
-
-func suggestionProbeURLs(raw string) []suggestionProbe {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		return nil
-	}
-	seen := map[string]bool{}
-	var out []suggestionProbe
-	add := func(v, reason string) {
-		if v == "" || seen[v] {
-			return
-		}
-		seen[v] = true
-		out = append(out, suggestionProbe{url: v, reason: reason})
-	}
-	root := &url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/"}
-	add(root.String(), "同一サイトのトップページから発見")
-
-	cleanPath := path.Clean(u.Path)
-	if cleanPath != "." && cleanPath != "/" {
-		parent := path.Dir(cleanPath)
-		if parent != "." && parent != "/" {
-			parentURL := &url.URL{Scheme: u.Scheme, Host: u.Host, Path: parent + "/"}
-			add(parentURL.String(), "登録ソースの親URLから発見")
-		}
-	}
-	return out
-}
-
-func populateSourceSuggestionsFromProbes(
-	ctx context.Context,
-	probes []probeSeed,
-	preferredTopics []string,
-	registered map[string]bool,
-	cands map[string]*sourceSuggestionAgg,
-	remainingSuggestionBudget func() time.Duration,
-	discover func(context.Context, string) ([]FeedCandidate, error),
-) {
-	if remainingSuggestionBudget == nil {
-		remainingSuggestionBudget = func() time.Duration { return 0 }
-	}
-	if discover == nil {
-		return
-	}
-	for _, p := range probes {
-		probeTimeout := capDuration(1200*time.Millisecond, remainingSuggestionBudget())
-		if probeTimeout <= 0 {
-			break
-		}
-		probeCtx, cancel := context.WithTimeout(ctx, probeTimeout)
-		feeds, err := discover(probeCtx, p.ProbeURL)
-		cancel()
-		if err != nil {
-			continue
-		}
-		for _, f := range feeds {
-			key := normalizeFeedURL(f.URL)
-			if key == "" || registered[key] {
-				continue
-			}
-			a := cands[key]
-			if a == nil {
-				a = &sourceSuggestionAgg{
-					URL:           f.URL,
-					Title:         f.Title,
-					Reasons:       map[string]bool{},
-					MatchedTopics: map[string]bool{},
-					SeedSourceIDs: map[string]bool{},
-				}
-				cands[key] = a
-			}
-			if a.Title == nil && f.Title != nil {
-				a.Title = f.Title
-			}
-			if !a.Reasons[p.Reason] {
-				a.Reasons[p.Reason] = true
-				a.Score++
-			}
-			if !a.SeedSourceIDs[p.SourceID] {
-				a.SeedSourceIDs[p.SourceID] = true
-				a.Score += 2
-			}
-			for _, topic := range preferredTopics {
-				if topic == "" {
-					continue
-				}
-				if sourceSuggestionTopicMatch(f, topic) && !a.MatchedTopics[topic] {
-					a.MatchedTopics[topic] = true
-					a.Score += 3
-				}
-			}
-		}
-	}
-}
-
-func normalizeFeedURL(raw string) string {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Host == "" {
-		return ""
-	}
-	u.Fragment = ""
-	if (u.Scheme == "http" && strings.HasSuffix(u.Host, ":80")) || (u.Scheme == "https" && strings.HasSuffix(u.Host, ":443")) {
-		u.Host = strings.Split(u.Host, ":")[0]
-	}
-	u.Host = strings.ToLower(u.Host)
-	return u.String()
-}
-
-func mapKeys[T any](m map[string]T) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func sourceSuggestionTopicMatch(f FeedCandidate, topic string) bool {
-	t := strings.ToLower(strings.TrimSpace(topic))
-	if t == "" {
-		return false
-	}
-	if f.Title != nil && strings.Contains(strings.ToLower(*f.Title), t) {
-		return true
-	}
-	return strings.Contains(strings.ToLower(f.URL), t)
-}
-
-func (h *SourceHandler) rankSourceSuggestionsWithLLM(
-	ctx context.Context,
-	userID string,
-	sources []model.Source,
-	preferredTopics []string,
-	positiveExamples []service.RankFeedSuggestionsExample,
-	negativeExamples []service.RankFeedSuggestionsExample,
-	suggestions []sourceSuggestionResponse,
-	anthropicAPIKey *string,
-	googleAPIKey *string,
-	groqAPIKey *string,
-	fireworksAPIKey *string,
-	deepseekAPIKey *string,
-	alibabaAPIKey *string,
-	mistralAPIKey *string,
-	togetherAPIKey *string,
-	xaiAPIKey *string,
-	zaiAPIKey *string,
-	openAIAPIKey *string,
-	model *string,
-	remainingSuggestionBudget func() time.Duration,
-) map[string]any {
-	if h.worker == nil || len(suggestions) == 0 {
-		return nil
-	}
-	if remainingSuggestionBudget == nil {
-		remainingSuggestionBudget = func() time.Duration { return 0 }
-	}
-	if remainingSuggestionBudget() <= 0 {
-		return map[string]any{
-			"warning": "source suggestion rank skipped due timeout budget",
-			"stage":   "rank",
-		}
-	}
-	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
-	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
-	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
-	hasFireworks := fireworksAPIKey != nil && strings.TrimSpace(*fireworksAPIKey) != ""
-	hasDeepSeek := deepseekAPIKey != nil && strings.TrimSpace(*deepseekAPIKey) != ""
-	hasAlibaba := alibabaAPIKey != nil && strings.TrimSpace(*alibabaAPIKey) != ""
-	hasMistral := mistralAPIKey != nil && strings.TrimSpace(*mistralAPIKey) != ""
-	hasTogether := togetherAPIKey != nil && strings.TrimSpace(*togetherAPIKey) != ""
-	hasXAI := xaiAPIKey != nil && strings.TrimSpace(*xaiAPIKey) != ""
-	hasZAI := zaiAPIKey != nil && strings.TrimSpace(*zaiAPIKey) != ""
-	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
-	if !hasAnthropic && !hasGoogle && !hasGroq && !hasFireworks && !hasDeepSeek && !hasAlibaba && !hasMistral && !hasTogether && !hasXAI && !hasZAI && !hasOpenAI {
-		return nil
-	}
-	existing := make([]service.RankFeedSuggestionsExistingSource, 0, len(sources))
-	for _, s := range sources {
-		existing = append(existing, service.RankFeedSuggestionsExistingSource{
-			URL:   s.URL,
-			Title: s.Title,
-		})
-	}
-	cands := make([]service.RankFeedSuggestionsCandidate, 0, len(suggestions))
-	byID := map[string]*sourceSuggestionResponse{}
-	for i := range suggestions {
-		s := suggestions[i]
-		id := fmt.Sprintf("c%03d", i+1)
-		cands = append(cands, service.RankFeedSuggestionsCandidate{
-			ID:            id,
-			URL:           s.URL,
-			Title:         s.Title,
-			Reasons:       s.Reasons,
-			MatchedTopics: s.MatchedTopics,
-		})
-		byID[id] = &suggestions[i]
-	}
-	rankBudget := capDuration(20*time.Second, remainingSuggestionBudget())
-	if rankBudget <= 0 {
-		return map[string]any{
-			"warning": "source suggestion rank skipped due timeout budget",
-			"stage":   "rank",
-		}
-	}
-	rankCtx, cancel := context.WithTimeout(ctx, rankBudget)
-	resp, err := h.worker.RankFeedSuggestionsWithModel(
-		rankCtx,
-		existing,
-		preferredTopics,
-		cands,
-		positiveExamples,
-		negativeExamples,
-		anthropicAPIKey,
-		googleAPIKey,
-		groqAPIKey,
-		deepseekAPIKey,
-		alibabaAPIKey,
-		mistralAPIKey,
-		togetherAPIKey,
-		xaiAPIKey,
-		zaiAPIKey,
-		fireworksAPIKey,
-		openAIAPIKey,
-		model,
-	)
-	cancel()
-	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return map[string]any{
-				"warning": "source suggestion ranking timed out",
-				"stage":   "rank",
-			}
-		}
-		return map[string]any{
-			"error": err.Error(),
-			"stage": "rank",
-		}
-	}
-	if resp == nil {
-		return map[string]any{
-			"error": "empty response from rank-feed-suggestions",
-			"stage": "rank",
-		}
-	}
-	resp.LLM = service.NormalizeCatalogPricedUsage("source_suggestion", resp.LLM)
-	h.recordSourceSuggestionLLMUsage(ctx, userID, resp.LLM)
-	if len(resp.Items) == 0 {
-		if resp.LLM != nil {
-			return map[string]any{
-				"provider":             resp.LLM.Provider,
-				"model":                resp.LLM.Model,
-				"requested_model":      resp.LLM.RequestedModel,
-				"resolved_model":       resp.LLM.ResolvedModel,
-				"estimated_cost_usd":   resp.LLM.EstimatedCostUSD,
-				"input_tokens":         resp.LLM.InputTokens,
-				"output_tokens":        resp.LLM.OutputTokens,
-				"pricing_source":       resp.LLM.PricingSource,
-				"pricing_model_family": resp.LLM.PricingModelFamily,
-				"warning":              "rank returned no items",
-				"stage":                "rank",
-			}
-		}
-		return map[string]any{
-			"warning": "rank returned no items and no llm meta",
-			"stage":   "rank",
-		}
-	}
-	byURL := map[string]*sourceSuggestionResponse{}
-	for i := range suggestions {
-		byURL[normalizeFeedURL(suggestions[i].URL)] = &suggestions[i]
-	}
-	rank := make(map[string]int, len(resp.Items))
-	for i, it := range resp.Items {
-		if it.ID != nil {
-			if s, ok := byID[strings.TrimSpace(*it.ID)]; ok {
-				reason := strings.TrimSpace(it.Reason)
-				if reason != "" {
-					s.AIReason = &reason
-					s.Reasons = []string{reason}
-				}
-				conf := it.Confidence
-				s.AIConfidence = &conf
-				rank[normalizeFeedURL(s.URL)] = i
-				continue
-			}
-		}
-		k := normalizeFeedURL(it.URL)
-		if k == "" {
-			continue
-		}
-		rank[k] = i
-		if s, ok := byURL[k]; ok {
-			reason := strings.TrimSpace(it.Reason)
-			if reason != "" {
-				s.AIReason = &reason
-				// 表示理由もAIの説明を主にする。
-				s.Reasons = []string{reason}
-			}
-			conf := it.Confidence
-			s.AIConfidence = &conf
-		}
-	}
-	sort.SliceStable(suggestions, func(i, j int) bool {
-		ki := normalizeFeedURL(suggestions[i].URL)
-		kj := normalizeFeedURL(suggestions[j].URL)
-		ri, iok := rank[ki]
-		rj, jok := rank[kj]
-		if iok && jok && ri != rj {
-			return ri < rj
-		}
-		if iok != jok {
-			return iok
-		}
-		return suggestions[i].URL < suggestions[j].URL
-	})
-	if resp.LLM == nil {
-		return map[string]any{
-			"warning": "rank succeeded but llm meta is empty",
-			"stage":   "rank",
-		}
-	}
-	return map[string]any{
-		"provider":             resp.LLM.Provider,
-		"model":                resp.LLM.Model,
-		"requested_model":      resp.LLM.RequestedModel,
-		"resolved_model":       resp.LLM.ResolvedModel,
-		"estimated_cost_usd":   resp.LLM.EstimatedCostUSD,
-		"input_tokens":         resp.LLM.InputTokens,
-		"output_tokens":        resp.LLM.OutputTokens,
-		"pricing_source":       resp.LLM.PricingSource,
-		"pricing_model_family": resp.LLM.PricingModelFamily,
-		"stage":                "rank",
-		"items_count":          len(resp.Items),
-	}
-}
-
-func (h *SourceHandler) getUserAnthropicAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetAnthropicAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserSourceSuggestionModel(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil {
-		return nil
-	}
-	settings, err := h.settingsRepo.GetByUserID(ctx, userID)
-	if err != nil {
-		return nil
-	}
-	if settings.SourceSuggestionModel == nil || strings.TrimSpace(*settings.SourceSuggestionModel) == "" {
-		return nil
-	}
-	v := strings.TrimSpace(*settings.SourceSuggestionModel)
-	return &v
-}
-
-func (h *SourceHandler) getUserGoogleAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetGoogleAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserGroqAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetGroqAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserDeepSeekAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetDeepSeekAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserAlibabaAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetAlibabaAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserMistralAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetMistralAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserXAIAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetXAIAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserTogetherAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetTogetherAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserZAIAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetZAIAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserFireworksAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetFireworksAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserOpenRouterAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetOpenRouterAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserPoeAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetPoeAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserSiliconFlowAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetSiliconFlowAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func (h *SourceHandler) getUserOpenAIAPIKey(ctx context.Context, userID string) *string {
-	if h.settingsRepo == nil || h.cipher == nil {
-		return nil
-	}
-	enc, err := h.settingsRepo.GetOpenAIAPIKeyEncrypted(ctx, userID)
-	if err != nil || enc == nil || *enc == "" {
-		return nil
-	}
-	plain, err := h.cipher.DecryptString(*enc)
-	if err != nil {
-		return nil
-	}
-	plain = strings.TrimSpace(plain)
-	if plain == "" {
-		return nil
-	}
-	return &plain
-}
-
-func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, togetherAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, openAIAPIKey, model *string) (*string, *string, *string, *string, *string, *string, *string, *string, *string, *string, *string) {
-	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
-	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
-	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
-	hasFireworks := fireworksAPIKey != nil && strings.TrimSpace(*fireworksAPIKey) != ""
-	hasDeepSeek := deepseekAPIKey != nil && strings.TrimSpace(*deepseekAPIKey) != ""
-	hasAlibaba := alibabaAPIKey != nil && strings.TrimSpace(*alibabaAPIKey) != ""
-	hasMistral := mistralAPIKey != nil && strings.TrimSpace(*mistralAPIKey) != ""
-	hasTogether := togetherAPIKey != nil && strings.TrimSpace(*togetherAPIKey) != ""
-	hasXAI := xaiAPIKey != nil && strings.TrimSpace(*xaiAPIKey) != ""
-	hasZAI := zaiAPIKey != nil && strings.TrimSpace(*zaiAPIKey) != ""
-	hasOpenRouter := openRouterAPIKey != nil && strings.TrimSpace(*openRouterAPIKey) != ""
-	hasPoe := poeAPIKey != nil && strings.TrimSpace(*poeAPIKey) != ""
-	hasSiliconFlow := siliconFlowAPIKey != nil && strings.TrimSpace(*siliconFlowAPIKey) != ""
-	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
-	purpose := "source_suggestion"
-
-	selectByProvider := func(provider string, explicitModel *string) (*string, *string, *string, *string, *string, *string, *string, *string, *string, *string, *string) {
-		resolved := explicitModel
-		if resolved == nil || strings.TrimSpace(*resolved) == "" {
-			v := service.DefaultLLMModelForPurpose(provider, purpose)
-			resolved = &v
-		}
-		switch provider {
-		case "google":
-			if hasGoogle {
-				return nil, googleAPIKey, nil, nil, nil, nil, nil, nil, nil, nil, resolved
-			}
-		case "groq":
-			if hasGroq {
-				return nil, nil, groqAPIKey, nil, nil, nil, nil, nil, nil, nil, resolved
-			}
-		case "fireworks":
-			if hasFireworks {
-				return nil, nil, nil, fireworksAPIKey, nil, nil, nil, nil, nil, nil, resolved
-			}
-		case "deepseek":
-			if hasDeepSeek {
-				return nil, nil, nil, nil, deepseekAPIKey, nil, nil, nil, nil, nil, resolved
-			}
-		case "alibaba":
-			if hasAlibaba {
-				return nil, nil, nil, nil, nil, alibabaAPIKey, nil, nil, nil, nil, resolved
-			}
-		case "mistral":
-			if hasMistral {
-				return nil, nil, nil, nil, nil, nil, mistralAPIKey, nil, nil, nil, resolved
-			}
-		case "together":
-			if hasTogether {
-				return nil, nil, nil, nil, nil, nil, nil, nil, nil, togetherAPIKey, resolved
-			}
-		case "xai":
-			if hasXAI {
-				return nil, nil, nil, nil, nil, nil, nil, xaiAPIKey, nil, nil, resolved
-			}
-		case "zai":
-			if hasZAI {
-				return nil, nil, nil, nil, nil, nil, nil, nil, zaiAPIKey, nil, resolved
-			}
-		case "openrouter":
-			if hasOpenRouter {
-				return nil, nil, nil, nil, nil, nil, nil, nil, nil, openRouterAPIKey, resolved
-			}
-		case "poe":
-			if hasPoe {
-				return nil, nil, nil, nil, nil, nil, nil, nil, nil, poeAPIKey, resolved
-			}
-		case "siliconflow":
-			if hasSiliconFlow {
-				return nil, nil, nil, nil, nil, nil, nil, nil, nil, siliconFlowAPIKey, resolved
-			}
-		case "openai":
-			if hasOpenAI {
-				return nil, nil, nil, nil, nil, nil, nil, nil, nil, openAIAPIKey, resolved
-			}
-		case "anthropic":
-			if hasAnthropic {
-				return anthropicAPIKey, nil, nil, nil, nil, nil, nil, nil, nil, nil, resolved
-			}
-		}
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
-	}
-
-	// 明示モデルがある場合は基本的にそのプロバイダを優先。
-	// ただし指定プロバイダのキーが無い場合は、利用可能な側へフォールバックして
-	// 「AI提案がまったく動かない」状態を避ける。
-	if model != nil && strings.TrimSpace(*model) != "" {
-		preferredProvider := service.LLMProviderForModel(model)
-		if outAnthropic, outGoogle, outGroq, outFireworks, outDeepSeek, outAlibaba, outMistral, outXAI, outZAI, outOpenAI, resolved := selectByProvider(preferredProvider, model); resolved != nil {
-			return outAnthropic, outGoogle, outGroq, outFireworks, outDeepSeek, outAlibaba, outMistral, outXAI, outZAI, outOpenAI, resolved
-		}
-		for _, provider := range service.CostEfficientLLMProviders(preferredProvider) {
-			if outAnthropic, outGoogle, outGroq, outFireworks, outDeepSeek, outAlibaba, outMistral, outXAI, outZAI, outOpenAI, resolved := selectByProvider(provider, nil); resolved != nil {
-				return outAnthropic, outGoogle, outGroq, outFireworks, outDeepSeek, outAlibaba, outMistral, outXAI, outZAI, outOpenAI, resolved
-			}
-		}
-		return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, model
-	}
-
-	// モデル未指定時は、利用可能なキーに合わせて自動選択。
-	for _, provider := range service.CostEfficientLLMProviders("") {
-		if outAnthropic, outGoogle, outGroq, outFireworks, outDeepSeek, outAlibaba, outMistral, outXAI, outZAI, outOpenAI, resolved := selectByProvider(provider, nil); resolved != nil {
-			return outAnthropic, outGoogle, outGroq, outFireworks, outDeepSeek, outAlibaba, outMistral, outXAI, outZAI, outOpenAI, resolved
-		}
-	}
-	return nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
-}
-
-func (h *SourceHandler) buildSourceSuggestionFewShotExamples(
-	ctx context.Context,
-	userID string,
-) ([]service.RankFeedSuggestionsExample, []service.RankFeedSuggestionsExample) {
-	positiveRows, err := h.repo.RecommendedByUser(ctx, userID, 5)
-	if err != nil {
-		positiveRows = nil
-	}
-	negativeRows, err := h.repo.LowAffinityByUser(ctx, userID, 3)
-	if err != nil {
-		negativeRows = nil
-	}
-	positive := make([]service.RankFeedSuggestionsExample, 0, len(positiveRows))
-	for _, row := range positiveRows {
-		reason := fmt.Sprintf("読了%d / Fav%d / 直近親和%.2f", row.ReadCount30d, row.FavoriteCount30d, row.AffinityScore)
-		positive = append(positive, service.RankFeedSuggestionsExample{
-			URL:    row.URL,
-			Title:  row.Title,
-			Reason: reason,
-		})
-	}
-	negative := make([]service.RankFeedSuggestionsExample, 0, len(negativeRows))
-	for _, row := range negativeRows {
-		reason := fmt.Sprintf("読了%d / Fav%d / 直近親和%.2f", row.ReadCount30d, row.FavoriteCount30d, row.AffinityScore)
-		negative = append(negative, service.RankFeedSuggestionsExample{
-			URL:    row.URL,
-			Title:  row.Title,
-			Reason: reason,
-		})
-	}
-	return positive, negative
-}
-
-func (h *SourceHandler) expandSourceSuggestionsWithLLMSeeds(
-	ctx context.Context,
-	userID string,
-	sources []model.Source,
-	preferredTopics []string,
-	positiveExamples []service.RankFeedSuggestionsExample,
-	negativeExamples []service.RankFeedSuggestionsExample,
-	registered map[string]bool,
-	cands map[string]*sourceSuggestionAgg,
-	anthropicAPIKey *string,
-	googleAPIKey *string,
-	groqAPIKey *string,
-	fireworksAPIKey *string,
-	deepseekAPIKey *string,
-	alibabaAPIKey *string,
-	mistralAPIKey *string,
-	togetherAPIKey *string,
-	xaiAPIKey *string,
-	zaiAPIKey *string,
-	openAIAPIKey *string,
-	model *string,
-	remainingSuggestionBudget func() time.Duration,
-) (map[string]any, bool) {
-	if remainingSuggestionBudget == nil {
-		remainingSuggestionBudget = func() time.Duration { return 0 }
-	}
-	if remainingSuggestionBudget() <= 0 {
-		return map[string]any{
-			"warning": "source suggestion seed skipped due timeout budget",
-			"stage":   "seed_generation",
-		}, true
-	}
-	existing := make([]service.RankFeedSuggestionsExistingSource, 0, len(sources))
-	for _, s := range sources {
-		existing = append(existing, service.RankFeedSuggestionsExistingSource{URL: s.URL, Title: s.Title})
-	}
-	seedBudget := capDuration(25*time.Second, remainingSuggestionBudget())
-	if seedBudget <= 0 {
-		return map[string]any{
-			"warning": "source suggestion seed skipped due timeout budget",
-			"stage":   "seed_generation",
-		}, true
-	}
-	ctxSeed, cancelSeed := context.WithTimeout(ctx, seedBudget)
-	defer cancelSeed()
-	resp, err := h.worker.SuggestFeedSeedSitesWithModel(
-		ctxSeed,
-		existing,
-		preferredTopics,
-		positiveExamples,
-		negativeExamples,
-		anthropicAPIKey,
-		googleAPIKey,
-		groqAPIKey,
-		deepseekAPIKey,
-		alibabaAPIKey,
-		mistralAPIKey,
-		togetherAPIKey,
-		xaiAPIKey,
-		zaiAPIKey,
-		fireworksAPIKey,
-		openAIAPIKey,
-		model,
-	)
-	if err != nil || resp == nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return map[string]any{
-				"warning": "source suggestion seed generation timed out",
-				"stage":   "seed_generation",
-			}, true
-		}
-		if err != nil {
-			return map[string]any{
-				"error": err.Error(),
-				"stage": "seed_generation",
-			}, false
-		}
-		return map[string]any{
-			"error": "empty response from suggest-feed-seed-sites",
-			"stage": "seed_generation",
-		}, false
-	}
-	if remainingSuggestionBudget() <= 0 {
-		return map[string]any{
-			"warning": "source suggestion seed generation timed out",
-			"stage":   "seed_generation",
-		}, true
-	}
-	resp.LLM = service.NormalizeCatalogPricedUsage("source_suggestion", resp.LLM)
-	h.recordSourceSuggestionLLMUsage(ctx, userID, resp.LLM)
-	meta := llmUsageMetaMap(resp.LLM, "seed_generation")
-	if meta == nil {
-		meta = map[string]any{"stage": "seed_generation"}
-	}
-	meta["items_count"] = len(resp.Items)
-	seedItems := resp.Items
-	if len(seedItems) > 10 {
-		seedItems = seedItems[:10]
-	}
-	beforeCount := len(cands)
-	for _, seed := range seedItems {
-		seedURL := coerceHTTPURL(strings.TrimSpace(seed.URL))
-		if seedURL == "" {
-			continue
-		}
-		addedFromSeed := false
-		probeURLs := aiSeedFeedProbeURLs(seedURL)
-		if len(probeURLs) == 0 {
-			probeURLs = []string{seedURL}
-		}
-		if len(probeURLs) > 4 {
-			probeURLs = probeURLs[:4]
-		}
-		for _, probe := range probeURLs {
-			if remainingSuggestionBudget() <= 0 {
-				break
-			}
-			probeTimeout := capDuration(1500*time.Millisecond, remainingSuggestionBudget())
-			if probeTimeout <= 0 {
-				break
-			}
-			ctxOne, cancel := context.WithTimeout(ctx, probeTimeout)
-			feeds, err := discoverRSSFeeds(ctxOne, probe)
-			cancel()
-			if err != nil {
-				continue
-			}
-			for _, f := range feeds {
-				key := normalizeFeedURL(f.URL)
-				if key == "" || registered[key] {
-					continue
-				}
-				a := cands[key]
-				if a == nil {
-					a = &sourceSuggestionAgg{
-						URL:           f.URL,
-						Title:         f.Title,
-						Reasons:       map[string]bool{},
-						MatchedTopics: map[string]bool{},
-						SeedSourceIDs: map[string]bool{},
-					}
-					cands[key] = a
-				}
-				if a.Title == nil && f.Title != nil {
-					a.Title = f.Title
-				}
-				reason := "AI提案サイトから発見"
-				if strings.TrimSpace(seed.Reason) != "" {
-					reason = "AI候補: " + strings.TrimSpace(seed.Reason)
-				}
-				if !a.Reasons[reason] {
-					a.Reasons[reason] = true
-					a.Score += 6
-				}
-				for _, topic := range preferredTopics {
-					if sourceSuggestionTopicMatch(f, topic) && !a.MatchedTopics[topic] {
-						a.MatchedTopics[topic] = true
-						a.Score += 3
-					}
-				}
-				addedFromSeed = true
-			}
-		}
-		if remainingSuggestionBudget() <= 0 && !addedFromSeed {
-			meta = mergeLLMWarning(meta, "source suggestion timed out during AI seed probing", "seed_generation")
-		}
-		// Feed検出に失敗しても、AIシードURL自体を候補として残す。
-		// 登録時に再discoverを試みる前提で、候補ゼロ化を防ぐ。
-		if !addedFromSeed {
-			key := normalizeFeedURL(seedURL)
-			if key == "" || registered[key] {
-				continue
-			}
-			a := cands[key]
-			if a == nil {
-				a = &sourceSuggestionAgg{
-					URL:           seedURL,
-					Title:         seed.Title,
-					Reasons:       map[string]bool{},
-					MatchedTopics: map[string]bool{},
-					SeedSourceIDs: map[string]bool{},
-				}
-				cands[key] = a
-			}
-			if a.Title == nil && seed.Title != nil && strings.TrimSpace(*seed.Title) != "" {
-				a.Title = seed.Title
-			}
-			reason := "AI提案サイト（登録時にFeed検出）"
-			if strings.TrimSpace(seed.Reason) != "" {
-				reason = "AI候補: " + strings.TrimSpace(seed.Reason)
-			}
-			if !a.Reasons[reason] {
-				a.Reasons[reason] = true
-				a.Score += 4
-			}
-		}
-	}
-	if len(seedItems) == 0 {
-		meta = mergeLLMWarning(meta, "seed returned no items", "seed_generation")
-	} else if len(cands) == beforeCount {
-		meta = mergeLLMWarning(meta, "seed produced no usable candidates", "seed_generation")
-	}
-	return meta, false
-}
-
-func aiSeedFeedProbeURLs(raw string) []string {
-	u, err := url.Parse(coerceHTTPURL(strings.TrimSpace(raw)))
-	if err != nil || u.Host == "" {
-		return nil
-	}
-	if u.Scheme == "" {
-		u.Scheme = "https"
-	}
-	base := &url.URL{Scheme: u.Scheme, Host: u.Host}
-	seen := map[string]bool{}
-	var out []string
-	add := func(v string) {
-		v = strings.TrimSpace(v)
-		if v == "" || seen[v] {
-			return
-		}
-		seen[v] = true
-		out = append(out, v)
-	}
-	// First try the seed itself as-is.
-	add(u.String())
-	// Then try common feed endpoints on root.
-	for _, p := range []string{"/feed", "/rss", "/atom.xml", "/feed.xml", "/rss.xml", "/index.xml"} {
-		c := *base
-		c.Path = p
-		add(c.String())
-	}
-	return out
-}
-
-func coerceHTTPURL(raw string) string {
-	v := strings.TrimSpace(raw)
-	if v == "" {
-		return ""
-	}
-	u, err := url.Parse(v)
-	if err == nil && u.Host != "" {
-		if u.Scheme == "" {
-			u.Scheme = "https"
-		}
-		return u.String()
-	}
-	// Handle hostname-like text without scheme (e.g. "example.com")
-	if !strings.Contains(v, "://") && strings.Contains(v, ".") && !strings.ContainsAny(v, " \t\r\n") {
-		return "https://" + v
-	}
-	return ""
-}
-
-func capDuration(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func mergeLLMWarning(llmMeta map[string]any, warning string, stage string) map[string]any {
-	if llmMeta == nil {
-		llmMeta = map[string]any{}
-	}
-	existing, ok := llmMeta["warning"].(string)
-	if ok && existing != "" {
-		if !strings.Contains(existing, warning) {
-			llmMeta["warning"] = fmt.Sprintf("%s; %s", existing, warning)
-		}
-	} else {
-		llmMeta["warning"] = warning
-	}
-	if stage != "" {
-		llmMeta["stage"] = stage
-	}
-	return llmMeta
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func (h *SourceHandler) recordSourceSuggestionLLMUsage(ctx context.Context, userID string, llm *service.LLMUsage) {
-	llm = service.NormalizeCatalogPricedUsage("source_suggestion", llm)
-	if h.llmUsageRepo == nil || llm == nil {
-		return
-	}
-	if llm.Provider == "" || llm.Model == "" {
-		return
-	}
-	uid := userID
-	if err := h.llmUsageRepo.Insert(ctx, repository.LLMUsageLogInput{
-		UserID:                   &uid,
-		Provider:                 llm.Provider,
-		Model:                    llm.Model,
-		RequestedModel:           llm.RequestedModel,
-		ResolvedModel:            llm.ResolvedModel,
-		PricingModelFamily:       llm.PricingModelFamily,
-		PricingSource:            llm.PricingSource,
-		OpenRouterCostUSD:        llm.OpenRouterCostUSD,
-		OpenRouterGenerationID:   strings.TrimSpace(llm.OpenRouterGenerationID),
-		Purpose:                  "source_suggestion",
-		InputTokens:              llm.InputTokens,
-		OutputTokens:             llm.OutputTokens,
-		CacheCreationInputTokens: llm.CacheCreationInputTokens,
-		CacheReadInputTokens:     llm.CacheReadInputTokens,
-		EstimatedCostUSD:         llm.EstimatedCostUSD,
-	}); err != nil {
-		// Best-effort logging: don't fail source suggestions UI on usage log issues.
-		return
-	}
-	_ = service.BumpUserLLMUsageCacheVersion(ctx, h.cache, userID)
+	writeJSON(w, sourceRecommendResponse{Items: out, Limit: limit, LLM: llmMeta})
 }
 
 func (h *SourceHandler) Update(w http.ResponseWriter, r *http.Request) {

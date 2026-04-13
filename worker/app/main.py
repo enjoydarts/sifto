@@ -1,5 +1,6 @@
 import os
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -19,7 +20,27 @@ if _SENTRY_DSN:
         traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0")),
     )
 
-app = FastAPI(title="sifto-worker")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        langfuse_log_runtime_status()
+    except Exception as e:
+        _log.warning("failed to log langfuse runtime status: %s", e)
+    yield
+    langfuse_flush()
+
+
+app = FastAPI(title="sifto-worker", lifespan=lifespan)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    _log.error("unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "internal server error"},
+    )
 
 _INTERNAL_WORKER_SECRET = os.getenv("INTERNAL_WORKER_SECRET", "").strip()
 
@@ -103,18 +124,6 @@ async def langfuse_request_tracing(request: Request, call_next):
             langfuse_update_current(level="ERROR", status_message=_normalize_string_for_trace(str(e), 500))
             raise
 
-
-@app.on_event("shutdown")
-def flush_langfuse():
-    langfuse_flush()
-
-
-@app.on_event("startup")
-def log_langfuse_status():
-    try:
-        langfuse_log_runtime_status()
-    except Exception as e:
-        _log.warning("failed to log langfuse runtime status: %s", e)
 
 app.include_router(extract.router)
 app.include_router(facts.router)

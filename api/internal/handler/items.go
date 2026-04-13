@@ -38,6 +38,7 @@ type ItemHandler struct {
 	searchItems     *service.ItemSearchService
 	searchSuggest   *service.SearchSuggestionService
 	detail          *service.ItemDetailService
+	keyProvider     *service.UserKeyProvider
 }
 
 const itemsListCacheTTL = 30 * time.Second
@@ -370,6 +371,7 @@ func NewItemHandler(
 	worker *service.WorkerClient,
 	cache service.JSONCache,
 	search *service.MeilisearchService,
+	keyProvider *service.UserKeyProvider,
 ) *ItemHandler {
 	return &ItemHandler{
 		repo:            repo,
@@ -389,6 +391,7 @@ func NewItemHandler(
 		searchItems:     service.NewItemSearchService(search, repo),
 		searchSuggest:   service.NewSearchSuggestionService(search),
 		detail:          service.NewItemDetailService(repo),
+		keyProvider:     keyProvider,
 	}
 }
 
@@ -448,7 +451,7 @@ func (h *ItemHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID string, generatedAt time.Time, persona string) *model.ItemNavigator {
-	if h.detail == nil || h.settingsRepo == nil || h.worker == nil || h.cipher == nil {
+	if h.detail == nil || h.settingsRepo == nil || h.worker == nil || h.keyProvider == nil {
 		return nil
 	}
 	settings, err := h.settingsRepo.EnsureDefaults(ctx, userID)
@@ -484,33 +487,7 @@ func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID str
 		return nil
 	}
 
-	anthropicKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAnthropicAPIKeyEncrypted, h.cipher, userID, "")
-	googleKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetGoogleAPIKeyEncrypted, h.cipher, userID, "")
-	groqKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetGroqAPIKeyEncrypted, h.cipher, userID, "")
-	fireworksKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetFireworksAPIKeyEncrypted, h.cipher, userID, "")
-	deepseekKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetDeepSeekAPIKeyEncrypted, h.cipher, userID, "")
-	alibabaKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetAlibabaAPIKeyEncrypted, h.cipher, userID, "")
-	mistralKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMistralAPIKeyEncrypted, h.cipher, userID, "")
-	togetherKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetTogetherAPIKeyEncrypted, h.cipher, userID, "")
-	moonshotKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetMoonshotAPIKeyEncrypted, h.cipher, userID, "")
-	xaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetXAIAPIKeyEncrypted, h.cipher, userID, "")
-	zaiKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetZAIAPIKeyEncrypted, h.cipher, userID, "")
-	openRouterKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenRouterAPIKeyEncrypted, h.cipher, userID, "")
-	poeKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetPoeAPIKeyEncrypted, h.cipher, userID, "")
-	siliconFlowKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetSiliconFlowAPIKeyEncrypted, h.cipher, userID, "")
-	openAIKey, _ := loadAndDecryptUserSecret(ctx, h.settingsRepo.GetOpenAIAPIKeyEncrypted, h.cipher, userID, "")
-	switch service.LLMProviderForModel(modelName) {
-	case "openrouter":
-		openAIKey = openRouterKey
-	case "together":
-		openAIKey = togetherKey
-	case "moonshot":
-		openAIKey = moonshotKey
-	case "poe":
-		openAIKey = poeKey
-	case "siliconflow":
-		openAIKey = siliconFlowKey
-	}
+	nk := loadNavigatorKeys(ctx, h.keyProvider, userID, modelName)
 
 	var publishedAt *string
 	if item.PublishedAt != nil {
@@ -530,16 +507,16 @@ func (h *ItemHandler) buildItemNavigator(ctx context.Context, userID, itemID str
 			Facts:           facts,
 			PublishedAt:     publishedAt,
 		},
-		anthropicKey,
-		googleKey,
-		groqKey,
-		deepseekKey,
-		alibabaKey,
-		mistralKey,
-		xaiKey,
-		zaiKey,
-		fireworksKey,
-		openAIKey,
+		nk.anthropicKey,
+		nk.googleKey,
+		nk.groqKey,
+		nk.deepseekKey,
+		nk.alibabaKey,
+		nk.mistralKey,
+		nk.xaiKey,
+		nk.zaiKey,
+		nk.fireworksKey,
+		nk.openAIKey,
 		modelName,
 	)
 	if err != nil {
@@ -1079,7 +1056,7 @@ func (h *ItemHandler) refreshPreferenceProfileAsync(userID, itemID string) {
 	if userID == "" || itemID == "" || h.prefProfileRepo == nil {
 		return
 	}
-	go func() {
+	safeGo(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
@@ -1095,7 +1072,7 @@ func (h *ItemHandler) refreshPreferenceProfileAsync(userID, itemID string) {
 		if persistErr := h.repo.PersistPersonalScores(ctx, userID, []string{itemID}); persistErr != nil {
 			log.Printf("personal score persist failed user_id=%s item_id=%s err=%v", userID, itemID, persistErr)
 		}
-	}()
+	})
 }
 
 func (h *ItemHandler) TopicTrends(w http.ResponseWriter, r *http.Request) {
@@ -1110,10 +1087,7 @@ func (h *ItemHandler) TopicTrends(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{
-		"items": rows,
-		"limit": limit,
-	})
+	writeJSON(w, topicTrendsResponse{Items: rows, Limit: limit})
 }
 
 func (h *ItemHandler) TopicPulse(w http.ResponseWriter, r *http.Request) {
@@ -1133,11 +1107,7 @@ func (h *ItemHandler) TopicPulse(w http.ResponseWriter, r *http.Request) {
 		writeRepoError(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{
-		"days":  days,
-		"limit": limit,
-		"items": rows,
-	})
+	writeJSON(w, topicPulseResponse{Days: days, Limit: limit, Items: rows})
 }
 
 func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
@@ -1163,41 +1133,18 @@ func (h *ItemHandler) ReadingPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	cacheKey := cacheKeyReadingPlan(userID, params.Window, params.Size, params.DiversifyTopics, params.ExcludeRead, params.ExcludeLater)
 	cacheBust := q.Get("cache_bust") == "1"
-	if h.cache != nil && !cacheBust {
-		var cached model.ReadingPlanResponse
-		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
-			readingPlanCacheCounter.hits.Add(1)
-			incrCacheMetric(r.Context(), h.cache, userID, "reading_plan.hit")
-			log.Printf("reading-plan cache hit user_id=%s key=%s", userID, cacheKey)
-			writeJSON(w, &cached)
-			return
-		} else if err != nil {
-			readingPlanCacheCounter.errors.Add(1)
-			incrCacheMetric(r.Context(), h.cache, userID, "reading_plan.error")
-			log.Printf("reading-plan cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
-		}
-		readingPlanCacheCounter.misses.Add(1)
-		incrCacheMetric(r.Context(), h.cache, userID, "reading_plan.miss")
-		log.Printf("reading-plan cache miss user_id=%s key=%s", userID, cacheKey)
-	} else if cacheBust {
-		readingPlanCacheCounter.bypass.Add(1)
-		if h.cache != nil {
-			incrCacheMetric(r.Context(), h.cache, userID, "reading_plan.bypass")
-		}
-		log.Printf("reading-plan cache bypass user_id=%s key=%s", userID, cacheKey)
-	}
-
-	resp, err := h.repo.ReadingPlan(r.Context(), userID, params)
+	resp, err := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, 120*time.Second, func() (*model.ReadingPlanResponse, error) {
+		return h.repo.ReadingPlan(r.Context(), userID, params)
+	}, cacheFetchOptions{
+		cacheBust:    cacheBust,
+		metricPrefix: "reading_plan",
+		userID:       userID,
+		counter:      &readingPlanCacheCounter,
+		logKeyPrefix: "reading-plan",
+	})
 	if err != nil {
 		writeRepoError(w, err)
 		return
-	}
-	if h.cache != nil && resp != nil {
-		if err := h.cache.SetJSON(r.Context(), cacheKey, resp, 120*time.Second); err != nil {
-			readingPlanCacheCounter.errors.Add(1)
-			incrCacheMetric(r.Context(), h.cache, userID, "reading_plan.error")
-			log.Printf("reading-plan cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
-		}
 	}
 	writeJSON(w, resp)
 }
@@ -1244,14 +1191,14 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if resp == nil {
-		out := map[string]any{
-			"items":       []model.Item{},
-			"size":        size,
-			"window":      window,
-			"completed":   0,
-			"remaining":   0,
-			"total":       0,
-			"source_pool": 0,
+		out := focusQueueResponse{
+			Items:      []model.Item{},
+			Size:       size,
+			Window:     window,
+			Completed:  0,
+			Remaining:  0,
+			Total:      0,
+			SourcePool: 0,
 		}
 		if h.cache != nil {
 			if err := h.cache.SetJSON(r.Context(), cacheKey, out, focusQueueCacheTTL); err != nil {
@@ -1269,15 +1216,15 @@ func (h *ItemHandler) FocusQueue(w http.ResponseWriter, r *http.Request) {
 			completed++
 		}
 	}
-	out := map[string]any{
-		"items":            items,
-		"size":             size,
-		"window":           resp.Window,
-		"completed":        completed,
-		"remaining":        len(items) - completed,
-		"total":            len(items),
-		"source_pool":      resp.SourcePoolCount,
-		"diversify_topics": resp.DiversifyTopics,
+	out := focusQueueResponse{
+		Items:           items,
+		Size:            size,
+		Window:          resp.Window,
+		Completed:       completed,
+		Remaining:       len(items) - completed,
+		Total:           len(items),
+		SourcePool:      resp.SourcePoolCount,
+		DiversifyTopics: resp.DiversifyTopics,
 	}
 	if h.cache != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, out, focusQueueCacheTTL); err != nil {
@@ -1451,15 +1398,15 @@ func (h *ItemHandler) TriageAll(w http.ResponseWriter, r *http.Request) {
 		}
 		page++
 	}
-	out := map[string]any{
-		"items":            items,
-		"size":             len(items),
-		"window":           "all",
-		"completed":        0,
-		"remaining":        len(items),
-		"total":            len(items),
-		"source_pool":      0,
-		"diversify_topics": false,
+	out := focusQueueResponse{
+		Items:           items,
+		Size:            len(items),
+		Window:          "all",
+		Completed:       0,
+		Remaining:       len(items),
+		Total:           len(items),
+		SourcePool:      0,
+		DiversifyTopics: false,
 	}
 	if h.cache != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, out, triageAllCacheTTL); err != nil {
@@ -1665,11 +1612,11 @@ func (h *ItemHandler) Related(w http.ResponseWriter, r *http.Request) {
 	items = rerankAndFilterRelated(items, targetTopics, limit)
 	annotateRelatedReasons(items, targetTopics)
 	clusters := clusterRelatedItems(items)
-	out := map[string]any{
-		"items":    items,
-		"clusters": clusters,
-		"limit":    limit,
-		"item_id":  id,
+	out := relatedItemsResponse{
+		Items:    items,
+		Clusters: clusters,
+		Limit:    limit,
+		ItemID:   id,
 	}
 	if h.cache != nil {
 		if err := h.cache.SetJSON(r.Context(), cacheKey, out, relatedItemsCacheTTL); err != nil {
@@ -1923,7 +1870,7 @@ func (h *ItemHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
 		log.Printf("item-search upsert enqueue failed item_id=%s err=%v", id, err)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
-	writeJSON(w, map[string]any{"item_id": id, "is_read": true})
+	writeJSON(w, itemToggleResponse{ItemID: id, IsRead: true})
 }
 
 func (h *ItemHandler) MarkUnread(w http.ResponseWriter, r *http.Request) {
@@ -1943,7 +1890,7 @@ func (h *ItemHandler) MarkUnread(w http.ResponseWriter, r *http.Request) {
 		log.Printf("item-search upsert enqueue failed item_id=%s err=%v", id, err)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
-	writeJSON(w, map[string]any{"item_id": id, "is_read": false})
+	writeJSON(w, itemToggleResponse{ItemID: id, IsRead: false})
 }
 
 func (h *ItemHandler) MarkReadBulk(w http.ResponseWriter, r *http.Request) {
@@ -1977,7 +1924,7 @@ func (h *ItemHandler) MarkReadBulk(w http.ResponseWriter, r *http.Request) {
 			log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
 		}
 		h.invalidateUserCaches(r.Context(), userID)
-		writeJSON(w, map[string]any{"status": "ok", "updated_count": updated})
+		writeJSON(w, bulkStatusResponse{Status: "ok", UpdatedCount: updated})
 		return
 	}
 	if body.UnreadOnly && body.ReadOnly {
@@ -2002,7 +1949,7 @@ func (h *ItemHandler) MarkReadBulk(w http.ResponseWriter, r *http.Request) {
 		log.Printf("items-list version bump failed user_id=%s err=%v", userID, err)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
-	writeJSON(w, map[string]any{"status": "ok", "updated_count": updated})
+	writeJSON(w, bulkStatusResponse{Status: "ok", UpdatedCount: updated})
 }
 
 func (h *ItemHandler) MarkLater(w http.ResponseWriter, r *http.Request) {
@@ -2022,7 +1969,7 @@ func (h *ItemHandler) MarkLater(w http.ResponseWriter, r *http.Request) {
 		log.Printf("item-search upsert enqueue failed item_id=%s err=%v", id, err)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
-	writeJSON(w, map[string]any{"item_id": id, "is_later": true})
+	writeJSON(w, itemLaterResponse{ItemID: id, IsLater: true})
 }
 
 func (h *ItemHandler) UnmarkLater(w http.ResponseWriter, r *http.Request) {
@@ -2042,7 +1989,7 @@ func (h *ItemHandler) UnmarkLater(w http.ResponseWriter, r *http.Request) {
 		log.Printf("item-search upsert enqueue failed item_id=%s err=%v", id, err)
 	}
 	h.invalidateUserCaches(r.Context(), userID)
-	writeJSON(w, map[string]any{"item_id": id, "is_later": false})
+	writeJSON(w, itemLaterResponse{ItemID: id, IsLater: false})
 }
 
 func (h *ItemHandler) MarkLaterBulk(w http.ResponseWriter, r *http.Request) {
@@ -2076,7 +2023,7 @@ func (h *ItemHandler) MarkLaterBulk(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.invalidateUserCaches(r.Context(), userID)
-	writeJSON(w, map[string]any{"status": "ok", "updated_count": updated})
+	writeJSON(w, bulkStatusResponse{Status: "ok", UpdatedCount: updated})
 }
 
 func (h *ItemHandler) SetFeedback(w http.ResponseWriter, r *http.Request) {
@@ -2139,10 +2086,7 @@ func (h *ItemHandler) Retry(w http.ResponseWriter, r *http.Request) {
 		log.Printf("item-detail version bump failed item_id=%s err=%v", item.ID, err)
 	}
 	w.WriteHeader(http.StatusAccepted)
-	writeJSON(w, map[string]any{
-		"status":  "queued",
-		"item_id": item.ID,
-	})
+	writeJSON(w, retryItemResponse{Status: "queued", ItemID: item.ID})
 }
 
 func (h *ItemHandler) RetryFromFacts(w http.ResponseWriter, r *http.Request) {
@@ -2173,10 +2117,7 @@ func (h *ItemHandler) RetryFromFacts(w http.ResponseWriter, r *http.Request) {
 	}
 	h.invalidateUserCaches(r.Context(), userID)
 	w.WriteHeader(http.StatusAccepted)
-	writeJSON(w, map[string]any{
-		"status":  "queued",
-		"item_id": item.ID,
-	})
+	writeJSON(w, retryItemResponse{Status: "queued", ItemID: item.ID})
 }
 
 func (h *ItemHandler) RetryFromFactsBulk(w http.ResponseWriter, r *http.Request) {
@@ -2259,11 +2200,11 @@ func (h *ItemHandler) RetryFailed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusAccepted)
-	writeJSON(w, map[string]any{
-		"status":       "queued",
-		"source_id":    sourceID,
-		"matched":      len(items),
-		"queued_count": queued,
-		"failed_count": failed,
+	writeJSON(w, retryFailedResponse{
+		Status:      "queued",
+		SourceID:    sourceID,
+		Matched:     len(items),
+		QueuedCount: queued,
+		FailedCount: failed,
 	})
 }

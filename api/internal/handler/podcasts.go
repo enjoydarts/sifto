@@ -36,28 +36,21 @@ func (h *PodcastsHandler) Feed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := strings.TrimSpace(chi.URLParam(r, "slug"))
-	var result *service.PodcastFeedResult
 	cacheKey := cacheKeyPodcastFeed(slug)
-	if h.cache != nil && slug != "" {
-		var cached service.PodcastFeedResult
-		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
-			result = &cached
-		}
-	}
-	if result == nil {
-		built, err := h.feed.Build(r.Context(), slug)
-		if err != nil {
-			if errors.Is(err, repository.ErrNotFound) {
-				http.NotFound(w, r)
-				return
-			}
-			http.Error(w, "failed to build podcast feed", http.StatusInternalServerError)
+	result, err := cachedFetch(r.Context(), h.cache, cacheKey, podcastFeedCacheTTL, func() (*service.PodcastFeedResult, error) {
+		return h.feed.Build(r.Context(), slug)
+	})
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			http.NotFound(w, r)
 			return
 		}
-		result = built
-		if h.cache != nil && slug != "" {
-			_ = h.cache.SetJSON(r.Context(), cacheKey, result, podcastFeedCacheTTL)
-		}
+		http.Error(w, "failed to build podcast feed", http.StatusInternalServerError)
+		return
+	}
+	if result == nil {
+		http.Error(w, "failed to build podcast feed", http.StatusInternalServerError)
+		return
 	}
 	body := result.Body
 	sum := sha256.Sum256(body)

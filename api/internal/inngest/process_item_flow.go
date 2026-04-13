@@ -40,7 +40,7 @@ type processItemDeps struct {
 	openAI             *service.OpenAIClient
 	oneSignal          *service.OneSignalClient
 	publisher          *service.EventPublisher
-	secretCipher       *service.SecretCipher
+	keyProvider        *service.UserKeyProvider
 	cache              service.JSONCache
 	promptResolver     *service.PromptResolver
 	pickScoreThreshold float64
@@ -409,7 +409,7 @@ func extractAndPersistFacts(
 		var currentRuntime *llmRuntime
 		factsAttempt, err := step.Run(ctx, stepLabel, func(ctx context.Context) (*processFactsAttemptResult, error) {
 			log.Printf("process-item extract-facts start item_id=%s attempt=%d", itemID, attempt+1)
-			runtime, err := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, currentModelOverride, "facts")
+			runtime, err := resolveLLMRuntime(ctx, deps.keyProvider, userIDPtr, currentModelOverride, "facts")
 			if err != nil {
 				return nil, err
 			}
@@ -626,7 +626,7 @@ func summarizeAndPersistItem(
 		var primaryRuntime *llmRuntime
 		summaryAttempt, err := step.Run(ctx, stepLabel, func(ctx context.Context) (*processSummaryAttemptResult, error) {
 			log.Printf("process-item summarize start item_id=%s attempt=%d", itemID, attempt+1)
-			runtime, err := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, primaryModelOverride, "summary")
+			runtime, err := resolveLLMRuntime(ctx, deps.keyProvider, userIDPtr, primaryModelOverride, "summary")
 			if err != nil {
 				return nil, err
 			}
@@ -654,7 +654,7 @@ func summarizeAndPersistItem(
 				var fallbackRuntime *llmRuntime
 				fallbackAttempt, fallbackErr := step.Run(ctx, fallbackStepLabel, func(ctx context.Context) (*processSummaryAttemptResult, error) {
 					log.Printf("process-item summarize fallback start item_id=%s attempt=%d", itemID, attempt+1)
-					runtime, runtimeErr := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr, fallbackModelOverride, "summary")
+					runtime, runtimeErr := resolveLLMRuntime(ctx, deps.keyProvider, userIDPtr, fallbackModelOverride, "summary")
 					if runtimeErr != nil {
 						return nil, runtimeErr
 					}
@@ -941,7 +941,7 @@ func createEmbeddingIfPossible(
 	summary *service.SummarizeResponse,
 	facts []string,
 ) {
-	userOpenAIKey, err := loadUserOpenAIAPIKey(ctx, deps.userSettingsRepo, deps.secretCipher, userIDPtr)
+	userOpenAIKey, err := loadUserAPIKey(ctx, deps.keyProvider, userIDPtr, "openai")
 	if err != nil {
 		log.Printf("process-item embedding skip item_id=%s reason=%v", itemID, err)
 		return

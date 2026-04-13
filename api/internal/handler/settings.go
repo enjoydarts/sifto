@@ -64,7 +64,7 @@ type navigatorPersonaDefinition struct {
 }
 
 func NewSettingsHandler(repo *repository.UserSettingsRepo, userRepo *repository.UserRepo, audioBriefingRepo *repository.AudioBriefingRepo, summaryAudioRepo *repository.SummaryAudioVoiceSettingsRepo, aivisModelRepo *repository.AivisModelRepo, obsidianRepo *repository.ObsidianExportRepo, notificationRepo *repository.NotificationPriorityRepo, prefProfileRepo *repository.PreferenceProfileRepo, llmUsageRepo *repository.LLMUsageLogRepo, openRouterOverrideRepo *repository.OpenRouterModelOverrideRepo, cipher *service.SecretCipher, github *service.GitHubAppClient, obsidianExport *service.ObsidianExportService, worker *service.WorkerClient, cache service.JSONCache) *SettingsHandler {
-	return &SettingsHandler{
+	h := &SettingsHandler{
 		settings:          service.NewSettingsService(repo, userRepo, audioBriefingRepo, summaryAudioRepo, aivisModelRepo, obsidianRepo, llmUsageRepo, openRouterOverrideRepo, cipher, github),
 		podcastArtwork:    service.NewPodcastArtworkService(repo, worker),
 		aivisDictionaries: service.NewAivisUserDictionaryService(repo, cipher),
@@ -76,6 +76,8 @@ func NewSettingsHandler(repo *repository.UserSettingsRepo, userRepo *repository.
 		obsidianExport:    obsidianExport,
 		cache:             cache,
 	}
+	h.settings.SetNotificationRuleRepo(notificationRepo)
+	return h
 }
 
 func (h *SettingsHandler) settingsCacheKey(ctx context.Context, userID string) (string, error) {
@@ -104,29 +106,12 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if cacheKeyErr != nil {
 		log.Printf("settings cache key failed user_id=%s err=%v", userID, cacheKeyErr)
 	}
-	if h.cache != nil && cacheKeyErr == nil && r.URL.Query().Get("cache_bust") != "1" {
-		var cached service.SettingsGetPayload
-		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
-			writeJSON(w, &cached)
-			return
-		} else if err != nil {
-			log.Printf("settings cache get failed user_id=%s key=%s err=%v", userID, cacheKey, err)
-		}
-	}
-	payload, err := h.settings.Get(r.Context(), userID)
+	payload, err := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, settingsCacheTTL, func() (*service.SettingsGetPayload, error) {
+		return h.settings.Get(r.Context(), userID)
+	}, cacheFetchOptions{cacheBust: r.URL.Query().Get("cache_bust") == "1", cacheKeyErr: cacheKeyErr, logKeyPrefix: "settings"})
 	if err != nil {
 		http.Error(w, "failed to load settings", http.StatusInternalServerError)
 		return
-	}
-	if h.notificationRepo != nil {
-		if rule, ruleErr := h.notificationRepo.EnsureDefaults(r.Context(), userID); ruleErr == nil {
-			payload.NotificationPriority = serviceMapNotificationPriority(rule)
-		}
-	}
-	if h.cache != nil && cacheKeyErr == nil {
-		if err := h.cache.SetJSON(r.Context(), cacheKey, payload, settingsCacheTTL); err != nil {
-			log.Printf("settings cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
-		}
 	}
 	writeJSON(w, payload)
 }
@@ -188,7 +173,7 @@ func resolveNavigatorPersonasPath() (string, error) {
 func (h *SettingsHandler) InoreaderConnect(w http.ResponseWriter, r *http.Request) {
 	result, err := h.oauth.BuildConnect(r)
 	if err != nil {
-		if err.Error() == "inoreader oauth is not configured" {
+		if errors.Is(err, service.ErrInoreaderOAuthNotConfigured) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -250,9 +235,9 @@ func (h *SettingsHandler) DeleteInoreaderOAuth(w http.ResponseWriter, r *http.Re
 		log.Printf("settings version bump failed user_id=%s err=%v", userID, err)
 	}
 	writeJSON(w, map[string]any{
-		"user_id":                 settings.UserID,
-		"has_inoreader_oauth":     settings.HasInoreaderOAuth,
-		"inoreader_token_expires": settings.InoreaderTokenExpiresAt,
+		"user_id":                    settings.UserID,
+		"has_inoreader_oauth":        settings.HasInoreaderOAuth,
+		"inoreader_token_expires_at": settings.InoreaderTokenExpiresAt,
 	})
 }
 
@@ -348,7 +333,8 @@ func (h *SettingsHandler) UpdateLLMModels(w http.ResponseWriter, r *http.Request
 		TTSMarkupPreprocessModel:    body.TTSMarkupPreprocessModel,
 	})
 	if err != nil {
-		if strings.HasPrefix(err.Error(), "invalid model for ") || strings.HasPrefix(err.Error(), "model missing required capability for ") || err.Error() == "invalid embedding model" {
+		var mve *service.ModelValidationError
+		if errors.As(err, &mve) || errors.Is(err, service.ErrInvalidEmbeddingModel) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -399,8 +385,7 @@ func (h *SettingsHandler) UpdateAudioBriefing(w http.ResponseWriter, r *http.Req
 		BGMR2Prefix:                 body.BGMR2Prefix,
 	})
 	if err != nil {
-		switch err.Error() {
-		case "invalid schedule_mode", "invalid interval_hours", "invalid articles_per_episode", "invalid target_duration_minutes", "invalid chunk_trailing_silence_seconds", "invalid program_name", "invalid bgm_r2_prefix":
+		if service.IsUserError(err) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -477,7 +462,7 @@ func (h *SettingsHandler) UploadPodcastArtwork(w http.ResponseWriter, r *http.Re
 	}
 	artworkURL, err := h.podcastArtwork.Upload(r.Context(), userID, body.ContentType, body.ContentBase64)
 	if err != nil {
-		if strings.Contains(err.Error(), "unsupported podcast artwork content_type") || strings.Contains(err.Error(), "AUDIO_BRIEFING_PUBLIC_BASE_URL is not configured") || strings.Contains(err.Error(), "AUDIO_BRIEFING_PUBLIC_BUCKET is not configured") {
+		if errors.Is(err, service.ErrUnsupportedArtworkContentType) || errors.Is(err, service.ErrPublicBaseURLNotConfigured) || errors.Is(err, service.ErrPublicBucketNotConfigured) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -546,7 +531,7 @@ func (h *SettingsHandler) UpdateAudioBriefingPersonaVoices(w http.ResponseWriter
 	}
 	rows, err := h.settings.UpdateAudioBriefingPersonaVoices(r.Context(), userID, inputs)
 	if err != nil {
-		if strings.HasPrefix(err.Error(), "invalid ") || strings.HasPrefix(err.Error(), "duplicate persona voice:") || strings.HasPrefix(err.Error(), "aivis models are not synced") {
+		if service.IsUserError(err) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -618,7 +603,7 @@ func (h *SettingsHandler) UpdateSummaryAudioVoiceSettings(w http.ResponseWriter,
 		AivisUserDictionaryUUID:  body.AivisUserDictionaryUUID,
 	})
 	if err != nil {
-		if strings.HasPrefix(err.Error(), "invalid ") || strings.HasPrefix(err.Error(), "aivis models are not synced") {
+		if service.IsUserError(err) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -696,7 +681,7 @@ func (h *SettingsHandler) UpdateObsidianExport(w http.ResponseWriter, r *http.Re
 		KeywordLinkMode:  body.KeywordLinkMode,
 	})
 	if err != nil {
-		if err.Error() == "invalid keyword_link_mode" {
+		if errors.Is(err, service.ErrInvalidKeywordLinkMode) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -708,7 +693,7 @@ func (h *SettingsHandler) UpdateObsidianExport(w http.ResponseWriter, r *http.Re
 	}
 	writeJSON(w, map[string]any{
 		"user_id":         settings.UserID,
-		"obsidian_export": serviceMapObsidianExport(settings, h.github),
+		"obsidian_export": service.NewObsidianExportView(settings, h.github),
 	})
 }
 
@@ -753,7 +738,7 @@ func (h *SettingsHandler) UpdateNotificationPriority(w http.ResponseWriter, r *h
 	}
 	writeJSON(w, map[string]any{
 		"user_id":               userID,
-		"notification_priority": serviceMapNotificationPriority(rule),
+		"notification_priority": service.NewNotificationPriorityView(rule),
 	})
 }
 
@@ -778,49 +763,6 @@ func (h *SettingsHandler) RunObsidianExport(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, res)
-}
-
-func serviceMapObsidianExport(settings *model.ObsidianExportSettings, github *service.GitHubAppClient) map[string]any {
-	out := map[string]any{
-		"enabled":                settings.Enabled,
-		"github_installation_id": settings.GitHubInstallationID,
-		"github_repo_owner":      settings.GitHubRepoOwner,
-		"github_repo_name":       settings.GitHubRepoName,
-		"github_repo_branch":     settings.GitHubRepoBranch,
-		"vault_root_path":        settings.VaultRootPath,
-		"keyword_link_mode":      settings.KeywordLinkMode,
-		"last_run_at":            settings.LastRunAt,
-		"last_success_at":        settings.LastSuccessAt,
-	}
-	if github != nil {
-		out["github_app_enabled"] = github.Enabled()
-		out["github_app_install_url"] = github.InstallURL()
-	}
-	return out
-}
-
-func serviceMapNotificationPriority(rule *model.NotificationPriorityRule) map[string]any {
-	if rule == nil {
-		return map[string]any{
-			"sensitivity":        "medium",
-			"daily_cap":          3,
-			"theme_weight":       1.0,
-			"immediate_enabled":  true,
-			"briefing_enabled":   true,
-			"review_enabled":     true,
-			"goal_match_enabled": true,
-		}
-	}
-	return map[string]any{
-		"id":                 rule.ID,
-		"sensitivity":        rule.Sensitivity,
-		"daily_cap":          rule.DailyCap,
-		"theme_weight":       rule.ThemeWeight,
-		"immediate_enabled":  rule.ImmediateEnabled,
-		"briefing_enabled":   rule.BriefingEnabled,
-		"review_enabled":     rule.ReviewEnabled,
-		"goal_match_enabled": rule.GoalMatchEnabled,
-	}
 }
 
 func (h *SettingsHandler) UpdateBudget(w http.ResponseWriter, r *http.Request) {
@@ -867,7 +809,8 @@ func (h *SettingsHandler) UpdateUIFontSettings(w http.ResponseWriter, r *http.Re
 	}
 	settings, err := h.settings.UpdateUIFontSettings(r.Context(), userID, body)
 	if err != nil {
-		if err.Error() == "invalid ui_font_sans_key" || err.Error() == "invalid ui_font_serif_key" {
+		var ve *service.ValidationError
+		if errors.As(err, &ve) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -900,8 +843,8 @@ func (h *SettingsHandler) setAPIKey(w http.ResponseWriter, r *http.Request, prov
 	}
 	settings, err := h.settings.SetAPIKey(r.Context(), userID, provider, key)
 	if err != nil {
-		if err.Error() == "user secret encryption is not configured" {
-			http.Error(w, "user secret encryption is not configured", http.StatusInternalServerError)
+		if errors.Is(err, service.ErrSecretEncryptionNotConfigured) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -956,8 +899,8 @@ func (h *SettingsHandler) SetAzureSpeechConfig(w http.ResponseWriter, r *http.Re
 	}
 	settings, err := h.settings.SetAPIKey(r.Context(), userID, "azure_speech", apiKey)
 	if err != nil {
-		if err.Error() == "user secret encryption is not configured" {
-			http.Error(w, "user secret encryption is not configured", http.StatusInternalServerError)
+		if errors.Is(err, service.ErrSecretEncryptionNotConfigured) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -1258,17 +1201,16 @@ func (h *SettingsHandler) GetAivisUserDictionaries(w http.ResponseWriter, r *htt
 	userID := middleware.GetUserID(r)
 	items, err := h.aivisDictionaries.List(r.Context(), userID)
 	if err != nil {
-		switch err.Error() {
-		case "aivis api key is not configured":
+		if errors.Is(err, service.ErrAivisAPIKeyNotConfigured) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
-		case "user secret encryption is not configured":
+		}
+		if errors.Is(err, service.ErrSecretEncryptionNotConfigured) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
-		default:
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
 		}
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
 	}
 	writeJSON(w, map[string]any{"user_dictionaries": items})
 }
@@ -1284,7 +1226,7 @@ func (h *SettingsHandler) SetAivisUserDictionary(w http.ResponseWriter, r *http.
 	}
 	settings, err := h.settings.SetAivisUserDictionaryUUID(r.Context(), userID, body.AivisUserDictionaryUUID)
 	if err != nil {
-		if err.Error() == "aivis_user_dictionary_uuid is required" {
+		if errors.Is(err, service.ErrAivisDictionaryUUIDRequired) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

@@ -22,7 +22,7 @@ func (r *ItemRepo) LoadByIDsPreservingOrder(ctx context.Context, userID string, 
 		       (ir.item_id IS NOT NULL) AS is_read,
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
-		       sm.score, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
+		       sm.score, sm.personal_score, sm.personal_score_reason, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM ranked_ids rid
 		JOIN items i ON i.id = rid.item_id

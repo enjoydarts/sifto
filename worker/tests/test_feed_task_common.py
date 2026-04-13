@@ -133,7 +133,7 @@ class FeedTaskCommonTests(unittest.TestCase):
         self.assertEqual(path.as_posix(), "/app/shared/ai_navigator_personas.json")
 
     def test_shared_navigator_persona_definitions_include_audio_briefing_prompts(self):
-        path = Path(__file__).resolve().parents[3] / "shared" / "ai_navigator_personas.json"
+        path = Path(__file__).resolve().parents[2] / "shared" / "ai_navigator_personas.json"
         payload = json.loads(path.read_text(encoding="utf-8"))
 
         self.assertGreater(len(payload), 0)

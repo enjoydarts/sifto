@@ -1,5 +1,3 @@
-"use client";
-
 import type { ProviderModelChangeEvent, UserSettings } from "@/lib/api";
 import { DEFAULT_UI_FONT_SANS_KEY, DEFAULT_UI_FONT_SERIF_KEY, getUIFontByKey } from "@/lib/ui-fonts";
 

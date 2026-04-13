@@ -34,7 +34,7 @@ func executeLLMCheck[T any](ctx context.Context, deps processItemDeps, cfg llmCh
 	result, err := step.Run(ctx, stepName, func(ctx context.Context) (*T, error) {
 		runtime := cfg.defaultRuntime
 		if chooseModelOverride(cfg.modelOverride, nil) != nil {
-			resolved, resolveErr := resolveLLMRuntime(ctx, deps.userSettingsRepo, deps.secretCipher, cfg.userID, cfg.modelOverride, cfg.resolvePurpose)
+			resolved, resolveErr := resolveLLMRuntime(ctx, deps.keyProvider, cfg.userID, cfg.modelOverride, cfg.resolvePurpose)
 			if resolveErr != nil {
 				return nil, resolveErr
 			}

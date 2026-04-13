@@ -26,7 +26,7 @@ func PodcastArtworkExt(contentType string) (string, error) {
 	case "image/webp":
 		return ".webp", nil
 	default:
-		return "", fmt.Errorf("unsupported podcast artwork content_type")
+		return "", ErrUnsupportedArtworkContentType
 	}
 }
 
@@ -52,7 +52,7 @@ func (s *PodcastArtworkService) Upload(ctx context.Context, userID string, conte
 	}
 	publicBucket := AudioBriefingPublicBucketFromEnv()
 	if publicBucket == "" {
-		return nil, fmt.Errorf("AUDIO_BRIEFING_PUBLIC_BUCKET is not configured")
+		return nil, ErrPublicBucketNotConfigured
 	}
 	resp, err := s.worker.UploadAudioBriefingObject(ctx, publicBucket, objectKey, contentBase64, contentType)
 	if err != nil {
@@ -60,7 +60,7 @@ func (s *PodcastArtworkService) Upload(ctx context.Context, userID string, conte
 	}
 	publicURL := AudioBriefingPublicObjectURL(resp.ObjectKey)
 	if publicURL == nil {
-		return nil, fmt.Errorf("AUDIO_BRIEFING_PUBLIC_BASE_URL is not configured")
+		return nil, ErrPublicBaseURLNotConfigured
 	}
 	settings, err := s.repo.SetPodcastArtworkURL(ctx, userID, publicURL)
 	if err != nil {

@@ -98,6 +98,24 @@
       }
     },
     {
+      "id": "minimax",
+      "api_key_header": "x-minimax-api-key",
+      "match_exact": [
+        "MiniMax-M2.7",
+        "MiniMax-M2.7-highspeed",
+        "MiniMax-M2.5",
+        "MiniMax-M2.5-highspeed"
+      ],
+      "default_models": {
+        "facts": "MiniMax-M2.5-highspeed",
+        "summary": "MiniMax-M2.7",
+        "digest_cluster_draft": "MiniMax-M2.7",
+        "digest": "MiniMax-M2.7",
+        "ask": "MiniMax-M2.7-highspeed",
+        "source_suggestion": "MiniMax-M2.5-highspeed"
+      }
+    },
+    {
       "id": "moonshot",
       "api_key_header": "x-openai-api-key",
       "match_exact": [
@@ -1144,6 +1162,102 @@
         "pricing_source": "mistral_static_2026_03",
         "input_per_mtok_usd": 0.5,
         "output_per_mtok_usd": 1.5
+      }
+    },
+    {
+      "id": "MiniMax-M2.7",
+      "provider": "minimax",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "recommended",
+      "best_for": "balanced",
+      "highlights": ["jsonStable"],
+      "comment": "MiniMax の標準候補。要約・質問・ダイジェストを広く任せやすい主力モデルとして追加する。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "minimax_docs_2026_04",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 1.2,
+        "cache_write_per_mtok_usd": 0.375,
+        "cache_read_per_mtok_usd": 0.06
+      }
+    },
+    {
+      "id": "MiniMax-M2.7-highspeed",
+      "provider": "minimax",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "ask",
+      "highlights": ["fast", "jsonStable"],
+      "comment": "MiniMax の高速候補。Ask や応答速度を優先した比較で使いやすい highspeed 枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "minimax_docs_2026_04",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 2.4,
+        "cache_write_per_mtok_usd": 0.375,
+        "cache_read_per_mtok_usd": 0.06
+      }
+    },
+    {
+      "id": "MiniMax-M2.5",
+      "provider": "minimax",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": [],
+      "comment": "ひとつ前の安定世代。M2.7 系と見比べたい時の基準線として残す。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "minimax_docs_2026_04",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 1.2,
+        "cache_write_per_mtok_usd": 0.375,
+        "cache_read_per_mtok_usd": 0.03
+      }
+    },
+    {
+      "id": "MiniMax-M2.5-highspeed",
+      "provider": "minimax",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "facts",
+      "highlights": ["fast"],
+      "comment": "軽量寄りの既定候補。事実抽出やソース提案を速く回したい時の highspeed 枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": true
+      },
+      "pricing": {
+        "pricing_source": "minimax_docs_2026_04",
+        "input_per_mtok_usd": 0.6,
+        "output_per_mtok_usd": 2.4,
+        "cache_write_per_mtok_usd": 0.375,
+        "cache_read_per_mtok_usd": 0.03
       }
     },
     {

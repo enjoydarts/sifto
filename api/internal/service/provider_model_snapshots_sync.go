@@ -261,6 +261,9 @@ func (s *ProviderModelSnapshotSyncService) buildDiscoveryService(ctx context.Con
 		if keys.Mistral == "" {
 			keys.Mistral = s.loadUserKey(ctx, user.ID, s.settings.GetMistralAPIKeyEncrypted)
 		}
+		if keys.MiniMax == "" {
+			keys.MiniMax = s.loadUserKey(ctx, user.ID, s.settings.GetMiniMaxAPIKeyEncrypted)
+		}
 		if keys.Moonshot == "" {
 			keys.Moonshot = s.loadUserKey(ctx, user.ID, s.settings.GetMoonshotAPIKeyEncrypted)
 		}

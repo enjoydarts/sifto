@@ -17,6 +17,7 @@ type navigatorKeys struct {
 	mistralKey   *string
 	xaiKey       *string
 	zaiKey       *string
+	minimaxKey   *string
 	openAIKey    *string
 }
 
@@ -32,6 +33,7 @@ func loadNavigatorKeys(ctx context.Context, keyProvider *service.UserKeyProvider
 		mistralKey:   keys["mistral"],
 		xaiKey:       keys["xai"],
 		zaiKey:       keys["zai"],
+		minimaxKey:   keys["minimax"],
 		openAIKey:    keyProvider.ResolveOpenAIKey(keys, model),
 	}
 }
@@ -46,6 +48,7 @@ func (k navigatorKeys) hasAny() bool {
 		stringPtrNonEmpty(k.mistralKey) ||
 		stringPtrNonEmpty(k.xaiKey) ||
 		stringPtrNonEmpty(k.zaiKey) ||
+		stringPtrNonEmpty(k.minimaxKey) ||
 		stringPtrNonEmpty(k.openAIKey)
 }
 

@@ -349,6 +349,61 @@ func TestLLMModelSettingsPayloadIncludesFallbackModels(t *testing.T) {
 	}
 }
 
+func TestSettingsServiceSetAndDeleteMiniMaxAPIKey(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "settings-service-minimax-test-key")
+
+	svc := newSettingsServiceForTest(t)
+	svc.cipher = NewSecretCipher()
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+
+	settings, err := svc.SetAPIKey(ctx, userID, "minimax", "mini-max-secret")
+	if err != nil {
+		t.Fatalf("SetAPIKey(minimax) error = %v", err)
+	}
+	if !settings.HasMiniMaxAPIKey {
+		t.Fatal("HasMiniMaxAPIKey = false, want true")
+	}
+	if settings.MiniMaxAPIKeyLast4 == nil || *settings.MiniMaxAPIKeyLast4 != "cret" {
+		t.Fatalf("MiniMaxAPIKeyLast4 = %#v, want %q", settings.MiniMaxAPIKeyLast4, "cret")
+	}
+
+	settings, err = svc.DeleteAPIKey(ctx, userID, "minimax")
+	if err != nil {
+		t.Fatalf("DeleteAPIKey(minimax) error = %v", err)
+	}
+	if settings.HasMiniMaxAPIKey {
+		t.Fatal("HasMiniMaxAPIKey = true, want false")
+	}
+	if settings.MiniMaxAPIKeyLast4 != nil {
+		t.Fatalf("MiniMaxAPIKeyLast4 = %#v, want nil", settings.MiniMaxAPIKeyLast4)
+	}
+}
+
+func TestSettingsServiceGetIncludesMiniMaxAPIKeyPayload(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "settings-service-minimax-payload-key")
+
+	svc := newSettingsServiceForTest(t)
+	svc.cipher = NewSecretCipher()
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+
+	if _, err := svc.SetAPIKey(ctx, userID, "minimax", "payload-minimax-secret"); err != nil {
+		t.Fatalf("SetAPIKey(minimax) error = %v", err)
+	}
+
+	payload, err := svc.Get(ctx, userID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !payload.HasMiniMaxAPIKey {
+		t.Fatal("HasMiniMaxAPIKey = false, want true")
+	}
+	if payload.MiniMaxAPIKeyLast4 == nil || *payload.MiniMaxAPIKeyLast4 != "cret" {
+		t.Fatalf("MiniMaxAPIKeyLast4 = %#v, want %q", payload.MiniMaxAPIKeyLast4, "cret")
+	}
+}
+
 func TestUpdateLLMModelsAcceptsTTSMarkupPreprocessModel(t *testing.T) {
 	svc := newSettingsServiceForTest(t)
 	ctx := context.Background()

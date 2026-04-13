@@ -264,6 +264,8 @@ func buildSettingsModule(d *appDeps) appModule {
 				r.Delete("/alibaba-key", settingsH.DeleteAlibabaAPIKey)
 				r.Post("/mistral-key", settingsH.SetMistralAPIKey)
 				r.Delete("/mistral-key", settingsH.DeleteMistralAPIKey)
+				r.Post("/minimax-key", settingsH.SetMiniMaxAPIKey)
+				r.Delete("/minimax-key", settingsH.DeleteMiniMaxAPIKey)
 				r.Post("/moonshot-key", settingsH.SetMoonshotAPIKey)
 				r.Delete("/moonshot-key", settingsH.DeleteMoonshotAPIKey)
 				r.Post("/xai-key", settingsH.SetXAIAPIKey)

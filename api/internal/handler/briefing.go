@@ -588,6 +588,8 @@ func hasNavigatorProviderKey(settings *model.UserSettings, provider string) bool
 		return settings.HasTogetherAPIKey
 	case "moonshot":
 		return settings.HasMoonshotAPIKey
+	case "minimax":
+		return settings.HasMiniMaxAPIKey
 	case "xai":
 		return settings.HasXAIAPIKey
 	case "zai":

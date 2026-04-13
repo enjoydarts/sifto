@@ -439,6 +439,7 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 	mistralKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMistralAPIKeyEncrypted, o.cipher, userID, "")
 	togetherKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetTogetherAPIKeyEncrypted, o.cipher, userID, "")
 	moonshotKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMoonshotAPIKeyEncrypted, o.cipher, userID, "")
+	minimaxKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMiniMaxAPIKeyEncrypted, o.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetXAIAPIKeyEncrypted, o.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetZAIAPIKeyEncrypted, o.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenRouterAPIKeyEncrypted, o.cipher, userID, "")
@@ -490,6 +491,8 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 					effectiveOpenAIKey = togetherKey
 				case "moonshot":
 					effectiveOpenAIKey = moonshotKey
+				case "minimax":
+					effectiveOpenAIKey = minimaxKey
 				case "poe":
 					effectiveOpenAIKey = poeKey
 				case "siliconflow":
@@ -672,6 +675,7 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	mistralKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMistralAPIKeyEncrypted, o.cipher, job.UserID, "")
 	togetherKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetTogetherAPIKeyEncrypted, o.cipher, job.UserID, "")
 	moonshotKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMoonshotAPIKeyEncrypted, o.cipher, job.UserID, "")
+	minimaxKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMiniMaxAPIKeyEncrypted, o.cipher, job.UserID, "")
 	xaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetXAIAPIKeyEncrypted, o.cipher, job.UserID, "")
 	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetZAIAPIKeyEncrypted, o.cipher, job.UserID, "")
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenRouterAPIKeyEncrypted, o.cipher, job.UserID, "")
@@ -717,6 +721,8 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 				effectiveOpenAIKey = togetherKey
 			case "moonshot":
 				effectiveOpenAIKey = moonshotKey
+			case "minimax":
+				effectiveOpenAIKey = minimaxKey
 			case "poe":
 				effectiveOpenAIKey = poeKey
 			case "siliconflow":
@@ -1666,6 +1672,8 @@ func audioBriefingProviderLabel(provider string) string {
 		return "Mistral"
 	case "moonshot":
 		return "Moonshot"
+	case "minimax":
+		return "MiniMax"
 	case "together":
 		return "Together AI"
 	case "xai":
@@ -1965,6 +1973,8 @@ func hasAudioBriefingProviderKey(settings *model.UserSettings, provider string) 
 		return settings.HasTogetherAPIKey
 	case "moonshot":
 		return settings.HasMoonshotAPIKey
+	case "minimax":
+		return settings.HasMiniMaxAPIKey
 	case "xai":
 		return settings.HasXAIAPIKey
 	case "zai":

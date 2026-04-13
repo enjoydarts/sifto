@@ -72,6 +72,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var v model.UserSettings
 	var anthropicKeyEnc *string
 	var openAIKeyEnc *string
+	var miniMaxAPIKeyEnc *string
 	var googleAPIKeyEnc *string
 	var groqAPIKeyEnc *string
 	var deepseekAPIKeyEnc *string
@@ -96,6 +97,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       anthropic_api_key_last4,
 		       openai_api_key_enc,
 		       openai_api_key_last4,
+		       minimax_api_key_enc,
+		       minimax_api_key_last4,
 		       google_api_key_enc,
 		       google_api_key_last4,
 		       groq_api_key_enc,
@@ -191,6 +194,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.AnthropicAPIKeyLast4,
 		&openAIKeyEnc,
 		&v.OpenAIAPIKeyLast4,
+		&miniMaxAPIKeyEnc,
+		&v.MiniMaxAPIKeyLast4,
 		&googleAPIKeyEnc,
 		&v.GoogleAPIKeyLast4,
 		&groqAPIKeyEnc,
@@ -283,6 +288,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	}
 	v.HasAnthropicAPIKey = anthropicKeyEnc != nil && *anthropicKeyEnc != ""
 	v.HasOpenAIAPIKey = openAIKeyEnc != nil && *openAIKeyEnc != ""
+	v.HasMiniMaxAPIKey = miniMaxAPIKeyEnc != nil && *miniMaxAPIKeyEnc != ""
 	v.HasGoogleAPIKey = googleAPIKeyEnc != nil && *googleAPIKeyEnc != ""
 	v.HasGroqAPIKey = groqAPIKeyEnc != nil && *groqAPIKeyEnc != ""
 	v.HasDeepSeekAPIKey = deepseekAPIKeyEnc != nil && *deepseekAPIKeyEnc != ""
@@ -616,6 +622,26 @@ func (r *UserSettingsRepo) GetOpenAIAPIKeyEncrypted(ctx context.Context, userID 
 	var v *string
 	err := r.db.QueryRow(ctx, `
 		SELECT openai_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1`,
+		userID,
+	).Scan(&v)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
+func (r *UserSettingsRepo) GetMiniMaxAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT minimax_api_key_enc
 		FROM user_settings
 		WHERE user_id = $1`,
 		userID,
@@ -1083,6 +1109,22 @@ func (r *UserSettingsRepo) SetOpenAIAPIKey(ctx context.Context, userID, encrypte
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetMiniMaxAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, minimax_api_key_enc, minimax_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET minimax_api_key_enc = EXCLUDED.minimax_api_key_enc,
+		    minimax_api_key_last4 = EXCLUDED.minimax_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) SetGoogleAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, google_api_key_enc, google_api_key_last4)
@@ -1408,6 +1450,22 @@ func (r *UserSettingsRepo) ClearOpenAIAPIKey(ctx context.Context, userID string)
 		ON CONFLICT (user_id) DO UPDATE
 		SET openai_api_key_enc = NULL,
 		    openai_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearMiniMaxAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, minimax_api_key_enc, minimax_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET minimax_api_key_enc = NULL,
+		    minimax_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

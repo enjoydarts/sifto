@@ -777,6 +777,7 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 	mistralAPIKey *string,
 	togetherAPIKey *string,
 	moonshotAPIKey *string,
+	minimaxAPIKey *string,
 	openRouterAPIKey *string,
 	poeAPIKey *string,
 	siliconFlowAPIKey *string,
@@ -793,7 +794,7 @@ func (w *WorkerClient) RankFeedSuggestionsWithModel(
 		"positive_examples": positiveExamples,
 		"negative_examples": negativeExamples,
 		"model":             model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, selectOpenAICompatibleKey(model, togetherAPIKey, moonshotAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, openAIAPIKey), nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, selectOpenAICompatibleKey(model, togetherAPIKey, moonshotAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, minimaxAPIKey, openAIAPIKey), nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) SuggestFeedSeedSites(
@@ -836,6 +837,7 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 	mistralAPIKey *string,
 	togetherAPIKey *string,
 	moonshotAPIKey *string,
+	minimaxAPIKey *string,
 	openRouterAPIKey *string,
 	poeAPIKey *string,
 	siliconFlowAPIKey *string,
@@ -851,7 +853,7 @@ func (w *WorkerClient) SuggestFeedSeedSitesWithModel(
 		"positive_examples": positiveExamples,
 		"negative_examples": negativeExamples,
 		"model":             model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, selectOpenAICompatibleKey(model, togetherAPIKey, moonshotAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, openAIAPIKey), nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, selectOpenAICompatibleKey(model, togetherAPIKey, moonshotAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, minimaxAPIKey, openAIAPIKey), nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) GenerateBriefingNavigatorWithModel(
@@ -876,7 +878,7 @@ func (w *WorkerClient) GenerateBriefingNavigatorWithModel(
 		"candidates":    candidates,
 		"intro_context": introContext,
 		"model":         model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) ComposeAINavigatorBriefWithModel(
@@ -901,7 +903,7 @@ func (w *WorkerClient) ComposeAINavigatorBriefWithModel(
 		"candidates":    candidates,
 		"intro_context": introContext,
 		"model":         model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) GenerateSourceNavigatorWithModel(
@@ -945,9 +947,7 @@ func (w *WorkerClient) GenerateSourceNavigatorWithModel(
 	if fireworksAPIKey != "" {
 		headers["X-Fireworks-Api-Key"] = fireworksAPIKey
 	}
-	if openAIAPIKey != "" {
-		headers["X-OpenAI-Api-Key"] = openAIAPIKey
-	}
+	setOpenAICompatibleAPIKeyHeader(headers, model, stringPtrOrNil(strings.TrimSpace(openAIAPIKey)))
 	return postWithHeaders[SourceNavigatorResponse](ctx, w, "/source-navigator", map[string]any{
 		"persona":    persona,
 		"candidates": candidates,
@@ -975,7 +975,7 @@ func (w *WorkerClient) GenerateItemNavigatorWithModel(
 		"persona": persona,
 		"article": article,
 		"model":   model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) GenerateAudioBriefingScriptWithModel(
@@ -1022,7 +1022,7 @@ func (w *WorkerClient) GenerateAudioBriefingScriptWithModel(
 		"include_article_segments": includeArticleSegments,
 		"include_ending":           includeEnding,
 		"prompt":                   prompt,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) SynthesizeAudioBriefingUpload(
@@ -1412,9 +1412,7 @@ func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *st
 	if fireworksAPIKey != nil && *fireworksAPIKey != "" {
 		headers["X-Fireworks-Api-Key"] = *fireworksAPIKey
 	}
-	if openAIAPIKey != nil && *openAIAPIKey != "" {
-		headers["X-Openai-Api-Key"] = *openAIAPIKey
-	}
+	setOpenAICompatibleAPIKeyHeader(headers, nil, openAIAPIKey)
 	if aivisAPIKey != nil && *aivisAPIKey != "" {
 		headers["X-Aivis-Api-Key"] = *aivisAPIKey
 	}
@@ -1430,7 +1428,30 @@ func workerHeaders(anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *st
 	return headers
 }
 
-func selectOpenAICompatibleKey(model *string, togetherAPIKey *string, moonshotAPIKey *string, openRouterAPIKey *string, poeAPIKey *string, siliconFlowAPIKey *string, openAIAPIKey *string) *string {
+func workerHeadersForModel(model *string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, aivisAPIKey *string, fishAudioAPIKey *string, elevenLabsAPIKey *string, internalSecret string) map[string]string {
+	headers := workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, nil, aivisAPIKey, fishAudioAPIKey, elevenLabsAPIKey, internalSecret)
+	if headers == nil && openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != "" {
+		headers = map[string]string{}
+	}
+	setOpenAICompatibleAPIKeyHeader(headers, model, openAIAPIKey)
+	if len(headers) == 0 {
+		return nil
+	}
+	return headers
+}
+
+func setOpenAICompatibleAPIKeyHeader(headers map[string]string, model *string, openAIAPIKey *string) {
+	if headers == nil || openAIAPIKey == nil || strings.TrimSpace(*openAIAPIKey) == "" {
+		return
+	}
+	if LLMProviderForModel(model) == "minimax" {
+		headers["X-Minimax-Api-Key"] = strings.TrimSpace(*openAIAPIKey)
+		return
+	}
+	headers["X-Openai-Api-Key"] = strings.TrimSpace(*openAIAPIKey)
+}
+
+func selectOpenAICompatibleKey(model *string, togetherAPIKey *string, moonshotAPIKey *string, openRouterAPIKey *string, poeAPIKey *string, siliconFlowAPIKey *string, minimaxAPIKey *string, openAIAPIKey *string) *string {
 	switch LLMProviderForModel(model) {
 	case "together":
 		if togetherAPIKey != nil && strings.TrimSpace(*togetherAPIKey) != "" {
@@ -1451,6 +1472,10 @@ func selectOpenAICompatibleKey(model *string, togetherAPIKey *string, moonshotAP
 	case "siliconflow":
 		if siliconFlowAPIKey != nil && strings.TrimSpace(*siliconFlowAPIKey) != "" {
 			return siliconFlowAPIKey
+		}
+	case "minimax":
+		if minimaxAPIKey != nil && strings.TrimSpace(*minimaxAPIKey) != "" {
+			return minimaxAPIKey
 		}
 	}
 	return openAIAPIKey

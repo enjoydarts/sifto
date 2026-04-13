@@ -8,7 +8,7 @@ _PROVIDER_MODULE_MAP = {
 
 _DEFAULT_PROVIDERS = [
     "anthropic", "google", "fireworks", "groq", "deepseek", "alibaba",
-    "mistral", "together", "moonshot", "xai", "zai", "openrouter",
+    "mistral", "together", "moonshot", "minimax", "xai", "zai", "openrouter",
     "poe", "siliconflow", "openai",
 ]
 

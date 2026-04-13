@@ -55,6 +55,24 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("mistral-small-2603"); got == nil {
 		t.Fatal("mistral-small-2603 not found in catalog")
 	}
+	if got := findModelCatalog("MiniMax-M2.7"); got == nil {
+		t.Fatal("MiniMax-M2.7 not found in catalog")
+	}
+	if got := findModelCatalog(MiniMaxAliasModelID("MiniMax-M2.7")); got == nil {
+		t.Fatal("minimax::MiniMax-M2.7 not found in catalog")
+	}
+	if got := findModelCatalog("minimax/MiniMax-M2.7"); got == nil {
+		t.Fatal("minimax/MiniMax-M2.7 not found in catalog")
+	}
+	if got := findModelCatalog("MiniMax-M2.7-highspeed"); got == nil {
+		t.Fatal("MiniMax-M2.7-highspeed not found in catalog")
+	}
+	if got := findModelCatalog("MiniMax-M2.5"); got == nil {
+		t.Fatal("MiniMax-M2.5 not found in catalog")
+	}
+	if got := findModelCatalog("MiniMax-M2.5-highspeed"); got == nil {
+		t.Fatal("MiniMax-M2.5-highspeed not found in catalog")
+	}
 	if got := findModelCatalog("gemma-4-31b-it"); got == nil {
 		t.Fatal("gemma-4-31b-it not found in catalog")
 	}
@@ -88,6 +106,12 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "qwen3.6-plus", provider: "alibaba"},
 		{model: "mistral-small-2506", provider: "mistral"},
 		{model: "mistral-small-2603", provider: "mistral"},
+		{model: "MiniMax-M2.7", provider: "minimax"},
+		{model: MiniMaxAliasModelID("MiniMax-M2.7"), provider: "minimax"},
+		{model: "minimax/MiniMax-M2.7", provider: "minimax"},
+		{model: "MiniMax-M2.7-highspeed", provider: "minimax"},
+		{model: "MiniMax-M2.5", provider: "minimax"},
+		{model: "MiniMax-M2.5-highspeed", provider: "minimax"},
 		{model: "grok-4-fast-non-reasoning", provider: "xai"},
 		{model: "grok-4.20-0309-non-reasoning", provider: "xai"},
 		{model: "grok-4.20-0309-reasoning", provider: "xai"},
@@ -100,6 +124,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "kimi-k2.5", provider: "moonshot"},
 		{model: "kimi-k2-0905-preview", provider: "moonshot"},
 		{model: "kimi-k2-thinking-turbo", provider: "moonshot"},
+		{model: "MiniMax-M2.5", provider: "minimax"},
+		{model: "MiniMax-M2.7", provider: "minimax"},
 		{model: TogetherAliasModelID("moonshotai/Kimi-K2.5"), provider: "together"},
 		{model: TogetherAliasModelID("zai-org/GLM-5.1"), provider: "together"},
 		{model: TogetherAliasModelID("openai/gpt-oss-120b"), provider: "together"},
@@ -131,6 +157,11 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{provider: "mistral", purpose: "digest", want: "mistral-medium-2508"},
 		{provider: "mistral", purpose: "ask", want: "mistral-small-2603"},
 		{provider: "mistral", purpose: "source_suggestion", want: "mistral-small-2603"},
+		{provider: "minimax", purpose: "facts", want: "MiniMax-M2.5-highspeed"},
+		{provider: "minimax", purpose: "summary", want: "MiniMax-M2.7"},
+		{provider: "minimax", purpose: "digest", want: "MiniMax-M2.7"},
+		{provider: "minimax", purpose: "ask", want: "MiniMax-M2.7-highspeed"},
+		{provider: "minimax", purpose: "source_suggestion", want: "MiniMax-M2.5-highspeed"},
 		{provider: "xai", purpose: "facts", want: "grok-4-fast-non-reasoning"},
 		{provider: "zai", purpose: "ask", want: "glm-5-turbo"},
 		{provider: "fireworks", purpose: "ask", want: "fireworks/kimi-k2-instruct-0905"},

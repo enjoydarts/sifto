@@ -15,7 +15,7 @@ import {
   YAxis,
   ZAxis,
 } from "recharts";
-import { formatModelDisplayName, providerLabel } from "@/lib/model-display";
+import { formatModelDisplayName, normalizeProvider, providerLabel } from "@/lib/model-display";
 import ModelSelect from "@/components/settings/model-select";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
@@ -31,7 +31,7 @@ function fmtNum(v: number) {
 }
 
 function providerColor(provider: string) {
-  switch (provider) {
+  switch (normalizeProvider(provider)) {
     case "openai":
       return "#10b981";
     case "anthropic":
@@ -44,6 +44,8 @@ function providerColor(provider: string) {
       return "#ef4444";
     case "alibaba":
       return "#14b8a6";
+    case "minimax":
+      return "#65a30d";
     case "mistral":
       return "#fb7185";
     case "together":

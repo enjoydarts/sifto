@@ -11,6 +11,7 @@ export type AccessProviderID =
   | "deepseek"
   | "alibaba"
   | "mistral"
+  | "minimax"
   | "moonshot"
   | "xai"
   | "zai"
@@ -138,6 +139,14 @@ const ACCESS_CARD_METADATA: AccessCardMetadata[] = [
     notSetKey: "settings.alibabaNotSet",
     placeholder: "sk-...",
     selectStatus: (settings) => ({ configured: settings.has_alibaba_api_key, last4: settings.alibaba_api_key_last4 }),
+  },
+  {
+    id: "minimax",
+    titleKey: "settings.minimaxTitle",
+    descriptionKey: "settings.minimaxDescription",
+    notSetKey: "settings.minimaxNotSet",
+    placeholder: "sk-...",
+    selectStatus: (settings) => ({ configured: settings.has_minimax_api_key, last4: settings.minimax_api_key_last4 }),
   },
   {
     id: "mistral",

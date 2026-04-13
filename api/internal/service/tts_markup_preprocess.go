@@ -215,6 +215,8 @@ func (s *TTSMarkupPreprocessService) loadProviderKey(ctx context.Context, userID
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetTogetherAPIKeyEncrypted, s.cipher, userID, "together api key is not configured")
 	case "moonshot":
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetMoonshotAPIKeyEncrypted, s.cipher, userID, "moonshot api key is not configured")
+	case "minimax":
+		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetMiniMaxAPIKeyEncrypted, s.cipher, userID, "minimax api key is not configured")
 	case "xai":
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetXAIAPIKeyEncrypted, s.cipher, userID, "xai api key is not configured")
 	case "zai":
@@ -269,6 +271,8 @@ func hasFishPreprocessProviderKey(settings *model.UserSettings, provider string)
 		return settings.HasTogetherAPIKey
 	case "moonshot":
 		return settings.HasMoonshotAPIKey
+	case "minimax":
+		return settings.HasMiniMaxAPIKey
 	case "xai":
 		return settings.HasXAIAPIKey
 	case "zai":

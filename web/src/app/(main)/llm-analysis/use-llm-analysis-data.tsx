@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ItemDetail, LLMExecutionCurrentMonthSummary, LLMUsageAnalysisSummary } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
 import { type ModelOption } from "@/components/settings/model-select";
-import { formatModelDisplayName, providerLabel } from "@/lib/model-display";
+import { formatModelDisplayName, normalizeProvider, providerLabel } from "@/lib/model-display";
 
 export function fmtUSD(v: number) {
   return `$${v.toFixed(6)}`;
@@ -102,25 +102,34 @@ export function useLLMAnalysisPageData() {
     load(Number(days));
   }, [days, load]);
 
-  const providers = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.provider))).sort((a, b) => a.localeCompare(b)),
+  const normalizedRows = useMemo(
+    () => rows.map((row) => ({ ...row, provider: normalizeProvider(row.provider) })),
     [rows]
   );
+  const normalizedExecutionRows = useMemo(
+    () => executionRows.map((row) => ({ ...row, provider: normalizeProvider(row.provider) })),
+    [executionRows]
+  );
+
+  const providers = useMemo(
+    () => Array.from(new Set(normalizedRows.map((row) => row.provider))).sort((a, b) => a.localeCompare(b)),
+    [normalizedRows]
+  );
   const purposes = useMemo(
-    () => Array.from(new Set(rows.map((row) => row.purpose))).sort((a, b) => a.localeCompare(b)),
-    [rows]
+    () => Array.from(new Set(normalizedRows.map((row) => row.purpose))).sort((a, b) => a.localeCompare(b)),
+    [normalizedRows]
   );
 
   const enrichedRows = useMemo<AnalysisRow[]>(() => {
-    const totalCost = rows.reduce((acc, row) => acc + row.estimated_cost_usd, 0);
-    return rows.map((row) => ({
+    const totalCost = normalizedRows.reduce((acc, row) => acc + row.estimated_cost_usd, 0);
+    return normalizedRows.map((row) => ({
       ...row,
       avg_input_tokens_per_call: row.calls > 0 ? row.input_tokens / row.calls : 0,
       avg_output_tokens_per_call: row.calls > 0 ? row.output_tokens / row.calls : 0,
       avg_cost_per_call_usd: row.calls > 0 ? row.estimated_cost_usd / row.calls : 0,
       cost_share_pct: totalCost > 0 ? (row.estimated_cost_usd / totalCost) * 100 : 0,
     }));
-  }, [rows]);
+  }, [normalizedRows]);
 
   const filteredRows = useMemo(() => {
     return enrichedRows
@@ -280,7 +289,7 @@ export function useLLMAnalysisPageData() {
         emptyResponses: number;
       }
     >();
-    for (const row of executionRows) {
+    for (const row of normalizedExecutionRows) {
       const key = `${row.provider}:${row.model}:${row.purpose}`;
       const current = map.get(key) ?? { attempts: 0, failures: 0, retries: 0, emptyResponses: 0 };
       current.attempts += row.attempts;
@@ -290,7 +299,7 @@ export function useLLMAnalysisPageData() {
       map.set(key, current);
     }
     return map;
-  }, [executionRows]);
+  }, [normalizedExecutionRows]);
 
   const rankingRows = useMemo<RankedModelRow[]>(() => {
     const grouped = new Map<
@@ -521,7 +530,7 @@ export function useLLMAnalysisPageData() {
           new Set(
             (logs ?? [])
               .filter((log) => log.item_id)
-              .filter((log) => log.provider === selectedRankingRow.provider)
+              .filter((log) => normalizeProvider(log.provider) === selectedRankingRow.provider)
               .filter((log) => log.model === selectedRankingRow.model)
               .filter((log) => log.purpose === selectedRankingRow.purpose)
               .map((log) => log.item_id as string)

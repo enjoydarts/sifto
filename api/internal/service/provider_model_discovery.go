@@ -34,6 +34,7 @@ type ProviderModelDiscoveryKeys struct {
 	DeepSeek    string
 	Alibaba     string
 	Mistral     string
+	MiniMax     string
 	Moonshot    string
 	SiliconFlow string
 	XAI         string
@@ -70,6 +71,7 @@ func (s *ProviderModelDiscoveryService) DiscoverAll(ctx context.Context) ([]Prov
 		{"alibaba", s.fetchAlibabaModels},
 		{"deepseek", s.fetchDeepSeekModels},
 		{"mistral", s.fetchMistralModels},
+		{"minimax", s.fetchMiniMaxModels},
 		{"moonshot", s.fetchMoonshotModels},
 		{"siliconflow", s.fetchSiliconFlowModels},
 		{"zai", s.fetchZAIModels},
@@ -441,6 +443,19 @@ func normalizeTogetherAPIBaseURL(raw string) string {
 	return base
 }
 
+func normalizeMiniMaxAPIBaseURL(raw string) string {
+	base := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if base == "" {
+		return "https://api.minimax.io"
+	}
+	for _, suffix := range []string{"/v1/chat/completions", "/chat/completions", "/v1"} {
+		if strings.HasSuffix(base, suffix) {
+			return strings.TrimSuffix(base, suffix)
+		}
+	}
+	return base
+}
+
 func (s *ProviderModelDiscoveryService) fetchDeepSeekModels(ctx context.Context) ([]string, error) {
 	apiKey := strings.TrimSpace(s.keys.DeepSeek)
 	if apiKey == "" {
@@ -679,6 +694,31 @@ func (s *ProviderModelDiscoveryService) fetchMistralModels(ctx context.Context) 
 		models = append(models, item.ID)
 	}
 	return normalizeModelIDs(models), nil
+}
+
+func (s *ProviderModelDiscoveryService) fetchMiniMaxModels(ctx context.Context) ([]string, error) {
+	apiKey := strings.TrimSpace(s.keys.MiniMax)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("MINIMAX_API_KEY"))
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("api key is required")
+	}
+	base := normalizeMiniMaxAPIBaseURL(os.Getenv("MINIMAX_API_BASE_URL"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	var models []string
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		var err error
+		models, err = readModelsListResponse(resp)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return models, nil
 }
 
 func (s *ProviderModelDiscoveryService) fetchXAIModels(ctx context.Context) ([]string, error) {

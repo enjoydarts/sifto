@@ -257,6 +257,7 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 	mistralKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetMistralAPIKeyEncrypted, s.cipher, userID, "")
 	togetherKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetTogetherAPIKeyEncrypted, s.cipher, userID, "")
 	moonshotKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetMoonshotAPIKeyEncrypted, s.cipher, userID, "")
+	minimaxKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetMiniMaxAPIKeyEncrypted, s.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetXAIAPIKeyEncrypted, s.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetZAIAPIKeyEncrypted, s.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenRouterAPIKeyEncrypted, s.cipher, userID, "")
@@ -275,6 +276,8 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 		openAIKey = togetherKey
 	case "moonshot":
 		openAIKey = moonshotKey
+	case "minimax":
+		openAIKey = minimaxKey
 	case "poe":
 		openAIKey = poeKey
 	case "siliconflow":
@@ -439,6 +442,7 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 	mistralKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetMistralAPIKeyEncrypted, s.cipher, userID, "")
 	togetherKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetTogetherAPIKeyEncrypted, s.cipher, userID, "")
 	moonshotKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetMoonshotAPIKeyEncrypted, s.cipher, userID, "")
+	minimaxKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetMiniMaxAPIKeyEncrypted, s.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetXAIAPIKeyEncrypted, s.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetZAIAPIKeyEncrypted, s.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenRouterAPIKeyEncrypted, s.cipher, userID, "")
@@ -452,6 +456,8 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 		openAIKey = togetherKey
 	case "moonshot":
 		openAIKey = moonshotKey
+	case "minimax":
+		openAIKey = minimaxKey
 	case "poe":
 		openAIKey = poeKey
 	case "siliconflow":
@@ -867,6 +873,8 @@ func hasAINavigatorBriefProviderKey(settings *model.UserSettings, provider strin
 		return settings.HasTogetherAPIKey
 	case "moonshot":
 		return settings.HasMoonshotAPIKey
+	case "minimax":
+		return settings.HasMiniMaxAPIKey
 	case "xai":
 		return settings.HasXAIAPIKey
 	case "zai":

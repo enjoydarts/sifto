@@ -140,6 +140,7 @@ func TestSelectSourceSuggestionLLMResolvesOpenAICompatibleProviders(t *testing.T
 				strPtr("moonshot-key"),
 				nil,
 				nil,
+				nil,
 				strPtr("openrouter-key"),
 				strPtr("poe-key"),
 				strPtr("siliconflow-key"),

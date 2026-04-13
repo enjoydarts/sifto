@@ -7,6 +7,8 @@ OPENROUTER_ALIAS_PREFIX = "openrouter::"
 POE_ALIAS_PREFIX = "poe::"
 SILICONFLOW_ALIAS_PREFIX = "siliconflow::"
 TOGETHER_ALIAS_PREFIX = "together::"
+MINIMAX_ALIAS_PREFIX = "minimax::"
+MINIMAX_SLASH_PREFIX = "minimax/"
 
 
 def resolve_model_id(model: str | None) -> str:
@@ -19,6 +21,10 @@ def resolve_model_id(model: str | None) -> str:
         return m[len(SILICONFLOW_ALIAS_PREFIX) :]
     if m.startswith(TOGETHER_ALIAS_PREFIX):
         return m[len(TOGETHER_ALIAS_PREFIX) :]
+    if m.startswith(MINIMAX_ALIAS_PREFIX):
+        return m[len(MINIMAX_ALIAS_PREFIX) :]
+    if m.startswith(MINIMAX_SLASH_PREFIX):
+        return m[len(MINIMAX_SLASH_PREFIX) :]
     return m
 
 
@@ -59,6 +65,8 @@ def provider_for_model(model: str | None) -> str:
         return "siliconflow"
     if m.startswith(TOGETHER_ALIAS_PREFIX):
         return "together"
+    if m.startswith(MINIMAX_ALIAS_PREFIX) or m.startswith(MINIMAX_SLASH_PREFIX):
+        return "minimax"
     catalog = load_llm_catalog()
     for group in ("chat_models", "embedding_models"):
         for item in catalog.get(group, []):

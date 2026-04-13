@@ -77,6 +77,8 @@ export interface UserSettings {
   mistral_api_key_last4: string | null;
   has_moonshot_api_key: boolean;
   moonshot_api_key_last4: string | null;
+  has_minimax_api_key: boolean;
+  minimax_api_key_last4: string | null;
   has_xai_api_key: boolean;
   xai_api_key_last4: string | null;
   has_zai_api_key: boolean;

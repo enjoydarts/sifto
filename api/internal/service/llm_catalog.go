@@ -68,6 +68,8 @@ const openRouterAliasPrefix = "openrouter::"
 const poeAliasPrefix = "poe::"
 const siliconFlowAliasPrefix = "siliconflow::"
 const togetherAliasPrefix = "together::"
+const miniMaxAliasPrefix = "minimax::"
+const miniMaxSlashPrefix = "minimax/"
 
 var anthropicOpenRouterResolvedPattern = regexp.MustCompile(`^anthropic/claude-(\d+(?:\.\d+)*)-(opus|sonnet|haiku)-\d{8}$`)
 
@@ -162,6 +164,33 @@ func IsTogetherAliasedModel(model string) bool {
 	return strings.HasPrefix(strings.TrimSpace(model), togetherAliasPrefix)
 }
 
+func MiniMaxAliasModelID(model string) string {
+	m := strings.TrimSpace(model)
+	if m == "" {
+		return ""
+	}
+	if strings.HasPrefix(m, miniMaxAliasPrefix) || strings.HasPrefix(m, miniMaxSlashPrefix) {
+		return m
+	}
+	return miniMaxAliasPrefix + m
+}
+
+func ResolveMiniMaxModelID(model string) string {
+	m := strings.TrimSpace(model)
+	if strings.HasPrefix(m, miniMaxAliasPrefix) {
+		return strings.TrimPrefix(m, miniMaxAliasPrefix)
+	}
+	if strings.HasPrefix(m, miniMaxSlashPrefix) {
+		return strings.TrimPrefix(m, miniMaxSlashPrefix)
+	}
+	return m
+}
+
+func IsMiniMaxAliasedModel(model string) bool {
+	m := strings.TrimSpace(model)
+	return strings.HasPrefix(m, miniMaxAliasPrefix) || strings.HasPrefix(m, miniMaxSlashPrefix)
+}
+
 func LLMCatalogData() *LLMCatalog {
 	path := catalogPath()
 	info, err := os.Stat(path)
@@ -218,10 +247,6 @@ func mergedCatalog(base *LLMCatalog) *LLMCatalog {
 	}
 	dynamicCatalogMu.RLock()
 	defer dynamicCatalogMu.RUnlock()
-	if len(dynamicChatModels) == 0 {
-		snapshot := *base
-		return &snapshot
-	}
 	merged := *base
 	totalDynamic := 0
 	for _, models := range dynamicChatModels {
@@ -232,6 +257,9 @@ func mergedCatalog(base *LLMCatalog) *LLMCatalog {
 	for _, model := range base.ChatModels {
 		merged.ChatModels = append(merged.ChatModels, model)
 		seen[model.ID] = struct{}{}
+	}
+	if len(dynamicChatModels) == 0 {
+		return &merged
 	}
 	for _, models := range dynamicChatModels {
 		for _, model := range models {
@@ -316,6 +344,9 @@ func resolveCatalogAliasModelID(catalog *LLMCatalog, model string) string {
 	if IsTogetherAliasedModel(m) {
 		candidates = append(candidates, ResolveTogetherModelID(m))
 	}
+	if IsMiniMaxAliasedModel(m) {
+		candidates = append(candidates, ResolveMiniMaxModelID(m))
+	}
 	if strings.HasPrefix(m, "models/") {
 		candidates = append(candidates, strings.TrimSpace(strings.TrimPrefix(m, "models/")))
 	}
@@ -381,9 +412,10 @@ func providerCatalogByID(provider string) *LLMProviderCatalog {
 	if p == "" {
 		return nil
 	}
-	for i := range LLMCatalogData().Providers {
-		if LLMCatalogData().Providers[i].ID == p {
-			return &LLMCatalogData().Providers[i]
+	catalog := LLMCatalogData()
+	for i := range catalog.Providers {
+		if catalog.Providers[i].ID == p {
+			return &catalog.Providers[i]
 		}
 	}
 	return nil

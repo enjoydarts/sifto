@@ -1043,6 +1043,20 @@ func (h *SettingsHandler) DeleteMistralAPIKey(w http.ResponseWriter, r *http.Req
 	})
 }
 
+func (h *SettingsHandler) SetMiniMaxAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "minimax", map[string]func(*model.UserSettings) any{
+		"has_minimax_api_key":   func(s *model.UserSettings) any { return s.HasMiniMaxAPIKey },
+		"minimax_api_key_last4": func(s *model.UserSettings) any { return s.MiniMaxAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteMiniMaxAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "minimax", map[string]func(*model.UserSettings) any{
+		"has_minimax_api_key":   func(s *model.UserSettings) any { return s.HasMiniMaxAPIKey },
+		"minimax_api_key_last4": func(s *model.UserSettings) any { return s.MiniMaxAPIKeyLast4 },
+	})
+}
+
 func (h *SettingsHandler) SetMoonshotAPIKey(w http.ResponseWriter, r *http.Request) {
 	h.setAPIKey(w, r, "moonshot", map[string]func(*model.UserSettings) any{
 		"has_moonshot_api_key":   func(s *model.UserSettings) any { return s.HasMoonshotAPIKey },

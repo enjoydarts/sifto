@@ -38,6 +38,8 @@ type SettingsGetPayload struct {
 	AnthropicAPIKeyLast4    *string                         `json:"anthropic_api_key_last4,omitempty"`
 	HasOpenAIAPIKey         bool                            `json:"has_openai_api_key"`
 	OpenAIAPIKeyLast4       *string                         `json:"openai_api_key_last4,omitempty"`
+	HasMiniMaxAPIKey        bool                            `json:"has_minimax_api_key"`
+	MiniMaxAPIKeyLast4      *string                         `json:"minimax_api_key_last4,omitempty"`
 	HasGoogleAPIKey         bool                            `json:"has_google_api_key"`
 	GoogleAPIKeyLast4       *string                         `json:"google_api_key_last4,omitempty"`
 	HasGroqAPIKey           bool                            `json:"has_groq_api_key"`
@@ -391,6 +393,8 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		AnthropicAPIKeyLast4:    settings.AnthropicAPIKeyLast4,
 		HasOpenAIAPIKey:         settings.HasOpenAIAPIKey,
 		OpenAIAPIKeyLast4:       settings.OpenAIAPIKeyLast4,
+		HasMiniMaxAPIKey:        settings.HasMiniMaxAPIKey,
+		MiniMaxAPIKeyLast4:      settings.MiniMaxAPIKeyLast4,
 		HasGoogleAPIKey:         settings.HasGoogleAPIKey,
 		GoogleAPIKeyLast4:       settings.GoogleAPIKeyLast4,
 		HasGroqAPIKey:           settings.HasGroqAPIKey,
@@ -1248,6 +1252,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetAnthropicAPIKey(ctx, userID, enc, last4)
 	case "openai":
 		return s.repo.SetOpenAIAPIKey(ctx, userID, enc, last4)
+	case "minimax":
+		return s.repo.SetMiniMaxAPIKey(ctx, userID, enc, last4)
 	case "google":
 		return s.repo.SetGoogleAPIKey(ctx, userID, enc, last4)
 	case "groq":
@@ -1293,6 +1299,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearAnthropicAPIKey(ctx, userID)
 	case "openai":
 		return s.repo.ClearOpenAIAPIKey(ctx, userID)
+	case "minimax":
+		return s.repo.ClearMiniMaxAPIKey(ctx, userID)
 	case "google":
 		return s.repo.ClearGoogleAPIKey(ctx, userID)
 	case "groq":

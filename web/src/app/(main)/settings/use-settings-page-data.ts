@@ -175,6 +175,8 @@ export function useSettingsPageData() {
   const [deletingAlibabaKey, setDeletingAlibabaKey] = useState(false);
   const [savingMistralKey, setSavingMistralKey] = useState(false);
   const [deletingMistralKey, setDeletingMistralKey] = useState(false);
+  const [savingMiniMaxKey, setSavingMiniMaxKey] = useState(false);
+  const [deletingMiniMaxKey, setDeletingMiniMaxKey] = useState(false);
   const [savingMoonshotKey, setSavingMoonshotKey] = useState(false);
   const [deletingMoonshotKey, setDeletingMoonshotKey] = useState(false);
   const [savingXAIKey, setSavingXAIKey] = useState(false);
@@ -224,6 +226,7 @@ export function useSettingsPageData() {
   const [deepseekApiKeyInput, setDeepseekApiKeyInput] = useState("");
   const [alibabaApiKeyInput, setAlibabaApiKeyInput] = useState("");
   const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
+  const [miniMaxApiKeyInput, setMiniMaxApiKeyInput] = useState("");
   const [moonshotApiKeyInput, setMoonshotApiKeyInput] = useState("");
   const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
   const [zaiApiKeyInput, setZaiApiKeyInput] = useState("");
@@ -1187,6 +1190,12 @@ export function useSettingsPageData() {
         deleteTitle: t("settings.mistralDeleteTitle"), deleteMessage: t("settings.mistralDeleteMessage"),
         emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.mistralSaved"), deleteSuccessMessage: t("settings.toast.mistralDeleted"),
       },
+      minimax: {
+        value: miniMaxApiKeyInput, setValue: setMiniMaxApiKeyInput, setSaving: setSavingMiniMaxKey, setDeleting: setDeletingMiniMaxKey,
+        save: api.setMiniMaxApiKey, remove: api.deleteMiniMaxApiKey,
+        deleteTitle: t("settings.minimaxDeleteTitle"), deleteMessage: t("settings.minimaxDeleteMessage"),
+        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.minimaxSaved"), deleteSuccessMessage: t("settings.toast.minimaxDeleted"),
+      },
       moonshot: {
         value: moonshotApiKeyInput, setValue: setMoonshotApiKeyInput, setSaving: setSavingMoonshotKey, setDeleting: setDeletingMoonshotKey,
         save: api.setMoonshotApiKey, remove: api.deleteMoonshotApiKey,
@@ -1319,6 +1328,7 @@ export function useSettingsPageData() {
       groq: createAccessCardRuntime(groqApiKeyInput, setGroqApiKeyInput, apiKeyHandlers.groq!.submit, apiKeyHandlers.groq!.remove, savingGroqKey, deletingGroqKey),
       deepseek: createAccessCardRuntime(deepseekApiKeyInput, setDeepseekApiKeyInput, apiKeyHandlers.deepseek!.submit, apiKeyHandlers.deepseek!.remove, savingDeepSeekKey, deletingDeepSeekKey),
       alibaba: createAccessCardRuntime(alibabaApiKeyInput, setAlibabaApiKeyInput, apiKeyHandlers.alibaba!.submit, apiKeyHandlers.alibaba!.remove, savingAlibabaKey, deletingAlibabaKey),
+      minimax: createAccessCardRuntime(miniMaxApiKeyInput, setMiniMaxApiKeyInput, apiKeyHandlers.minimax!.submit, apiKeyHandlers.minimax!.remove, savingMiniMaxKey, deletingMiniMaxKey),
       mistral: createAccessCardRuntime(mistralApiKeyInput, setMistralApiKeyInput, apiKeyHandlers.mistral!.submit, apiKeyHandlers.mistral!.remove, savingMistralKey, deletingMistralKey),
       moonshot: createAccessCardRuntime(moonshotApiKeyInput, setMoonshotApiKeyInput, apiKeyHandlers.moonshot!.submit, apiKeyHandlers.moonshot!.remove, savingMoonshotKey, deletingMoonshotKey),
       xai: createAccessCardRuntime(xaiApiKeyInput, setXaiApiKeyInput, apiKeyHandlers.xai!.submit, apiKeyHandlers.xai!.remove, savingXAIKey, deletingXAIKey),

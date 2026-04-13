@@ -12,6 +12,7 @@ import {
   UserSettings,
 } from "@/lib/api";
 import { useI18n } from "@/components/i18n-provider";
+import { normalizeProvider } from "@/lib/model-display";
 
 type SummaryRow = LLMUsageDailySummary & {
   key: string;
@@ -34,6 +35,7 @@ const PROVIDER_COLORS: Record<string, { stroke: string; fill: string; fillOpacit
   groq: { stroke: "#8b5cf6", fill: "#a78bfa", fillOpacity: 0.55 },
   deepseek: { stroke: "#ef4444", fill: "#f87171", fillOpacity: 0.55 },
   alibaba: { stroke: "#0f766e", fill: "#14b8a6", fillOpacity: 0.55 },
+  minimax: { stroke: "#65a30d", fill: "#a3e635", fillOpacity: 0.55 },
   mistral: { stroke: "#be123c", fill: "#fb7185", fillOpacity: 0.55 },
   together: { stroke: "#0f766e", fill: "#5eead4", fillOpacity: 0.55 },
   xai: { stroke: "#4338ca", fill: "#818cf8", fillOpacity: 0.55 },
@@ -51,17 +53,6 @@ const FALLBACK_PROVIDER_COLORS = [
   { stroke: "#4338ca", fill: "#818cf8", fillOpacity: 0.55 },
   { stroke: "#a16207", fill: "#facc15", fillOpacity: 0.55 },
 ];
-
-export function normalizeProvider(provider: string) {
-  const p = provider.trim().toLowerCase();
-  if (p.startsWith("poe::") || p.startsWith("poe/")) {
-    return "poe";
-  }
-  if (p.startsWith("siliconflow::") || p.startsWith("siliconflow/")) {
-    return "siliconflow";
-  }
-  return p;
-}
 
 export function fmtUSD(v: number) {
   return `$${v.toFixed(6)}`;
@@ -112,6 +103,18 @@ export function useLLMUsageData() {
       provider: normalizeProvider(row.provider),
     }));
   }, [summaryRows]);
+  const normalizedCurrentMonthProviderRows = useMemo(() => {
+    return currentMonthProviderRows.map((row) => ({
+      ...row,
+      provider: normalizeProvider(row.provider),
+    }));
+  }, [currentMonthProviderRows]);
+  const normalizedCurrentMonthExecutionRows = useMemo(() => {
+    return currentMonthExecutionRows.map((row) => ({
+      ...row,
+      provider: normalizeProvider(row.provider),
+    }));
+  }, [currentMonthExecutionRows]);
 
   const selectedDays = useMemo(() => {
     if (daysFilter !== "mtd") {
@@ -195,27 +198,27 @@ export function useLLMUsageData() {
   }, [totals]);
 
   const providerCardRows = useMemo(() => {
-    const monthProviders = new Set(currentMonthProviderRows.map((row) => row.provider));
+    const monthProviders = new Set(normalizedCurrentMonthProviderRows.map((row) => row.provider));
     const selectedProviders = new Set(providerTotals.map((row) => row.provider));
     const allProviders = new Set<string>([...monthProviders, ...selectedProviders]);
     return Array.from(allProviders)
       .map((provider) => ({
         provider,
         selectedCost: totals.byProviderCost.get(provider) ?? 0,
-        monthCost: currentMonthProviderRows.find((row) => row.provider === provider)?.estimated_cost_usd ?? 0,
+        monthCost: normalizedCurrentMonthProviderRows.find((row) => row.provider === provider)?.estimated_cost_usd ?? 0,
       }))
       .sort((a, b) => {
         if (b.selectedCost !== a.selectedCost) return b.selectedCost - a.selectedCost;
         if (b.monthCost !== a.monthCost) return b.monthCost - a.monthCost;
         return a.provider.localeCompare(b.provider);
       });
-  }, [currentMonthProviderRows, providerTotals, totals]);
+  }, [normalizedCurrentMonthProviderRows, providerTotals, totals]);
 
   const currentMonthProviderTableRows = useMemo(() => {
-    const total = settings?.current_month?.estimated_cost_usd ?? currentMonthProviderRows.reduce((acc, row) => acc + row.estimated_cost_usd, 0);
-    const totalCalls = currentMonthProviderRows.reduce((acc, row) => acc + row.calls, 0);
+    const total = settings?.current_month?.estimated_cost_usd ?? normalizedCurrentMonthProviderRows.reduce((acc, row) => acc + row.estimated_cost_usd, 0);
+    const totalCalls = normalizedCurrentMonthProviderRows.reduce((acc, row) => acc + row.calls, 0);
     const dir = providerSortDir === "asc" ? 1 : -1;
-    return currentMonthProviderRows.map((row) => ({
+    return normalizedCurrentMonthProviderRows.map((row) => ({
       ...row,
       share_pct: total > 0 ? (row.estimated_cost_usd / total) * 100 : 0,
       call_share_pct: totalCalls > 0 ? (row.calls / totalCalls) * 100 : 0,
@@ -233,7 +236,7 @@ export function useLLMUsageData() {
       if (cmp !== 0) return cmp * dir;
       return a.provider.localeCompare(b.provider);
     });
-  }, [currentMonthProviderRows, providerSortDir, providerSortKey, settings]);
+  }, [normalizedCurrentMonthProviderRows, providerSortDir, providerSortKey, settings]);
 
   const currentMonthPurposeTableRows = useMemo(() => {
     const totalCost = currentMonthPurposeRows.reduce((acc, row) => acc + row.estimated_cost_usd, 0);
@@ -260,7 +263,7 @@ export function useLLMUsageData() {
   }, [currentMonthPurposeRows, purposeSortDir, purposeSortKey]);
 
   const currentMonthExecutionTableRows = useMemo(() => {
-    const rows = currentMonthExecutionRows.filter((row) => row.attempts > 0);
+    const rows = normalizedCurrentMonthExecutionRows.filter((row) => row.attempts > 0);
     const dir = reliabilitySortDir === "asc" ? 1 : -1;
     return rows.sort((a, b) => {
       const modelA = `${a.provider}/${a.model}`;
@@ -306,7 +309,7 @@ export function useLLMUsageData() {
       if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
       return a.model.localeCompare(b.model);
     });
-  }, [currentMonthExecutionRows, reliabilitySortDir, reliabilitySortKey]);
+  }, [normalizedCurrentMonthExecutionRows, reliabilitySortDir, reliabilitySortKey]);
 
   const handleReliabilitySort = useCallback((key: string) => {
     if (reliabilitySortKey === key) {

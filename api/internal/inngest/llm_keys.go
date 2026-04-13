@@ -78,6 +78,8 @@ func llmKeysTuple(provider string, key, model *string) (*llmRuntime, error) {
 		rt.OpenAIKey = key
 	case "together":
 		rt.OpenAIKey = key
+	case "minimax":
+		rt.OpenAIKey = key
 	case "xai":
 		rt.XAIKey = key
 	case "zai":

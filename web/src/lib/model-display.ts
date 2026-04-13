@@ -5,6 +5,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   groq: "Groq",
   deepseek: "DeepSeek",
   alibaba: "Alibaba",
+  minimax: "MiniMax",
   mistral: "Mistral",
   together: "Together AI",
   xai: "xAI",
@@ -16,8 +17,23 @@ const PROVIDER_LABELS: Record<string, string> = {
   siliconflow: "SiliconFlow",
 };
 
+export function normalizeProvider(provider: string): string {
+  const p = provider.trim().toLowerCase();
+  if (p.startsWith("poe::") || p.startsWith("poe/")) {
+    return "poe";
+  }
+  if (p.startsWith("siliconflow::") || p.startsWith("siliconflow/")) {
+    return "siliconflow";
+  }
+  if (p.startsWith("minimax::") || p.startsWith("minimax/")) {
+    return "minimax";
+  }
+  return p;
+}
+
 export function providerLabel(provider: string): string {
-  return PROVIDER_LABELS[provider] ?? provider;
+  const normalized = normalizeProvider(provider);
+  return PROVIDER_LABELS[normalized] ?? provider;
 }
 
 export function formatModelDisplayName(model: string): string {
@@ -27,6 +43,10 @@ export function formatModelDisplayName(model: string): string {
       ? model.slice("together::".length)
     : model.startsWith("siliconflow::")
       ? model.slice("siliconflow::".length)
+    : model.startsWith("minimax::")
+      ? model.slice("minimax::".length)
+      : model.startsWith("minimax/")
+        ? model.slice("minimax/".length)
       : model;
   switch (raw) {
     case "mistral-large-2512":

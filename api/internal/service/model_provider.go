@@ -2,7 +2,7 @@ package service
 
 import "strings"
 
-var costEfficientProviderPriority = []string{"groq", "zai", "fireworks", "together", "moonshot", "alibaba", "google", "mistral", "xai", "deepseek", "siliconflow", "openrouter", "openai", "anthropic"}
+var costEfficientProviderPriority = []string{"groq", "zai", "fireworks", "together", "moonshot", "alibaba", "google", "mistral", "xai", "deepseek", "minimax", "siliconflow", "openrouter", "openai", "anthropic"}
 
 func isModelByProvider(model *string, provider string) bool {
 	if model == nil {
@@ -20,6 +20,7 @@ func IsGroqModel(model *string) bool     { return isModelByProvider(model, "groq
 func IsDeepSeekModel(model *string) bool { return isModelByProvider(model, "deepseek") }
 func IsAlibabaModel(model *string) bool  { return isModelByProvider(model, "alibaba") }
 func IsMistralModel(model *string) bool  { return isModelByProvider(model, "mistral") }
+func IsMiniMaxModel(model *string) bool  { return isModelByProvider(model, "minimax") }
 func IsXAIModel(model *string) bool      { return isModelByProvider(model, "xai") }
 func IsOpenAIModel(model *string) bool   { return isModelByProvider(model, "openai") }
 

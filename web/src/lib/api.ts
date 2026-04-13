@@ -973,6 +973,16 @@ export const api = {
       "/settings/mistral-key",
       { method: "DELETE" }
     ),
+  setMiniMaxApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_minimax_api_key: boolean; minimax_api_key_last4: string | null }>(
+      "/settings/minimax-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteMiniMaxApiKey: () =>
+    apiFetch<{ user_id: string; has_minimax_api_key: boolean; minimax_api_key_last4: string | null }>(
+      "/settings/minimax-key",
+      { method: "DELETE" }
+    ),
   setMoonshotApiKey: (apiKey: string) =>
     apiFetch<{ user_id: string; has_moonshot_api_key: boolean; moonshot_api_key_last4: string | null }>(
       "/settings/moonshot-key",

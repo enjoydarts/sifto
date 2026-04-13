@@ -103,6 +103,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		settings.HasMistralAPIKey,
 		settings.HasTogetherAPIKey,
 		settings.HasMoonshotAPIKey,
+		settings.HasMiniMaxAPIKey,
 		settings.HasXAIAPIKey,
 		settings.HasZAIAPIKey,
 		settings.HasOpenRouterAPIKey,
@@ -111,7 +112,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		settings.HasOpenAIAPIKey,
 	)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or minimax or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
 		return
 	}
 	cacheKey := cacheKeyAsk(userID, query, *modelName, embeddingModel, body.Days, body.UnreadOnly, body.Limit, body.SourceIDs)
@@ -179,11 +180,12 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		mistralKey:   allKeys["mistral"],
 		xaiKey:       allKeys["xai"],
 		zaiKey:       allKeys["zai"],
+		minimaxKey:   allKeys["minimax"],
 		openAIKey:    h.keyProvider.ResolveOpenAIKey(allKeys, nil),
 	}
-	modelName = chooseAskModel(settings, navKeys.anthropicKey != nil, navKeys.googleKey != nil, navKeys.fireworksKey != nil, navKeys.groqKey != nil, navKeys.deepseekKey != nil, navKeys.alibabaKey != nil, navKeys.mistralKey != nil, allKeys["together"] != nil, allKeys["moonshot"] != nil, navKeys.xaiKey != nil, navKeys.zaiKey != nil, allKeys["openrouter"] != nil, allKeys["poe"] != nil, allKeys["siliconflow"] != nil, allKeys["openai"] != nil)
+	modelName = chooseAskModel(settings, navKeys.anthropicKey != nil, navKeys.googleKey != nil, navKeys.fireworksKey != nil, navKeys.groqKey != nil, navKeys.deepseekKey != nil, navKeys.alibabaKey != nil, navKeys.mistralKey != nil, allKeys["together"] != nil, allKeys["moonshot"] != nil, navKeys.minimaxKey != nil, navKeys.xaiKey != nil, navKeys.zaiKey != nil, allKeys["openrouter"] != nil, allKeys["poe"] != nil, allKeys["siliconflow"] != nil, allKeys["openai"] != nil)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or minimax or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
 		return
 	}
 	openAIChatKey := h.keyProvider.ResolveOpenAIKey(allKeys, modelName)
@@ -455,7 +457,7 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 	return &v
 }
 
-func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFireworks, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasTogether, hasMoonshot, hasXAI, hasZAI, hasOpenRouter, hasPoe, hasSiliconFlow, hasOpenAI bool) *string {
+func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFireworks, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasTogether, hasMoonshot, hasMiniMax, hasXAI, hasZAI, hasOpenRouter, hasPoe, hasSiliconFlow, hasOpenAI bool) *string {
 	if settings != nil && settings.AskModel != nil && strings.TrimSpace(*settings.AskModel) != "" {
 		v := strings.TrimSpace(*settings.AskModel)
 		switch service.LLMProviderForModel(&v) {
@@ -489,6 +491,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "moonshot":
 			if hasMoonshot {
+				return &v
+			}
+		case "minimax":
+			if hasMiniMax {
 				return &v
 			}
 		case "xai":
@@ -556,6 +562,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			if hasMoonshot {
 				return &v
 			}
+		case "minimax":
+			if hasMiniMax {
+				return &v
+			}
 		case "xai":
 			if hasXAI {
 				return &v
@@ -619,6 +629,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "moonshot":
 			if hasMoonshot {
+				return &v
+			}
+		case "minimax":
+			if hasMiniMax {
 				return &v
 			}
 		case "xai":
@@ -685,6 +699,11 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "moonshot":
 			if hasMoonshot {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				return &v
+			}
+		case "minimax":
+			if hasMiniMax {
 				v := service.DefaultLLMModelForPurpose(provider, "ask")
 				return &v
 			}

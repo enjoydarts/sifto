@@ -175,6 +175,38 @@ class TTSMarkupPreprocessServiceTests(unittest.TestCase):
         self.assertEqual(result["text"], "[pause]整形済み")
         self.assertEqual(result["llm"]["provider"], "xai")
 
+    def test_preprocess_uses_minimax_openai_compatible_transport(self):
+        service = TTSMarkupPreprocessService()
+
+        with (
+            patch(
+                "app.services.tts_markup_preprocess.get_default_prompt_template",
+                return_value={
+                    "system_instruction": "SYSTEM",
+                    "prompt_text": "{{text}}",
+                },
+            ),
+            patch(
+                "app.services.tts_markup_preprocess.minimax_provider._chat_json",
+                return_value=("[自然に]整形済み", {"input_tokens": 9, "output_tokens": 18}),
+            ) as chat_json,
+        ):
+            result = service.preprocess(
+                text="元テキスト",
+                model="MiniMax-M2.5",
+                api_key="minimax-key",
+            )
+
+        chat_json.assert_called_once_with(
+            "元テキスト",
+            "MiniMax-M2.5",
+            "minimax-key",
+            system_instruction="SYSTEM",
+            max_output_tokens=3200,
+        )
+        self.assertEqual(result["text"], "[自然に]整形済み")
+        self.assertEqual(result["llm"]["provider"], "minimax")
+
     def test_preprocess_uses_azure_speech_purpose_mapping(self):
         service = TTSMarkupPreprocessService()
 

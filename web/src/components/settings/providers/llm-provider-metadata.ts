@@ -31,6 +31,9 @@ export function inferProviderLabelFromModelID(modelID: string, t: Translate): st
   if (modelID.startsWith("siliconflow::")) {
     return t("settings.modelGuide.provider.siliconflow", "SiliconFlow");
   }
+  if (modelID.startsWith("minimax::") || modelID.startsWith("minimax/")) {
+    return t("settings.modelGuide.provider.minimax", "MiniMax");
+  }
   if (modelID.startsWith("together::")) {
     return t("settings.modelGuide.provider.together", "Together AI");
   }

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 Provider = Literal[
     "openai", "anthropic", "google", "groq", "deepseek",
     "openrouter", "together", "mistral", "xai", "alibaba",
-    "poe", "siliconflow", "fireworks", "zai", "moonshot",
+    "poe", "siliconflow", "fireworks", "zai", "moonshot", "minimax",
 ]
 
 

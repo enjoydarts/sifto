@@ -194,6 +194,7 @@
         "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "meta-llama/Meta-Llama-3-8B-Instruct-Lite",
         "google/gemma-3n-E4B-it",
+        "MiniMaxAI/MiniMax-M2.7",
         "Qwen/Qwen2.5-7B-Instruct-Turbo",
         "Qwen/Qwen3.5-397B-A17B",
         "Qwen/Qwen3.5-9B",
@@ -1920,6 +1921,29 @@
       }
     },
     {
+      "id": "fireworks/minimax-m2p7",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "balanced",
+      "highlights": ["fast"],
+      "comment": "MiniMax M2.7 の新規比較枠。M2.5 より新しい agentic 系の挙動を Fireworks 経由で検証したい時向け。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_model_page_2026_04",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 1.2,
+        "cache_read_per_mtok_usd": 0.06
+      }
+    },
+    {
       "id": "fireworks/qwen3-8b",
       "provider": "fireworks",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
@@ -2630,6 +2654,30 @@
         "pricing_source": "together_serverless_models_2026_04",
         "input_per_mtok_usd": 0.02,
         "output_per_mtok_usd": 0.04
+      }
+    },
+    {
+      "id": "together::MiniMaxAI/MiniMax-M2.7",
+      "provider": "together",
+      "source_provider": "minimaxai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "experimental",
+      "best_for": "balanced",
+      "highlights": ["fast", "jsonStable"],
+      "comment": "Together AI 上の MiniMax M2.7。長い agentic 実行やコーディング寄りの比較候補として追加する。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_model_page_2026_04",
+        "input_per_mtok_usd": 0.3,
+        "output_per_mtok_usd": 1.2,
+        "cache_read_per_mtok_usd": 0.06
       }
     },
     {

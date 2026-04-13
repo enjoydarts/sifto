@@ -63,6 +63,13 @@ func (s *ProviderModelSnapshotSyncService) SyncCommonProviders(ctx context.Conte
 		if model.ExcludeFromProviderModelSnapshots(res.Provider) {
 			continue
 		}
+		if res.Error != nil {
+			if err := s.syncSnapshotProviderFailure(ctx, res.Provider, *res.Error); err != nil {
+				return nil, err
+			}
+			syncedProviders++
+			continue
+		}
 		if err := s.syncSnapshotProvider(ctx, res.Provider, res.Models, "provider_api", trigger, now, &events); err != nil {
 			return nil, err
 		}
@@ -128,6 +135,23 @@ func (s *ProviderModelSnapshotSyncService) syncSnapshotProvider(
 		}
 	}
 	return s.updates.UpsertSnapshot(ctx, provider, models, "ok", nil)
+}
+
+func (s *ProviderModelSnapshotSyncService) syncSnapshotProviderFailure(
+	ctx context.Context,
+	provider string,
+	errText string,
+) error {
+	msg := strings.TrimSpace(errText)
+	var models []string
+	prev, err := s.updates.GetSnapshot(ctx, provider)
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+		return err
+	}
+	if prev != nil {
+		models = prev.Models
+	}
+	return s.updates.UpsertSnapshot(ctx, provider, models, "failed", &msg)
 }
 
 func (s *ProviderModelSnapshotSyncService) sendNotifications(ctx context.Context, now time.Time, events []model.ProviderModelChangeEvent) error {

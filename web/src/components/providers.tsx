@@ -130,7 +130,7 @@ export function Providers({ children, clerkEnabled, clerkPublishableKey }: Provi
               <QueryRefreshOnResume />
               <UIFontSettingsSync />
               <PWARegister />
-              <OneSignalInit />
+              {clerkEnabled ? <OneSignalInit /> : null}
               {children}
             </ConfirmProvider>
           </ToastProvider>

@@ -2,7 +2,14 @@ import unittest
 from unittest.mock import patch
 
 from app.services.llm_catalog import provider_api_key_header, provider_for_model
-from app.services.minimax_service import _chat_completions_url, _llm_meta, _p
+from app.services.minimax_service import (
+    _api_base_url,
+    _call_with_model_fallback,
+    _call_with_model_fallback_async,
+    _client_for_api_key,
+    _async_client_for_api_key,
+    _llm_meta,
+)
 
 
 class MiniMaxServiceTests(unittest.TestCase):
@@ -15,37 +22,48 @@ class MiniMaxServiceTests(unittest.TestCase):
     def test_provider_api_key_header_uses_minimax_header(self):
         self.assertEqual(provider_api_key_header("minimax"), "x-minimax-api-key")
 
-    def test_chat_completions_url_normalizes_base_url(self):
-        self.assertEqual(_chat_completions_url(""), "https://api.minimax.io/v1/chat/completions")
-        self.assertEqual(_chat_completions_url("https://api.minimax.io/v1"), "https://api.minimax.io/v1/chat/completions")
-        self.assertEqual(_chat_completions_url("https://api.minimax.io"), "https://api.minimax.io/v1/chat/completions")
-        self.assertEqual(_chat_completions_url("https://api.minimax.io/chat/completions"), "https://api.minimax.io/chat/completions")
+    @patch("app.services.minimax_service.os.getenv", return_value="https://api.minimax.io/custom-anthropic")
+    def test_api_base_url_uses_env_override(self, getenv):
+        self.assertEqual(_api_base_url(), "https://api.minimax.io/custom-anthropic")
+        getenv.assert_called_with("MINIMAX_API_BASE_URL")
 
-    @patch("app.services.minimax_service.os.getenv", return_value="https://api.minimax.io/v1")
-    def test_provider_uses_normalized_env_chat_url(self, getenv):
-        self.assertEqual(_p._get_chat_url(), "https://api.minimax.io/v1/chat/completions")
-        getenv.assert_called()
+    @patch("app.services.minimax_service._transport_client_for_api_key", return_value=object())
+    @patch("app.services.minimax_service.os.getenv", return_value="https://api.minimax.io/anthropic")
+    def test_client_uses_minimax_anthropic_base_url(self, getenv, client_for_api_key):
+        self.assertIsNotNone(_client_for_api_key("minimax-key"))
+        client_for_api_key.assert_called_once_with("minimax-key", base_url="https://api.minimax.io/anthropic")
+        getenv.assert_called_with("MINIMAX_API_BASE_URL")
 
-    @patch("app.services.provider_base.run_chat_json", return_value=('{"ok":true}', {"input_tokens": 1, "output_tokens": 1}))
-    def test_minimax_disables_response_format(self, run_chat_json):
-        _p._chat_json(
-            "prompt",
-            "MiniMax-M2.7",
-            "minimax-key",
-            response_schema={"type": "object"},
-            schema_name="test",
-        )
+    @patch("app.services.minimax_service._transport_async_client_for_api_key", return_value=object())
+    @patch("app.services.minimax_service.os.getenv", return_value="https://api.minimax.io/anthropic")
+    def test_async_client_uses_minimax_anthropic_base_url(self, getenv, async_client_for_api_key):
+        self.assertIsNotNone(_async_client_for_api_key("minimax-key"))
+        async_client_for_api_key.assert_called_once_with("minimax-key", base_url="https://api.minimax.io/anthropic")
+        getenv.assert_called_with("MINIMAX_API_BASE_URL")
 
-        self.assertIsNone(run_chat_json.call_args.kwargs.get("response_schema"))
+    @patch("app.services.minimax_service._anthropic_call_with_model_fallback", return_value=(None, None, []))
+    @patch("app.services.minimax_service.os.getenv", return_value="https://api.minimax.io/anthropic")
+    def test_transport_uses_minimax_anthropic_base_url(self, getenv, transport):
+        _call_with_model_fallback("prompt", "MiniMax-M2.7", "MiniMax-M2.5", api_key="minimax-key")
+        transport.assert_called_once()
+        self.assertEqual(transport.call_args.kwargs.get("base_url"), "https://api.minimax.io/anthropic")
+        getenv.assert_called_with("MINIMAX_API_BASE_URL")
+
+    @patch("app.services.minimax_service._anthropic_call_with_model_fallback_async", return_value=(None, None, []))
+    @patch("app.services.minimax_service.os.getenv", return_value="https://api.minimax.io/anthropic")
+    def test_async_transport_uses_minimax_anthropic_base_url(self, getenv, transport):
+        import asyncio
+
+        asyncio.run(_call_with_model_fallback_async("prompt", "MiniMax-M2.7", "MiniMax-M2.5", api_key="minimax-key"))
+        transport.assert_called_once()
+        self.assertEqual(transport.call_args.kwargs.get("base_url"), "https://api.minimax.io/anthropic")
+        getenv.assert_called_with("MINIMAX_API_BASE_URL")
 
     def test_llm_meta_preserves_minimax_provider_identity(self):
         llm = _llm_meta(
-            "MiniMax-M2.5",
+            None,
             "summary",
-            {
-                "input_tokens": 120,
-                "output_tokens": 80,
-            },
+            "MiniMax-M2.5",
         )
 
         self.assertEqual(llm.get("provider"), "minimax")

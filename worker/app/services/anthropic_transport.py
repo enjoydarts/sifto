@@ -15,15 +15,35 @@ def env_timeout_seconds(name: str, default: float) -> float:
         return default
 
 
-def client_for_api_key(api_key: str | None):
+def client_for_api_key(
+    api_key: str | None,
+    *,
+    base_url: str | None = None,
+    default_headers: dict[str, str] | None = None,
+):
     if api_key:
-        return anthropic.Anthropic(api_key=api_key)
+        kwargs = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        if default_headers:
+            kwargs["default_headers"] = default_headers
+        return anthropic.Anthropic(**kwargs)
     return None
 
 
-def async_client_for_api_key(api_key: str | None):
+def async_client_for_api_key(
+    api_key: str | None,
+    *,
+    base_url: str | None = None,
+    default_headers: dict[str, str] | None = None,
+):
     if api_key:
-        return anthropic.AsyncAnthropic(api_key=api_key)
+        kwargs = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        if default_headers:
+            kwargs["default_headers"] = default_headers
+        return anthropic.AsyncAnthropic(**kwargs)
     return None
 
 
@@ -55,8 +75,10 @@ def messages_create(
     enable_prompt_cache: bool = False,
     temperature: float | None = None,
     top_p: float | None = None,
+    base_url: str | None = None,
+    default_headers: dict[str, str] | None = None,
 ):
-    client = client_for_api_key(api_key)
+    client = client_for_api_key(api_key, base_url=base_url, default_headers=default_headers)
     if client is None:
         return None
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 300.0)
@@ -98,6 +120,8 @@ def call_with_retries(
     enable_prompt_cache: bool = False,
     temperature: float | None = None,
     top_p: float | None = None,
+    base_url: str | None = None,
+    default_headers: dict[str, str] | None = None,
     logger=None,
 ):
     last_err = None
@@ -114,6 +138,8 @@ def call_with_retries(
                 enable_prompt_cache=enable_prompt_cache,
                 temperature=temperature,
                 top_p=top_p,
+                base_url=base_url,
+                default_headers=default_headers,
             )
         except Exception as e:
             last_err = e
@@ -146,9 +172,11 @@ def call_with_model_fallback(
     enable_prompt_cache: bool = False,
     temperature: float | None = None,
     top_p: float | None = None,
+    base_url: str | None = None,
+    default_headers: dict[str, str] | None = None,
     logger=None,
 ):
-    if client_for_api_key(api_key) is None:
+    if client_for_api_key(api_key, base_url=base_url, default_headers=default_headers) is None:
         return None, None, []
     failures = []
     try:
@@ -164,6 +192,8 @@ def call_with_model_fallback(
                 enable_prompt_cache=enable_prompt_cache,
                 temperature=temperature,
                 top_p=top_p,
+                base_url=base_url,
+                default_headers=default_headers,
                 logger=logger,
             ),
             primary_model,
@@ -187,6 +217,8 @@ def call_with_model_fallback(
                         enable_prompt_cache=enable_prompt_cache,
                         temperature=temperature,
                         top_p=top_p,
+                        base_url=base_url,
+                        default_headers=default_headers,
                         logger=logger,
                     ),
                     fallback_model,
@@ -210,8 +242,10 @@ async def messages_create_async(
     enable_prompt_cache: bool = False,
     temperature: float | None = None,
     top_p: float | None = None,
+    base_url: str | None = None,
+    default_headers: dict[str, str] | None = None,
 ):
-    client = async_client_for_api_key(api_key)
+    client = async_client_for_api_key(api_key, base_url=base_url, default_headers=default_headers)
     if client is None:
         return None
     req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 300.0)
@@ -248,6 +282,8 @@ async def call_with_retries_async(
     enable_prompt_cache: bool = False,
     temperature: float | None = None,
     top_p: float | None = None,
+    base_url: str | None = None,
+    default_headers: dict[str, str] | None = None,
     logger=None,
 ):
     import asyncio
@@ -265,6 +301,8 @@ async def call_with_retries_async(
                 enable_prompt_cache=enable_prompt_cache,
                 temperature=temperature,
                 top_p=top_p,
+                base_url=base_url,
+                default_headers=default_headers,
             )
         except Exception as e:
             last_err = e
@@ -297,9 +335,11 @@ async def call_with_model_fallback_async(
     enable_prompt_cache: bool = False,
     temperature: float | None = None,
     top_p: float | None = None,
+    base_url: str | None = None,
+    default_headers: dict[str, str] | None = None,
     logger=None,
 ):
-    if async_client_for_api_key(api_key) is None:
+    if async_client_for_api_key(api_key, base_url=base_url, default_headers=default_headers) is None:
         return None, None, []
     failures = []
     try:
@@ -315,6 +355,8 @@ async def call_with_model_fallback_async(
                 enable_prompt_cache=enable_prompt_cache,
                 temperature=temperature,
                 top_p=top_p,
+                base_url=base_url,
+                default_headers=default_headers,
                 logger=logger,
             ),
             primary_model,
@@ -338,6 +380,8 @@ async def call_with_model_fallback_async(
                         enable_prompt_cache=enable_prompt_cache,
                         temperature=temperature,
                         top_p=top_p,
+                        base_url=base_url,
+                        default_headers=default_headers,
                         logger=logger,
                     ),
                     fallback_model,

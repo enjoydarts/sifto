@@ -10,12 +10,14 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
 type ProviderModelDiscoveryService struct {
-	http *http.Client
-	keys ProviderModelDiscoveryKeys
+	http           *http.Client
+	keys           ProviderModelDiscoveryKeys
+	requestTimeout time.Duration
 }
 
 type ProviderModelsResult struct {
@@ -43,14 +45,16 @@ type ProviderModelDiscoveryKeys struct {
 
 func NewProviderModelDiscoveryService() *ProviderModelDiscoveryService {
 	return &ProviderModelDiscoveryService{
-		http: &http.Client{Timeout: 8 * time.Second},
+		http:           &http.Client{Timeout: 35 * time.Second},
+		requestTimeout: 20 * time.Second,
 	}
 }
 
 func NewProviderModelDiscoveryServiceWithKeys(keys ProviderModelDiscoveryKeys) *ProviderModelDiscoveryService {
 	return &ProviderModelDiscoveryService{
-		http: &http.Client{Timeout: 8 * time.Second},
-		keys: keys,
+		http:           &http.Client{Timeout: 35 * time.Second},
+		keys:           keys,
+		requestTimeout: 20 * time.Second,
 	}
 }
 
@@ -74,20 +78,70 @@ func (s *ProviderModelDiscoveryService) DiscoverAll(ctx context.Context) ([]Prov
 		{"fireworks", s.fetchFireworksModels},
 		{"together", s.fetchTogetherModels},
 	}
-	out := make([]ProviderModelsResult, 0, len(providers))
-	for _, p := range providers {
-		models, err := p.fn(ctx)
-		if err != nil {
-			if strings.Contains(err.Error(), "api key is required") {
-				continue
+	type indexedResult struct {
+		index  int
+		result *ProviderModelsResult
+	}
+	resultsCh := make(chan indexedResult, len(providers))
+	var wg sync.WaitGroup
+	wg.Add(len(providers))
+	for i, p := range providers {
+		go func(index int, providerName string, fn func(context.Context) ([]string, error)) {
+			defer wg.Done()
+			providerCtx := ctx
+			cancel := func() {}
+			timeout := s.providerTimeout(providerName)
+			if timeout > 0 {
+				providerCtx, cancel = context.WithTimeout(ctx, timeout)
 			}
-			msg := fmt.Sprintf("%s model discovery: %v", p.name, err)
-			out = append(out, ProviderModelsResult{Provider: p.name, Error: &msg})
-			continue
+			defer cancel()
+
+			models, err := fn(providerCtx)
+			if err != nil {
+				if strings.Contains(err.Error(), "api key is required") {
+					resultsCh <- indexedResult{index: index}
+					return
+				}
+				msg := fmt.Sprintf("%s model discovery: %v", providerName, err)
+				resultsCh <- indexedResult{
+					index:  index,
+					result: &ProviderModelsResult{Provider: providerName, Error: &msg},
+				}
+				return
+			}
+			resultsCh <- indexedResult{
+				index:  index,
+				result: &ProviderModelsResult{Provider: providerName, Models: models},
+			}
+		}(i, p.name, p.fn)
+	}
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+
+	ordered := make([]*ProviderModelsResult, len(providers))
+	for item := range resultsCh {
+		if item.result != nil {
+			ordered[item.index] = item.result
 		}
-		out = append(out, ProviderModelsResult{Provider: p.name, Models: models})
+	}
+	out := make([]ProviderModelsResult, 0, len(providers))
+	for _, item := range ordered {
+		if item != nil {
+			out = append(out, *item)
+		}
 	}
 	return out, nil
+}
+
+func (s *ProviderModelDiscoveryService) providerTimeout(provider string) time.Duration {
+	switch provider {
+	case "fireworks":
+		return 28 * time.Second
+	default:
+		return s.requestTimeout
+	}
 }
 
 func providerModelDiscoveryRetryable(err error) bool {
@@ -756,7 +810,17 @@ func (s *ProviderModelDiscoveryService) fetchFireworksModels(ctx context.Context
 	}
 	parsedBase.Path = "/v1/accounts/fireworks/models"
 	query := url.Values{}
-	query.Set("pageSize", "200")
+	query.Set("pageSize", "100")
+	query.Set("readMask", strings.Join([]string{
+		"models.name",
+		"models.displayName",
+		"models.description",
+		"models.supportsServerless",
+		"models.public",
+		"models.baseModelDetails.modelType",
+		"models.modelType",
+		"nextPageToken",
+	}, ","))
 	models := make([]string, 0, 128)
 	for {
 		parsedBase.RawQuery = query.Encode()
@@ -770,11 +834,9 @@ func (s *ProviderModelDiscoveryService) fetchFireworksModels(ctx context.Context
 			Models        []fireworksModelListItem `json:"models"`
 			NextPageToken string                   `json:"nextPageToken"`
 		}
-		resp, err := s.http.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		if err := readJSONResponse(resp, &decoded); err != nil {
+		if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+			return readJSONResponse(resp, &decoded)
+		}); err != nil {
 			return nil, err
 		}
 		items := decoded.Models

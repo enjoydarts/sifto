@@ -308,6 +308,50 @@ func TestProviderModelDiscoveryFetchAlibabaModelsRetriesTransientServerError(t *
 	}
 }
 
+func TestProviderModelDiscoveryFetchFireworksModelsRetriesTransientServerError(t *testing.T) {
+	var attempts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/accounts/fireworks/models" {
+			t.Fatalf("path = %s, want %s", r.URL.Path, "/v1/accounts/fireworks/models")
+		}
+		if r.URL.Query().Get("pageSize") != "100" {
+			t.Fatalf("pageSize = %q, want %q", r.URL.Query().Get("pageSize"), "100")
+		}
+		if got := r.URL.Query().Get("readMask"); !strings.Contains(got, "models.name") || !strings.Contains(got, "models.displayName") {
+			t.Fatalf("readMask = %q, want models.name/models.displayName", got)
+		}
+		current := attempts.Add(1)
+		if current < 2 {
+			http.Error(w, `{"error":"temporary"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{"name": "accounts/fireworks/models/fireworks/glm-5", "displayName": "GLM-5 Instruct", "description": "LLM text model", "public": true},
+			},
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("FIREWORKS_API_KEY", "test-fireworks-key")
+	t.Setenv("FIREWORKS_API_BASE_URL", server.URL)
+
+	svc := NewProviderModelDiscoveryService()
+	svc.http = server.Client()
+
+	models, err := svc.fetchFireworksModels(context.Background())
+	if err != nil {
+		t.Fatalf("fetchFireworksModels failed: %v", err)
+	}
+	if attempts.Load() != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts.Load())
+	}
+	if len(models) != 1 || models[0] != "fireworks/glm-5" {
+		t.Fatalf("models = %#v, want %#v", models, []string{"fireworks/glm-5"})
+	}
+}
+
 func TestProviderModelDiscoveryDiscoverAllReturnsProviderErrorsWithoutFailingWholeSync(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

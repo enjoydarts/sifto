@@ -105,6 +105,7 @@ class ProviderConfig:
     include_resolved_model_in_meta: bool = False
     facts_output_mode: str = "object"
     facts_pass_schema: bool = True
+    supports_response_format: bool = True
     no_temperature_families: list[str] = field(default_factory=list)
 
 
@@ -233,6 +234,11 @@ class OpenAICompatProvider:
     async def _post_process_chat_result_async(self, text: str, usage: dict, model: str, api_key: str, response_schema, timeout) -> tuple[str, dict]:
         return self._post_process_chat_result(text, usage, model, api_key, response_schema, timeout)
 
+    def _request_response_schema(self, response_schema: dict | None) -> dict | None:
+        if not self.config.supports_response_format:
+            return None
+        return response_schema
+
     def _chat_json(
         self,
         prompt: str,
@@ -253,6 +259,7 @@ class OpenAICompatProvider:
         req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else env_timeout_seconds(f"{self.config.env_prefix}_TIMEOUT_SEC", 300.0)
         attempts = max(1, int(os.getenv(f"{self.config.env_prefix}_RETRY_ATTEMPTS", "3") or "3"))
         base_sleep_sec = env_timeout_seconds(f"{self.config.env_prefix}_RETRY_BASE_SEC", 0.5)
+        request_response_schema = self._request_response_schema(response_schema)
         text, usage = run_chat_json(
             prompt,
             model,
@@ -267,7 +274,7 @@ class OpenAICompatProvider:
             logger=self._log,
             system_instruction=system_instruction,
             max_output_tokens=max_output_tokens,
-            response_schema=response_schema,
+            response_schema=request_response_schema,
             schema_name=schema_name,
             include_temperature=self._include_temperature(model),
             temperature=self._normalize_temperature(model, temperature),
@@ -295,6 +302,7 @@ class OpenAICompatProvider:
         req_timeout = timeout_sec if timeout_sec and timeout_sec > 0 else env_timeout_seconds(f"{self.config.env_prefix}_TIMEOUT_SEC", 300.0)
         attempts = max(1, int(os.getenv(f"{self.config.env_prefix}_RETRY_ATTEMPTS", "3") or "3"))
         base_sleep_sec = env_timeout_seconds(f"{self.config.env_prefix}_RETRY_BASE_SEC", 0.5)
+        request_response_schema = self._request_response_schema(response_schema)
         text, usage = await run_chat_json_async(
             prompt,
             model,
@@ -309,7 +317,7 @@ class OpenAICompatProvider:
             logger=self._log,
             system_instruction=system_instruction,
             max_output_tokens=max_output_tokens,
-            response_schema=response_schema,
+            response_schema=request_response_schema,
             schema_name=schema_name,
             include_temperature=self._include_temperature(model),
             temperature=self._normalize_temperature(model, temperature),

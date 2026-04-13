@@ -25,6 +25,7 @@ _config = ProviderConfig(
     pricing_source_version="minimax_openai_compat_2026_04",
     api_base_url="https://api.minimax.io/v1/chat/completions",
     api_base_url_env="MINIMAX_API_BASE_URL",
+    supports_response_format=False,
 )
 _p = _MiniMaxProvider(_config)
 _llm_meta = _p._llm_meta

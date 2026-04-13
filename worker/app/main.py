@@ -34,12 +34,22 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="sifto-worker", lifespan=lifespan)
 
 
+def _public_error_detail(request: Request, exc: Exception) -> str:
+    internal_secret = _INTERNAL_WORKER_SECRET
+    provided = str(request.headers.get("x-internal-worker-secret") or "").strip()
+    if internal_secret and provided == internal_secret:
+        detail = str(exc).strip()
+        if detail:
+            return detail[:1000]
+    return "internal server error"
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     _log.error("unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={"detail": "internal server error"},
+        content={"detail": _public_error_detail(request, exc)},
     )
 
 _INTERNAL_WORKER_SECRET = os.getenv("INTERNAL_WORKER_SECRET", "").strip()

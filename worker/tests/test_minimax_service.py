@@ -26,6 +26,18 @@ class MiniMaxServiceTests(unittest.TestCase):
         self.assertEqual(_p._get_chat_url(), "https://api.minimax.io/v1/chat/completions")
         getenv.assert_called()
 
+    @patch("app.services.provider_base.run_chat_json", return_value=('{"ok":true}', {"input_tokens": 1, "output_tokens": 1}))
+    def test_minimax_disables_response_format(self, run_chat_json):
+        _p._chat_json(
+            "prompt",
+            "MiniMax-M2.7",
+            "minimax-key",
+            response_schema={"type": "object"},
+            schema_name="test",
+        )
+
+        self.assertIsNone(run_chat_json.call_args.kwargs.get("response_schema"))
+
     def test_llm_meta_preserves_minimax_provider_identity(self):
         llm = _llm_meta(
             "MiniMax-M2.5",

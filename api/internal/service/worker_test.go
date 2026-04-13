@@ -1,6 +1,11 @@
 package service
 
-import "testing"
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
 
 func workerTestStringPtr(v string) *string { return &v }
 
@@ -60,6 +65,35 @@ func TestWorkerHeadersUsesMinimaxHeaderForMiniMaxModels(t *testing.T) {
 	}
 	if _, ok := headers["X-Openai-Api-Key"]; ok {
 		t.Fatalf("X-Openai-Api-Key should not be set for MiniMax models")
+	}
+}
+
+func TestExtractFactsWithModelUsesMinimaxHeader(t *testing.T) {
+	var gotMinimax string
+	var gotOpenAI string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMinimax = r.Header.Get("X-Minimax-Api-Key")
+		gotOpenAI = r.Header.Get("X-Openai-Api-Key")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"facts":["ok"]}`))
+	}))
+	defer server.Close()
+
+	client := &WorkerClient{
+		baseURL: server.URL,
+		http:    server.Client(),
+	}
+	model := "MiniMax-M2.5"
+	key := "minimax-key"
+
+	if _, err := client.ExtractFactsWithModel(context.Background(), nil, "content", nil, nil, nil, nil, nil, nil, nil, nil, nil, &key, &model, nil); err != nil {
+		t.Fatalf("ExtractFactsWithModel: %v", err)
+	}
+	if gotMinimax != "minimax-key" {
+		t.Fatalf("X-Minimax-Api-Key = %q, want %q", gotMinimax, "minimax-key")
+	}
+	if gotOpenAI != "" {
+		t.Fatalf("X-Openai-Api-Key = %q, want empty", gotOpenAI)
 	}
 }
 

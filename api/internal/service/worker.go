@@ -577,7 +577,7 @@ func (w *WorkerClient) ExtractFactsWithModel(ctx context.Context, title *string,
 		"content": content,
 		"model":   model,
 		"prompt":  prompt,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) Summarize(ctx context.Context, title *string, facts []string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string) (*SummarizeResponse, error) {
@@ -596,7 +596,7 @@ func (w *WorkerClient) SummarizeWithModel(ctx context.Context, title *string, fa
 		"model":             model,
 		"source_text_chars": sourceTextChars,
 		"prompt":            prompt,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) CheckSummaryFaithfulnessWithModel(ctx context.Context, title *string, facts []string, summary string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, model *string) (*SummaryFaithfulnessResponse, error) {
@@ -605,7 +605,7 @@ func (w *WorkerClient) CheckSummaryFaithfulnessWithModel(ctx context.Context, ti
 		"facts":   facts,
 		"summary": summary,
 		"model":   model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) CheckFactsWithModel(ctx context.Context, title *string, content string, facts []string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, model *string) (*FactsCheckResponse, error) {
@@ -614,14 +614,14 @@ func (w *WorkerClient) CheckFactsWithModel(ctx context.Context, title *string, c
 		"content": content,
 		"facts":   facts,
 		"model":   model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) TranslateTitleWithModel(ctx context.Context, title string, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string, model *string) (*TranslateTitleResponse, error) {
 	return postWithHeaders[TranslateTitleResponse](ctx, w, "/translate-title", map[string]any{
 		"title": title,
 		"model": model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) ComposeDigest(ctx context.Context, digestDate string, items []ComposeDigestItem, anthropicAPIKey *string, googleAPIKey *string, groqAPIKey *string, deepseekAPIKey *string, alibabaAPIKey *string, mistralAPIKey *string, xaiAPIKey *string, zaiAPIKey *string, fireworksAPIKey *string, openAIAPIKey *string) (*ComposeDigestResponse, error) {
@@ -648,7 +648,7 @@ func (w *WorkerClient) ComposeDigestWithModel(ctx context.Context, digestDate st
 		"items":       items,
 		"model":       model,
 		"prompt":      prompt,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) ComposeDigestClusterDraftWithModel(
@@ -675,7 +675,7 @@ func (w *WorkerClient) ComposeDigestClusterDraftWithModel(
 		"topics":        topics,
 		"source_lines":  sourceLines,
 		"model":         model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) AskWithModel(
@@ -703,7 +703,7 @@ func (w *WorkerClient) AskWithModel(
 		"query":      query,
 		"candidates": candidates,
 		"model":      model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) GenerateAskNavigatorWithModel(
@@ -731,7 +731,7 @@ func (w *WorkerClient) GenerateAskNavigatorWithModel(
 		"persona": persona,
 		"input":   input,
 		"model":   model,
-	}, workerHeaders(anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
+	}, workerHeadersForModel(model, anthropicAPIKey, googleAPIKey, groqAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, xaiAPIKey, zaiAPIKey, fireworksAPIKey, openAIAPIKey, nil, nil, nil, w.internalSecret))
 }
 
 func (w *WorkerClient) RankFeedSuggestions(

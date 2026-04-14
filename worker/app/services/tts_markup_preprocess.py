@@ -11,7 +11,8 @@ from app.services.gemini_service import _llm_meta as gemini_llm_meta
 from app.services.groq_service import _p as groq_provider
 from app.services.llm_catalog import provider_for_model
 from app.services.mistral_service import _p as mistral_provider
-from app.services.minimax_service import _p as minimax_provider
+from app.services.minimax_service import _call_with_model_fallback as minimax_call_with_model_fallback
+from app.services.minimax_service import _llm_meta as minimax_llm_meta
 from app.services.moonshot_service import _p as moonshot_provider
 from app.services.openai_service import _p as openai_provider
 from app.services.openrouter_service import _p as openrouter_provider
@@ -88,7 +89,7 @@ class TTSMarkupPreprocessService:
             "alibaba": lambda key: self._preprocess_openai_compat(alibaba_provider._chat_json, alibaba_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
             "mistral": lambda key: self._preprocess_openai_compat(mistral_provider._chat_json, mistral_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
             "moonshot": lambda key: self._preprocess_openai_compat(moonshot_provider._chat_json, moonshot_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
-            "minimax": lambda key: self._preprocess_openai_compat(minimax_provider._chat_json, minimax_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
+            "minimax": lambda key: self._preprocess_minimax(model_name, key, system_instruction, prompt, purpose),
             "xai": lambda key: self._preprocess_openai_compat(xai_chat_json, xai_llm_meta, model_name, key, system_instruction, prompt, purpose),
             "zai": lambda key: self._preprocess_openai_compat(zai_provider._chat_json, zai_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
             "fireworks": lambda key: self._preprocess_openai_compat(fireworks_provider._chat_json, fireworks_provider._llm_meta, model_name, key, system_instruction, prompt, purpose),
@@ -197,6 +198,30 @@ class TTSMarkupPreprocessService:
             "text": text,
             "llm": with_execution_failures(
                 anthropic_llm_meta(message, purpose, used_model or model),
+                execution_failures,
+            ),
+        }
+
+    def _preprocess_minimax(self, model: str, api_key: str, system_instruction: str, prompt: str, purpose: str) -> dict:
+        system_prompt = str(system_instruction or "").strip() or None
+        combined_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+        message, used_model, execution_failures = minimax_call_with_model_fallback(
+            combined_prompt,
+            model,
+            None,
+            max_tokens=_MAX_OUTPUT_TOKENS,
+            api_key=api_key,
+            system_prompt=system_prompt,
+            user_prompt=prompt,
+        )
+        if message is None:
+            detail = self._format_execution_failures(execution_failures)
+            raise RuntimeError(f"minimax tts markup preprocess failed{detail}")
+        text = str(message.content[0].text or "").strip()
+        return {
+            "text": text,
+            "llm": with_execution_failures(
+                minimax_llm_meta(message, purpose, used_model or model),
                 execution_failures,
             ),
         }

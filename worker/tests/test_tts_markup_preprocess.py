@@ -175,8 +175,25 @@ class TTSMarkupPreprocessServiceTests(unittest.TestCase):
         self.assertEqual(result["text"], "[pause]整形済み")
         self.assertEqual(result["llm"]["provider"], "xai")
 
-    def test_preprocess_uses_minimax_openai_compatible_transport(self):
+    def test_preprocess_uses_minimax_anthropic_compatible_transport(self):
         service = TTSMarkupPreprocessService()
+        message = type(
+            "Message",
+            (),
+            {
+                "content": [type("Content", (), {"text": "[自然に]整形済み"})()],
+                "usage": type(
+                    "Usage",
+                    (),
+                    {
+                        "input_tokens": 9,
+                        "output_tokens": 18,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 0,
+                    },
+                )(),
+            },
+        )()
 
         with (
             patch(
@@ -187,9 +204,9 @@ class TTSMarkupPreprocessServiceTests(unittest.TestCase):
                 },
             ),
             patch(
-                "app.services.tts_markup_preprocess.minimax_provider._chat_json",
-                return_value=("[自然に]整形済み", {"input_tokens": 9, "output_tokens": 18}),
-            ) as chat_json,
+                "app.services.tts_markup_preprocess.minimax_call_with_model_fallback",
+                return_value=(message, "MiniMax-M2.5", []),
+            ) as minimax_call,
         ):
             result = service.preprocess(
                 text="元テキスト",
@@ -197,12 +214,14 @@ class TTSMarkupPreprocessServiceTests(unittest.TestCase):
                 api_key="minimax-key",
             )
 
-        chat_json.assert_called_once_with(
-            "元テキスト",
+        minimax_call.assert_called_once_with(
+            "SYSTEM\n\n元テキスト",
             "MiniMax-M2.5",
-            "minimax-key",
-            system_instruction="SYSTEM",
-            max_output_tokens=3200,
+            None,
+            max_tokens=3200,
+            api_key="minimax-key",
+            system_prompt="SYSTEM",
+            user_prompt="元テキスト",
         )
         self.assertEqual(result["text"], "[自然に]整形済み")
         self.assertEqual(result["llm"]["provider"], "minimax")

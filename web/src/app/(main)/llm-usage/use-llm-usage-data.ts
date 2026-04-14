@@ -83,6 +83,7 @@ export function useLLMUsageData() {
   const [logSortDir, setLogSortDir] = useState<"asc" | "desc">("desc");
   const [forecastMode, setForecastMode] = useState<"month_avg" | "recent_7d">("month_avg");
   const [forecastMonth, setForecastMonth] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [daysFilter, setDaysFilter] = useState<"7" | "14" | "30" | "90" | "mtd">("mtd");
   const [limit, setLimit] = useState(100);
   const [logPage, setLogPage] = useState(1);
@@ -129,16 +130,35 @@ export function useLLMUsageData() {
     return daysFilter === "mtd" ? t("llm.monthToDate") : t("llm.totalCost");
   }, [daysFilter, t]);
 
-  const load = useCallback(async (daysParam: number, limitParam: number) => {
+  const currentJSTMonth = useMemo(() => {
+    const now = new Date();
+    const jstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+    return `${jstNow.getFullYear()}-${String(jstNow.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+
+  const previousJSTMonth = useMemo(() => {
+    const now = new Date();
+    const jstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+    const prev = new Date(jstNow.getFullYear(), jstNow.getMonth() - 1, 1);
+    return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+
+  useEffect(() => {
+    if (!selectedMonth) {
+      setSelectedMonth(currentJSTMonth);
+    }
+  }, [currentJSTMonth, selectedMonth]);
+
+  const load = useCallback(async (daysParam: number, limitParam: number, monthParam: string) => {
     const seq = ++seqRef.current;
     setLoading(true);
     try {
       const [summary, byModel, byProviderCurrentMonth, byPurposeCurrentMonth, executionCurrentMonth, recent, userSettings] = await Promise.all([
         api.getLLMUsageSummary({ days: daysParam }),
         api.getLLMUsageByModel({ days: daysParam }),
-        api.getLLMUsageCurrentMonthByProvider(),
-        api.getLLMUsageCurrentMonthByPurpose(),
-        api.getLLMExecutionCurrentMonthSummary(),
+        api.getLLMUsageCurrentMonthByProvider({ month: monthParam }),
+        api.getLLMUsageCurrentMonthByPurpose({ month: monthParam }),
+        api.getLLMExecutionCurrentMonthSummary({ month: monthParam }),
         api.getLLMUsage({ limit: limitParam }),
         api.getSettings(),
       ]);
@@ -163,8 +183,9 @@ export function useLLMUsageData() {
 
   useEffect(() => {
     setLogPage(1);
-    load(selectedDays, limit);
-  }, [limit, load, selectedDays]);
+    if (!selectedMonth) return;
+    load(selectedDays, limit, selectedMonth);
+  }, [limit, load, selectedDays, selectedMonth]);
 
   const totals = useMemo(() => {
     const t = {
@@ -452,8 +473,19 @@ export function useLLMUsageData() {
       if (r.date_jst.length >= 7) months.add(r.date_jst.slice(0, 7));
     }
     if (settings?.current_month?.month_jst) months.add(settings.current_month.month_jst);
+    months.add(currentJSTMonth);
+    months.add(previousJSTMonth);
     return Array.from(months).sort((a, b) => b.localeCompare(a));
-  }, [settings, summaryRows]);
+  }, [currentJSTMonth, previousJSTMonth, settings, summaryRows]);
+
+  const monthOptions = useMemo(() => {
+    return [currentJSTMonth, previousJSTMonth]
+      .filter((value, index, array) => array.indexOf(value) === index)
+      .map((value) => ({
+        value,
+        label: value === currentJSTMonth ? t("llm.currentMonth") : t("llm.previousMonth"),
+      }));
+  }, [currentJSTMonth, previousJSTMonth, t]);
 
   useEffect(() => {
     if (availableForecastMonths.length === 0) return;
@@ -699,6 +731,8 @@ export function useLLMUsageData() {
     limit, setLimit,
     forecastMode, setForecastMode,
     forecastMonth, setForecastMonth,
+    selectedMonth, setSelectedMonth,
+    monthOptions,
     logPage, setLogPage,
     providerSortKey, setProviderSortKey,
     providerSortDir, setProviderSortDir,

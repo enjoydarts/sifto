@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/enjoydarts/sifto/api/internal/repository"
 )
@@ -168,12 +169,30 @@ func (s *LLMUsageService) ValueMetricsCurrentMonth(ctx context.Context, userID s
 	if err != nil {
 		return nil, err
 	}
+	return s.finalizeValueMetrics(ctx, userID, raw, true)
+}
+
+func (s *LLMUsageService) ValueMetricsMonth(ctx context.Context, userID string, month time.Time) ([]LLMValueMetricView, error) {
+	if s.valueRepo == nil {
+		return []LLMValueMetricView{}, nil
+	}
+	raw, err := s.valueRepo.CollectByMonth(ctx, userID, month)
+	if err != nil {
+		return nil, err
+	}
+	return s.finalizeValueMetrics(ctx, userID, raw, isCurrentJSTMonth(month))
+}
+
+func (s *LLMUsageService) finalizeValueMetrics(ctx context.Context, userID string, raw []repository.LLMValueMetricAggregate, persist bool) ([]LLMValueMetricView, error) {
 	rows := make([]LLMValueMetricView, len(raw))
 	for i, row := range raw {
 		rows[i] = mapLLMValueMetricView(row)
 	}
 	rows = finalizeLLMValueMetrics(rows)
 
+	if !persist {
+		return rows, nil
+	}
 	snapshots := make([]repository.LLMValueMetricSnapshot, len(rows))
 	for i, row := range rows {
 		snapshots[i] = repository.LLMValueMetricSnapshot{
@@ -205,6 +224,16 @@ func (s *LLMUsageService) ValueMetricsCurrentMonth(ctx context.Context, userID s
 		return nil, err
 	}
 	return rows, nil
+}
+
+func isCurrentJSTMonth(month time.Time) bool {
+	loc, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		loc = time.FixedZone("JST", 9*60*60)
+	}
+	now := time.Now().In(loc)
+	target := month.In(loc)
+	return now.Year() == target.Year() && now.Month() == target.Month()
 }
 
 func ratioCompact(a, b float64) string {

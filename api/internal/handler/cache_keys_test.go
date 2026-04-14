@@ -82,8 +82,8 @@ func TestCacheKeyLLMUsageVersioned(t *testing.T) {
 		}
 	}
 
-	got = cacheKeyLLMUsageExecutionCurrentMonthVersioned("u1", 11)
-	want := "v1:llm_usage:execution_current_month:u1:v=11"
+	got = cacheKeyLLMUsageExecutionCurrentMonthVersioned("u1", 11, "2026-03")
+	want := "v1:llm_usage:execution_current_month:u1:v=11:month=2026-03"
 	if got != want {
 		t.Fatalf("cacheKeyLLMUsageExecutionCurrentMonthVersioned = %q, want %q", got, want)
 	}
@@ -91,11 +91,14 @@ func TestCacheKeyLLMUsageVersioned(t *testing.T) {
 	if got, want = cacheKeyLLMUsageModelSummaryVersioned("u1", 5, 30), "v1:llm_usage:model:u1:v=5:days=30"; got != want {
 		t.Fatalf("cacheKeyLLMUsageModelSummaryVersioned = %q, want %q", got, want)
 	}
-	if got, want = cacheKeyLLMUsageProviderCurrentMonthVersioned("u1", 2), "v1:llm_usage:provider_current_month:u1:v=2"; got != want {
+	if got, want = cacheKeyLLMUsageProviderCurrentMonthVersioned("u1", 2, "2026-03"), "v1:llm_usage:provider_current_month:u1:v=2:month=2026-03"; got != want {
 		t.Fatalf("cacheKeyLLMUsageProviderCurrentMonthVersioned = %q, want %q", got, want)
 	}
-	if got, want = cacheKeyLLMUsagePurposeCurrentMonthVersioned("u1", 4), "v1:llm_usage:purpose_current_month:u1:v=4"; got != want {
+	if got, want = cacheKeyLLMUsagePurposeCurrentMonthVersioned("u1", 4, "2026-03"), "v1:llm_usage:purpose_current_month:u1:v=4:month=2026-03"; got != want {
 		t.Fatalf("cacheKeyLLMUsagePurposeCurrentMonthVersioned = %q, want %q", got, want)
+	}
+	if got, want = cacheKeyLLMUsageValueMetricsCurrentMonthVersioned("u1", 7, "2026-03"), "v1:llm_usage:value_metrics_current_month:u1:v=7:month=2026-03"; got != want {
+		t.Fatalf("cacheKeyLLMUsageValueMetricsCurrentMonthVersioned = %q, want %q", got, want)
 	}
 	if got, want = cacheKeyLLMUsageListVersioned("u1", 6, 100), "v1:llm_usage:list:u1:v=6:limit=100"; got != want {
 		t.Fatalf("cacheKeyLLMUsageListVersioned = %q, want %q", got, want)

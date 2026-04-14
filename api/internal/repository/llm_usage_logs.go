@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -367,13 +368,20 @@ func (r *LLMUsageLogRepo) SumEstimatedCostByUserBetween(ctx context.Context, use
 }
 
 func (r *LLMUsageLogRepo) ProviderSummaryCurrentMonthByUser(ctx context.Context, userID string) ([]LLMUsageProviderMonthSummary, error) {
+	return r.ProviderSummaryByUserMonth(ctx, userID, time.Now())
+}
+
+func (r *LLMUsageLogRepo) ProviderSummaryByUserMonth(ctx context.Context, userID string, month time.Time) ([]LLMUsageProviderMonthSummary, error) {
+	loc, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		loc = time.FixedZone("JST", 9*60*60)
+	}
+	monthJST := month.In(loc)
+	monthStart := time.Date(monthJST.Year(), monthJST.Month(), 1, 0, 0, 0, 0, loc)
+	nextMonthStart := monthStart.AddDate(0, 1, 0)
+	monthKey := monthStart.Format("2006-01")
 	rows, err := r.db.Query(ctx, `
-		WITH bounds AS (
-			SELECT
-				date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo') AS month_start_jst,
-				date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 month' AS next_month_start_jst
-		)
-		SELECT TO_CHAR(b.month_start_jst, 'YYYY-MM') AS month_jst,
+		SELECT $2 AS month_jst,
 		       l.provider,
 		       COUNT(*)::int AS calls,
 		       COALESCE(SUM(l.input_tokens),0)::bigint AS input_tokens,
@@ -382,12 +390,11 @@ func (r *LLMUsageLogRepo) ProviderSummaryCurrentMonthByUser(ctx context.Context,
 		       COALESCE(SUM(l.cache_read_input_tokens),0)::bigint AS cache_read_input_tokens,
 		       COALESCE(SUM(l.estimated_cost_usd),0)::double precision AS estimated_cost_usd
 		FROM llm_usage_logs l
-		CROSS JOIN bounds b
 		WHERE l.user_id = $1
-		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
-		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= $3
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < $4
 		GROUP BY 1,2
-		ORDER BY estimated_cost_usd DESC, calls DESC, provider ASC`, userID)
+		ORDER BY estimated_cost_usd DESC, calls DESC, provider ASC`, userID, monthKey, monthStart, nextMonthStart)
 	if err != nil {
 		return nil, err
 	}
@@ -409,13 +416,20 @@ func (r *LLMUsageLogRepo) ProviderSummaryCurrentMonthByUser(ctx context.Context,
 }
 
 func (r *LLMUsageLogRepo) PurposeSummaryCurrentMonthByUser(ctx context.Context, userID string) ([]LLMUsagePurposeMonthSummary, error) {
+	return r.PurposeSummaryByUserMonth(ctx, userID, time.Now())
+}
+
+func (r *LLMUsageLogRepo) PurposeSummaryByUserMonth(ctx context.Context, userID string, month time.Time) ([]LLMUsagePurposeMonthSummary, error) {
+	loc, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		loc = time.FixedZone("JST", 9*60*60)
+	}
+	monthJST := month.In(loc)
+	monthStart := time.Date(monthJST.Year(), monthJST.Month(), 1, 0, 0, 0, 0, loc)
+	nextMonthStart := monthStart.AddDate(0, 1, 0)
+	monthKey := monthStart.Format("2006-01")
 	rows, err := r.db.Query(ctx, `
-		WITH bounds AS (
-			SELECT
-				date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo') AS month_start_jst,
-				date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 month' AS next_month_start_jst
-		)
-		SELECT TO_CHAR(b.month_start_jst, 'YYYY-MM') AS month_jst,
+		SELECT $2 AS month_jst,
 		       l.purpose,
 		       COUNT(*)::int AS calls,
 		       COALESCE(SUM(l.input_tokens),0)::bigint AS input_tokens,
@@ -424,12 +438,11 @@ func (r *LLMUsageLogRepo) PurposeSummaryCurrentMonthByUser(ctx context.Context, 
 		       COALESCE(SUM(l.cache_read_input_tokens),0)::bigint AS cache_read_input_tokens,
 		       COALESCE(SUM(l.estimated_cost_usd),0)::double precision AS estimated_cost_usd
 		FROM llm_usage_logs l
-		CROSS JOIN bounds b
 		WHERE l.user_id = $1
-		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
-		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= $3
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < $4
 		GROUP BY 1,2
-		ORDER BY estimated_cost_usd DESC, calls DESC, purpose ASC`, userID)
+		ORDER BY estimated_cost_usd DESC, calls DESC, purpose ASC`, userID, monthKey, monthStart, nextMonthStart)
 	if err != nil {
 		return nil, err
 	}
@@ -448,6 +461,18 @@ func (r *LLMUsageLogRepo) PurposeSummaryCurrentMonthByUser(ctx context.Context, 
 		out = append(out, v)
 	}
 	return out, rows.Err()
+}
+
+func ParseMonthJST(month string) (time.Time, error) {
+	loc, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		loc = time.FixedZone("JST", 9*60*60)
+	}
+	parsed, err := time.ParseInLocation("2006-01", strings.TrimSpace(month), loc)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid month")
+	}
+	return time.Date(parsed.Year(), parsed.Month(), 1, 0, 0, 0, 0, loc), nil
 }
 
 func (r *LLMUsageLogRepo) AnalysisSummaryByUser(ctx context.Context, userID string, days int) ([]LLMUsageAnalysisSummary, error) {

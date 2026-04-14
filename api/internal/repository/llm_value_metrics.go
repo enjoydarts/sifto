@@ -68,14 +68,25 @@ func currentLLMValueMetricsWindow(now time.Time) (time.Time, time.Time) {
 }
 
 func (r *LLMValueMetricsRepo) CollectCurrentMonth(ctx context.Context, userID string) ([]LLMValueMetricAggregate, error) {
+	return r.CollectByMonth(ctx, userID, time.Now())
+}
+
+func (r *LLMValueMetricsRepo) CollectByMonth(ctx context.Context, userID string, month time.Time) ([]LLMValueMetricAggregate, error) {
+	loc, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		loc = time.FixedZone("JST", 9*60*60)
+	}
+	monthJST := month.In(loc)
+	monthStart := time.Date(monthJST.Year(), monthJST.Month(), 1, 0, 0, 0, 0, loc)
+	nextMonthStart := monthStart.AddDate(0, 1, 0)
+	windowEnd := nextMonthStart
+	nowJST := time.Now().In(loc)
+	if nowJST.Before(nextMonthStart) {
+		windowEnd = time.Date(nowJST.Year(), nowJST.Month(), nowJST.Day(), 0, 0, 0, 0, loc)
+	}
+	monthKey := monthStart.Format("2006-01")
 	rows, err := r.db.Query(ctx, `
-		WITH bounds AS (
-			SELECT
-				date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo') AS month_start_jst,
-				date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 month' AS next_month_start_jst,
-				TO_CHAR(date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo'), 'YYYY-MM') AS month_jst
-		),
-		usage AS (
+		WITH usage AS (
 			SELECT
 				l.purpose,
 				l.provider,
@@ -87,10 +98,9 @@ func (r *LLMValueMetricsRepo) CollectCurrentMonth(ctx context.Context, userID st
 				COUNT(*)::int AS calls,
 				COALESCE(SUM(l.estimated_cost_usd), 0)::double precision AS total_cost_usd
 			FROM llm_usage_logs l
-			CROSS JOIN bounds b
 			WHERE l.user_id::text = $1
-			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
-			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
+			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= $2
+			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < $3
 			GROUP BY l.purpose, l.provider, l.model
 		),
 		latest_item_usage AS (
@@ -101,11 +111,10 @@ func (r *LLMValueMetricsRepo) CollectCurrentMonth(ctx context.Context, userID st
 				l.model,
 				l.created_at
 			FROM llm_usage_logs l
-			CROSS JOIN bounds b
 			WHERE l.user_id::text = $1
 			  AND l.item_id IS NOT NULL
-			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
-			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
+			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= $2
+			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < $3
 			ORDER BY l.item_id, l.purpose, l.provider, l.model, l.created_at DESC
 		),
 		item_actions AS (
@@ -118,34 +127,33 @@ func (r *LLMValueMetricsRepo) CollectCurrentMonth(ctx context.Context, userID st
 				COUNT(DISTINCT CASE WHEN fb.item_id IS NOT NULL THEN u.item_id END)::int AS favorite_count,
 				COUNT(DISTINCT CASE WHEN ai.id IS NOT NULL THEN u.item_id END)::int AS insight_count
 			FROM latest_item_usage u
-			CROSS JOIN bounds b
 			LEFT JOIN item_reads ir
 				ON ir.user_id::text = $1
 				AND ir.item_id = u.item_id
 				AND ir.read_at >= u.created_at
-				AND (ir.read_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
-				AND (ir.read_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
+				AND (ir.read_at AT TIME ZONE 'Asia/Tokyo') >= $2
+				AND (ir.read_at AT TIME ZONE 'Asia/Tokyo') < $3
 			LEFT JOIN item_feedbacks fb
 				ON fb.user_id::text = $1
 				AND fb.item_id = u.item_id
 				AND fb.is_favorite = TRUE
 				AND fb.updated_at >= u.created_at
-				AND (fb.updated_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
-				AND (fb.updated_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
+				AND (fb.updated_at AT TIME ZONE 'Asia/Tokyo') >= $2
+				AND (fb.updated_at AT TIME ZONE 'Asia/Tokyo') < $3
 			LEFT JOIN ask_insight_items aii
 				ON aii.item_id = u.item_id
 			LEFT JOIN ask_insights ai
 				ON ai.id = aii.insight_id
 				AND ai.user_id = $1
 				AND ai.created_at >= u.created_at
-				AND (ai.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
-				AND (ai.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
+				AND (ai.created_at AT TIME ZONE 'Asia/Tokyo') >= $2
+				AND (ai.created_at AT TIME ZONE 'Asia/Tokyo') < $3
 			GROUP BY u.purpose, u.provider, u.model
 		)
 		SELECT
-			b.month_start_jst::date,
-			(NOW() AT TIME ZONE 'Asia/Tokyo')::date,
-			b.month_jst,
+			$2::date,
+			$4::date,
+			$5,
 			u.purpose,
 			u.provider,
 			u.model,
@@ -157,12 +165,11 @@ func (r *LLMValueMetricsRepo) CollectCurrentMonth(ctx context.Context, userID st
 			COALESCE(a.favorite_count, 0),
 			COALESCE(a.insight_count, 0)
 		FROM usage u
-		CROSS JOIN bounds b
 		LEFT JOIN item_actions a
 			ON a.purpose = u.purpose
 			AND a.provider = u.provider
 			AND a.model = u.model
-		ORDER BY u.total_cost_usd DESC, u.calls DESC, u.provider ASC, u.model ASC`, userID)
+		ORDER BY u.total_cost_usd DESC, u.calls DESC, u.provider ASC, u.model ASC`, userID, monthStart, nextMonthStart, windowEnd, monthKey)
 	if err != nil {
 		return nil, err
 	}

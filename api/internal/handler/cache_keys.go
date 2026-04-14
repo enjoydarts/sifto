@@ -195,24 +195,24 @@ func cacheKeyLLMUsageAnalysisVersioned(userID string, version int64, days int) s
 	return fmt.Sprintf("%s:llm_usage:analysis:%s:v=%d:days=%d", cacheKeyVersion, userID, version, days)
 }
 
-func cacheKeyLLMUsageProviderCurrentMonthVersioned(userID string, version int64) string {
-	return fmt.Sprintf("%s:llm_usage:provider_current_month:%s:v=%d", cacheKeyVersion, userID, version)
+func cacheKeyLLMUsageProviderCurrentMonthVersioned(userID string, version int64, month string) string {
+	return fmt.Sprintf("%s:llm_usage:provider_current_month:%s:v=%d:month=%s", cacheKeyVersion, userID, version, month)
 }
 
-func cacheKeyLLMUsagePurposeCurrentMonthVersioned(userID string, version int64) string {
-	return fmt.Sprintf("%s:llm_usage:purpose_current_month:%s:v=%d", cacheKeyVersion, userID, version)
+func cacheKeyLLMUsagePurposeCurrentMonthVersioned(userID string, version int64, month string) string {
+	return fmt.Sprintf("%s:llm_usage:purpose_current_month:%s:v=%d:month=%s", cacheKeyVersion, userID, version, month)
 }
 
-func cacheKeyLLMUsageExecutionCurrentMonthVersioned(userID string, version int64) string {
-	return fmt.Sprintf("%s:llm_usage:execution_current_month:%s:v=%d", cacheKeyVersion, userID, version)
+func cacheKeyLLMUsageExecutionCurrentMonthVersioned(userID string, version int64, month string) string {
+	return fmt.Sprintf("%s:llm_usage:execution_current_month:%s:v=%d:month=%s", cacheKeyVersion, userID, version, month)
 }
 
 func cacheKeyLLMUsageExecutionSummaryVersioned(userID string, version int64, days int) string {
 	return fmt.Sprintf("%s:llm_usage:execution:%s:v=%d:days=%d", cacheKeyVersion, userID, version, days)
 }
 
-func cacheKeyLLMUsageValueMetricsCurrentMonthVersioned(userID string, version int64) string {
-	return fmt.Sprintf("%s:llm_usage:value_metrics_current_month:%s:v=%d", cacheKeyVersion, userID, version)
+func cacheKeyLLMUsageValueMetricsCurrentMonthVersioned(userID string, version int64, month string) string {
+	return fmt.Sprintf("%s:llm_usage:value_metrics_current_month:%s:v=%d:month=%s", cacheKeyVersion, userID, version, month)
 }
 
 func cacheKeyLLMUsageListVersioned(userID string, version int64, limit int) string {

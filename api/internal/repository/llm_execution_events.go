@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -76,12 +77,19 @@ func (r *LLMExecutionEventRepo) Insert(ctx context.Context, in LLMExecutionEvent
 }
 
 func (r *LLMExecutionEventRepo) CurrentMonthSummaryByUser(ctx context.Context, userID string) ([]LLMExecutionCurrentMonthSummary, error) {
+	return r.SummaryByUserMonth(ctx, userID, time.Now())
+}
+
+func (r *LLMExecutionEventRepo) SummaryByUserMonth(ctx context.Context, userID string, month time.Time) ([]LLMExecutionCurrentMonthSummary, error) {
+	loc, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		loc = time.FixedZone("JST", 9*60*60)
+	}
+	monthJST := month.In(loc)
+	monthStart := time.Date(monthJST.Year(), monthJST.Month(), 1, 0, 0, 0, 0, loc)
+	nextMonthStart := monthStart.AddDate(0, 1, 0)
+	monthKey := monthStart.Format("2006-01")
 	rows, err := r.db.Query(ctx, `
-		WITH bounds AS (
-			SELECT
-				date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo') AS month_start_jst,
-				date_trunc('month', NOW() AT TIME ZONE 'Asia/Tokyo') + INTERVAL '1 month' AS next_month_start_jst
-		),
 		usage_costs AS (
 			SELECT
 				l.user_id,
@@ -90,13 +98,12 @@ func (r *LLMExecutionEventRepo) CurrentMonthSummaryByUser(ctx context.Context, u
 				l.model,
 				COALESCE(SUM(l.estimated_cost_usd), 0)::double precision AS estimated_cost_usd
 			FROM llm_usage_logs l
-			CROSS JOIN bounds b
 			WHERE l.user_id = $1
-			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
-			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
+			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= $2
+			  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < $3
 			GROUP BY l.user_id, l.purpose, l.provider, l.model
 		)
-		SELECT TO_CHAR(b.month_start_jst, 'YYYY-MM') AS month_jst,
+		SELECT $4 AS month_jst,
 		       e.purpose,
 		       e.provider,
 		       e.model,
@@ -110,18 +117,17 @@ func (r *LLMExecutionEventRepo) CurrentMonthSummaryByUser(ctx context.Context, u
 		       CASE WHEN COUNT(*) = 0 THEN 0 ELSE ROUND((COUNT(*) FILTER (WHERE e.attempt_index > 0)::numeric * 100.0) / COUNT(*), 1) END::double precision AS retry_rate_pct,
 		       CASE WHEN COUNT(*) = 0 THEN 0 ELSE ROUND((COUNT(*) FILTER (WHERE e.empty_response)::numeric * 100.0) / COUNT(*), 1) END::double precision AS empty_rate_pct
 		FROM llm_execution_events e
-		CROSS JOIN bounds b
 		LEFT JOIN usage_costs u
 		  ON u.user_id = e.user_id
 		 AND u.purpose = e.purpose
 		 AND u.provider = e.provider
 		 AND u.model = e.model
 		WHERE e.user_id = $1
-		  AND (e.created_at AT TIME ZONE 'Asia/Tokyo') >= b.month_start_jst
-		  AND (e.created_at AT TIME ZONE 'Asia/Tokyo') < b.next_month_start_jst
+		  AND (e.created_at AT TIME ZONE 'Asia/Tokyo') >= $2
+		  AND (e.created_at AT TIME ZONE 'Asia/Tokyo') < $3
 		GROUP BY 1,2,3,4
 		ORDER BY estimated_cost_usd DESC, failures DESC, retries DESC, attempts DESC, purpose ASC, provider ASC, model ASC
-	`, userID)
+	`, userID, monthStart, nextMonthStart, monthKey)
 	if err != nil {
 		return nil, err
 	}

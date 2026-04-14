@@ -57,6 +57,8 @@ export default function LLMUsagePage() {
     limit, setLimit,
     forecastMode, setForecastMode,
     forecastMonth, setForecastMonth,
+    selectedMonth, setSelectedMonth,
+    monthOptions,
     logPage, setLogPage,
     providerSortKey, setProviderSortKey,
     providerSortDir, setProviderSortDir,
@@ -127,6 +129,20 @@ export default function LLMUsagePage() {
               </select>
             </label>
             <label className="text-sm">
+              <span className="mb-1 block text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("llm.month")}</span>
+              <select
+                value={selectedMonth ?? ""}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="min-h-10 w-full rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm text-[var(--color-editorial-ink)]"
+              >
+                {monthOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm">
               <span className="mb-1 block text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("llm.limit")}</span>
               <select
                 value={limit}
@@ -188,7 +204,7 @@ export default function LLMUsagePage() {
               <div className="rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3">
                 <div className="text-sm font-semibold text-[var(--color-editorial-ink)]">{t("llmUsage.status.currentMonth")}</div>
                 <div className="mt-1 text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
-                  {settings?.current_month?.month_jst ?? "—"} / {fmtUSD(settings?.current_month?.estimated_cost_usd ?? 0)}
+                  {selectedMonth ?? "—"} / {fmtUSD(currentMonthProviderTableRows.reduce((acc, row) => acc + row.estimated_cost_usd, 0))}
                 </div>
               </div>
               <div className="rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-4 py-3">
@@ -446,8 +462,8 @@ export default function LLMUsagePage() {
             <CurrentMonthByProviderTable
               title={t("llm.currentMonthByProvider")}
               rows={currentMonthProviderTableRows}
-              monthLabel={settings?.current_month?.month_jst ?? currentMonthProviderTableRows[0]?.month_jst ?? "—"}
-              totalCostLabel={fmtUSD(settings?.current_month?.estimated_cost_usd ?? 0)}
+              monthLabel={selectedMonth ?? currentMonthProviderTableRows[0]?.month_jst ?? "—"}
+              totalCostLabel={fmtUSD(currentMonthProviderTableRows.reduce((acc, row) => acc + row.estimated_cost_usd, 0))}
               noSummaryLabel={t("llm.noSummary")}
               fmtNum={fmtNum}
               fmtUSD={fmtUSD}
@@ -461,7 +477,7 @@ export default function LLMUsagePage() {
             <CurrentMonthByPurposeTable
               title={t("llm.currentMonthByPurpose")}
               rows={currentMonthPurposeTableRows}
-              monthLabel={settings?.current_month?.month_jst ?? currentMonthPurposeTableRows[0]?.month_jst ?? "—"}
+              monthLabel={selectedMonth ?? currentMonthPurposeTableRows[0]?.month_jst ?? "—"}
               noSummaryLabel={t("llm.noSummary")}
               fmtNum={fmtNum}
               fmtUSD={fmtUSD}
@@ -474,7 +490,7 @@ export default function LLMUsagePage() {
           {activeSection === "reliability" ? (
             <ReliabilityTable
               rows={currentMonthExecutionTableRows}
-              monthLabel={settings?.current_month?.month_jst ?? currentMonthExecutionTableRows[0]?.month_jst ?? "—"}
+              monthLabel={selectedMonth ?? currentMonthExecutionTableRows[0]?.month_jst ?? "—"}
               noSummaryLabel={t("llm.noSummary")}
               fmtNum={fmtNum}
               fmtUSD={fmtUSD}

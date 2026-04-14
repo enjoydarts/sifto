@@ -617,20 +617,30 @@ export const api = {
     const qs = q.toString();
     return apiFetch<LLMUsageAnalysisSummary[]>(`/llm-usage/analysis${qs ? `?${qs}` : ""}`);
   },
-  getLLMUsageCurrentMonthByProvider: () => {
-    return apiFetch<LLMUsageProviderMonthSummary[]>("/llm-usage/current-month/by-provider");
+  getLLMUsageCurrentMonthByProvider: (params?: { month?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.month) q.set("month", params.month);
+    const qs = q.toString();
+    return apiFetch<LLMUsageProviderMonthSummary[]>(`/llm-usage/current-month/by-provider${qs ? `?${qs}` : ""}`);
   },
-  getLLMUsageCurrentMonthByPurpose: () => {
-    return apiFetch<LLMUsagePurposeMonthSummary[]>("/llm-usage/current-month/by-purpose");
+  getLLMUsageCurrentMonthByPurpose: (params?: { month?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.month) q.set("month", params.month);
+    const qs = q.toString();
+    return apiFetch<LLMUsagePurposeMonthSummary[]>(`/llm-usage/current-month/by-purpose${qs ? `?${qs}` : ""}`);
   },
-  getLLMExecutionCurrentMonthSummary: (params?: { days?: number }) => {
+  getLLMExecutionCurrentMonthSummary: (params?: { days?: number; month?: string }) => {
     const q = new URLSearchParams();
     if (params?.days) q.set("days", String(params.days));
+    if (params?.month) q.set("month", params.month);
     const qs = q.toString();
     return apiFetch<LLMExecutionCurrentMonthSummary[]>(`/llm-usage/current-month/execution-summary${qs ? `?${qs}` : ""}`);
   },
-  getLLMValueMetricsCurrentMonth: () => {
-    return apiFetch<LLMValueMetric[]>("/llm-usage/current-month/value-metrics");
+  getLLMValueMetricsCurrentMonth: (params?: { month?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.month) q.set("month", params.month);
+    const qs = q.toString();
+    return apiFetch<LLMValueMetric[]>(`/llm-usage/current-month/value-metrics${qs ? `?${qs}` : ""}`);
   },
   getProviderModelUpdates: (params?: { days?: number; limit?: number }) => {
     const q = new URLSearchParams();

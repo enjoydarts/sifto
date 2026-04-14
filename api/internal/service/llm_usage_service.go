@@ -187,6 +187,14 @@ func (s *LLMUsageService) ProviderSummaryCurrentMonth(ctx context.Context, userI
 	return mapSlice(rows, mapProviderMonthSummaryView), nil
 }
 
+func (s *LLMUsageService) ProviderSummaryMonth(ctx context.Context, userID string, month time.Time) ([]LLMUsageProviderMonthSummaryView, error) {
+	rows, err := s.repo.ProviderSummaryByUserMonth(ctx, userID, month)
+	if err != nil {
+		return nil, err
+	}
+	return mapSlice(rows, mapProviderMonthSummaryView), nil
+}
+
 func (s *LLMUsageService) PurposeSummaryCurrentMonth(ctx context.Context, userID string) ([]LLMUsagePurposeMonthSummaryView, error) {
 	rows, err := s.repo.PurposeSummaryCurrentMonthByUser(ctx, userID)
 	if err != nil {
@@ -195,8 +203,24 @@ func (s *LLMUsageService) PurposeSummaryCurrentMonth(ctx context.Context, userID
 	return mapSlice(rows, mapPurposeMonthSummaryView), nil
 }
 
+func (s *LLMUsageService) PurposeSummaryMonth(ctx context.Context, userID string, month time.Time) ([]LLMUsagePurposeMonthSummaryView, error) {
+	rows, err := s.repo.PurposeSummaryByUserMonth(ctx, userID, month)
+	if err != nil {
+		return nil, err
+	}
+	return mapSlice(rows, mapPurposeMonthSummaryView), nil
+}
+
 func (s *LLMUsageService) ExecutionSummaryCurrentMonth(ctx context.Context, userID string) ([]LLMExecutionCurrentMonthSummaryView, error) {
 	rows, err := s.executionRepo.CurrentMonthSummaryByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return mapSlice(rows, mapExecutionMonthSummaryView), nil
+}
+
+func (s *LLMUsageService) ExecutionSummaryMonth(ctx context.Context, userID string, month time.Time) ([]LLMExecutionCurrentMonthSummaryView, error) {
+	rows, err := s.executionRepo.SummaryByUserMonth(ctx, userID, month)
 	if err != nil {
 		return nil, err
 	}

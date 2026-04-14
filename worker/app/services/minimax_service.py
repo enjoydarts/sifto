@@ -111,6 +111,33 @@ def _require_model(model: str | None, purpose: str) -> str:
     raise RuntimeError(f"minimax model is required for {purpose}")
 
 
+def _require_api_key(api_key: str | None, purpose: str) -> None:
+    if _client_for_api_key(api_key) is None:
+        raise RuntimeError(f"minimax api key is required for {purpose}")
+
+
+def _format_execution_failures(execution_failures: list[dict] | None) -> str:
+    failures = execution_failures or []
+    parts: list[str] = []
+    for failure in failures:
+        if not isinstance(failure, dict):
+            continue
+        reason = str(failure.get("reason") or "").strip()
+        model = str(failure.get("model") or "").strip()
+        if reason and model:
+            parts.append(f"{model}: {reason}")
+        elif reason:
+            parts.append(reason)
+    return " | ".join(parts)
+
+
+def _raise_execution_failure(purpose: str, execution_failures: list[dict] | None, default_message: str) -> None:
+    detail = _format_execution_failures(execution_failures)
+    if detail:
+        raise RuntimeError(f"minimax {purpose} failed: {detail}")
+    raise RuntimeError(default_message)
+
+
 def _split_text_chunks(text: str, chunk_chars: int = 8000, overlap_chars: int = 400) -> list[str]:
     text = (text or "").strip()
     if not text:
@@ -317,23 +344,7 @@ def _llm_meta(message, purpose: str, model: str, provider: str = "minimax") -> d
 
 def extract_facts(title: str | None, content: str, api_key: str | None = None, model: str | None = None) -> dict:
     resolved_model = _require_model(model, "facts")
-    if _client_for_api_key(api_key) is None:
-        lines = [line.strip() for line in content.splitlines() if line.strip()]
-        facts = lines[:5]
-        if not facts and title:
-            facts = [f"タイトル: {title}"]
-        return {
-            "facts": facts,
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+    _require_api_key(api_key, "facts")
 
     chunks = _split_text_chunks(content, chunk_chars=8000, overlap_chars=400)
     if not chunks:
@@ -370,19 +381,7 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
         llm_metas.append(_with_execution_failures(_llm_meta(message, "facts", used_model or resolved_model), execution_failures))
 
     if not any_llm_success:
-        lines = [line.strip() for line in content.splitlines() if line.strip()]
-        return {
-            "facts": lines[:5],
-            "llm": _with_execution_failures({
-                "provider": "local-fallback",
-                "model": resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            }, execution_failures_all),
-        }
+        _raise_execution_failure("facts", execution_failures_all, "minimax facts returned no message")
 
     merged_facts = _merge_fact_lists(all_fact_lists, max_items=24)
     localization_llm = None
@@ -423,34 +422,7 @@ def summarize(
     resolved_model = _require_model(model, "summary")
     task = build_summary_task(title, facts, source_text_chars)
     max_tokens = _summary_max_tokens(task["target_chars"])
-
-    if _client_for_api_key(api_key) is None:
-        summary = " / ".join(facts[:8])[:task["max_chars"]] if facts else (title or "")
-        score_breakdown = {
-            "importance": 0.4,
-            "novelty": 0.4,
-            "actionability": 0.4,
-            "reliability": 0.5,
-            "relevance": 0.5,
-        }
-        return {
-            "summary": summary or "要約を生成できませんでした",
-            "topics": ["local-dev"],
-            "translated_title": "",
-            "score": _summary_composite_score(score_breakdown),
-            "score_breakdown": score_breakdown,
-            "score_reason": "ローカルフォールバックのため簡易スコアです。",
-            "score_policy_version": "v4",
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+    _require_api_key(api_key, "summary")
 
     prompt = f"{task['system_instruction']}\n\n{task['prompt']}"
     enable_summary_prompt_cache = os.getenv("MINIMAX_SUMMARY_PROMPT_CACHE", "0").strip() not in ("0", "false", "False")
@@ -465,32 +437,7 @@ def summarize(
         enable_prompt_cache=enable_summary_prompt_cache,
     )
     if message is None:
-        summary = " / ".join(facts[:8])[:task["max_chars"]] if facts else (title or "")
-        score_breakdown = {
-            "importance": 0.4,
-            "novelty": 0.4,
-            "actionability": 0.4,
-            "reliability": 0.5,
-            "relevance": 0.5,
-        }
-        return {
-            "summary": summary or "要約を生成できませんでした",
-            "topics": ["local-dev"],
-            "translated_title": "",
-            "score": _summary_composite_score(score_breakdown),
-            "score_breakdown": score_breakdown,
-            "score_reason": "MiniMax応答を取得できなかったため簡易スコアです。",
-            "score_policy_version": "v4",
-            "llm": _with_execution_failures({
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            }, execution_failures),
-        }
+        _raise_execution_failure("summary", execution_failures, "minimax summary returned no message")
     text = message.content[0].text.strip()
     start = text.find("{")
     end = text.rfind("}") + 1
@@ -517,6 +464,7 @@ def summarize(
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, api_key: str | None = None, model: str | None = None) -> dict:
     resolved_model = _require_model(model, "faithfulness_check")
+    _require_api_key(api_key, "faithfulness_check")
     prompt = summary_faithfulness_prompt(title, facts, summary)
     message, used_model, _execution_failures = _call_with_model_fallback(
         prompt,
@@ -528,9 +476,7 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
         user_prompt=prompt,
     )
     if message is None:
-        result = {"verdict": "warn", "short_comment": "判定モデル応答を取得できなかったため簡易扱いです。"}
-        result["llm"] = empty_llm_meta("local-fallback", used_model or resolved_model)
-        return result
+        _raise_execution_failure("faithfulness_check", _execution_failures, "minimax faithfulness_check returned no message")
     return run_summary_faithfulness_check(
         lambda: wrap_message_transport(
             message,
@@ -558,6 +504,7 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
 
 def check_facts(title: str | None, content: str, facts: list[str], api_key: str | None = None, model: str | None = None) -> dict:
     resolved_model = _require_model(model, "facts_check")
+    _require_api_key(api_key, "facts_check")
     prompt = facts_check_prompt(title, content, facts)
     message, used_model, _execution_failures = _call_with_model_fallback(
         prompt,
@@ -569,11 +516,7 @@ def check_facts(title: str | None, content: str, facts: list[str], api_key: str 
         user_prompt=prompt,
     )
     if message is None:
-        return {
-            "verdict": "warn",
-            "short_comment": "判定モデル応答を取得できなかったため簡易扱いです。",
-            "llm": empty_llm_meta("local-fallback", used_model or resolved_model),
-        }
+        _raise_execution_failure("facts_check", _execution_failures, "minimax facts_check returned no message")
     retry_prompt = facts_check_retry_prompt(title, content, facts)
     return run_facts_check(
         lambda: wrap_message_transport(
@@ -602,6 +545,7 @@ def check_facts(title: str | None, content: str, facts: list[str], api_key: str 
 
 def translate_title(title: str, api_key: str | None = None, model: str | None = None) -> dict:
     resolved_model = _require_model(model, "summary")
+    _require_api_key(api_key, "summary")
     src = (title or "").strip()
     if not src:
         return {"translated_title": "", "llm": None}
@@ -621,7 +565,7 @@ JSONで返してください:
         api_key=api_key,
     )
     if message is None:
-        return {"translated_title": _translate_title_to_ja(src, resolved_model, api_key=api_key), "llm": None}
+        _raise_execution_failure("summary", _execution_failures, "minimax translate_title returned no message")
 
     text = message.content[0].text.strip()
     data = _extract_first_json_object(text) or {}
@@ -724,6 +668,7 @@ def _build_digest_input_sections(items: list[dict]) -> tuple[str, str]:
 
 def compose_digest(digest_date: str, items: list[dict], api_key: str | None = None, model: str | None = None) -> dict:
     resolved_model = _require_model(model, "digest")
+    _require_api_key(api_key, "digest")
     if not items:
         return {
             "subject": f"Sifto Digest - {digest_date}",
@@ -755,36 +700,7 @@ def compose_digest(digest_date: str, items: list[dict], api_key: str | None = No
         user_prompt=task["prompt"],
     )
     if message is None:
-        top_topics = []
-        for item in items:
-            top_topics.extend(item.get("topics") or [])
-        lines = [
-            "【全体サマリ】",
-            "本日のダイジェスト（当日分の全記事要約ベース）をお届けします。",
-            "",
-            "【注目ポイント】",
-        ]
-        lines += [
-            f"- #{item.get('rank')} {item.get('title') or '（タイトルなし）'}"
-            for item in items
-        ]
-        if top_topics:
-            lines += ["", "【その他のポイント】", "主なトピック: " + ", ".join(dict.fromkeys(top_topics))]
-        lines += ["", "【明日以降のフォローポイント】", "新規更新の続報と追加情報の有無を継続確認してください。", "", "以上です。"]
-        body = "\n".join(lines)
-        return {
-            "subject": f"Sifto Digest {digest_date}",
-            "body": body,
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("digest", _execution_failures, "minimax digest returned no message")
 
     text = message.content[0].text.strip()
     subject, body = parse_digest_result(text, error_prefix="claude compose_digest missing subject/body")
@@ -802,6 +718,7 @@ def compose_digest(digest_date: str, items: list[dict], api_key: str | None = No
 
 def ask_question(query: str, candidates: list[dict], api_key: str | None = None, model: str | None = None) -> dict:
     resolved_model = _require_model(model, "ask")
+    _require_api_key(api_key, "ask")
     if not candidates:
         return {
             "answer": "該当する記事は見つかりませんでした。",
@@ -829,20 +746,7 @@ def ask_question(query: str, candidates: list[dict], api_key: str | None = None,
         user_prompt=task["prompt"],
     )
     if message is None:
-        return {
-            "answer": "候補記事から回答を生成できませんでした。",
-            "bullets": [],
-            "citations": [],
-            "llm": {
-                "provider": "none",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("ask", _execution_failures, "minimax ask returned no message")
     text = message.content[0].text.strip()
     result = parse_ask_result(text, candidates, error_prefix="claude ask missing answer")
     return {**result, "llm": _llm_meta(message, "ask", used_model or resolved_model)}
@@ -857,6 +761,7 @@ def compose_digest_cluster_draft(
     model: str | None = None,
 ) -> dict:
     resolved_model = _require_model(model, "digest_cluster_draft")
+    _require_api_key(api_key, "digest_cluster_draft")
     cluster_label = str(cluster_label or "話題").strip() or "話題"
     topics = [str(t).strip() for t in topics if str(t).strip()][:8]
     source_lines = [str(x).strip() for x in source_lines if str(x).strip()][:16]
@@ -866,20 +771,6 @@ def compose_digest_cluster_draft(
             "llm": {
                 "provider": "none",
                 "model": "none",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
-
-    if _client_for_api_key(api_key) is None:
-        return {
-            "draft_summary": fallback_cluster_draft_from_source_lines(source_lines),
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "cache_creation_input_tokens": 0,
@@ -900,18 +791,7 @@ def compose_digest_cluster_draft(
         user_prompt=task["prompt"],
     )
     if message is None:
-        return {
-            "draft_summary": fallback_cluster_draft_from_source_lines(source_lines),
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("digest_cluster_draft", _execution_failures, "minimax digest_cluster_draft returned no message")
     text = message.content[0].text.strip()
     draft_summary = parse_cluster_draft_result(text, task["source_lines"])
     return {
@@ -930,6 +810,7 @@ def rank_feed_suggestions(
     model: str | None = None,
 ) -> dict:
     resolved_model = _require_model(model, "source_suggestion")
+    _require_api_key(api_key, "source_suggestion")
     if not candidates:
         return {
             "items": [],
@@ -945,34 +826,6 @@ def rank_feed_suggestions(
         }
     task = build_rank_feed_task(existing_sources, preferred_topics, candidates, positive_examples, negative_examples)
 
-    if _client_for_api_key(api_key) is None:
-        # Local/dev fallback: keep order and synthesize simple reasons.
-        out = []
-        for c in task["candidates"]:
-            reasons = c.get("reasons") or []
-            matched_topics = c.get("matched_topics") or []
-            reason = " / ".join([*(["高評価トピックに近い"] if matched_topics else []), *[str(r) for r in reasons[:1]]]) or "関連候補"
-            out.append(
-                {
-                    "id": c.get("id"),
-                    "url": c.get("url"),
-                    "reason": reason[:120],
-                    "confidence": 0.4 if matched_topics else 0.25,
-                }
-            )
-        return {
-            "items": out,
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
-
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
         resolved_model,
@@ -981,18 +834,7 @@ def rank_feed_suggestions(
         api_key=api_key,
     )
     if message is None:
-        return {
-            "items": [],
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("source_suggestion", _execution_failures, "minimax source_suggestion returned no message")
 
     text = message.content[0].text.strip()
     out = parse_rank_feed_result(text, task["candidates"])
@@ -1010,22 +852,8 @@ def generate_briefing_navigator(
     model: str | None = None,
 ) -> dict:
     resolved_model = _require_model(model, "briefing_navigator")
+    _require_api_key(api_key, "briefing_navigator")
     task = build_briefing_navigator_task(persona, candidates, intro_context)
-    if _client_for_api_key(api_key) is None:
-        out = parse_briefing_navigator_result("{}", task["candidates"])
-        return {
-            "intro": out["intro"],
-            "picks": out["picks"],
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
 
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
@@ -1037,20 +865,7 @@ def generate_briefing_navigator(
         top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
-        out = parse_briefing_navigator_result("{}", task["candidates"])
-        return {
-            "intro": out["intro"],
-            "picks": out["picks"],
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("briefing_navigator", _execution_failures, "minimax briefing_navigator returned no message")
 
     text = message.content[0].text.strip()
     out = parse_briefing_navigator_result(text, task["candidates"])
@@ -1069,25 +884,8 @@ def compose_ai_navigator_brief(
     model: str | None = None,
 ) -> dict:
     resolved_model = _require_model(model, "ai_navigator_brief")
+    _require_api_key(api_key, "ai_navigator_brief")
     task = build_ai_navigator_brief_task(persona, candidates, intro_context)
-    if _client_for_api_key(api_key) is None:
-        out = parse_ai_navigator_brief_result("{}", task["candidates"], intro_context)
-        return {
-            "title": out["title"],
-            "intro": out["intro"],
-            "summary": out["summary"],
-            "ending": out["ending"],
-            "items": out["items"],
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
 
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
@@ -1099,23 +897,7 @@ def compose_ai_navigator_brief(
         top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
-        out = parse_ai_navigator_brief_result("{}", task["candidates"], intro_context)
-        return {
-            "title": out["title"],
-            "intro": out["intro"],
-            "summary": out["summary"],
-            "ending": out["ending"],
-            "items": out["items"],
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("ai_navigator_brief", _execution_failures, "minimax ai_navigator_brief returned no message")
 
     text = message.content[0].text.strip()
     out = parse_ai_navigator_brief_result(text, task["candidates"], intro_context)
@@ -1136,23 +918,8 @@ def generate_item_navigator(
     model: str | None = None,
 ) -> dict:
     resolved_model = _require_model(model, "item_navigator")
+    _require_api_key(api_key, "item_navigator")
     task = build_item_navigator_task(persona, article)
-    if _client_for_api_key(api_key) is None:
-        out = parse_item_navigator_result("{}", task["article"])
-        return {
-            "headline": out["headline"],
-            "commentary": out["commentary"],
-            "stance_tags": out["stance_tags"],
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
 
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
@@ -1164,21 +931,7 @@ def generate_item_navigator(
         top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
-        out = parse_item_navigator_result("{}", task["article"])
-        return {
-            "headline": out["headline"],
-            "commentary": out["commentary"],
-            "stance_tags": out["stance_tags"],
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("item_navigator", _execution_failures, "minimax item_navigator returned no message")
 
     text = message.content[0].text.strip()
     out = parse_item_navigator_result(text, task["article"])
@@ -1205,6 +958,7 @@ def generate_audio_briefing_script(
     model: str | None = None,
 ) -> dict:
     resolved_model = _require_model(model, "audio_briefing_script")
+    _require_api_key(api_key, "audio_briefing_script")
     task = build_audio_briefing_script_task(
         persona,
         articles,
@@ -1217,9 +971,6 @@ def generate_audio_briefing_script(
         include_article_segments=include_article_segments,
         include_ending=include_ending,
     )
-    if _client_for_api_key(api_key) is None:
-        raise RuntimeError("audio briefing script api client is unavailable")
-
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["user_prompt"],
         resolved_model,
@@ -1262,15 +1013,8 @@ def generate_ask_navigator(
     model: str | None = None,
 ) -> dict:
     resolved_model = _require_model(model, "ask_navigator")
+    _require_api_key(api_key, "ask_navigator")
     task = build_ask_navigator_task(persona, ask_input)
-    if _client_for_api_key(api_key) is None:
-        out = parse_ask_navigator_result("{}", task["input"])
-        return {
-            "headline": out["headline"],
-            "commentary": out["commentary"],
-            "next_angles": out["next_angles"],
-            "llm": empty_llm_meta("local-dev", "local-fallback"),
-        }
 
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
@@ -1282,13 +1026,7 @@ def generate_ask_navigator(
         top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
-        out = parse_ask_navigator_result("{}", task["input"])
-        return {
-            "headline": out["headline"],
-            "commentary": out["commentary"],
-            "next_angles": out["next_angles"],
-            "llm": empty_llm_meta("local-fallback", used_model or resolved_model),
-        }
+        _raise_execution_failure("ask_navigator", _execution_failures, "minimax ask_navigator returned no message")
 
     text = message.content[0].text.strip()
     out = parse_ask_navigator_result(text, task["input"])
@@ -1307,24 +1045,8 @@ def generate_source_navigator(
     model: str | None = None,
 ) -> dict:
     resolved_model = _require_model(model, "source_navigator")
+    _require_api_key(api_key, "source_navigator")
     task = build_source_navigator_task(persona, candidates)
-    if _client_for_api_key(api_key) is None:
-        out = parse_source_navigator_result("{}", task["candidates"])
-        return {
-            "overview": out["overview"],
-            "keep": out["keep"],
-            "watch": out["watch"],
-            "standout": out["standout"],
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
 
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
@@ -1336,22 +1058,7 @@ def generate_source_navigator(
         top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
-        out = parse_source_navigator_result("{}", task["candidates"])
-        return {
-            "overview": out["overview"],
-            "keep": out["keep"],
-            "watch": out["watch"],
-            "standout": out["standout"],
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("source_navigator", _execution_failures, "minimax source_navigator returned no message")
 
     text = message.content[0].text.strip()
     out = parse_source_navigator_result(text, task["candidates"])
@@ -1373,21 +1080,8 @@ def suggest_feed_seed_sites(
     model: str | None = None,
 ) -> dict:
     resolved_model = _require_model(model, "source_suggestion")
+    _require_api_key(api_key, "source_suggestion")
     task = build_seed_sites_task(existing_sources, preferred_topics, positive_examples, negative_examples)
-
-    if _client_for_api_key(api_key) is None:
-        return {
-            "items": [],
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
         resolved_model,
@@ -1396,18 +1090,7 @@ def suggest_feed_seed_sites(
         api_key=api_key,
     )
     if message is None:
-        return {
-            "items": [],
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("source_suggestion", _execution_failures, "minimax source_suggestion returned no message")
     text = message.content[0].text.strip()
     out = parse_seed_sites_result(text, task["existing_sources"])
     return {
@@ -1428,23 +1111,7 @@ async def _call_with_model_fallback_async(*args, **kwargs):
 
 async def extract_facts_async(title: str | None, content: str, api_key: str | None = None, model: str | None = None) -> dict:
     resolved_model = _require_model(model, "facts")
-    if _async_client_for_api_key(api_key) is None:
-        lines = [line.strip() for line in content.splitlines() if line.strip()]
-        facts = lines[:5]
-        if not facts and title:
-            facts = [f"タイトル: {title}"]
-        return {
-            "facts": facts,
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+    _require_api_key(api_key, "facts")
 
     chunks = _split_text_chunks(content, chunk_chars=8000, overlap_chars=400)
     if not chunks:
@@ -1481,19 +1148,7 @@ async def extract_facts_async(title: str | None, content: str, api_key: str | No
         llm_metas.append(_with_execution_failures(_llm_meta(message, "facts", used_model or resolved_model), execution_failures))
 
     if not any_llm_success:
-        lines = [line.strip() for line in content.splitlines() if line.strip()]
-        return {
-            "facts": lines[:5],
-            "llm": _with_execution_failures({
-                "provider": "local-fallback",
-                "model": resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            }, execution_failures_all),
-        }
+        _raise_execution_failure("facts", execution_failures_all, "minimax facts returned no message")
 
     merged_facts = _merge_fact_lists(all_fact_lists, max_items=24)
     localization_llm = None
@@ -1534,34 +1189,7 @@ async def summarize_async(
     resolved_model = _require_model(model, "summary")
     task = build_summary_task(title, facts, source_text_chars)
     max_tokens = _summary_max_tokens(task["target_chars"])
-
-    if _async_client_for_api_key(api_key) is None:
-        summary = " / ".join(facts[:8])[:task["max_chars"]] if facts else (title or "")
-        score_breakdown = {
-            "importance": 0.4,
-            "novelty": 0.4,
-            "actionability": 0.4,
-            "reliability": 0.5,
-            "relevance": 0.5,
-        }
-        return {
-            "summary": summary or "要約を生成できませんでした",
-            "topics": ["local-dev"],
-            "translated_title": "",
-            "score": _summary_composite_score(score_breakdown),
-            "score_breakdown": score_breakdown,
-            "score_reason": "ローカルフォールバックのため簡易スコアです。",
-            "score_policy_version": "v4",
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+    _require_api_key(api_key, "summary")
 
     prompt = f"{task['system_instruction']}\n\n{task['prompt']}"
     enable_summary_prompt_cache = os.getenv("MINIMAX_SUMMARY_PROMPT_CACHE", "0").strip() not in ("0", "false", "False")
@@ -1576,32 +1204,7 @@ async def summarize_async(
         enable_prompt_cache=enable_summary_prompt_cache,
     )
     if message is None:
-        summary = " / ".join(facts[:8])[:task["max_chars"]] if facts else (title or "")
-        score_breakdown = {
-            "importance": 0.4,
-            "novelty": 0.4,
-            "actionability": 0.4,
-            "reliability": 0.5,
-            "relevance": 0.5,
-        }
-        return {
-            "summary": summary or "要約を生成できませんでした",
-            "topics": ["local-dev"],
-            "translated_title": "",
-            "score": _summary_composite_score(score_breakdown),
-            "score_breakdown": score_breakdown,
-            "score_reason": "MiniMax応答を取得できなかったため簡易スコアです。",
-            "score_policy_version": "v4",
-            "llm": _with_execution_failures({
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            }, execution_failures),
-        }
+        _raise_execution_failure("summary", execution_failures, "minimax summary returned no message")
     text = message.content[0].text.strip()
     start = text.find("{")
     end = text.rfind("}") + 1
@@ -1629,6 +1232,7 @@ async def summarize_async(
 
 async def check_summary_faithfulness_async(title: str | None, facts: list[str], summary: str, api_key: str | None = None, model: str | None = None) -> dict:
     resolved_model = _require_model(model, "faithfulness_check")
+    _require_api_key(api_key, "faithfulness_check")
     prompt = summary_faithfulness_prompt(title, facts, summary)
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         prompt,
@@ -1640,9 +1244,7 @@ async def check_summary_faithfulness_async(title: str | None, facts: list[str], 
         user_prompt=prompt,
     )
     if message is None:
-        result = {"verdict": "warn", "short_comment": "判定モデル応答を取得できなかったため簡易扱いです。"}
-        result["llm"] = empty_llm_meta("local-fallback", used_model or resolved_model)
-        return result
+        _raise_execution_failure("faithfulness_check", _execution_failures, "minimax faithfulness_check returned no message")
     return await asyncio.to_thread(
         run_summary_faithfulness_check,
         lambda: wrap_message_transport(
@@ -1671,6 +1273,7 @@ async def check_summary_faithfulness_async(title: str | None, facts: list[str], 
 
 async def check_facts_async(title: str | None, content: str, facts: list[str], api_key: str | None = None, model: str | None = None) -> dict:
     resolved_model = _require_model(model, "facts_check")
+    _require_api_key(api_key, "facts_check")
     prompt = facts_check_prompt(title, content, facts)
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         prompt,
@@ -1682,11 +1285,7 @@ async def check_facts_async(title: str | None, content: str, facts: list[str], a
         user_prompt=prompt,
     )
     if message is None:
-        return {
-            "verdict": "warn",
-            "short_comment": "判定モデル応答を取得できなかったため簡易扱いです。",
-            "llm": empty_llm_meta("local-fallback", used_model or resolved_model),
-        }
+        _raise_execution_failure("facts_check", _execution_failures, "minimax facts_check returned no message")
     retry_prompt = facts_check_retry_prompt(title, content, facts)
     return await asyncio.to_thread(
         run_facts_check,
@@ -1716,6 +1315,7 @@ async def check_facts_async(title: str | None, content: str, facts: list[str], a
 
 async def translate_title_async(title: str, api_key: str | None = None, model: str | None = None) -> dict:
     resolved_model = _require_model(model, "summary")
+    _require_api_key(api_key, "summary")
     src = (title or "").strip()
     if not src:
         return {"translated_title": "", "llm": None}
@@ -1735,8 +1335,7 @@ JSONで返してください:
         api_key=api_key,
     )
     if message is None:
-        _translated = await asyncio.to_thread(_translate_title_to_ja, src, resolved_model, api_key)
-        return {"translated_title": _translated, "llm": None}
+        _raise_execution_failure("summary", _execution_failures, "minimax translate_title returned no message")
 
     text = message.content[0].text.strip()
     data = _extract_first_json_object(text) or {}
@@ -1751,6 +1350,7 @@ JSONで返してください:
 
 async def compose_digest_async(digest_date: str, items: list[dict], api_key: str | None = None, model: str | None = None) -> dict:
     resolved_model = _require_model(model, "digest")
+    _require_api_key(api_key, "digest")
     if not items:
         return {
             "subject": f"Sifto Digest - {digest_date}",
@@ -1782,36 +1382,7 @@ async def compose_digest_async(digest_date: str, items: list[dict], api_key: str
         user_prompt=task["prompt"],
     )
     if message is None:
-        top_topics = []
-        for item in items:
-            top_topics.extend(item.get("topics") or [])
-        lines = [
-            "【全体サマリ】",
-            "本日のダイジェスト（当日分の全記事要約ベース）をお届けします。",
-            "",
-            "【注目ポイント】",
-        ]
-        lines += [
-            f"- #{item.get('rank')} {item.get('title') or '（タイトルなし）'}"
-            for item in items
-        ]
-        if top_topics:
-            lines += ["", "【その他のポイント】", "主なトピック: " + ", ".join(dict.fromkeys(top_topics))]
-        lines += ["", "【明日以降のフォローポイント】", "新規更新の続報と追加情報の有無を継続確認してください。", "", "以上です。"]
-        body = "\n".join(lines)
-        return {
-            "subject": f"Sifto Digest {digest_date}",
-            "body": body,
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("digest", _execution_failures, "minimax digest returned no message")
 
     text = message.content[0].text.strip()
     subject, body = parse_digest_result(text, error_prefix="claude compose_digest missing subject/body")
@@ -1845,6 +1416,7 @@ async def ask_question_async(query: str, candidates: list[dict], api_key: str | 
             },
         }
     task = build_ask_task(query, candidates)
+    _require_api_key(api_key, "ask")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         f"{task['system_instruction']}\n\n{task['prompt']}",
         resolved_model,
@@ -1856,20 +1428,7 @@ async def ask_question_async(query: str, candidates: list[dict], api_key: str | 
         user_prompt=task["prompt"],
     )
     if message is None:
-        return {
-            "answer": "候補記事から回答を生成できませんでした。",
-            "bullets": [],
-            "citations": [],
-            "llm": {
-                "provider": "none",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("ask", _execution_failures, "minimax ask returned no message")
     text = message.content[0].text.strip()
     result = parse_ask_result(text, candidates, error_prefix="claude ask missing answer")
     return {**result, "llm": _llm_meta(message, "ask", used_model or resolved_model)}
@@ -1900,21 +1459,7 @@ async def compose_digest_cluster_draft_async(
                 "estimated_cost_usd": 0.0,
             },
         }
-
-    if _async_client_for_api_key(api_key) is None:
-        return {
-            "draft_summary": fallback_cluster_draft_from_source_lines(source_lines),
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
-
+    _require_api_key(api_key, "digest_cluster_draft")
     task = build_cluster_draft_task(cluster_label, item_count, topics, source_lines)
 
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
@@ -1927,18 +1472,7 @@ async def compose_digest_cluster_draft_async(
         user_prompt=task["prompt"],
     )
     if message is None:
-        return {
-            "draft_summary": fallback_cluster_draft_from_source_lines(source_lines),
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("digest_cluster_draft", _execution_failures, "minimax digest_cluster_draft returned no message")
     text = message.content[0].text.strip()
     draft_summary = parse_cluster_draft_result(text, task["source_lines"])
     return {
@@ -1969,36 +1503,9 @@ async def rank_feed_suggestions_async(
                 "cache_read_input_tokens": 0,
                 "estimated_cost_usd": 0.0,
             },
-        }
+    }
     task = build_rank_feed_task(existing_sources, preferred_topics, candidates, positive_examples, negative_examples)
-
-    if _async_client_for_api_key(api_key) is None:
-        out = []
-        for c in task["candidates"]:
-            reasons = c.get("reasons") or []
-            matched_topics = c.get("matched_topics") or []
-            reason = " / ".join([*(["高評価トピックに近い"] if matched_topics else []), *[str(r) for r in reasons[:1]]]) or "関連候補"
-            out.append(
-                {
-                    "id": c.get("id"),
-                    "url": c.get("url"),
-                    "reason": reason[:120],
-                    "confidence": 0.4 if matched_topics else 0.25,
-                }
-            )
-        return {
-            "items": out,
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
-
+    _require_api_key(api_key, "source_suggestion")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
         resolved_model,
@@ -2007,18 +1514,7 @@ async def rank_feed_suggestions_async(
         api_key=api_key,
     )
     if message is None:
-        return {
-            "items": [],
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("source_suggestion", _execution_failures, "minimax source_suggestion returned no message")
 
     text = message.content[0].text.strip()
     out = parse_rank_feed_result(text, task["candidates"])
@@ -2037,22 +1533,7 @@ async def generate_briefing_navigator_async(
 ) -> dict:
     resolved_model = _require_model(model, "briefing_navigator")
     task = build_briefing_navigator_task(persona, candidates, intro_context)
-    if _async_client_for_api_key(api_key) is None:
-        out = parse_briefing_navigator_result("{}", task["candidates"])
-        return {
-            "intro": out["intro"],
-            "picks": out["picks"],
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
-
+    _require_api_key(api_key, "briefing_navigator")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
         resolved_model,
@@ -2063,20 +1544,7 @@ async def generate_briefing_navigator_async(
         top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
-        out = parse_briefing_navigator_result("{}", task["candidates"])
-        return {
-            "intro": out["intro"],
-            "picks": out["picks"],
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("briefing_navigator", _execution_failures, "minimax briefing_navigator returned no message")
 
     text = message.content[0].text.strip()
     out = parse_briefing_navigator_result(text, task["candidates"])
@@ -2096,25 +1564,7 @@ async def compose_ai_navigator_brief_async(
 ) -> dict:
     resolved_model = _require_model(model, "ai_navigator_brief")
     task = build_ai_navigator_brief_task(persona, candidates, intro_context)
-    if _async_client_for_api_key(api_key) is None:
-        out = parse_ai_navigator_brief_result("{}", task["candidates"], intro_context)
-        return {
-            "title": out["title"],
-            "intro": out["intro"],
-            "summary": out["summary"],
-            "ending": out["ending"],
-            "items": out["items"],
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
-
+    _require_api_key(api_key, "ai_navigator_brief")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
         resolved_model,
@@ -2125,23 +1575,7 @@ async def compose_ai_navigator_brief_async(
         top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
-        out = parse_ai_navigator_brief_result("{}", task["candidates"], intro_context)
-        return {
-            "title": out["title"],
-            "intro": out["intro"],
-            "summary": out["summary"],
-            "ending": out["ending"],
-            "items": out["items"],
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("ai_navigator_brief", _execution_failures, "minimax ai_navigator_brief returned no message")
 
     text = message.content[0].text.strip()
     out = parse_ai_navigator_brief_result(text, task["candidates"], intro_context)
@@ -2163,23 +1597,7 @@ async def generate_item_navigator_async(
 ) -> dict:
     resolved_model = _require_model(model, "item_navigator")
     task = build_item_navigator_task(persona, article)
-    if _async_client_for_api_key(api_key) is None:
-        out = parse_item_navigator_result("{}", task["article"])
-        return {
-            "headline": out["headline"],
-            "commentary": out["commentary"],
-            "stance_tags": out["stance_tags"],
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
-
+    _require_api_key(api_key, "item_navigator")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
         resolved_model,
@@ -2190,21 +1608,7 @@ async def generate_item_navigator_async(
         top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
-        out = parse_item_navigator_result("{}", task["article"])
-        return {
-            "headline": out["headline"],
-            "commentary": out["commentary"],
-            "stance_tags": out["stance_tags"],
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("item_navigator", _execution_failures, "minimax item_navigator returned no message")
 
     text = message.content[0].text.strip()
     out = parse_item_navigator_result(text, task["article"])
@@ -2289,15 +1693,7 @@ async def generate_ask_navigator_async(
 ) -> dict:
     resolved_model = _require_model(model, "ask_navigator")
     task = build_ask_navigator_task(persona, ask_input)
-    if _async_client_for_api_key(api_key) is None:
-        out = parse_ask_navigator_result("{}", task["input"])
-        return {
-            "headline": out["headline"],
-            "commentary": out["commentary"],
-            "next_angles": out["next_angles"],
-            "llm": empty_llm_meta("local-dev", "local-fallback"),
-        }
-
+    _require_api_key(api_key, "ask_navigator")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
         resolved_model,
@@ -2308,13 +1704,7 @@ async def generate_ask_navigator_async(
         top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
-        out = parse_ask_navigator_result("{}", task["input"])
-        return {
-            "headline": out["headline"],
-            "commentary": out["commentary"],
-            "next_angles": out["next_angles"],
-            "llm": empty_llm_meta("local-fallback", used_model or resolved_model),
-        }
+        _raise_execution_failure("ask_navigator", _execution_failures, "minimax ask_navigator returned no message")
 
     text = message.content[0].text.strip()
     out = parse_ask_navigator_result(text, task["input"])
@@ -2334,24 +1724,7 @@ async def generate_source_navigator_async(
 ) -> dict:
     resolved_model = _require_model(model, "source_navigator")
     task = build_source_navigator_task(persona, candidates)
-    if _async_client_for_api_key(api_key) is None:
-        out = parse_source_navigator_result("{}", task["candidates"])
-        return {
-            "overview": out["overview"],
-            "keep": out["keep"],
-            "watch": out["watch"],
-            "standout": out["standout"],
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
-
+    _require_api_key(api_key, "source_navigator")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
         resolved_model,
@@ -2362,22 +1735,7 @@ async def generate_source_navigator_async(
         top_p=task["sampling_profile"]["top_p"],
     )
     if message is None:
-        out = parse_source_navigator_result("{}", task["candidates"])
-        return {
-            "overview": out["overview"],
-            "keep": out["keep"],
-            "watch": out["watch"],
-            "standout": out["standout"],
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("source_navigator", _execution_failures, "minimax source_navigator returned no message")
 
     text = message.content[0].text.strip()
     out = parse_source_navigator_result(text, task["candidates"])
@@ -2400,20 +1758,7 @@ async def suggest_feed_seed_sites_async(
 ) -> dict:
     resolved_model = _require_model(model, "source_suggestion")
     task = build_seed_sites_task(existing_sources, preferred_topics, positive_examples, negative_examples)
-
-    if _async_client_for_api_key(api_key) is None:
-        return {
-            "items": [],
-            "llm": {
-                "provider": "local-dev",
-                "model": "local-fallback",
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+    _require_api_key(api_key, "source_suggestion")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
         resolved_model,
@@ -2422,18 +1767,7 @@ async def suggest_feed_seed_sites_async(
         api_key=api_key,
     )
     if message is None:
-        return {
-            "items": [],
-            "llm": {
-                "provider": "local-fallback",
-                "model": used_model or resolved_model,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "estimated_cost_usd": 0.0,
-            },
-        }
+        _raise_execution_failure("source_suggestion", _execution_failures, "minimax source_suggestion returned no message")
     text = message.content[0].text.strip()
     out = parse_seed_sites_result(text, task["existing_sources"])
     if len(out) == 0:

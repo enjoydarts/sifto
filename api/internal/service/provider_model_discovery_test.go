@@ -135,6 +135,30 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 	}
 }
 
+func TestNormalizeMiniMaxAPIBaseURL(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "empty", raw: "", want: "https://api.minimax.io"},
+		{name: "base", raw: "https://api.minimax.io", want: "https://api.minimax.io"},
+		{name: "v1", raw: "https://api.minimax.io/v1", want: "https://api.minimax.io"},
+		{name: "chat completions", raw: "https://api.minimax.io/chat/completions", want: "https://api.minimax.io"},
+		{name: "v1 chat completions", raw: "https://api.minimax.io/v1/chat/completions", want: "https://api.minimax.io"},
+		{name: "anthropic", raw: "https://api.minimax.io/anthropic", want: "https://api.minimax.io"},
+		{name: "anthropic v1", raw: "https://api.minimax.io/anthropic/v1", want: "https://api.minimax.io"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeMiniMaxAPIBaseURL(tt.raw); got != tt.want {
+				t.Fatalf("normalizeMiniMaxAPIBaseURL(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNormalizeTogetherAPIBaseURL(t *testing.T) {
 	tests := []struct {
 		name string

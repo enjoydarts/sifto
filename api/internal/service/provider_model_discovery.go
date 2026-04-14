@@ -448,7 +448,7 @@ func normalizeMiniMaxAPIBaseURL(raw string) string {
 	if base == "" {
 		return "https://api.minimax.io"
 	}
-	for _, suffix := range []string{"/v1/chat/completions", "/chat/completions", "/v1"} {
+	for _, suffix := range []string{"/anthropic/v1", "/anthropic", "/v1/chat/completions", "/chat/completions", "/v1"} {
 		if strings.HasSuffix(base, suffix) {
 			return strings.TrimSuffix(base, suffix)
 		}

@@ -75,13 +75,13 @@ from app.services.facts_task_common import build_facts_localization_task, build_
 from app.services.task_transport_common import empty_llm_meta, with_execution_failures, wrap_message_fallback_transport, wrap_message_transport
 
 _client = None
-_facts_model = os.getenv("MINIMAX_FACTS_MODEL", "MiniMax-M2.5-highspeed")
-_summary_model = os.getenv("MINIMAX_SUMMARY_MODEL", "MiniMax-M2.7")
+_facts_model = "MiniMax-M2.5-highspeed"
+_summary_model = "MiniMax-M2.7"
 _summary_model_fallback = None
 _facts_model_fallback = None
-_digest_model = os.getenv("MINIMAX_DIGEST_MODEL", _summary_model)
+_digest_model = _summary_model
 _digest_model_fallback = None
-_feed_suggest_model = os.getenv("MINIMAX_FEED_SUGGEST_MODEL", "MiniMax-M2.5-highspeed")
+_feed_suggest_model = "MiniMax-M2.5-highspeed"
 _feed_suggest_model_fallback = None
 _log = logging.getLogger(__name__)
 _MINIMAX_PRICING_SOURCE_VERSION = "llm_catalog"

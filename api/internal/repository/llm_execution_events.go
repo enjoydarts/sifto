@@ -90,7 +90,7 @@ func (r *LLMExecutionEventRepo) SummaryByUserMonth(ctx context.Context, userID s
 	nextMonthStart := monthStart.AddDate(0, 1, 0)
 	monthKey := monthStart.Format("2006-01")
 	rows, err := r.db.Query(ctx, `
-		usage_costs AS (
+		WITH usage_costs AS (
 			SELECT
 				l.user_id,
 				l.purpose,

@@ -223,7 +223,7 @@ func (r *ProviderModelUpdateRepo) ListSnapshotEntries(ctx context.Context, provi
 	countQuery := fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM provider_model_snapshots pms
-		CROSS JOIN LATERAL jsonb_array_elements_text(pms.models) AS model_entry(model_id)
+		LEFT JOIN LATERAL jsonb_array_elements_text(pms.models) AS model_entry(model_id) ON TRUE
 		WHERE %s`, whereClause)
 	if err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
@@ -231,9 +231,9 @@ func (r *ProviderModelUpdateRepo) ListSnapshotEntries(ctx context.Context, provi
 
 	args = append(args, limit, offset)
 	rowsQuery := fmt.Sprintf(`
-		SELECT provider, model_entry.model_id, fetched_at, status, error
+		SELECT provider, COALESCE(model_entry.model_id, ''), fetched_at, status, error
 		FROM provider_model_snapshots pms
-		CROSS JOIN LATERAL jsonb_array_elements_text(pms.models) AS model_entry(model_id)
+		LEFT JOIN LATERAL jsonb_array_elements_text(pms.models) AS model_entry(model_id) ON TRUE
 		WHERE %s
 		ORDER BY fetched_at DESC, provider ASC, model_entry.model_id ASC
 		LIMIT $%d OFFSET $%d`, whereClause, len(args)-1, len(args))

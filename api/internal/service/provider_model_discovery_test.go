@@ -81,16 +81,6 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 			baseURL:  "/v1",
 			wantPath: "/v1/models",
 		},
-		{
-			name: "minimax",
-			fetchFunc: func(ctx context.Context, svc *ProviderModelDiscoveryService) ([]string, error) {
-				return svc.fetchMiniMaxModels(ctx)
-			},
-			apiKey:   "test-minimax-key",
-			baseKey:  "MINIMAX_API_BASE_URL",
-			baseURL:  "/v1/chat/completions",
-			wantPath: "/v1/models",
-		},
 	}
 
 	for _, c := range cases {
@@ -103,8 +93,10 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 				if r.URL.Path != c.wantPath {
 					t.Fatalf("path = %s, want %s", r.URL.Path, c.wantPath)
 				}
-				if got := r.Header.Get("Authorization"); got != "Bearer "+c.apiKey {
-					t.Fatalf("authorization = %q, want %q", got, "Bearer "+c.apiKey)
+				if c.name != "minimax" {
+					if got := r.Header.Get("Authorization"); got != "Bearer "+c.apiKey {
+						t.Fatalf("authorization = %q, want %q", got, "Bearer "+c.apiKey)
+					}
 				}
 				w.Header().Set("Content-Type", "application/json")
 				_ = json.NewEncoder(w).Encode(map[string]any{
@@ -135,6 +127,44 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 	}
 }
 
+func TestProviderModelDiscoveryFetchMiniMaxModelsFromDocs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s, want %s", r.Method, http.MethodGet)
+		}
+		if r.URL.Path != "/docs/api-reference/api-overview" {
+			t.Fatalf("path = %s, want %s", r.URL.Path, "/docs/api-reference/api-overview")
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`
+			<html>
+				<body>
+					<div>MiniMax-M2.7</div>
+					<div>MiniMax-M2.7-highspeed</div>
+					<div>MiniMax-M2.5</div>
+					<div>MiniMax-M2.7</div>
+				</body>
+			</html>
+		`))
+	}))
+	defer server.Close()
+
+	svc := NewProviderModelDiscoveryService()
+	svc.http = server.Client()
+	original := miniMaxDiscoveryDocsURLs
+	miniMaxDiscoveryDocsURLs = []string{server.URL + "/docs/api-reference/api-overview"}
+	defer func() { miniMaxDiscoveryDocsURLs = original }()
+
+	models, err := svc.fetchMiniMaxModels(context.Background())
+	if err != nil {
+		t.Fatalf("fetchMiniMaxModels failed: %v", err)
+	}
+	want := []string{"MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"}
+	if !slices.Equal(models, want) {
+		t.Fatalf("models = %#v, want %#v", models, want)
+	}
+}
+
 func TestNormalizeMiniMaxAPIBaseURL(t *testing.T) {
 	tests := []struct {
 		name string
@@ -156,6 +186,22 @@ func TestNormalizeMiniMaxAPIBaseURL(t *testing.T) {
 				t.Fatalf("normalizeMiniMaxAPIBaseURL(%q) = %q, want %q", tt.raw, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestExtractMiniMaxModelIDs(t *testing.T) {
+	body := `
+		<div>MiniMax-M2.7</div>
+		<div>MiniMax-M2.7-highspeed</div>
+		<div>MiniMax-M2.5</div>
+		<div>MiniMax-M2-her</div>
+		<div>MiniMax-M2</div>
+	`
+
+	got := normalizeModelIDs(extractMiniMaxModelIDs(body))
+	want := []string{"MiniMax-M2", "MiniMax-M2-her", "MiniMax-M2.5", "MiniMax-M2.7", "MiniMax-M2.7-highspeed"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("extractMiniMaxModelIDs() = %#v, want %#v", got, want)
 	}
 }
 
@@ -183,7 +229,6 @@ func TestNormalizeTogetherAPIBaseURL(t *testing.T) {
 
 func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredProviders(t *testing.T) {
 	moonshotKey := "test-moonshot-key"
-	minimaxKey := "test-minimax-key"
 	poeKey := "test-poe-key"
 	siliconFlowKey := "test-siliconflow-key"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -223,17 +268,16 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 				}{Data: []struct {
 					ID string `json:"id"`
 				}{{ID: "siliconflow-model-1"}}})
-			case "Bearer " + minimaxKey:
-				_ = json.NewEncoder(w).Encode(struct {
-					Data []struct {
-						ID string `json:"id"`
-					} `json:"data"`
-				}{Data: []struct {
-					ID string `json:"id"`
-				}{{ID: "minimax-model-1"}}})
 			default:
 				t.Fatalf("unexpected authorization for /v1/models: %q", r.Header.Get("Authorization"))
 			}
+		case "/docs/api-reference/api-overview":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`
+				<div>MiniMax-M2.7</div>
+				<div>MiniMax-M2.7-highspeed</div>
+				<div>MiniMax-M2.5</div>
+			`))
 		case "/api/paas/v4/models":
 			_ = json.NewEncoder(w).Encode(struct {
 				Data []struct {
@@ -260,8 +304,6 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 	t.Setenv("POE_API_BASE_URL", server.URL+"/v1")
 	t.Setenv("ALIBABA_API_KEY", "test-alibaba-key")
 	t.Setenv("ALIBABA_API_BASE_URL", server.URL+"/compatible-mode/v1/chat/completions")
-	t.Setenv("MINIMAX_API_KEY", minimaxKey)
-	t.Setenv("MINIMAX_API_BASE_URL", server.URL+"/v1/chat/completions")
 	t.Setenv("MOONSHOT_API_KEY", moonshotKey)
 	t.Setenv("MOONSHOT_API_BASE_URL", server.URL+"/v1/chat/completions")
 	t.Setenv("SILICONFLOW_API_KEY", siliconFlowKey)
@@ -271,6 +313,9 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 
 	svc := NewProviderModelDiscoveryService()
 	svc.http = server.Client()
+	originalMiniMaxURLs := miniMaxDiscoveryDocsURLs
+	miniMaxDiscoveryDocsURLs = []string{server.URL + "/docs/api-reference/api-overview"}
+	defer func() { miniMaxDiscoveryDocsURLs = originalMiniMaxURLs }()
 	results, err := svc.DiscoverAll(context.Background())
 	if err != nil {
 		t.Fatalf("DiscoverAll failed: %v", err)
@@ -307,8 +352,8 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 			}
 		}
 		if item.Provider == "minimax" {
-			if item.Models[0] != "minimax-model-1" {
-				t.Fatalf("minimax model = %q, want %q", item.Models[0], "minimax-model-1")
+			if item.Models[0] != "MiniMax-M2.5" {
+				t.Fatalf("minimax model = %q, want %q", item.Models[0], "MiniMax-M2.5")
 			}
 		}
 	}

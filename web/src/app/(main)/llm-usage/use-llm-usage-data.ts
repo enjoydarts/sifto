@@ -83,8 +83,7 @@ export function useLLMUsageData() {
   const [logSortDir, setLogSortDir] = useState<"asc" | "desc">("desc");
   const [forecastMode, setForecastMode] = useState<"month_avg" | "recent_7d">("month_avg");
   const [forecastMonth, setForecastMonth] = useState<string | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
-  const [daysFilter, setDaysFilter] = useState<"7" | "14" | "30" | "90" | "mtd">("mtd");
+  const [daysFilter, setDaysFilter] = useState<"7" | "14" | "30" | "90" | "mtd" | "prev_month">("mtd");
   const [limit, setLimit] = useState(100);
   const [logPage, setLogPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -118,16 +117,21 @@ export function useLLMUsageData() {
   }, [currentMonthExecutionRows]);
 
   const selectedDays = useMemo(() => {
-    if (daysFilter !== "mtd") {
+    if (daysFilter !== "mtd" && daysFilter !== "prev_month") {
       return Number(daysFilter);
     }
     const now = new Date();
     const jstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+    if (daysFilter === "prev_month") {
+      return new Date(jstNow.getFullYear(), jstNow.getMonth(), 0).getDate();
+    }
     return jstNow.getDate();
   }, [daysFilter]);
 
   const totalCostLabel = useMemo(() => {
-    return daysFilter === "mtd" ? t("llm.monthToDate") : t("llm.totalCost");
+    if (daysFilter === "mtd") return t("llm.monthToDate");
+    if (daysFilter === "prev_month") return t("llm.monthTotal");
+    return t("llm.totalCost");
   }, [daysFilter, t]);
 
   const currentJSTMonth = useMemo(() => {
@@ -143,23 +147,21 @@ export function useLLMUsageData() {
     return `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
   }, []);
 
-  useEffect(() => {
-    if (!selectedMonth) {
-      setSelectedMonth(currentJSTMonth);
-    }
-  }, [currentJSTMonth, selectedMonth]);
+  const selectedMonth = useMemo(() => {
+    return daysFilter === "prev_month" ? previousJSTMonth : currentJSTMonth;
+  }, [currentJSTMonth, daysFilter, previousJSTMonth]);
 
-  const load = useCallback(async (daysParam: number, limitParam: number, monthParam: string) => {
+  const load = useCallback(async (daysParam: number, limitParam: number, monthParam: string, monthMode: boolean) => {
     const seq = ++seqRef.current;
     setLoading(true);
     try {
       const [summary, byModel, byProviderCurrentMonth, byPurposeCurrentMonth, executionCurrentMonth, recent, userSettings] = await Promise.all([
-        api.getLLMUsageSummary({ days: daysParam }),
-        api.getLLMUsageByModel({ days: daysParam }),
+        api.getLLMUsageSummary(monthMode ? { month: monthParam } : { days: daysParam }),
+        api.getLLMUsageByModel(monthMode ? { month: monthParam } : { days: daysParam }),
         api.getLLMUsageCurrentMonthByProvider({ month: monthParam }),
         api.getLLMUsageCurrentMonthByPurpose({ month: monthParam }),
         api.getLLMExecutionCurrentMonthSummary({ month: monthParam }),
-        api.getLLMUsage({ limit: limitParam }),
+        api.getLLMUsage(monthMode ? { limit: limitParam, month: monthParam } : { limit: limitParam }),
         api.getSettings(),
       ]);
       if (seq !== seqRef.current) return;
@@ -183,9 +185,8 @@ export function useLLMUsageData() {
 
   useEffect(() => {
     setLogPage(1);
-    if (!selectedMonth) return;
-    load(selectedDays, limit, selectedMonth);
-  }, [limit, load, selectedDays, selectedMonth]);
+    load(selectedDays, limit, selectedMonth, daysFilter === "mtd" || daysFilter === "prev_month");
+  }, [daysFilter, limit, load, selectedDays, selectedMonth]);
 
   const totals = useMemo(() => {
     const t = {
@@ -478,15 +479,6 @@ export function useLLMUsageData() {
     return Array.from(months).sort((a, b) => b.localeCompare(a));
   }, [currentJSTMonth, previousJSTMonth, settings, summaryRows]);
 
-  const monthOptions = useMemo(() => {
-    return [currentJSTMonth, previousJSTMonth]
-      .filter((value, index, array) => array.indexOf(value) === index)
-      .map((value) => ({
-        value,
-        label: value === currentJSTMonth ? t("llm.currentMonth") : t("llm.previousMonth"),
-      }));
-  }, [currentJSTMonth, previousJSTMonth, t]);
-
   useEffect(() => {
     if (availableForecastMonths.length === 0) return;
     if (!forecastMonth || !availableForecastMonths.includes(forecastMonth)) {
@@ -731,8 +723,7 @@ export function useLLMUsageData() {
     limit, setLimit,
     forecastMode, setForecastMode,
     forecastMonth, setForecastMonth,
-    selectedMonth, setSelectedMonth,
-    monthOptions,
+    selectedMonth,
     logPage, setLogPage,
     providerSortKey, setProviderSortKey,
     providerSortDir, setProviderSortDir,

@@ -614,7 +614,6 @@ export const jaDict: Dict = {
   "llm.days": "集計日数",
   "llm.currentMonth": "当月",
   "llm.previousMonth": "先月",
-  "llm.month": "対象月",
   "llm.limit": "履歴件数",
   "llm.totalCost": "合計コスト",
   "llm.totalCalls": "呼び出し回数",

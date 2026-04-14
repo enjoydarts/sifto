@@ -91,6 +91,24 @@ func (h *LLMUsageHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cacheBust := r.URL.Query().Get("cache_bust") == "1"
+	monthRaw := strings.TrimSpace(r.URL.Query().Get("month"))
+	if monthRaw != "" {
+		monthTime, monthKey, ok := parseUsageMonthJST(r)
+		if !ok {
+			http.Error(w, "invalid month", http.StatusBadRequest)
+			return
+		}
+		cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageListMonthVersioned(userID, 0, limit, monthKey))
+		rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageListCacheTTL, func() ([]service.LLMUsageLogView, error) {
+			return h.usage.ListMonth(r.Context(), userID, limit, monthTime)
+		}, cacheFetchOptions{cacheBust: cacheBust, cacheKeyErr: err})
+		if fetchErr != nil {
+			writeRepoError(w, fetchErr)
+			return
+		}
+		writeJSON(w, rows)
+		return
+	}
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageListVersioned(userID, 0, limit))
 	rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageListCacheTTL, func() ([]service.LLMUsageLogView, error) {
 		return h.usage.List(r.Context(), userID, limit)
@@ -104,12 +122,30 @@ func (h *LLMUsageHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *LLMUsageHandler) DailySummary(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
+	monthRaw := strings.TrimSpace(r.URL.Query().Get("month"))
+	if monthRaw != "" {
+		monthTime, monthKey, ok := parseUsageMonthJST(r)
+		if !ok {
+			http.Error(w, "invalid month", http.StatusBadRequest)
+			return
+		}
+		cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageDailySummaryMonthVersioned(userID, 0, monthKey))
+		rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageDailySummaryCacheTTL, func() ([]service.LLMUsageDailySummaryView, error) {
+			return h.usage.DailySummaryMonth(r.Context(), userID, monthTime)
+		}, cacheFetchOptions{cacheBust: cacheBust, cacheKeyErr: err})
+		if fetchErr != nil {
+			writeRepoError(w, fetchErr)
+			return
+		}
+		writeJSON(w, rows)
+		return
+	}
 	days, ok := parseUsageDays(r)
 	if !ok {
 		http.Error(w, "invalid days", http.StatusBadRequest)
 		return
 	}
-	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageDailySummaryVersioned(userID, 0, days))
 	rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageDailySummaryCacheTTL, func() ([]service.LLMUsageDailySummaryView, error) {
 		return h.usage.DailySummary(r.Context(), userID, days)
@@ -123,12 +159,30 @@ func (h *LLMUsageHandler) DailySummary(w http.ResponseWriter, r *http.Request) {
 
 func (h *LLMUsageHandler) ModelSummary(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
+	cacheBust := r.URL.Query().Get("cache_bust") == "1"
+	monthRaw := strings.TrimSpace(r.URL.Query().Get("month"))
+	if monthRaw != "" {
+		monthTime, monthKey, ok := parseUsageMonthJST(r)
+		if !ok {
+			http.Error(w, "invalid month", http.StatusBadRequest)
+			return
+		}
+		cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageModelSummaryMonthVersioned(userID, 0, monthKey))
+		rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageModelSummaryCacheTTL, func() ([]service.LLMUsageModelSummaryView, error) {
+			return h.usage.ModelSummaryMonth(r.Context(), userID, monthTime)
+		}, cacheFetchOptions{cacheBust: cacheBust, cacheKeyErr: err})
+		if fetchErr != nil {
+			writeRepoError(w, fetchErr)
+			return
+		}
+		writeJSON(w, rows)
+		return
+	}
 	days, ok := parseUsageDays(r)
 	if !ok {
 		http.Error(w, "invalid days", http.StatusBadRequest)
 		return
 	}
-	cacheBust := r.URL.Query().Get("cache_bust") == "1"
 	cacheKey, err := h.llmUsageCacheKey(r.Context(), userID, cacheKeyLLMUsageModelSummaryVersioned(userID, 0, days))
 	rows, fetchErr := cachedFetchWithOpts(r.Context(), h.cache, cacheKey, llmUsageModelSummaryCacheTTL, func() ([]service.LLMUsageModelSummaryView, error) {
 		return h.usage.ModelSummary(r.Context(), userID, days)

@@ -614,7 +614,6 @@ export const enDict: Dict = {
   "llm.days": "Days",
   "llm.currentMonth": "Current month",
   "llm.previousMonth": "Previous month",
-  "llm.month": "Month",
   "llm.limit": "Rows",
   "llm.totalCost": "Total Cost",
   "llm.totalCalls": "Calls",

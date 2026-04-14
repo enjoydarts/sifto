@@ -163,6 +163,14 @@ func (s *LLMUsageService) List(ctx context.Context, userID string, limit int) ([
 	return mapSlice(rows, mapUsageLogView), nil
 }
 
+func (s *LLMUsageService) ListMonth(ctx context.Context, userID string, limit int, month time.Time) ([]LLMUsageLogView, error) {
+	rows, err := s.repo.ListByUserMonth(ctx, userID, limit, month)
+	if err != nil {
+		return nil, err
+	}
+	return mapSlice(rows, mapUsageLogView), nil
+}
+
 func (s *LLMUsageService) DailySummary(ctx context.Context, userID string, days int) ([]LLMUsageDailySummaryView, error) {
 	rows, err := s.repo.DailySummaryByUser(ctx, userID, days)
 	if err != nil {
@@ -171,8 +179,24 @@ func (s *LLMUsageService) DailySummary(ctx context.Context, userID string, days 
 	return mapSlice(rows, mapDailySummaryView), nil
 }
 
+func (s *LLMUsageService) DailySummaryMonth(ctx context.Context, userID string, month time.Time) ([]LLMUsageDailySummaryView, error) {
+	rows, err := s.repo.DailySummaryByUserMonth(ctx, userID, month)
+	if err != nil {
+		return nil, err
+	}
+	return mapSlice(rows, mapDailySummaryView), nil
+}
+
 func (s *LLMUsageService) ModelSummary(ctx context.Context, userID string, days int) ([]LLMUsageModelSummaryView, error) {
 	rows, err := s.repo.ModelSummaryByUser(ctx, userID, days)
+	if err != nil {
+		return nil, err
+	}
+	return mapSlice(rows, mapModelSummaryView), nil
+}
+
+func (s *LLMUsageService) ModelSummaryMonth(ctx context.Context, userID string, month time.Time) ([]LLMUsageModelSummaryView, error) {
+	rows, err := s.repo.ModelSummaryByUserMonth(ctx, userID, month)
 	if err != nil {
 		return nil, err
 	}

@@ -57,8 +57,7 @@ export default function LLMUsagePage() {
     limit, setLimit,
     forecastMode, setForecastMode,
     forecastMonth, setForecastMonth,
-    selectedMonth, setSelectedMonth,
-    monthOptions,
+    selectedMonth,
     logPage, setLogPage,
     providerSortKey, setProviderSortKey,
     providerSortDir, setProviderSortDir,
@@ -117,7 +116,7 @@ export default function LLMUsagePage() {
               <span className="mb-1 block text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("llm.days")}</span>
               <select
                 value={daysFilter}
-                onChange={(e) => setDaysFilter(e.target.value as "7" | "14" | "30" | "90" | "mtd")}
+                onChange={(e) => setDaysFilter(e.target.value as "7" | "14" | "30" | "90" | "mtd" | "prev_month")}
                 className="min-h-10 w-full rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm text-[var(--color-editorial-ink)]"
               >
                 {(["7", "14", "30", "90"] as const).map((d) => (
@@ -126,20 +125,7 @@ export default function LLMUsagePage() {
                   </option>
                 ))}
                 <option value="mtd">{t("llm.currentMonth")}</option>
-              </select>
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-xs font-medium text-[var(--color-editorial-ink-faint)]">{t("llm.month")}</span>
-              <select
-                value={selectedMonth ?? ""}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="min-h-10 w-full rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-4 py-2 text-sm text-[var(--color-editorial-ink)]"
-              >
-                {monthOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
+                <option value="prev_month">{t("llm.previousMonth")}</option>
               </select>
             </label>
             <label className="text-sm">

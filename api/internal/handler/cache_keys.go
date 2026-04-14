@@ -187,8 +187,16 @@ func cacheKeyLLMUsageDailySummaryVersioned(userID string, version int64, days in
 	return fmt.Sprintf("%s:llm_usage:daily:%s:v=%d:days=%d", cacheKeyVersion, userID, version, days)
 }
 
+func cacheKeyLLMUsageDailySummaryMonthVersioned(userID string, version int64, month string) string {
+	return fmt.Sprintf("%s:llm_usage:daily:%s:v=%d:month=%s", cacheKeyVersion, userID, version, month)
+}
+
 func cacheKeyLLMUsageModelSummaryVersioned(userID string, version int64, days int) string {
 	return fmt.Sprintf("%s:llm_usage:model:%s:v=%d:days=%d", cacheKeyVersion, userID, version, days)
+}
+
+func cacheKeyLLMUsageModelSummaryMonthVersioned(userID string, version int64, month string) string {
+	return fmt.Sprintf("%s:llm_usage:model:%s:v=%d:month=%s", cacheKeyVersion, userID, version, month)
 }
 
 func cacheKeyLLMUsageAnalysisVersioned(userID string, version int64, days int) string {
@@ -217,6 +225,10 @@ func cacheKeyLLMUsageValueMetricsCurrentMonthVersioned(userID string, version in
 
 func cacheKeyLLMUsageListVersioned(userID string, version int64, limit int) string {
 	return fmt.Sprintf("%s:llm_usage:list:%s:v=%d:limit=%d", cacheKeyVersion, userID, version, limit)
+}
+
+func cacheKeyLLMUsageListMonthVersioned(userID string, version int64, limit int, month string) string {
+	return fmt.Sprintf("%s:llm_usage:list:%s:v=%d:limit=%d:month=%s", cacheKeyVersion, userID, version, limit, month)
 }
 
 func cacheUserInvalidatePrefixes(userID string) []string {

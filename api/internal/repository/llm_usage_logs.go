@@ -208,6 +208,49 @@ func (r *LLMUsageLogRepo) ListByUser(ctx context.Context, userID string, limit i
 	return out, rows.Err()
 }
 
+func (r *LLMUsageLogRepo) ListByUserMonth(ctx context.Context, userID string, limit int, month time.Time) ([]LLMUsageLog, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	loc, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		loc = time.FixedZone("JST", 9*60*60)
+	}
+	monthJST := month.In(loc)
+	monthStart := time.Date(monthJST.Year(), monthJST.Month(), 1, 0, 0, 0, 0, loc)
+	nextMonthStart := monthStart.AddDate(0, 1, 0)
+	rows, err := r.db.Query(ctx, `
+		SELECT id, user_id, source_id, item_id, digest_id,
+		       provider, model, requested_model, resolved_model, pricing_model_family, pricing_source, openrouter_cost_usd, openrouter_generation_id, purpose,
+		       input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens,
+		       estimated_cost_usd, created_at
+		FROM llm_usage_logs
+		WHERE user_id = $1
+		  AND (created_at AT TIME ZONE 'Asia/Tokyo') >= $2
+		  AND (created_at AT TIME ZONE 'Asia/Tokyo') < $3
+		ORDER BY created_at DESC
+		LIMIT $4`, userID, monthStart, nextMonthStart, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []LLMUsageLog
+	for rows.Next() {
+		var v LLMUsageLog
+		if err := rows.Scan(
+			&v.ID, &v.UserID, &v.SourceID, &v.ItemID, &v.DigestID,
+			&v.Provider, &v.Model, &v.RequestedModel, &v.ResolvedModel, &v.PricingModelFamily, &v.PricingSource, &v.OpenRouterCostUSD, &v.OpenRouterGenerationID, &v.Purpose,
+			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens, &v.CacheReadInputTokens,
+			&v.EstimatedCostUSD, &v.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 func (r *LLMUsageLogRepo) ListOpenRouterBackfillCandidates(ctx context.Context, userID *string, limit int, from, to *time.Time) ([]LLMUsageLog, error) {
 	if limit <= 0 || limit > 5000 {
 		limit = 500
@@ -308,6 +351,51 @@ func (r *LLMUsageLogRepo) DailySummaryByUser(ctx context.Context, userID string,
 	return out, rows.Err()
 }
 
+func (r *LLMUsageLogRepo) DailySummaryByUserMonth(ctx context.Context, userID string, month time.Time) ([]LLMUsageDailySummary, error) {
+	loc, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		loc = time.FixedZone("JST", 9*60*60)
+	}
+	monthJST := month.In(loc)
+	monthStart := time.Date(monthJST.Year(), monthJST.Month(), 1, 0, 0, 0, 0, loc)
+	nextMonthStart := monthStart.AddDate(0, 1, 0)
+	rows, err := r.db.Query(ctx, `
+		SELECT (l.created_at AT TIME ZONE 'Asia/Tokyo')::date::text AS date_jst,
+		       l.provider,
+		       l.purpose,
+		       l.pricing_source,
+		       COUNT(*)::int AS calls,
+		       COALESCE(SUM(l.input_tokens),0)::bigint AS input_tokens,
+		       COALESCE(SUM(l.output_tokens),0)::bigint AS output_tokens,
+		       COALESCE(SUM(l.cache_creation_input_tokens),0)::bigint AS cache_creation_input_tokens,
+		       COALESCE(SUM(l.cache_read_input_tokens),0)::bigint AS cache_read_input_tokens,
+		       COALESCE(SUM(l.estimated_cost_usd),0)::double precision AS estimated_cost_usd
+		FROM llm_usage_logs l
+		WHERE l.user_id = $1
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= $2
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < $3
+		GROUP BY 1,2,3,4
+		ORDER BY date_jst DESC, provider ASC, purpose ASC, pricing_source ASC`, userID, monthStart, nextMonthStart)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []LLMUsageDailySummary
+	for rows.Next() {
+		var v LLMUsageDailySummary
+		if err := rows.Scan(
+			&v.DateJST, &v.Provider, &v.Purpose, &v.PricingSource, &v.Calls,
+			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens,
+			&v.CacheReadInputTokens, &v.EstimatedCostUSD,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 func (r *LLMUsageLogRepo) ModelSummaryByUser(ctx context.Context, userID string, days int) ([]LLMUsageModelSummary, error) {
 	if days <= 0 || days > 365 {
 		days = 14
@@ -334,6 +422,50 @@ func (r *LLMUsageLogRepo) ModelSummaryByUser(ctx context.Context, userID string,
 		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < b.until_jst
 		GROUP BY l.provider, l.model, l.pricing_source
 		ORDER BY estimated_cost_usd DESC, calls DESC, provider ASC, model ASC`, userID, days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []LLMUsageModelSummary
+	for rows.Next() {
+		var v LLMUsageModelSummary
+		if err := rows.Scan(
+			&v.Provider, &v.Model, &v.PricingSource, &v.Calls,
+			&v.InputTokens, &v.OutputTokens, &v.CacheCreationInputTokens,
+			&v.CacheReadInputTokens, &v.EstimatedCostUSD,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+func (r *LLMUsageLogRepo) ModelSummaryByUserMonth(ctx context.Context, userID string, month time.Time) ([]LLMUsageModelSummary, error) {
+	loc, err := time.LoadLocation("Asia/Tokyo")
+	if err != nil {
+		loc = time.FixedZone("JST", 9*60*60)
+	}
+	monthJST := month.In(loc)
+	monthStart := time.Date(monthJST.Year(), monthJST.Month(), 1, 0, 0, 0, 0, loc)
+	nextMonthStart := monthStart.AddDate(0, 1, 0)
+	rows, err := r.db.Query(ctx, `
+		SELECT l.provider,
+		       l.model,
+		       l.pricing_source,
+		       COUNT(*)::int AS calls,
+		       COALESCE(SUM(l.input_tokens),0)::bigint AS input_tokens,
+		       COALESCE(SUM(l.output_tokens),0)::bigint AS output_tokens,
+		       COALESCE(SUM(l.cache_creation_input_tokens),0)::bigint AS cache_creation_input_tokens,
+		       COALESCE(SUM(l.cache_read_input_tokens),0)::bigint AS cache_read_input_tokens,
+		       COALESCE(SUM(l.estimated_cost_usd),0)::double precision AS estimated_cost_usd
+		FROM llm_usage_logs l
+		WHERE l.user_id = $1
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') >= $2
+		  AND (l.created_at AT TIME ZONE 'Asia/Tokyo') < $3
+		GROUP BY l.provider, l.model, l.pricing_source
+		ORDER BY estimated_cost_usd DESC, calls DESC, provider ASC, model ASC`, userID, monthStart, nextMonthStart)
 	if err != nil {
 		return nil, err
 	}

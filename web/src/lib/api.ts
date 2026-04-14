@@ -593,21 +593,24 @@ export const api = {
   },
 
   // LLM Usage
-  getLLMUsage: (params?: { limit?: number }) => {
+  getLLMUsage: (params?: { limit?: number; month?: string }) => {
     const q = new URLSearchParams();
     if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.month) q.set("month", params.month);
     const qs = q.toString();
     return apiFetch<LLMUsageLog[]>(`/llm-usage${qs ? `?${qs}` : ""}`);
   },
-  getLLMUsageSummary: (params?: { days?: number }) => {
+  getLLMUsageSummary: (params?: { days?: number; month?: string }) => {
     const q = new URLSearchParams();
     if (params?.days) q.set("days", String(params.days));
+    if (params?.month) q.set("month", params.month);
     const qs = q.toString();
     return apiFetch<LLMUsageDailySummary[]>(`/llm-usage/summary${qs ? `?${qs}` : ""}`);
   },
-  getLLMUsageByModel: (params?: { days?: number }) => {
+  getLLMUsageByModel: (params?: { days?: number; month?: string }) => {
     const q = new URLSearchParams();
     if (params?.days) q.set("days", String(params.days));
+    if (params?.month) q.set("month", params.month);
     const qs = q.toString();
     return apiFetch<LLMUsageModelSummary[]>(`/llm-usage/by-model${qs ? `?${qs}` : ""}`);
   },

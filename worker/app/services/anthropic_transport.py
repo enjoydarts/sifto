@@ -122,6 +122,7 @@ def call_with_retries(
     top_p: float | None = None,
     base_url: str | None = None,
     default_headers: dict[str, str] | None = None,
+    provider_label: str = "anthropic",
     logger=None,
 ):
     last_err = None
@@ -148,7 +149,8 @@ def call_with_retries(
             sleep_sec = 1.0 * (2**attempt)
             if logger is not None:
                 logger.warning(
-                    "anthropic rate-limited model=%s retry_in=%.1fs attempt=%d/%d",
+                    "%s rate-limited model=%s retry_in=%.1fs attempt=%d/%d",
+                    provider_label,
                     model,
                     sleep_sec,
                     attempt + 1,
@@ -174,6 +176,7 @@ def call_with_model_fallback(
     top_p: float | None = None,
     base_url: str | None = None,
     default_headers: dict[str, str] | None = None,
+    provider_label: str = "anthropic",
     logger=None,
 ):
     if client_for_api_key(api_key, base_url=base_url, default_headers=default_headers) is None:
@@ -194,6 +197,7 @@ def call_with_model_fallback(
                 top_p=top_p,
                 base_url=base_url,
                 default_headers=default_headers,
+                provider_label=provider_label,
                 logger=logger,
             ),
             primary_model,
@@ -202,7 +206,7 @@ def call_with_model_fallback(
     except Exception as e:
         failures.append({"model": primary_model, "reason": str(e)})
         if logger is not None:
-            logger.warning("anthropic call failed model=%s err=%s", primary_model, e)
+            logger.warning("%s call failed model=%s err=%s", provider_label, primary_model, e)
         if fallback_model and fallback_model != primary_model:
             try:
                 return (
@@ -219,6 +223,7 @@ def call_with_model_fallback(
                         top_p=top_p,
                         base_url=base_url,
                         default_headers=default_headers,
+                        provider_label=provider_label,
                         logger=logger,
                     ),
                     fallback_model,
@@ -227,7 +232,7 @@ def call_with_model_fallback(
             except Exception as e2:
                 failures.append({"model": fallback_model, "reason": str(e2)})
                 if logger is not None:
-                    logger.warning("anthropic fallback failed model=%s err=%s", fallback_model, e2)
+                    logger.warning("%s fallback failed model=%s err=%s", provider_label, fallback_model, e2)
         return None, None, failures
 
 
@@ -284,6 +289,7 @@ async def call_with_retries_async(
     top_p: float | None = None,
     base_url: str | None = None,
     default_headers: dict[str, str] | None = None,
+    provider_label: str = "anthropic",
     logger=None,
 ):
     import asyncio
@@ -311,7 +317,8 @@ async def call_with_retries_async(
             sleep_sec = 1.0 * (2**attempt)
             if logger is not None:
                 logger.warning(
-                    "anthropic rate-limited model=%s retry_in=%.1fs attempt=%d/%d",
+                    "%s rate-limited model=%s retry_in=%.1fs attempt=%d/%d",
+                    provider_label,
                     model,
                     sleep_sec,
                     attempt + 1,
@@ -337,6 +344,7 @@ async def call_with_model_fallback_async(
     top_p: float | None = None,
     base_url: str | None = None,
     default_headers: dict[str, str] | None = None,
+    provider_label: str = "anthropic",
     logger=None,
 ):
     if async_client_for_api_key(api_key, base_url=base_url, default_headers=default_headers) is None:
@@ -357,6 +365,7 @@ async def call_with_model_fallback_async(
                 top_p=top_p,
                 base_url=base_url,
                 default_headers=default_headers,
+                provider_label=provider_label,
                 logger=logger,
             ),
             primary_model,
@@ -365,7 +374,7 @@ async def call_with_model_fallback_async(
     except Exception as e:
         failures.append({"model": primary_model, "reason": str(e)})
         if logger is not None:
-            logger.warning("anthropic call failed model=%s err=%s", primary_model, e)
+            logger.warning("%s call failed model=%s err=%s", provider_label, primary_model, e)
         if fallback_model and fallback_model != primary_model:
             try:
                 return (
@@ -382,6 +391,7 @@ async def call_with_model_fallback_async(
                         top_p=top_p,
                         base_url=base_url,
                         default_headers=default_headers,
+                        provider_label=provider_label,
                         logger=logger,
                     ),
                     fallback_model,
@@ -390,5 +400,5 @@ async def call_with_model_fallback_async(
             except Exception as e2:
                 failures.append({"model": fallback_model, "reason": str(e2)})
                 if logger is not None:
-                    logger.warning("anthropic fallback failed model=%s err=%s", fallback_model, e2)
+                    logger.warning("%s fallback failed model=%s err=%s", provider_label, fallback_model, e2)
         return None, None, failures

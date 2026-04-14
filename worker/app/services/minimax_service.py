@@ -100,7 +100,13 @@ def _async_client_for_api_key(api_key: str | None):
 
 
 def _call_with_model_fallback(*args, **kwargs):
-    return _anthropic_call_with_model_fallback(*args, base_url=_api_base_url(), logger=_log, **kwargs)
+    return _anthropic_call_with_model_fallback(
+        *args,
+        base_url=_api_base_url(),
+        provider_label="minimax",
+        logger=_log,
+        **kwargs,
+    )
 
 
 def _with_execution_failures(llm: dict, execution_failures: list[dict] | None) -> dict:
@@ -1397,7 +1403,13 @@ def suggest_feed_seed_sites(
 
 
 async def _call_with_model_fallback_async(*args, **kwargs):
-    return await _anthropic_call_with_model_fallback_async(*args, base_url=_api_base_url(), logger=_log, **kwargs)
+    return await _anthropic_call_with_model_fallback_async(
+        *args,
+        base_url=_api_base_url(),
+        provider_label="minimax",
+        logger=_log,
+        **kwargs,
+    )
 
 
 async def extract_facts_async(title: str | None, content: str, api_key: str | None = None, model: str | None = None) -> dict:

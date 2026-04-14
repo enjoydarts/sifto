@@ -211,6 +211,7 @@
         "mistralai/Mixtral-8x7B-Instruct-v0.1",
         "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "meta-llama/Meta-Llama-3-8B-Instruct-Lite",
+        "google/gemma-4-31B-it",
         "google/gemma-3n-E4B-it",
         "MiniMaxAI/MiniMax-M2.7",
         "Qwen/Qwen2.5-7B-Instruct-Turbo",
@@ -2745,6 +2746,29 @@
         "pricing_source": "together_serverless_models_2026_04",
         "input_per_mtok_usd": 0.1,
         "output_per_mtok_usd": 0.1
+      }
+    },
+    {
+      "id": "together::google/gemma-4-31B-it",
+      "provider": "together",
+      "source_provider": "google",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["reasoning", "toolCalling", "jsonStable"],
+      "comment": "Together AI 上の Gemma 4 31B。推論、コーディング、structured output の比較候補として追加する。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_serverless_models_2026_04",
+        "input_per_mtok_usd": 0.2,
+        "output_per_mtok_usd": 0.5
       }
     },
     {

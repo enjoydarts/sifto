@@ -8,9 +8,8 @@ from app.services.minimax_service import (
     _call_with_model_fallback_async,
     _client_for_api_key,
     _async_client_for_api_key,
-    _facts_model_fallback,
-    _summary_model_fallback,
     _llm_meta,
+    _require_model,
 )
 
 
@@ -24,9 +23,9 @@ class MiniMaxServiceTests(unittest.TestCase):
     def test_provider_api_key_header_uses_minimax_header(self):
         self.assertEqual(provider_api_key_header("minimax"), "x-minimax-api-key")
 
-    def test_default_internal_fallback_models_are_disabled(self):
-        self.assertIsNone(_facts_model_fallback)
-        self.assertIsNone(_summary_model_fallback)
+    def test_model_is_required(self):
+        with self.assertRaisesRegex(RuntimeError, "minimax model is required for summary"):
+            _require_model(None, "summary")
 
     @patch("app.services.minimax_service.os.getenv", return_value="https://api.minimax.io/custom-anthropic")
     def test_api_base_url_uses_env_override(self, getenv):

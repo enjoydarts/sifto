@@ -19,6 +19,7 @@ from app.services.openrouter_service import _p as openrouter_provider
 from app.services.poe_service import _p as poe_provider
 from app.services.prompt_template_defaults import get_default_prompt_template, render_prompt_template
 from app.services.siliconflow_service import _p as siliconflow_provider
+from app.services.anthropic_transport import message_text as anthropic_message_text
 from app.services.task_transport_common import with_execution_failures
 from app.services.xai_service import _p as xai_provider
 from app.services.zai_service import _p as zai_provider
@@ -193,7 +194,7 @@ class TTSMarkupPreprocessService:
         if message is None:
             detail = self._format_execution_failures(execution_failures)
             raise RuntimeError(f"anthropic tts markup preprocess failed{detail}")
-        text = str(message.content[0].text or "").strip()
+        text = anthropic_message_text(message)
         return {
             "text": text,
             "llm": with_execution_failures(
@@ -217,7 +218,7 @@ class TTSMarkupPreprocessService:
         if message is None:
             detail = self._format_execution_failures(execution_failures)
             raise RuntimeError(f"minimax tts markup preprocess failed{detail}")
-        text = str(message.content[0].text or "").strip()
+        text = anthropic_message_text(message)
         return {
             "text": text,
             "llm": with_execution_failures(

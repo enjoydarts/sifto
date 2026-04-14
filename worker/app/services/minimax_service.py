@@ -10,6 +10,7 @@ from app.services.anthropic_transport import (
     client_for_api_key as _transport_client_for_api_key,
     async_client_for_api_key as _transport_async_client_for_api_key,
     env_timeout_seconds as _env_timeout_seconds,
+    message_text as _message_text,
     message_usage as _message_usage,
 )
 from app.services.llm_text_utils import (
@@ -175,7 +176,7 @@ JSONで返してください:
         title,
         structured_call=lambda: (
             lambda message: (
-                str(((_extract_first_json_object(message.content[0].text.strip()) or {}).get("translated_title") or ""))
+                str(((_extract_first_json_object(_message_text(message)) or {}).get("translated_title") or ""))
                 if message is not None
                 else ""
             )
@@ -189,7 +190,7 @@ JSONで返してください:
             )[0]
         ),
         plain_retry_call=lambda: (
-            lambda message: (message.content[0].text.strip() if message is not None else "")
+            lambda message: (_message_text(message) if message is not None else "")
         )(
             _call_with_model_fallback(
                 plain_prompt,
@@ -376,7 +377,7 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
         if message is None:
             continue
         any_llm_success = True
-        text = message.content[0].text.strip()
+        text = _message_text(message)
         all_fact_lists.append(parse_facts_result(text))
         llm_metas.append(_with_execution_failures(_llm_meta(message, "facts", used_model or resolved_model), execution_failures))
 
@@ -398,7 +399,7 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
         )
         execution_failures_all.extend(execution_failures or [])
         if message is not None:
-            localized_facts = parse_facts_result(message.content[0].text.strip())
+            localized_facts = parse_facts_result(_message_text(message))
             if localized_facts:
                 merged_facts = localized_facts
                 localization_llm = _with_execution_failures(_llm_meta(message, "facts_localization", used_model or resolved_model), execution_failures)
@@ -438,7 +439,7 @@ def summarize(
     )
     if message is None:
         _raise_execution_failure("summary", execution_failures, "minimax summary returned no message")
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     start = text.find("{")
     end = text.rfind("}") + 1
     try:
@@ -567,7 +568,7 @@ JSONで返してください:
     if message is None:
         _raise_execution_failure("summary", _execution_failures, "minimax translate_title returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     data = _extract_first_json_object(text) or {}
     translated = str(data.get("translated_title") or "").strip()
     if not translated:
@@ -702,7 +703,7 @@ def compose_digest(digest_date: str, items: list[dict], api_key: str | None = No
     if message is None:
         _raise_execution_failure("digest", _execution_failures, "minimax digest returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     subject, body = parse_digest_result(text, error_prefix="claude compose_digest missing subject/body")
     if len(body) < 80:
         raise RuntimeError(f"claude compose_digest body too short: len={len(body)}")
@@ -747,7 +748,7 @@ def ask_question(query: str, candidates: list[dict], api_key: str | None = None,
     )
     if message is None:
         _raise_execution_failure("ask", _execution_failures, "minimax ask returned no message")
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     result = parse_ask_result(text, candidates, error_prefix="claude ask missing answer")
     return {**result, "llm": _llm_meta(message, "ask", used_model or resolved_model)}
 
@@ -792,7 +793,7 @@ def compose_digest_cluster_draft(
     )
     if message is None:
         _raise_execution_failure("digest_cluster_draft", _execution_failures, "minimax digest_cluster_draft returned no message")
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     draft_summary = parse_cluster_draft_result(text, task["source_lines"])
     return {
         "draft_summary": draft_summary,
@@ -836,7 +837,7 @@ def rank_feed_suggestions(
     if message is None:
         _raise_execution_failure("source_suggestion", _execution_failures, "minimax source_suggestion returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_rank_feed_result(text, task["candidates"])
     return {
         "items": out,
@@ -867,7 +868,7 @@ def generate_briefing_navigator(
     if message is None:
         _raise_execution_failure("briefing_navigator", _execution_failures, "minimax briefing_navigator returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_briefing_navigator_result(text, task["candidates"])
     return {
         "intro": out["intro"],
@@ -899,7 +900,7 @@ def compose_ai_navigator_brief(
     if message is None:
         _raise_execution_failure("ai_navigator_brief", _execution_failures, "minimax ai_navigator_brief returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_ai_navigator_brief_result(text, task["candidates"], intro_context)
     return {
         "title": out["title"],
@@ -933,7 +934,7 @@ def generate_item_navigator(
     if message is None:
         _raise_execution_failure("item_navigator", _execution_failures, "minimax item_navigator returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_item_navigator_result(text, task["article"])
     return {
         "headline": out["headline"],
@@ -984,7 +985,7 @@ def generate_audio_briefing_script(
     if message is None:
         raise RuntimeError("audio briefing script returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_audio_briefing_script_result(
         text,
         task["articles"],
@@ -1028,7 +1029,7 @@ def generate_ask_navigator(
     if message is None:
         _raise_execution_failure("ask_navigator", _execution_failures, "minimax ask_navigator returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_ask_navigator_result(text, task["input"])
     return {
         "headline": out["headline"],
@@ -1060,7 +1061,7 @@ def generate_source_navigator(
     if message is None:
         _raise_execution_failure("source_navigator", _execution_failures, "minimax source_navigator returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_source_navigator_result(text, task["candidates"])
     return {
         "overview": out["overview"],
@@ -1091,7 +1092,7 @@ def suggest_feed_seed_sites(
     )
     if message is None:
         _raise_execution_failure("source_suggestion", _execution_failures, "minimax source_suggestion returned no message")
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_seed_sites_result(text, task["existing_sources"])
     return {
         "items": out,
@@ -1143,7 +1144,7 @@ async def extract_facts_async(title: str | None, content: str, api_key: str | No
         if message is None:
             continue
         any_llm_success = True
-        text = message.content[0].text.strip()
+        text = _message_text(message)
         all_fact_lists.append(parse_facts_result(text))
         llm_metas.append(_with_execution_failures(_llm_meta(message, "facts", used_model or resolved_model), execution_failures))
 
@@ -1165,7 +1166,7 @@ async def extract_facts_async(title: str | None, content: str, api_key: str | No
         )
         execution_failures_all.extend(execution_failures or [])
         if message is not None:
-            localized_facts = parse_facts_result(message.content[0].text.strip())
+            localized_facts = parse_facts_result(_message_text(message))
             if localized_facts:
                 merged_facts = localized_facts
                 localization_llm = _with_execution_failures(_llm_meta(message, "facts_localization", used_model or resolved_model), execution_failures)
@@ -1205,7 +1206,7 @@ async def summarize_async(
     )
     if message is None:
         _raise_execution_failure("summary", execution_failures, "minimax summary returned no message")
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     start = text.find("{")
     end = text.rfind("}") + 1
     try:
@@ -1337,7 +1338,7 @@ JSONで返してください:
     if message is None:
         _raise_execution_failure("summary", _execution_failures, "minimax translate_title returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     data = _extract_first_json_object(text) or {}
     translated = str(data.get("translated_title") or "").strip()
     if not translated:
@@ -1384,7 +1385,7 @@ async def compose_digest_async(digest_date: str, items: list[dict], api_key: str
     if message is None:
         _raise_execution_failure("digest", _execution_failures, "minimax digest returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     subject, body = parse_digest_result(text, error_prefix="claude compose_digest missing subject/body")
     if len(body) < 80:
         raise RuntimeError(f"claude compose_digest body too short: len={len(body)}")
@@ -1429,7 +1430,7 @@ async def ask_question_async(query: str, candidates: list[dict], api_key: str | 
     )
     if message is None:
         _raise_execution_failure("ask", _execution_failures, "minimax ask returned no message")
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     result = parse_ask_result(text, candidates, error_prefix="claude ask missing answer")
     return {**result, "llm": _llm_meta(message, "ask", used_model or resolved_model)}
 
@@ -1473,7 +1474,7 @@ async def compose_digest_cluster_draft_async(
     )
     if message is None:
         _raise_execution_failure("digest_cluster_draft", _execution_failures, "minimax digest_cluster_draft returned no message")
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     draft_summary = parse_cluster_draft_result(text, task["source_lines"])
     return {
         "draft_summary": draft_summary,
@@ -1516,7 +1517,7 @@ async def rank_feed_suggestions_async(
     if message is None:
         _raise_execution_failure("source_suggestion", _execution_failures, "minimax source_suggestion returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_rank_feed_result(text, task["candidates"])
     return {
         "items": out,
@@ -1546,7 +1547,7 @@ async def generate_briefing_navigator_async(
     if message is None:
         _raise_execution_failure("briefing_navigator", _execution_failures, "minimax briefing_navigator returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_briefing_navigator_result(text, task["candidates"])
     return {
         "intro": out["intro"],
@@ -1577,7 +1578,7 @@ async def compose_ai_navigator_brief_async(
     if message is None:
         _raise_execution_failure("ai_navigator_brief", _execution_failures, "minimax ai_navigator_brief returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_ai_navigator_brief_result(text, task["candidates"], intro_context)
     return {
         "title": out["title"],
@@ -1610,7 +1611,7 @@ async def generate_item_navigator_async(
     if message is None:
         _raise_execution_failure("item_navigator", _execution_failures, "minimax item_navigator returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_item_navigator_result(text, task["article"])
     return {
         "headline": out["headline"],
@@ -1663,7 +1664,7 @@ async def generate_audio_briefing_script_async(
     if message is None:
         raise RuntimeError("audio briefing script returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_audio_briefing_script_result(
         text,
         task["articles"],
@@ -1706,7 +1707,7 @@ async def generate_ask_navigator_async(
     if message is None:
         _raise_execution_failure("ask_navigator", _execution_failures, "minimax ask_navigator returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_ask_navigator_result(text, task["input"])
     return {
         "headline": out["headline"],
@@ -1737,7 +1738,7 @@ async def generate_source_navigator_async(
     if message is None:
         _raise_execution_failure("source_navigator", _execution_failures, "minimax source_navigator returned no message")
 
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_source_navigator_result(text, task["candidates"])
     return {
         "overview": out["overview"],
@@ -1768,7 +1769,7 @@ async def suggest_feed_seed_sites_async(
     )
     if message is None:
         _raise_execution_failure("source_suggestion", _execution_failures, "minimax source_suggestion returned no message")
-    text = message.content[0].text.strip()
+    text = _message_text(message)
     out = parse_seed_sites_result(text, task["existing_sources"])
     if len(out) == 0:
         rescue_prompt = f"""既存ソースと重複しないサイトURL候補を必ず10件以上返してください。JSONのみ。
@@ -1790,7 +1791,7 @@ async def suggest_feed_seed_sites_async(
             api_key=api_key,
         )
         if rescue_message is not None:
-            out.extend(parse_seed_sites_result(rescue_message.content[0].text.strip(), task["existing_sources"]))
+            out.extend(parse_seed_sites_result(_message_text(rescue_message), task["existing_sources"]))
     return {
         "items": out,
         "llm": _llm_meta(message, "source_suggestion", used_model or resolved_model),

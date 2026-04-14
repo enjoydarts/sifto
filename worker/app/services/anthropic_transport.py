@@ -4,6 +4,25 @@ import time
 import anthropic
 
 
+def message_text(message) -> str:
+    if message is None:
+        return ""
+    content = getattr(message, "content", None) or []
+    parts: list[str] = []
+    for block in content:
+        if isinstance(block, dict):
+            block_type = str(block.get("type") or "").strip()
+            text = block.get("text")
+        else:
+            block_type = str(getattr(block, "type", "") or "").strip()
+            text = getattr(block, "text", None)
+        if block_type and block_type != "text":
+            continue
+        if isinstance(text, str) and text.strip():
+            parts.append(text.strip())
+    return "\n".join(parts).strip()
+
+
 def env_timeout_seconds(name: str, default: float) -> float:
     raw = os.getenv(name)
     if raw is None or raw == "":

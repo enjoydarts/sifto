@@ -74,15 +74,6 @@ from app.services.feed_task_common import (
 from app.services.facts_task_common import build_facts_localization_task, build_facts_task, parse_facts_result
 from app.services.task_transport_common import empty_llm_meta, with_execution_failures, wrap_message_fallback_transport, wrap_message_transport
 
-_client = None
-_facts_model = os.getenv("ANTHROPIC_FACTS_MODEL", "claude-haiku-4-5")
-_summary_model = os.getenv("ANTHROPIC_SUMMARY_MODEL", "claude-sonnet-4-6")
-_summary_model_fallback = os.getenv("ANTHROPIC_SUMMARY_MODEL_FALLBACK", "claude-sonnet-4-5-20250929")
-_facts_model_fallback = os.getenv("ANTHROPIC_FACTS_MODEL_FALLBACK", "claude-3-5-haiku-20241022")
-_digest_model = os.getenv("ANTHROPIC_DIGEST_MODEL", _summary_model)
-_digest_model_fallback = os.getenv("ANTHROPIC_DIGEST_MODEL_FALLBACK", _summary_model_fallback)
-_feed_suggest_model = os.getenv("ANTHROPIC_FEED_SUGGEST_MODEL", _summary_model)
-_feed_suggest_model_fallback = os.getenv("ANTHROPIC_FEED_SUGGEST_MODEL_FALLBACK", _summary_model_fallback)
 _log = logging.getLogger(__name__)
 _ANTHROPIC_PRICING_SOURCE_VERSION = "anthropic_static_2026_02"
 
@@ -115,6 +106,13 @@ def _call_with_model_fallback(*args, **kwargs):
 
 def _with_execution_failures(llm: dict, execution_failures: list[dict] | None) -> dict:
     return with_execution_failures(llm, execution_failures)
+
+
+def _require_model(model: str | None, purpose: str) -> str:
+    resolved = str(model or "").strip()
+    if resolved:
+        return resolved
+    raise RuntimeError(f"anthropic model is required for {purpose}")
 
 
 def _require_api_key(api_key: str | None, purpose: str) -> None:
@@ -189,7 +187,7 @@ JSONで返してください:
             _call_with_model_fallback(
                 prompt,
                 model,
-                _summary_model_fallback,
+                None,
                 max_tokens=200,
                 api_key=api_key,
             )[0]
@@ -200,7 +198,7 @@ JSONで返してください:
             _call_with_model_fallback(
                 plain_prompt,
                 model,
-                _summary_model_fallback,
+                None,
                 max_tokens=120,
                 api_key=api_key,
             )[0]
@@ -352,6 +350,7 @@ def _llm_meta(message, purpose: str, model: str, provider: str = "anthropic") ->
     }
 
 def extract_facts(title: str | None, content: str, api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "facts")
     _require_api_key(api_key, "facts")
 
     chunks = _split_text_chunks(content, chunk_chars=8000, overlap_chars=400)
@@ -373,8 +372,8 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
         )
         message, used_model, execution_failures = _call_with_model_fallback(
             f"{task['system_instruction']}\n\n{task['prompt']}",
-            str(model or _facts_model),
-            _facts_model_fallback,
+            resolved_model,
+            None,
             max_tokens=1024,
             api_key=api_key,
             system_prompt=task["system_instruction"],
@@ -386,7 +385,7 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
         any_llm_success = True
         text = message.content[0].text.strip()
         all_fact_lists.append(parse_facts_result(text))
-        llm_metas.append(_with_execution_failures(_llm_meta(message, "facts", used_model or _facts_model), execution_failures))
+        llm_metas.append(_with_execution_failures(_llm_meta(message, "facts", used_model or resolved_model), execution_failures))
 
     if not any_llm_success:
         _raise_execution_failure("facts", execution_failures_all, "anthropic facts returned no message")
@@ -397,8 +396,8 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
         localize_task = build_facts_localization_task(title, merged_facts)
         message, used_model, execution_failures = _call_with_model_fallback(
             f"{localize_task['system_instruction']}\n\n{localize_task['prompt']}",
-            str(model or _facts_model),
-            _facts_model_fallback,
+            resolved_model,
+            None,
             max_tokens=1024,
             api_key=api_key,
             system_prompt=localize_task["system_instruction"],
@@ -409,7 +408,7 @@ def extract_facts(title: str | None, content: str, api_key: str | None = None, m
             localized_facts = parse_facts_result(message.content[0].text.strip())
             if localized_facts:
                 merged_facts = localized_facts
-                localization_llm = _with_execution_failures(_llm_meta(message, "facts_localization", used_model or _facts_model), execution_failures)
+                localization_llm = _with_execution_failures(_llm_meta(message, "facts_localization", used_model or resolved_model), execution_failures)
     llm = _merge_llm_metas(llm_metas, "facts")
     llm["chunk_count"] = len(chunks)
     llm["chunk_success_count"] = len(llm_metas)
@@ -427,6 +426,7 @@ def summarize(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "summary")
     task = build_summary_task(title, facts, source_text_chars)
     max_tokens = _summary_max_tokens(task["target_chars"])
     _require_api_key(api_key, "summary")
@@ -435,8 +435,8 @@ def summarize(
     enable_summary_prompt_cache = os.getenv("ANTHROPIC_SUMMARY_PROMPT_CACHE", "1").strip() not in ("0", "false", "False")
     message, used_model, execution_failures = _call_with_model_fallback(
         prompt,
-        str(model or _summary_model),
-        _summary_model_fallback,
+        resolved_model,
+        None,
         max_tokens=max_tokens,
         api_key=api_key,
         system_prompt=task["system_instruction"],
@@ -462,20 +462,21 @@ def summarize(
         raw_score_breakdown=data.get("score_breakdown") if isinstance(data.get("score_breakdown"), dict) else {},
         score_reason=str(data.get("score_reason") or "").strip(),
         translated_title=str(data.get("translated_title") or "").strip(),
-        translate_func=lambda raw_title: _translate_title_to_ja(raw_title, used_model or _summary_model, api_key=api_key),
-        llm=_with_execution_failures(_llm_meta(message, "summary", used_model or _summary_model), execution_failures),
+        translate_func=lambda raw_title: _translate_title_to_ja(raw_title, used_model or resolved_model, api_key=api_key),
+        llm=_with_execution_failures(_llm_meta(message, "summary", used_model or resolved_model), execution_failures),
         error_prefix="anthropic summarize parse failed",
         response_text=text,
     )
 
 
 def check_summary_faithfulness(title: str | None, facts: list[str], summary: str, api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "faithfulness_check")
     _require_api_key(api_key, "faithfulness_check")
     prompt = summary_faithfulness_prompt(title, facts, summary)
     message, used_model, _execution_failures = _call_with_model_fallback(
         prompt,
-        str(model or _summary_model),
-        _summary_model_fallback,
+        resolved_model,
+        None,
         max_tokens=320,
         api_key=api_key,
         system_prompt=summary_faithfulness_system_instruction(),
@@ -486,14 +487,14 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
     return run_summary_faithfulness_check(
         lambda: wrap_message_transport(
             message,
-            lambda msg: _llm_meta(msg, "faithfulness_check", used_model or _summary_model),
-            empty_llm_meta("anthropic", used_model or _summary_model, _ANTHROPIC_PRICING_SOURCE_VERSION),
+            lambda msg: _llm_meta(msg, "faithfulness_check", used_model or resolved_model),
+            empty_llm_meta("anthropic", used_model or resolved_model, _ANTHROPIC_PRICING_SOURCE_VERSION),
         ),
         retry_call=lambda: wrap_message_fallback_transport(
             _call_with_model_fallback(
                 summary_faithfulness_retry_prompt(title, facts, summary),
-                str(model or _summary_model),
-                _summary_model_fallback,
+                resolved_model,
+                None,
                 max_tokens=120,
                 api_key=api_key,
                 system_prompt="pass / warn / fail のいずれか1語のみを返す。",
@@ -502,19 +503,20 @@ def check_summary_faithfulness(title: str | None, facts: list[str], summary: str
             ),
             lambda msg, resolved_model: _llm_meta(msg, "faithfulness_check", resolved_model),
             "anthropic",
-            used_model or _summary_model,
+            used_model or resolved_model,
             _ANTHROPIC_PRICING_SOURCE_VERSION,
         ),
     )
 
 
 def check_facts(title: str | None, content: str, facts: list[str], api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "facts_check")
     _require_api_key(api_key, "facts_check")
     prompt = facts_check_prompt(title, content, facts)
     message, used_model, _execution_failures = _call_with_model_fallback(
         prompt,
-        str(model or _summary_model),
-        _summary_model_fallback,
+        resolved_model,
+        None,
         max_tokens=320,
         api_key=api_key,
         system_prompt=facts_check_system_instruction(),
@@ -526,14 +528,14 @@ def check_facts(title: str | None, content: str, facts: list[str], api_key: str 
     return run_facts_check(
         lambda: wrap_message_transport(
             message,
-            lambda msg: _llm_meta(msg, "facts_check", used_model or _summary_model),
-            empty_llm_meta("anthropic", used_model or _summary_model, _ANTHROPIC_PRICING_SOURCE_VERSION),
+            lambda msg: _llm_meta(msg, "facts_check", used_model or resolved_model),
+            empty_llm_meta("anthropic", used_model or resolved_model, _ANTHROPIC_PRICING_SOURCE_VERSION),
         ),
         retry_call=lambda: wrap_message_fallback_transport(
             _call_with_model_fallback(
                 retry_prompt,
-                str(model or _summary_model),
-                _summary_model_fallback,
+                resolved_model,
+                None,
                 max_tokens=220,
                 api_key=api_key,
                 system_prompt=facts_check_system_instruction(),
@@ -542,13 +544,14 @@ def check_facts(title: str | None, content: str, facts: list[str], api_key: str 
             ),
             lambda msg, resolved_model: _llm_meta(msg, "facts_check", resolved_model),
             "anthropic",
-            used_model or _summary_model,
+            used_model or resolved_model,
             _ANTHROPIC_PRICING_SOURCE_VERSION,
         ),
     )
 
 
 def translate_title(title: str, api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "summary")
     src = (title or "").strip()
     if not src:
         return {"translated_title": "", "llm": None}
@@ -562,22 +565,22 @@ JSONで返してください:
 """
     message, used_model, _execution_failures = _call_with_model_fallback(
         prompt,
-        str(model or _summary_model),
-        _summary_model_fallback,
+        resolved_model,
+        None,
         max_tokens=200,
         api_key=api_key,
     )
     if message is None:
-        return {"translated_title": _translate_title_to_ja(src, str(model or _summary_model), api_key=api_key), "llm": None}
+        return {"translated_title": _translate_title_to_ja(src, resolved_model, api_key=api_key), "llm": None}
 
     text = message.content[0].text.strip()
     data = _extract_first_json_object(text) or {}
     translated = str(data.get("translated_title") or "").strip()
     if not translated:
-        translated = _translate_title_to_ja(src, used_model or _summary_model, api_key=api_key)
+        translated = _translate_title_to_ja(src, used_model or resolved_model, api_key=api_key)
     return {
         "translated_title": translated[:300],
-        "llm": _llm_meta(message, "summary", used_model or _summary_model),
+        "llm": _llm_meta(message, "summary", used_model or resolved_model),
     }
 
 
@@ -670,6 +673,7 @@ def _build_digest_input_sections(items: list[dict]) -> tuple[str, str]:
 
 
 def compose_digest(digest_date: str, items: list[dict], api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "digest")
     _require_api_key(api_key, "digest")
     if not items:
         return {
@@ -693,8 +697,8 @@ def compose_digest(digest_date: str, items: list[dict], api_key: str | None = No
 
     message, used_model, _execution_failures = _call_with_model_fallback(
         f"{task['system_instruction']}\n\n{task['prompt']}",
-        str(model or _digest_model),
-        _digest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=10000,
         api_key=api_key,
         timeout_sec=compose_timeout,
@@ -708,7 +712,7 @@ def compose_digest(digest_date: str, items: list[dict], api_key: str | None = No
     subject, body = parse_digest_result(text, error_prefix="claude compose_digest missing subject/body")
     if len(body) < 80:
         raise RuntimeError(f"claude compose_digest body too short: len={len(body)}")
-    llm = _llm_meta(message, "digest", used_model or _digest_model)
+    llm = _llm_meta(message, "digest", used_model or resolved_model)
     llm["input_mode"] = input_mode
     llm["items_count"] = len(items)
     return {
@@ -719,6 +723,7 @@ def compose_digest(digest_date: str, items: list[dict], api_key: str | None = No
 
 
 def ask_question(query: str, candidates: list[dict], api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "ask")
     _require_api_key(api_key, "ask")
     if not candidates:
         return {
@@ -738,8 +743,8 @@ def ask_question(query: str, candidates: list[dict], api_key: str | None = None,
     task = build_ask_task(query, candidates)
     message, used_model, _execution_failures = _call_with_model_fallback(
         f"{task['system_instruction']}\n\n{task['prompt']}",
-        str(model or _digest_model),
-        _digest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=3200,
         api_key=api_key,
         timeout_sec=_env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 300.0),
@@ -750,7 +755,7 @@ def ask_question(query: str, candidates: list[dict], api_key: str | None = None,
         _raise_execution_failure("ask", _execution_failures, "anthropic ask returned no message")
     text = message.content[0].text.strip()
     result = parse_ask_result(text, candidates, error_prefix="claude ask missing answer")
-    return {**result, "llm": _llm_meta(message, "ask", used_model or _digest_model)}
+    return {**result, "llm": _llm_meta(message, "ask", used_model or resolved_model)}
 
 
 def compose_digest_cluster_draft(
@@ -761,6 +766,7 @@ def compose_digest_cluster_draft(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "digest_cluster_draft")
     cluster_label = str(cluster_label or "話題").strip() or "話題"
     topics = [str(t).strip() for t in topics if str(t).strip()][:8]
     source_lines = [str(x).strip() for x in source_lines if str(x).strip()][:16]
@@ -784,8 +790,8 @@ def compose_digest_cluster_draft(
 
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
-        str(model or _digest_model),
-        _digest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=DIGEST_CLUSTER_DRAFT_MAX_OUTPUT_TOKENS,
         api_key=api_key,
         system_prompt=task["system_instruction"],
@@ -797,7 +803,7 @@ def compose_digest_cluster_draft(
     draft_summary = parse_cluster_draft_result(text, task["source_lines"])
     return {
         "draft_summary": draft_summary,
-        "llm": _llm_meta(message, "digest_cluster_draft", used_model or _digest_model),
+        "llm": _llm_meta(message, "digest_cluster_draft", used_model or resolved_model),
     }
 
 
@@ -810,6 +816,7 @@ def rank_feed_suggestions(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "source_suggestion")
     if not candidates:
         return {
             "items": [],
@@ -822,13 +829,13 @@ def rank_feed_suggestions(
                 "cache_read_input_tokens": 0,
                 "estimated_cost_usd": 0.0,
             },
-    }
+        }
     task = build_rank_feed_task(existing_sources, preferred_topics, candidates, positive_examples, negative_examples)
     _require_api_key(api_key, "source_suggestion")
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=2800,
         api_key=api_key,
     )
@@ -839,7 +846,7 @@ def rank_feed_suggestions(
     out = parse_rank_feed_result(text, task["candidates"])
     return {
         "items": out,
-        "llm": _llm_meta(message, "source_suggestion", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "source_suggestion", used_model or resolved_model),
     }
 
 
@@ -850,12 +857,13 @@ def generate_briefing_navigator(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "briefing_navigator")
     task = build_briefing_navigator_task(persona, candidates, intro_context)
     _require_api_key(api_key, "briefing_navigator")
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=1800,
         api_key=api_key,
         temperature=task["sampling_profile"]["temperature"],
@@ -869,7 +877,7 @@ def generate_briefing_navigator(
     return {
         "intro": out["intro"],
         "picks": out["picks"],
-        "llm": _llm_meta(message, "briefing_navigator", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "briefing_navigator", used_model or resolved_model),
     }
 
 
@@ -880,12 +888,13 @@ def compose_ai_navigator_brief(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "ai_navigator_brief")
     task = build_ai_navigator_brief_task(persona, candidates, intro_context)
     _require_api_key(api_key, "ai_navigator_brief")
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=3200,
         api_key=api_key,
         temperature=task["sampling_profile"]["temperature"],
@@ -902,7 +911,7 @@ def compose_ai_navigator_brief(
         "summary": out["summary"],
         "ending": out["ending"],
         "items": out["items"],
-        "llm": _llm_meta(message, "ai_navigator_brief", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "ai_navigator_brief", used_model or resolved_model),
     }
 
 
@@ -912,12 +921,13 @@ def generate_item_navigator(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "item_navigator")
     task = build_item_navigator_task(persona, article)
     _require_api_key(api_key, "item_navigator")
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=2200,
         api_key=api_key,
         temperature=task["sampling_profile"]["temperature"],
@@ -932,7 +942,7 @@ def generate_item_navigator(
         "headline": out["headline"],
         "commentary": out["commentary"],
         "stance_tags": out["stance_tags"],
-        "llm": _llm_meta(message, "item_navigator", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "item_navigator", used_model or resolved_model),
     }
 
 
@@ -950,6 +960,7 @@ def generate_audio_briefing_script(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "audio_briefing_script")
     task = build_audio_briefing_script_task(
         persona,
         articles,
@@ -967,8 +978,8 @@ def generate_audio_briefing_script(
 
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["user_prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=_audio_briefing_script_max_tokens(task["target_chars"], str((intro_context or {}).get("audio_briefing_conversation_mode") or "single")),
         api_key=api_key,
         system_prompt=task["system_instruction"],
@@ -996,7 +1007,7 @@ def generate_audio_briefing_script(
         "article_segments": out["article_segments"],
         "turns": out["turns"],
         "ending": out["ending"],
-        "llm": _llm_meta(message, "audio_briefing_script", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "audio_briefing_script", used_model or resolved_model),
     }
 
 
@@ -1006,12 +1017,13 @@ def generate_ask_navigator(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "ask_navigator")
     task = build_ask_navigator_task(persona, ask_input)
     _require_api_key(api_key, "ask_navigator")
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=2400,
         api_key=api_key,
         temperature=task["sampling_profile"]["temperature"],
@@ -1026,7 +1038,7 @@ def generate_ask_navigator(
         "headline": out["headline"],
         "commentary": out["commentary"],
         "next_angles": out["next_angles"],
-        "llm": _llm_meta(message, "ask_navigator", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "ask_navigator", used_model or resolved_model),
     }
 
 
@@ -1036,12 +1048,13 @@ def generate_source_navigator(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "source_navigator")
     task = build_source_navigator_task(persona, candidates)
     _require_api_key(api_key, "source_navigator")
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=2600,
         api_key=api_key,
         temperature=task["sampling_profile"]["temperature"],
@@ -1057,7 +1070,7 @@ def generate_source_navigator(
         "keep": out["keep"],
         "watch": out["watch"],
         "standout": out["standout"],
-        "llm": _llm_meta(message, "source_navigator", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "source_navigator", used_model or resolved_model),
     }
 
 
@@ -1069,12 +1082,13 @@ def suggest_feed_seed_sites(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "source_suggestion")
     task = build_seed_sites_task(existing_sources, preferred_topics, positive_examples, negative_examples)
     _require_api_key(api_key, "source_suggestion")
     message, used_model, _execution_failures = _call_with_model_fallback(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=2200,
         api_key=api_key,
     )
@@ -1084,7 +1098,7 @@ def suggest_feed_seed_sites(
     out = parse_seed_sites_result(text, task["existing_sources"])
     return {
         "items": out,
-        "llm": _llm_meta(message, "source_suggestion", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "source_suggestion", used_model or resolved_model),
     }
 
 
@@ -1093,6 +1107,7 @@ async def _call_with_model_fallback_async(*args, **kwargs):
 
 
 async def extract_facts_async(title: str | None, content: str, api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "facts")
     _require_api_key(api_key, "facts")
 
     chunks = _split_text_chunks(content, chunk_chars=8000, overlap_chars=400)
@@ -1114,8 +1129,8 @@ async def extract_facts_async(title: str | None, content: str, api_key: str | No
         )
         message, used_model, execution_failures = await _call_with_model_fallback_async(
             f"{task['system_instruction']}\n\n{task['prompt']}",
-            str(model or _facts_model),
-            _facts_model_fallback,
+            resolved_model,
+            None,
             max_tokens=1024,
             api_key=api_key,
             system_prompt=task["system_instruction"],
@@ -1127,7 +1142,7 @@ async def extract_facts_async(title: str | None, content: str, api_key: str | No
         any_llm_success = True
         text = message.content[0].text.strip()
         all_fact_lists.append(parse_facts_result(text))
-        llm_metas.append(_with_execution_failures(_llm_meta(message, "facts", used_model or _facts_model), execution_failures))
+        llm_metas.append(_with_execution_failures(_llm_meta(message, "facts", used_model or resolved_model), execution_failures))
 
     if not any_llm_success:
         _raise_execution_failure("facts", execution_failures_all, "anthropic facts returned no message")
@@ -1138,8 +1153,8 @@ async def extract_facts_async(title: str | None, content: str, api_key: str | No
         localize_task = build_facts_localization_task(title, merged_facts)
         message, used_model, execution_failures = await _call_with_model_fallback_async(
             f"{localize_task['system_instruction']}\n\n{localize_task['prompt']}",
-            str(model or _facts_model),
-            _facts_model_fallback,
+            resolved_model,
+            None,
             max_tokens=1024,
             api_key=api_key,
             system_prompt=localize_task["system_instruction"],
@@ -1150,7 +1165,7 @@ async def extract_facts_async(title: str | None, content: str, api_key: str | No
             localized_facts = parse_facts_result(message.content[0].text.strip())
             if localized_facts:
                 merged_facts = localized_facts
-                localization_llm = _with_execution_failures(_llm_meta(message, "facts_localization", used_model or _facts_model), execution_failures)
+                localization_llm = _with_execution_failures(_llm_meta(message, "facts_localization", used_model or resolved_model), execution_failures)
     llm = _merge_llm_metas(llm_metas, "facts")
     llm["chunk_count"] = len(chunks)
     llm["chunk_success_count"] = len(llm_metas)
@@ -1168,6 +1183,7 @@ async def summarize_async(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "summary")
     task = build_summary_task(title, facts, source_text_chars)
     max_tokens = _summary_max_tokens(task["target_chars"])
     _require_api_key(api_key, "summary")
@@ -1176,8 +1192,8 @@ async def summarize_async(
     enable_summary_prompt_cache = os.getenv("ANTHROPIC_SUMMARY_PROMPT_CACHE", "1").strip() not in ("0", "false", "False")
     message, used_model, execution_failures = await _call_with_model_fallback_async(
         prompt,
-        str(model or _summary_model),
-        _summary_model_fallback,
+        resolved_model,
+        None,
         max_tokens=max_tokens,
         api_key=api_key,
         system_prompt=task["system_instruction"],
@@ -1204,20 +1220,21 @@ async def summarize_async(
         raw_score_breakdown=data.get("score_breakdown") if isinstance(data.get("score_breakdown"), dict) else {},
         score_reason=str(data.get("score_reason") or "").strip(),
         translated_title=str(data.get("translated_title") or "").strip(),
-        translate_func=lambda raw_title: _translate_title_to_ja(raw_title, used_model or _summary_model, api_key=api_key),
-        llm=_with_execution_failures(_llm_meta(message, "summary", used_model or _summary_model), execution_failures),
+        translate_func=lambda raw_title: _translate_title_to_ja(raw_title, used_model or resolved_model, api_key=api_key),
+        llm=_with_execution_failures(_llm_meta(message, "summary", used_model or resolved_model), execution_failures),
         error_prefix="anthropic summarize parse failed",
         response_text=text,
     )
 
 
 async def check_summary_faithfulness_async(title: str | None, facts: list[str], summary: str, api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "faithfulness_check")
     _require_api_key(api_key, "faithfulness_check")
     prompt = summary_faithfulness_prompt(title, facts, summary)
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         prompt,
-        str(model or _summary_model),
-        _summary_model_fallback,
+        resolved_model,
+        None,
         max_tokens=320,
         api_key=api_key,
         system_prompt=summary_faithfulness_system_instruction(),
@@ -1229,14 +1246,14 @@ async def check_summary_faithfulness_async(title: str | None, facts: list[str], 
         run_summary_faithfulness_check,
         lambda: wrap_message_transport(
             message,
-            lambda msg: _llm_meta(msg, "faithfulness_check", used_model or _summary_model),
-            empty_llm_meta("anthropic", used_model or _summary_model, _ANTHROPIC_PRICING_SOURCE_VERSION),
+            lambda msg: _llm_meta(msg, "faithfulness_check", used_model or resolved_model),
+            empty_llm_meta("anthropic", used_model or resolved_model, _ANTHROPIC_PRICING_SOURCE_VERSION),
         ),
         retry_call=lambda: wrap_message_fallback_transport(
             _call_with_model_fallback(
                 summary_faithfulness_retry_prompt(title, facts, summary),
-                str(model or _summary_model),
-                _summary_model_fallback,
+                resolved_model,
+                None,
                 max_tokens=120,
                 api_key=api_key,
                 system_prompt="pass / warn / fail のいずれか1語のみを返す。",
@@ -1245,19 +1262,20 @@ async def check_summary_faithfulness_async(title: str | None, facts: list[str], 
             ),
             lambda msg, resolved_model: _llm_meta(msg, "faithfulness_check", resolved_model),
             "anthropic",
-            used_model or _summary_model,
+            used_model or resolved_model,
             _ANTHROPIC_PRICING_SOURCE_VERSION,
         ),
     )
 
 
 async def check_facts_async(title: str | None, content: str, facts: list[str], api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "facts_check")
     _require_api_key(api_key, "facts_check")
     prompt = facts_check_prompt(title, content, facts)
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         prompt,
-        str(model or _summary_model),
-        _summary_model_fallback,
+        resolved_model,
+        None,
         max_tokens=320,
         api_key=api_key,
         system_prompt=facts_check_system_instruction(),
@@ -1270,14 +1288,14 @@ async def check_facts_async(title: str | None, content: str, facts: list[str], a
         run_facts_check,
         lambda: wrap_message_transport(
             message,
-            lambda msg: _llm_meta(msg, "facts_check", used_model or _summary_model),
-            empty_llm_meta("anthropic", used_model or _summary_model, _ANTHROPIC_PRICING_SOURCE_VERSION),
+            lambda msg: _llm_meta(msg, "facts_check", used_model or resolved_model),
+            empty_llm_meta("anthropic", used_model or resolved_model, _ANTHROPIC_PRICING_SOURCE_VERSION),
         ),
         retry_call=lambda: wrap_message_fallback_transport(
             _call_with_model_fallback(
                 retry_prompt,
-                str(model or _summary_model),
-                _summary_model_fallback,
+                resolved_model,
+                None,
                 max_tokens=220,
                 api_key=api_key,
                 system_prompt=facts_check_system_instruction(),
@@ -1286,13 +1304,14 @@ async def check_facts_async(title: str | None, content: str, facts: list[str], a
             ),
             lambda msg, resolved_model: _llm_meta(msg, "facts_check", resolved_model),
             "anthropic",
-            used_model or _summary_model,
+            used_model or resolved_model,
             _ANTHROPIC_PRICING_SOURCE_VERSION,
         ),
     )
 
 
 async def translate_title_async(title: str, api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "summary")
     src = (title or "").strip()
     if not src:
         return {"translated_title": "", "llm": None}
@@ -1306,27 +1325,28 @@ JSONで返してください:
 """
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         prompt,
-        str(model or _summary_model),
-        _summary_model_fallback,
+        resolved_model,
+        None,
         max_tokens=200,
         api_key=api_key,
     )
     if message is None:
-        _translated = await asyncio.to_thread(_translate_title_to_ja, src, str(model or _summary_model), api_key)
+        _translated = await asyncio.to_thread(_translate_title_to_ja, src, resolved_model, api_key)
         return {"translated_title": _translated, "llm": None}
 
     text = message.content[0].text.strip()
     data = _extract_first_json_object(text) or {}
     translated = str(data.get("translated_title") or "").strip()
     if not translated:
-        translated = await asyncio.to_thread(_translate_title_to_ja, src, used_model or _summary_model, api_key)
+        translated = await asyncio.to_thread(_translate_title_to_ja, src, used_model or resolved_model, api_key)
     return {
         "translated_title": translated[:300],
-        "llm": _llm_meta(message, "summary", used_model or _summary_model),
+        "llm": _llm_meta(message, "summary", used_model or resolved_model),
     }
 
 
 async def compose_digest_async(digest_date: str, items: list[dict], api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "digest")
     _require_api_key(api_key, "digest")
     if not items:
         return {
@@ -1350,8 +1370,8 @@ async def compose_digest_async(digest_date: str, items: list[dict], api_key: str
 
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         f"{task['system_instruction']}\n\n{task['prompt']}",
-        str(model or _digest_model),
-        _digest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=10000,
         api_key=api_key,
         timeout_sec=compose_timeout,
@@ -1365,7 +1385,7 @@ async def compose_digest_async(digest_date: str, items: list[dict], api_key: str
     subject, body = parse_digest_result(text, error_prefix="claude compose_digest missing subject/body")
     if len(body) < 80:
         raise RuntimeError(f"claude compose_digest body too short: len={len(body)}")
-    llm = _llm_meta(message, "digest", used_model or _digest_model)
+    llm = _llm_meta(message, "digest", used_model or resolved_model)
     llm["input_mode"] = input_mode
     llm["items_count"] = len(items)
     return {
@@ -1376,6 +1396,7 @@ async def compose_digest_async(digest_date: str, items: list[dict], api_key: str
 
 
 async def ask_question_async(query: str, candidates: list[dict], api_key: str | None = None, model: str | None = None) -> dict:
+    resolved_model = _require_model(model, "ask")
     _require_api_key(api_key, "ask")
     if not candidates:
         return {
@@ -1395,8 +1416,8 @@ async def ask_question_async(query: str, candidates: list[dict], api_key: str | 
     task = build_ask_task(query, candidates)
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         f"{task['system_instruction']}\n\n{task['prompt']}",
-        str(model or _digest_model),
-        _digest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=3200,
         api_key=api_key,
         timeout_sec=_env_timeout_seconds("ANTHROPIC_TIMEOUT_SEC", 300.0),
@@ -1407,7 +1428,7 @@ async def ask_question_async(query: str, candidates: list[dict], api_key: str | 
         _raise_execution_failure("ask", _execution_failures, "anthropic ask returned no message")
     text = message.content[0].text.strip()
     result = parse_ask_result(text, candidates, error_prefix="claude ask missing answer")
-    return {**result, "llm": _llm_meta(message, "ask", used_model or _digest_model)}
+    return {**result, "llm": _llm_meta(message, "ask", used_model or resolved_model)}
 
 
 async def compose_digest_cluster_draft_async(
@@ -1418,6 +1439,7 @@ async def compose_digest_cluster_draft_async(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "digest_cluster_draft")
     cluster_label = str(cluster_label or "話題").strip() or "話題"
     topics = [str(t).strip() for t in topics if str(t).strip()][:8]
     source_lines = [str(x).strip() for x in source_lines if str(x).strip()][:16]
@@ -1441,8 +1463,8 @@ async def compose_digest_cluster_draft_async(
 
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
-        str(model or _digest_model),
-        _digest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=DIGEST_CLUSTER_DRAFT_MAX_OUTPUT_TOKENS,
         api_key=api_key,
         system_prompt=task["system_instruction"],
@@ -1454,7 +1476,7 @@ async def compose_digest_cluster_draft_async(
     draft_summary = parse_cluster_draft_result(text, task["source_lines"])
     return {
         "draft_summary": draft_summary,
-        "llm": _llm_meta(message, "digest_cluster_draft", used_model or _digest_model),
+        "llm": _llm_meta(message, "digest_cluster_draft", used_model or resolved_model),
     }
 
 
@@ -1467,6 +1489,7 @@ async def rank_feed_suggestions_async(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "source_suggestion")
     if not candidates:
         return {
             "items": [],
@@ -1479,13 +1502,13 @@ async def rank_feed_suggestions_async(
                 "cache_read_input_tokens": 0,
                 "estimated_cost_usd": 0.0,
             },
-    }
+        }
     task = build_rank_feed_task(existing_sources, preferred_topics, candidates, positive_examples, negative_examples)
     _require_api_key(api_key, "source_suggestion")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=2800,
         api_key=api_key,
     )
@@ -1496,7 +1519,7 @@ async def rank_feed_suggestions_async(
     out = parse_rank_feed_result(text, task["candidates"])
     return {
         "items": out,
-        "llm": _llm_meta(message, "source_suggestion", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "source_suggestion", used_model or resolved_model),
     }
 
 
@@ -1507,12 +1530,13 @@ async def generate_briefing_navigator_async(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "briefing_navigator")
     task = build_briefing_navigator_task(persona, candidates, intro_context)
     _require_api_key(api_key, "briefing_navigator")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=1800,
         api_key=api_key,
         temperature=task["sampling_profile"]["temperature"],
@@ -1526,7 +1550,7 @@ async def generate_briefing_navigator_async(
     return {
         "intro": out["intro"],
         "picks": out["picks"],
-        "llm": _llm_meta(message, "briefing_navigator", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "briefing_navigator", used_model or resolved_model),
     }
 
 
@@ -1537,12 +1561,13 @@ async def compose_ai_navigator_brief_async(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "ai_navigator_brief")
     task = build_ai_navigator_brief_task(persona, candidates, intro_context)
     _require_api_key(api_key, "ai_navigator_brief")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=3200,
         api_key=api_key,
         temperature=task["sampling_profile"]["temperature"],
@@ -1559,7 +1584,7 @@ async def compose_ai_navigator_brief_async(
         "summary": out["summary"],
         "ending": out["ending"],
         "items": out["items"],
-        "llm": _llm_meta(message, "ai_navigator_brief", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "ai_navigator_brief", used_model or resolved_model),
     }
 
 
@@ -1569,12 +1594,13 @@ async def generate_item_navigator_async(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "item_navigator")
     task = build_item_navigator_task(persona, article)
     _require_api_key(api_key, "item_navigator")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=2200,
         api_key=api_key,
         temperature=task["sampling_profile"]["temperature"],
@@ -1589,7 +1615,7 @@ async def generate_item_navigator_async(
         "headline": out["headline"],
         "commentary": out["commentary"],
         "stance_tags": out["stance_tags"],
-        "llm": _llm_meta(message, "item_navigator", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "item_navigator", used_model or resolved_model),
     }
 
 
@@ -1607,6 +1633,7 @@ async def generate_audio_briefing_script_async(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "audio_briefing_script")
     task = build_audio_briefing_script_task(
         persona,
         articles,
@@ -1624,8 +1651,8 @@ async def generate_audio_briefing_script_async(
 
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["user_prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=_audio_briefing_script_max_tokens(task["target_chars"], str((intro_context or {}).get("audio_briefing_conversation_mode") or "single")),
         api_key=api_key,
         system_prompt=task["system_instruction"],
@@ -1653,7 +1680,7 @@ async def generate_audio_briefing_script_async(
         "article_segments": out["article_segments"],
         "turns": out["turns"],
         "ending": out["ending"],
-        "llm": _llm_meta(message, "audio_briefing_script", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "audio_briefing_script", used_model or resolved_model),
     }
 
 
@@ -1663,12 +1690,13 @@ async def generate_ask_navigator_async(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "ask_navigator")
     task = build_ask_navigator_task(persona, ask_input)
     _require_api_key(api_key, "ask_navigator")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=2400,
         api_key=api_key,
         temperature=task["sampling_profile"]["temperature"],
@@ -1683,7 +1711,7 @@ async def generate_ask_navigator_async(
         "headline": out["headline"],
         "commentary": out["commentary"],
         "next_angles": out["next_angles"],
-        "llm": _llm_meta(message, "ask_navigator", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "ask_navigator", used_model or resolved_model),
     }
 
 
@@ -1693,12 +1721,13 @@ async def generate_source_navigator_async(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "source_navigator")
     task = build_source_navigator_task(persona, candidates)
     _require_api_key(api_key, "source_navigator")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=2600,
         api_key=api_key,
         temperature=task["sampling_profile"]["temperature"],
@@ -1714,7 +1743,7 @@ async def generate_source_navigator_async(
         "keep": out["keep"],
         "watch": out["watch"],
         "standout": out["standout"],
-        "llm": _llm_meta(message, "source_navigator", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "source_navigator", used_model or resolved_model),
     }
 
 
@@ -1726,12 +1755,13 @@ async def suggest_feed_seed_sites_async(
     api_key: str | None = None,
     model: str | None = None,
 ) -> dict:
+    resolved_model = _require_model(model, "source_suggestion")
     task = build_seed_sites_task(existing_sources, preferred_topics, positive_examples, negative_examples)
     _require_api_key(api_key, "source_suggestion")
     message, used_model, _execution_failures = await _call_with_model_fallback_async(
         task["prompt"],
-        str(model or _feed_suggest_model),
-        _feed_suggest_model_fallback,
+        resolved_model,
+        None,
         max_tokens=2200,
         api_key=api_key,
     )
@@ -1753,8 +1783,8 @@ async def suggest_feed_seed_sites_async(
 """
         rescue_message, _, _execution_failures = await _call_with_model_fallback_async(
             rescue_prompt,
-            str(model or _feed_suggest_model),
-            _feed_suggest_model_fallback,
+            resolved_model,
+            None,
             max_tokens=1500,
             api_key=api_key,
         )
@@ -1762,5 +1792,5 @@ async def suggest_feed_seed_sites_async(
             out.extend(parse_seed_sites_result(rescue_message.content[0].text.strip(), task["existing_sources"]))
     return {
         "items": out,
-        "llm": _llm_meta(message, "source_suggestion", used_model or _feed_suggest_model),
+        "llm": _llm_meta(message, "source_suggestion", used_model or resolved_model),
     }

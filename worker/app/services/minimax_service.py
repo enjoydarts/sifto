@@ -77,18 +77,29 @@ from app.services.task_transport_common import empty_llm_meta, with_execution_fa
 _client = None
 _facts_model = os.getenv("MINIMAX_FACTS_MODEL", "MiniMax-M2.5-highspeed")
 _summary_model = os.getenv("MINIMAX_SUMMARY_MODEL", "MiniMax-M2.7")
-_summary_model_fallback = os.getenv("MINIMAX_SUMMARY_MODEL_FALLBACK", "MiniMax-M2.5")
-_facts_model_fallback = os.getenv("MINIMAX_FACTS_MODEL_FALLBACK", "MiniMax-M2.5")
+_summary_model_fallback = None
+_facts_model_fallback = None
 _digest_model = os.getenv("MINIMAX_DIGEST_MODEL", _summary_model)
-_digest_model_fallback = os.getenv("MINIMAX_DIGEST_MODEL_FALLBACK", _summary_model_fallback)
+_digest_model_fallback = None
 _feed_suggest_model = os.getenv("MINIMAX_FEED_SUGGEST_MODEL", "MiniMax-M2.5-highspeed")
-_feed_suggest_model_fallback = os.getenv("MINIMAX_FEED_SUGGEST_MODEL_FALLBACK", "MiniMax-M2.5")
+_feed_suggest_model_fallback = None
 _log = logging.getLogger(__name__)
 _MINIMAX_PRICING_SOURCE_VERSION = "llm_catalog"
 
 
 def _api_base_url() -> str:
     return (os.getenv("MINIMAX_API_BASE_URL") or "https://api.minimax.io/anthropic").strip()
+
+
+def _optional_model_env(name: str) -> str | None:
+    value = str(os.getenv(name) or "").strip()
+    return value or None
+
+
+_summary_model_fallback = _optional_model_env("MINIMAX_SUMMARY_MODEL_FALLBACK")
+_facts_model_fallback = _optional_model_env("MINIMAX_FACTS_MODEL_FALLBACK")
+_digest_model_fallback = _optional_model_env("MINIMAX_DIGEST_MODEL_FALLBACK")
+_feed_suggest_model_fallback = _optional_model_env("MINIMAX_FEED_SUGGEST_MODEL_FALLBACK")
 
 
 def _client_for_api_key(api_key: str | None):

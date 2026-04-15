@@ -763,6 +763,7 @@ func summarizeAndPersistItem(
 		itemID,
 		summary.Summary,
 		summary.Topics,
+		summary.Genre,
 		summary.TranslatedTitle,
 		summary.Score,
 		summary.ScoreBreakdown,

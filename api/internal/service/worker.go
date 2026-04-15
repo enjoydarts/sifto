@@ -168,6 +168,7 @@ type ExtractFactsResponse struct {
 type SummarizeResponse struct {
 	Summary            string         `json:"summary"`
 	Topics             []string       `json:"topics"`
+	Genre              *string        `json:"genre,omitempty"`
 	TranslatedTitle    string         `json:"translated_title,omitempty"`
 	Score              float64        `json:"score"`
 	ScoreBreakdown     map[string]any `json:"score_breakdown,omitempty"`

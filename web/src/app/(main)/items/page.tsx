@@ -1,13 +1,19 @@
 "use client";
 
-import { Suspense, useCallback } from "react";
+import { Suspense, useCallback, useMemo } from "react";
 import { CheckCheck, Newspaper, Search, Volume2, X } from "lucide-react";
 import { InlineReader } from "@/components/inline-reader";
 import { PageTransition } from "@/components/page-transition";
 import { FiltersBar } from "@/components/items/filters-bar";
+import {
+  UNCATEGORIZED_GENRE_PARAM,
+  genreValueFromCountEntry,
+  isUncategorizedGenreParam,
+  normalizeGenreNavigationValue,
+  orderGenreCountEntries,
+} from "@/components/items/item-genre";
 import { ItemCard } from "@/components/items/item-card";
 import { FeedTabs } from "@/components/items/feed-tabs";
-import { ItemsSummaryStrip } from "@/components/items/items-summary-strip";
 import { ItemsListState } from "@/components/items/items-list-state";
 import { DenseArticleList } from "@/components/items/dense-article-list";
 import { PageHeader } from "@/components/ui/page-header";
@@ -21,8 +27,8 @@ import { useItemsPageData, type ItemsFeedQueryData } from "./use-items-page-data
 function ItemsPageContent() {
   const {
     t, locale,
-    setFeed, setSort, setFilter, setTopic, setSource, setSearch, setFavorite, setPage, resetFilters,
-    feedMode, sortMode, filter, topic, sourceID, searchQuery, searchMode, unreadOnly, favoriteOnly, page,
+    setFeed, setSort, setFilter, setGenre, setTopic, setSource, setSearch, setFavorite, setPage, resetFilters,
+    feedMode, sortMode, filter, genre, topic, sourceID, searchQuery, searchMode, unreadOnly, favoriteOnly, page,
     unreadMode, readMode, pendingMode, deletedMode,
     summaryAudioPlaybackBlocked,
     setError,
@@ -42,7 +48,7 @@ function ItemsPageContent() {
     activeSuggestionIndex, setActiveSuggestionIndex,
     inlineQueueItemIds, setInlineQueueItemIds,
     listQueryKey,
-    items, itemsTotal, searchUnavailable,
+    items, itemsTotal, genreCounts, searchUnavailable,
     loading, visibleError,
     suggestions,
     suggestionsLoading,
@@ -54,7 +60,6 @@ function ItemsPageContent() {
     sortedItems,
     dateSections,
     inlineItemStatus,
-    summaryMetrics,
     pageSubtitleKey,
     detailHref,
     rememberScroll,
@@ -115,6 +120,51 @@ function ItemsPageContent() {
     );
   }, [detailHref, feedbackUpdatingIds, locale, pendingMode, prefetchItemDetail, readUpdatingIds, rememberScroll, retryItem, retryingIds, router, saveReadQueue, selectedItemIDSet, sortedItems, t, toggleRead, toggleSelectedItem, updateItemFeedback, setInlineItemId, setInlineQueueItemIds]);
 
+  const genreNavOptions = useMemo(() => {
+    const selectedGenre = normalizeGenreNavigationValue(genre);
+    const selectedIsUncategorized = isUncategorizedGenreParam(selectedGenre);
+    const regularOptions: Array<{ value: string; label: string; count?: number }> = [];
+    const seenRegular = new Set<string>();
+    let uncategorizedCount: number | undefined;
+
+    for (const entry of orderGenreCountEntries(genreCounts)) {
+      const value = genreValueFromCountEntry(entry);
+      if (!value) {
+        uncategorizedCount = entry.count;
+        continue;
+      }
+      if (seenRegular.has(value)) continue;
+      seenRegular.add(value);
+      regularOptions.push({ value, label: value, count: entry.count });
+    }
+
+    if (selectedGenre && !selectedIsUncategorized && !seenRegular.has(selectedGenre)) {
+      regularOptions.unshift({ value: selectedGenre, label: selectedGenre, count: itemsTotal });
+    }
+    if (selectedIsUncategorized && uncategorizedCount == null) {
+      uncategorizedCount = itemsTotal;
+    }
+
+    return [
+      {
+        value: "",
+        label: t("items.genre.allItems"),
+        count: selectedGenre ? undefined : itemsTotal,
+        active: selectedGenre === "",
+      },
+      ...regularOptions.map((option) => ({
+        ...option,
+        active: option.value === selectedGenre,
+      })),
+      {
+        value: UNCATEGORIZED_GENRE_PARAM,
+        label: t("items.genre.uncategorized"),
+        count: uncategorizedCount,
+        active: selectedIsUncategorized,
+      },
+    ];
+  }, [genre, genreCounts, itemsTotal, t]);
+
   const railFilterTags = [
     topic ? (
       <Tag key="topic" tone="accent" removable onRemove={() => setTopic("")}>
@@ -150,6 +200,17 @@ function ItemsPageContent() {
     ) : null,
   ].filter(Boolean);
 
+  const triageDisabled = pendingMode;
+  const triageDisabledReason = triageDisabled ? t("items.quickAction.triageDisabledPending") : undefined;
+  const audioDisabled = pendingMode || deletedMode || summaryAudioPlaybackBlocked;
+  const audioDisabledReason = pendingMode
+    ? t("items.quickAction.audioDisabledPending")
+    : deletedMode
+      ? t("items.quickAction.audioDisabledDeleted")
+      : summaryAudioPlaybackBlocked
+        ? t("summaryAudio.playbackBlocked.notConfigured")
+        : undefined;
+
   return (
     <PageTransition>
       <div className="space-y-3 pb-8">
@@ -157,40 +218,25 @@ function ItemsPageContent() {
           <aside className="hidden xl:sticky xl:top-[6.25rem] xl:flex xl:self-start xl:flex-col xl:gap-4">
             <SectionCard compact className="overflow-hidden">
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
-                {t("items.rail.metrics")}
-              </div>
-              <div className="mt-3 divide-y divide-[var(--color-editorial-line)]">
-                {summaryMetrics.map((metric) => (
-                  <div key={metric.key} className="grid gap-1 py-3 first:pt-0 last:pb-0">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-                      {metric.label}
-                    </div>
-                    <div className="text-[2rem] leading-none tracking-[-0.04em] text-[var(--color-editorial-ink)]">
-                      {metric.value}
-                    </div>
-                    <div className="text-xs leading-5 text-[var(--color-editorial-ink-soft)]">
-                      {metric.hint}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-
-            <SectionCard compact>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
                 {t("items.rail.actions")}
               </div>
               <div className="mt-3 grid gap-2">
-                {!pendingMode && (
-                  <button
-                    type="button"
-                    onClick={() => router.push("/triage?mode=all")}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 press focus-ring"
-                  >
-                    <CheckCheck className="size-4" aria-hidden="true" />
-                    <span>{t("items.openAllTriage")}</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (triageDisabled) {
+                      return;
+                    }
+                    router.push("/triage?mode=all");
+                  }}
+                  disabled={triageDisabled}
+                  title={triageDisabledReason}
+                  aria-label={triageDisabledReason ? `${t("items.openAllTriage")}: ${triageDisabledReason}` : t("items.openAllTriage")}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 press focus-ring"
+                >
+                  <CheckCheck className="size-4" aria-hidden="true" />
+                  <span>{t("items.openAllTriage")}</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -207,22 +253,50 @@ function ItemsPageContent() {
                   <Search className="size-4" aria-hidden="true" />
                   <span>{t("items.search.open")}</span>
                 </button>
-                {!pendingMode && !deletedMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (audioDisabled) {
+                      return;
+                    }
+                    router.push(`/audio-player?queue=view&view=${encodeURIComponent(summaryAudioViewQuery)}`);
+                  }}
+                  disabled={audioDisabled}
+                  title={audioDisabledReason}
+                  aria-label={audioDisabledReason ? `${t("items.openAudioPlayer")}: ${audioDisabledReason}` : t("items.openAudioPlayer")}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:cursor-not-allowed disabled:opacity-50 press focus-ring"
+                >
+                  <Volume2 className="size-4" aria-hidden="true" />
+                  <span>{t("items.openAudioPlayer")}</span>
+                </button>
+              </div>
+            </SectionCard>
+
+            <SectionCard compact className="overflow-hidden">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
+                {t("items.genre.browse")}
+              </div>
+              <div className="mt-3 grid gap-1.5">
+                {genreNavOptions.map((option) => (
                   <button
+                    key={`genre-nav:${option.value || "all"}`}
                     type="button"
-                    onClick={() => {
-                      if (summaryAudioPlaybackBlocked) {
-                        return;
-                      }
-                      router.push(`/audio-player?queue=view&view=${encodeURIComponent(summaryAudioViewQuery)}`);
-                    }}
-                    disabled={summaryAudioPlaybackBlocked}
-                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:cursor-not-allowed disabled:opacity-50 press focus-ring"
+                    aria-current={option.active ? "page" : undefined}
+                    onClick={() => setGenre(option.value)}
+                    className={`flex min-h-10 items-center justify-between gap-3 rounded-[14px] border px-3 py-2 text-left text-sm transition press focus-ring ${
+                      option.active
+                        ? "border-[var(--color-editorial-accent-line)] bg-[var(--color-editorial-accent-soft)] text-[var(--color-editorial-accent)]"
+                        : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
+                    }`}
                   >
-                    <Volume2 className="size-4" aria-hidden="true" />
-                    <span>{t("items.openAudioPlayer")}</span>
+                    <span className="min-w-0 truncate">{option.label}</span>
+                    {typeof option.count === "number" ? (
+                      <span className="shrink-0 text-[11px] font-medium text-[var(--color-editorial-ink-faint)]">
+                        {option.count.toLocaleString()}
+                      </span>
+                    ) : null}
                   </button>
-                )}
+                ))}
               </div>
             </SectionCard>
 
@@ -268,39 +342,41 @@ function ItemsPageContent() {
                   >
                     <Search className="size-4" aria-hidden="true" />
                   </button>
-                  {!pendingMode && (
-                    <button
-                      type="button"
-                      onClick={() => router.push("/triage?mode=all")}
-                      className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 press focus-ring"
-                    >
-                      <CheckCheck className="size-4" aria-hidden="true" />
-                      <span>{t("items.openAllTriage")}</span>
-                    </button>
-                  )}
-                  {!pendingMode && !deletedMode && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (summaryAudioPlaybackBlocked) {
-                          return;
-                        }
-                        router.push(`/audio-player?queue=view&view=${encodeURIComponent(summaryAudioViewQuery)}`);
-                      }}
-                      disabled={summaryAudioPlaybackBlocked}
-                      className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50 press focus-ring"
-                    >
-                      <Volume2 className="size-4" aria-hidden="true" />
-                      <span>{t("items.openAudioPlayer")}</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (triageDisabled) {
+                        return;
+                      }
+                      router.push("/triage?mode=all");
+                    }}
+                    disabled={triageDisabled}
+                    title={triageDisabledReason}
+                    aria-label={triageDisabledReason ? `${t("items.openAllTriage")}: ${triageDisabledReason}` : t("items.openAllTriage")}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--color-editorial-ink)] bg-[var(--color-editorial-ink)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-editorial-panel-strong)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 press focus-ring"
+                  >
+                    <CheckCheck className="size-4" aria-hidden="true" />
+                    <span>{t("items.openAllTriage")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (audioDisabled) {
+                        return;
+                      }
+                      router.push(`/audio-player?queue=view&view=${encodeURIComponent(summaryAudioViewQuery)}`);
+                    }}
+                    disabled={audioDisabled}
+                    title={audioDisabledReason}
+                    aria-label={audioDisabledReason ? `${t("items.openAudioPlayer")}: ${audioDisabledReason}` : t("items.openAudioPlayer")}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-3.5 py-1.5 text-sm font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel-strong)] disabled:cursor-not-allowed disabled:opacity-50 press focus-ring"
+                  >
+                    <Volume2 className="size-4" aria-hidden="true" />
+                    <span>{t("items.openAudioPlayer")}</span>
+                  </button>
                 </div>
               )}
             />
-
-            <div className="hidden xl:hidden">
-              <ItemsSummaryStrip metrics={summaryMetrics} />
-            </div>
 
             <FilterBar
               compact
@@ -447,6 +523,34 @@ function ItemsPageContent() {
             >
               {showFilterBadges ? <div className="flex flex-wrap items-center gap-2">{railFilterTags}</div> : null}
             </FilterBar>
+
+            <SectionCard compact className="xl:hidden">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
+                {t("items.genre.browse")}
+              </div>
+              <div className="mt-3 flex snap-x gap-2 overflow-x-auto pb-1">
+                {genreNavOptions.map((option) => (
+                  <button
+                    key={`genre-nav-mobile:${option.value || "all"}`}
+                    type="button"
+                    aria-current={option.active ? "page" : undefined}
+                    onClick={() => setGenre(option.value)}
+                    className={`inline-flex min-h-10 shrink-0 snap-start items-center gap-2 rounded-full border px-3 py-2 text-sm transition press focus-ring ${
+                      option.active
+                        ? "border-[var(--color-editorial-accent-line)] bg-[var(--color-editorial-accent-soft)] text-[var(--color-editorial-accent)]"
+                        : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)]"
+                    }`}
+                  >
+                    <span>{option.label}</span>
+                    {typeof option.count === "number" ? (
+                      <span className="text-[11px] font-medium text-[var(--color-editorial-ink-faint)]">
+                        {option.count.toLocaleString()}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            </SectionCard>
 
             {searchQuery && searchUnavailable ? (
               <SectionCard className="border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">

@@ -1,0 +1,5 @@
+ALTER TABLE items
+DROP COLUMN IF EXISTS user_genre;
+
+ALTER TABLE item_summaries
+DROP COLUMN IF EXISTS genre;

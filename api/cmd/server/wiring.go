@@ -146,6 +146,7 @@ func buildItemsModule(d *appDeps) appModule {
 				r.Delete("/{id}", itemH.Delete)
 				r.Post("/{id}/restore", itemH.Restore)
 				r.Get("/{id}", itemH.GetDetail)
+				r.Patch("/{id}/genre", itemH.UpdateGenre)
 				r.Patch("/{id}/feedback", itemH.SetFeedback)
 				r.Post("/{id}/read", itemH.MarkRead)
 				r.Post("/mark-read-bulk", itemH.MarkReadBulk)

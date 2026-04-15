@@ -78,6 +78,7 @@ func (r *ItemInngestRepo) InsertSummary(
 	ctx context.Context,
 	itemID, summary string,
 	topics []string,
+	genre *string,
 	translatedTitle string,
 	score float64,
 	scoreBreakdown map[string]any,
@@ -103,18 +104,20 @@ func (r *ItemInngestRepo) InsertSummary(
 	if translatedTitle != "" {
 		translatedTitlePtr = &translatedTitle
 	}
+	genre = normalizeGenreValue(genre)
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO item_summaries (item_id, summary, topics, translated_title, score, score_breakdown, score_reason, score_policy_version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO item_summaries (item_id, summary, topics, genre, translated_title, score, score_breakdown, score_reason, score_policy_version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (item_id) DO UPDATE SET
 		    summary = EXCLUDED.summary, topics = EXCLUDED.topics,
+		    genre = EXCLUDED.genre,
 		    translated_title = EXCLUDED.translated_title,
 		    score = EXCLUDED.score,
 		    score_breakdown = EXCLUDED.score_breakdown,
 		    score_reason = EXCLUDED.score_reason,
 		    score_policy_version = EXCLUDED.score_policy_version,
 		    summarized_at = NOW()`,
-		itemID, summary, topics, translatedTitlePtr, score, scoreBreakdownJSON, scoreReasonPtr, scorePolicyVersionPtr)
+		itemID, summary, topics, genre, translatedTitlePtr, score, scoreBreakdownJSON, scoreReasonPtr, scorePolicyVersionPtr)
 	if err != nil {
 		return err
 	}

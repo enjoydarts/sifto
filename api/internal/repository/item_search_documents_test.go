@@ -26,3 +26,17 @@ func TestItemSearchDocumentsQueryIncludesNoteAndHighlightFields(t *testing.T) {
 		t.Fatalf("item search documents query must select highlight_text")
 	}
 }
+
+func TestItemSearchDocumentsQueryIncludesEffectiveGenre(t *testing.T) {
+	query := itemSearchDocumentsQuery(`AND i.id = $1`)
+
+	if !strings.Contains(query, "AS effective_genre") {
+		t.Fatalf("item search documents query must select effective_genre")
+	}
+	if !strings.Contains(query, "'uncategorized'") {
+		t.Fatalf("item search documents query must compute an uncategorized fallback")
+	}
+	if !strings.Contains(query, "NULLIF(BTRIM(i.user_genre), '')") || !strings.Contains(query, "NULLIF(BTRIM(sm.genre), '')") {
+		t.Fatalf("item search documents query must compute effective_genre from user_genre then summary genre")
+	}
+}

@@ -7,6 +7,7 @@ import { ItemLLMExecutionAttempt, NavigatorLLM } from "@/lib/api";
 import { AINavigatorAvatar } from "@/components/briefing/ai-navigator-avatar";
 import { formatModelDisplayName } from "@/lib/model-display";
 import { InlineReader } from "@/components/inline-reader";
+import { ItemGenreEditor } from "@/components/items/item-genre-editor";
 import { ItemHighlightList } from "@/components/items/item-highlight-list";
 import { ItemNoteEditor } from "@/components/items/item-note-editor";
 import { PersonalScoreExplainer } from "@/components/items/personal-score-explainer";
@@ -209,6 +210,7 @@ export default function ItemDetailPage() {
     feedbackUpdating,
     retryUpdating,
     retryFromFactsUpdating,
+    genreUpdating,
     related,
     expandedRelatedClusterIds,
     setExpandedRelatedClusterIds,
@@ -226,6 +228,7 @@ export default function ItemDetailPage() {
     itemNavigatorOpen,
     setItemNavigatorOpen,
     itemNavigatorDisplayPersona,
+    genreSuggestions,
     dateLocale,
     canMarkRead,
     isDeleted,
@@ -243,6 +246,7 @@ export default function ItemDetailPage() {
     restoreItem,
     retryItem,
     retryFromFacts,
+    saveGenre,
     saveNote,
     createHighlight,
     deleteHighlight,
@@ -472,13 +476,14 @@ export default function ItemDetailPage() {
 
       <section className="overflow-hidden rounded-[24px] border border-[var(--color-editorial-line)] bg-[rgba(255,255,255,0.72)] shadow-[var(--shadow-card)]">
         <div className="flex flex-wrap gap-2 border-b border-[var(--color-editorial-line)] bg-[rgba(250,247,241,0.95)] px-4 py-3 md:px-5 md:py-4">
-          {(["summary", "facts", "body", "related", "notes"] as const).map((tab) => {
+          {(["summary", "facts", "body", "related", "notes", "genre"] as const).map((tab) => {
             const label =
               tab === "summary" ? t("tabs.summary")
               : tab === "facts" ? t("tabs.facts")
               : tab === "body" ? t("tabs.body")
               : tab === "related" ? t("tabs.related")
-              : t("tabs.notes");
+              : tab === "notes" ? t("tabs.notes")
+              : t("tabs.genre");
             const active = detailTab === tab;
             return (
               <button
@@ -896,6 +901,21 @@ export default function ItemDetailPage() {
                   disabled={disableMutations}
                 />
               </div>
+            </section>
+          </div>
+        ) : null}
+
+        {detailTab === "genre" ? (
+          <div className="min-w-0 px-5 py-6 md:px-7 md:py-7">
+            <section className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-5 py-4 md:px-6 md:py-5">
+              <ItemGenreEditor
+                genre={item.genre}
+                userGenre={item.user_genre}
+                summaryGenre={item.summary?.genre}
+                suggestions={genreSuggestions}
+                disabled={disableMutations || genreUpdating}
+                onSave={saveGenre}
+              />
             </section>
           </div>
         ) : null}

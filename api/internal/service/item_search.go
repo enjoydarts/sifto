@@ -25,12 +25,28 @@ type ItemSearchQuery struct {
 	Status       *string
 	SourceID     *string
 	Topic        *string
+	Genre        *string
 	UnreadOnly   bool
 	ReadOnly     bool
 	FavoriteOnly bool
 	LaterOnly    bool
 	Page         int
 	PageSize     int
+}
+
+func normalizeGenreFilterValue(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	normalized := strings.ToLower(strings.TrimSpace(*value))
+	if normalized == "" {
+		return nil
+	}
+	switch normalized {
+	case "uncategorized", "untagged":
+		normalized = "uncategorized"
+	}
+	return &normalized
 }
 
 func (s *ItemSearchService) Search(ctx context.Context, q ItemSearchQuery) (*model.ItemListResponse, error) {
@@ -47,10 +63,18 @@ func (s *ItemSearchService) Search(ctx context.Context, q ItemSearchQuery) (*mod
 	searchResp, err := s.search.SearchItems(ctx, MeilisearchSearchParams{
 		Query:      strings.TrimSpace(q.Query),
 		SearchMode: q.SearchMode,
-		Filters:    buildItemSearchFilters(q),
+		Filters:    buildItemSearchFilters(q, true),
 		Offset:     (q.Page - 1) * q.PageSize,
 		Limit:      q.PageSize,
 		CropLength: 18,
+	})
+	if err != nil {
+		return nil, err
+	}
+	genreCounts, err := s.search.SearchItemGenreCounts(ctx, MeilisearchSearchParams{
+		Query:      strings.TrimSpace(q.Query),
+		SearchMode: q.SearchMode,
+		Filters:    buildItemSearchFilters(q, false),
 	})
 	if err != nil {
 		return nil, err
@@ -77,19 +101,20 @@ func (s *ItemSearchService) Search(ctx context.Context, q ItemSearchQuery) (*mod
 
 	mode := searchResp.Mode
 	return &model.ItemListResponse{
-		Items:      items,
-		Page:       q.Page,
-		PageSize:   q.PageSize,
-		Total:      searchResp.Total,
-		HasNext:    (q.Page * q.PageSize) < searchResp.Total,
-		Sort:       "relevance",
-		Status:     q.Status,
-		SourceID:   q.SourceID,
-		SearchMode: &mode,
+		Items:       items,
+		GenreCounts: genreCounts,
+		Page:        q.Page,
+		PageSize:    q.PageSize,
+		Total:       searchResp.Total,
+		HasNext:     (q.Page * q.PageSize) < searchResp.Total,
+		Sort:        "relevance",
+		Status:      q.Status,
+		SourceID:    q.SourceID,
+		SearchMode:  &mode,
 	}, nil
 }
 
-func buildItemSearchFilters(q ItemSearchQuery) []string {
+func buildItemSearchFilters(q ItemSearchQuery, includeGenre bool) []string {
 	filters := []string{
 		"user_id = " + QuoteMeilisearchFilter(q.UserID),
 	}
@@ -114,6 +139,11 @@ func buildItemSearchFilters(q ItemSearchQuery) []string {
 	}
 	if q.Topic != nil && strings.TrimSpace(*q.Topic) != "" {
 		filters = append(filters, "topics = "+QuoteMeilisearchFilter(*q.Topic))
+	}
+	if includeGenre {
+		if normalizedGenre := normalizeGenreFilterValue(q.Genre); normalizedGenre != nil {
+			filters = append(filters, "effective_genre = "+QuoteMeilisearchFilter(*normalizedGenre))
+		}
 	}
 	if q.UnreadOnly {
 		filters = append(filters, "is_read = false")

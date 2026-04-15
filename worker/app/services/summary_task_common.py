@@ -3,7 +3,27 @@ from app.services.langfuse_client import get_prompt_text
 from app.services.prompt_template_defaults import get_default_prompt_template
 from app.services.runtime_prompt_overrides import apply_prompt_override
 
-SUMMARY_SYSTEM_INSTRUCTION = str(get_default_prompt_template("summary.default").get("system_instruction") or "")
+_SUMMARY_GENRE_PATTERN = r"^[ぁ-ゖァ-ヺー一-龥々〆ヵヶ]{1,12}$"
+_SUMMARY_GENRE_GUIDANCE = (
+    "genre は必須です。短い日本語の単一ラベルを1つだけ返してください。"
+    "複数ラベル、説明文、列挙、スラッシュ区切り、英語だけのラベルは不可です。"
+    "判定が難しい場合は最も近い単一ラベルを返し、どうしても無理な場合のみ空文字にしてください。"
+    "空文字は上流で null 扱いになります。"
+)
+
+
+def _append_summary_genre_guidance(text: str) -> str:
+    rendered = str(text or "").strip()
+    if not rendered:
+        return ""
+    if _SUMMARY_GENRE_GUIDANCE in rendered:
+        return rendered
+    return f"{rendered}\n\n# Genre\n{_SUMMARY_GENRE_GUIDANCE}"
+
+
+SUMMARY_SYSTEM_INSTRUCTION = _append_summary_genre_guidance(
+    str(get_default_prompt_template("summary.default").get("system_instruction") or "")
+)
 
 
 SUMMARY_SCHEMA = {
@@ -12,6 +32,20 @@ SUMMARY_SCHEMA = {
         "summary": {"type": "string"},
         "topics": {"type": "array", "items": {"type": "string"}},
         "translated_title": {"type": "string"},
+        "genre": {
+            "anyOf": [
+                {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 12,
+                    "pattern": _SUMMARY_GENRE_PATTERN,
+                },
+                {
+                    "type": "string",
+                    "maxLength": 0,
+                },
+            ]
+        },
         "score_breakdown": {
             "type": "object",
             "properties": {
@@ -26,7 +60,7 @@ SUMMARY_SCHEMA = {
         },
         "score_reason": {"type": "string"},
     },
-    "required": ["summary", "topics", "translated_title", "score_breakdown", "score_reason"],
+    "required": ["summary", "topics", "translated_title", "score_breakdown", "score_reason", "genre"],
     "additionalProperties": False,
 }
 
@@ -50,6 +84,8 @@ def build_summary_task(title: str | None, facts: list[str], source_text_chars: i
         variables=variables,
     )
     system_instruction, prompt = apply_prompt_override("summary.default", SUMMARY_SYSTEM_INSTRUCTION, prompt, variables)
+    system_instruction = _append_summary_genre_guidance(system_instruction)
+    prompt = _append_summary_genre_guidance(prompt)
     return {
         "target_chars": target_chars,
         "min_chars": min_chars,

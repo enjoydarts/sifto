@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
+
+	"github.com/enjoydarts/sifto/api/internal/model"
 )
 
 func TestNewMeilisearchServiceFromEnv(t *testing.T) {
@@ -160,6 +163,66 @@ func TestEnsureItemsIndexIncludesNoteAndHighlightSettings(t *testing.T) {
 	}
 	if !foundNote || !foundHighlight {
 		t.Fatalf("searchableAttributes = %#v, want note_text and highlight_text", searchable)
+	}
+}
+
+func TestEnsureItemsIndexIncludesEffectiveGenreFilterableAttribute(t *testing.T) {
+	var patchBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/indexes":
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"taskUid":1}`))
+		case r.Method == http.MethodPatch && r.URL.Path == "/indexes/items/settings":
+			if err := json.NewDecoder(r.Body).Decode(&patchBody); err != nil {
+				t.Fatalf("decode settings: %v", err)
+			}
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"taskUid":2}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	svc := &MeilisearchService{
+		baseURL:    server.URL,
+		itemsIndex: "items",
+		client:     server.Client(),
+	}
+	if err := svc.ensureItemsIndex(context.Background()); err != nil {
+		t.Fatalf("ensureItemsIndex returned error: %v", err)
+	}
+
+	filterable, ok := patchBody["filterableAttributes"].([]any)
+	if !ok {
+		t.Fatalf("filterableAttributes type = %T", patchBody["filterableAttributes"])
+	}
+	found := false
+	for _, raw := range filterable {
+		if raw == "effective_genre" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("filterableAttributes = %#v, want effective_genre", filterable)
+	}
+}
+
+func TestGenreCountsFromMapSkipsEmptyGenre(t *testing.T) {
+	got := genreCountsFromMap(map[string]int{
+		"":         4,
+		"analysis": 3,
+		"news":     5,
+	})
+
+	want := []model.GenreCount{
+		{Genre: "news", Count: 5},
+		{Genre: "analysis", Count: 3},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("genreCountsFromMap = %#v, want %#v", got, want)
 	}
 }
 

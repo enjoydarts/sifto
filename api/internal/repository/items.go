@@ -28,6 +28,7 @@ type ItemListParams struct {
 	Status       *string
 	SourceID     *string
 	Topic        *string
+	Genre        *string
 	Query        *string
 	UnreadOnly   bool
 	ReadOnly     bool
@@ -97,6 +98,19 @@ func scanItemsWithBreakdown(rows itemRowScanner) ([]model.Item, error) {
 	return items, rows.Err()
 }
 
+func scanItemsWithGenres(rows itemRowScanner) ([]model.Item, error) {
+	var items []model.Item
+	for rows.Next() {
+		var it model.Item
+		if err := rows.Scan(&it.ID, &it.SourceID, &it.SourceTitle, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
+			&it.Status, &it.ProcessingError, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.PersonalScore, &it.PersonalScoreReason, &it.SummaryTopics, &it.TranslatedTitle, &it.UserGenre, &it.Genre, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, it)
+	}
+	return items, rows.Err()
+}
+
 func firstTopicKey(topics []string) string {
 	for _, t := range topics {
 		if t != "" {
@@ -104,6 +118,89 @@ func firstTopicKey(topics []string) string {
 		}
 	}
 	return "__untagged__"
+}
+
+func buildItemListFilterParts(userID string, p ItemListParams, includeGenre bool) (string, string, []any) {
+	joins := `
+		JOIN sources s ON s.id = i.source_id
+		LEFT JOIN item_summaries sm ON sm.item_id = i.id`
+	where := `s.user_id = $1`
+	args := []any{userID}
+	if p.Status != nil {
+		where, args = appendItemStatusFilter(where, args, p.Status)
+	} else {
+		where += ` AND i.deleted_at IS NULL`
+	}
+	if p.SourceID != nil {
+		args = append(args, *p.SourceID)
+		where += ` AND i.source_id = $` + itoa(len(args))
+	}
+	if p.Topic != nil && *p.Topic != "" {
+		args = append(args, *p.Topic)
+		where += ` AND COALESCE(sm.topics, '{}'::text[]) @> ARRAY[$` + itoa(len(args)) + `::text]`
+	}
+	if p.Query != nil && strings.TrimSpace(*p.Query) != "" {
+		args = append(args, "%"+strings.TrimSpace(*p.Query)+"%")
+		where += ` AND (
+			COALESCE(i.title, '') ILIKE $` + itoa(len(args)) + `
+			OR i.url ILIKE $` + itoa(len(args)) + `
+			OR COALESCE(sm.translated_title, '') ILIKE $` + itoa(len(args)) + `
+		)`
+	}
+	if includeGenre {
+		where, args = appendItemGenreFilter(where, args, p.Genre, "i", "sm")
+	}
+	if p.UnreadOnly {
+		where += ` AND NOT EXISTS (
+			SELECT 1 FROM item_reads ir2
+			WHERE ir2.item_id = i.id AND ir2.user_id = $1
+		)`
+	}
+	if p.ReadOnly {
+		where += ` AND EXISTS (
+			SELECT 1 FROM item_reads ir2
+			WHERE ir2.item_id = i.id AND ir2.user_id = $1
+		)`
+	}
+	if p.FavoriteOnly {
+		where += ` AND EXISTS (
+			SELECT 1 FROM item_feedbacks fb2
+			WHERE fb2.item_id = i.id AND fb2.user_id = $1 AND fb2.is_favorite = true
+		)`
+	}
+	if p.LaterOnly {
+		where += ` AND EXISTS (
+			SELECT 1 FROM item_laters il2
+			WHERE il2.item_id = i.id AND il2.user_id = $1
+		)`
+	}
+	return joins, where, args
+}
+
+func (r *ItemRepo) listGenreCounts(ctx context.Context, joins, where string, args []any) ([]model.GenreCount, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT `+effectiveGenreExpr("i", "sm")+` AS genre, COUNT(*)::int AS count
+		FROM items i
+		`+joins+`
+		WHERE `+where+`
+		GROUP BY 1
+		ORDER BY COUNT(*) DESC, 1 ASC`,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]model.GenreCount, 0)
+	for rows.Next() {
+		var genreCount model.GenreCount
+		if err := rows.Scan(&genreCount.Genre, &genreCount.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, genreCount)
+	}
+	return out, rows.Err()
 }
 
 func (r *ItemRepo) List(ctx context.Context, userID string, status, sourceID *string, limit int) ([]model.Item, error) {
@@ -179,75 +276,22 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 		p.Sort = "newest"
 	}
 
-	baseWhere := ` FROM items i
-		JOIN sources s ON s.id = i.source_id
-		WHERE s.user_id = $1`
-	args := []any{userID}
-	if p.Status != nil {
-		baseWhere, args = appendItemStatusFilter(baseWhere, args, p.Status)
-	} else {
-		baseWhere += ` AND i.deleted_at IS NULL`
-	}
-	if p.SourceID != nil {
-		args = append(args, *p.SourceID)
-		baseWhere += ` AND i.source_id = $` + itoa(len(args))
-	}
-	if p.Topic != nil && *p.Topic != "" {
-		args = append(args, *p.Topic)
-		baseWhere += ` AND EXISTS (
-			SELECT 1
-			FROM item_summaries smt
-			WHERE smt.item_id = i.id
-			  AND COALESCE(smt.topics, '{}'::text[]) @> ARRAY[$` + itoa(len(args)) + `::text]
-		)`
-	}
-	if p.Query != nil && strings.TrimSpace(*p.Query) != "" {
-		args = append(args, "%"+strings.TrimSpace(*p.Query)+"%")
-		baseWhere += ` AND (
-			COALESCE(i.title, '') ILIKE $` + itoa(len(args)) + `
-			OR i.url ILIKE $` + itoa(len(args)) + `
-			OR EXISTS (
-				SELECT 1
-				FROM item_summaries smq
-				WHERE smq.item_id = i.id
-				  AND COALESCE(smq.translated_title, '') ILIKE $` + itoa(len(args)) + `
-			)
-		)`
-	}
-	if p.UnreadOnly {
-		baseWhere += ` AND NOT EXISTS (
-			SELECT 1 FROM item_reads ir2
-			WHERE ir2.item_id = i.id AND ir2.user_id = $1
-		)`
-	}
-	if p.ReadOnly {
-		baseWhere += ` AND EXISTS (
-			SELECT 1 FROM item_reads ir2
-			WHERE ir2.item_id = i.id AND ir2.user_id = $1
-		)`
-	}
-	if p.FavoriteOnly {
-		baseWhere += ` AND EXISTS (
-			SELECT 1 FROM item_feedbacks fb2
-			WHERE fb2.item_id = i.id AND fb2.user_id = $1 AND fb2.is_favorite = true
-		)`
-	}
-	if p.LaterOnly {
-		baseWhere += ` AND EXISTS (
-			SELECT 1 FROM item_laters il2
-			WHERE il2.item_id = i.id AND il2.user_id = $1
-		)`
-	}
+	countJoins, countWhere, countArgs := buildItemListFilterParts(userID, p, true)
+	genreCountJoins, genreCountWhere, genreCountArgs := buildItemListFilterParts(userID, p, false)
 
 	var total int
-	if err := r.db.QueryRow(ctx, `SELECT COUNT(*)`+baseWhere, args...).Scan(&total); err != nil {
+	if err := r.db.QueryRow(ctx, `SELECT COUNT(*) FROM items i `+countJoins+` WHERE `+countWhere, countArgs...).Scan(&total); err != nil {
+		return nil, err
+	}
+	genreCounts, err := r.listGenreCounts(ctx, genreCountJoins, genreCountWhere, genreCountArgs)
+	if err != nil {
 		return nil, err
 	}
 
 	offset := (p.Page - 1) * p.PageSize
-	args = append(args, p.PageSize, offset)
-	limitArg := `$` + itoa(len(args)-1)
-	offsetArg := `$` + itoa(len(args))
+	listArgs := append(append([]any{}, countArgs...), p.PageSize, offset)
+	limitArg := `$` + itoa(len(listArgs)-1)
+	offsetArg := `$` + itoa(len(listArgs))
 
 	orderBy := ` ORDER BY i.created_at DESC`
 	if p.Sort == "score" {
@@ -264,88 +308,37 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
 		       sm.score, sm.personal_score, sm.personal_score_reason, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
+		       i.user_genre, `+effectiveGenreExpr("i", "sm")+` AS genre,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
-		JOIN sources s ON s.id = i.source_id
+		`+countJoins+`
 		LEFT JOIN item_reads ir ON ir.item_id = i.id AND ir.user_id = $1
 		LEFT JOIN item_feedbacks fb ON fb.item_id = i.id AND fb.user_id = $1
-		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		LEFT JOIN item_facts_checks fc ON fc.item_id = i.id
 		LEFT JOIN summary_faithfulness_checks sfc ON sfc.item_id = i.id
-		WHERE s.user_id = $1`+
-		func() string {
-			q := ""
-			nextIdx := 2
-			if p.Status != nil {
-				if *p.Status == "deleted" {
-					q += ` AND i.deleted_at IS NOT NULL`
-				} else if *p.Status == "pending" {
-					q += ` AND i.deleted_at IS NULL AND i.status IN ('new', 'fetched', 'facts_extracted', 'failed')`
-				} else {
-					q += ` AND i.deleted_at IS NULL AND i.status = $` + itoa(nextIdx)
-					nextIdx++
-				}
-			} else {
-				q += ` AND i.deleted_at IS NULL`
-			}
-			if p.SourceID != nil {
-				q += ` AND i.source_id = $` + itoa(nextIdx)
-				nextIdx++
-			}
-			if p.Topic != nil && *p.Topic != "" {
-				q += ` AND EXISTS (
-					SELECT 1 FROM item_summaries smt
-					WHERE smt.item_id = i.id
-					  AND COALESCE(smt.topics, '{}'::text[]) @> ARRAY[$` + itoa(nextIdx) + `::text]
-				)`
-				nextIdx++
-			}
-			if p.Query != nil && strings.TrimSpace(*p.Query) != "" {
-				q += ` AND (
-					COALESCE(i.title, '') ILIKE $` + itoa(nextIdx) + `
-					OR i.url ILIKE $` + itoa(nextIdx) + `
-					OR COALESCE(sm.translated_title, '') ILIKE $` + itoa(nextIdx) + `
-				)`
-				nextIdx++
-			}
-			if p.UnreadOnly {
-				q += ` AND ir.item_id IS NULL`
-			}
-			if p.ReadOnly {
-				q += ` AND ir.item_id IS NOT NULL`
-			}
-			if p.FavoriteOnly {
-				q += ` AND COALESCE(fb.is_favorite, false) = true`
-			}
-			if p.LaterOnly {
-				q += ` AND EXISTS (
-					SELECT 1 FROM item_laters il2
-					WHERE il2.item_id = i.id AND il2.user_id = $1
-				)`
-			}
-			return q
-		}()+
+		WHERE `+countWhere+
 		orderBy+` LIMIT `+limitArg+` OFFSET `+offsetArg,
-		args...,
+		listArgs...,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	items, err := scanItems(rows)
+	items, err := scanItemsWithGenres(rows)
 	if err != nil {
 		return nil, err
 	}
 	return &model.ItemListResponse{
-		Items:    items,
-		Page:     p.Page,
-		PageSize: p.PageSize,
-		Total:    total,
-		HasNext:  offset+len(items) < total,
-		Sort:     p.Sort,
-		Status:   p.Status,
-		SourceID: p.SourceID,
+		Items:       items,
+		GenreCounts: genreCounts,
+		Page:        p.Page,
+		PageSize:    p.PageSize,
+		Total:       total,
+		HasNext:     offset+len(items) < total,
+		Sort:        p.Sort,
+		Status:      p.Status,
+		SourceID:    p.SourceID,
 	}, nil
 }
 

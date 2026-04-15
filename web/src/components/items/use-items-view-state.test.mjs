@@ -7,12 +7,17 @@ import {
   normalizeItemsViewState,
   parseItemsQueryState,
 } from "./items-view-state-core.ts";
+import {
+  UNCATEGORIZED_GENRE_PARAM,
+  normalizeGenreNavigationValue,
+} from "./item-genre.ts";
 
 function makeState(overrides = {}) {
   return {
     feedMode: "unread",
     sortMode: "score",
     filter: "",
+    genre: "",
     topic: "",
     sourceID: "",
     searchQuery: "",
@@ -136,11 +141,22 @@ test("itemsViewStateReducer resets page and updates search", () => {
   assert.equal(next.page, 1);
 });
 
+test("itemsViewStateReducer resets page and updates genre", () => {
+  const next = itemsViewStateReducer(makeState({ page: 6 }), {
+    type: "set_genre",
+    genre: "AI agents",
+  });
+
+  assert.equal(next.genre, "AI agents");
+  assert.equal(next.page, 1);
+});
+
 test("buildItemsSearchParams serializes normalized state", () => {
   const params = buildItemsSearchParams(
     makeState({
       feedMode: "later",
       sortMode: "score",
+      genre: "AI agents",
       searchQuery: "tts",
       searchMode: "or",
       favoriteOnly: true,
@@ -150,17 +166,64 @@ test("buildItemsSearchParams serializes normalized state", () => {
 
   assert.equal(
     params.toString(),
-    "feed=later&q=tts&search_mode=or&sort=score&unread=1&favorite=1&page=2"
+    "feed=later&genre=AI+agents&q=tts&search_mode=or&sort=score&unread=1&favorite=1&page=2"
   );
 });
 
 test("parseItemsQueryState reads current URL flags", () => {
   const parsed = parseItemsQueryState(
-    new URLSearchParams("feed=deleted&status=deleted&sort=personal_score&favorite=1&page=7")
+    new URLSearchParams("feed=deleted&status=deleted&genre=Security&sort=personal_score&favorite=1&page=7")
   );
 
   assert.equal(parsed.feedMode, "deleted");
+  assert.equal(parsed.genre, "Security");
   assert.equal(parsed.sortMode, "personal_score");
   assert.equal(parsed.favoriteOnly, false);
   assert.equal(parsed.page, 7);
+});
+
+test("normalizeGenreNavigationValue preserves uncategorized aliases for navigation state", () => {
+  assert.equal(normalizeGenreNavigationValue("uncategorized"), UNCATEGORIZED_GENRE_PARAM);
+  assert.equal(normalizeGenreNavigationValue("untagged"), UNCATEGORIZED_GENRE_PARAM);
+});
+
+test("parseItemsQueryState keeps bookmarked uncategorized genre intact", () => {
+  const parsed = parseItemsQueryState(
+    new URLSearchParams("feed=unread&genre=uncategorized&sort=personal_score")
+  );
+
+  assert.equal(parsed.genre, UNCATEGORIZED_GENRE_PARAM);
+  assert.equal(buildItemsSearchParams(parsed).get("genre"), UNCATEGORIZED_GENRE_PARAM);
+});
+
+test("parseItemsQueryState canonicalizes untagged alias to uncategorized", () => {
+  const parsed = parseItemsQueryState(
+    new URLSearchParams("feed=unread&genre=untagged&sort=personal_score")
+  );
+
+  assert.equal(parsed.genre, UNCATEGORIZED_GENRE_PARAM);
+  assert.equal(buildItemsSearchParams(parsed).get("genre"), UNCATEGORIZED_GENRE_PARAM);
+});
+
+test("itemsViewStateReducer reset_filters clears genre along with other filter state", () => {
+  const next = itemsViewStateReducer(
+    makeState({
+      filter: "failed",
+      genre: "Security",
+      topic: "infra",
+      sourceID: "source-1",
+      searchQuery: "incident",
+      favoriteOnly: true,
+      page: 9,
+    }),
+    { type: "reset_filters" }
+  );
+
+  assert.equal(next.filter, "");
+  assert.equal(next.genre, "");
+  assert.equal(next.topic, "");
+  assert.equal(next.sourceID, "");
+  assert.equal(next.searchQuery, "");
+  assert.equal(next.favoriteOnly, false);
+  assert.equal(next.page, 1);
 });

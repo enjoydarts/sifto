@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -114,6 +115,7 @@ func (s *MeilisearchService) ensureItemsIndex(ctx context.Context) error {
 			"is_favorite",
 			"is_later",
 			"topics",
+			"effective_genre",
 		},
 		"sortableAttributes": []string{
 			"published_at",
@@ -214,6 +216,7 @@ type MeilisearchSearchParams struct {
 
 type MeilisearchSearchHit struct {
 	ItemID         string
+	EffectiveGenre string
 	SearchSnippets []model.ItemSearchSnippet
 }
 
@@ -281,6 +284,16 @@ func (s *MeilisearchService) SearchItems(ctx context.Context, params Meilisearch
 	}, nil
 }
 
+func (s *MeilisearchService) SearchItemGenreCounts(ctx context.Context, params MeilisearchSearchParams) ([]model.GenreCount, error) {
+	if err := s.ensureItemsIndex(ctx); err != nil {
+		return nil, err
+	}
+	if requiresContiguousJapaneseMatch(params.Query) {
+		return s.searchItemGenreCountsStrict(ctx, params)
+	}
+	return s.searchItemGenreCountsByFacet(ctx, params)
+}
+
 func (s *MeilisearchService) searchItemsStrict(ctx context.Context, params MeilisearchSearchParams) (*MeilisearchSearchResult, error) {
 	pageSize := params.Limit
 	if pageSize <= 0 {
@@ -344,6 +357,91 @@ func strictSearchBatchSize(pageSize int) int {
 	return size
 }
 
+func (s *MeilisearchService) searchItemGenreCountsStrict(ctx context.Context, params MeilisearchSearchParams) ([]model.GenreCount, error) {
+	rawOffset := 0
+	rawTotal := 0
+	pageSize := params.Limit
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	batchSize := strictSearchBatchSize(pageSize)
+	counts := make(map[string]int)
+
+	for {
+		batchParams := params
+		batchParams.Offset = rawOffset
+		batchParams.Limit = batchSize
+
+		page, err := s.searchItemsPage(ctx, batchParams)
+		if err != nil {
+			return nil, err
+		}
+		rawTotal = page.Total
+		for _, hit := range page.Hits {
+			genre := strings.TrimSpace(hit.EffectiveGenre)
+			if genre == "" {
+				continue
+			}
+			counts[genre]++
+		}
+
+		if page.RawHitCount == 0 || rawOffset+page.RawHitCount >= rawTotal {
+			break
+		}
+		rawOffset += page.RawHitCount
+	}
+
+	return genreCountsFromMap(counts), nil
+}
+
+func (s *MeilisearchService) searchItemGenreCountsByFacet(ctx context.Context, params MeilisearchSearchParams) ([]model.GenreCount, error) {
+	mode := NormalizeSearchMode(params.SearchMode)
+	payload := map[string]any{
+		"q":      params.Query,
+		"filter": params.Filters,
+		"limit":  0,
+		"offset": 0,
+		"facets": []string{"effective_genre"},
+	}
+	if mode == "and" {
+		payload["matchingStrategy"] = "all"
+	} else {
+		payload["matchingStrategy"] = "last"
+	}
+
+	var raw struct {
+		FacetDistribution map[string]map[string]int `json:"facetDistribution"`
+	}
+	if err := s.doJSON(ctx, http.MethodPost, "/indexes/"+s.itemsIndex+"/search", payload, &raw, false); err != nil {
+		return nil, err
+	}
+	return genreCountsFromMap(raw.FacetDistribution["effective_genre"]), nil
+}
+
+func genreCountsFromMap(counts map[string]int) []model.GenreCount {
+	if len(counts) == 0 {
+		return nil
+	}
+	out := make([]model.GenreCount, 0, len(counts))
+	for genre, count := range counts {
+		genre = strings.TrimSpace(genre)
+		if genre == "" {
+			continue
+		}
+		out = append(out, model.GenreCount{Genre: genre, Count: count})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Genre < out[j].Genre
+	})
+	return out
+}
+
 func (s *MeilisearchService) searchItemsPage(ctx context.Context, params MeilisearchSearchParams) (*meilisearchSearchPage, error) {
 	mode := NormalizeSearchMode(params.SearchMode)
 	if params.Limit <= 0 {
@@ -387,10 +485,11 @@ func (s *MeilisearchService) searchItemsPage(ctx context.Context, params Meilise
 
 	var raw struct {
 		Hits []struct {
-			ID         string         `json:"id"`
-			Formatted  map[string]any `json:"_formatted"`
-			RawTitle   string         `json:"title"`
-			RawSummary string         `json:"summary"`
+			ID             string         `json:"id"`
+			EffectiveGenre string         `json:"effective_genre"`
+			Formatted      map[string]any `json:"_formatted"`
+			RawTitle       string         `json:"title"`
+			RawSummary     string         `json:"summary"`
 		} `json:"hits"`
 		EstimatedTotalHits int `json:"estimatedTotalHits"`
 		TotalHits          int `json:"totalHits"`
@@ -415,6 +514,7 @@ func (s *MeilisearchService) searchItemsPage(ctx context.Context, params Meilise
 		}
 		result.Hits = append(result.Hits, MeilisearchSearchHit{
 			ItemID:         hit.ID,
+			EffectiveGenre: strings.TrimSpace(hit.EffectiveGenre),
 			SearchSnippets: snippets,
 		})
 	}

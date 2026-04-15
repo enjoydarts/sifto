@@ -97,6 +97,32 @@ func TestExtractFactsWithModelUsesMinimaxHeader(t *testing.T) {
 	}
 }
 
+func TestSummarizeWithModelDecodesGenre(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/summarize" {
+			t.Fatalf("path = %q, want /summarize", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"summary":"ok","topics":["ai"],"score":0.8,"genre":"analysis"}`))
+	}))
+	defer server.Close()
+
+	client := &WorkerClient{
+		baseURL: server.URL,
+		http:    server.Client(),
+	}
+	model := "gpt-5.4-mini"
+	openAIKey := "openai-key"
+
+	resp, err := client.SummarizeWithModel(context.Background(), nil, []string{"fact"}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, &openAIKey, &model, nil)
+	if err != nil {
+		t.Fatalf("SummarizeWithModel: %v", err)
+	}
+	if resp.Genre == nil || *resp.Genre != "analysis" {
+		t.Fatalf("Genre = %v, want analysis", workerTestDerefString(resp.Genre))
+	}
+}
+
 func workerTestDerefString(v *string) string {
 	if v == nil {
 		return ""

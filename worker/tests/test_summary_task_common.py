@@ -1,4 +1,5 @@
 import unittest
+import re
 
 from app.services.prompt_template_defaults import get_default_prompt_template
 from app.services.runtime_prompt_overrides import bind_prompt_override
@@ -13,6 +14,8 @@ class SummaryTaskCommonTests(unittest.TestCase):
         self.assertIn("短文の羅列", SUMMARY_SYSTEM_INSTRUCTION)
         self.assertIn("技術記事は、一般的なビジネス記事より importance を明確に高く採点", SUMMARY_SYSTEM_INSTRUCTION)
         self.assertIn("actionability も高く採点", SUMMARY_SYSTEM_INSTRUCTION)
+        self.assertIn("genre は必須です", SUMMARY_SYSTEM_INSTRUCTION)
+        self.assertIn("短い日本語の単一ラベル", SUMMARY_SYSTEM_INSTRUCTION)
 
     def test_build_summary_task_fallback_requests_natural_connected_prose(self):
         task = build_summary_task(
@@ -34,6 +37,40 @@ class SummaryTaskCommonTests(unittest.TestCase):
         self.assertIn("必要に応じて主語や関係を補い", prompt)
         self.assertIn("技術記事を明確に優遇してください", prompt)
         self.assertIn("importance と actionability を高めに採点", prompt)
+        self.assertIn("genre は必須です", prompt)
+        self.assertIn("空文字は上流で null 扱い", prompt)
+        self.assertEqual(task["schema"]["required"], ["summary", "topics", "translated_title", "score_breakdown", "score_reason", "genre"])
+        genre_schema = task["schema"]["properties"]["genre"]
+        self.assertEqual(genre_schema["anyOf"][0]["type"], "string")
+        self.assertEqual(genre_schema["anyOf"][0]["maxLength"], 12)
+        self.assertEqual(genre_schema["anyOf"][1]["type"], "string")
+        self.assertEqual(genre_schema["anyOf"][1]["maxLength"], 0)
+
+    def test_genre_schema_allows_short_japanese_single_label_or_empty_string(self):
+        task = build_summary_task(
+            "OpenAI updates model lineup",
+            ["OpenAI announced a new lineup."],
+            source_text_chars=1200,
+        )
+
+        pattern = re.compile(task["schema"]["properties"]["genre"]["anyOf"][0]["pattern"])
+
+        for allowed in ("技術", "経済", "政策", "研究", "セキュリティ"):
+            self.assertIsNotNone(pattern.fullmatch(allowed), allowed)
+
+        self.assertEqual(task["schema"]["properties"]["genre"]["anyOf"][1]["maxLength"], 0)
+
+    def test_genre_schema_rejects_english_multi_label_and_non_japanese_examples(self):
+        task = build_summary_task(
+            "OpenAI updates model lineup",
+            ["OpenAI announced a new lineup."],
+            source_text_chars=1200,
+        )
+
+        pattern = re.compile(task["schema"]["properties"]["genre"]["anyOf"][0]["pattern"])
+
+        for rejected in ("news", "security", "AI", "技術/AI", "技術,経済", "tech", "123", "経済 速報"):
+            self.assertIsNone(pattern.fullmatch(rejected), rejected)
 
     def test_build_summary_task_fallback_uses_safe_translated_title_example(self):
         task = build_summary_task(

@@ -1,4 +1,5 @@
 import type { FeedMode, SortMode } from "./feed-tabs";
+import { normalizeGenreNavigationValue } from "./item-genre-shared.js";
 
 const FILTERS = ["", "summarized", "pending", "new", "fetched", "facts_extracted", "failed", "deleted"] as const;
 
@@ -10,6 +11,7 @@ export type ItemsViewState = {
   feedMode: FeedMode;
   sortMode: SortMode;
   filter: string;
+  genre: string;
   topic: string;
   sourceID: string;
   searchQuery: string;
@@ -24,6 +26,7 @@ export type ItemsViewStateAction =
   | { type: "set_feed"; feed: FeedMode }
   | { type: "set_sort"; sort: SortMode }
   | { type: "set_filter"; filter: string }
+  | { type: "set_genre"; genre: string }
   | { type: "set_topic"; topic: string }
   | { type: "set_source"; sourceID: string }
   | { type: "set_search"; searchQuery: string; searchMode: "natural" | "and" | "or" }
@@ -53,6 +56,7 @@ export function parseItemsQueryState(searchParams: URLSearchParams): ItemsViewSt
 
   const filter =
     qFilter && FILTERS.includes(qFilter as (typeof FILTERS)[number]) && qFilter !== "deleted" ? qFilter : "";
+  const genre = normalizeGenreNavigationValue(searchParams.get("genre"));
   const topic = (searchParams.get("topic") ?? "").trim();
   const sourceID = (searchParams.get("source_id") ?? "").trim();
   const searchQuery = (searchParams.get("q") ?? "").trim();
@@ -70,6 +74,7 @@ export function parseItemsQueryState(searchParams: URLSearchParams): ItemsViewSt
     feedMode: deletedViaLegacyStatus ? "deleted" : feedMode,
     sortMode,
     filter,
+    genre,
     topic,
     sourceID,
     searchQuery,
@@ -82,6 +87,7 @@ export function parseItemsQueryState(searchParams: URLSearchParams): ItemsViewSt
 
 export function normalizeItemsViewState(state: ItemsViewState): ItemsViewState {
   const next = { ...state };
+  next.genre = normalizeGenreNavigationValue(next.genre);
   if (next.feedMode === "read") {
     next.unreadOnly = false;
   }
@@ -108,6 +114,7 @@ export function buildItemsSearchParams(state: ItemsViewState): URLSearchParams {
   const q = new URLSearchParams();
   q.set("feed", normalized.feedMode);
   if (normalized.filter) q.set("status", normalized.filter);
+  if (normalized.genre) q.set("genre", normalized.genre);
   if (normalized.sourceID) q.set("source_id", normalized.sourceID);
   if (normalized.topic) q.set("topic", normalized.topic);
   if (normalized.searchQuery) q.set("q", normalized.searchQuery);
@@ -145,6 +152,12 @@ export function itemsViewStateReducer(state: ItemsViewState, action: ItemsViewSt
       return normalizeItemsViewState({
         ...state,
         filter: action.filter,
+        page: 1,
+      });
+    case "set_genre":
+      return normalizeItemsViewState({
+        ...state,
+        genre: normalizeGenreNavigationValue(action.genre),
         page: 1,
       });
     case "set_topic":
@@ -187,6 +200,7 @@ export function itemsViewStateReducer(state: ItemsViewState, action: ItemsViewSt
       return normalizeItemsViewState({
         ...state,
         filter: "",
+        genre: "",
         topic: "",
         sourceID: "",
         searchQuery: "",

@@ -461,6 +461,8 @@ type Item struct {
 	PersonalScoreReason    *string                    `json:"personal_score_reason,omitempty"`
 	PersonalScoreBreakdown *PersonalScoreBreakdown    `json:"personal_score_breakdown,omitempty"`
 	SummaryTopics          []string                   `json:"summary_topics,omitempty"`
+	UserGenre              *string                    `json:"user_genre,omitempty"`
+	Genre                  string                     `json:"genre,omitempty"`
 	RecommendationReason   *string                    `json:"recommendation_reason,omitempty"`
 	TranslatedTitle        *string                    `json:"translated_title,omitempty"`
 	SearchMatchCount       int                        `json:"search_match_count,omitempty"`
@@ -493,6 +495,7 @@ type ItemSearchDocument struct {
 	HighlightText   string     `json:"highlight_text"`
 	ContentText     string     `json:"content_text"`
 	Topics          []string   `json:"topics"`
+	EffectiveGenre  string     `json:"effective_genre,omitempty"`
 	PublishedAt     *time.Time `json:"published_at,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 }
@@ -536,6 +539,7 @@ type ItemSummary struct {
 	ItemID             string                     `json:"item_id"`
 	Summary            string                     `json:"summary"`
 	Topics             []string                   `json:"topics"`
+	Genre              *string                    `json:"genre,omitempty"`
 	TranslatedTitle    *string                    `json:"translated_title,omitempty"`
 	Score              *float64                   `json:"score,omitempty"`
 	ScoreBreakdown     *ItemSummaryScoreBreakdown `json:"score_breakdown,omitempty"`
@@ -729,6 +733,7 @@ type AskLLM struct {
 
 type ItemListResponse struct {
 	Items             []Item  `json:"items"`
+	GenreCounts       []GenreCount `json:"genre_counts,omitempty"`
 	Page              int     `json:"page"`
 	PageSize          int     `json:"page_size"`
 	Total             int     `json:"total"`
@@ -738,6 +743,11 @@ type ItemListResponse struct {
 	SourceID          *string `json:"source_id,omitempty"`
 	SearchMode        *string `json:"search_mode,omitempty"`
 	SearchUnavailable bool    `json:"search_unavailable,omitempty"`
+}
+
+type GenreCount struct {
+	Genre string `json:"genre"`
+	Count int    `json:"count"`
 }
 
 type FavoriteExportItem struct {

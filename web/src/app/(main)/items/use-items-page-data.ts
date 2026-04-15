@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, Item, ItemSearchSuggestion } from "@/lib/api";
+import { api, Item, ItemGenreCount, ItemSearchSuggestion } from "@/lib/api";
 import { patchItemsInFeedCaches } from "@/lib/query-cache-helpers";
 import { queryKeys } from "@/lib/query-keys";
 import { useI18n } from "@/components/i18n-provider";
@@ -15,6 +15,7 @@ import { buildItemsSearchParams, useItemsViewState } from "@/components/items/us
 export type ItemsFeedQueryData = {
   items: Item[];
   total: number;
+  genreCounts: ItemGenreCount[];
   searchUnavailable?: boolean;
   searchMode?: "natural" | "and" | "or" | string | null;
 };
@@ -26,8 +27,8 @@ export function useItemsPageData() {
   const player = useSharedAudioPlayer();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const { state: viewState, currentItemsHref, setFeed, setSort, setFilter, setTopic, setSource, setSearch, setFavorite, setPage, resetFilters } = useItemsViewState();
-  const { feedMode, sortMode, filter, topic, sourceID, searchQuery, searchMode, unreadOnly, favoriteOnly, page } = viewState;
+  const { state: viewState, currentItemsHref, setFeed, setSort, setFilter, setGenre, setTopic, setSource, setSearch, setFavorite, setPage, resetFilters } = useItemsViewState();
+  const { feedMode, sortMode, filter, genre, topic, sourceID, searchQuery, searchMode, unreadOnly, favoriteOnly, page } = viewState;
   const unreadMode = feedMode === "unread";
   const readMode = feedMode === "read";
   const laterMode = feedMode === "later";
@@ -60,6 +61,7 @@ export function useItemsPageData() {
       ...queryKeys.items.feedPrefix,
       feedMode,
       filter,
+      genre,
       topic,
       sourceID,
       searchQuery,
@@ -70,7 +72,7 @@ export function useItemsPageData() {
       favoriteOnly ? 1 : 0,
       readMode ? 1 : 0,
     ] as const,
-    [favoriteOnly, feedMode, filter, page, readMode, searchMode, searchQuery, sortMode, sourceID, topic, unreadOnly]
+    [favoriteOnly, feedMode, filter, genre, page, readMode, searchMode, searchQuery, sortMode, sourceID, topic, unreadOnly]
   );
 
   const listQuery = useQuery<ItemsFeedQueryData>({
@@ -79,6 +81,7 @@ export function useItemsPageData() {
       const data = await api.getItems({
         status: deletedMode ? "deleted" : filter || (pendingMode ? "pending" : "summarized"),
         ...(sourceID ? { source_id: sourceID } : {}),
+        ...(genre ? { genre } : {}),
         ...(topic ? { topic } : {}),
         ...(searchQuery ? { q: searchQuery } : {}),
         ...(searchQuery ? { search_mode: searchMode } : {}),
@@ -93,6 +96,7 @@ export function useItemsPageData() {
       return {
         items: data?.items ?? [],
         total: data?.total ?? 0,
+        genreCounts: data?.genre_counts ?? [],
         searchUnavailable: data?.search_unavailable ?? false,
         searchMode: data?.search_mode ?? searchMode,
       };
@@ -101,6 +105,7 @@ export function useItemsPageData() {
   const cachedItemsLength = listQuery.data?.items?.length ?? 0;
   const items = useMemo(() => listQuery.data?.items ?? [], [listQuery.data?.items]);
   const itemsTotal = listQuery.data?.total ?? 0;
+  const genreCounts = useMemo(() => listQuery.data?.genreCounts ?? [], [listQuery.data?.genreCounts]);
   const searchUnavailable = listQuery.data?.searchUnavailable ?? false;
   const loading = !listQuery.data && (listQuery.isLoading || listQuery.isFetching);
   const queryError = listQuery.error ? String(listQuery.error) : null;
@@ -483,40 +488,6 @@ export function useItemsPageData() {
     () => sortedItems.find((item) => item.id === inlineItemId)?.status ?? null,
     [inlineItemId, sortedItems]
   );
-  const visibleUnreadCount = useMemo(() => sortedItems.filter((item) => !item.is_read).length, [sortedItems]);
-  const visibleReadCount = useMemo(() => sortedItems.filter((item) => item.is_read).length, [sortedItems]);
-  const visibleRetryCount = useMemo(() => sortedItems.filter((item) => item.status === "failed").length, [sortedItems]);
-  const summaryMetrics = useMemo(
-    () => [
-      {
-        key: "results",
-        label: t("items.kpi.results"),
-        value: itemsTotal.toLocaleString(),
-        hint: t("items.state.summaryResultsHint"),
-      },
-      {
-        key: "unread",
-        label: t("items.kpi.unreadVisible"),
-        value: visibleUnreadCount.toLocaleString(),
-        hint: t("items.state.summaryUnreadHint"),
-        tone: "accent" as const,
-      },
-      {
-        key: "read",
-        label: t("items.kpi.readVisible"),
-        value: visibleReadCount.toLocaleString(),
-        hint: t("items.state.summaryReadHint"),
-      },
-      {
-        key: "retry",
-        label: t("items.state.retryLabel"),
-        value: visibleRetryCount.toLocaleString(),
-        hint: t("items.state.summaryRetryHint"),
-      },
-    ],
-    [itemsTotal, t, visibleReadCount, visibleRetryCount, visibleUnreadCount]
-  );
-
   const pageSubtitleKey =
     feedMode === "later"
       ? "items.subtitle.later"
@@ -603,8 +574,8 @@ export function useItemsPageData() {
   return {
     t, locale,
     viewState, currentItemsHref,
-    setFeed, setSort, setFilter, setTopic, setSource, setSearch, setFavorite, setPage, resetFilters,
-    feedMode, sortMode, filter, topic, sourceID, searchQuery, searchMode, unreadOnly, favoriteOnly, page,
+    setFeed, setSort, setFilter, setGenre, setTopic, setSource, setSearch, setFavorite, setPage, resetFilters,
+    feedMode, sortMode, filter, genre, topic, sourceID, searchQuery, searchMode, unreadOnly, favoriteOnly, page,
     unreadMode, readMode, laterMode, pendingMode, deletedMode,
     summaryAudioPlaybackBlocked,
     pageSize,
@@ -626,7 +597,7 @@ export function useItemsPageData() {
     activeSuggestionIndex, setActiveSuggestionIndex,
     inlineQueueItemIds, setInlineQueueItemIds,
     listQueryKey,
-    items, itemsTotal, searchUnavailable,
+    items, itemsTotal, genreCounts, searchUnavailable,
     loading, visibleError,
     suggestions,
     suggestionsLoading: suggestionsQuery.isFetching && !suggestionsQuery.data,
@@ -639,7 +610,6 @@ export function useItemsPageData() {
     sortedItems,
     dateSections,
     inlineItemStatus,
-    summaryMetrics,
     pageSubtitleKey,
     detailHref,
     rememberScroll,

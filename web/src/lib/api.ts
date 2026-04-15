@@ -33,6 +33,7 @@ import type {
   GeminiTTSVoicesResponse,
   ItemDetail,
   ItemFeedbackResult,
+  ItemGenreUpdateResult,
   ItemHighlight,
   ItemListResponse,
   ItemNavigatorResponse,
@@ -280,11 +281,12 @@ export const api = {
     ),
 
   // Items
-  getItems: (params?: { status?: string; source_id?: string; topic?: string; q?: string; search_mode?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean; read_only?: boolean; favorite_only?: boolean; later_only?: boolean }) => {
+  getItems: (params?: { status?: string; source_id?: string; topic?: string; genre?: string; q?: string; search_mode?: string; page?: number; page_size?: number; sort?: string; unread_only?: boolean; read_only?: boolean; favorite_only?: boolean; later_only?: boolean }) => {
     const q = new URLSearchParams();
     if (params?.status) q.set("status", params.status);
     if (params?.source_id) q.set("source_id", params.source_id);
     if (params?.topic) q.set("topic", params.topic);
+    if (params?.genre) q.set("genre", params.genre);
     if (params?.q) q.set("q", params.q);
     if (params?.search_mode) q.set("search_mode", params.search_mode);
     if (params?.page) q.set("page", String(params.page));
@@ -496,6 +498,11 @@ export const api = {
     return apiFetch<{ days: number; limit: number; items: TopicPulseItem[] }>(`/topics/pulse${qs ? `?${qs}` : ""}`);
   },
   getItem: (id: string) => apiFetch<ItemDetail>(`/items/${id}`),
+  updateItemGenre: (id: string, body: { user_genre: string | null }) =>
+    apiFetch<ItemGenreUpdateResult>(`/items/${id}/genre`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   synthesizeSummaryAudio: (id: string) =>
     clientFetch<SummaryAudioSynthesisResponse>(`/summary-audio-proxy/items/${id}/synthesize`, {
       method: "POST",

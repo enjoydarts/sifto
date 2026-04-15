@@ -24,12 +24,13 @@ func TestCacheKeyVersionKeys(t *testing.T) {
 }
 
 func TestCacheKeyItemsListVersioned(t *testing.T) {
-	got := cacheKeyItemsListVersioned("u1", 7, "summarized", "src-1", "go", "openai", "and", true, false, true, false, "score", 2, 50)
+	got := cacheKeyItemsListVersioned("u1", 7, "summarized", "src-1", "go", "analysis", "openai", "and", true, false, true, false, "score", 2, 50)
 	wantParts := []string{
-		"v1:items:list:u1:v=7",
+		"v1:items:list:u1:sv=2:v=7",
 		"status=summarized",
 		"source=src-1",
 		"topic=go",
+		"genre=analysis",
 		"q=openai",
 		"mode=and",
 		"unread=true",
@@ -49,7 +50,7 @@ func TestCacheKeyItemsListVersioned(t *testing.T) {
 
 func TestCacheKeyItemDetailVersioned(t *testing.T) {
 	got := cacheKeyItemDetailVersioned("u1", "item-1", 3)
-	want := "v1:items:detail:u1:item=item-1:v=3"
+	want := "v1:items:detail:u1:sv=2:item=item-1:v=3"
 	if got != want {
 		t.Fatalf("cacheKeyItemDetailVersioned = %q, want %q", got, want)
 	}

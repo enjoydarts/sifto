@@ -147,6 +147,12 @@ func lockSettingsServiceTestDB(t *testing.T, db *pgxpool.Pool) {
 			t.Fatalf("pg_advisory_unlock() error = %v", err)
 		}
 	})
+	if _, err := db.Exec(context.Background(), `ALTER TABLE items ADD COLUMN IF NOT EXISTS user_genre text`); err != nil {
+		t.Fatalf("ensure items.user_genre: %v", err)
+	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE item_summaries ADD COLUMN IF NOT EXISTS genre text`); err != nil {
+		t.Fatalf("ensure item_summaries.genre: %v", err)
+	}
 }
 
 func TestValidateCatalogModelForPurpose(t *testing.T) {

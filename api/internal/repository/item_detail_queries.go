@@ -13,6 +13,8 @@ func (r *ItemRepo) loadItemDetailBase(ctx context.Context, id, userID string) (*
 		SELECT i.id, i.source_id, s.title, i.url, i.title, i.thumbnail_url, i.content_text, i.status,
 		       i.deleted_at IS NOT NULL AS is_deleted,
 		       sm.translated_title,
+		       i.user_genre,
+		       `+effectiveGenreExpr("i", "sm")+` AS genre,
 		       EXISTS (
 		           SELECT 1 FROM item_reads ir
 		           WHERE ir.item_id = i.id AND ir.user_id = $2
@@ -23,7 +25,7 @@ func (r *ItemRepo) loadItemDetailBase(ctx context.Context, id, userID string) (*
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
 	).Scan(&d.ID, &d.SourceID, &d.SourceTitle, &d.URL, &d.Title, &d.ThumbnailURL, &d.ContentText,
-		&d.Status, &deleted, &d.TranslatedTitle, &d.IsRead, &d.ProcessingError, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
+		&d.Status, &deleted, &d.TranslatedTitle, &d.UserGenre, &d.Genre, &d.IsRead, &d.ProcessingError, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {
 		return nil, mapDBError(err)
 	}
@@ -54,10 +56,10 @@ func (r *ItemRepo) queryFactsDetail(ctx context.Context, itemID string) (*model.
 func (r *ItemRepo) querySummaryDetail(ctx context.Context, itemID string) (*model.ItemSummary, error) {
 	var summary model.ItemSummary
 	err := r.db.QueryRow(ctx, `
-		SELECT id, item_id, summary, topics, translated_title, score, score_breakdown, score_reason, score_policy_version, summarized_at
+		SELECT id, item_id, summary, topics, genre, translated_title, score, score_breakdown, score_reason, score_policy_version, summarized_at
 		FROM item_summaries
 		WHERE item_id = $1`, itemID,
-	).Scan(&summary.ID, &summary.ItemID, &summary.Summary, &summary.Topics, &summary.TranslatedTitle, &summary.Score,
+	).Scan(&summary.ID, &summary.ItemID, &summary.Summary, &summary.Topics, &summary.Genre, &summary.TranslatedTitle, &summary.Score,
 		scoreBreakdownScanner{dst: &summary.ScoreBreakdown}, &summary.ScoreReason, &summary.ScorePolicyVersion, &summary.SummarizedAt)
 	if err != nil {
 		return nil, err

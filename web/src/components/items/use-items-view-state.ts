@@ -96,6 +96,7 @@ export function useItemsViewState() {
   const setFeed = useCallback((feed: import("./feed-tabs").FeedMode) => dispatchAction({ type: "set_feed", feed }), [dispatchAction]);
   const setSort = useCallback((sort: import("./feed-tabs").SortMode) => dispatchAction({ type: "set_sort", sort }), [dispatchAction]);
   const setFilter = useCallback((filter: string) => dispatchAction({ type: "set_filter", filter }), [dispatchAction]);
+  const setGenre = useCallback((genre: string) => dispatchAction({ type: "set_genre", genre }), [dispatchAction]);
   const setTopic = useCallback((topic: string) => dispatchAction({ type: "set_topic", topic }), [dispatchAction]);
   const setSource = useCallback((sourceID: string) => dispatchAction({ type: "set_source", sourceID }), [dispatchAction]);
   const setSearch = useCallback(
@@ -115,6 +116,7 @@ export function useItemsViewState() {
     setFeed,
     setSort,
     setFilter,
+    setGenre,
     setTopic,
     setSource,
     setSearch,

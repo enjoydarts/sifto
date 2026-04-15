@@ -20,6 +20,8 @@ export interface Item {
   personal_score?: number;
   personal_score_reason?: string;
   personal_score_breakdown?: PersonalScoreBreakdown | null;
+  genre?: string | null;
+  user_genre?: string | null;
   search_match_count?: number;
   search_snippets?: ItemSearchSnippet[];
   published_at: string | null;
@@ -73,6 +75,7 @@ export interface ItemSummary {
   item_id: string;
   summary: string;
   topics: string[];
+  genre?: string | null;
   translated_title?: string | null;
   score: number | null;
   score_breakdown?: {
@@ -308,8 +311,21 @@ export interface ItemLaterResult {
 
 export type ItemFeedbackResult = ItemFeedback;
 
+export interface ItemGenreCount {
+  genre?: string | null;
+  label?: string | null;
+  count: number;
+}
+
+export interface ItemGenreUpdateResult {
+  item_id: string;
+  genre?: string | null;
+  user_genre?: string | null;
+}
+
 export interface ItemListResponse {
   items: Item[];
+  genre_counts?: ItemGenreCount[];
   page: number;
   page_size: number;
   total: number;

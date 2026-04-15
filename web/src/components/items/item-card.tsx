@@ -3,6 +3,7 @@
 import { ExternalLink, Star, ThumbsDown, ThumbsUp } from "lucide-react";
 import { type Item } from "@/lib/api";
 import { Thumbnail } from "@/components/thumbnail";
+import { displayGenreLabel, normalizeStoredGenreValue } from "@/components/items/item-genre";
 import { CheckStatusBadges } from "@/components/items/check-status-badges";
 import { ListRowCard } from "@/components/ui/list-row-card";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -95,6 +96,8 @@ export function ItemCard({
     item.content_text?.trim()?.replace(/\s+/g, " ").slice(0, 150) ||
     item.recommendation_reason?.trim() ||
     null;
+  const genreLabel = displayGenreLabel(item.genre, t("items.genre.uncategorized"));
+  const hasManualGenre = normalizeStoredGenreValue(item.user_genre) !== "";
 
   const reactionPill = item.is_favorite
     ? { icon: <Star className="size-3 fill-current" aria-hidden="true" />, label: t("items.feedback.favorite"), tone: "success" as const }
@@ -185,6 +188,18 @@ export function ItemCard({
               }`}
             >
               {displayTitle ?? item.url}
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                  hasManualGenre
+                    ? "border-[var(--color-editorial-accent-line)] bg-[var(--color-editorial-accent-soft)] text-[var(--color-editorial-accent)]"
+                    : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-muted)] text-[var(--color-editorial-ink-faint)]"
+                }`}
+              >
+                {genreLabel}
+              </span>
             </div>
 
             {dek ? (

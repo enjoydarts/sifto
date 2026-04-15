@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ItemDetail, RelatedItem } from "@/lib/api";
+import { api, ItemDetail, ItemGenreCount, ItemListResponse, RelatedItem } from "@/lib/api";
+import { normalizeStoredGenreValue } from "@/components/items/item-genre";
+import { patchGenreSuggestionsResponse } from "@/components/items/item-genre-suggestions-cache.js";
 import { patchItemsInFeedCaches, removeItemFromFeedCaches } from "@/lib/query-cache-helpers";
 import { useI18n } from "@/components/i18n-provider";
 import { useToast } from "@/components/toast-provider";
@@ -32,6 +34,7 @@ function localizeActionError(
     | "delete"
     | "retry"
     | "retryFromFacts"
+    | "saveGenre"
     | "saveNote"
     | "createHighlight"
     | "deleteHighlight",
@@ -48,6 +51,7 @@ function localizeActionError(
       case "delete":
       case "markRead":
       case "feedback":
+      case "saveGenre":
       case "saveNote":
       case "createHighlight":
       case "deleteHighlight":
@@ -75,11 +79,12 @@ export function useItemDetailData() {
   const [feedbackUpdating, setFeedbackUpdating] = useState(false);
   const [retryUpdating, setRetryUpdating] = useState(false);
   const [retryFromFactsUpdating, setRetryFromFactsUpdating] = useState(false);
+  const [genreUpdating, setGenreUpdating] = useState(false);
   const [related, setRelated] = useState<RelatedItem[]>([]);
   const [relatedClusters, setRelatedClusters] = useState<RelatedCluster[]>([]);
   const [expandedRelatedClusterIds, setExpandedRelatedClusterIds] = useState<Record<string, boolean>>({});
   const [relatedSortMode, setRelatedSortMode] = useState<"similarity" | "recent">("similarity");
-  const [detailTab, setDetailTab] = useState<"summary" | "facts" | "body" | "related" | "notes">("summary");
+  const [detailTab, setDetailTab] = useState<"summary" | "facts" | "body" | "related" | "notes" | "genre">("summary");
   const [relatedError, setRelatedError] = useState<string | null>(null);
   const [nextItemHref, setNextItemHref] = useState<string | null>(null);
   const [inlineItemId, setInlineItemId] = useState<string | null>(null);
@@ -92,6 +97,12 @@ export function useItemDetailData() {
   const settingsQuery = useQuery({
     queryKey: ["settings"] as const,
     queryFn: () => api.getSettings(),
+    staleTime: 60_000,
+    placeholderData: (prev) => prev,
+  });
+  const genreSuggestionsQuery = useQuery({
+    queryKey: ["item-genre-suggestions"] as const,
+    queryFn: () => api.getItems({ status: "summarized", sort: "newest", page: 1, page_size: 1 }),
     staleTime: 60_000,
     placeholderData: (prev) => prev,
   });
@@ -136,6 +147,13 @@ export function useItemDetailData() {
       if (patch.is_favorite != null) patchObj.is_favorite = patch.is_favorite;
       if (patch.feedback_rating != null) patchObj.feedback_rating = patch.feedback_rating;
       patchItemsInFeedCaches(queryClient, itemId, patchObj);
+    },
+    [queryClient]
+  );
+
+  const syncItemGenreInFeedCaches = useCallback(
+    (itemId: string, patch: { genre?: string | null; user_genre?: string | null }) => {
+      patchItemsInFeedCaches(queryClient, itemId, patch);
     },
     [queryClient]
   );
@@ -234,6 +252,16 @@ export function useItemDetailData() {
   }, [item, queryClient, refreshReadDependentQueries, syncItemReadInFeedCaches]);
 
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
+  const genreSuggestions = useMemo(
+    () =>
+      (genreSuggestionsQuery.data?.genre_counts ?? [])
+        .map((entry: ItemGenreCount) => ({
+          value: normalizeStoredGenreValue(entry.genre ?? entry.label ?? ""),
+          count: entry.count,
+        }))
+        .filter((entry, index, arr) => entry.value !== "" && arr.findIndex((v) => v.value === entry.value) === index),
+    [genreSuggestionsQuery.data?.genre_counts]
+  );
   const canMarkRead = !!item && item.status !== "deleted";
   const isDeleted = item?.status === "deleted";
   const canUseItemNavigator = Boolean(item && item.status !== "deleted" && item.summary?.summary && item.facts?.facts?.length);
@@ -550,6 +578,59 @@ export function useItemDetailData() {
     }
   };
 
+  const saveGenre = useCallback(
+    async (userGenre: string | null) => {
+      if (!item || item.status === "deleted") {
+        throw new Error(t("itemDetail.actionError.deletedReadonly"));
+      }
+      setGenreUpdating(true);
+      try {
+        const previousUserGenre = normalizeStoredGenreValue(item.user_genre);
+        const previousSummaryGenre = normalizeStoredGenreValue(item.summary?.genre);
+        const previousEffectiveGenre = normalizeStoredGenreValue(item.genre ?? (previousUserGenre || previousSummaryGenre));
+        const normalizedUserGenre = normalizeStoredGenreValue(userGenre);
+        const next = await api.updateItemGenre(item.id, {
+          user_genre: normalizedUserGenre || null,
+        });
+        const nextUserGenre = normalizeStoredGenreValue(next.user_genre ?? normalizedUserGenre);
+        const nextSummaryGenre = normalizeStoredGenreValue(item.summary?.genre);
+        const nextGenre = normalizeStoredGenreValue(next.genre ?? (nextUserGenre || nextSummaryGenre));
+        const patch = {
+          genre: nextGenre || null,
+          user_genre: nextUserGenre || null,
+        };
+        syncItemGenreInFeedCaches(item.id, patch);
+        setItem((prev) => (prev ? { ...prev, ...patch } : prev));
+        queryClient.setQueryData<ItemDetail>(["item-detail", item.id], (prev) =>
+          prev ? { ...prev, ...patch } : prev
+        );
+        setActionError(null);
+        await queryClient.invalidateQueries({ queryKey: ["items-feed"] });
+        queryClient.setQueryData<ItemListResponse | undefined>(["item-genre-suggestions"], (prev) =>
+          patchGenreSuggestionsResponse(prev, {
+            beforeEffectiveGenre: previousEffectiveGenre,
+            afterEffectiveGenre: nextGenre,
+          })
+        );
+        await queryClient.invalidateQueries({ queryKey: ["item-genre-suggestions"] });
+        showToast(
+          nextUserGenre ? t("itemDetail.genre.saved") : t("itemDetail.genre.cleared"),
+          "success"
+        );
+        return {
+          genre: patch.genre,
+          user_genre: patch.user_genre,
+          summary_genre: nextSummaryGenre || null,
+        };
+      } catch (e) {
+        throw new Error(localizeActionError(e, "saveGenre", t));
+      } finally {
+        setGenreUpdating(false);
+      }
+    },
+    [item, queryClient, showToast, syncItemGenreInFeedCaches, t]
+  );
+
   const createHighlight = async (input: { quote_text: string; anchor_text?: string; section?: string }) => {
     if (!item || item.status === "deleted") return;
     try {
@@ -599,6 +680,7 @@ export function useItemDetailData() {
     feedbackUpdating,
     retryUpdating,
     retryFromFactsUpdating,
+    genreUpdating,
     related,
     relatedClusters,
     expandedRelatedClusterIds,
@@ -617,6 +699,7 @@ export function useItemDetailData() {
     itemNavigatorOpen,
     setItemNavigatorOpen,
     itemNavigatorDisplayPersona,
+    genreSuggestions,
     dateLocale,
     canMarkRead,
     isDeleted,
@@ -635,6 +718,7 @@ export function useItemDetailData() {
     restoreItem,
     retryItem,
     retryFromFacts,
+    saveGenre,
     saveNote,
     createHighlight,
     deleteHighlight,

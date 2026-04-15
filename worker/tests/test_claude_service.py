@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from unittest.mock import patch
 
 from app.services.claude_service import summarize, summarize_async
 
@@ -44,6 +45,24 @@ class ClaudeServiceTests(unittest.TestCase):
                     api_key=None,
                 )
             )
+
+    @patch("app.services.claude_service._llm_meta", return_value={"provider": "anthropic", "model": "claude-sonnet-4-6"})
+    @patch("app.services.claude_service._message_text")
+    @patch("app.services.claude_service._call_with_model_fallback")
+    @patch("app.services.claude_service._client_for_api_key", return_value=object())
+    def test_summarize_keeps_genre_from_structured_output(self, _client_for_api_key, call_with_model_fallback, message_text, _llm_meta):
+        call_with_model_fallback.return_value = (object(), "claude-sonnet-4-6", [])
+        message_text.return_value = '{"summary":"要約です。","topics":["AI"],"genre":"技術","translated_title":"翻訳済みタイトル","score_breakdown":{"importance":0.8,"novelty":0.5,"actionability":0.6,"reliability":0.9,"relevance":0.7},"score_reason":"理由です。"}'
+
+        result = summarize(
+            title="Example title",
+            facts=["Fact 1"],
+            source_text_chars=1200,
+            model="claude-sonnet-4-6",
+            api_key="anthropic-key",
+        )
+
+        self.assertEqual(result["genre"], "技術")
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ def finalize_summary_result(
     title: str | None,
     summary_text: str,
     topics: list[str] | None,
+    genre: str | None,
     raw_score_breakdown: dict | None,
     score_reason: str,
     translated_title: str,
@@ -24,10 +25,14 @@ def finalize_summary_result(
         summary = extract_json_string_value_loose(response_text, "summary")
     if not summary:
         raise RuntimeError(f"{error_prefix}: response_snippet={response_text[:500]}")
+    normalized_genre = str(genre or "").strip()
+    if not normalized_genre:
+        normalized_genre = extract_json_string_value_loose(response_text, "genre")
     score_breakdown = normalize_score_breakdown(raw_score_breakdown)
     return {
         "summary": summary,
         "topics": [str(t).strip() for t in (topics or []) if str(t).strip()],
+        "genre": str(normalized_genre or "").strip(),
         "translated_title": finalize_translated_title(
             title,
             str(translated_title or "").strip(),

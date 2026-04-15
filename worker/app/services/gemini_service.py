@@ -617,6 +617,7 @@ def summarize(
         title=title,
         summary_text=str(data.get("summary", "")).strip(),
         topics=topics,
+        genre=str(data.get("genre") or "").strip(),
         raw_score_breakdown=data.get("score_breakdown") if isinstance(data.get("score_breakdown"), dict) else {},
         score_reason=str(data.get("score_reason") or "").strip(),
         translated_title=str(data.get("translated_title") or "").strip(),

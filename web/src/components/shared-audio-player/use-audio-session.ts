@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { api, type Item, type PlaybackSession } from "@/lib/api";
+import { swallowPlaybackSessionError } from "./playback-session-guard";
 import { progressRatio } from "./use-audio-playback";
 import type {
   SharedAudioBriefingPayload,
@@ -24,6 +25,10 @@ type AudioBriefingResumePayload = {
   briefing_id: string;
   current_offset_sec: number;
 };
+
+function reportPlaybackSessionError(error: unknown) {
+  console.error("playback session request failed", error);
+}
 
 function buildSummaryResumePayload(
   queueKind: SummaryAudioQueueKind,
@@ -77,29 +82,43 @@ export function useAudioSession(
       return;
     }
     const current = queue[0];
-    const session = await api.createPlaybackSession({
-      mode: "summary_queue",
-      title: current?.translated_title || current?.title || "",
-      subtitle: current?.source_title || "",
-      current_position_sec: offsetSec,
-      duration_sec: getDurationSec(),
-      progress_ratio: progressRatio(offsetSec, getDurationSec()),
-      resume_payload: buildSummaryResumePayload(queueKind, queueQuery, queue, currentIndex, excludedItemIDs, offsetSec),
-    });
+    const session = await swallowPlaybackSessionError(
+      () => api.createPlaybackSession({
+        mode: "summary_queue",
+        title: current?.translated_title || current?.title || "",
+        subtitle: current?.source_title || "",
+        current_position_sec: offsetSec,
+        duration_sec: getDurationSec(),
+        progress_ratio: progressRatio(offsetSec, getDurationSec()),
+        resume_payload: buildSummaryResumePayload(queueKind, queueQuery, queue, currentIndex, excludedItemIDs, offsetSec),
+      }),
+      reportPlaybackSessionError,
+    );
+    if (!session) {
+      remoteSessionIDRef.current = null;
+      return;
+    }
     remoteSessionIDRef.current = session.id;
     lastPersistedPositionSecRef.current = offsetSec;
   }
 
   async function createAudioBriefingPlaybackSession(payload: SharedAudioBriefingPayload, offsetSec: number) {
-    const session = await api.createPlaybackSession({
-      mode: "audio_briefing",
-      title: payload.title,
-      subtitle: payload.summary ?? "",
-      current_position_sec: offsetSec,
-      duration_sec: getDurationSec(),
-      progress_ratio: progressRatio(offsetSec, getDurationSec()),
-      resume_payload: buildAudioBriefingResumePayload(payload, offsetSec),
-    });
+    const session = await swallowPlaybackSessionError(
+      () => api.createPlaybackSession({
+        mode: "audio_briefing",
+        title: payload.title,
+        subtitle: payload.summary ?? "",
+        current_position_sec: offsetSec,
+        duration_sec: getDurationSec(),
+        progress_ratio: progressRatio(offsetSec, getDurationSec()),
+        resume_payload: buildAudioBriefingResumePayload(payload, offsetSec),
+      }),
+      reportPlaybackSessionError,
+    );
+    if (!session) {
+      remoteSessionIDRef.current = null;
+      return;
+    }
     remoteSessionIDRef.current = session.id;
     lastPersistedPositionSecRef.current = offsetSec;
   }
@@ -139,16 +158,17 @@ export function useAudioSession(
         ),
       };
       if (kind === "complete") {
-        await api.completePlaybackSession(sessionID, body);
+        await swallowPlaybackSessionError(() => api.completePlaybackSession(sessionID, body), reportPlaybackSessionError);
         remoteSessionIDRef.current = null;
         return;
       }
       if (kind === "interrupt") {
-        await api.interruptPlaybackSession(sessionID, body);
+        await swallowPlaybackSessionError(() => api.interruptPlaybackSession(sessionID, body), reportPlaybackSessionError);
         remoteSessionIDRef.current = null;
         return;
       }
-      await api.updatePlaybackSession(sessionID, body);
+      const updated = await swallowPlaybackSessionError(() => api.updatePlaybackSession(sessionID, body), reportPlaybackSessionError);
+      if (!updated) return;
       lastPersistedPositionSecRef.current = effectivePosition;
       return;
     }
@@ -164,16 +184,17 @@ export function useAudioSession(
         resume_payload: buildAudioBriefingResumePayload(payload, effectivePosition),
       };
       if (kind === "complete") {
-        await api.completePlaybackSession(sessionID, body);
+        await swallowPlaybackSessionError(() => api.completePlaybackSession(sessionID, body), reportPlaybackSessionError);
         remoteSessionIDRef.current = null;
         return;
       }
       if (kind === "interrupt") {
-        await api.interruptPlaybackSession(sessionID, body);
+        await swallowPlaybackSessionError(() => api.interruptPlaybackSession(sessionID, body), reportPlaybackSessionError);
         remoteSessionIDRef.current = null;
         return;
       }
-      await api.updatePlaybackSession(sessionID, body);
+      const updated = await swallowPlaybackSessionError(() => api.updatePlaybackSession(sessionID, body), reportPlaybackSessionError);
+      if (!updated) return;
       lastPersistedPositionSecRef.current = effectivePosition;
     }
   }

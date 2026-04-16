@@ -18,17 +18,56 @@
 
 ---
 ## 【使ってよいタグ】
-- `[sigh]`
-- `[laughing]`
-- `[uhm]`
+- `[admiration]`
+- `[agitation]`
+- `[anger]`
+- `[annoyance]`
+- `[anticipation]`
+- `[anxiety]`
+- `[appreciation]`
+- `[approval]`
+- `[astonishment]`
+- `[awe]`
+- `[boredom]`
+- `[caution]`
+- `[compassion]`
+- `[confidence]`
+- `[confusion]`
+- `[contempt]`
+- `[curiosity]`
+- `[determination]`
+- `[disappointment]`
+- `[disapproval]`
+- `[disgust]`
+- `[doubt]`
+- `[eagerness]`
+- `[embarrassment]`
+- `[empathy]`
+- `[encouraging]`
+- `[enjoyment]`
+- `[enthusiasm]`
+- `[excitement]`
+- `[fear]`
+- `[frustration]`
+- `[gratitude]`
+- `[happy]`
+- `[hope]`
+- `[horror]`
+- `[interest]`
+- `[joy]`
+- `[laughs]`
+- `[love]`
+- `[negative]`
+- `[nervousness]`
+- `[neutral]`
+- `[optimism]`
+- `[pain]`
+- `[positive]`
+- `[sadness]`
 - `[sarcasm]`
-- `[robotic]`
-- `[shouting]`
-- `[whispering]`
-- `[extremely fast]`
-- `[short pause]`
-- `[medium pause]`
-- `[long pause]`
+- `[satisfaction]`
+- `[surprise]`
+- `[sympathy]`
 
 ---
 ## 【重要ルール】
@@ -40,12 +79,6 @@
 - `<|speaker:0|>` と `<|speaker:1|>` は絶対に消さない
 - 話者タグの順序や話者割り当てを変えない
 - 各発話の本文は残しつつ、必要最小限のタグだけ足す
-
----
-## 【禁止】
-- `[scared]`
-- `[curious]`
-- `[bored]`
 
 ---
 ## 【日本語最適化】

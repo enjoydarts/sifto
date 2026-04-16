@@ -9,9 +9,24 @@ from app.services.tts_markup_preprocess import (
     TTSMarkupPreprocessService,
     XAI_TTS_PREPROCESS_PURPOSE,
 )
+from app.services.prompt_template_defaults import get_default_prompt_template
 
 
 class TTSMarkupPreprocessServiceTests(unittest.TestCase):
+    def test_gemini_prompt_templates_include_gemini_3_1_emotion_tags(self):
+        prompt_keys = [
+            "gemini.summary_preprocess",
+            "gemini.audio_briefing_single_preprocess",
+            "gemini.audio_briefing_duo_preprocess",
+        ]
+
+        for prompt_key in prompt_keys:
+            with self.subTest(prompt_key=prompt_key):
+                prompt_text = str(get_default_prompt_template(prompt_key).get("prompt_text") or "")
+                self.assertIn("[admiration]", prompt_text)
+                self.assertIn("[sympathy]", prompt_text)
+                self.assertNotIn("[scared]", prompt_text)
+
     def test_preprocess_uses_openai_compatible_transport(self):
         service = TTSMarkupPreprocessService()
 

@@ -4,11 +4,12 @@ from app.routers.summarize import SummarizeResponse
 
 
 class SummarizeRouterTests(unittest.TestCase):
-    def test_response_model_includes_genre(self):
+    def test_response_model_includes_genre_and_other_label(self):
         response = SummarizeResponse(
             summary="要約です。",
             topics=["AI"],
-            genre="技術",
+            genre="research",
+            other_label="",
             translated_title="",
             score=0.72,
             score_breakdown={"importance": 0.8, "novelty": 0.5, "actionability": 0.6, "reliability": 0.9, "relevance": 0.7},
@@ -18,7 +19,8 @@ class SummarizeRouterTests(unittest.TestCase):
         )
 
         dumped = response.model_dump() if hasattr(response, "model_dump") else response.dict()
-        self.assertEqual(dumped["genre"], "技術")
+        self.assertEqual(dumped["genre"], "research")
+        self.assertEqual(dumped["other_label"], "")
 
 
 if __name__ == "__main__":

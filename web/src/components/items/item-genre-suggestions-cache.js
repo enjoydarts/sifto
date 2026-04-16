@@ -11,7 +11,7 @@ export function patchGenreSuggestionsResponse(prev, {
   const nextCounts = [...(prev.genre_counts ?? [])].map((entry) => ({ ...entry }));
 
   const findIndex = (genreValue) =>
-    nextCounts.findIndex((entry) => normalizeStoredGenreValue(entry.genre ?? entry.label ?? "") === genreValue);
+    nextCounts.findIndex((entry) => normalizeStoredGenreValue(entry.genre?.trim() ? entry.genre : entry.label ?? "") === genreValue);
 
   const ensureEntry = (genreValue) => {
     if (!genreValue) return;

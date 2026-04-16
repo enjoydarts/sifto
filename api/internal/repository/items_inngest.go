@@ -79,6 +79,7 @@ func (r *ItemInngestRepo) InsertSummary(
 	itemID, summary string,
 	topics []string,
 	genre *string,
+	otherGenreLabel *string,
 	translatedTitle string,
 	score float64,
 	scoreBreakdown map[string]any,
@@ -104,20 +105,21 @@ func (r *ItemInngestRepo) InsertSummary(
 	if translatedTitle != "" {
 		translatedTitlePtr = &translatedTitle
 	}
-	genre = normalizeGenreValue(genre)
+	genre, otherGenreLabel = normalizeGenreInput(genre, otherGenreLabel)
 	_, err := r.db.Exec(ctx, `
-		INSERT INTO item_summaries (item_id, summary, topics, genre, translated_title, score, score_breakdown, score_reason, score_policy_version)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO item_summaries (item_id, summary, topics, genre, other_genre_label, translated_title, score, score_breakdown, score_reason, score_policy_version)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (item_id) DO UPDATE SET
 		    summary = EXCLUDED.summary, topics = EXCLUDED.topics,
 		    genre = EXCLUDED.genre,
+		    other_genre_label = EXCLUDED.other_genre_label,
 		    translated_title = EXCLUDED.translated_title,
 		    score = EXCLUDED.score,
 		    score_breakdown = EXCLUDED.score_breakdown,
 		    score_reason = EXCLUDED.score_reason,
 		    score_policy_version = EXCLUDED.score_policy_version,
 		    summarized_at = NOW()`,
-		itemID, summary, topics, genre, translatedTitlePtr, score, scoreBreakdownJSON, scoreReasonPtr, scorePolicyVersionPtr)
+		itemID, summary, topics, genre, otherGenreLabel, translatedTitlePtr, score, scoreBreakdownJSON, scoreReasonPtr, scorePolicyVersionPtr)
 	if err != nil {
 		return err
 	}

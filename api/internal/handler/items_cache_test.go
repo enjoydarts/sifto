@@ -47,7 +47,7 @@ func TestItemListCacheKeyUsesVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("itemsListCacheKey returned error: %v", err)
 	}
-	want := "v1:items:list:u1:sv=2:v=7:status=summarized:source=src-1:topic=go:genre=analysis:q=openai:mode=and:unread=true:read=false:fav=true:later=false:sort=score:page=2:size=50"
+	want := "v1:items:list:u1:sv=3:v=7:status=summarized:source=src-1:topic=go:genre=analysis:q=openai:mode=and:unread=true:read=false:fav=true:later=false:sort=score:page=2:size=50"
 	if key != want {
 		t.Fatalf("itemsListCacheKey = %q, want %q", key, want)
 	}
@@ -96,7 +96,7 @@ func TestItemDetailCacheKeyUsesVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("itemDetailCacheKey returned error: %v", err)
 	}
-	want := "v1:items:detail:u1:sv=2:item=item-1:v=3"
+	want := "v1:items:detail:u1:sv=3:item=item-1:v=3"
 	if key != want {
 		t.Fatalf("itemDetailCacheKey = %q, want %q", key, want)
 	}

@@ -6,8 +6,8 @@ import { patchGenreSuggestionsResponse } from "./item-genre-suggestions-cache.js
 function makeResponse() {
   return {
     genre_counts: [
-      { genre: "Security", label: "Security", count: 4 },
-      { genre: "AI", label: "AI", count: 2 },
+      { genre: "security", label: "security", count: 4 },
+      { genre: "ai", label: "ai", count: 2 },
     ],
     items: [],
     page: 1,
@@ -20,30 +20,30 @@ function makeResponse() {
 
 test("patchGenreSuggestionsResponse keeps counts stable when effective genre does not change", () => {
   const patched = patchGenreSuggestionsResponse(makeResponse(), {
-    beforeEffectiveGenre: "Security",
-    afterEffectiveGenre: "Security",
+    beforeEffectiveGenre: "security",
+    afterEffectiveGenre: "security",
   });
 
   assert.deepEqual(
     patched.genre_counts,
     [
-      { genre: "Security", label: "Security", count: 4 },
-      { genre: "AI", label: "AI", count: 2 },
+      { genre: "security", label: "security", count: 4 },
+      { genre: "ai", label: "ai", count: 2 },
     ]
   );
 });
 
 test("patchGenreSuggestionsResponse updates counts only when effective genre changes", () => {
   const patched = patchGenreSuggestionsResponse(makeResponse(), {
-    beforeEffectiveGenre: "Security",
-    afterEffectiveGenre: "AI",
+    beforeEffectiveGenre: "security",
+    afterEffectiveGenre: "ai",
   });
 
   assert.deepEqual(
     patched.genre_counts,
     [
-      { genre: "AI", label: "AI", count: 3 },
-      { genre: "Security", label: "Security", count: 3 },
+      { genre: "ai", label: "ai", count: 3 },
+      { genre: "security", label: "security", count: 3 },
     ]
   );
 });
@@ -57,9 +57,24 @@ test("patchGenreSuggestionsResponse adds the resulting effective genre when miss
   assert.deepEqual(
     patched.genre_counts,
     [
-      { genre: "Security", label: "Security", count: 4 },
-      { genre: "AI", label: "AI", count: 2 },
-      { genre: "Robotics", label: "Robotics", count: 1 },
+      { genre: "security", label: "security", count: 4 },
+      { genre: "ai", label: "ai", count: 2 },
+      { genre: "robotics", label: "robotics", count: 1 },
     ]
   );
+});
+
+test("patchGenreSuggestionsResponse resolves untagged fallback labels to uncategorized", () => {
+  const patched = patchGenreSuggestionsResponse(
+    {
+      ...makeResponse(),
+      genre_counts: [{ genre: "", label: "untagged", count: 2 }],
+    },
+    {
+      beforeEffectiveGenre: "uncategorized",
+      afterEffectiveGenre: "uncategorized",
+    }
+  );
+
+  assert.deepEqual(patched.genre_counts, [{ genre: "", label: "untagged", count: 2 }]);
 });

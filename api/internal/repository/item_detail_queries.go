@@ -14,7 +14,9 @@ func (r *ItemRepo) loadItemDetailBase(ctx context.Context, id, userID string) (*
 		       i.deleted_at IS NOT NULL AS is_deleted,
 		       sm.translated_title,
 		       i.user_genre,
+		       i.user_other_genre_label,
 		       `+effectiveGenreExpr("i", "sm")+` AS genre,
+		       `+effectiveOtherGenreLabelExpr("i", "sm")+` AS other_genre_label,
 		       EXISTS (
 		           SELECT 1 FROM item_reads ir
 		           WHERE ir.item_id = i.id AND ir.user_id = $2
@@ -25,7 +27,7 @@ func (r *ItemRepo) loadItemDetailBase(ctx context.Context, id, userID string) (*
 		LEFT JOIN item_summaries sm ON sm.item_id = i.id
 		WHERE i.id = $1 AND s.user_id = $2`, id, userID,
 	).Scan(&d.ID, &d.SourceID, &d.SourceTitle, &d.URL, &d.Title, &d.ThumbnailURL, &d.ContentText,
-		&d.Status, &deleted, &d.TranslatedTitle, &d.UserGenre, &d.Genre, &d.IsRead, &d.ProcessingError, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
+		&d.Status, &deleted, &d.TranslatedTitle, &d.UserGenre, &d.UserOtherGenreLabel, &d.Genre, &d.OtherGenreLabel, &d.IsRead, &d.ProcessingError, &d.PublishedAt, &d.FetchedAt, &d.CreatedAt, &d.UpdatedAt)
 	if err != nil {
 		return nil, mapDBError(err)
 	}
@@ -56,10 +58,10 @@ func (r *ItemRepo) queryFactsDetail(ctx context.Context, itemID string) (*model.
 func (r *ItemRepo) querySummaryDetail(ctx context.Context, itemID string) (*model.ItemSummary, error) {
 	var summary model.ItemSummary
 	err := r.db.QueryRow(ctx, `
-		SELECT id, item_id, summary, topics, genre, translated_title, score, score_breakdown, score_reason, score_policy_version, summarized_at
+		SELECT id, item_id, summary, topics, genre, other_genre_label, translated_title, score, score_breakdown, score_reason, score_policy_version, summarized_at
 		FROM item_summaries
 		WHERE item_id = $1`, itemID,
-	).Scan(&summary.ID, &summary.ItemID, &summary.Summary, &summary.Topics, &summary.Genre, &summary.TranslatedTitle, &summary.Score,
+	).Scan(&summary.ID, &summary.ItemID, &summary.Summary, &summary.Topics, &summary.Genre, &summary.OtherGenreLabel, &summary.TranslatedTitle, &summary.Score,
 		scoreBreakdownScanner{dst: &summary.ScoreBreakdown}, &summary.ScoreReason, &summary.ScorePolicyVersion, &summary.SummarizedAt)
 	if err != nil {
 		return nil, err

@@ -18,7 +18,7 @@ class _StubSummaryProvider(OpenAICompatProvider):
 
     def _chat_json(self, prompt, model, api_key, **kwargs):
         return (
-            '{"summary":"要約です。","topics":["AI"],"genre":"技術","translated_title":"","score_breakdown":{"importance":0.8,"novelty":0.5,"actionability":0.6,"reliability":0.9,"relevance":0.7},"score_reason":"理由です。"}',
+            '{"summary":"要約です。","topics":["AI"],"genre":"research","other_label":"不要","translated_title":"","score_breakdown":{"importance":0.8,"novelty":0.5,"actionability":0.6,"reliability":0.9,"relevance":0.7},"score_reason":"理由です。"}',
             {},
         )
 
@@ -30,7 +30,7 @@ class _StubSummaryProvider(OpenAICompatProvider):
 
 
 class ProviderBaseSummaryTests(unittest.TestCase):
-    def test_summarize_keeps_genre_in_final_result(self):
+    def test_summarize_keeps_taxonomy_genre_in_final_result(self):
         provider = _StubSummaryProvider()
 
         result = provider.summarize(
@@ -41,7 +41,8 @@ class ProviderBaseSummaryTests(unittest.TestCase):
             api_key="test-key",
         )
 
-        self.assertEqual(result["genre"], "技術")
+        self.assertEqual(result["genre"], "research")
+        self.assertEqual(result["other_label"], "")
 
 
 if __name__ == "__main__":

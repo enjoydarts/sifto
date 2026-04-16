@@ -103,7 +103,7 @@ func scanItemsWithGenres(rows itemRowScanner) ([]model.Item, error) {
 	for rows.Next() {
 		var it model.Item
 		if err := rows.Scan(&it.ID, &it.SourceID, &it.SourceTitle, &it.URL, &it.Title, &it.ThumbnailURL, &it.ContentText,
-			&it.Status, &it.ProcessingError, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.PersonalScore, &it.PersonalScoreReason, &it.SummaryTopics, &it.TranslatedTitle, &it.UserGenre, &it.Genre, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			&it.Status, &it.ProcessingError, &it.FactsCheckResult, &it.FaithfulnessResult, &it.IsRead, &it.IsFavorite, &it.FeedbackRating, &it.SummaryScore, &it.PersonalScore, &it.PersonalScoreReason, &it.SummaryTopics, &it.TranslatedTitle, &it.UserGenre, &it.UserOtherGenreLabel, &it.Genre, &it.OtherGenreLabel, &it.PublishedAt, &it.FetchedAt, &it.CreatedAt, &it.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, it)
@@ -308,7 +308,8 @@ func (r *ItemRepo) ListPage(ctx context.Context, userID string, p ItemListParams
 		       COALESCE(fb.is_favorite, false) AS is_favorite,
 		       COALESCE(fb.rating, 0) AS feedback_rating,
 		       sm.score, sm.personal_score, sm.personal_score_reason, COALESCE(sm.topics, '{}'::text[]), sm.translated_title,
-		       i.user_genre, `+effectiveGenreExpr("i", "sm")+` AS genre,
+		       i.user_genre, i.user_other_genre_label, `+effectiveGenreExpr("i", "sm")+` AS genre,
+		       `+effectiveOtherGenreLabelExpr("i", "sm")+` AS other_genre_label,
 		       i.published_at, i.fetched_at, i.created_at, i.updated_at
 		FROM items i
 		`+countJoins+`

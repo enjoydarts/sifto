@@ -910,8 +910,11 @@ export default function ItemDetailPage() {
             <section className="rounded-[22px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-5 py-4 md:px-6 md:py-5">
               <ItemGenreEditor
                 genre={item.genre}
+                genreOtherLabel={item.other_genre_label}
                 userGenre={item.user_genre}
+                userOtherGenreLabel={item.user_other_genre_label}
                 summaryGenre={item.summary?.genre}
+                summaryOtherGenreLabel={item.summary?.other_genre_label}
                 suggestions={genreSuggestions}
                 disabled={disableMutations || genreUpdating}
                 onSave={saveGenre}

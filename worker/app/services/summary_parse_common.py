@@ -12,6 +12,7 @@ def finalize_summary_result(
     summary_text: str,
     topics: list[str] | None,
     genre: str | None,
+    other_label: str | None = None,
     raw_score_breakdown: dict | None,
     score_reason: str,
     translated_title: str,
@@ -28,11 +29,17 @@ def finalize_summary_result(
     normalized_genre = str(genre or "").strip()
     if not normalized_genre:
         normalized_genre = extract_json_string_value_loose(response_text, "genre")
+    normalized_other_label = str(other_label or "").strip()
+    if not normalized_other_label:
+        normalized_other_label = extract_json_string_value_loose(response_text, "other_label")
+    if normalized_genre != "other":
+        normalized_other_label = ""
     score_breakdown = normalize_score_breakdown(raw_score_breakdown)
     return {
         "summary": summary,
         "topics": [str(t).strip() for t in (topics or []) if str(t).strip()],
         "genre": str(normalized_genre or "").strip(),
+        "other_label": str(normalized_other_label or "").strip()[:20],
         "translated_title": finalize_translated_title(
             title,
             str(translated_title or "").strip(),

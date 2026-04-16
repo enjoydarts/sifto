@@ -21,7 +21,9 @@ export interface Item {
   personal_score_reason?: string;
   personal_score_breakdown?: PersonalScoreBreakdown | null;
   genre?: string | null;
+  other_genre_label?: string | null;
   user_genre?: string | null;
+  user_other_genre_label?: string | null;
   search_match_count?: number;
   search_snippets?: ItemSearchSnippet[];
   published_at: string | null;
@@ -76,6 +78,7 @@ export interface ItemSummary {
   summary: string;
   topics: string[];
   genre?: string | null;
+  other_genre_label?: string | null;
   translated_title?: string | null;
   score: number | null;
   score_breakdown?: {
@@ -320,7 +323,9 @@ export interface ItemGenreCount {
 export interface ItemGenreUpdateResult {
   item_id: string;
   genre?: string | null;
+  other_genre_label?: string | null;
   user_genre?: string | null;
+  user_other_genre_label?: string | null;
 }
 
 export interface ItemListResponse {

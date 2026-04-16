@@ -9,7 +9,7 @@ func TestCacheKeyVersionKeys(t *testing.T) {
 	if got, want := cacheVersionKeyUserItems("u1"), "cache_version:user_items:u1"; got != want {
 		t.Fatalf("cacheVersionKeyUserItems = %q, want %q", got, want)
 	}
-	if got, want := cacheVersionKeyItemDetail("item-1"), "cache_version:item_detail:v2:item-1"; got != want {
+	if got, want := cacheVersionKeyItemDetail("item-1"), "cache_version:item_detail:v3:item-1"; got != want {
 		t.Fatalf("cacheVersionKeyItemDetail = %q, want %q", got, want)
 	}
 	if got, want := cacheVersionKeyUserSettings("u1"), "cache_version:user_settings:u1"; got != want {
@@ -26,7 +26,7 @@ func TestCacheKeyVersionKeys(t *testing.T) {
 func TestCacheKeyItemsListVersioned(t *testing.T) {
 	got := cacheKeyItemsListVersioned("u1", 7, "summarized", "src-1", "go", "analysis", "openai", "and", true, false, true, false, "score", 2, 50)
 	wantParts := []string{
-		"v1:items:list:u1:sv=2:v=7",
+		"v1:items:list:u1:sv=3:v=7",
 		"status=summarized",
 		"source=src-1",
 		"topic=go",
@@ -50,7 +50,7 @@ func TestCacheKeyItemsListVersioned(t *testing.T) {
 
 func TestCacheKeyItemDetailVersioned(t *testing.T) {
 	got := cacheKeyItemDetailVersioned("u1", "item-1", 3)
-	want := "v1:items:detail:u1:sv=2:item=item-1:v=3"
+	want := "v1:items:detail:u1:sv=3:item=item-1:v=3"
 	if got != want {
 		t.Fatalf("cacheKeyItemDetailVersioned = %q, want %q", got, want)
 	}

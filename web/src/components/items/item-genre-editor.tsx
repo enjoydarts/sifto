@@ -2,7 +2,13 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/components/i18n-provider";
-import { displayGenreLabel, normalizeStoredGenreValue } from "@/components/items/item-genre";
+import {
+  displayGenreLabel,
+  getGenreOptions,
+  normalizeOtherGenreLabel,
+  normalizeStoredGenreValue,
+  OTHER_GENRE_KEY,
+} from "@/components/items/item-genre";
 
 type GenreSuggestion = {
   value: string;
@@ -11,63 +17,166 @@ type GenreSuggestion = {
 
 type ItemGenreEditorProps = {
   genre?: string | null;
+  genreOtherLabel?: string | null;
   userGenre?: string | null;
+  userOtherGenreLabel?: string | null;
   summaryGenre?: string | null;
+  summaryOtherGenreLabel?: string | null;
   suggestions: GenreSuggestion[];
   disabled?: boolean;
-  onSave: (userGenre: string | null) => Promise<{ genre?: string | null; user_genre?: string | null; summary_genre?: string | null } | void>;
+  onSave: (input: {
+    userGenre: string | null;
+    userOtherGenreLabel: string | null;
+  }) => Promise<{
+    genre?: string | null;
+    other_genre_label?: string | null;
+    user_genre?: string | null;
+    user_other_genre_label?: string | null;
+    summary_genre?: string | null;
+    summary_other_genre_label?: string | null;
+  } | void>;
 };
 
 type FeedbackState =
   | { tone: "success" | "error"; text: string }
   | null;
 
+function resolveEffectiveOtherGenreLabel({
+  genreKey,
+  genreOtherLabel,
+  userGenreKey,
+  userOtherGenreLabel,
+  summaryGenreKey,
+  summaryOtherGenreLabel,
+}: {
+  genreKey: string;
+  genreOtherLabel?: string | null;
+  userGenreKey: string;
+  userOtherGenreLabel?: string | null;
+  summaryGenreKey: string;
+  summaryOtherGenreLabel?: string | null;
+}) {
+  if (genreKey !== OTHER_GENRE_KEY) return "";
+  if (userGenreKey === OTHER_GENRE_KEY) return normalizeOtherGenreLabel(userOtherGenreLabel);
+  if (summaryGenreKey === OTHER_GENRE_KEY) return normalizeOtherGenreLabel(summaryOtherGenreLabel);
+  return normalizeOtherGenreLabel(genreOtherLabel);
+}
+
 export function ItemGenreEditor({
   genre,
+  genreOtherLabel,
   userGenre,
+  userOtherGenreLabel,
   summaryGenre,
+  summaryOtherGenreLabel,
   suggestions,
   disabled = false,
   onSave,
 }: ItemGenreEditorProps) {
   const { t } = useI18n();
-  const [draft, setDraft] = useState(userGenre ?? "");
+  const [draftGenre, setDraftGenre] = useState(userGenre ?? "");
+  const [draftOtherGenreLabel, setDraftOtherGenreLabel] = useState(userOtherGenreLabel ?? "");
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [localGenre, setLocalGenre] = useState(genre ?? null);
+  const [localGenreOtherLabel, setLocalGenreOtherLabel] = useState(genreOtherLabel ?? null);
   const [localUserGenre, setLocalUserGenre] = useState(userGenre ?? null);
+  const [localUserOtherGenreLabel, setLocalUserOtherGenreLabel] = useState(userOtherGenreLabel ?? null);
   const [localSummaryGenre, setLocalSummaryGenre] = useState(summaryGenre ?? null);
+  const [localSummaryOtherGenreLabel, setLocalSummaryOtherGenreLabel] = useState(summaryOtherGenreLabel ?? null);
 
   useEffect(() => {
-    setDraft(userGenre ?? "");
+    setDraftGenre(userGenre ?? "");
+    setDraftOtherGenreLabel(userOtherGenreLabel ?? "");
     setLocalGenre(genre ?? null);
+    setLocalGenreOtherLabel(genreOtherLabel ?? null);
     setLocalUserGenre(userGenre ?? null);
+    setLocalUserOtherGenreLabel(userOtherGenreLabel ?? null);
     setLocalSummaryGenre(summaryGenre ?? null);
-  }, [genre, summaryGenre, userGenre]);
+    setLocalSummaryOtherGenreLabel(summaryOtherGenreLabel ?? null);
+  }, [genre, genreOtherLabel, summaryGenre, summaryOtherGenreLabel, userGenre, userOtherGenreLabel]);
 
-  const effectiveGenreLabel = displayGenreLabel(localGenre, t("items.genre.uncategorized"));
-  const manualGenreLabel = normalizeStoredGenreValue(localUserGenre);
-  const summaryGenreLabel = normalizeStoredGenreValue(localSummaryGenre);
-  const normalizedDraft = normalizeStoredGenreValue(draft);
-  const saveDisabled = disabled || saving || normalizedDraft === normalizeStoredGenreValue(localUserGenre);
+  const normalizedLocalGenre = normalizeStoredGenreValue(localGenre);
+  const normalizedLocalUserGenre = normalizeStoredGenreValue(localUserGenre);
+  const normalizedLocalSummaryGenre = normalizeStoredGenreValue(localSummaryGenre);
+  const currentRelevantOtherGenreLabel = normalizedLocalUserGenre === OTHER_GENRE_KEY
+    ? normalizeOtherGenreLabel(localUserOtherGenreLabel)
+    : "";
+  const normalizedDraftGenre = normalizeStoredGenreValue(draftGenre);
+  const normalizedDraftOtherGenreLabel = normalizeOtherGenreLabel(draftOtherGenreLabel);
+  const draftRelevantOtherGenreLabel = normalizedDraftGenre === OTHER_GENRE_KEY ? normalizedDraftOtherGenreLabel : "";
+  const saveDisabled =
+    disabled ||
+    saving ||
+    (normalizedDraftGenre === OTHER_GENRE_KEY && draftRelevantOtherGenreLabel === "") ||
+    (normalizedDraftGenre === normalizedLocalUserGenre && draftRelevantOtherGenreLabel === currentRelevantOtherGenreLabel);
+
+  const genreOptions = useMemo(() => getGenreOptions(t), [t]);
+
+  const effectiveGenreLabel = displayGenreLabel(localGenre, t, {
+    otherLabel: resolveEffectiveOtherGenreLabel({
+      genreKey: normalizedLocalGenre,
+      genreOtherLabel: localGenreOtherLabel,
+      userGenreKey: normalizedLocalUserGenre,
+      userOtherGenreLabel: localUserOtherGenreLabel,
+      summaryGenreKey: normalizedLocalSummaryGenre,
+      summaryOtherGenreLabel: localSummaryOtherGenreLabel,
+    }),
+  });
+  const manualGenreLabel = normalizedLocalUserGenre
+    ? displayGenreLabel(localUserGenre, t, { otherLabel: localUserOtherGenreLabel })
+    : "";
+  const summaryGenreLabel = normalizedLocalSummaryGenre
+    ? displayGenreLabel(localSummaryGenre, t, { otherLabel: localSummaryOtherGenreLabel })
+    : "";
 
   const visibleSuggestions = useMemo(
     () => suggestions.filter((suggestion) => normalizeStoredGenreValue(suggestion.value) !== ""),
     [suggestions]
   );
 
-  async function persistGenre(nextUserGenre: string | null) {
+  async function persistGenre(nextUserGenre: string | null, nextUserOtherGenreLabel: string | null) {
     setSaving(true);
     setFeedback(null);
     try {
-      const next = await onSave(nextUserGenre);
-      const savedUserGenre = normalizeStoredGenreValue(next?.user_genre ?? nextUserGenre);
+      const requestedUserGenre = normalizeStoredGenreValue(nextUserGenre);
+      const requestedUserOtherGenreLabel = requestedUserGenre === OTHER_GENRE_KEY
+        ? normalizeOtherGenreLabel(nextUserOtherGenreLabel)
+        : "";
+      const next = await onSave({
+        userGenre: requestedUserGenre || null,
+        userOtherGenreLabel: requestedUserOtherGenreLabel || null,
+      });
+      const savedUserGenre = normalizeStoredGenreValue(next?.user_genre ?? requestedUserGenre);
+      const savedUserOtherGenreLabel = savedUserGenre === OTHER_GENRE_KEY
+        ? normalizeOtherGenreLabel(next?.user_other_genre_label ?? requestedUserOtherGenreLabel)
+        : "";
       const savedSummaryGenre = normalizeStoredGenreValue(next?.summary_genre ?? localSummaryGenre);
+      const savedSummaryOtherGenreLabel = savedSummaryGenre === OTHER_GENRE_KEY
+        ? normalizeOtherGenreLabel(next?.summary_other_genre_label ?? localSummaryOtherGenreLabel)
+        : "";
       const savedEffectiveGenre = normalizeStoredGenreValue(next?.genre ?? (savedUserGenre || savedSummaryGenre));
+      const savedEffectiveOtherGenreLabel = savedEffectiveGenre === OTHER_GENRE_KEY
+        ? normalizeOtherGenreLabel(
+            next?.other_genre_label ??
+              resolveEffectiveOtherGenreLabel({
+                genreKey: savedEffectiveGenre,
+                genreOtherLabel: localGenreOtherLabel,
+                userGenreKey: savedUserGenre,
+                userOtherGenreLabel: savedUserOtherGenreLabel,
+                summaryGenreKey: savedSummaryGenre,
+                summaryOtherGenreLabel: savedSummaryOtherGenreLabel,
+              })
+          )
+        : "";
       setLocalUserGenre(savedUserGenre || null);
+      setLocalUserOtherGenreLabel(savedUserOtherGenreLabel || null);
       setLocalSummaryGenre(savedSummaryGenre || null);
+      setLocalSummaryOtherGenreLabel(savedSummaryOtherGenreLabel || null);
       setLocalGenre(savedEffectiveGenre || null);
-      setDraft(savedUserGenre);
+      setLocalGenreOtherLabel(savedEffectiveOtherGenreLabel || null);
+      setDraftGenre(savedUserGenre);
+      setDraftOtherGenreLabel(savedUserOtherGenreLabel);
       setFeedback({
         tone: "success",
         text: savedUserGenre ? t("itemDetail.genre.saved") : t("itemDetail.genre.cleared"),
@@ -84,7 +193,7 @@ export function ItemGenreEditor({
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    await persistGenre(normalizedDraft || null);
+    await persistGenre(normalizedDraftGenre || null, draftRelevantOtherGenreLabel || null);
   }
 
   return (
@@ -133,19 +242,43 @@ export function ItemGenreEditor({
 
       <label className="mt-4 block">
         <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
-          {t("itemDetail.genre.inputLabel")}
+          {t("itemDetail.genre.selectLabel")}
         </span>
-        <input
-          value={draft}
+        <select
+          value={draftGenre}
           onChange={(e) => {
-            setDraft(e.target.value);
+            setDraftGenre(e.target.value);
             setFeedback(null);
           }}
-          disabled={disabled}
-          placeholder={t("itemDetail.genre.placeholder")}
+          disabled={disabled || saving}
           className="mt-2 min-h-11 w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink)] placeholder:text-[var(--color-editorial-ink-faint)] focus-ring"
-        />
+        >
+          <option value="">{t("itemDetail.genre.manualEmpty")}</option>
+          {genreOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </label>
+
+      {normalizedDraftGenre === OTHER_GENRE_KEY ? (
+        <label className="mt-4 block">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-editorial-ink-faint)]">
+            {t("itemDetail.genre.otherInputLabel")}
+          </span>
+          <input
+            value={draftOtherGenreLabel}
+            onChange={(e) => {
+              setDraftOtherGenreLabel(e.target.value);
+              setFeedback(null);
+            }}
+            disabled={disabled || saving}
+            placeholder={t("itemDetail.genre.otherPlaceholder")}
+            className="mt-2 min-h-11 w-full rounded-[16px] border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-sm text-[var(--color-editorial-ink)] placeholder:text-[var(--color-editorial-ink-faint)] focus-ring"
+          />
+        </label>
+      ) : null}
 
       {visibleSuggestions.length > 0 ? (
         <div className="mt-4">
@@ -154,13 +287,14 @@ export function ItemGenreEditor({
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {visibleSuggestions.map((suggestion) => {
-              const active = normalizeStoredGenreValue(draft) === normalizeStoredGenreValue(suggestion.value);
+              const normalizedSuggestionValue = normalizeStoredGenreValue(suggestion.value);
+              const active = normalizedDraftGenre === normalizedSuggestionValue;
               return (
                 <button
                   key={suggestion.value}
                   type="button"
                   onClick={() => {
-                    setDraft(suggestion.value);
+                    setDraftGenre(suggestion.value);
                     setFeedback(null);
                   }}
                   className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition press focus-ring ${
@@ -169,7 +303,7 @@ export function ItemGenreEditor({
                       : "border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)]"
                   }`}
                 >
-                  <span>{suggestion.value}</span>
+                  <span>{displayGenreLabel(suggestion.value, t)}</span>
                   {typeof suggestion.count === "number" ? (
                     <span className="text-[11px] text-[var(--color-editorial-ink-faint)]">{suggestion.count}</span>
                   ) : null}
@@ -185,7 +319,7 @@ export function ItemGenreEditor({
           <button
             type="button"
             disabled={disabled || saving}
-            onClick={() => void persistGenre(null)}
+            onClick={() => void persistGenre(null, null)}
             className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel-strong)] px-3 py-2 text-xs font-medium text-[var(--color-editorial-ink-soft)] hover:bg-[var(--color-editorial-panel)] disabled:opacity-60"
           >
             {t("itemDetail.genre.clear")}

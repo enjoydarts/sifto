@@ -21,6 +21,7 @@ class SummarizeResponse(BaseModel):
     summary: str
     topics: list[str]
     genre: str = ""
+    other_label: str = ""
     translated_title: str = ""
     score: float
     score_breakdown: dict | None = None

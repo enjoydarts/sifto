@@ -166,6 +166,50 @@ func TestEnsureItemsIndexIncludesNoteAndHighlightSettings(t *testing.T) {
 	}
 }
 
+func TestEnsureItemsIndexIncludesEffectiveOtherGenreLabelSearchableAttribute(t *testing.T) {
+	var patchBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/indexes":
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"taskUid":1}`))
+		case r.Method == http.MethodPatch && r.URL.Path == "/indexes/items/settings":
+			if err := json.NewDecoder(r.Body).Decode(&patchBody); err != nil {
+				t.Fatalf("decode settings: %v", err)
+			}
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"taskUid":2}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	svc := &MeilisearchService{
+		baseURL:    server.URL,
+		itemsIndex: "items",
+		client:     server.Client(),
+	}
+	if err := svc.ensureItemsIndex(context.Background()); err != nil {
+		t.Fatalf("ensureItemsIndex returned error: %v", err)
+	}
+
+	searchable, ok := patchBody["searchableAttributes"].([]any)
+	if !ok {
+		t.Fatalf("searchableAttributes type = %T", patchBody["searchableAttributes"])
+	}
+	found := false
+	for _, raw := range searchable {
+		if raw == "effective_other_genre_label" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("searchableAttributes = %#v, want effective_other_genre_label", searchable)
+	}
+}
+
 func TestEnsureItemsIndexIncludesEffectiveGenreFilterableAttribute(t *testing.T) {
 	var patchBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

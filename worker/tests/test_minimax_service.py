@@ -79,9 +79,9 @@ class MiniMaxServiceTests(unittest.TestCase):
     @patch("app.services.minimax_service._message_text")
     @patch("app.services.minimax_service._call_with_model_fallback")
     @patch("app.services.minimax_service._client_for_api_key", return_value=object())
-    def test_summarize_keeps_genre_from_structured_output(self, _client_for_api_key, call_with_model_fallback, message_text, _llm_meta):
+    def test_summarize_keeps_taxonomy_genre_from_structured_output(self, _client_for_api_key, call_with_model_fallback, message_text, _llm_meta):
         call_with_model_fallback.return_value = (object(), "MiniMax-M2.5", [])
-        message_text.return_value = '{"summary":"要約です。","topics":["AI"],"genre":"技術","translated_title":"翻訳済みタイトル","score_breakdown":{"importance":0.8,"novelty":0.5,"actionability":0.6,"reliability":0.9,"relevance":0.7},"score_reason":"理由です。"}'
+        message_text.return_value = '{"summary":"要約です。","topics":["AI"],"genre":"research","other_label":"不要","translated_title":"翻訳済みタイトル","score_breakdown":{"importance":0.8,"novelty":0.5,"actionability":0.6,"reliability":0.9,"relevance":0.7},"score_reason":"理由です。"}'
 
         result = summarize(
             title="Example title",
@@ -91,7 +91,8 @@ class MiniMaxServiceTests(unittest.TestCase):
             api_key="minimax-key",
         )
 
-        self.assertEqual(result["genre"], "技術")
+        self.assertEqual(result["genre"], "research")
+        self.assertEqual(result["other_label"], "")
 
 
 if __name__ == "__main__":

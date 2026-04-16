@@ -40,3 +40,17 @@ func TestItemSearchDocumentsQueryIncludesEffectiveGenre(t *testing.T) {
 		t.Fatalf("item search documents query must compute effective_genre from user_genre then summary genre")
 	}
 }
+
+func TestItemSearchDocumentsQueryIncludesEffectiveOtherGenreLabel(t *testing.T) {
+	query := itemSearchDocumentsQuery(`AND i.id = $1`)
+
+	if !strings.Contains(query, "AS effective_other_genre_label") {
+		t.Fatalf("item search documents query must select effective_other_genre_label")
+	}
+	if !strings.Contains(query, "i.user_other_genre_label") {
+		t.Fatalf("item search documents query must consider manual other label")
+	}
+	if !strings.Contains(query, "sm.other_genre_label") {
+		t.Fatalf("item search documents query must consider summary other label")
+	}
+}

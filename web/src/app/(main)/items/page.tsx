@@ -7,6 +7,7 @@ import { PageTransition } from "@/components/page-transition";
 import { FiltersBar } from "@/components/items/filters-bar";
 import {
   UNCATEGORIZED_GENRE_PARAM,
+  displayGenreLabel,
   genreValueFromCountEntry,
   isUncategorizedGenreParam,
   normalizeGenreNavigationValue,
@@ -129,17 +130,17 @@ function ItemsPageContent() {
 
     for (const entry of orderGenreCountEntries(genreCounts)) {
       const value = genreValueFromCountEntry(entry);
-      if (!value) {
+      if (!value || isUncategorizedGenreParam(value)) {
         uncategorizedCount = entry.count;
         continue;
       }
       if (seenRegular.has(value)) continue;
       seenRegular.add(value);
-      regularOptions.push({ value, label: value, count: entry.count });
+      regularOptions.push({ value, label: displayGenreLabel(value, t), count: entry.count });
     }
 
     if (selectedGenre && !selectedIsUncategorized && !seenRegular.has(selectedGenre)) {
-      regularOptions.unshift({ value: selectedGenre, label: selectedGenre, count: itemsTotal });
+      regularOptions.unshift({ value: selectedGenre, label: displayGenreLabel(selectedGenre, t), count: itemsTotal });
     }
     if (selectedIsUncategorized && uncategorizedCount == null) {
       uncategorizedCount = itemsTotal;
@@ -158,7 +159,7 @@ function ItemsPageContent() {
       })),
       {
         value: UNCATEGORIZED_GENRE_PARAM,
-        label: t("items.genre.uncategorized"),
+        label: displayGenreLabel(UNCATEGORIZED_GENRE_PARAM, t),
         count: uncategorizedCount,
         active: selectedIsUncategorized,
       },

@@ -103,7 +103,7 @@ func TestSummarizeWithModelDecodesGenre(t *testing.T) {
 			t.Fatalf("path = %q, want /summarize", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"summary":"ok","topics":["ai"],"score":0.8,"genre":"analysis"}`))
+		_, _ = w.Write([]byte(`{"summary":"ok","topics":["ai"],"score":0.8,"genre":"analysis","other_label":"Observability"}`))
 	}))
 	defer server.Close()
 
@@ -120,6 +120,9 @@ func TestSummarizeWithModelDecodesGenre(t *testing.T) {
 	}
 	if resp.Genre == nil || *resp.Genre != "analysis" {
 		t.Fatalf("Genre = %v, want analysis", workerTestDerefString(resp.Genre))
+	}
+	if resp.OtherGenreLabel == nil || *resp.OtherGenreLabel != "Observability" {
+		t.Fatalf("OtherGenreLabel = %v, want Observability", workerTestDerefString(resp.OtherGenreLabel))
 	}
 }
 

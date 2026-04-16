@@ -764,6 +764,7 @@ func summarizeAndPersistItem(
 		summary.Summary,
 		summary.Topics,
 		summary.Genre,
+		summary.OtherGenreLabel,
 		summary.TranslatedTitle,
 		summary.Score,
 		summary.ScoreBreakdown,

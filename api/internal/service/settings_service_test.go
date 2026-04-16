@@ -150,8 +150,14 @@ func lockSettingsServiceTestDB(t *testing.T, db *pgxpool.Pool) {
 	if _, err := db.Exec(context.Background(), `ALTER TABLE items ADD COLUMN IF NOT EXISTS user_genre text`); err != nil {
 		t.Fatalf("ensure items.user_genre: %v", err)
 	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE items ADD COLUMN IF NOT EXISTS user_other_genre_label text`); err != nil {
+		t.Fatalf("ensure items.user_other_genre_label: %v", err)
+	}
 	if _, err := db.Exec(context.Background(), `ALTER TABLE item_summaries ADD COLUMN IF NOT EXISTS genre text`); err != nil {
 		t.Fatalf("ensure item_summaries.genre: %v", err)
+	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE item_summaries ADD COLUMN IF NOT EXISTS other_genre_label text`); err != nil {
+		t.Fatalf("ensure item_summaries.other_genre_label: %v", err)
 	}
 }
 

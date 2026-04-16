@@ -12,15 +12,15 @@ import (
 
 const cacheKeyVersion = "v1"
 const navigatorCacheKeyVersion = "v2"
-const itemsListCacheSchemaVersion = 2
-const itemDetailCacheSchemaVersion = 2
+const itemsListCacheSchemaVersion = 3
+const itemDetailCacheSchemaVersion = 3
 
 func cacheVersionKeyUserItems(userID string) string {
 	return fmt.Sprintf("cache_version:user_items:%s", userID)
 }
 
 func cacheVersionKeyItemDetail(itemID string) string {
-	return fmt.Sprintf("cache_version:item_detail:v2:%s", itemID)
+	return fmt.Sprintf("cache_version:item_detail:v3:%s", itemID)
 }
 
 func cacheVersionKeyUserSettings(userID string) string {

@@ -105,6 +105,7 @@ func (s *MeilisearchService) ensureItemsIndex(ctx context.Context) error {
 			"highlight_text",
 			"content_text",
 			"topics",
+			"effective_other_genre_label",
 		},
 		"filterableAttributes": []string{
 			"user_id",

@@ -9,6 +9,28 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/repository"
 )
 
+var itemGenreFilterKeys = map[string]struct{}{
+	"ai":            {},
+	"agent":         {},
+	"devtools":      {},
+	"security":      {},
+	"cloud":         {},
+	"data":          {},
+	"infra":         {},
+	"web":           {},
+	"mobile":        {},
+	"robotics":      {},
+	"semiconductor": {},
+	"research":      {},
+	"product":       {},
+	"business":      {},
+	"funding":       {},
+	"regulation":    {},
+	"design":        {},
+	"uncategorized": {},
+	"other":         {},
+}
+
 type ItemSearchService struct {
 	search *MeilisearchService
 	repo   *repository.ItemRepo
@@ -45,6 +67,10 @@ func normalizeGenreFilterValue(value *string) *string {
 	switch normalized {
 	case "uncategorized", "untagged":
 		normalized = "uncategorized"
+	default:
+		if _, ok := itemGenreFilterKeys[normalized]; !ok {
+			normalized = "other"
+		}
 	}
 	return &normalized
 }

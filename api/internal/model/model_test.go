@@ -8,12 +8,12 @@ import (
 
 func TestItemSearchDocumentJSONOmitsEmptyEffectiveGenre(t *testing.T) {
 	doc := ItemSearchDocument{
-		ID:      "item-1",
-		UserID:  "user-1",
+		ID:       "item-1",
+		UserID:   "user-1",
 		SourceID: "source-1",
-		Status:  "summarized",
-		Title:   "Title",
-		Summary: "Summary",
+		Status:   "summarized",
+		Title:    "Title",
+		Summary:  "Summary",
 	}
 
 	raw, err := json.Marshal(doc)
@@ -22,5 +22,8 @@ func TestItemSearchDocumentJSONOmitsEmptyEffectiveGenre(t *testing.T) {
 	}
 	if strings.Contains(string(raw), `"effective_genre"`) {
 		t.Fatalf("marshaled doc = %s, want effective_genre omitted when empty", raw)
+	}
+	if strings.Contains(string(raw), `"effective_other_genre_label"`) {
+		t.Fatalf("marshaled doc = %s, want effective_other_genre_label omitted when empty", raw)
 	}
 }

@@ -8,6 +8,7 @@ import {
   parseItemsQueryState,
 } from "./items-view-state-core.ts";
 import {
+  OTHER_GENRE_KEY,
   UNCATEGORIZED_GENRE_PARAM,
   normalizeGenreNavigationValue,
 } from "./item-genre.ts";
@@ -147,7 +148,7 @@ test("itemsViewStateReducer resets page and updates genre", () => {
     genre: "AI agents",
   });
 
-  assert.equal(next.genre, "AI agents");
+  assert.equal(next.genre, OTHER_GENRE_KEY);
   assert.equal(next.page, 1);
 });
 
@@ -166,7 +167,7 @@ test("buildItemsSearchParams serializes normalized state", () => {
 
   assert.equal(
     params.toString(),
-    "feed=later&genre=AI+agents&q=tts&search_mode=or&sort=score&unread=1&favorite=1&page=2"
+    "feed=later&genre=other&q=tts&search_mode=or&sort=score&unread=1&favorite=1&page=2"
   );
 });
 
@@ -176,7 +177,7 @@ test("parseItemsQueryState reads current URL flags", () => {
   );
 
   assert.equal(parsed.feedMode, "deleted");
-  assert.equal(parsed.genre, "Security");
+  assert.equal(parsed.genre, "security");
   assert.equal(parsed.sortMode, "personal_score");
   assert.equal(parsed.favoriteOnly, false);
   assert.equal(parsed.page, 7);
@@ -185,6 +186,11 @@ test("parseItemsQueryState reads current URL flags", () => {
 test("normalizeGenreNavigationValue preserves uncategorized aliases for navigation state", () => {
   assert.equal(normalizeGenreNavigationValue("uncategorized"), UNCATEGORIZED_GENRE_PARAM);
   assert.equal(normalizeGenreNavigationValue("untagged"), UNCATEGORIZED_GENRE_PARAM);
+});
+
+test("normalizeGenreNavigationValue canonicalizes unknown genre values to other", () => {
+  assert.equal(normalizeGenreNavigationValue("AI agents"), OTHER_GENRE_KEY);
+  assert.equal(normalizeGenreNavigationValue("edge-compute"), OTHER_GENRE_KEY);
 });
 
 test("parseItemsQueryState keeps bookmarked uncategorized genre intact", () => {
@@ -203,6 +209,15 @@ test("parseItemsQueryState canonicalizes untagged alias to uncategorized", () =>
 
   assert.equal(parsed.genre, UNCATEGORIZED_GENRE_PARAM);
   assert.equal(buildItemsSearchParams(parsed).get("genre"), UNCATEGORIZED_GENRE_PARAM);
+});
+
+test("parseItemsQueryState canonicalizes unknown bookmarked genre to other", () => {
+  const parsed = parseItemsQueryState(
+    new URLSearchParams("feed=unread&genre=AI+agents&sort=personal_score")
+  );
+
+  assert.equal(parsed.genre, OTHER_GENRE_KEY);
+  assert.equal(buildItemsSearchParams(parsed).get("genre"), OTHER_GENRE_KEY);
 });
 
 test("itemsViewStateReducer reset_filters clears genre along with other filter state", () => {

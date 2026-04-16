@@ -1438,13 +1438,14 @@ func (h *ItemHandler) UpdateGenre(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r)
 	id := chi.URLParam(r, "id")
 	var body struct {
-		UserGenre *string `json:"user_genre"`
+		UserGenre           *string `json:"user_genre"`
+		UserOtherGenreLabel *string `json:"user_other_genre_label"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
-	if err := h.repo.UpdateUserGenre(r.Context(), userID, id, body.UserGenre); err != nil {
+	if err := h.repo.UpdateUserGenre(r.Context(), userID, id, body.UserGenre, body.UserOtherGenreLabel); err != nil {
 		writeRepoError(w, err)
 		return
 	}
@@ -1466,15 +1467,19 @@ func (h *ItemHandler) UpdateGenre(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := struct {
-		ItemID    string  `json:"item_id"`
-		Genre     string  `json:"genre,omitempty"`
-		UserGenre *string `json:"user_genre,omitempty"`
+		ItemID              string  `json:"item_id"`
+		Genre               string  `json:"genre,omitempty"`
+		UserGenre           *string `json:"user_genre,omitempty"`
+		OtherGenreLabel     *string `json:"other_genre_label,omitempty"`
+		UserOtherGenreLabel *string `json:"user_other_genre_label,omitempty"`
 	}{
 		ItemID: id,
 	}
 	if item != nil {
 		resp.Genre = item.Genre
 		resp.UserGenre = item.UserGenre
+		resp.OtherGenreLabel = item.OtherGenreLabel
+		resp.UserOtherGenreLabel = item.UserOtherGenreLabel
 	}
 	writeJSON(w, resp)
 }

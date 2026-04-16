@@ -4,7 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ItemDetail, ItemGenreCount, ItemListResponse, RelatedItem } from "@/lib/api";
-import { normalizeStoredGenreValue } from "@/components/items/item-genre";
+import {
+  genreValueFromCountEntry,
+  normalizeOtherGenreLabel,
+  normalizeStoredGenreValue,
+  orderGenreCountEntries,
+  OTHER_GENRE_KEY,
+} from "@/components/items/item-genre";
 import { patchGenreSuggestionsResponse } from "@/components/items/item-genre-suggestions-cache.js";
 import { patchItemsInFeedCaches, removeItemFromFeedCaches } from "@/lib/query-cache-helpers";
 import { useI18n } from "@/components/i18n-provider";
@@ -19,6 +25,27 @@ export type RelatedCluster = {
   representative: RelatedItem;
   items: RelatedItem[];
 };
+
+function resolveEffectiveOtherGenreLabel({
+  effectiveGenre,
+  effectiveOtherGenreLabel,
+  userGenre,
+  userOtherGenreLabel,
+  summaryGenre,
+  summaryOtherGenreLabel,
+}: {
+  effectiveGenre: string;
+  effectiveOtherGenreLabel?: string | null;
+  userGenre: string;
+  userOtherGenreLabel?: string | null;
+  summaryGenre: string;
+  summaryOtherGenreLabel?: string | null;
+}) {
+  if (effectiveGenre !== OTHER_GENRE_KEY) return "";
+  if (userGenre === OTHER_GENRE_KEY) return normalizeOtherGenreLabel(userOtherGenreLabel);
+  if (summaryGenre === OTHER_GENRE_KEY) return normalizeOtherGenreLabel(summaryOtherGenreLabel);
+  return normalizeOtherGenreLabel(effectiveOtherGenreLabel);
+}
 
 function extractHttpStatus(error: unknown): number | null {
   const message = error instanceof Error ? error.message : String(error);
@@ -152,7 +179,12 @@ export function useItemDetailData() {
   );
 
   const syncItemGenreInFeedCaches = useCallback(
-    (itemId: string, patch: { genre?: string | null; user_genre?: string | null }) => {
+    (itemId: string, patch: {
+      genre?: string | null;
+      other_genre_label?: string | null;
+      user_genre?: string | null;
+      user_other_genre_label?: string | null;
+    }) => {
       patchItemsInFeedCaches(queryClient, itemId, patch);
     },
     [queryClient]
@@ -254,9 +286,9 @@ export function useItemDetailData() {
   const dateLocale = useMemo(() => (locale === "ja" ? "ja-JP" : "en-US"), [locale]);
   const genreSuggestions = useMemo(
     () =>
-      (genreSuggestionsQuery.data?.genre_counts ?? [])
+      orderGenreCountEntries(genreSuggestionsQuery.data?.genre_counts ?? [])
         .map((entry: ItemGenreCount) => ({
-          value: normalizeStoredGenreValue(entry.genre ?? entry.label ?? ""),
+          value: genreValueFromCountEntry(entry),
           count: entry.count,
         }))
         .filter((entry, index, arr) => entry.value !== "" && arr.findIndex((v) => v.value === entry.value) === index),
@@ -579,7 +611,7 @@ export function useItemDetailData() {
   };
 
   const saveGenre = useCallback(
-    async (userGenre: string | null) => {
+    async (input: { userGenre: string | null; userOtherGenreLabel: string | null }) => {
       if (!item || item.status === "deleted") {
         throw new Error(t("itemDetail.actionError.deletedReadonly"));
       }
@@ -588,16 +620,41 @@ export function useItemDetailData() {
         const previousUserGenre = normalizeStoredGenreValue(item.user_genre);
         const previousSummaryGenre = normalizeStoredGenreValue(item.summary?.genre);
         const previousEffectiveGenre = normalizeStoredGenreValue(item.genre ?? (previousUserGenre || previousSummaryGenre));
-        const normalizedUserGenre = normalizeStoredGenreValue(userGenre);
+        const normalizedUserGenre = normalizeStoredGenreValue(input.userGenre);
+        const normalizedUserOtherGenreLabel = normalizedUserGenre === OTHER_GENRE_KEY
+          ? normalizeOtherGenreLabel(input.userOtherGenreLabel)
+          : "";
         const next = await api.updateItemGenre(item.id, {
           user_genre: normalizedUserGenre || null,
+          user_other_genre_label: normalizedUserOtherGenreLabel || null,
         });
         const nextUserGenre = normalizeStoredGenreValue(next.user_genre ?? normalizedUserGenre);
+        const nextUserOtherGenreLabel = nextUserGenre === OTHER_GENRE_KEY
+          ? normalizeOtherGenreLabel(next.user_other_genre_label ?? normalizedUserOtherGenreLabel)
+          : "";
         const nextSummaryGenre = normalizeStoredGenreValue(item.summary?.genre);
+        const nextSummaryOtherGenreLabel = nextSummaryGenre === OTHER_GENRE_KEY
+          ? normalizeOtherGenreLabel(item.summary?.other_genre_label)
+          : "";
         const nextGenre = normalizeStoredGenreValue(next.genre ?? (nextUserGenre || nextSummaryGenre));
+        const nextOtherGenreLabel = nextGenre === OTHER_GENRE_KEY
+          ? normalizeOtherGenreLabel(
+              next.other_genre_label ??
+                resolveEffectiveOtherGenreLabel({
+                  effectiveGenre: nextGenre,
+                  effectiveOtherGenreLabel: item.other_genre_label,
+                  userGenre: nextUserGenre,
+                  userOtherGenreLabel: nextUserOtherGenreLabel,
+                  summaryGenre: nextSummaryGenre,
+                  summaryOtherGenreLabel: nextSummaryOtherGenreLabel,
+                })
+            )
+          : "";
         const patch = {
           genre: nextGenre || null,
+          other_genre_label: nextOtherGenreLabel || null,
           user_genre: nextUserGenre || null,
+          user_other_genre_label: nextUserOtherGenreLabel || null,
         };
         syncItemGenreInFeedCaches(item.id, patch);
         setItem((prev) => (prev ? { ...prev, ...patch } : prev));
@@ -619,8 +676,12 @@ export function useItemDetailData() {
         );
         return {
           genre: patch.genre,
+          other_genre_label: patch.other_genre_label,
           user_genre: patch.user_genre,
+          user_other_genre_label: patch.user_other_genre_label,
           summary_genre: nextSummaryGenre || null,
+          summary_other_genre_label:
+            nextSummaryGenre === OTHER_GENRE_KEY ? nextSummaryOtherGenreLabel || null : null,
         };
       } catch (e) {
         throw new Error(localizeActionError(e, "saveGenre", t));

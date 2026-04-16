@@ -96,7 +96,7 @@ export function ItemCard({
     item.content_text?.trim()?.replace(/\s+/g, " ").slice(0, 150) ||
     item.recommendation_reason?.trim() ||
     null;
-  const genreLabel = displayGenreLabel(item.genre, t("items.genre.uncategorized"));
+  const genreLabel = displayGenreLabel(item.genre, t);
   const hasManualGenre = normalizeStoredGenreValue(item.user_genre) !== "";
 
   const reactionPill = item.is_favorite

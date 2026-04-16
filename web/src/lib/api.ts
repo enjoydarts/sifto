@@ -498,7 +498,7 @@ export const api = {
     return apiFetch<{ days: number; limit: number; items: TopicPulseItem[] }>(`/topics/pulse${qs ? `?${qs}` : ""}`);
   },
   getItem: (id: string) => apiFetch<ItemDetail>(`/items/${id}`),
-  updateItemGenre: (id: string, body: { user_genre: string | null }) =>
+  updateItemGenre: (id: string, body: { user_genre: string | null; user_other_genre_label?: string | null }) =>
     apiFetch<ItemGenreUpdateResult>(`/items/${id}/genre`, {
       method: "PATCH",
       body: JSON.stringify(body),

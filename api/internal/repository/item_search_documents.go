@@ -79,6 +79,7 @@ func itemSearchDocumentsQuery(suffix string) string {
 		       COALESCE(i.content_text, '') AS content_text,
 		       COALESCE(sm.topics, '{}'::text[]) AS topics,
 		       ` + effectiveGenreExpr("i", "sm") + ` AS effective_genre,
+		       ` + effectiveOtherGenreLabelExpr("i", "sm") + ` AS effective_other_genre_label,
 		       i.published_at,
 		       i.created_at
 		FROM items i
@@ -128,6 +129,7 @@ func (r *ItemSearchDocumentRepo) load(ctx context.Context, suffix string, args .
 			&doc.ContentText,
 			&doc.Topics,
 			&doc.EffectiveGenre,
+			&doc.EffectiveOtherGenreLabel,
 			&doc.PublishedAt,
 			&doc.CreatedAt,
 		); err != nil {

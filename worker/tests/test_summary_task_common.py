@@ -71,6 +71,13 @@ class SummaryTaskCommonTests(unittest.TestCase):
         self.assertNotIn("news", task["schema"]["properties"]["genre"]["enum"])
         self.assertNotIn("AI", task["schema"]["properties"]["genre"]["enum"])
 
+    def test_taxonomy_no_longer_exposes_agent_key(self):
+        self.assertIn("ai", SUMMARY_TAXONOMY)
+        self.assertNotIn("agent", SUMMARY_TAXONOMY)
+        self.assertIn("LLM", SUMMARY_SYSTEM_INSTRUCTION)
+        self.assertIn("生成AI", SUMMARY_SYSTEM_INSTRUCTION)
+        self.assertIn("エージェント", SUMMARY_SYSTEM_INSTRUCTION)
+
     def test_build_summary_task_fallback_uses_safe_translated_title_example(self):
         task = build_summary_task(
             "OpenAI updates model lineup",

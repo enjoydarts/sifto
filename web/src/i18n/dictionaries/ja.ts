@@ -373,7 +373,6 @@ export const jaDict: Dict = {
   "items.genre.allItems": "すべての記事",
   "items.genre.uncategorized": "未分類",
   "items.genre.label.ai": "AI",
-  "items.genre.label.agent": "AIエージェント",
   "items.genre.label.devtools": "開発ツール",
   "items.genre.label.security": "セキュリティ",
   "items.genre.label.cloud": "クラウド",

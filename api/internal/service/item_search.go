@@ -11,7 +11,6 @@ import (
 
 var itemGenreFilterKeys = map[string]struct{}{
 	"ai":            {},
-	"agent":         {},
 	"devtools":      {},
 	"security":      {},
 	"cloud":         {},
@@ -67,6 +66,8 @@ func normalizeGenreFilterValue(value *string) *string {
 	switch normalized {
 	case "uncategorized", "untagged":
 		normalized = "uncategorized"
+	case "agent":
+		normalized = "ai"
 	default:
 		if _, ok := itemGenreFilterKeys[normalized]; !ok {
 			normalized = "other"

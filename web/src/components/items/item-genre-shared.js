@@ -2,7 +2,6 @@ const UNTAGGED_ALIASES = new Set(["uncategorized", "untagged"]);
 
 export const ITEM_GENRE_KEYS = [
   "ai",
-  "agent",
   "devtools",
   "security",
   "cloud",
@@ -33,6 +32,7 @@ export function normalizeStoredGenreValue(value) {
   if (!trimmed) return "";
   const lower = trimmed.toLowerCase();
   if (UNTAGGED_ALIASES.has(lower)) return UNCATEGORIZED_GENRE_PARAM;
+  if (lower === "agent") return "ai";
   if (KNOWN_GENRE_KEY_SET.has(lower)) return lower;
   return OTHER_GENRE_KEY;
 }

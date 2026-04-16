@@ -1,0 +1,2 @@
+-- Irreversible data migration.
+-- Previous `agent` values were merged into `ai`, so there is no reliable way to restore them.

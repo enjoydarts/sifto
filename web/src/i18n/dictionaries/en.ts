@@ -373,7 +373,6 @@ export const enDict: Dict = {
   "items.genre.allItems": "All items",
   "items.genre.uncategorized": "Uncategorized",
   "items.genre.label.ai": "AI",
-  "items.genre.label.agent": "Agents",
   "items.genre.label.devtools": "Developer Tools",
   "items.genre.label.security": "Security",
   "items.genre.label.cloud": "Cloud",

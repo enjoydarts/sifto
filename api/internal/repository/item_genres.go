@@ -10,7 +10,6 @@ const otherGenre = "other"
 
 var itemGenreTaxonomyKeys = []string{
 	"ai",
-	"agent",
 	"devtools",
 	"security",
 	"cloud",
@@ -80,6 +79,8 @@ func normalizeGenreInput(genre, otherLabel *string) (*string, *string) {
 	switch {
 	case isUncategorizedGenreValue(normalized):
 		normalized = uncategorizedGenre
+	case normalized == "agent":
+		normalized = "ai"
 	case isKnownGenreKey(normalized):
 	default:
 		normalized = otherGenre
@@ -113,6 +114,7 @@ func normalizedSourceGenreExpr(rawExpr string) string {
 	return "CASE " +
 		"WHEN " + trimmed + " IS NULL THEN NULL " +
 		"WHEN " + lowered + " IN ('" + uncategorizedGenre + "', 'untagged') THEN '" + uncategorizedGenre + "' " +
+		"WHEN " + lowered + " = 'agent' THEN 'ai' " +
 		"WHEN " + lowered + " IN (" + itemGenreTaxonomyValuesSQL + ") THEN " + lowered + " " +
 		"ELSE '" + otherGenre + "' END"
 }

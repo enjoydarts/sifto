@@ -44,6 +44,11 @@ func TestNormalizeGenreInputRecognizesTaxonomyAndOtherLabels(t *testing.T) {
 			wantGenre: testGenreStrPtr("ai"),
 		},
 		{
+			name:      "legacy agent key becomes ai",
+			genre:     testGenreStrPtr("agent"),
+			wantGenre: testGenreStrPtr("ai"),
+		},
+		{
 			name:      "untagged alias becomes uncategorized",
 			genre:     testGenreStrPtr("  untagged "),
 			wantGenre: testGenreStrPtr("uncategorized"),

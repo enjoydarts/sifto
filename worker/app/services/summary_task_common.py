@@ -5,7 +5,6 @@ from app.services.runtime_prompt_overrides import apply_prompt_override
 
 SUMMARY_TAXONOMY = [
     "ai",
-    "agent",
     "devtools",
     "security",
     "cloud",
@@ -30,6 +29,9 @@ _SUMMARY_TAXONOMY_GUIDANCE = (
     "genre は必須です。固定 taxonomy から必ず 1 つだけ選んでください: "
     + ", ".join(SUMMARY_TAXONOMY)
     + "。"
+    "AI、LLM、生成AI、基盤モデル、AIエージェント、マルチエージェント、AI推論基盤の記事は ai を優先してください。"
+    "devtools は主題が開発者向けツールそのもののときだけ選んでください。"
+    "候補に当てはまるなら other を使わず、明確に候補外のときだけ other を選んでください。"
     "other のときだけ other_label を返してください。"
     f"other_label は短い日本語で {SUMMARY_OTHER_LABEL_MAX_LENGTH} 文字以内にし、"
     "それ以外では空文字にしてください。"

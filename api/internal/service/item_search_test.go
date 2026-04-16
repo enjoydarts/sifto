@@ -44,3 +44,23 @@ func TestBuildItemSearchFiltersNormalizesLegacyFreeformGenreToOther(t *testing.T
 		t.Fatalf("buildItemSearchFilters = %#v, want other effective_genre filter", filters)
 	}
 }
+
+func TestBuildItemSearchFiltersNormalizesLegacyAgentGenreToAI(t *testing.T) {
+	genre := "agent"
+
+	filters := buildItemSearchFilters(ItemSearchQuery{
+		UserID: "user-1",
+		Genre:  &genre,
+	}, true)
+
+	found := false
+	for _, filter := range filters {
+		if strings.Contains(filter, `effective_genre = "ai"`) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("buildItemSearchFilters = %#v, want ai effective_genre filter", filters)
+	}
+}

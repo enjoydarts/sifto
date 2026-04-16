@@ -22,6 +22,7 @@ function t(key) {
 
 test("normalizeStoredGenreValue canonicalizes fixed genre keys and uncategorized aliases", () => {
   assert.equal(normalizeStoredGenreValue(" Security "), "security");
+  assert.equal(normalizeStoredGenreValue("agent"), "ai");
   assert.equal(normalizeStoredGenreValue("untagged"), "uncategorized");
   assert.equal(normalizeStoredGenreValue("uncategorized"), "uncategorized");
 });

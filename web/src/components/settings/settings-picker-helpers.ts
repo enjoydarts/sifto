@@ -259,7 +259,7 @@ export function buildAudioBriefingPickerSelectActions(params: {
       if (!params.pickers.geminiTTSPickerPersona) return;
       params.updateAudioBriefingVoice(params.pickers.geminiTTSPickerPersona, {
         tts_provider: "gemini_tts",
-        tts_model: params.activeGeminiTTSVoice?.tts_model || "gemini-2.5-flash-tts",
+        tts_model: params.activeGeminiTTSVoice?.tts_model || getAudioBriefingTTSProviderDefaultModel("gemini_tts", params.conversationMode),
         voice_model: selection.voice_name,
         voice_style: "",
       });
@@ -325,7 +325,7 @@ export function buildSummaryAudioPickerSelectActions(params: {
     },
     onSelectGemini: (selection: { voice_name: string }) => {
       params.setSummaryAudioProvider("gemini_tts");
-      params.setSummaryAudioTTSModel(params.summaryAudioTTSModel.trim() || "gemini-2.5-flash-tts");
+      params.setSummaryAudioTTSModel(params.summaryAudioTTSModel.trim() || getAudioBriefingTTSProviderDefaultModel("gemini_tts", "single"));
       params.setSummaryAudioVoiceModel(selection.voice_name);
       params.setSummaryAudioVoiceStyle("");
       params.setSummaryAudioProviderVoiceLabel("");

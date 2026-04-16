@@ -90,7 +90,7 @@ export const TTS_PROVIDER_METADATA: Record<string, TTSProviderMetadata> = {
       supportsSpeechTuning: false,
       requiresRegion: false,
     },
-    defaultTTSModel: "gemini-2.5-flash-tts",
+    defaultTTSModel: "gemini-3.1-flash-tts-preview",
   },
   mock: {
     capabilities: {

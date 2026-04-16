@@ -28,6 +28,13 @@ const OPENAI_TTS_MODEL_OPTIONS: ModelOption[] = [
 
 const GEMINI_TTS_MODEL_OPTIONS: ModelOption[] = [
   {
+    value: "gemini-3.1-flash-tts-preview",
+    label: "gemini-3.1-flash-tts-preview",
+    selectedLabel: "Gemini TTS / gemini-3.1-flash-tts-preview",
+    note: "Latest preview Gemini speech generation model",
+    provider: "Gemini TTS",
+  },
+  {
     value: "gemini-2.5-flash-tts",
     label: "gemini-2.5-flash-tts",
     selectedLabel: "Gemini TTS / gemini-2.5-flash-tts",

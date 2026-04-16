@@ -1020,7 +1020,7 @@ func audioBriefingGeminiDuoRequestEstimatedBytes(group audioBriefingChunkGroup) 
 		},
 		"voice": map[string]any{
 			"languageCode": "ja-JP",
-			"modelName":    "gemini-2.5-flash-tts",
+			"modelName":    "gemini-3.1-flash-tts-preview",
 			"multiSpeakerVoiceConfig": map[string]any{
 				"speakerVoiceConfigs": []map[string]any{
 					{

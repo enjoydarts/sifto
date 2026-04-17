@@ -2,10 +2,29 @@ import asyncio
 import unittest
 from unittest.mock import patch
 
-from app.services.claude_service import summarize, summarize_async
+from app.services.claude_service import _llm_meta, summarize, summarize_async
 
 
 class ClaudeServiceTests(unittest.TestCase):
+    def test_llm_meta_prices_opus_4_7_family(self):
+        class _Message:
+            model = "claude-opus-4-7"
+            usage = type(
+                "Usage",
+                (),
+                {
+                    "input_tokens": 1_000_000,
+                    "output_tokens": 500_000,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                },
+            )()
+
+        llm = _llm_meta(_Message(), "summary", "claude-opus-4-7")
+        self.assertEqual(llm["pricing_model_family"], "claude-opus-4-7")
+        self.assertEqual(llm["pricing_source"], "anthropic_static_2026_04")
+        self.assertEqual(llm["estimated_cost_usd"], 17.5)
+
     def test_summarize_requires_model(self):
         with self.assertRaisesRegex(RuntimeError, "anthropic model is required for summary"):
             summarize(

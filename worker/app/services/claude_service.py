@@ -76,7 +76,7 @@ from app.services.facts_task_common import build_facts_localization_task, build_
 from app.services.task_transport_common import empty_llm_meta, with_execution_failures, wrap_message_fallback_transport, wrap_message_transport
 
 _log = logging.getLogger(__name__)
-_ANTHROPIC_PRICING_SOURCE_VERSION = "anthropic_static_2026_02"
+_ANTHROPIC_PRICING_SOURCE_VERSION = "anthropic_static_2026_04"
 
 _LEGACY_MODEL_PRICING = {
     # USD per 1M tokens (Claude API pricing); cache write assumes 5m cache.
@@ -93,6 +93,12 @@ _LEGACY_MODEL_PRICING = {
         "cache_read_per_mtok_usd": 0.30,
     },
     "claude-opus-4-6": {
+        "input_per_mtok_usd": 5.0,
+        "output_per_mtok_usd": 25.0,
+        "cache_write_per_mtok_usd": 6.25,
+        "cache_read_per_mtok_usd": 0.50,
+    },
+    "claude-opus-4-7": {
         "input_per_mtok_usd": 5.0,
         "output_per_mtok_usd": 25.0,
         "cache_write_per_mtok_usd": 6.25,

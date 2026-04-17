@@ -102,6 +102,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		provider string
 	}{
 		{model: "claude-sonnet-4-6", provider: "anthropic"},
+		{model: "claude-opus-4-7", provider: "anthropic"},
 		{model: "gemini-2.5-flash", provider: "google"},
 		{model: "openai/gpt-oss-20b", provider: "groq"},
 		{model: "deepseek-chat", provider: "deepseek"},

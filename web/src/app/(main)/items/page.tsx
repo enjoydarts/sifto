@@ -216,8 +216,8 @@ function ItemsPageContent() {
     <PageTransition>
       <div className="space-y-3 pb-8">
         <div className="grid gap-3 xl:grid-cols-[248px_minmax(0,1fr)] xl:items-start">
-          <aside className="hidden xl:sticky xl:top-[6.25rem] xl:flex xl:max-h-[calc(100vh-7rem)] xl:self-start xl:flex-col xl:gap-4 xl:overflow-y-auto xl:pr-1">
-            <SectionCard compact className="overflow-hidden">
+          <aside className="hidden xl:sticky xl:top-[6.25rem] xl:flex xl:max-h-[calc(100vh-7rem)] xl:self-start xl:flex-col xl:gap-4">
+            <SectionCard compact className="shrink-0 overflow-hidden">
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
                 {t("items.rail.actions")}
               </div>
@@ -277,7 +277,7 @@ function ItemsPageContent() {
               <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--color-editorial-ink-faint)]">
                 {t("items.genre.browse")}
               </div>
-              <div className="mt-3 grid gap-1.5">
+              <div className="mt-3 grid max-h-[calc(100vh-22rem)] gap-1.5 overflow-y-auto pr-1">
                 {genreNavOptions.map((option) => (
                   <button
                     key={`genre-nav:${option.value || "all"}`}

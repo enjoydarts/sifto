@@ -40,6 +40,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("qwen3.6-plus"); got == nil {
 		t.Fatal("qwen3.6-plus not found in catalog")
 	}
+	if got := findModelCatalog("qwen3.6-flash"); got == nil {
+		t.Fatal("qwen3.6-flash not found in catalog")
+	}
+	if got := findModelCatalog("qwen3.6-35b-a3b"); got == nil {
+		t.Fatal("qwen3.6-35b-a3b not found in catalog")
+	}
 	if got := findModelCatalog("fireworks/qwen3p6-plus"); got == nil {
 		t.Fatal("fireworks/qwen3p6-plus not found in catalog")
 	}
@@ -108,6 +114,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "deepseek-chat", provider: "deepseek"},
 		{model: "qwen3.5-plus", provider: "alibaba"},
 		{model: "qwen3.6-plus", provider: "alibaba"},
+		{model: "qwen3.6-flash", provider: "alibaba"},
+		{model: "qwen3.6-35b-a3b", provider: "alibaba"},
 		{model: "mistral-small-2506", provider: "mistral"},
 		{model: "mistral-small-2603", provider: "mistral"},
 		{model: "MiniMax-M2.7", provider: "minimax"},

@@ -6,6 +6,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   deepseek: "DeepSeek",
   alibaba: "Alibaba",
   minimax: "MiniMax",
+  xiaomi_mimo_token_plan: "Xiaomi MiMo (TokenPlan)",
   mistral: "Mistral",
   together: "Together AI",
   xai: "xAI",
@@ -49,6 +50,10 @@ export function formatModelDisplayName(model: string): string {
         ? model.slice("minimax/".length)
       : model;
   switch (raw) {
+    case "mimo-v2-pro":
+      return "MiMo-V2-Pro";
+    case "mimo-v2-omni":
+      return "MiMo-V2-Omni";
     case "mistral-large-2512":
       return "Mistral Large 3";
     case "mistral-medium-2508":

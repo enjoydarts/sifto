@@ -1057,6 +1057,20 @@ func (h *SettingsHandler) DeleteMiniMaxAPIKey(w http.ResponseWriter, r *http.Req
 	})
 }
 
+func (h *SettingsHandler) SetXiaomiMiMoTokenPlanAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "xiaomi_mimo_token_plan", map[string]func(*model.UserSettings) any{
+		"has_xiaomi_mimo_token_plan_api_key":   func(s *model.UserSettings) any { return s.HasXiaomiMiMoTokenPlanAPIKey },
+		"xiaomi_mimo_token_plan_api_key_last4": func(s *model.UserSettings) any { return s.XiaomiMiMoTokenPlanAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteXiaomiMiMoTokenPlanAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "xiaomi_mimo_token_plan", map[string]func(*model.UserSettings) any{
+		"has_xiaomi_mimo_token_plan_api_key":   func(s *model.UserSettings) any { return s.HasXiaomiMiMoTokenPlanAPIKey },
+		"xiaomi_mimo_token_plan_api_key_last4": func(s *model.UserSettings) any { return s.XiaomiMiMoTokenPlanAPIKeyLast4 },
+	})
+}
+
 func (h *SettingsHandler) SetMoonshotAPIKey(w http.ResponseWriter, r *http.Request) {
 	h.setAPIKey(w, r, "moonshot", map[string]func(*model.UserSettings) any{
 		"has_moonshot_api_key":   func(s *model.UserSettings) any { return s.HasMoonshotAPIKey },

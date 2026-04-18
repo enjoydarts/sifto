@@ -79,6 +79,8 @@ export interface UserSettings {
   moonshot_api_key_last4: string | null;
   has_minimax_api_key: boolean;
   minimax_api_key_last4: string | null;
+  has_xiaomi_mimo_token_plan_api_key: boolean;
+  xiaomi_mimo_token_plan_api_key_last4: string | null;
   has_xai_api_key: boolean;
   xai_api_key_last4: string | null;
   has_zai_api_key: boolean;

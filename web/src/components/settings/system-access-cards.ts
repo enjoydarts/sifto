@@ -12,6 +12,7 @@ export type AccessProviderID =
   | "alibaba"
   | "mistral"
   | "minimax"
+  | "xiaomi_mimo_token_plan"
   | "moonshot"
   | "xai"
   | "zai"
@@ -147,6 +148,14 @@ const ACCESS_CARD_METADATA: AccessCardMetadata[] = [
     notSetKey: "settings.minimaxNotSet",
     placeholder: "sk-...",
     selectStatus: (settings) => ({ configured: settings.has_minimax_api_key, last4: settings.minimax_api_key_last4 }),
+  },
+  {
+    id: "xiaomi_mimo_token_plan",
+    titleKey: "settings.xiaomiMimoTokenPlanTitle",
+    descriptionKey: "settings.xiaomiMimoTokenPlanDescription",
+    notSetKey: "settings.xiaomiMimoTokenPlanNotSet",
+    placeholder: "mimo_...",
+    selectStatus: (settings) => ({ configured: settings.has_xiaomi_mimo_token_plan_api_key, last4: settings.xiaomi_mimo_token_plan_api_key_last4 }),
   },
   {
     id: "mistral",

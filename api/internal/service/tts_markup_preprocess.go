@@ -217,6 +217,8 @@ func (s *TTSMarkupPreprocessService) loadProviderKey(ctx context.Context, userID
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetMoonshotAPIKeyEncrypted, s.cipher, userID, "moonshot api key is not configured")
 	case "minimax":
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetMiniMaxAPIKeyEncrypted, s.cipher, userID, "minimax api key is not configured")
+	case "xiaomi_mimo_token_plan":
+		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetXiaomiMiMoTokenPlanAPIKeyEncrypted, s.cipher, userID, "xiaomi mimo token plan api key is not configured")
 	case "xai":
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetXAIAPIKeyEncrypted, s.cipher, userID, "xai api key is not configured")
 	case "zai":
@@ -273,6 +275,8 @@ func hasFishPreprocessProviderKey(settings *model.UserSettings, provider string)
 		return settings.HasMoonshotAPIKey
 	case "minimax":
 		return settings.HasMiniMaxAPIKey
+	case "xiaomi_mimo_token_plan":
+		return settings.HasXiaomiMiMoTokenPlanAPIKey
 	case "xai":
 		return settings.HasXAIAPIKey
 	case "zai":

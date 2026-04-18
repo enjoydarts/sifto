@@ -440,6 +440,7 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 	togetherKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetTogetherAPIKeyEncrypted, o.cipher, userID, "")
 	moonshotKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMoonshotAPIKeyEncrypted, o.cipher, userID, "")
 	minimaxKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMiniMaxAPIKeyEncrypted, o.cipher, userID, "")
+	xiaomiMiMoTokenPlanKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetXiaomiMiMoTokenPlanAPIKeyEncrypted, o.cipher, userID, "")
 	xaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetXAIAPIKeyEncrypted, o.cipher, userID, "")
 	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetZAIAPIKeyEncrypted, o.cipher, userID, "")
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenRouterAPIKeyEncrypted, o.cipher, userID, "")
@@ -493,6 +494,8 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 					effectiveOpenAIKey = moonshotKey
 				case "minimax":
 					effectiveOpenAIKey = minimaxKey
+				case "xiaomi_mimo_token_plan":
+					effectiveOpenAIKey = xiaomiMiMoTokenPlanKey
 				case "poe":
 					effectiveOpenAIKey = poeKey
 				case "siliconflow":
@@ -676,6 +679,7 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	togetherKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetTogetherAPIKeyEncrypted, o.cipher, job.UserID, "")
 	moonshotKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMoonshotAPIKeyEncrypted, o.cipher, job.UserID, "")
 	minimaxKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetMiniMaxAPIKeyEncrypted, o.cipher, job.UserID, "")
+	xiaomiMiMoTokenPlanKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetXiaomiMiMoTokenPlanAPIKeyEncrypted, o.cipher, job.UserID, "")
 	xaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetXAIAPIKeyEncrypted, o.cipher, job.UserID, "")
 	zaiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetZAIAPIKeyEncrypted, o.cipher, job.UserID, "")
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenRouterAPIKeyEncrypted, o.cipher, job.UserID, "")
@@ -723,6 +727,8 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 				effectiveOpenAIKey = moonshotKey
 			case "minimax":
 				effectiveOpenAIKey = minimaxKey
+			case "xiaomi_mimo_token_plan":
+				effectiveOpenAIKey = xiaomiMiMoTokenPlanKey
 			case "poe":
 				effectiveOpenAIKey = poeKey
 			case "siliconflow":
@@ -1674,6 +1680,8 @@ func audioBriefingProviderLabel(provider string) string {
 		return "Moonshot"
 	case "minimax":
 		return "MiniMax"
+	case "xiaomi_mimo_token_plan":
+		return "Xiaomi MiMo (TokenPlan)"
 	case "together":
 		return "Together AI"
 	case "xai":
@@ -1975,6 +1983,8 @@ func hasAudioBriefingProviderKey(settings *model.UserSettings, provider string) 
 		return settings.HasMoonshotAPIKey
 	case "minimax":
 		return settings.HasMiniMaxAPIKey
+	case "xiaomi_mimo_token_plan":
+		return settings.HasXiaomiMiMoTokenPlanAPIKey
 	case "xai":
 		return settings.HasXAIAPIKey
 	case "zai":

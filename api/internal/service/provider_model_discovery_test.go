@@ -81,6 +81,16 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 			baseURL:  "/v1",
 			wantPath: "/v1/models",
 		},
+		{
+			name: "xiaomi_mimo_token_plan",
+			fetchFunc: func(ctx context.Context, svc *ProviderModelDiscoveryService) ([]string, error) {
+				return svc.fetchXiaomiMiMoTokenPlanModels(ctx)
+			},
+			apiKey:   "test-mimo-key",
+			baseKey:  "XIAOMI_MIMO_TOKEN_PLAN_API_BASE_URL",
+			baseURL:  "/v1",
+			wantPath: "/v1/models",
+		},
 	}
 
 	for _, c := range cases {
@@ -93,7 +103,11 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 				if r.URL.Path != c.wantPath {
 					t.Fatalf("path = %s, want %s", r.URL.Path, c.wantPath)
 				}
-				if c.name != "minimax" {
+				if c.name == "xiaomi_mimo_token_plan" {
+					if got := r.Header.Get("api-key"); got != c.apiKey {
+						t.Fatalf("api-key = %q, want %q", got, c.apiKey)
+					}
+				} else if c.name != "minimax" {
 					if got := r.Header.Get("Authorization"); got != "Bearer "+c.apiKey {
 						t.Fatalf("authorization = %q, want %q", got, "Bearer "+c.apiKey)
 					}
@@ -231,6 +245,7 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 	moonshotKey := "test-moonshot-key"
 	poeKey := "test-poe-key"
 	siliconFlowKey := "test-siliconflow-key"
+	xiaomiKey := "test-mimo-key"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -243,8 +258,16 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 				ID string `json:"id"`
 			}{{ID: "alibaba-model-1"}}})
 		case "/v1/models":
-			switch r.Header.Get("Authorization") {
-			case "Bearer " + moonshotKey:
+			switch {
+			case r.Header.Get("api-key") == xiaomiKey:
+				_ = json.NewEncoder(w).Encode(struct {
+					Data []struct {
+						ID string `json:"id"`
+					} `json:"data"`
+				}{Data: []struct {
+					ID string `json:"id"`
+				}{{ID: "xiaomi_mimo_token_plan-model-1"}}})
+			case r.Header.Get("Authorization") == "Bearer "+moonshotKey:
 				_ = json.NewEncoder(w).Encode(struct {
 					Data []struct {
 						ID string `json:"id"`
@@ -252,7 +275,7 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 				}{Data: []struct {
 					ID string `json:"id"`
 				}{{ID: "moonshot-model-1"}}})
-			case "Bearer " + poeKey:
+			case r.Header.Get("Authorization") == "Bearer "+poeKey:
 				_ = json.NewEncoder(w).Encode(struct {
 					Data []struct {
 						ID string `json:"id"`
@@ -260,7 +283,7 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 				}{Data: []struct {
 					ID string `json:"id"`
 				}{{ID: "poe-model-1"}}})
-			case "Bearer " + siliconFlowKey:
+			case r.Header.Get("Authorization") == "Bearer "+siliconFlowKey:
 				_ = json.NewEncoder(w).Encode(struct {
 					Data []struct {
 						ID string `json:"id"`
@@ -269,7 +292,7 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 					ID string `json:"id"`
 				}{{ID: "siliconflow-model-1"}}})
 			default:
-				t.Fatalf("unexpected authorization for /v1/models: %q", r.Header.Get("Authorization"))
+				t.Fatalf("unexpected auth for /v1/models: authorization=%q api-key=%q", r.Header.Get("Authorization"), r.Header.Get("api-key"))
 			}
 		case "/docs/api-reference/api-overview":
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -308,6 +331,8 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 	t.Setenv("MOONSHOT_API_BASE_URL", server.URL+"/v1/chat/completions")
 	t.Setenv("SILICONFLOW_API_KEY", siliconFlowKey)
 	t.Setenv("SILICONFLOW_API_BASE_URL", server.URL+"/v1/chat/completions")
+	t.Setenv("XIAOMI_MIMO_TOKEN_PLAN_API_KEY", "test-mimo-key")
+	t.Setenv("XIAOMI_MIMO_TOKEN_PLAN_API_BASE_URL", server.URL+"/v1")
 	t.Setenv("ZAI_API_KEY", "test-zai-key")
 	t.Setenv("ZAI_API_BASE_URL", server.URL+"/api/paas/v4/chat/completions")
 
@@ -320,8 +345,8 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 	if err != nil {
 		t.Fatalf("DiscoverAll failed: %v", err)
 	}
-	if len(results) != 6 {
-		t.Fatalf("providers count = %d, want 6", len(results))
+	if len(results) != 7 {
+		t.Fatalf("providers count = %d, want 7", len(results))
 	}
 	got := make([]string, 0, len(results))
 	for _, item := range results {
@@ -351,13 +376,18 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 				t.Fatalf("siliconflow model = %q, want %q", item.Models[0], "siliconflow-model-1")
 			}
 		}
+		if item.Provider == "xiaomi_mimo_token_plan" {
+			if item.Models[0] != "xiaomi_mimo_token_plan-model-1" {
+				t.Fatalf("xiaomi_mimo_token_plan model = %q, want %q", item.Models[0], "xiaomi_mimo_token_plan-model-1")
+			}
+		}
 		if item.Provider == "minimax" {
 			if item.Models[0] != "MiniMax-M2.5" {
 				t.Fatalf("minimax model = %q, want %q", item.Models[0], "MiniMax-M2.5")
 			}
 		}
 	}
-	want := []string{"alibaba", "minimax", "moonshot", "poe", "siliconflow", "zai"}
+	want := []string{"alibaba", "minimax", "moonshot", "poe", "siliconflow", "xiaomi_mimo_token_plan", "zai"}
 	slices.Sort(got)
 	slices.Sort(want)
 	for i := range want {

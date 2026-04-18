@@ -282,6 +282,9 @@ func (s *ProviderModelSnapshotSyncService) buildDiscoveryService(ctx context.Con
 		if keys.Together == "" {
 			keys.Together = s.loadUserKey(ctx, user.ID, s.settings.GetTogetherAPIKeyEncrypted)
 		}
+		if keys.XiaomiMiMoTokenPlan == "" {
+			keys.XiaomiMiMoTokenPlan = s.loadUserKey(ctx, user.ID, s.settings.GetXiaomiMiMoTokenPlanAPIKeyEncrypted)
+		}
 	}
 	return NewProviderModelDiscoveryServiceWithKeys(keys), nil
 }

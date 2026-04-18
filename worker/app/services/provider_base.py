@@ -107,6 +107,8 @@ class ProviderConfig:
     facts_pass_schema: bool = True
     supports_response_format: bool = True
     no_temperature_families: list[str] = field(default_factory=list)
+    auth_header_name: str = "Authorization"
+    auth_scheme: str = "Bearer"
 
 
 class OpenAICompatProvider:
@@ -279,6 +281,8 @@ class OpenAICompatProvider:
             include_temperature=self._include_temperature(model),
             temperature=self._normalize_temperature(model, temperature),
             top_p=self._normalize_top_p(top_p),
+            auth_header_name=self.config.auth_header_name,
+            auth_scheme=self.config.auth_scheme,
         )
         return self._post_process_chat_result(text, usage, model, api_key, response_schema, req_timeout)
 
@@ -322,6 +326,8 @@ class OpenAICompatProvider:
             include_temperature=self._include_temperature(model),
             temperature=self._normalize_temperature(model, temperature),
             top_p=self._normalize_top_p(top_p),
+            auth_header_name=self.config.auth_header_name,
+            auth_scheme=self.config.auth_scheme,
         )
         return await self._post_process_chat_result_async(text, usage, model, api_key, response_schema, req_timeout)
 

@@ -104,6 +104,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		settings.HasTogetherAPIKey,
 		settings.HasMoonshotAPIKey,
 		settings.HasMiniMaxAPIKey,
+		settings.HasXiaomiMiMoTokenPlanAPIKey,
 		settings.HasXAIAPIKey,
 		settings.HasZAIAPIKey,
 		settings.HasOpenRouterAPIKey,
@@ -112,7 +113,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		settings.HasOpenAIAPIKey,
 	)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or minimax or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or minimax or xiaomi_mimo_token_plan or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
 		return
 	}
 	cacheKey := cacheKeyAsk(userID, query, *modelName, embeddingModel, body.Days, body.UnreadOnly, body.Limit, body.SourceIDs)
@@ -183,7 +184,7 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		minimaxKey:   allKeys["minimax"],
 		openAIKey:    h.keyProvider.ResolveOpenAIKey(allKeys, nil),
 	}
-	modelName = chooseAskModel(settings, navKeys.anthropicKey != nil, navKeys.googleKey != nil, navKeys.fireworksKey != nil, navKeys.groqKey != nil, navKeys.deepseekKey != nil, navKeys.alibabaKey != nil, navKeys.mistralKey != nil, allKeys["together"] != nil, allKeys["moonshot"] != nil, navKeys.minimaxKey != nil, navKeys.xaiKey != nil, navKeys.zaiKey != nil, allKeys["openrouter"] != nil, allKeys["poe"] != nil, allKeys["siliconflow"] != nil, allKeys["openai"] != nil)
+	modelName = chooseAskModel(settings, navKeys.anthropicKey != nil, navKeys.googleKey != nil, navKeys.fireworksKey != nil, navKeys.groqKey != nil, navKeys.deepseekKey != nil, navKeys.alibabaKey != nil, navKeys.mistralKey != nil, allKeys["together"] != nil, allKeys["moonshot"] != nil, navKeys.minimaxKey != nil, allKeys["xiaomi_mimo_token_plan"] != nil, navKeys.xaiKey != nil, navKeys.zaiKey != nil, allKeys["openrouter"] != nil, allKeys["poe"] != nil, allKeys["siliconflow"] != nil, allKeys["openai"] != nil)
 	if modelName == nil {
 		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or minimax or xai or zai or openrouter or poe or siliconflow or openai api key is required", http.StatusBadRequest)
 		return
@@ -457,7 +458,7 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 	return &v
 }
 
-func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFireworks, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasTogether, hasMoonshot, hasMiniMax, hasXAI, hasZAI, hasOpenRouter, hasPoe, hasSiliconFlow, hasOpenAI bool) *string {
+func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFireworks, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasTogether, hasMoonshot, hasMiniMax, hasXiaomiMiMoTokenPlan, hasXAI, hasZAI, hasOpenRouter, hasPoe, hasSiliconFlow, hasOpenAI bool) *string {
 	if settings != nil && settings.AskModel != nil && strings.TrimSpace(*settings.AskModel) != "" {
 		v := strings.TrimSpace(*settings.AskModel)
 		switch service.LLMProviderForModel(&v) {
@@ -495,6 +496,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "minimax":
 			if hasMiniMax {
+				return &v
+			}
+		case "xiaomi_mimo_token_plan":
+			if hasXiaomiMiMoTokenPlan {
 				return &v
 			}
 		case "xai":
@@ -566,6 +571,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			if hasMiniMax {
 				return &v
 			}
+		case "xiaomi_mimo_token_plan":
+			if hasXiaomiMiMoTokenPlan {
+				return &v
+			}
 		case "xai":
 			if hasXAI {
 				return &v
@@ -633,6 +642,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "minimax":
 			if hasMiniMax {
+				return &v
+			}
+		case "xiaomi_mimo_token_plan":
+			if hasXiaomiMiMoTokenPlan {
 				return &v
 			}
 		case "xai":
@@ -704,6 +717,11 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "minimax":
 			if hasMiniMax {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				return &v
+			}
+		case "xiaomi_mimo_token_plan":
+			if hasXiaomiMiMoTokenPlan {
 				v := service.DefaultLLMModelForPurpose(provider, "ask")
 				return &v
 			}

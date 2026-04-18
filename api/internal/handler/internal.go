@@ -763,6 +763,8 @@ func (h *InternalHandler) DebugBackfillTranslatedTitles(w http.ResponseWriter, r
 				openAIKey, err = h.loadMoonshotAPIKey(r.Context(), t.UserID)
 			case "together":
 				openAIKey, err = h.loadTogetherAPIKey(r.Context(), t.UserID)
+			case "xiaomi_mimo_token_plan":
+				openAIKey, err = h.loadXiaomiMiMoTokenPlanAPIKey(r.Context(), t.UserID)
 			case "xai":
 				xaiKey, err = h.loadXAIAPIKey(r.Context(), t.UserID)
 			case "zai":
@@ -997,6 +999,24 @@ func (h *InternalHandler) loadTogetherAPIKey(ctx context.Context, userID string)
 	}
 	if enc == nil || *enc == "" {
 		return nil, fmt.Errorf("together api key is not set")
+	}
+	if !h.cipher.Enabled() {
+		return nil, fmt.Errorf("secret cipher is not configured")
+	}
+	plain, err := h.cipher.DecryptString(*enc)
+	if err != nil {
+		return nil, err
+	}
+	return &plain, nil
+}
+
+func (h *InternalHandler) loadXiaomiMiMoTokenPlanAPIKey(ctx context.Context, userID string) (*string, error) {
+	enc, err := h.settings.GetXiaomiMiMoTokenPlanAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if enc == nil || *enc == "" {
+		return nil, fmt.Errorf("xiaomi mimo token plan api key is not set")
 	}
 	if !h.cipher.Enabled() {
 		return nil, fmt.Errorf("secret cipher is not configured")

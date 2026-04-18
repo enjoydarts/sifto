@@ -136,3 +136,69 @@ func TestSettingsHandlerDeleteMiniMaxAPIKey(t *testing.T) {
 		t.Fatalf("minimax_api_key_last4 = %#v, want nil", resp.MiniMaxAPIKeyLast4)
 	}
 }
+
+func TestSettingsHandlerSetXiaomiMiMoTokenPlanAPIKey(t *testing.T) {
+	handler := newSettingsHandlerForAPIKeyTest(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/settings/xiaomi-mimo-token-plan-key", bytes.NewBufferString(`{"api_key":"mimo-handler-key"}`))
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, "00000000-0000-4000-8000-000000000051"))
+	rec := httptest.NewRecorder()
+
+	handler.SetXiaomiMiMoTokenPlanAPIKey(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		UserID                         string  `json:"user_id"`
+		HasXiaomiMiMoTokenPlanAPIKey   bool    `json:"has_xiaomi_mimo_token_plan_api_key"`
+		XiaomiMiMoTokenPlanAPIKeyLast4 *string `json:"xiaomi_mimo_token_plan_api_key_last4"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.HasXiaomiMiMoTokenPlanAPIKey {
+		t.Fatal("has_xiaomi_mimo_token_plan_api_key = false, want true")
+	}
+	if resp.XiaomiMiMoTokenPlanAPIKeyLast4 == nil || *resp.XiaomiMiMoTokenPlanAPIKeyLast4 != "-key" {
+		t.Fatalf("xiaomi_mimo_token_plan_api_key_last4 = %#v, want %q", resp.XiaomiMiMoTokenPlanAPIKeyLast4, "-key")
+	}
+}
+
+func TestSettingsHandlerDeleteXiaomiMiMoTokenPlanAPIKey(t *testing.T) {
+	handler := newSettingsHandlerForAPIKeyTest(t)
+	userID := "00000000-0000-4000-8000-000000000051"
+
+	setReq := httptest.NewRequest(http.MethodPost, "/api/settings/xiaomi-mimo-token-plan-key", bytes.NewBufferString(`{"api_key":"mimo-handler-key"}`))
+	setReq = setReq.WithContext(context.WithValue(setReq.Context(), middleware.UserIDKey, userID))
+	setRec := httptest.NewRecorder()
+	handler.SetXiaomiMiMoTokenPlanAPIKey(setRec, setReq)
+	if setRec.Code != http.StatusOK {
+		t.Fatalf("setup status = %d, want 200 body=%s", setRec.Code, setRec.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/settings/xiaomi-mimo-token-plan-key", nil)
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, userID))
+	rec := httptest.NewRecorder()
+
+	handler.DeleteXiaomiMiMoTokenPlanAPIKey(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		HasXiaomiMiMoTokenPlanAPIKey   bool    `json:"has_xiaomi_mimo_token_plan_api_key"`
+		XiaomiMiMoTokenPlanAPIKeyLast4 *string `json:"xiaomi_mimo_token_plan_api_key_last4"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.HasXiaomiMiMoTokenPlanAPIKey {
+		t.Fatal("has_xiaomi_mimo_token_plan_api_key = true, want false")
+	}
+	if resp.XiaomiMiMoTokenPlanAPIKeyLast4 != nil {
+		t.Fatalf("xiaomi_mimo_token_plan_api_key_last4 = %#v, want nil", resp.XiaomiMiMoTokenPlanAPIKeyLast4)
+	}
+}

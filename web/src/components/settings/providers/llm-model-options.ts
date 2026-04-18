@@ -9,7 +9,7 @@ import {
   isUnavailableOpenRouterModel,
   localizeLLMSettingKey,
 } from "@/components/settings/providers/llm-provider-metadata";
-import { formatModelDisplayName } from "@/lib/model-display";
+import { formatModelDisplayName, providerLabel as formatProviderLabel } from "@/lib/model-display";
 
 export function buildModelSelectLabels(t: (key: string, fallback?: string) => string) {
   return {
@@ -30,7 +30,7 @@ export function buildModelSelectLabels(t: (key: string, fallback?: string) => st
 }
 
 export function toModelOption(item: LLMCatalogModel, t: (key: string, fallback?: string) => string): ModelOption {
-  const providerLabel = t(`settings.modelGuide.provider.${item.provider}`, item.provider);
+  const providerLabel = formatProviderLabel(item.provider);
   return {
     value: item.id,
     label: formatModelDisplayName(item.id),

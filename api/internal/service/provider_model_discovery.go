@@ -38,21 +38,22 @@ var (
 )
 
 type ProviderModelDiscoveryKeys struct {
-	OpenAI      string
-	Anthropic   string
-	Google      string
-	Groq        string
-	DeepSeek    string
-	Alibaba     string
-	Mistral     string
-	MiniMax     string
-	Moonshot    string
-	SiliconFlow string
-	XAI         string
-	ZAI         string
-	Poe         string
-	Fireworks   string
-	Together    string
+	OpenAI              string
+	Anthropic           string
+	Google              string
+	Groq                string
+	DeepSeek            string
+	Alibaba             string
+	Mistral             string
+	MiniMax             string
+	Moonshot            string
+	SiliconFlow         string
+	XAI                 string
+	ZAI                 string
+	Poe                 string
+	Fireworks           string
+	Together            string
+	XiaomiMiMoTokenPlan string
 }
 
 func NewProviderModelDiscoveryService() *ProviderModelDiscoveryService {
@@ -90,6 +91,7 @@ func (s *ProviderModelDiscoveryService) DiscoverAll(ctx context.Context) ([]Prov
 		{"poe", s.fetchPoeModels},
 		{"fireworks", s.fetchFireworksModels},
 		{"together", s.fetchTogetherModels},
+		{"xiaomi_mimo_token_plan", s.fetchXiaomiMiMoTokenPlanModels},
 	}
 	type indexedResult struct {
 		index  int
@@ -441,10 +443,48 @@ func (s *ProviderModelDiscoveryService) fetchTogetherModels(ctx context.Context)
 	return models, nil
 }
 
+func (s *ProviderModelDiscoveryService) fetchXiaomiMiMoTokenPlanModels(ctx context.Context) ([]string, error) {
+	apiKey := strings.TrimSpace(s.keys.XiaomiMiMoTokenPlan)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("XIAOMI_MIMO_TOKEN_PLAN_API_KEY"))
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("api key is required")
+	}
+	base := normalizeXiaomiMiMoTokenPlanAPIBaseURL(os.Getenv("XIAOMI_MIMO_TOKEN_PLAN_API_BASE_URL"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("api-key", apiKey)
+	var models []string
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		var readErr error
+		models, readErr = readModelsListResponse(resp)
+		return readErr
+	}); err != nil {
+		return nil, err
+	}
+	return models, nil
+}
+
 func normalizeTogetherAPIBaseURL(raw string) string {
 	base := strings.TrimRight(strings.TrimSpace(raw), "/")
 	if base == "" {
 		return "https://api.together.xyz"
+	}
+	for _, suffix := range []string{"/v1/chat/completions", "/chat/completions", "/v1"} {
+		if strings.HasSuffix(base, suffix) {
+			return strings.TrimSuffix(base, suffix)
+		}
+	}
+	return base
+}
+
+func normalizeXiaomiMiMoTokenPlanAPIBaseURL(raw string) string {
+	base := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if base == "" {
+		return "https://token-plan-sgp.xiaomimimo.com"
 	}
 	for _, suffix := range []string{"/v1/chat/completions", "/chat/completions", "/v1"} {
 		if strings.HasSuffix(base, suffix) {

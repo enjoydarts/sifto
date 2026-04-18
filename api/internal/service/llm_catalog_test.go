@@ -79,6 +79,12 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog("MiniMax-M2.5-highspeed"); got == nil {
 		t.Fatal("MiniMax-M2.5-highspeed not found in catalog")
 	}
+	if got := findModelCatalog("mimo-v2-pro"); got == nil {
+		t.Fatal("mimo-v2-pro not found in catalog")
+	}
+	if got := findModelCatalog("mimo-v2-omni"); got == nil {
+		t.Fatal("mimo-v2-omni not found in catalog")
+	}
 	if got := findModelCatalog("gemma-4-31b-it"); got == nil {
 		t.Fatal("gemma-4-31b-it not found in catalog")
 	}
@@ -138,6 +144,8 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "kimi-k2-thinking-turbo", provider: "moonshot"},
 		{model: "MiniMax-M2.5", provider: "minimax"},
 		{model: "MiniMax-M2.7", provider: "minimax"},
+		{model: "mimo-v2-pro", provider: "xiaomi_mimo_token_plan"},
+		{model: "mimo-v2-omni", provider: "xiaomi_mimo_token_plan"},
 		{model: TogetherAliasModelID("google/gemma-4-31B-it"), provider: "together"},
 		{model: TogetherAliasModelID("moonshotai/Kimi-K2.5"), provider: "together"},
 		{model: TogetherAliasModelID("zai-org/GLM-5.1"), provider: "together"},
@@ -175,6 +183,9 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{provider: "minimax", purpose: "digest", want: "MiniMax-M2.7"},
 		{provider: "minimax", purpose: "ask", want: "MiniMax-M2.7-highspeed"},
 		{provider: "minimax", purpose: "source_suggestion", want: "MiniMax-M2.5-highspeed"},
+		{provider: "xiaomi_mimo_token_plan", purpose: "facts", want: "mimo-v2-pro"},
+		{provider: "xiaomi_mimo_token_plan", purpose: "digest", want: "mimo-v2-omni"},
+		{provider: "xiaomi_mimo_token_plan", purpose: "ask", want: "mimo-v2-pro"},
 		{provider: "xai", purpose: "facts", want: "grok-4-fast-non-reasoning"},
 		{provider: "zai", purpose: "ask", want: "glm-5-turbo"},
 		{provider: "fireworks", purpose: "ask", want: "fireworks/kimi-k2-instruct-0905"},

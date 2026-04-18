@@ -590,6 +590,8 @@ func hasNavigatorProviderKey(settings *model.UserSettings, provider string) bool
 		return settings.HasMoonshotAPIKey
 	case "minimax":
 		return settings.HasMiniMaxAPIKey
+	case "xiaomi_mimo_token_plan":
+		return settings.HasXiaomiMiMoTokenPlanAPIKey
 	case "xai":
 		return settings.HasXAIAPIKey
 	case "zai":

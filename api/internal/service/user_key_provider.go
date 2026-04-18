@@ -34,6 +34,7 @@ func (p *UserKeyProvider) registerLoaders() {
 	p.loaders["deepseek"] = p.settingsRepo.GetDeepSeekAPIKeyEncrypted
 	p.loaders["alibaba"] = p.settingsRepo.GetAlibabaAPIKeyEncrypted
 	p.loaders["minimax"] = p.settingsRepo.GetMiniMaxAPIKeyEncrypted
+	p.loaders["xiaomi_mimo_token_plan"] = p.settingsRepo.GetXiaomiMiMoTokenPlanAPIKeyEncrypted
 	p.loaders["mistral"] = p.settingsRepo.GetMistralAPIKeyEncrypted
 	p.loaders["moonshot"] = p.settingsRepo.GetMoonshotAPIKeyEncrypted
 	p.loaders["xai"] = p.settingsRepo.GetXAIAPIKeyEncrypted
@@ -87,7 +88,7 @@ func (p *UserKeyProvider) GetAllKeys(ctx context.Context, userID string) map[str
 func (p *UserKeyProvider) ResolveOpenAIKey(keys map[string]*string, model *string) *string {
 	provider := LLMProviderForModel(model)
 	switch provider {
-	case "openrouter", "together", "moonshot", "poe", "siliconflow", "minimax":
+	case "openrouter", "together", "moonshot", "poe", "siliconflow", "minimax", "xiaomi_mimo_token_plan":
 		return keys[provider]
 	default:
 		return keys["openai"]

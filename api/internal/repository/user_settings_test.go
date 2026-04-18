@@ -87,3 +87,48 @@ func TestUserSettingsRepoSetAndClearMiniMaxAPIKey(t *testing.T) {
 		t.Fatalf("encrypted key after clear = %#v, want nil", enc)
 	}
 }
+
+func TestUserSettingsRepoSetAndClearXiaomiMiMoTokenPlanAPIKey(t *testing.T) {
+	ctx := context.Background()
+	pool := testUserSettingsRepoDB(t)
+	repo := NewUserSettingsRepo(pool)
+	userID := "00000000-0000-4000-8000-000000000041"
+
+	settings, err := repo.SetXiaomiMiMoTokenPlanAPIKey(ctx, userID, "encrypted-mimo-key", "5678")
+	if err != nil {
+		t.Fatalf("SetXiaomiMiMoTokenPlanAPIKey() error = %v", err)
+	}
+	if !settings.HasXiaomiMiMoTokenPlanAPIKey {
+		t.Fatal("HasXiaomiMiMoTokenPlanAPIKey = false, want true")
+	}
+	if settings.XiaomiMiMoTokenPlanAPIKeyLast4 == nil || *settings.XiaomiMiMoTokenPlanAPIKeyLast4 != "5678" {
+		t.Fatalf("XiaomiMiMoTokenPlanAPIKeyLast4 = %#v, want %q", settings.XiaomiMiMoTokenPlanAPIKeyLast4, "5678")
+	}
+
+	enc, err := repo.GetXiaomiMiMoTokenPlanAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetXiaomiMiMoTokenPlanAPIKeyEncrypted() error = %v", err)
+	}
+	if enc == nil || *enc != "encrypted-mimo-key" {
+		t.Fatalf("encrypted key = %#v, want %q", enc, "encrypted-mimo-key")
+	}
+
+	settings, err = repo.ClearXiaomiMiMoTokenPlanAPIKey(ctx, userID)
+	if err != nil {
+		t.Fatalf("ClearXiaomiMiMoTokenPlanAPIKey() error = %v", err)
+	}
+	if settings.HasXiaomiMiMoTokenPlanAPIKey {
+		t.Fatal("HasXiaomiMiMoTokenPlanAPIKey = true, want false")
+	}
+	if settings.XiaomiMiMoTokenPlanAPIKeyLast4 != nil {
+		t.Fatalf("XiaomiMiMoTokenPlanAPIKeyLast4 = %#v, want nil", settings.XiaomiMiMoTokenPlanAPIKeyLast4)
+	}
+
+	enc, err = repo.GetXiaomiMiMoTokenPlanAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetXiaomiMiMoTokenPlanAPIKeyEncrypted() after clear error = %v", err)
+	}
+	if enc != nil {
+		t.Fatalf("encrypted key after clear = %#v, want nil", enc)
+	}
+}

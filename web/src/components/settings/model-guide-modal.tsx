@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { LLMCatalogModel } from "@/lib/api";
 import ModelGuideTable from "@/components/settings/model-guide-table";
+import { providerLabel } from "@/lib/model-display";
 
 export default function ModelGuideModal({
   open,
@@ -73,7 +74,7 @@ export default function ModelGuideModal({
               >
                 {providerOptions.map((provider) => (
                   <option key={provider} value={provider}>
-                    {provider === "all" ? t("settings.modelGuide.filters.allProviders") : t(`settings.modelGuide.provider.${provider}`, provider)}
+                    {provider === "all" ? t("settings.modelGuide.filters.allProviders") : providerLabel(provider)}
                   </option>
                 ))}
               </select>

@@ -149,6 +149,8 @@ def run_chat_json(
     include_temperature: bool = True,
     temperature: float | None = None,
     top_p: float | None = None,
+    auth_header_name: str = "Authorization",
+    auth_scheme: str = "Bearer",
 ) -> tuple[str, dict]:
     body: dict = {
         "model": normalize_model_name(model),
@@ -181,8 +183,9 @@ def run_chat_json(
         # exhaust output tokens into reasoning_content and leave message.content empty.
         body["thinking"] = {"type": "disabled"}
 
+    auth_value = f"{auth_scheme} {api_key}".strip() if auth_scheme else api_key
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        auth_header_name: auth_value,
         "Content-Type": "application/json",
     }
     retryable_status = {408, 409, 429, 500, 502, 503, 504}
@@ -339,6 +342,8 @@ async def run_chat_json_async(
     include_temperature: bool = True,
     temperature: float | None = None,
     top_p: float | None = None,
+    auth_header_name: str = "Authorization",
+    auth_scheme: str = "Bearer",
 ) -> tuple[str, dict]:
     body: dict = {
         "model": normalize_model_name(model),
@@ -369,8 +374,9 @@ async def run_chat_json_async(
     if provider_name in {"zai", "moonshot"}:
         body["thinking"] = {"type": "disabled"}
 
+    auth_value = f"{auth_scheme} {api_key}".strip() if auth_scheme else api_key
     headers = {
-        "Authorization": f"Bearer {api_key}",
+        auth_header_name: auth_value,
         "Content-Type": "application/json",
     }
     retryable_status = {408, 409, 429, 500, 502, 503, 504}

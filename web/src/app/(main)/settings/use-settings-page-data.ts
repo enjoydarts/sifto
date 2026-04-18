@@ -177,6 +177,8 @@ export function useSettingsPageData() {
   const [deletingMistralKey, setDeletingMistralKey] = useState(false);
   const [savingMiniMaxKey, setSavingMiniMaxKey] = useState(false);
   const [deletingMiniMaxKey, setDeletingMiniMaxKey] = useState(false);
+  const [savingXiaomiMiMoTokenPlanKey, setSavingXiaomiMiMoTokenPlanKey] = useState(false);
+  const [deletingXiaomiMiMoTokenPlanKey, setDeletingXiaomiMiMoTokenPlanKey] = useState(false);
   const [savingMoonshotKey, setSavingMoonshotKey] = useState(false);
   const [deletingMoonshotKey, setDeletingMoonshotKey] = useState(false);
   const [savingXAIKey, setSavingXAIKey] = useState(false);
@@ -227,6 +229,7 @@ export function useSettingsPageData() {
   const [alibabaApiKeyInput, setAlibabaApiKeyInput] = useState("");
   const [mistralApiKeyInput, setMistralApiKeyInput] = useState("");
   const [miniMaxApiKeyInput, setMiniMaxApiKeyInput] = useState("");
+  const [xiaomiMiMoTokenPlanApiKeyInput, setXiaomiMiMoTokenPlanApiKeyInput] = useState("");
   const [moonshotApiKeyInput, setMoonshotApiKeyInput] = useState("");
   const [xaiApiKeyInput, setXaiApiKeyInput] = useState("");
   const [zaiApiKeyInput, setZaiApiKeyInput] = useState("");
@@ -1196,6 +1199,12 @@ export function useSettingsPageData() {
         deleteTitle: t("settings.minimaxDeleteTitle"), deleteMessage: t("settings.minimaxDeleteMessage"),
         emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.minimaxSaved"), deleteSuccessMessage: t("settings.toast.minimaxDeleted"),
       },
+      xiaomi_mimo_token_plan: {
+        value: xiaomiMiMoTokenPlanApiKeyInput, setValue: setXiaomiMiMoTokenPlanApiKeyInput, setSaving: setSavingXiaomiMiMoTokenPlanKey, setDeleting: setDeletingXiaomiMiMoTokenPlanKey,
+        save: api.setXiaomiMiMoTokenPlanApiKey, remove: api.deleteXiaomiMiMoTokenPlanApiKey,
+        deleteTitle: t("settings.xiaomiMimoTokenPlanDeleteTitle"), deleteMessage: t("settings.xiaomiMimoTokenPlanDeleteMessage"),
+        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.xiaomiMimoTokenPlanSaved"), deleteSuccessMessage: t("settings.toast.xiaomiMimoTokenPlanDeleted"),
+      },
       moonshot: {
         value: moonshotApiKeyInput, setValue: setMoonshotApiKeyInput, setSaving: setSavingMoonshotKey, setDeleting: setDeletingMoonshotKey,
         save: api.setMoonshotApiKey, remove: api.deleteMoonshotApiKey,
@@ -1329,6 +1338,7 @@ export function useSettingsPageData() {
       deepseek: createAccessCardRuntime(deepseekApiKeyInput, setDeepseekApiKeyInput, apiKeyHandlers.deepseek!.submit, apiKeyHandlers.deepseek!.remove, savingDeepSeekKey, deletingDeepSeekKey),
       alibaba: createAccessCardRuntime(alibabaApiKeyInput, setAlibabaApiKeyInput, apiKeyHandlers.alibaba!.submit, apiKeyHandlers.alibaba!.remove, savingAlibabaKey, deletingAlibabaKey),
       minimax: createAccessCardRuntime(miniMaxApiKeyInput, setMiniMaxApiKeyInput, apiKeyHandlers.minimax!.submit, apiKeyHandlers.minimax!.remove, savingMiniMaxKey, deletingMiniMaxKey),
+      xiaomi_mimo_token_plan: createAccessCardRuntime(xiaomiMiMoTokenPlanApiKeyInput, setXiaomiMiMoTokenPlanApiKeyInput, apiKeyHandlers.xiaomi_mimo_token_plan!.submit, apiKeyHandlers.xiaomi_mimo_token_plan!.remove, savingXiaomiMiMoTokenPlanKey, deletingXiaomiMiMoTokenPlanKey),
       mistral: createAccessCardRuntime(mistralApiKeyInput, setMistralApiKeyInput, apiKeyHandlers.mistral!.submit, apiKeyHandlers.mistral!.remove, savingMistralKey, deletingMistralKey),
       moonshot: createAccessCardRuntime(moonshotApiKeyInput, setMoonshotApiKeyInput, apiKeyHandlers.moonshot!.submit, apiKeyHandlers.moonshot!.remove, savingMoonshotKey, deletingMoonshotKey),
       xai: createAccessCardRuntime(xaiApiKeyInput, setXaiApiKeyInput, apiKeyHandlers.xai!.submit, apiKeyHandlers.xai!.remove, savingXAIKey, deletingXAIKey),

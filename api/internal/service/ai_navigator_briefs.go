@@ -278,6 +278,9 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 		openAIKey = moonshotKey
 	case "minimax":
 		openAIKey = minimaxKey
+	case "xiaomi_mimo_token_plan":
+		xiaomiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetXiaomiMiMoTokenPlanAPIKeyEncrypted, s.cipher, userID, "")
+		openAIKey = xiaomiKey
 	case "poe":
 		openAIKey = poeKey
 	case "siliconflow":
@@ -458,6 +461,9 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 		openAIKey = moonshotKey
 	case "minimax":
 		openAIKey = minimaxKey
+	case "xiaomi_mimo_token_plan":
+		xiaomiKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetXiaomiMiMoTokenPlanAPIKeyEncrypted, s.cipher, userID, "")
+		openAIKey = xiaomiKey
 	case "poe":
 		openAIKey = poeKey
 	case "siliconflow":
@@ -875,6 +881,8 @@ func hasAINavigatorBriefProviderKey(settings *model.UserSettings, provider strin
 		return settings.HasMoonshotAPIKey
 	case "minimax":
 		return settings.HasMiniMaxAPIKey
+	case "xiaomi_mimo_token_plan":
+		return settings.HasXiaomiMiMoTokenPlanAPIKey
 	case "xai":
 		return settings.HasXAIAPIKey
 	case "zai":

@@ -1003,6 +1003,16 @@ export const api = {
       "/settings/minimax-key",
       { method: "DELETE" }
     ),
+  setXiaomiMiMoTokenPlanApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_xiaomi_mimo_token_plan_api_key: boolean; xiaomi_mimo_token_plan_api_key_last4: string | null }>(
+      "/settings/xiaomi-mimo-token-plan-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteXiaomiMiMoTokenPlanApiKey: () =>
+    apiFetch<{ user_id: string; has_xiaomi_mimo_token_plan_api_key: boolean; xiaomi_mimo_token_plan_api_key_last4: string | null }>(
+      "/settings/xiaomi-mimo-token-plan-key",
+      { method: "DELETE" }
+    ),
   setMoonshotApiKey: (apiKey: string) =>
     apiFetch<{ user_id: string; has_moonshot_api_key: boolean; moonshot_api_key_last4: string | null }>(
       "/settings/moonshot-key",

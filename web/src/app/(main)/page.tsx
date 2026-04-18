@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Bell, BookOpen, Flame, Sparkles, X } from "lucide-react";
 import { api, BriefingCluster, Item, NavigatorLLM, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
+import { providerLabel } from "@/lib/model-display";
 import { queryKeys } from "@/lib/query-keys";
 import { ReadingGoalsPanel } from "@/components/briefing/reading-goals-panel";
 import { DueReviewPanel } from "@/components/reviews/due-review-panel";
@@ -283,7 +284,7 @@ export default function BriefingPage() {
               <div className="min-w-0">
                 <h2 className="font-sans text-sm font-semibold text-[var(--warning)]">{t("briefing.providerModelUpdates")}</h2>
                 <p className="font-sans text-sm text-[var(--warning)]/90">
-                  {visibleModelUpdates.slice(0, 3).map((event) => `${event.provider} ${event.change_type === "added" ? "+" : "-"} ${event.model_id}`).join(" / ")}
+                  {visibleModelUpdates.slice(0, 3).map((event) => `${providerLabel(event.provider)} ${event.change_type === "added" ? "+" : "-"} ${event.model_id}`).join(" / ")}
                 </p>
               </div>
             </div>

@@ -8,7 +8,7 @@ class _MoonshotProvider(OpenAICompatProvider):
             return 0.6
         return 1.0
 
-    def _normalize_top_p(self, value: float | None) -> float:
+    def _normalize_top_p(self, model: str, value: float | None) -> float:
         return 0.95
 
 

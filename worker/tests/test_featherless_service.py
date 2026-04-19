@@ -45,6 +45,22 @@ class FeatherlessServiceTests(unittest.TestCase):
         self.assertEqual(result["genre"], "ai")
         self.assertEqual(result["other_label"], "")
 
+    def test_moonshot_kimi_k25_uses_native_moonshot_sampling_defaults(self):
+        from app.services.featherless_service import _normalize_temperature, _normalize_top_p
+
+        self.assertEqual(_normalize_temperature("moonshotai/Kimi-K2.5", None), 0.6)
+        self.assertEqual(_normalize_temperature("moonshotai/Kimi-K2.5", 0.2), 0.6)
+        self.assertEqual(_normalize_temperature("moonshotai/Kimi-K2.5", 1.0), 0.6)
+        self.assertEqual(_normalize_top_p("moonshotai/Kimi-K2.5", None), 0.95)
+        self.assertEqual(_normalize_top_p("moonshotai/Kimi-K2.5", 0.8), 0.95)
+
+    def test_non_moonshot_models_keep_caller_sampling(self):
+        from app.services.featherless_service import _normalize_temperature, _normalize_top_p
+
+        self.assertEqual(_normalize_temperature("Qwen/Qwen3.5-9B", 0.4), 0.4)
+        self.assertIsNone(_normalize_top_p("Qwen/Qwen3.5-9B", None))
+        self.assertEqual(_normalize_top_p("Qwen/Qwen3.5-9B", 0.9), 0.9)
+
 
 if __name__ == "__main__":
     unittest.main()

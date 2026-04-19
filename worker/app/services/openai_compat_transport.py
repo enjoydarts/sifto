@@ -11,6 +11,32 @@ _PROVIDER_CONCURRENCY_LOCK = threading.Lock()
 _PROVIDER_CONCURRENCY_SEMAPHORES: dict[tuple[str, int], threading.Semaphore] = {}
 
 
+def _is_featherless_qwen_model(model: str) -> bool:
+    return "qwen" in str(model or "").strip().lower()
+
+
+def _is_featherless_moonshot_model(model: str) -> bool:
+    normalized = str(model or "").strip().lower()
+    return normalized.startswith("moonshotai/") or normalized.startswith("kimi-")
+
+
+def _apply_openai_compat_request_overrides(provider_name: str, normalized_model: str, body: dict) -> None:
+    if provider_name in {"zai", "moonshot"}:
+        # Some OpenAI-compatible providers enable thinking by default, which can
+        # exhaust output tokens into reasoning_content and leave message.content empty.
+        body["thinking"] = {"type": "disabled"}
+        return
+    if provider_name != "featherless":
+        return
+    if _is_featherless_moonshot_model(normalized_model):
+        body["thinking"] = {"type": "disabled"}
+        return
+    if _is_featherless_qwen_model(normalized_model):
+        # OpenAI SDK users would pass this via extra_body; on the raw HTTP body
+        # it must be included as a top-level field.
+        body["chat_template_kwargs"] = {"enable_thinking": False}
+
+
 def _provider_max_concurrency(provider_name: str) -> int | None:
     provider = str(provider_name or "").strip().lower()
     if provider != "zai":
@@ -179,14 +205,7 @@ def run_chat_json(
         else:
             body["response_format"] = {"type": "json_object"}
     normalized_model = str(normalize_model_name(model) or "")
-    if provider_name in {"zai", "moonshot"}:
-        # Some OpenAI-compatible providers enable thinking by default, which can
-        # exhaust output tokens into reasoning_content and leave message.content empty.
-        body["thinking"] = {"type": "disabled"}
-    if provider_name == "featherless" and "qwen" in normalized_model.lower():
-        # OpenAI SDK users would pass this via extra_body; on the raw HTTP body
-        # it must be included as a top-level field.
-        body["chat_template_kwargs"] = {"enable_thinking": False}
+    _apply_openai_compat_request_overrides(provider_name, normalized_model, body)
 
     auth_value = f"{auth_scheme} {api_key}".strip() if auth_scheme else api_key
     headers = {
@@ -377,10 +396,7 @@ async def run_chat_json_async(
         else:
             body["response_format"] = {"type": "json_object"}
     normalized_model = str(normalize_model_name(model) or "")
-    if provider_name in {"zai", "moonshot"}:
-        body["thinking"] = {"type": "disabled"}
-    if provider_name == "featherless" and "qwen" in normalized_model.lower():
-        body["chat_template_kwargs"] = {"enable_thinking": False}
+    _apply_openai_compat_request_overrides(provider_name, normalized_model, body)
 
     auth_value = f"{auth_scheme} {api_key}".strip() if auth_scheme else api_key
     headers = {

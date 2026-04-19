@@ -15,6 +15,18 @@ def _chat_completions_url(raw_base_url: str) -> str:
 
 
 class _FeatherlessProvider(OpenAICompatProvider):
+    def _normalize_temperature(self, model: str, value: float | None) -> float | None:
+        normalized = self._normalize_model_name(model).strip().lower()
+        if normalized in {"moonshotai/kimi-k2.5", "kimi-k2.5"}:
+            return 0.6
+        return value
+
+    def _normalize_top_p(self, model: str, value: float | None) -> float | None:
+        normalized = self._normalize_model_name(model).strip().lower()
+        if normalized in {"moonshotai/kimi-k2.5", "kimi-k2.5"}:
+            return 0.95
+        return value
+
     def _get_chat_url(self) -> str:
         return _chat_completions_url(os.getenv(self.config.api_base_url_env, ""))
 
@@ -29,6 +41,8 @@ _config = ProviderConfig(
     use_billed_cost=True,
 )
 _p = _FeatherlessProvider(_config)
+_normalize_temperature = _p._normalize_temperature
+_normalize_top_p = _p._normalize_top_p
 
 extract_facts = _p.extract_facts
 summarize = _p.summarize

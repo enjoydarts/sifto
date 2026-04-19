@@ -51,9 +51,9 @@ class MoonshotServiceTests(unittest.TestCase):
         self.assertEqual(_normalize_temperature("kimi-k2.5", 1.0), 0.6)
 
     def test_top_p_is_forced_to_point_ninety_five(self):
-        self.assertEqual(_normalize_top_p(None), 0.95)
-        self.assertEqual(_normalize_top_p(0.8), 0.95)
-        self.assertEqual(_normalize_top_p(0.95), 0.95)
+        self.assertEqual(_normalize_top_p("kimi-k2.5", None), 0.95)
+        self.assertEqual(_normalize_top_p("kimi-k2.5", 0.8), 0.95)
+        self.assertEqual(_normalize_top_p("kimi-k2.5", 0.95), 0.95)
 
 
 if __name__ == "__main__":

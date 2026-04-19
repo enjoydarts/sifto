@@ -227,7 +227,7 @@ class OpenAICompatProvider:
     def _normalize_temperature(self, model: str, value: float | None) -> float | None:
         return value
 
-    def _normalize_top_p(self, value: float | None) -> float | None:
+    def _normalize_top_p(self, model: str, value: float | None) -> float | None:
         return value
 
     def _post_process_chat_result(self, text: str, usage: dict, model: str, api_key: str, response_schema, timeout) -> tuple[str, dict]:
@@ -280,7 +280,7 @@ class OpenAICompatProvider:
             schema_name=schema_name,
             include_temperature=self._include_temperature(model),
             temperature=self._normalize_temperature(model, temperature),
-            top_p=self._normalize_top_p(top_p),
+            top_p=self._normalize_top_p(model, top_p),
             auth_header_name=self.config.auth_header_name,
             auth_scheme=self.config.auth_scheme,
         )
@@ -325,7 +325,7 @@ class OpenAICompatProvider:
             schema_name=schema_name,
             include_temperature=self._include_temperature(model),
             temperature=self._normalize_temperature(model, temperature),
-            top_p=self._normalize_top_p(top_p),
+            top_p=self._normalize_top_p(model, top_p),
             auth_header_name=self.config.auth_header_name,
             auth_scheme=self.config.auth_scheme,
         )

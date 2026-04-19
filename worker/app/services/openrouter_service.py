@@ -208,7 +208,7 @@ def _chat_json(
         schema_name=schema_name,
         include_temperature=_p._include_temperature(model),
         temperature=_p._normalize_temperature(model, temperature),
-        top_p=_p._normalize_top_p(top_p),
+        top_p=_p._normalize_top_p(model, top_p),
     )
     if usage.get("billed_cost_usd") is None and usage.get("generation_id"):
         generation_meta = _fetch_generation_cost_details(api_key, str(usage.get("generation_id") or ""), req_timeout)

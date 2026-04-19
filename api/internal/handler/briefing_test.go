@@ -63,3 +63,11 @@ func TestShouldCacheBriefingNavigatorResponse(t *testing.T) {
 		t.Fatal("response with intro only should be cached")
 	}
 }
+
+func TestHasNavigatorProviderKeySupportsFeatherless(t *testing.T) {
+	settings := &model.UserSettings{HasFeatherlessAPIKey: true}
+
+	if !hasNavigatorProviderKey(settings, "featherless") {
+		t.Fatal("hasNavigatorProviderKey(featherless) = false, want true")
+	}
+}

@@ -263,6 +263,7 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenRouterAPIKeyEncrypted, s.cipher, userID, "")
 	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetPoeAPIKeyEncrypted, s.cipher, userID, "")
 	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetSiliconFlowAPIKeyEncrypted, s.cipher, userID, "")
+	featherlessKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetFeatherlessAPIKeyEncrypted, s.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenAIAPIKeyEncrypted, s.cipher, userID, "")
 	executionModel := resolveAINavigatorBriefExecutionModel(brief.Model)
 	if executionModel == "" {
@@ -285,6 +286,8 @@ func (s *AINavigatorBriefService) RunQueuedBrief(ctx context.Context, userID, br
 		openAIKey = poeKey
 	case "siliconflow":
 		openAIKey = siliconFlowKey
+	case "featherless":
+		openAIKey = featherlessKey
 	}
 	workerCandidates := make([]BriefingNavigatorCandidate, 0, len(candidates))
 	candidateByID := make(map[string]model.BriefingNavigatorCandidate, len(candidates))
@@ -451,6 +454,7 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenRouterAPIKeyEncrypted, s.cipher, userID, "")
 	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetPoeAPIKeyEncrypted, s.cipher, userID, "")
 	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetSiliconFlowAPIKeyEncrypted, s.cipher, userID, "")
+	featherlessKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetFeatherlessAPIKeyEncrypted, s.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, s.settings.GetOpenAIAPIKeyEncrypted, s.cipher, userID, "")
 	switch LLMProviderForModel(modelName) {
 	case "openrouter":
@@ -468,6 +472,8 @@ func (s *AINavigatorBriefService) GenerateBriefForSlot(ctx context.Context, user
 		openAIKey = poeKey
 	case "siliconflow":
 		openAIKey = siliconFlowKey
+	case "featherless":
+		openAIKey = featherlessKey
 	}
 	workerCandidates := make([]BriefingNavigatorCandidate, 0, len(candidates))
 	candidateByID := make(map[string]model.BriefingNavigatorCandidate, len(candidates))
@@ -897,6 +903,8 @@ func hasAINavigatorBriefProviderKey(settings *model.UserSettings, provider strin
 		return settings.HasPoeAPIKey
 	case "siliconflow":
 		return settings.HasSiliconFlowAPIKey
+	case "featherless":
+		return settings.HasFeatherlessAPIKey
 	default:
 		return settings.HasAnthropicAPIKey
 	}

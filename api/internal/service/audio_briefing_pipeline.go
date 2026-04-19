@@ -2017,6 +2017,8 @@ func hasAudioBriefingProviderKey(settings *model.UserSettings, provider string) 
 		return settings.HasPoeAPIKey
 	case "siliconflow":
 		return settings.HasSiliconFlowAPIKey
+	case "featherless":
+		return settings.HasFeatherlessAPIKey
 	default:
 		return settings.HasAnthropicAPIKey
 	}

@@ -685,6 +685,14 @@ func TestSelectAudioBriefingOpenAICompatibleKeySupportsFeatherless(t *testing.T)
 	}
 }
 
+func TestHasAudioBriefingProviderKeySupportsFeatherless(t *testing.T) {
+	settings := &model.UserSettings{HasFeatherlessAPIKey: true}
+
+	if !hasAudioBriefingProviderKey(settings, "featherless") {
+		t.Fatal("hasAudioBriefingProviderKey(featherless) = false, want true")
+	}
+}
+
 func TestIsRetryableAudioBriefingScriptWorkerError(t *testing.T) {
 	tests := []struct {
 		name string

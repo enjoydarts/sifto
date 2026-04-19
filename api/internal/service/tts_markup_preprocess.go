@@ -233,6 +233,8 @@ func (s *TTSMarkupPreprocessService) loadProviderKey(ctx context.Context, userID
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetPoeAPIKeyEncrypted, s.cipher, userID, "poe api key is not configured")
 	case "siliconflow":
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetSiliconFlowAPIKeyEncrypted, s.cipher, userID, "siliconflow api key is not configured")
+	case "featherless":
+		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetFeatherlessAPIKeyEncrypted, s.cipher, userID, "featherless api key is not configured")
 	default:
 		return loadAndDecryptAudioBriefingUserSecret(ctx, s.userSettings.GetAnthropicAPIKeyEncrypted, s.cipher, userID, "anthropic api key is not configured")
 	}
@@ -291,6 +293,8 @@ func hasFishPreprocessProviderKey(settings *model.UserSettings, provider string)
 		return settings.HasPoeAPIKey
 	case "siliconflow":
 		return settings.HasSiliconFlowAPIKey
+	case "featherless":
+		return settings.HasFeatherlessAPIKey
 	default:
 		return settings.HasAnthropicAPIKey
 	}

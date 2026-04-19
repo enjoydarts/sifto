@@ -80,3 +80,11 @@ func TestFormatAINavigatorBriefModelLabelFallsBackToConfiguredPlainProviderModel
 		t.Fatalf("formatAINavigatorBriefModelLabel(...) = %q, want %q", got, "zai / glm-5")
 	}
 }
+
+func TestHasAINavigatorBriefProviderKeySupportsFeatherless(t *testing.T) {
+	settings := &model.UserSettings{HasFeatherlessAPIKey: true}
+
+	if !hasAINavigatorBriefProviderKey(settings, "featherless") {
+		t.Fatal("hasAINavigatorBriefProviderKey(featherless) = false, want true")
+	}
+}

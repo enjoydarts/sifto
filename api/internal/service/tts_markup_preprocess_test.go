@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/enjoydarts/sifto/api/internal/repository"
 )
 
@@ -228,6 +229,14 @@ func TestTTSMarkupPreprocessRejectsEmptyOutput(t *testing.T) {
 	_, err = service.PreprocessSummaryAudioText(ctx, userID, "", "元テキスト")
 	if err == nil || err != ErrTTSMarkupPreprocessEmptyOutput {
 		t.Fatalf("PreprocessSummaryAudioText() error = %v, want %v", err, ErrTTSMarkupPreprocessEmptyOutput)
+	}
+}
+
+func TestHasFishPreprocessProviderKeySupportsFeatherless(t *testing.T) {
+	settings := &model.UserSettings{HasFeatherlessAPIKey: true}
+
+	if !hasFishPreprocessProviderKey(settings, "featherless") {
+		t.Fatal("hasFishPreprocessProviderKey(featherless) = false, want true")
 	}
 }
 

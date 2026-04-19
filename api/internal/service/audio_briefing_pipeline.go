@@ -54,6 +54,32 @@ type audioBriefingTurnBatchResult struct {
 	ScriptLLMModels   []string
 }
 
+func selectAudioBriefingOpenAICompatibleKey(
+	provider string,
+	openAIKey, openRouterKey, togetherKey, moonshotKey, minimaxKey, xiaomiMiMoTokenPlanKey, poeKey, siliconFlowKey, featherlessKey *string,
+) *string {
+	switch provider {
+	case "openrouter":
+		return openRouterKey
+	case "together":
+		return togetherKey
+	case "moonshot":
+		return moonshotKey
+	case "minimax":
+		return minimaxKey
+	case "xiaomi_mimo_token_plan":
+		return xiaomiMiMoTokenPlanKey
+	case "poe":
+		return poeKey
+	case "siliconflow":
+		return siliconFlowKey
+	case "featherless":
+		return featherlessKey
+	default:
+		return openAIKey
+	}
+}
+
 func NewAudioBriefingOrchestrator(
 	repo *repository.AudioBriefingRepo,
 	settingsRepo *repository.UserSettingsRepo,
@@ -446,6 +472,7 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenRouterAPIKeyEncrypted, o.cipher, userID, "")
 	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetPoeAPIKeyEncrypted, o.cipher, userID, "")
 	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetSiliconFlowAPIKeyEncrypted, o.cipher, userID, "")
+	featherlessKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetFeatherlessAPIKeyEncrypted, o.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenAIAPIKeyEncrypted, o.cipher, userID, "")
 
 	normalizedPersona := normalizeAudioBriefingPersona(persona)
@@ -484,23 +511,18 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 			var errs []string
 			for idx, modelName := range modelNames {
 				modelValue := modelName
-				effectiveOpenAIKey := openAIKey
-				switch LLMProviderForModel(&modelValue) {
-				case "openrouter":
-					effectiveOpenAIKey = openRouterKey
-				case "together":
-					effectiveOpenAIKey = togetherKey
-				case "moonshot":
-					effectiveOpenAIKey = moonshotKey
-				case "minimax":
-					effectiveOpenAIKey = minimaxKey
-				case "xiaomi_mimo_token_plan":
-					effectiveOpenAIKey = xiaomiMiMoTokenPlanKey
-				case "poe":
-					effectiveOpenAIKey = poeKey
-				case "siliconflow":
-					effectiveOpenAIKey = siliconFlowKey
-				}
+				effectiveOpenAIKey := selectAudioBriefingOpenAICompatibleKey(
+					LLMProviderForModel(&modelValue),
+					openAIKey,
+					openRouterKey,
+					togetherKey,
+					moonshotKey,
+					minimaxKey,
+					xiaomiMiMoTokenPlanKey,
+					poeKey,
+					siliconFlowKey,
+					featherlessKey,
+				)
 				resp, err := generateAudioBriefingScriptWithRetry(workerCtx, func(callCtx context.Context) (*AudioBriefingScriptResponse, error) {
 					return o.worker.GenerateAudioBriefingScriptWithModel(
 						callCtx,
@@ -685,6 +707,7 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	openRouterKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenRouterAPIKeyEncrypted, o.cipher, job.UserID, "")
 	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetPoeAPIKeyEncrypted, o.cipher, job.UserID, "")
 	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetSiliconFlowAPIKeyEncrypted, o.cipher, job.UserID, "")
+	featherlessKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetFeatherlessAPIKeyEncrypted, o.cipher, job.UserID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenAIAPIKeyEncrypted, o.cipher, job.UserID, "")
 
 	introContext := buildAudioBriefingIntroContext(job.SlotStartedAtJST, briefingSettings.ProgramName)
@@ -717,23 +740,18 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 		var errs []string
 		for idx, modelName := range modelNames {
 			modelValue := modelName
-			effectiveOpenAIKey := openAIKey
-			switch LLMProviderForModel(&modelValue) {
-			case "openrouter":
-				effectiveOpenAIKey = openRouterKey
-			case "together":
-				effectiveOpenAIKey = togetherKey
-			case "moonshot":
-				effectiveOpenAIKey = moonshotKey
-			case "minimax":
-				effectiveOpenAIKey = minimaxKey
-			case "xiaomi_mimo_token_plan":
-				effectiveOpenAIKey = xiaomiMiMoTokenPlanKey
-			case "poe":
-				effectiveOpenAIKey = poeKey
-			case "siliconflow":
-				effectiveOpenAIKey = siliconFlowKey
-			}
+			effectiveOpenAIKey := selectAudioBriefingOpenAICompatibleKey(
+				LLMProviderForModel(&modelValue),
+				openAIKey,
+				openRouterKey,
+				togetherKey,
+				moonshotKey,
+				minimaxKey,
+				xiaomiMiMoTokenPlanKey,
+				poeKey,
+				siliconFlowKey,
+				featherlessKey,
+			)
 			resp, err := generateAudioBriefingScriptWithRetry(workerCtx, func(callCtx context.Context) (*AudioBriefingScriptResponse, error) {
 				return o.worker.GenerateAudioBriefingScriptWithModel(
 					callCtx,

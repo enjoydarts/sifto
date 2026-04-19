@@ -656,6 +656,35 @@ func TestResolveAudioBriefingScriptModelsPrefersPrimaryThenFallback(t *testing.T
 	}
 }
 
+func TestSelectAudioBriefingOpenAICompatibleKeySupportsFeatherless(t *testing.T) {
+	openAIKey := stringPtr("openai-key")
+	openRouterKey := stringPtr("openrouter-key")
+	togetherKey := stringPtr("together-key")
+	moonshotKey := stringPtr("moonshot-key")
+	minimaxKey := stringPtr("minimax-key")
+	xiaomiMiMoTokenPlanKey := stringPtr("mimo-key")
+	poeKey := stringPtr("poe-key")
+	siliconFlowKey := stringPtr("siliconflow-key")
+	featherlessKey := stringPtr("featherless-key")
+
+	got := selectAudioBriefingOpenAICompatibleKey(
+		"featherless",
+		openAIKey,
+		openRouterKey,
+		togetherKey,
+		moonshotKey,
+		minimaxKey,
+		xiaomiMiMoTokenPlanKey,
+		poeKey,
+		siliconFlowKey,
+		featherlessKey,
+	)
+
+	if got == nil || *got != "featherless-key" {
+		t.Fatalf("featherless key = %v, want featherless-key", got)
+	}
+}
+
 func TestIsRetryableAudioBriefingScriptWorkerError(t *testing.T) {
 	tests := []struct {
 		name string

@@ -28,10 +28,7 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
         return
     if provider_name != "featherless":
         return
-    if _is_featherless_moonshot_model(normalized_model):
-        body["thinking"] = {"type": "disabled"}
-        return
-    if _is_featherless_qwen_model(normalized_model):
+    if _is_featherless_moonshot_model(normalized_model) or _is_featherless_qwen_model(normalized_model):
         # OpenAI SDK users would pass this via extra_body; on the raw HTTP body
         # it must be included as a top-level field.
         body["chat_template_kwargs"] = {"enable_thinking": False}

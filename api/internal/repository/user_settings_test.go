@@ -41,6 +41,12 @@ func lockUserSettingsRepoTestDB(t *testing.T, pool *pgxpool.Pool) {
 			t.Fatalf("pg_advisory_unlock() error = %v", err)
 		}
 	})
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS featherless_api_key_enc text`); err != nil {
+		t.Fatalf("ensure user_settings.featherless_api_key_enc: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS featherless_api_key_last4 text`); err != nil {
+		t.Fatalf("ensure user_settings.featherless_api_key_last4: %v", err)
+	}
 }
 
 func TestUserSettingsRepoSetAndClearMiniMaxAPIKey(t *testing.T) {
@@ -127,6 +133,51 @@ func TestUserSettingsRepoSetAndClearXiaomiMiMoTokenPlanAPIKey(t *testing.T) {
 	enc, err = repo.GetXiaomiMiMoTokenPlanAPIKeyEncrypted(ctx, userID)
 	if err != nil {
 		t.Fatalf("GetXiaomiMiMoTokenPlanAPIKeyEncrypted() after clear error = %v", err)
+	}
+	if enc != nil {
+		t.Fatalf("encrypted key after clear = %#v, want nil", enc)
+	}
+}
+
+func TestUserSettingsRepoSetAndClearFeatherlessAPIKey(t *testing.T) {
+	ctx := context.Background()
+	pool := testUserSettingsRepoDB(t)
+	repo := NewUserSettingsRepo(pool)
+	userID := "00000000-0000-4000-8000-000000000041"
+
+	settings, err := repo.SetFeatherlessAPIKey(ctx, userID, "encrypted-featherless-key", "9012")
+	if err != nil {
+		t.Fatalf("SetFeatherlessAPIKey() error = %v", err)
+	}
+	if !settings.HasFeatherlessAPIKey {
+		t.Fatal("HasFeatherlessAPIKey = false, want true")
+	}
+	if settings.FeatherlessAPIKeyLast4 == nil || *settings.FeatherlessAPIKeyLast4 != "9012" {
+		t.Fatalf("FeatherlessAPIKeyLast4 = %#v, want %q", settings.FeatherlessAPIKeyLast4, "9012")
+	}
+
+	enc, err := repo.GetFeatherlessAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetFeatherlessAPIKeyEncrypted() error = %v", err)
+	}
+	if enc == nil || *enc != "encrypted-featherless-key" {
+		t.Fatalf("encrypted key = %#v, want %q", enc, "encrypted-featherless-key")
+	}
+
+	settings, err = repo.ClearFeatherlessAPIKey(ctx, userID)
+	if err != nil {
+		t.Fatalf("ClearFeatherlessAPIKey() error = %v", err)
+	}
+	if settings.HasFeatherlessAPIKey {
+		t.Fatal("HasFeatherlessAPIKey = true, want false")
+	}
+	if settings.FeatherlessAPIKeyLast4 != nil {
+		t.Fatalf("FeatherlessAPIKeyLast4 = %#v, want nil", settings.FeatherlessAPIKeyLast4)
+	}
+
+	enc, err = repo.GetFeatherlessAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetFeatherlessAPIKeyEncrypted() after clear error = %v", err)
 	}
 	if enc != nil {
 		t.Fatalf("encrypted key after clear = %#v, want nil", enc)

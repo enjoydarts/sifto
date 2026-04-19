@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/enjoydarts/sifto/api/internal/repository"
 )
 
 type ProviderModelDiscoveryService struct {
@@ -54,6 +56,7 @@ type ProviderModelDiscoveryKeys struct {
 	Fireworks           string
 	Together            string
 	XiaomiMiMoTokenPlan string
+	Featherless         string
 }
 
 func NewProviderModelDiscoveryService() *ProviderModelDiscoveryService {
@@ -92,6 +95,7 @@ func (s *ProviderModelDiscoveryService) DiscoverAll(ctx context.Context) ([]Prov
 		{"fireworks", s.fetchFireworksModels},
 		{"together", s.fetchTogetherModels},
 		{"xiaomi_mimo_token_plan", s.fetchXiaomiMiMoTokenPlanModels},
+		{"featherless", s.fetchFeatherlessModels},
 	}
 	type indexedResult struct {
 		index  int
@@ -479,6 +483,106 @@ func normalizeTogetherAPIBaseURL(raw string) string {
 		}
 	}
 	return base
+}
+
+func normalizeFeatherlessAPIBaseURL(raw string) string {
+	base := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if base == "" {
+		return "https://api.featherless.ai"
+	}
+	for _, suffix := range []string{"/v1/chat/completions", "/chat/completions", "/v1"} {
+		if strings.HasSuffix(base, suffix) {
+			return strings.TrimSuffix(base, suffix)
+		}
+	}
+	return base
+}
+
+func (s *ProviderModelDiscoveryService) fetchFeatherlessModels(ctx context.Context) ([]string, error) {
+	snapshots, err := s.fetchFeatherlessSnapshots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		models = append(models, snapshot.ModelID)
+	}
+	return normalizeModelIDs(models), nil
+}
+
+func (s *ProviderModelDiscoveryService) fetchFeatherlessSnapshots(ctx context.Context) ([]repository.FeatherlessModelSnapshot, error) {
+	apiKey := strings.TrimSpace(s.keys.Featherless)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("FEATHERLESS_API_KEY"))
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("api key is required")
+	}
+	base := normalizeFeatherlessAPIBaseURL(os.Getenv("FEATHERLESS_API_BASE_URL"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	var snapshots []repository.FeatherlessModelSnapshot
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		defer resp.Body.Close()
+		if resp.StatusCode >= 400 {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+			if len(body) > 0 {
+				return fmt.Errorf("status %d body=%s", resp.StatusCode, string(body))
+			}
+			return fmt.Errorf("status %d", resp.StatusCode)
+		}
+		var payload struct {
+			Data []struct {
+				ID                     string `json:"id"`
+				Name                   string `json:"name"`
+				ModelClass             string `json:"model_class"`
+				ContextLength          *int   `json:"context_length"`
+				MaxCompletionTokens    *int   `json:"max_completion_tokens"`
+				IsGated                bool   `json:"is_gated"`
+				AvailableOnCurrentPlan bool   `json:"available_on_current_plan"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		snapshots = make([]repository.FeatherlessModelSnapshot, 0, len(payload.Data))
+		seen := make(map[string]struct{}, len(payload.Data))
+		for _, item := range payload.Data {
+			modelID := strings.TrimSpace(item.ID)
+			if modelID == "" {
+				continue
+			}
+			if _, ok := seen[modelID]; ok {
+				continue
+			}
+			seen[modelID] = struct{}{}
+			displayName := strings.TrimSpace(item.Name)
+			if displayName == "" {
+				displayName = modelID
+			}
+			snapshots = append(snapshots, repository.FeatherlessModelSnapshot{
+				ModelID:                modelID,
+				DisplayName:            displayName,
+				ModelClass:             strings.TrimSpace(item.ModelClass),
+				ContextLength:          item.ContextLength,
+				MaxCompletionTokens:    item.MaxCompletionTokens,
+				IsGated:                item.IsGated,
+				AvailableOnCurrentPlan: item.AvailableOnCurrentPlan,
+				FetchedAt:              now,
+			})
+		}
+		slices.SortFunc(snapshots, func(a, b repository.FeatherlessModelSnapshot) int {
+			return strings.Compare(a.ModelID, b.ModelID)
+		})
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return snapshots, nil
 }
 
 func normalizeXiaomiMiMoTokenPlanAPIBaseURL(raw string) string {

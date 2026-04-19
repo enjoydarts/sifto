@@ -178,10 +178,15 @@ def run_chat_json(
             }
         else:
             body["response_format"] = {"type": "json_object"}
+    normalized_model = str(normalize_model_name(model) or "")
     if provider_name in {"zai", "moonshot"}:
         # Some OpenAI-compatible providers enable thinking by default, which can
         # exhaust output tokens into reasoning_content and leave message.content empty.
         body["thinking"] = {"type": "disabled"}
+    if provider_name == "featherless" and "qwen" in normalized_model.lower():
+        # OpenAI SDK users would pass this via extra_body; on the raw HTTP body
+        # it must be included as a top-level field.
+        body["chat_template_kwargs"] = {"enable_thinking": False}
 
     auth_value = f"{auth_scheme} {api_key}".strip() if auth_scheme else api_key
     headers = {
@@ -371,8 +376,11 @@ async def run_chat_json_async(
             }
         else:
             body["response_format"] = {"type": "json_object"}
+    normalized_model = str(normalize_model_name(model) or "")
     if provider_name in {"zai", "moonshot"}:
         body["thinking"] = {"type": "disabled"}
+    if provider_name == "featherless" and "qwen" in normalized_model.lower():
+        body["chat_template_kwargs"] = {"enable_thinking": False}
 
     auth_value = f"{auth_scheme} {api_key}".strip() if auth_scheme else api_key
     headers = {

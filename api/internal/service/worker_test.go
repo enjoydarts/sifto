@@ -17,6 +17,7 @@ func TestSelectOpenAICompatibleKeyPrefersProviderSpecificKey(t *testing.T) {
 	siliconFlowKey := workerTestStringPtr("siliconflow-key")
 	minimaxKey := workerTestStringPtr("minimax-key")
 	xiaomiKey := workerTestStringPtr("xiaomi-key")
+	featherlessKey := workerTestStringPtr("featherless-key")
 	openAIKey := workerTestStringPtr("openai-key")
 
 	tests := []struct {
@@ -31,12 +32,13 @@ func TestSelectOpenAICompatibleKeyPrefersProviderSpecificKey(t *testing.T) {
 		{name: "siliconflow", model: workerTestStringPtr("siliconflow::Qwen/Qwen3-Next-80B-A3B-Instruct"), want: siliconFlowKey},
 		{name: "minimax", model: workerTestStringPtr("MiniMax-M2.5"), want: minimaxKey},
 		{name: "xiaomi mimo token plan", model: workerTestStringPtr("mimo-v2-pro"), want: xiaomiKey},
+		{name: "featherless", model: workerTestStringPtr("featherless::Qwen/Qwen3.5-9B"), want: featherlessKey},
 		{name: "openai fallback", model: workerTestStringPtr("gpt-5.4-mini"), want: openAIKey},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := selectOpenAICompatibleKey(tt.model, togetherKey, moonshotKey, openRouterKey, poeKey, siliconFlowKey, minimaxKey, xiaomiKey, openAIKey)
+			got := selectOpenAICompatibleKey(tt.model, togetherKey, moonshotKey, openRouterKey, poeKey, siliconFlowKey, minimaxKey, xiaomiKey, featherlessKey, openAIKey)
 			if got == nil || tt.want == nil || *got != *tt.want {
 				t.Fatalf("got %v, want %v", workerTestDerefString(got), workerTestDerefString(tt.want))
 			}

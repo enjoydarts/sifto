@@ -295,6 +295,31 @@ class RunChatJsonTests(unittest.TestCase):
         self.assertEqual(_FakeClient.last_json.get("thinking"), {"type": "disabled"})
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
+    def test_featherless_requests_disable_qwen_thinking_via_chat_template_kwargs(self):
+        run_chat_json(
+            "Return JSON",
+            "Qwen/Qwen3.5-27B",
+            "test-key",
+            url="https://example.com/chat/completions",
+            normalize_model_name=lambda model: model,
+            supports_strict_schema=lambda model: False,
+            timeout_sec=5,
+            attempts=1,
+            base_sleep_sec=0,
+            provider_name="featherless",
+            logger=None,
+            response_schema={"type": "object"},
+        )
+
+        self.assertIsNotNone(_FakeClient.last_json)
+        self.assertEqual(
+            _FakeClient.last_json.get("chat_template_kwargs"),
+            {"enable_thinking": False},
+        )
+        self.assertNotIn("reasoning", _FakeClient.last_json)
+        self.assertNotIn("thinking", _FakeClient.last_json)
+
+    @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
     def test_non_zai_requests_do_not_set_thinking(self):
         _text, usage = run_chat_json(
             "Return JSON",

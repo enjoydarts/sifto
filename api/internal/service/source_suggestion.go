@@ -181,6 +181,7 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 	openRouterAPIKey := allKeys["openrouter"]
 	poeAPIKey := allKeys["poe"]
 	siliconFlowAPIKey := allKeys["siliconflow"]
+	featherlessAPIKey := allKeys["featherless"]
 	openAIAPIKey := allKeys["openai"]
 	anthropicSourceSuggestionModel := s.getUserSourceSuggestionModel(ctx, userID)
 	resolved := selectSourceSuggestionLLM(
@@ -200,6 +201,7 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 		openRouterAPIKey,
 		poeAPIKey,
 		siliconFlowAPIKey,
+		featherlessAPIKey,
 		openAIAPIKey,
 		anthropicSourceSuggestionModel,
 	)
@@ -242,7 +244,7 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 	}
 
 	cands := map[string]*sourceSuggestionAgg{}
-	aiReady := (resolved.AnthropicAPIKey != nil || resolved.GoogleAPIKey != nil || resolved.GroqAPIKey != nil || resolved.FireworksAPIKey != nil || resolved.DeepseekAPIKey != nil || resolved.AlibabaAPIKey != nil || resolved.MistralAPIKey != nil || resolved.TogetherAPIKey != nil || resolved.MoonshotAPIKey != nil || resolved.MiniMaxAPIKey != nil || resolved.XiaomiMiMoTokenPlanAPIKey != nil || resolved.XAIAPIKey != nil || resolved.ZAIAPIKey != nil || resolved.OpenAIAPIKey != nil || resolved.OpenRouterAPIKey != nil || resolved.PoeAPIKey != nil || resolved.SiliconFlowAPIKey != nil) && s.worker != nil
+	aiReady := (resolved.AnthropicAPIKey != nil || resolved.GoogleAPIKey != nil || resolved.GroqAPIKey != nil || resolved.FireworksAPIKey != nil || resolved.DeepseekAPIKey != nil || resolved.AlibabaAPIKey != nil || resolved.MistralAPIKey != nil || resolved.TogetherAPIKey != nil || resolved.MoonshotAPIKey != nil || resolved.MiniMaxAPIKey != nil || resolved.XiaomiMiMoTokenPlanAPIKey != nil || resolved.XAIAPIKey != nil || resolved.ZAIAPIKey != nil || resolved.OpenAIAPIKey != nil || resolved.OpenRouterAPIKey != nil || resolved.PoeAPIKey != nil || resolved.SiliconFlowAPIKey != nil || resolved.FeatherlessAPIKey != nil) && s.worker != nil
 	var seedLLMMeta map[string]any
 	timedOutInAiStep := false
 	if aiReady {
@@ -268,6 +270,7 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 			resolved.OpenRouterAPIKey,
 			resolved.PoeAPIKey,
 			resolved.SiliconFlowAPIKey,
+			resolved.FeatherlessAPIKey,
 			resolved.XAIAPIKey,
 			resolved.ZAIAPIKey,
 			resolved.OpenAIAPIKey,
@@ -346,6 +349,7 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 		resolved.OpenRouterAPIKey,
 		resolved.PoeAPIKey,
 		resolved.SiliconFlowAPIKey,
+		resolved.FeatherlessAPIKey,
 		resolved.XAIAPIKey,
 		resolved.ZAIAPIKey,
 		resolved.OpenAIAPIKey,
@@ -396,6 +400,7 @@ func (s *SourceSuggestionService) rankSourceSuggestionsWithLLM(
 	openRouterAPIKey *string,
 	poeAPIKey *string,
 	siliconFlowAPIKey *string,
+	featherlessAPIKey *string,
 	xaiAPIKey *string,
 	zaiAPIKey *string,
 	openAIAPIKey *string,
@@ -426,10 +431,11 @@ func (s *SourceSuggestionService) rankSourceSuggestionsWithLLM(
 	hasOpenRouter := openRouterAPIKey != nil && strings.TrimSpace(*openRouterAPIKey) != ""
 	hasPoe := poeAPIKey != nil && strings.TrimSpace(*poeAPIKey) != ""
 	hasSiliconFlow := siliconFlowAPIKey != nil && strings.TrimSpace(*siliconFlowAPIKey) != ""
+	hasFeatherless := featherlessAPIKey != nil && strings.TrimSpace(*featherlessAPIKey) != ""
 	hasXAI := xaiAPIKey != nil && strings.TrimSpace(*xaiAPIKey) != ""
 	hasZAI := zaiAPIKey != nil && strings.TrimSpace(*zaiAPIKey) != ""
 	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
-	if !hasAnthropic && !hasGoogle && !hasGroq && !hasFireworks && !hasDeepSeek && !hasAlibaba && !hasMistral && !hasTogether && !hasMoonshot && !hasOpenRouter && !hasPoe && !hasSiliconFlow && !hasXAI && !hasZAI && !hasOpenAI {
+	if !hasAnthropic && !hasGoogle && !hasGroq && !hasFireworks && !hasDeepSeek && !hasAlibaba && !hasMistral && !hasTogether && !hasMoonshot && !hasOpenRouter && !hasPoe && !hasSiliconFlow && !hasFeatherless && !hasXAI && !hasZAI && !hasOpenAI {
 		return nil
 	}
 	existing := make([]RankFeedSuggestionsExistingSource, 0, len(sources))
@@ -480,6 +486,7 @@ func (s *SourceSuggestionService) rankSourceSuggestionsWithLLM(
 		openRouterAPIKey,
 		poeAPIKey,
 		siliconFlowAPIKey,
+		featherlessAPIKey,
 		xaiAPIKey,
 		zaiAPIKey,
 		fireworksAPIKey,
@@ -628,11 +635,12 @@ type resolvedProviderKeys struct {
 	OpenRouterAPIKey          *string
 	PoeAPIKey                 *string
 	SiliconFlowAPIKey         *string
+	FeatherlessAPIKey         *string
 	OpenAIAPIKey              *string
 	SelectedModel             *string
 }
 
-func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, togetherAPIKey, moonshotAPIKey, miniMaxAPIKey, xiaomiMiMoTokenPlanAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, openAIAPIKey, model *string) resolvedProviderKeys {
+func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, togetherAPIKey, moonshotAPIKey, miniMaxAPIKey, xiaomiMiMoTokenPlanAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, featherlessAPIKey, openAIAPIKey, model *string) resolvedProviderKeys {
 	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
 	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
 	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
@@ -649,6 +657,7 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 	hasOpenRouter := openRouterAPIKey != nil && strings.TrimSpace(*openRouterAPIKey) != ""
 	hasPoe := poeAPIKey != nil && strings.TrimSpace(*poeAPIKey) != ""
 	hasSiliconFlow := siliconFlowAPIKey != nil && strings.TrimSpace(*siliconFlowAPIKey) != ""
+	hasFeatherless := featherlessAPIKey != nil && strings.TrimSpace(*featherlessAPIKey) != ""
 	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
 	purpose := "source_suggestion"
 
@@ -722,6 +731,14 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 		case "siliconflow":
 			if hasSiliconFlow {
 				return resolvedProviderKeys{SiliconFlowAPIKey: siliconFlowAPIKey, SelectedModel: resolved}
+			}
+		case "featherless":
+			if hasFeatherless {
+				return resolvedProviderKeys{
+					FeatherlessAPIKey: featherlessAPIKey,
+					OpenAIAPIKey:      featherlessAPIKey,
+					SelectedModel:     resolved,
+				}
 			}
 		case "openai":
 			if hasOpenAI {
@@ -811,6 +828,7 @@ func (s *SourceSuggestionService) expandSourceSuggestionsWithLLMSeeds(
 	openRouterAPIKey *string,
 	poeAPIKey *string,
 	siliconFlowAPIKey *string,
+	featherlessAPIKey *string,
 	xaiAPIKey *string,
 	zaiAPIKey *string,
 	openAIAPIKey *string,
@@ -857,6 +875,7 @@ func (s *SourceSuggestionService) expandSourceSuggestionsWithLLMSeeds(
 		openRouterAPIKey,
 		poeAPIKey,
 		siliconFlowAPIKey,
+		featherlessAPIKey,
 		xaiAPIKey,
 		zaiAPIKey,
 		fireworksAPIKey,

@@ -91,6 +91,16 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 			baseURL:  "/v1",
 			wantPath: "/v1/models",
 		},
+		{
+			name: "featherless",
+			fetchFunc: func(ctx context.Context, svc *ProviderModelDiscoveryService) ([]string, error) {
+				return svc.fetchFeatherlessModels(ctx)
+			},
+			apiKey:   "test-featherless-key",
+			baseKey:  "FEATHERLESS_API_BASE_URL",
+			baseURL:  "/v1",
+			wantPath: "/v1/models",
+		},
 	}
 
 	for _, c := range cases {
@@ -138,6 +148,70 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 				t.Fatalf("models = %#v, want sorted unique two models", models)
 			}
 		})
+	}
+}
+
+func TestProviderModelDiscoveryFetchFeatherlessSnapshots(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s, want %s", r.Method, http.MethodGet)
+		}
+		if r.URL.Path != "/v1/models" {
+			t.Fatalf("path = %s, want %s", r.URL.Path, "/v1/models")
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-featherless-key" {
+			t.Fatalf("authorization = %q, want %q", got, "Bearer test-featherless-key")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{
+					"id":                        "meta-llama/llama-3.3-70b",
+					"name":                      "Llama 3.3 70B",
+					"model_class":               "text",
+					"context_length":            131072,
+					"max_completion_tokens":     8192,
+					"is_gated":                  true,
+					"available_on_current_plan": false,
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("FEATHERLESS_API_BASE_URL", server.URL+"/v1")
+	svc := NewProviderModelDiscoveryServiceWithKeys(ProviderModelDiscoveryKeys{
+		Featherless: "test-featherless-key",
+	})
+	svc.http = server.Client()
+
+	models, err := svc.fetchFeatherlessSnapshots(context.Background())
+	if err != nil {
+		t.Fatalf("fetchFeatherlessSnapshots() error = %v", err)
+	}
+	if len(models) != 1 {
+		t.Fatalf("len(models) = %d, want 1", len(models))
+	}
+	if models[0].ModelID != "meta-llama/llama-3.3-70b" {
+		t.Fatalf("model_id = %q, want %q", models[0].ModelID, "meta-llama/llama-3.3-70b")
+	}
+	if models[0].DisplayName != "Llama 3.3 70B" {
+		t.Fatalf("display_name = %q, want %q", models[0].DisplayName, "Llama 3.3 70B")
+	}
+	if models[0].ModelClass != "text" {
+		t.Fatalf("model_class = %q, want %q", models[0].ModelClass, "text")
+	}
+	if models[0].ContextLength == nil || *models[0].ContextLength != 131072 {
+		t.Fatalf("context_length = %v, want 131072", models[0].ContextLength)
+	}
+	if models[0].MaxCompletionTokens == nil || *models[0].MaxCompletionTokens != 8192 {
+		t.Fatalf("max_completion_tokens = %v, want 8192", models[0].MaxCompletionTokens)
+	}
+	if !models[0].IsGated {
+		t.Fatal("is_gated = false, want true")
+	}
+	if models[0].AvailableOnCurrentPlan {
+		t.Fatal("available_on_current_plan = true, want false")
 	}
 }
 
@@ -241,11 +315,34 @@ func TestNormalizeTogetherAPIBaseURL(t *testing.T) {
 	}
 }
 
+func TestNormalizeFeatherlessAPIBaseURL(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "empty", raw: "", want: "https://api.featherless.ai"},
+		{name: "base", raw: "https://api.featherless.ai", want: "https://api.featherless.ai"},
+		{name: "v1", raw: "https://api.featherless.ai/v1", want: "https://api.featherless.ai"},
+		{name: "chat completions", raw: "https://api.featherless.ai/chat/completions", want: "https://api.featherless.ai"},
+		{name: "v1 chat completions", raw: "https://api.featherless.ai/v1/chat/completions", want: "https://api.featherless.ai"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeFeatherlessAPIBaseURL(tt.raw); got != tt.want {
+				t.Fatalf("normalizeFeatherlessAPIBaseURL(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredProviders(t *testing.T) {
 	moonshotKey := "test-moonshot-key"
 	poeKey := "test-poe-key"
 	siliconFlowKey := "test-siliconflow-key"
 	xiaomiKey := "test-mimo-key"
+	featherlessKey := "test-featherless-key"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -291,6 +388,14 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 				}{Data: []struct {
 					ID string `json:"id"`
 				}{{ID: "siliconflow-model-1"}}})
+			case r.Header.Get("Authorization") == "Bearer "+featherlessKey:
+				_ = json.NewEncoder(w).Encode(struct {
+					Data []struct {
+						ID string `json:"id"`
+					} `json:"data"`
+				}{Data: []struct {
+					ID string `json:"id"`
+				}{{ID: "featherless-model-1"}}})
 			default:
 				t.Fatalf("unexpected auth for /v1/models: authorization=%q api-key=%q", r.Header.Get("Authorization"), r.Header.Get("api-key"))
 			}
@@ -335,6 +440,8 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 	t.Setenv("XIAOMI_MIMO_TOKEN_PLAN_API_BASE_URL", server.URL+"/v1")
 	t.Setenv("ZAI_API_KEY", "test-zai-key")
 	t.Setenv("ZAI_API_BASE_URL", server.URL+"/api/paas/v4/chat/completions")
+	t.Setenv("FEATHERLESS_API_KEY", featherlessKey)
+	t.Setenv("FEATHERLESS_API_BASE_URL", server.URL+"/v1/chat/completions")
 
 	svc := NewProviderModelDiscoveryService()
 	svc.http = server.Client()
@@ -345,8 +452,8 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 	if err != nil {
 		t.Fatalf("DiscoverAll failed: %v", err)
 	}
-	if len(results) != 7 {
-		t.Fatalf("providers count = %d, want 7", len(results))
+	if len(results) != 8 {
+		t.Fatalf("providers count = %d, want 8", len(results))
 	}
 	got := make([]string, 0, len(results))
 	for _, item := range results {
@@ -381,13 +488,18 @@ func TestProviderModelDiscoveryDiscoverAllSkipsMissingKeysAndReturnsConfiguredPr
 				t.Fatalf("xiaomi_mimo_token_plan model = %q, want %q", item.Models[0], "xiaomi_mimo_token_plan-model-1")
 			}
 		}
+		if item.Provider == "featherless" {
+			if item.Models[0] != "featherless-model-1" {
+				t.Fatalf("featherless model = %q, want %q", item.Models[0], "featherless-model-1")
+			}
+		}
 		if item.Provider == "minimax" {
 			if item.Models[0] != "MiniMax-M2.5" {
 				t.Fatalf("minimax model = %q, want %q", item.Models[0], "MiniMax-M2.5")
 			}
 		}
 	}
-	want := []string{"alibaba", "minimax", "moonshot", "poe", "siliconflow", "xiaomi_mimo_token_plan", "zai"}
+	want := []string{"alibaba", "featherless", "minimax", "moonshot", "poe", "siliconflow", "xiaomi_mimo_token_plan", "zai"}
 	slices.Sort(got)
 	slices.Sort(want)
 	for i := range want {

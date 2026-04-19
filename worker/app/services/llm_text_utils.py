@@ -29,7 +29,7 @@ def target_summary_chars(source_text_chars: int | None, facts: list[str]) -> int
 
 
 def summary_max_tokens(target_chars: int) -> int:
-    return clamp_int(round(target_chars * 1.38), 700, 2600)
+    return clamp_int(round(target_chars * 1.38), 1400, 5200)
 
 
 def audio_briefing_script_max_tokens(target_chars: int, conversation_mode: str = "single") -> int:

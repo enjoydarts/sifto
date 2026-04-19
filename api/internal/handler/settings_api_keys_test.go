@@ -48,6 +48,12 @@ func lockSettingsHandlerTestDB(t *testing.T, pool *pgxpool.Pool) {
 			t.Fatalf("pg_advisory_unlock() error = %v", err)
 		}
 	})
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS featherless_api_key_enc text`); err != nil {
+		t.Fatalf("ensure user_settings.featherless_api_key_enc: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS featherless_api_key_last4 text`); err != nil {
+		t.Fatalf("ensure user_settings.featherless_api_key_last4: %v", err)
+	}
 }
 
 func newSettingsHandlerForAPIKeyTest(t *testing.T) *SettingsHandler {
@@ -200,5 +206,71 @@ func TestSettingsHandlerDeleteXiaomiMiMoTokenPlanAPIKey(t *testing.T) {
 	}
 	if resp.XiaomiMiMoTokenPlanAPIKeyLast4 != nil {
 		t.Fatalf("xiaomi_mimo_token_plan_api_key_last4 = %#v, want nil", resp.XiaomiMiMoTokenPlanAPIKeyLast4)
+	}
+}
+
+func TestSettingsHandlerSetFeatherlessAPIKey(t *testing.T) {
+	handler := newSettingsHandlerForAPIKeyTest(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/settings/featherless-key", bytes.NewBufferString(`{"api_key":"featherless-handler-key"}`))
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, "00000000-0000-4000-8000-000000000051"))
+	rec := httptest.NewRecorder()
+
+	handler.SetFeatherlessAPIKey(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		UserID                 string  `json:"user_id"`
+		HasFeatherlessAPIKey   bool    `json:"has_featherless_api_key"`
+		FeatherlessAPIKeyLast4 *string `json:"featherless_api_key_last4"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !resp.HasFeatherlessAPIKey {
+		t.Fatal("has_featherless_api_key = false, want true")
+	}
+	if resp.FeatherlessAPIKeyLast4 == nil || *resp.FeatherlessAPIKeyLast4 != "-key" {
+		t.Fatalf("featherless_api_key_last4 = %#v, want %q", resp.FeatherlessAPIKeyLast4, "-key")
+	}
+}
+
+func TestSettingsHandlerDeleteFeatherlessAPIKey(t *testing.T) {
+	handler := newSettingsHandlerForAPIKeyTest(t)
+	userID := "00000000-0000-4000-8000-000000000051"
+
+	setReq := httptest.NewRequest(http.MethodPost, "/api/settings/featherless-key", bytes.NewBufferString(`{"api_key":"featherless-handler-key"}`))
+	setReq = setReq.WithContext(context.WithValue(setReq.Context(), middleware.UserIDKey, userID))
+	setRec := httptest.NewRecorder()
+	handler.SetFeatherlessAPIKey(setRec, setReq)
+	if setRec.Code != http.StatusOK {
+		t.Fatalf("setup status = %d, want 200 body=%s", setRec.Code, setRec.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/settings/featherless-key", nil)
+	req = req.WithContext(context.WithValue(req.Context(), middleware.UserIDKey, userID))
+	rec := httptest.NewRecorder()
+
+	handler.DeleteFeatherlessAPIKey(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		HasFeatherlessAPIKey   bool    `json:"has_featherless_api_key"`
+		FeatherlessAPIKeyLast4 *string `json:"featherless_api_key_last4"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.HasFeatherlessAPIKey {
+		t.Fatal("has_featherless_api_key = true, want false")
+	}
+	if resp.FeatherlessAPIKeyLast4 != nil {
+		t.Fatalf("featherless_api_key_last4 = %#v, want nil", resp.FeatherlessAPIKeyLast4)
 	}
 }

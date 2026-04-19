@@ -106,6 +106,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog(TogetherAliasModelID("Qwen/Qwen3-Coder-Next-FP8")); got == nil {
 		t.Fatal("together::Qwen/Qwen3-Coder-Next-FP8 not found in catalog")
 	}
+	if got := findModelCatalog(FeatherlessAliasModelID("Qwen/Qwen3.5-9B")); got == nil {
+		t.Fatal("featherless::Qwen/Qwen3.5-9B not found in catalog")
+	}
 }
 
 func TestCatalogProviderAndDefaults(t *testing.T) {
@@ -155,6 +158,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "openrouter::openai/gpt-oss-120b", provider: "openrouter"},
 		{model: "poe::Claude-Sonnet-4.5", provider: "poe"},
 		{model: "siliconflow::deepseek-ai/DeepSeek-V3.2", provider: "siliconflow"},
+		{model: FeatherlessAliasModelID("Qwen/Qwen3.5-9B"), provider: "featherless"},
 	}
 	for _, tt := range tests {
 		if got := CatalogProviderForModel(tt.model); got != tt.provider {
@@ -287,6 +291,7 @@ func TestDynamicChatModelsMergeAcrossProviders(t *testing.T) {
 	t.Cleanup(func() {
 		SetDynamicChatModelsForProvider("openrouter", nil)
 		SetDynamicChatModelsForProvider("poe", nil)
+		SetDynamicChatModelsForProvider("featherless", nil)
 	})
 
 	SetDynamicChatModelsForProvider("openrouter", []LLMModelCatalog{
@@ -295,6 +300,7 @@ func TestDynamicChatModelsMergeAcrossProviders(t *testing.T) {
 	SetDynamicChatModelsForProvider("poe", []LLMModelCatalog{
 		{ID: PoeAliasModelID("Claude-Sonnet-4.5"), Provider: "poe"},
 	})
+	SetDynamicChatModelsForProvider("featherless", FeatherlessModelIDsToCatalogModels([]string{"meta-llama/Llama-3.3-70B-Instruct-Turbo"}))
 
 	catalog := LLMCatalogData()
 	if CatalogModelByIDInCatalog(catalog, OpenRouterAliasModelID("openai/gpt-oss-120b")) == nil {
@@ -302,5 +308,8 @@ func TestDynamicChatModelsMergeAcrossProviders(t *testing.T) {
 	}
 	if CatalogModelByIDInCatalog(catalog, PoeAliasModelID("Claude-Sonnet-4.5")) == nil {
 		t.Fatal("poe dynamic model should be present in merged catalog")
+	}
+	if CatalogModelByIDInCatalog(catalog, FeatherlessAliasModelID("meta-llama/Llama-3.3-70B-Instruct-Turbo")) == nil {
+		t.Fatal("featherless dynamic model should be present in merged catalog")
 	}
 }

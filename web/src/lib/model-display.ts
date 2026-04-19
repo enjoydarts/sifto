@@ -14,6 +14,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   fireworks: "Fireworks",
   moonshot: "Moonshot",
   openrouter: "OpenRouter",
+  featherless: "Featherless.ai",
   poe: "Poe",
   siliconflow: "SiliconFlow",
 };
@@ -29,6 +30,9 @@ export function normalizeProvider(provider: string): string {
   if (p.startsWith("minimax::") || p.startsWith("minimax/")) {
     return "minimax";
   }
+  if (p.startsWith("featherless::") || p.startsWith("featherless/")) {
+    return "featherless";
+  }
   return p;
 }
 
@@ -40,6 +44,8 @@ export function providerLabel(provider: string): string {
 export function formatModelDisplayName(model: string): string {
   const raw = model.startsWith("openrouter::")
     ? model.slice("openrouter::".length)
+    : model.startsWith("featherless::")
+      ? model.slice("featherless::".length)
     : model.startsWith("together::")
       ? model.slice("together::".length)
     : model.startsWith("siliconflow::")

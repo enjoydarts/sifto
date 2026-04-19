@@ -74,6 +74,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	var openAIKeyEnc *string
 	var miniMaxAPIKeyEnc *string
 	var xiaomiMiMoTokenPlanAPIKeyEnc *string
+	var featherlessAPIKeyEnc *string
 	var googleAPIKeyEnc *string
 	var groqAPIKeyEnc *string
 	var deepseekAPIKeyEnc *string
@@ -102,6 +103,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		       minimax_api_key_last4,
 		       xiaomi_mimo_token_plan_api_key_enc,
 		       xiaomi_mimo_token_plan_api_key_last4,
+		       featherless_api_key_enc,
+		       featherless_api_key_last4,
 		       google_api_key_enc,
 		       google_api_key_last4,
 		       groq_api_key_enc,
@@ -201,6 +204,8 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 		&v.MiniMaxAPIKeyLast4,
 		&xiaomiMiMoTokenPlanAPIKeyEnc,
 		&v.XiaomiMiMoTokenPlanAPIKeyLast4,
+		&featherlessAPIKeyEnc,
+		&v.FeatherlessAPIKeyLast4,
 		&googleAPIKeyEnc,
 		&v.GoogleAPIKeyLast4,
 		&groqAPIKeyEnc,
@@ -295,6 +300,7 @@ func (r *UserSettingsRepo) GetByUserID(ctx context.Context, userID string) (*mod
 	v.HasOpenAIAPIKey = openAIKeyEnc != nil && *openAIKeyEnc != ""
 	v.HasMiniMaxAPIKey = miniMaxAPIKeyEnc != nil && *miniMaxAPIKeyEnc != ""
 	v.HasXiaomiMiMoTokenPlanAPIKey = xiaomiMiMoTokenPlanAPIKeyEnc != nil && *xiaomiMiMoTokenPlanAPIKeyEnc != ""
+	v.HasFeatherlessAPIKey = featherlessAPIKeyEnc != nil && *featherlessAPIKeyEnc != ""
 	v.HasGoogleAPIKey = googleAPIKeyEnc != nil && *googleAPIKeyEnc != ""
 	v.HasGroqAPIKey = groqAPIKeyEnc != nil && *groqAPIKeyEnc != ""
 	v.HasDeepSeekAPIKey = deepseekAPIKeyEnc != nil && *deepseekAPIKeyEnc != ""
@@ -668,6 +674,26 @@ func (r *UserSettingsRepo) GetXiaomiMiMoTokenPlanAPIKeyEncrypted(ctx context.Con
 	var v *string
 	err := r.db.QueryRow(ctx, `
 		SELECT xiaomi_mimo_token_plan_api_key_enc
+		FROM user_settings
+		WHERE user_id = $1`,
+		userID,
+	).Scan(&v)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if v == nil || *v == "" {
+		return nil, nil
+	}
+	return v, nil
+}
+
+func (r *UserSettingsRepo) GetFeatherlessAPIKeyEncrypted(ctx context.Context, userID string) (*string, error) {
+	var v *string
+	err := r.db.QueryRow(ctx, `
+		SELECT featherless_api_key_enc
 		FROM user_settings
 		WHERE user_id = $1`,
 		userID,
@@ -1167,6 +1193,22 @@ func (r *UserSettingsRepo) SetXiaomiMiMoTokenPlanAPIKey(ctx context.Context, use
 	return r.GetByUserID(ctx, userID)
 }
 
+func (r *UserSettingsRepo) SetFeatherlessAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, featherless_api_key_enc, featherless_api_key_last4)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id) DO UPDATE
+		SET featherless_api_key_enc = EXCLUDED.featherless_api_key_enc,
+		    featherless_api_key_last4 = EXCLUDED.featherless_api_key_last4,
+		    updated_at = NOW()`,
+		userID, encryptedKey, last4,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
 func (r *UserSettingsRepo) SetGoogleAPIKey(ctx context.Context, userID, encryptedKey, last4 string) (*model.UserSettings, error) {
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO user_settings (user_id, google_api_key_enc, google_api_key_last4)
@@ -1524,6 +1566,22 @@ func (r *UserSettingsRepo) ClearXiaomiMiMoTokenPlanAPIKey(ctx context.Context, u
 		ON CONFLICT (user_id) DO UPDATE
 		SET xiaomi_mimo_token_plan_api_key_enc = NULL,
 		    xiaomi_mimo_token_plan_api_key_last4 = NULL,
+		    updated_at = NOW()`,
+		userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByUserID(ctx, userID)
+}
+
+func (r *UserSettingsRepo) ClearFeatherlessAPIKey(ctx context.Context, userID string) (*model.UserSettings, error) {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO user_settings (user_id, featherless_api_key_enc, featherless_api_key_last4)
+		VALUES ($1, NULL, NULL)
+		ON CONFLICT (user_id) DO UPDATE
+		SET featherless_api_key_enc = NULL,
+		    featherless_api_key_last4 = NULL,
 		    updated_at = NOW()`,
 		userID,
 	)

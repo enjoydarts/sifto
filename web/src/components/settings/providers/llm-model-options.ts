@@ -1,15 +1,27 @@
 "use client";
 
-import { type LLMCatalog, type LLMCatalogModel, type ProviderModelChangeEvent, type UserSettings } from "@/lib/api";
-import { type ModelOption } from "@/components/settings/model-select";
+import type { ProviderModelChangeEvent } from "../../../types/api/common";
+import type { LLMCatalog, LLMCatalogModel } from "../../../types/api/model-catalog";
+import type { UserSettings } from "../../../types/api/settings";
 import {
   formatModelOptionNote,
   formatProviderModelLabel,
   inferProviderLabelFromModelID,
-  isUnavailableOpenRouterModel,
+  isUnavailableCatalogModel,
   localizeLLMSettingKey,
-} from "@/components/settings/providers/llm-provider-metadata";
-import { formatModelDisplayName, providerLabel as formatProviderLabel } from "@/lib/model-display";
+} from "./llm-provider-metadata";
+import { formatModelDisplayName, providerLabel as formatProviderLabel } from "../../../lib/model-display";
+import { getFeatherlessModelState } from "./featherless-model-state";
+
+type ModelOption = {
+  value: string;
+  label: string;
+  selectedLabel?: string;
+  note?: string;
+  provider?: string;
+  disabled?: boolean;
+  badge?: string;
+};
 
 export function buildModelSelectLabels(t: (key: string, fallback?: string) => string) {
   return {
@@ -31,12 +43,29 @@ export function buildModelSelectLabels(t: (key: string, fallback?: string) => st
 
 export function toModelOption(item: LLMCatalogModel, t: (key: string, fallback?: string) => string): ModelOption {
   const providerLabel = formatProviderLabel(item.provider);
+  const featherlessState = getFeatherlessModelState(item);
+  const unavailableOpenRouter = item.provider === "openrouter" && item.capabilities?.supports_structured_output === false;
+  const badge =
+    item.provider === "featherless"
+      ? featherlessState.kind === "gated"
+        ? t("settings.modelOption.badge.gated", "Gated")
+        : featherlessState.kind === "unavailable"
+          ? t("settings.modelOption.badge.unavailable", "Unavailable")
+        : featherlessState.kind === "removed"
+          ? t("settings.modelOption.badge.removed", "Removed")
+          : null
+      : unavailableOpenRouter
+        ? t("settings.modelOption.badge.unavailable", "Unavailable")
+        : null;
+
   return {
     value: item.id,
     label: formatModelDisplayName(item.id),
     selectedLabel: formatProviderModelLabel(providerLabel, item.id),
     note: formatModelOptionNote(item),
     provider: providerLabel,
+    disabled: unavailableOpenRouter || (item.provider === "featherless" && !featherlessState.selectable),
+    badge: badge ?? undefined,
   };
 }
 
@@ -45,12 +74,15 @@ function withCurrentModelFallback(items: ModelOption[], currentValue: string | u
     return items;
   }
   const providerLabel = inferProviderLabelFromModelID(currentValue, t);
+  const missingFeatherless = currentValue.startsWith("featherless::");
   return [
     {
       value: currentValue,
       label: formatModelDisplayName(currentValue),
       selectedLabel: formatProviderModelLabel(providerLabel, currentValue),
       provider: providerLabel ?? undefined,
+      disabled: missingFeatherless,
+      badge: missingFeatherless ? t("settings.modelOption.badge.removed", "Removed") : undefined,
     },
     ...items,
   ];
@@ -66,7 +98,8 @@ export function buildOptionsForPurpose(
     .filter((item) => {
       if (!(item.available_purposes ?? []).includes(purpose)) return false;
       if (item.id === currentValue) return true;
-      return !isUnavailableOpenRouterModel(item);
+      if (item.provider === "featherless") return true;
+      return !isUnavailableCatalogModel(item);
     })
     .map((item) => toModelOption(item, t));
   return withCurrentModelFallback(items, currentValue, t);
@@ -108,7 +141,17 @@ export function buildUnavailableSelectedModelWarnings(
   for (const [settingKey, modelID] of candidates) {
     if (!modelID) continue;
     const item = byID.get(modelID);
-    if (!item || !isUnavailableOpenRouterModel(item)) continue;
+    if (!item) {
+      if (modelID.startsWith("featherless::")) {
+        entries.push({
+          key: settingKey,
+          label: localizeLLMSettingKey(settingKey, t),
+          modelLabel: formatModelDisplayName(modelID),
+        });
+      }
+      continue;
+    }
+    if (!isUnavailableCatalogModel(item)) continue;
     entries.push({
       key: settingKey,
       label: localizeLLMSettingKey(settingKey, t),

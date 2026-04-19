@@ -3,7 +3,9 @@ package repository
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/enjoydarts/sifto/api/internal/model"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -20,6 +22,8 @@ func testProviderModelUpdatesRepoDB(t *testing.T) *pgxpool.Pool {
 	if _, err := pool.Exec(context.Background(), `
 		DELETE FROM provider_model_change_events WHERE provider = 'minimax';
 		DELETE FROM provider_model_snapshots WHERE provider = 'minimax';
+		DELETE FROM provider_model_change_events WHERE provider = 'featherless';
+		DELETE FROM provider_model_snapshots WHERE provider = 'featherless';
 	`); err != nil {
 		t.Fatalf("reset provider model updates tables: %v", err)
 	}
@@ -39,6 +43,19 @@ func lockProviderModelUpdatesRepoTestDB(t *testing.T, pool *pgxpool.Pool) {
 			t.Fatalf("pg_advisory_unlock() error = %v", err)
 		}
 	})
+	if _, err := pool.Exec(context.Background(), `
+		ALTER TABLE provider_model_change_events
+		  DROP CONSTRAINT IF EXISTS provider_model_change_events_change_type_check
+	`); err != nil {
+		t.Fatalf("drop provider_model_change_events_change_type_check: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		ALTER TABLE provider_model_change_events
+		  ADD CONSTRAINT provider_model_change_events_change_type_check
+		  CHECK (change_type IN ('added', 'constrained', 'availability_changed', 'gated_changed', 'removed'))
+	`); err != nil {
+		t.Fatalf("add provider_model_change_events_change_type_check: %v", err)
+	}
 }
 
 func TestProviderModelUpdateRepoListSnapshotEntriesIncludesFailedProviderWithoutModels(t *testing.T) {
@@ -72,5 +89,42 @@ func TestProviderModelUpdateRepoListSnapshotEntriesIncludesFailedProviderWithout
 	}
 	if items[0].Error == nil || *items[0].Error != errText {
 		t.Fatalf("error = %#v, want %q", items[0].Error, errText)
+	}
+}
+
+func TestProviderModelUpdateRepoListLatestProviderSummaryIncludesAvailabilityAndGatedChanges(t *testing.T) {
+	ctx := context.Background()
+	pool := testProviderModelUpdatesRepoDB(t)
+	repo := NewProviderModelUpdateRepo(pool)
+	detectedAt := time.Date(2026, 4, 19, 3, 4, 5, 0, time.UTC)
+
+	events := []model.ProviderModelChangeEvent{
+		{Provider: "featherless", ChangeType: "added", ModelID: "added-model", DetectedAt: detectedAt, Metadata: map[string]any{"trigger": "manual"}},
+		{Provider: "featherless", ChangeType: "availability_changed", ModelID: "availability-model", DetectedAt: detectedAt, Metadata: map[string]any{"trigger": "manual"}},
+		{Provider: "featherless", ChangeType: "gated_changed", ModelID: "gated-model", DetectedAt: detectedAt, Metadata: map[string]any{"trigger": "manual"}},
+		{Provider: "featherless", ChangeType: "removed", ModelID: "removed-model", DetectedAt: detectedAt, Metadata: map[string]any{"trigger": "manual"}},
+	}
+	if err := repo.InsertChangeEvents(ctx, events); err != nil {
+		t.Fatalf("InsertChangeEvents() error = %v", err)
+	}
+
+	summary, err := repo.ListLatestProviderSummary(ctx, "featherless")
+	if err != nil {
+		t.Fatalf("ListLatestProviderSummary() error = %v", err)
+	}
+	if summary == nil {
+		t.Fatal("summary = nil, want summary")
+	}
+	if len(summary.Added) != 1 || summary.Added[0].ModelID != "added-model" {
+		t.Fatalf("added = %#v, want added-model", summary.Added)
+	}
+	if len(summary.AvailabilityChanged) != 1 || summary.AvailabilityChanged[0].ModelID != "availability-model" {
+		t.Fatalf("availability_changed = %#v, want availability-model", summary.AvailabilityChanged)
+	}
+	if len(summary.GatedChanged) != 1 || summary.GatedChanged[0].ModelID != "gated-model" {
+		t.Fatalf("gated_changed = %#v, want gated-model", summary.GatedChanged)
+	}
+	if len(summary.Removed) != 1 || summary.Removed[0].ModelID != "removed-model" {
+		t.Fatalf("removed = %#v, want removed-model", summary.Removed)
 	}
 }

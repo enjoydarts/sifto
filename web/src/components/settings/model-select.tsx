@@ -9,6 +9,8 @@ type ModelOption = {
   selectedLabel?: string;
   note?: string;
   provider?: string;
+  disabled?: boolean;
+  badge?: string;
 };
 
 export default function ModelSelect({
@@ -223,12 +225,22 @@ export default function ModelSelect({
                           filtered.map((opt) => (
                             <tr
                               key={opt.value}
-                              className={`cursor-pointer transition hover:bg-zinc-50 ${value === opt.value ? "bg-zinc-50" : ""}`}
-                              onClick={() => setPendingValue(opt.value)}
+                              className={`${opt.disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-zinc-50"} transition ${value === opt.value ? "bg-zinc-50" : ""}`}
+                              onClick={() => {
+                                if (opt.disabled) return;
+                                setPendingValue(opt.value);
+                              }}
                             >
                               <td className="whitespace-nowrap px-4 py-3 text-zinc-700">{opt.provider ?? "Other"}</td>
                               <td className="px-4 py-3">
-                                <div className="whitespace-nowrap font-medium text-zinc-900">{opt.label}</div>
+                                <div className="flex items-center gap-2 whitespace-nowrap">
+                                  <span className="font-medium text-zinc-900">{opt.label}</span>
+                                  {opt.badge ? (
+                                    <span className="rounded-full border border-zinc-300 bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-600">
+                                      {opt.badge}
+                                    </span>
+                                  ) : null}
+                                </div>
                               </td>
                               <td className="whitespace-nowrap px-4 py-3 text-zinc-600">{opt.note ?? "—"}</td>
                             </tr>
@@ -339,15 +351,26 @@ export default function ModelSelect({
                         key={opt.value}
                         type="button"
                         onClick={() => {
+                          if (opt.disabled) return;
                           onChange(opt.value);
                           closeSelect();
                         }}
-                        className={`flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left hover:bg-zinc-50 ${
+                        disabled={opt.disabled}
+                        className={`flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2 text-left ${
+                          opt.disabled ? "cursor-not-allowed opacity-60" : "hover:bg-zinc-50"
+                        } ${
                           value === opt.value ? "bg-zinc-100" : ""
                         }`}
                       >
                         <span className="min-w-0">
-                          <span className="block break-all font-medium text-zinc-900">{opt.label}</span>
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="block break-all font-medium text-zinc-900">{opt.label}</span>
+                            {opt.badge ? (
+                              <span className="rounded-full border border-zinc-300 bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-600">
+                                {opt.badge}
+                              </span>
+                            ) : null}
+                          </span>
                           {opt.note && (
                             <span className="mt-0.5 block whitespace-normal break-words text-xs text-zinc-500">
                               {opt.note}

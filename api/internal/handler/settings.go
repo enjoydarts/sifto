@@ -1071,6 +1071,20 @@ func (h *SettingsHandler) DeleteXiaomiMiMoTokenPlanAPIKey(w http.ResponseWriter,
 	})
 }
 
+func (h *SettingsHandler) SetFeatherlessAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "featherless", map[string]func(*model.UserSettings) any{
+		"has_featherless_api_key":   func(s *model.UserSettings) any { return s.HasFeatherlessAPIKey },
+		"featherless_api_key_last4": func(s *model.UserSettings) any { return s.FeatherlessAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteFeatherlessAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "featherless", map[string]func(*model.UserSettings) any{
+		"has_featherless_api_key":   func(s *model.UserSettings) any { return s.HasFeatherlessAPIKey },
+		"featherless_api_key_last4": func(s *model.UserSettings) any { return s.FeatherlessAPIKeyLast4 },
+	})
+}
+
 func (h *SettingsHandler) SetMoonshotAPIKey(w http.ResponseWriter, r *http.Request) {
 	h.setAPIKey(w, r, "moonshot", map[string]func(*model.UserSettings) any{
 		"has_moonshot_api_key":   func(s *model.UserSettings) any { return s.HasMoonshotAPIKey },

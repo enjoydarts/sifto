@@ -17,6 +17,22 @@ export interface OpenRouterSyncStatusResponse {
   run: OpenRouterSyncRun | null;
 }
 
+export interface FeatherlessSyncRun {
+  id: string;
+  started_at: string;
+  finished_at?: string | null;
+  last_progress_at?: string | null;
+  status: string;
+  trigger_type: string;
+  fetched_count: number;
+  accepted_count: number;
+  error_message?: string | null;
+}
+
+export interface FeatherlessSyncStatusResponse {
+  run: FeatherlessSyncRun | null;
+}
+
 export interface PoeSyncRun {
   id: string;
   started_at: string;
@@ -227,6 +243,34 @@ export interface OpenRouterModelsResponse {
   unavailable_models: OpenRouterModelListEntry[];
 }
 
+export interface FeatherlessModelSnapshot {
+  provider_slug: string;
+  display_name: string;
+  model_id: string;
+  model_class?: string | null;
+  context_length?: number | null;
+  max_completion_tokens?: number | null;
+  is_gated: boolean;
+  available_on_current_plan: boolean;
+  fetched_at: string;
+}
+
+export interface FeatherlessModelListEntry extends FeatherlessModelSnapshot {
+  availability: "available" | "unavailable" | "removed" | string;
+  raw_availability?: "available" | "unavailable" | "removed" | "not_on_plan" | string;
+  reason?: "not_on_plan" | "removed" | string | null;
+  recent_change?: "added" | "availability_changed" | "gated_changed" | "removed" | string | null;
+  gated?: boolean;
+  available_on_current_plan: boolean;
+}
+
+export interface FeatherlessModelsResponse {
+  latest_run: FeatherlessSyncRun | null;
+  latest_change_summary?: ProviderModelChangeSummary | null;
+  models: FeatherlessModelListEntry[];
+  unavailable_models: FeatherlessModelListEntry[];
+}
+
 export interface ProviderModelSnapshotEntry {
   provider: string;
   model_id: string;
@@ -276,11 +320,17 @@ export interface LLMCatalogModelPricing {
 export interface LLMCatalogModel {
   id: string;
   provider: "anthropic" | "google" | "groq" | "openai" | "deepseek" | "alibaba" | "mistral" | "xai" | "zai" | string;
+  source_provider?: string;
   available_purposes: string[];
   recommendation?: "recommended" | "strong" | "experimental" | string;
   best_for?: "facts" | "summary" | "ask" | "digest" | "embedding" | "balanced" | string;
   highlights?: Array<"lowestCost" | "fast" | "jsonStable" | string>;
   comment?: string;
+  availability?: "available" | "unavailable" | "removed" | string;
+  raw_availability?: "available" | "unavailable" | "removed" | "not_on_plan" | string;
+  reason?: "not_on_plan" | "removed" | string | null;
+  gated?: boolean;
+  available_on_current_plan?: boolean;
   capabilities?: LLMCatalogModelCapabilities | null;
   pricing?: LLMCatalogModelPricing | null;
 }

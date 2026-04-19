@@ -1,7 +1,9 @@
 "use client";
 
-import type { LLMCatalog, LLMCatalogModel, UserSettings } from "@/lib/api";
-import { formatModelDisplayName } from "@/lib/model-display";
+import type { LLMCatalog, LLMCatalogModel } from "../../../types/api/model-catalog";
+import type { UserSettings } from "../../../types/api/settings";
+import { formatModelDisplayName } from "../../../lib/model-display";
+import { getFeatherlessModelState } from "./featherless-model-state";
 
 type Translate = (key: string, fallback?: string) => string;
 
@@ -27,6 +29,9 @@ export function formatModelOptionNote(item: LLMCatalogModel): string | undefined
 export function inferProviderLabelFromModelID(modelID: string, t: Translate): string | null {
   if (modelID.startsWith("openrouter::")) {
     return t("settings.modelGuide.provider.openrouter", "OpenRouter");
+  }
+  if (modelID.startsWith("featherless::")) {
+    return t("settings.modelGuide.provider.featherless", "Featherless.ai");
   }
   if (modelID.startsWith("siliconflow::")) {
     return t("settings.modelGuide.provider.siliconflow", "SiliconFlow");
@@ -208,4 +213,9 @@ export function localizeSettingsErrorMessage(raw: unknown, t: Translate): string
 
 export function isUnavailableOpenRouterModel(item: LLMCatalogModel): boolean {
   return item.provider === "openrouter" && item.capabilities?.supports_structured_output === false;
+}
+
+export function isUnavailableCatalogModel(item: LLMCatalogModel): boolean {
+  if (isUnavailableOpenRouterModel(item)) return true;
+  return item.provider === "featherless" && !getFeatherlessModelState(item).selectable;
 }

@@ -11,3 +11,14 @@ test("formatModelDisplayName formats Xiaomi MiMo models with branded casing", ()
 test("providerLabel formats Xiaomi MiMo TokenPlan provider label consistently", () => {
   assert.equal(providerLabel("xiaomi_mimo_token_plan"), "Xiaomi MiMo (TokenPlan)");
 });
+
+test("providerLabel formats Featherless consistently", () => {
+  assert.equal(providerLabel("featherless"), "Featherless.ai");
+});
+
+test("formatModelDisplayName strips Featherless alias prefix", () => {
+  assert.equal(
+    formatModelDisplayName("featherless::Qwen/Qwen3.5-9B"),
+    "Qwen/Qwen3.5-9B",
+  );
+});

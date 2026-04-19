@@ -378,7 +378,7 @@ class OpenAICompatProvider:
         task = build_facts_task(title, content, output_mode=self.config.facts_output_mode)
         chat_kwargs: dict = dict(
             system_instruction=task["system_instruction"],
-            max_output_tokens=1500,
+            max_output_tokens=3000,
         )
         if self.config.facts_pass_schema:
             chat_kwargs["response_schema"] = task["schema"]
@@ -680,7 +680,7 @@ class OpenAICompatProvider:
         task = build_facts_task(title, content, output_mode=self.config.facts_output_mode)
         chat_kwargs: dict = dict(
             system_instruction=task["system_instruction"],
-            max_output_tokens=1500,
+            max_output_tokens=3000,
         )
         if self.config.facts_pass_schema:
             chat_kwargs["response_schema"] = task["schema"]

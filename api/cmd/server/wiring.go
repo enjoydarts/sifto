@@ -269,6 +269,8 @@ func buildSettingsModule(d *appDeps) appModule {
 				r.Delete("/minimax-key", settingsH.DeleteMiniMaxAPIKey)
 				r.Post("/xiaomi-mimo-token-plan-key", settingsH.SetXiaomiMiMoTokenPlanAPIKey)
 				r.Delete("/xiaomi-mimo-token-plan-key", settingsH.DeleteXiaomiMiMoTokenPlanAPIKey)
+				r.Post("/featherless-key", settingsH.SetFeatherlessAPIKey)
+				r.Delete("/featherless-key", settingsH.DeleteFeatherlessAPIKey)
 				r.Post("/moonshot-key", settingsH.SetMoonshotAPIKey)
 				r.Delete("/moonshot-key", settingsH.DeleteMoonshotAPIKey)
 				r.Post("/xai-key", settingsH.SetXAIAPIKey)
@@ -405,6 +407,7 @@ func buildLLMModelsModule(d *appDeps) appModule {
 	openRouterModelOverrideRepo := repository.NewOpenRouterModelOverrideRepo(db)
 	providerModelUpdateRepo := repository.NewProviderModelUpdateRepo(db)
 	poeModelRepo := repository.NewPoeModelRepo(db)
+	featherlessModelRepo := repository.NewFeatherlessModelRepo(db)
 	poeUsageRepo := repository.NewPoeUsageRepo(db)
 	aivisModelRepo := repository.NewAivisModelRepo(db)
 	xaiVoiceRepo := repository.NewXAIVoiceRepo(db)
@@ -420,6 +423,8 @@ func buildLLMModelsModule(d *appDeps) appModule {
 	poeCatalogSvc := service.NewPoeCatalogService()
 	poeUsageSvc := service.NewPoeUsageService(poeUsageRepo)
 	poeModelsH := handler.NewPoeModelsHandler(poeModelRepo, userSettingsRepo, d.secretCipher, providerModelUpdateRepo, poeCatalogSvc, poeUsageSvc)
+	featherlessCatalogSvc := service.NewFeatherlessCatalogService()
+	featherlessModelsH := handler.NewFeatherlessModelsHandler(featherlessModelRepo, userSettingsRepo, d.secretCipher, providerModelUpdateRepo, featherlessCatalogSvc)
 	aivisCatalogSvc := service.NewAivisCatalogService()
 	aivisModelsH := handler.NewAivisModelsHandler(aivisModelRepo, providerModelUpdateRepo, aivisCatalogSvc)
 	fishAudioCatalogSvc := service.NewFishAudioCatalogService()
@@ -457,6 +462,11 @@ func buildLLMModelsModule(d *appDeps) appModule {
 				r.Post("/usage/sync", poeModelsH.SyncUsage)
 				r.Get("/status", poeModelsH.Status)
 				r.Post("/sync", poeModelsH.Sync)
+			})
+			r.Route("/featherless-models", func(r chi.Router) {
+				r.Get("/", featherlessModelsH.List)
+				r.Get("/status", featherlessModelsH.Status)
+				r.Post("/sync", featherlessModelsH.Sync)
 			})
 			r.Route("/aivis-models", func(r chi.Router) {
 				r.Get("/", aivisModelsH.List)
@@ -627,6 +637,7 @@ func preloadDynamicModels(ctx context.Context, d *appDeps) {
 	db := d.db
 	openRouterModelRepo := repository.NewOpenRouterModelRepo(db)
 	poeModelRepo := repository.NewPoeModelRepo(db)
+	featherlessModelRepo := repository.NewFeatherlessModelRepo(db)
 
 	if latestModels, _, err := openRouterModelRepo.ListLatestSnapshots(ctx); err != nil {
 		log.Printf("openrouter snapshot preload failed: %v", err)
@@ -637,6 +648,11 @@ func preloadDynamicModels(ctx context.Context, d *appDeps) {
 		log.Printf("poe snapshot preload failed: %v", err)
 	} else {
 		service.SetDynamicChatModelsForProvider("poe", service.PoeSnapshotsToCatalogModels(latestModels))
+	}
+	if latestModels, _, err := featherlessModelRepo.ListLatestSnapshots(ctx); err != nil {
+		log.Printf("featherless snapshot preload failed: %v", err)
+	} else {
+		service.SetDynamicChatModelsForProvider("featherless", service.FeatherlessSnapshotsToCatalogModels(latestModels))
 	}
 }
 

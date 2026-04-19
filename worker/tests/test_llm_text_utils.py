@@ -32,12 +32,13 @@ class FactsLocalizationDetectionTests(unittest.TestCase):
         self.assertEqual(audio_briefing_script_max_tokens(14000, "duo"), 30000)
 
     def test_summary_max_tokens_increases_by_about_fifteen_percent(self):
-        self.assertEqual(summary_max_tokens(500), 700)
-        self.assertEqual(summary_max_tokens(600), 828)
+        self.assertEqual(summary_max_tokens(500), 1400)
+        self.assertEqual(summary_max_tokens(600), 1400)
 
     def test_summary_max_tokens_keeps_existing_bounds(self):
-        self.assertEqual(summary_max_tokens(100), 700)
-        self.assertEqual(summary_max_tokens(3000), 2600)
+        self.assertEqual(summary_max_tokens(100), 1400)
+        self.assertEqual(summary_max_tokens(3000), 4140)
+        self.assertEqual(summary_max_tokens(4000), 5200)
 
 
 if __name__ == "__main__":

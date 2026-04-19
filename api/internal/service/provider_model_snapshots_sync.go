@@ -285,6 +285,9 @@ func (s *ProviderModelSnapshotSyncService) buildDiscoveryService(ctx context.Con
 		if keys.XiaomiMiMoTokenPlan == "" {
 			keys.XiaomiMiMoTokenPlan = s.loadUserKey(ctx, user.ID, s.settings.GetXiaomiMiMoTokenPlanAPIKeyEncrypted)
 		}
+		if keys.Featherless == "" {
+			keys.Featherless = s.loadUserKey(ctx, user.ID, s.settings.GetFeatherlessAPIKeyEncrypted)
+		}
 	}
 	return NewProviderModelDiscoveryServiceWithKeys(keys), nil
 }

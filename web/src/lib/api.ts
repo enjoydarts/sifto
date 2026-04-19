@@ -26,6 +26,8 @@ import type {
   Digest,
   DigestDetail,
   ElevenLabsVoicesResponse,
+  FeatherlessModelsResponse,
+  FeatherlessSyncStatusResponse,
   FishBrowseResponse,
   FishBrowseSort,
   FocusQueueResponse,
@@ -1103,6 +1105,16 @@ export const api = {
       "/settings/openrouter-key",
       { method: "DELETE" }
     ),
+  setFeatherlessApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_featherless_api_key: boolean; featherless_api_key_last4: string | null }>(
+      "/settings/featherless-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteFeatherlessApiKey: () =>
+    apiFetch<{ user_id: string; has_featherless_api_key: boolean; featherless_api_key_last4: string | null }>(
+      "/settings/featherless-key",
+      { method: "DELETE" }
+    ),
   setAivisApiKey: (apiKey: string) =>
     apiFetch<{ user_id: string; has_aivis_api_key: boolean; aivis_api_key_last4: string | null }>(
       "/settings/aivis-key",
@@ -1203,6 +1215,12 @@ export const api = {
     apiFetch<OpenRouterSyncStatusResponse>("/openrouter-models/status"),
   syncOpenRouterModels: () =>
     apiFetch<OpenRouterModelsResponse>("/openrouter-models/sync", { method: "POST" }),
+  getFeatherlessModels: () =>
+    apiFetch<FeatherlessModelsResponse>("/featherless-models"),
+  getFeatherlessSyncStatus: () =>
+    apiFetch<FeatherlessSyncStatusResponse>("/featherless-models/status"),
+  syncFeatherlessModels: () =>
+    apiFetch<FeatherlessModelsResponse>("/featherless-models/sync", { method: "POST" }),
   setOpenRouterStructuredOutputOverride: (modelId: string, allowStructuredOutput: boolean) =>
     apiFetch<{ model_id: string; override_enabled: boolean; allow_structured_output: boolean }>(
       "/openrouter-models/overrides/structured-output",

@@ -19,6 +19,7 @@ type LLMCatalog struct {
 
 type LLMProviderCatalog struct {
 	ID            string            `json:"id"`
+	Label         string            `json:"label,omitempty"`
 	APIKeyHeader  string            `json:"api_key_header"`
 	MatchExact    []string          `json:"match_exact"`
 	MatchPrefixes []string          `json:"match_prefixes"`
@@ -68,6 +69,7 @@ const openRouterAliasPrefix = "openrouter::"
 const poeAliasPrefix = "poe::"
 const siliconFlowAliasPrefix = "siliconflow::"
 const togetherAliasPrefix = "together::"
+const featherlessAliasPrefix = "featherless::"
 const miniMaxAliasPrefix = "minimax::"
 const miniMaxSlashPrefix = "minimax/"
 
@@ -162,6 +164,26 @@ func ResolveTogetherModelID(model string) string {
 
 func IsTogetherAliasedModel(model string) bool {
 	return strings.HasPrefix(strings.TrimSpace(model), togetherAliasPrefix)
+}
+
+func FeatherlessAliasModelID(model string) string {
+	m := strings.TrimSpace(model)
+	if m == "" {
+		return ""
+	}
+	if strings.HasPrefix(m, featherlessAliasPrefix) {
+		return m
+	}
+	return featherlessAliasPrefix + m
+}
+
+func ResolveFeatherlessModelID(model string) string {
+	m := strings.TrimSpace(model)
+	return strings.TrimPrefix(m, featherlessAliasPrefix)
+}
+
+func IsFeatherlessAliasedModel(model string) bool {
+	return strings.HasPrefix(strings.TrimSpace(model), featherlessAliasPrefix)
 }
 
 func MiniMaxAliasModelID(model string) string {
@@ -344,6 +366,9 @@ func resolveCatalogAliasModelID(catalog *LLMCatalog, model string) string {
 	if IsTogetherAliasedModel(m) {
 		candidates = append(candidates, ResolveTogetherModelID(m))
 	}
+	if IsFeatherlessAliasedModel(m) {
+		candidates = append(candidates, ResolveFeatherlessModelID(m))
+	}
 	if IsMiniMaxAliasedModel(m) {
 		candidates = append(candidates, ResolveMiniMaxModelID(m))
 	}
@@ -437,6 +462,9 @@ func CatalogProviderForModel(model string) string {
 	}
 	if IsTogetherAliasedModel(m) {
 		return "together"
+	}
+	if IsFeatherlessAliasedModel(m) {
+		return "featherless"
 	}
 	if entry := findModelCatalog(m); entry != nil && entry.Provider != "" {
 		return entry.Provider

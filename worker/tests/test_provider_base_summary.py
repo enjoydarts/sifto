@@ -15,8 +15,14 @@ class _StubSummaryProvider(OpenAICompatProvider):
                 default_model="test-model",
             )
         )
+        self.last_chat_kwargs = None
+        self.chat_kwargs_history = []
 
     def _chat_json(self, prompt, model, api_key, **kwargs):
+        self.last_chat_kwargs = kwargs
+        self.chat_kwargs_history.append(kwargs)
+        if kwargs.get("schema_name") == "facts":
+            return ('["Fact 1"]', {})
         return (
             '{"summary":"要約です。","topics":["AI"],"genre":"research","other_label":"不要","translated_title":"","score_breakdown":{"importance":0.8,"novelty":0.5,"actionability":0.6,"reliability":0.9,"relevance":0.7},"score_reason":"理由です。"}',
             {},
@@ -43,6 +49,19 @@ class ProviderBaseSummaryTests(unittest.TestCase):
 
         self.assertEqual(result["genre"], "research")
         self.assertEqual(result["other_label"], "")
+        self.assertEqual(provider.last_chat_kwargs["max_output_tokens"], 1400)
+
+    def test_extract_facts_uses_doubled_output_token_cap(self):
+        provider = _StubSummaryProvider()
+
+        provider.extract_facts(
+            title="Example",
+            content="Fact 1",
+            model="test-model",
+            api_key="test-key",
+        )
+
+        self.assertEqual(provider.chat_kwargs_history[0]["max_output_tokens"], 3000)
 
 
 if __name__ == "__main__":

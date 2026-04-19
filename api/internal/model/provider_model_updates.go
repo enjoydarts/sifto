@@ -4,7 +4,7 @@ import "time"
 
 func ExcludeFromProviderModelSnapshots(provider string) bool {
 	switch provider {
-	case "aivis", "openrouter", "poe":
+	case "aivis", "openrouter", "poe", "featherless":
 		return true
 	default:
 		return false
@@ -45,10 +45,12 @@ type ProviderModelChangeEvent struct {
 }
 
 type ProviderModelChangeSummary struct {
-	Provider    string                     `json:"provider"`
-	DetectedAt  time.Time                  `json:"detected_at"`
-	Trigger     string                     `json:"trigger"`
-	Added       []ProviderModelChangeEvent `json:"added"`
-	Constrained []ProviderModelChangeEvent `json:"constrained"`
-	Removed     []ProviderModelChangeEvent `json:"removed"`
+	Provider            string                     `json:"provider"`
+	DetectedAt          time.Time                  `json:"detected_at"`
+	Trigger             string                     `json:"trigger"`
+	Added               []ProviderModelChangeEvent `json:"added"`
+	Constrained         []ProviderModelChangeEvent `json:"constrained"`
+	AvailabilityChanged []ProviderModelChangeEvent `json:"availability_changed"`
+	GatedChanged        []ProviderModelChangeEvent `json:"gated_changed"`
+	Removed             []ProviderModelChangeEvent `json:"removed"`
 }

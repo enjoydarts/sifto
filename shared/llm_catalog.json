@@ -247,6 +247,19 @@
       }
     },
     {
+      "id": "featherless",
+      "label": "Featherless.ai",
+      "api_key_header": "x-openai-api-key",
+      "default_models": {
+        "facts": "featherless::Qwen/Qwen3.5-9B",
+        "summary": "featherless::Qwen/Qwen3.5-9B",
+        "digest_cluster_draft": "featherless::Qwen/Qwen3.5-9B",
+        "digest": "featherless::Qwen/Qwen3.5-9B",
+        "ask": "featherless::Qwen/Qwen3.5-9B",
+        "source_suggestion": "featherless::Qwen/Qwen3.5-9B"
+      }
+    },
+    {
       "id": "openrouter",
       "api_key_header": "x-openai-api-key",
       "default_models": {}
@@ -276,6 +289,30 @@
     }
   ],
   "chat_models": [
+    {
+      "id": "featherless::Qwen/Qwen3.5-9B",
+      "provider": "featherless",
+      "source_provider": "Qwen",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "experimental",
+      "highlights": ["experimental"],
+      "comment": "Featherless.ai 疎通用の最小 static model。将来は dynamic snapshot の alias model を merge して置き換える前提。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": false,
+        "supports_tool_calling": false,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "featherless_static_2026_04",
+        "input_per_mtok_usd": 0,
+        "output_per_mtok_usd": 0,
+        "cache_read_per_mtok_usd": 0
+      }
+    },
     {
       "id": "siliconflow::deepseek-ai/DeepSeek-V3.1",
       "provider": "siliconflow",

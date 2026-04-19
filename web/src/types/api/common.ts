@@ -17,6 +17,8 @@ export interface ProviderModelChangeSummary {
   trigger: string;
   added: ProviderModelChangeEvent[];
   constrained: ProviderModelChangeEvent[];
+  availability_changed?: ProviderModelChangeEvent[];
+  gated_changed?: ProviderModelChangeEvent[];
   removed: ProviderModelChangeEvent[];
 }
 

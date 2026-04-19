@@ -9,7 +9,7 @@ _PROVIDER_MODULE_MAP = {
 _DEFAULT_PROVIDERS = [
     "anthropic", "google", "fireworks", "groq", "deepseek", "alibaba",
     "mistral", "together", "moonshot", "minimax", "xai", "zai", "openrouter",
-    "poe", "siliconflow", "xiaomi_mimo_token_plan", "openai",
+    "poe", "siliconflow", "xiaomi_mimo_token_plan", "featherless", "openai",
 ]
 
 

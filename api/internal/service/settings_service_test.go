@@ -159,6 +159,12 @@ func lockSettingsServiceTestDB(t *testing.T, db *pgxpool.Pool) {
 	if _, err := db.Exec(context.Background(), `ALTER TABLE item_summaries ADD COLUMN IF NOT EXISTS other_genre_label text`); err != nil {
 		t.Fatalf("ensure item_summaries.other_genre_label: %v", err)
 	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS featherless_api_key_enc text`); err != nil {
+		t.Fatalf("ensure user_settings.featherless_api_key_enc: %v", err)
+	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS featherless_api_key_last4 text`); err != nil {
+		t.Fatalf("ensure user_settings.featherless_api_key_last4: %v", err)
+	}
 }
 
 func TestValidateCatalogModelForPurpose(t *testing.T) {
@@ -413,6 +419,61 @@ func TestSettingsServiceGetIncludesMiniMaxAPIKeyPayload(t *testing.T) {
 	}
 	if payload.MiniMaxAPIKeyLast4 == nil || *payload.MiniMaxAPIKeyLast4 != "cret" {
 		t.Fatalf("MiniMaxAPIKeyLast4 = %#v, want %q", payload.MiniMaxAPIKeyLast4, "cret")
+	}
+}
+
+func TestSettingsServiceSetAndDeleteFeatherlessAPIKey(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "settings-service-featherless-test-key")
+
+	svc := newSettingsServiceForTest(t)
+	svc.cipher = NewSecretCipher()
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+
+	settings, err := svc.SetAPIKey(ctx, userID, "featherless", "featherless-secret")
+	if err != nil {
+		t.Fatalf("SetAPIKey(featherless) error = %v", err)
+	}
+	if !settings.HasFeatherlessAPIKey {
+		t.Fatal("HasFeatherlessAPIKey = false, want true")
+	}
+	if settings.FeatherlessAPIKeyLast4 == nil || *settings.FeatherlessAPIKeyLast4 != "cret" {
+		t.Fatalf("FeatherlessAPIKeyLast4 = %#v, want %q", settings.FeatherlessAPIKeyLast4, "cret")
+	}
+
+	settings, err = svc.DeleteAPIKey(ctx, userID, "featherless")
+	if err != nil {
+		t.Fatalf("DeleteAPIKey(featherless) error = %v", err)
+	}
+	if settings.HasFeatherlessAPIKey {
+		t.Fatal("HasFeatherlessAPIKey = true, want false")
+	}
+	if settings.FeatherlessAPIKeyLast4 != nil {
+		t.Fatalf("FeatherlessAPIKeyLast4 = %#v, want nil", settings.FeatherlessAPIKeyLast4)
+	}
+}
+
+func TestSettingsServiceGetIncludesFeatherlessAPIKeyPayload(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "settings-service-featherless-payload-key")
+
+	svc := newSettingsServiceForTest(t)
+	svc.cipher = NewSecretCipher()
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+
+	if _, err := svc.SetAPIKey(ctx, userID, "featherless", "payload-featherless-secret"); err != nil {
+		t.Fatalf("SetAPIKey(featherless) error = %v", err)
+	}
+
+	payload, err := svc.Get(ctx, userID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !payload.HasFeatherlessAPIKey {
+		t.Fatal("HasFeatherlessAPIKey = false, want true")
+	}
+	if payload.FeatherlessAPIKeyLast4 == nil || *payload.FeatherlessAPIKeyLast4 != "cret" {
+		t.Fatalf("FeatherlessAPIKeyLast4 = %#v, want %q", payload.FeatherlessAPIKeyLast4, "cret")
 	}
 }
 

@@ -31,6 +31,8 @@ type UserSettings struct {
 	HasMiniMaxAPIKey                 bool       `json:"has_minimax_api_key"`
 	XiaomiMiMoTokenPlanAPIKeyLast4   *string    `json:"xiaomi_mimo_token_plan_api_key_last4,omitempty"`
 	HasXiaomiMiMoTokenPlanAPIKey     bool       `json:"has_xiaomi_mimo_token_plan_api_key"`
+	FeatherlessAPIKeyLast4           *string    `json:"featherless_api_key_last4,omitempty"`
+	HasFeatherlessAPIKey             bool       `json:"has_featherless_api_key"`
 	GoogleAPIKeyLast4                *string    `json:"google_api_key_last4,omitempty"`
 	HasGoogleAPIKey                  bool       `json:"has_google_api_key"`
 	GroqAPIKeyLast4                  *string    `json:"groq_api_key_last4,omitempty"`

@@ -55,6 +55,7 @@ const secondaryLinks = [
   { href: "/provider-model-snapshots", labelKey: "nav.providerModelSnapshots", icon: Link2 },
   { href: "/poe-models", labelKey: "nav.poeModels", icon: Link2 },
   { href: "/openrouter-models", labelKey: "nav.openrouterModels", icon: Link2 },
+  { href: "/featherless-models", labelKey: "nav.featherlessModels", icon: Link2 },
   { href: "/aivis-models", labelKey: "nav.aivisModels", icon: Link2 },
   { href: "/fish-models", labelKey: "nav.fishModels", icon: Link2 },
   { href: "/prompt-admin", labelKey: "nav.promptAdmin", icon: SettingsIcon },
@@ -114,7 +115,7 @@ function NavShell({ displayName, hasSignedInUser, onSignOut }: SharedNavProps) {
     {
       labelKey: "nav.group.llm",
       items: visibleSecondaryLinks.filter((link) =>
-        ["/llm-usage", "/llm-analysis", "/provider-model-snapshots", "/poe-models", "/openrouter-models", "/aivis-models", "/fish-models", "/prompt-admin"].includes(link.href),
+        ["/llm-usage", "/llm-analysis", "/provider-model-snapshots", "/poe-models", "/openrouter-models", "/featherless-models", "/aivis-models", "/fish-models", "/prompt-admin"].includes(link.href),
       ),
     },
   ];

@@ -21,6 +21,7 @@ export type AccessProviderID =
   | "poe"
   | "siliconflow"
   | "openrouter"
+  | "featherless"
   | "azure_speech"
   | "aivis"
   | "elevenlabs"
@@ -228,6 +229,14 @@ const ACCESS_CARD_METADATA: AccessCardMetadata[] = [
     notSetKey: "settings.openrouterNotSet",
     placeholder: "sk-or-v1-...",
     selectStatus: (settings) => ({ configured: settings.has_openrouter_api_key, last4: settings.openrouter_api_key_last4 }),
+  },
+  {
+    id: "featherless",
+    titleKey: "settings.featherlessTitle",
+    descriptionKey: "settings.featherlessDescription",
+    notSetKey: "settings.featherlessNotSet",
+    placeholder: "sk-...",
+    selectStatus: (settings) => ({ configured: Boolean(settings.has_featherless_api_key), last4: settings.featherless_api_key_last4 ?? null }),
   },
   {
     id: "azure_speech",

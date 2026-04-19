@@ -145,6 +145,7 @@ func TestSelectSourceSuggestionLLMResolvesOpenAICompatibleProviders(t *testing.T
 				strPtr("openrouter-key"),
 				strPtr("poe-key"),
 				strPtr("siliconflow-key"),
+				nil,
 				strPtr("openai-key"),
 				strPtr(tt.model),
 			)

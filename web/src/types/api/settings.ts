@@ -98,6 +98,8 @@ export interface UserSettings {
   azure_speech_region?: string | null;
   has_openrouter_api_key: boolean;
   openrouter_api_key_last4: string | null;
+  has_featherless_api_key?: boolean;
+  featherless_api_key_last4?: string | null;
   has_aivis_api_key: boolean;
   aivis_api_key_last4: string | null;
   has_elevenlabs_api_key?: boolean;

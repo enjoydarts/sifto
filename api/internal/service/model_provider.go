@@ -2,7 +2,7 @@ package service
 
 import "strings"
 
-var costEfficientProviderPriority = []string{"groq", "zai", "fireworks", "together", "moonshot", "alibaba", "google", "mistral", "xai", "deepseek", "minimax", "xiaomi_mimo_token_plan", "siliconflow", "openrouter", "openai", "anthropic"}
+var costEfficientProviderPriority = []string{"groq", "zai", "fireworks", "together", "moonshot", "alibaba", "google", "mistral", "xai", "deepseek", "minimax", "xiaomi_mimo_token_plan", "featherless", "siliconflow", "openrouter", "openai", "anthropic"}
 
 func isModelByProvider(model *string, provider string) bool {
 	if model == nil {

@@ -338,7 +338,10 @@ class RunChatJsonTests(unittest.TestCase):
 
         self.assertIsNotNone(_FakeClient.last_json)
         self.assertEqual(_FakeClient.last_json.get("thinking"), {"type": "disabled"})
-        self.assertNotIn("chat_template_kwargs", _FakeClient.last_json)
+        self.assertEqual(
+            _FakeClient.last_json.get("chat_template_kwargs"),
+            {"enable_thinking": False},
+        )
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
     def test_non_zai_requests_do_not_set_thinking(self):

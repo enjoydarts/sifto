@@ -40,6 +40,7 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
         return
     if _is_featherless_kimi_k25_model(normalized_model):
         body["thinking"] = {"type": "disabled"}
+        body["reasoning"] = {"enabled": False}
         body["chat_template_kwargs"] = {"enable_thinking": False}
         return
     if _is_featherless_glm_model(normalized_model):

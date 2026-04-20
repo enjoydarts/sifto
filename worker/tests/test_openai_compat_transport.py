@@ -339,6 +339,10 @@ class RunChatJsonTests(unittest.TestCase):
         self.assertIsNotNone(_FakeClient.last_json)
         self.assertEqual(_FakeClient.last_json.get("thinking"), {"type": "disabled"})
         self.assertEqual(
+            _FakeClient.last_json.get("reasoning"),
+            {"enabled": False},
+        )
+        self.assertEqual(
             _FakeClient.last_json.get("chat_template_kwargs"),
             {"enable_thinking": False},
         )

@@ -25,6 +25,11 @@ def _is_featherless_kimi_k25_model(model: str) -> bool:
     return normalized in {"moonshotai/kimi-k2.5", "kimi-k2.5"}
 
 
+def _is_featherless_glm_model(model: str) -> bool:
+    normalized = str(model or "").strip().lower()
+    return normalized.startswith("zai-org/glm-") or normalized.startswith("glm-")
+
+
 def _apply_openai_compat_request_overrides(provider_name: str, normalized_model: str, body: dict) -> None:
     if provider_name in {"zai", "moonshot"}:
         # Some OpenAI-compatible providers enable thinking by default, which can
@@ -36,6 +41,9 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
     if _is_featherless_kimi_k25_model(normalized_model):
         body["thinking"] = {"type": "disabled"}
         body["chat_template_kwargs"] = {"enable_thinking": False}
+        return
+    if _is_featherless_glm_model(normalized_model):
+        body["thinking"] = {"type": "disabled"}
         return
     if _is_featherless_moonshot_model(normalized_model) or _is_featherless_qwen_model(normalized_model):
         # OpenAI SDK users would pass this via extra_body; on the raw HTTP body

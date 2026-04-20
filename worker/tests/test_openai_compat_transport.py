@@ -320,7 +320,7 @@ class RunChatJsonTests(unittest.TestCase):
         self.assertNotIn("thinking", _FakeClient.last_json)
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
-    def test_featherless_requests_disable_moonshot_thinking_via_chat_template_kwargs(self):
+    def test_featherless_requests_disable_kimi_k25_thinking_via_top_level_thinking(self):
         run_chat_json(
             "Return JSON",
             "moonshotai/Kimi-K2.5",
@@ -337,11 +337,8 @@ class RunChatJsonTests(unittest.TestCase):
         )
 
         self.assertIsNotNone(_FakeClient.last_json)
-        self.assertEqual(
-            _FakeClient.last_json.get("chat_template_kwargs"),
-            {"enable_thinking": False},
-        )
-        self.assertNotIn("thinking", _FakeClient.last_json)
+        self.assertEqual(_FakeClient.last_json.get("thinking"), {"type": "disabled"})
+        self.assertNotIn("chat_template_kwargs", _FakeClient.last_json)
 
     @patch("app.services.openai_compat_transport.httpx.Client", _FakeClient)
     def test_non_zai_requests_do_not_set_thinking(self):

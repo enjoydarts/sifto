@@ -502,7 +502,7 @@ type ItemSearchDocument struct {
 	ContentText              string     `json:"content_text"`
 	Topics                   []string   `json:"topics"`
 	EffectiveGenre           string     `json:"effective_genre,omitempty"`
-	EffectiveOtherGenreLabel string     `json:"effective_other_genre_label,omitempty"`
+	EffectiveOtherGenreLabel *string    `json:"effective_other_genre_label,omitempty"`
 	PublishedAt              *time.Time `json:"published_at,omitempty"`
 	CreatedAt                time.Time  `json:"created_at"`
 }

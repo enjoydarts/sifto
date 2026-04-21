@@ -2110,6 +2110,29 @@
       }
     },
     {
+      "id": "fireworks/kimi-k2p6",
+      "provider": "fireworks",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "summary",
+      "highlights": ["long-context"],
+      "comment": "Fireworks の Kimi K2.6。K2.5 後継として、長文要約や Ask の上位比較枠に使う最新候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": true,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "fireworks_model_page_2026_04",
+        "input_per_mtok_usd": 0.95,
+        "output_per_mtok_usd": 4.0,
+        "cache_read_per_mtok_usd": 0.16
+      }
+    },
+    {
       "id": "fireworks/kimi-k2p5",
       "provider": "fireworks",
       "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],

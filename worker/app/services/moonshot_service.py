@@ -4,7 +4,7 @@ from .provider_base import ProviderConfig, OpenAICompatProvider
 class _MoonshotProvider(OpenAICompatProvider):
     def _normalize_temperature(self, model: str, value: float | None) -> float:
         m = self._normalize_model_name(model)
-        if m == "kimi-k2.5":
+        if m in {"kimi-k2.5", "kimi-k2.6"}:
             return 0.6
         return 1.0
 

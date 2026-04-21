@@ -6,6 +6,7 @@ from app.services.moonshot_service import _llm_meta, _normalize_temperature, _no
 
 class MoonshotServiceTests(unittest.TestCase):
     def test_provider_for_model_detects_moonshot(self):
+        self.assertEqual(provider_for_model("kimi-k2.6"), "moonshot")
         self.assertEqual(provider_for_model("kimi-k2.5"), "moonshot")
         self.assertEqual(provider_for_model("kimi-k2-0905-preview"), "moonshot")
         self.assertEqual(provider_for_model("kimi-k2-thinking-turbo"), "moonshot")
@@ -49,8 +50,14 @@ class MoonshotServiceTests(unittest.TestCase):
         self.assertEqual(_normalize_temperature("kimi-k2.5", None), 0.6)
         self.assertEqual(_normalize_temperature("kimi-k2.5", 0.2), 0.6)
         self.assertEqual(_normalize_temperature("kimi-k2.5", 1.0), 0.6)
+        self.assertEqual(_normalize_temperature("kimi-k2.6", None), 0.6)
+        self.assertEqual(_normalize_temperature("kimi-k2.6", 0.2), 0.6)
+        self.assertEqual(_normalize_temperature("kimi-k2.6", 1.0), 0.6)
 
     def test_top_p_is_forced_to_point_ninety_five(self):
+        self.assertEqual(_normalize_top_p("kimi-k2.6", None), 0.95)
+        self.assertEqual(_normalize_top_p("kimi-k2.6", 0.8), 0.95)
+        self.assertEqual(_normalize_top_p("kimi-k2.6", 0.95), 0.95)
         self.assertEqual(_normalize_top_p("kimi-k2.5", None), 0.95)
         self.assertEqual(_normalize_top_p("kimi-k2.5", 0.8), 0.95)
         self.assertEqual(_normalize_top_p("kimi-k2.5", 0.95), 0.95)

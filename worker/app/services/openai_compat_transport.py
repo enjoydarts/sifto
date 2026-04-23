@@ -11,21 +11,26 @@ _PROVIDER_CONCURRENCY_LOCK = threading.Lock()
 _PROVIDER_CONCURRENCY_SEMAPHORES: dict[tuple[str, int], threading.Semaphore] = {}
 
 
-def _is_featherless_qwen_model(model: str) -> bool:
+def _is_qwen_model(model: str) -> bool:
     return "qwen" in str(model or "").strip().lower()
 
 
-def _is_featherless_moonshot_model(model: str) -> bool:
+def _is_moonshot_model(model: str) -> bool:
     normalized = str(model or "").strip().lower()
     return normalized.startswith("moonshotai/") or normalized.startswith("kimi-")
 
 
-def _is_featherless_kimi_k25_model(model: str) -> bool:
+def _is_kimi_k2x_model(model: str) -> bool:
     normalized = str(model or "").strip().lower()
-    return normalized in {"moonshotai/kimi-k2.5", "kimi-k2.5"}
+    return normalized in {
+        "moonshotai/kimi-k2.5",
+        "kimi-k2.5",
+        "moonshotai/kimi-k2.6",
+        "kimi-k2.6",
+    }
 
 
-def _is_featherless_glm_model(model: str) -> bool:
+def _is_glm_model(model: str) -> bool:
     normalized = str(model or "").strip().lower()
     return normalized.startswith("zai-org/glm-") or normalized.startswith("glm-")
 
@@ -36,17 +41,24 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
         # exhaust output tokens into reasoning_content and leave message.content empty.
         body["thinking"] = {"type": "disabled"}
         return
+    if provider_name == "deepinfra":
+        if _is_kimi_k2x_model(normalized_model) or _is_glm_model(normalized_model):
+            body["thinking"] = {"type": "disabled"}
+            return
+        if _is_qwen_model(normalized_model):
+            body["chat_template_kwargs"] = {"enable_thinking": False}
+            return
     if provider_name != "featherless":
         return
-    if _is_featherless_kimi_k25_model(normalized_model):
+    if _is_kimi_k2x_model(normalized_model):
         body["thinking"] = {"type": "disabled"}
         body["reasoning"] = {"enabled": False}
         body["chat_template_kwargs"] = {"enable_thinking": False}
         return
-    if _is_featherless_glm_model(normalized_model):
+    if _is_glm_model(normalized_model):
         body["thinking"] = {"type": "disabled"}
         return
-    if _is_featherless_moonshot_model(normalized_model) or _is_featherless_qwen_model(normalized_model):
+    if _is_moonshot_model(normalized_model) or _is_qwen_model(normalized_model):
         # OpenAI SDK users would pass this via extra_body; on the raw HTTP body
         # it must be included as a top-level field.
         body["chat_template_kwargs"] = {"enable_thinking": False}

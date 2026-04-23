@@ -1051,7 +1051,11 @@ type BriefingNavigator struct {
 }
 
 type BriefingNavigatorEnvelope struct {
-	Navigator *BriefingNavigator `json:"navigator,omitempty"`
+	Navigator      *BriefingNavigator `json:"navigator,omitempty"`
+	Status         string             `json:"status,omitempty"`
+	Stale          bool               `json:"stale,omitempty"`
+	RefreshStarted bool               `json:"refresh_started,omitempty"`
+	GeneratedAt    *time.Time         `json:"generated_at,omitempty"`
 }
 
 type ItemNavigator struct {

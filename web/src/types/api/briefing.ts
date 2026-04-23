@@ -98,6 +98,10 @@ export interface BriefingTodayResponse {
 
 export interface BriefingNavigatorResponse {
   navigator?: BriefingTodayResponse["navigator"];
+  status?: "pending" | "ready" | "stale" | string;
+  stale?: boolean;
+  refresh_started?: boolean;
+  generated_at?: string | null;
 }
 
 export interface NavigatorLLM {

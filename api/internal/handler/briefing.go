@@ -15,12 +15,14 @@ import (
 	"github.com/enjoydarts/sifto/api/internal/repository"
 	"github.com/enjoydarts/sifto/api/internal/service"
 	"github.com/enjoydarts/sifto/api/internal/timeutil"
+	"github.com/redis/go-redis/v9"
 )
 
 var briefingSnapshotMaxAge = loadBriefingSnapshotMaxAge()
 
 const briefingNavigatorCacheTTL = 30 * time.Minute
 const briefingNavigatorPersonaHistoryTTL = 30 * 24 * time.Hour
+const briefingNavigatorRefreshLockTTL = 2 * time.Minute
 
 type BriefingHandler struct {
 	itemRepo     *repository.ItemRepo
@@ -172,17 +174,46 @@ func (h *BriefingHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		resolvedModel = strings.TrimSpace(*modelName)
 	}
 	cacheKey := cacheKeyBriefingNavigator(userID, persona, resolvedModel, preview)
-	if h.cache != nil && !cacheBust {
-		var cached model.BriefingNavigatorEnvelope
+	var cached model.BriefingNavigatorEnvelope
+	hasCached := false
+	if h.cache != nil {
 		if ok, err := h.cache.GetJSON(r.Context(), cacheKey, &cached); err == nil && ok {
-			if shouldCacheBriefingNavigatorResponse(&cached) {
-				writeJSON(w, cached)
-				return
-			}
+			hasCached = shouldCacheBriefingNavigatorResponse(&cached)
 		}
 	}
 
 	generatedAt := timeutil.NowJST()
+	if !preview {
+		refreshStarted := false
+		if hasCached && !cacheBust && isSnapshotFresh(cached.GeneratedAt, generatedAt) {
+			if cached.Status == "" {
+				cached.Status = "ready"
+			}
+			writeJSON(w, cached)
+			return
+		}
+		if h.tryStartBriefingNavigatorRefresh(userID, persona, resolvedModel, preview) {
+			refreshStarted = true
+			go h.refreshBriefingNavigator(userID, persona, resolvedModel, preview)
+		}
+		if hasCached {
+			cached.Status = "stale"
+			cached.Stale = true
+			cached.RefreshStarted = refreshStarted
+			if cached.GeneratedAt == nil && cached.Navigator != nil {
+				cached.GeneratedAt = cached.Navigator.GeneratedAt
+			}
+			writeJSON(w, cached)
+			return
+		}
+		writeJSON(w, model.BriefingNavigatorEnvelope{
+			Status:         "pending",
+			Stale:          false,
+			RefreshStarted: refreshStarted,
+		})
+		return
+	}
+
 	var navigator *model.BriefingNavigator
 	if preview {
 		navigator = h.buildNavigatorPreview(r.Context(), userID, generatedAt, persona, nil)
@@ -190,6 +221,8 @@ func (h *BriefingHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		navigator = h.buildNavigator(r.Context(), userID, generatedAt, persona)
 	}
 	resp := model.BriefingNavigatorEnvelope{Navigator: navigator}
+	resp.Status = "ready"
+	resp.GeneratedAt = navigator.GeneratedAt
 	log.Printf(
 		"briefing navigator response user_id=%s preview=%t model=%s persona=%s present=%t intro_len=%d picks=%d",
 		userID,
@@ -219,6 +252,71 @@ func (h *BriefingHandler) Navigator(w http.ResponseWriter, r *http.Request) {
 		rememberBriefingNavigatorPersona(r.Context(), h.cache, userID, persona)
 	}
 	writeJSON(w, resp)
+}
+
+func (h *BriefingHandler) refreshBriefingNavigator(userID, persona, modelName string, preview bool) {
+	lockKey := cacheKeyBriefingNavigatorRefreshing(userID, persona, modelName, preview)
+	defer h.finishBriefingNavigatorRefresh(lockKey)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	generatedAt := timeutil.NowJST()
+	navigator := h.buildNavigator(ctx, userID, generatedAt, persona)
+	if navigator == nil {
+		return
+	}
+	resp := model.BriefingNavigatorEnvelope{
+		Navigator:   navigator,
+		Status:      "ready",
+		GeneratedAt: navigator.GeneratedAt,
+	}
+	cacheKey := cacheKeyBriefingNavigator(userID, persona, modelName, preview)
+	if h.cache != nil && shouldCacheBriefingNavigatorResponse(&resp) {
+		if err := h.cache.SetJSON(ctx, cacheKey, resp, briefingNavigatorCacheTTL); err != nil {
+			log.Printf("briefing navigator cache set failed user_id=%s key=%s err=%v", userID, cacheKey, err)
+		}
+	}
+	rememberBriefingNavigatorPersona(ctx, h.cache, userID, persona)
+}
+
+func (h *BriefingHandler) tryStartBriefingNavigatorRefresh(userID, persona, modelName string, preview bool) bool {
+	lockKey := cacheKeyBriefingNavigatorRefreshing(userID, persona, modelName, preview)
+	client, prefix := service.RedisClientFromCache(h.cache)
+	if client != nil {
+		key := lockKey
+		if strings.TrimSpace(prefix) != "" {
+			key = prefix + ":" + lockKey
+		}
+		ok, err := client.SetNX(context.Background(), key, "1", briefingNavigatorRefreshLockTTL).Result()
+		if err != nil {
+			log.Printf("briefing navigator refresh lock failed user_id=%s key=%s err=%v", userID, lockKey, err)
+			return false
+		}
+		return ok
+	}
+	if h.cache == nil {
+		return false
+	}
+	if err := h.cache.SetJSON(context.Background(), lockKey, map[string]any{"running": true}, briefingNavigatorRefreshLockTTL); err != nil {
+		log.Printf("briefing navigator refresh fallback lock failed user_id=%s key=%s err=%v", userID, lockKey, err)
+		return false
+	}
+	return true
+}
+
+func (h *BriefingHandler) finishBriefingNavigatorRefresh(lockKey string) {
+	client, prefix := service.RedisClientFromCache(h.cache)
+	if client == nil {
+		return
+	}
+	key := lockKey
+	if strings.TrimSpace(prefix) != "" {
+		key = prefix + ":" + lockKey
+	}
+	if err := client.Del(context.Background(), key).Err(); err != nil && err != redis.Nil {
+		log.Printf("briefing navigator refresh unlock failed key=%s err=%v", lockKey, err)
+	}
 }
 
 func shouldCacheBriefingNavigatorResponse(resp *model.BriefingNavigatorEnvelope) bool {

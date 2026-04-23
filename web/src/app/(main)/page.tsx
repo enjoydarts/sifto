@@ -73,6 +73,13 @@ export default function BriefingPage() {
     staleTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    refetchInterval: (query) => {
+      const data = query.state.data as { status?: string; refresh_started?: boolean; stale?: boolean } | undefined;
+      if (!data) return false;
+      if (data.status === "pending") return 3000;
+      if (data.refresh_started || data.stale || data.status === "stale") return 5000;
+      return false;
+    },
     placeholderData: (prev) => prev,
   });
   const modelUpdatesQuery = useQuery({
@@ -111,9 +118,11 @@ export default function BriefingPage() {
   const data = briefingQuery.data;
   const modelUpdates = modelUpdatesQuery.data ?? EMPTY_MODEL_UPDATES;
   const navigator = navigatorQuery.data?.navigator ?? null;
+  const navigatorStatus = navigatorQuery.data?.status ?? (navigator ? "ready" : "");
+  const navigatorStale = navigatorQuery.data?.stale === true || navigatorStatus === "stale";
   const navigatorDisplayPersona = navigator?.avatar_style || navigator?.persona || settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor";
   const navigatorTheme = navigator ? navigatorThemeTokens(navigator.persona, navigator.avatar_style) : null;
-  const navigatorLoading = !navigator && (navigatorQuery.isLoading || navigatorQuery.isFetching);
+  const navigatorLoading = navigatorStatus === "pending" || (!navigator && (navigatorQuery.isLoading || navigatorQuery.isFetching));
   const navigatorLoadingPersona = settingsQuery.data?.llm_models?.navigator_persona?.trim() || "editor";
   const visibleModelUpdates = useMemo(() => {
     if (!dismissedModelUpdatesAt) return modelUpdates;
@@ -708,6 +717,11 @@ export default function BriefingPage() {
                   {navigatorResolvedModelLabel(navigator.llm) ? (
                     <div className="mt-1 text-[11px] text-[var(--color-editorial-ink-faint)]">
                       {t("briefing.navigator.usedModel")}: {navigatorResolvedModelLabel(navigator.llm)}
+                    </div>
+                  ) : null}
+                  {navigatorStale ? (
+                    <div className="mt-1 text-[11px] text-[var(--color-editorial-ink-faint)]">
+                      {t("briefing.navigator.loading", "Generating picks...")}
                     </div>
                   ) : null}
                 </div>

@@ -33,6 +33,26 @@ export interface FeatherlessSyncStatusResponse {
   run: FeatherlessSyncRun | null;
 }
 
+export interface DeepInfraSyncRun {
+  id: string;
+  started_at: string;
+  finished_at?: string | null;
+  last_progress_at?: string | null;
+  status: string;
+  trigger_type: string;
+  fetched_count: number;
+  accepted_count: number;
+  translation_target_count: number;
+  translation_completed_count: number;
+  translation_failed_count: number;
+  last_error_message?: string | null;
+  error_message?: string | null;
+}
+
+export interface DeepInfraSyncStatusResponse {
+  run: DeepInfraSyncRun | null;
+}
+
 export interface PoeSyncRun {
   id: string;
   started_at: string;
@@ -271,6 +291,33 @@ export interface FeatherlessModelsResponse {
   unavailable_models: FeatherlessModelListEntry[];
 }
 
+export interface DeepInfraModelSnapshot {
+  model_id: string;
+  display_name?: string | null;
+  provider_slug?: string | null;
+  model_type?: string | null;
+  description_en?: string | null;
+  description_ja?: string | null;
+  context_length?: number | null;
+  max_tokens?: number | null;
+  input_per_mtok_usd?: number | null;
+  output_per_mtok_usd?: number | null;
+  cache_read_per_mtok_usd?: number | null;
+  fetched_at: string;
+}
+
+export interface DeepInfraModelListEntry extends DeepInfraModelSnapshot {
+  availability: "available" | "removed" | string;
+  recent_change?: "added" | "pricing_changed" | "context_changed" | "removed" | string | null;
+}
+
+export interface DeepInfraModelsResponse {
+  latest_run: DeepInfraSyncRun | null;
+  latest_change_summary?: ProviderModelChangeSummary | null;
+  models: DeepInfraModelListEntry[];
+  unavailable_models: DeepInfraModelListEntry[];
+}
+
 export interface ProviderModelSnapshotEntry {
   provider: string;
   model_id: string;
@@ -319,7 +366,7 @@ export interface LLMCatalogModelPricing {
 
 export interface LLMCatalogModel {
   id: string;
-  provider: "anthropic" | "google" | "groq" | "openai" | "deepseek" | "alibaba" | "mistral" | "xai" | "zai" | string;
+  provider: "anthropic" | "google" | "groq" | "openai" | "deepseek" | "alibaba" | "mistral" | "xai" | "zai" | "deepinfra" | string;
   source_provider?: string;
   available_purposes: string[];
   recommendation?: "recommended" | "strong" | "experimental" | string;

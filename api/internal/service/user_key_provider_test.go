@@ -58,3 +58,25 @@ func TestUserKeyProviderGetAPIKeyLoadsFeatherlessKey(t *testing.T) {
 		t.Fatalf("GetAPIKey(featherless) = %#v, want %q", got, "featherless-secret-value")
 	}
 }
+
+func TestUserKeyProviderGetAPIKeyLoadsDeepInfraKey(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "user-key-provider-deepinfra-key")
+
+	svc := newSettingsServiceForTest(t)
+	svc.cipher = NewSecretCipher()
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+
+	if _, err := svc.SetAPIKey(ctx, userID, "deepinfra", "deepinfra-secret-value"); err != nil {
+		t.Fatalf("SetAPIKey(deepinfra) error = %v", err)
+	}
+
+	provider := NewUserKeyProvider(svc.repo, svc.cipher)
+	got, err := provider.GetAPIKey(ctx, userID, "deepinfra")
+	if err != nil {
+		t.Fatalf("GetAPIKey(deepinfra) error = %v", err)
+	}
+	if got == nil || *got != "deepinfra-secret-value" {
+		t.Fatalf("GetAPIKey(deepinfra) = %#v, want %q", got, "deepinfra-secret-value")
+	}
+}

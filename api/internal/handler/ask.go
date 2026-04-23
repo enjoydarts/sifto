@@ -110,11 +110,12 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		settings.HasOpenRouterAPIKey,
 		settings.HasPoeAPIKey,
 		settings.HasSiliconFlowAPIKey,
+		settings.HasDeepInfraAPIKey,
 		settings.HasFeatherlessAPIKey,
 		settings.HasOpenAIAPIKey,
 	)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or minimax or xiaomi_mimo_token_plan or xai or zai or openrouter or poe or siliconflow or featherless or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or minimax or xiaomi_mimo_token_plan or xai or zai or openrouter or poe or siliconflow or deepinfra or featherless or openai api key is required", http.StatusBadRequest)
 		return
 	}
 	cacheKey := cacheKeyAsk(userID, query, *modelName, embeddingModel, body.Days, body.UnreadOnly, body.Limit, body.SourceIDs)
@@ -185,9 +186,9 @@ func (h *AskHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		minimaxKey:   allKeys["minimax"],
 		openAIKey:    h.keyProvider.ResolveOpenAIKey(allKeys, nil),
 	}
-	modelName = chooseAskModel(settings, navKeys.anthropicKey != nil, navKeys.googleKey != nil, navKeys.fireworksKey != nil, navKeys.groqKey != nil, navKeys.deepseekKey != nil, navKeys.alibabaKey != nil, navKeys.mistralKey != nil, allKeys["together"] != nil, allKeys["moonshot"] != nil, navKeys.minimaxKey != nil, allKeys["xiaomi_mimo_token_plan"] != nil, navKeys.xaiKey != nil, navKeys.zaiKey != nil, allKeys["openrouter"] != nil, allKeys["poe"] != nil, allKeys["siliconflow"] != nil, allKeys["featherless"] != nil, allKeys["openai"] != nil)
+	modelName = chooseAskModel(settings, navKeys.anthropicKey != nil, navKeys.googleKey != nil, navKeys.fireworksKey != nil, navKeys.groqKey != nil, navKeys.deepseekKey != nil, navKeys.alibabaKey != nil, navKeys.mistralKey != nil, allKeys["together"] != nil, allKeys["moonshot"] != nil, navKeys.minimaxKey != nil, allKeys["xiaomi_mimo_token_plan"] != nil, navKeys.xaiKey != nil, navKeys.zaiKey != nil, allKeys["openrouter"] != nil, allKeys["poe"] != nil, allKeys["siliconflow"] != nil, allKeys["deepinfra"] != nil, allKeys["featherless"] != nil, allKeys["openai"] != nil)
 	if modelName == nil {
-		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or minimax or xai or zai or openrouter or poe or siliconflow or featherless or openai api key is required", http.StatusBadRequest)
+		http.Error(w, "anthropic or google or fireworks or groq or deepseek or alibaba or mistral or together or moonshot or minimax or xai or zai or openrouter or poe or siliconflow or deepinfra or featherless or openai api key is required", http.StatusBadRequest)
 		return
 	}
 	openAIChatKey := h.keyProvider.ResolveOpenAIKey(allKeys, modelName)
@@ -459,7 +460,7 @@ func askCitationPublishedAt(item model.AskCandidate) *string {
 	return &v
 }
 
-func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFireworks, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasTogether, hasMoonshot, hasMiniMax, hasXiaomiMiMoTokenPlan, hasXAI, hasZAI, hasOpenRouter, hasPoe, hasSiliconFlow, hasFeatherless, hasOpenAI bool) *string {
+func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFireworks, hasGroq, hasDeepSeek, hasAlibaba, hasMistral, hasTogether, hasMoonshot, hasMiniMax, hasXiaomiMiMoTokenPlan, hasXAI, hasZAI, hasOpenRouter, hasPoe, hasSiliconFlow, hasDeepInfra, hasFeatherless, hasOpenAI bool) *string {
 	if settings != nil && settings.AskModel != nil && strings.TrimSpace(*settings.AskModel) != "" {
 		v := strings.TrimSpace(*settings.AskModel)
 		switch service.LLMProviderForModel(&v) {
@@ -525,6 +526,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "siliconflow":
 			if hasSiliconFlow {
+				return &v
+			}
+		case "deepinfra":
+			if hasDeepInfra {
 				return &v
 			}
 		case "featherless":
@@ -604,6 +609,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			if hasSiliconFlow {
 				return &v
 			}
+		case "deepinfra":
+			if hasDeepInfra {
+				return &v
+			}
 		case "featherless":
 			if hasFeatherless {
 				return &v
@@ -681,6 +690,10 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			if hasSiliconFlow {
 				return &v
 			}
+		case "deepinfra":
+			if hasDeepInfra {
+				return &v
+			}
 		case "featherless":
 			if hasFeatherless {
 				return &v
@@ -755,6 +768,11 @@ func chooseAskModel(settings *model.UserSettings, hasAnthropic, hasGoogle, hasFi
 			}
 		case "openai":
 			if hasOpenAI {
+				v := service.DefaultLLMModelForPurpose(provider, "ask")
+				return &v
+			}
+		case "deepinfra":
+			if hasDeepInfra {
 				v := service.DefaultLLMModelForPurpose(provider, "ask")
 				return &v
 			}

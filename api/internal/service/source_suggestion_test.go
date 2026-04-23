@@ -124,6 +124,18 @@ func TestSelectSourceSuggestionLLMResolvesOpenAICompatibleProviders(t *testing.T
 				}
 			},
 		},
+		{
+			name:  "deepinfra",
+			model: "deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo",
+			check: func(t *testing.T, got resolvedProviderKeys) {
+				if got.DeepInfraAPIKey == nil || *got.DeepInfraAPIKey != "deepinfra-key" {
+					t.Fatalf("DeepInfraAPIKey = %v", got.DeepInfraAPIKey)
+				}
+				if got.OpenAIAPIKey == nil || *got.OpenAIAPIKey != "deepinfra-key" {
+					t.Fatalf("OpenAIAPIKey = %v, want deepinfra-key passthrough", got.OpenAIAPIKey)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -146,6 +158,7 @@ func TestSelectSourceSuggestionLLMResolvesOpenAICompatibleProviders(t *testing.T
 				strPtr("poe-key"),
 				strPtr("siliconflow-key"),
 				nil,
+				strPtr("deepinfra-key"),
 				strPtr("openai-key"),
 				strPtr(tt.model),
 			)

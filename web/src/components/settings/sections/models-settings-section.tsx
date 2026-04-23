@@ -233,7 +233,11 @@ export default function ModelsSettingsSection({
               dismissed: t("settings.providerModelUpdate.dismissed"),
               restore: t("settings.providerModelUpdate.restore"),
               added: t("settings.providerModelUpdate.added", "added"),
+              constrained: t("settings.providerModelUpdate.constrained", "constrained"),
               removed: t("settings.providerModelUpdate.removed", "removed"),
+              pricingChanged: t("settings.providerModelUpdate.pricingChanged", "pricing changed"),
+              contextChanged: t("settings.providerModelUpdate.contextChanged", "context changed"),
+              genericChanged: t("settings.providerModelUpdate.changed", "changed"),
             }}
           />
           <SectionCard>

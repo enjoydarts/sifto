@@ -1071,6 +1071,20 @@ func (h *SettingsHandler) DeleteXiaomiMiMoTokenPlanAPIKey(w http.ResponseWriter,
 	})
 }
 
+func (h *SettingsHandler) SetDeepInfraAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.setAPIKey(w, r, "deepinfra", map[string]func(*model.UserSettings) any{
+		"has_deepinfra_api_key":   func(s *model.UserSettings) any { return s.HasDeepInfraAPIKey },
+		"deepinfra_api_key_last4": func(s *model.UserSettings) any { return s.DeepInfraAPIKeyLast4 },
+	})
+}
+
+func (h *SettingsHandler) DeleteDeepInfraAPIKey(w http.ResponseWriter, r *http.Request) {
+	h.deleteAPIKey(w, r, "deepinfra", map[string]func(*model.UserSettings) any{
+		"has_deepinfra_api_key":   func(s *model.UserSettings) any { return s.HasDeepInfraAPIKey },
+		"deepinfra_api_key_last4": func(s *model.UserSettings) any { return s.DeepInfraAPIKeyLast4 },
+	})
+}
+
 func (h *SettingsHandler) SetFeatherlessAPIKey(w http.ResponseWriter, r *http.Request) {
 	h.setAPIKey(w, r, "featherless", map[string]func(*model.UserSettings) any{
 		"has_featherless_api_key":   func(s *model.UserSettings) any { return s.HasFeatherlessAPIKey },

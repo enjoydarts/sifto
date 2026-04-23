@@ -240,6 +240,14 @@ func TestHasFishPreprocessProviderKeySupportsFeatherless(t *testing.T) {
 	}
 }
 
+func TestHasFishPreprocessProviderKeySupportsDeepInfra(t *testing.T) {
+	settings := &model.UserSettings{HasDeepInfraAPIKey: true}
+
+	if !hasFishPreprocessProviderKey(settings, "deepinfra") {
+		t.Fatal("hasFishPreprocessProviderKey(deepinfra) = false, want true")
+	}
+}
+
 func TestTTSMarkupPreprocessAudioBriefingSingleUsesPromptKeyAndPersonaVariables(t *testing.T) {
 	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "fish-preprocess-briefing-single-test-key")
 	db, err := repository.NewPool(context.Background())

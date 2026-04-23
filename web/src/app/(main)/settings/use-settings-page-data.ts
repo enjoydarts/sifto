@@ -197,6 +197,8 @@ export function useSettingsPageData() {
   const [deletingAzureSpeechConfig, setDeletingAzureSpeechConfig] = useState(false);
   const [savingOpenRouterKey, setSavingOpenRouterKey] = useState(false);
   const [deletingOpenRouterKey, setDeletingOpenRouterKey] = useState(false);
+  const [savingDeepInfraKey, setSavingDeepInfraKey] = useState(false);
+  const [deletingDeepInfraKey, setDeletingDeepInfraKey] = useState(false);
   const [savingFeatherlessKey, setSavingFeatherlessKey] = useState(false);
   const [deletingFeatherlessKey, setDeletingFeatherlessKey] = useState(false);
   const [savingAivisKey, setSavingAivisKey] = useState(false);
@@ -242,6 +244,7 @@ export function useSettingsPageData() {
   const [azureSpeechApiKeyInput, setAzureSpeechApiKeyInput] = useState("");
   const [azureSpeechRegionInput, setAzureSpeechRegionInput] = useState("");
   const [openRouterApiKeyInput, setOpenRouterApiKeyInput] = useState("");
+  const [deepInfraApiKeyInput, setDeepInfraApiKeyInput] = useState("");
   const [featherlessApiKeyInput, setFeatherlessApiKeyInput] = useState("");
   const [aivisApiKeyInput, setAivisApiKeyInput] = useState("");
   const [elevenLabsApiKeyInput, setElevenLabsApiKeyInput] = useState("");
@@ -1258,6 +1261,12 @@ export function useSettingsPageData() {
         deleteTitle: t("settings.openrouterDeleteTitle"), deleteMessage: t("settings.openrouterDeleteMessage"),
         emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.openrouterSaved"), deleteSuccessMessage: t("settings.toast.openrouterDeleted"),
       },
+      deepinfra: {
+        value: deepInfraApiKeyInput, setValue: setDeepInfraApiKeyInput, setSaving: setSavingDeepInfraKey, setDeleting: setDeletingDeepInfraKey,
+        save: api.setDeepInfraApiKey, remove: api.deleteDeepInfraApiKey,
+        deleteTitle: t("settings.deepinfraDeleteTitle"), deleteMessage: t("settings.deepinfraDeleteMessage"),
+        emptyValueMessage: t("settings.error.enterApiKey"), saveSuccessMessage: t("settings.toast.deepinfraSaved"), deleteSuccessMessage: t("settings.toast.deepinfraDeleted"),
+      },
       featherless: {
         value: featherlessApiKeyInput, setValue: setFeatherlessApiKeyInput, setSaving: setSavingFeatherlessKey, setDeleting: setDeletingFeatherlessKey,
         save: api.setFeatherlessApiKey, remove: api.deleteFeatherlessApiKey,
@@ -1367,6 +1376,7 @@ export function useSettingsPageData() {
         setAzureSpeechRegionInput,
       ),
       openrouter: createAccessCardRuntime(openRouterApiKeyInput, setOpenRouterApiKeyInput, apiKeyHandlers.openrouter!.submit, apiKeyHandlers.openrouter!.remove, savingOpenRouterKey, deletingOpenRouterKey),
+      deepinfra: createAccessCardRuntime(deepInfraApiKeyInput, setDeepInfraApiKeyInput, apiKeyHandlers.deepinfra!.submit, apiKeyHandlers.deepinfra!.remove, savingDeepInfraKey, deletingDeepInfraKey),
       featherless: createAccessCardRuntime(featherlessApiKeyInput, setFeatherlessApiKeyInput, apiKeyHandlers.featherless!.submit, apiKeyHandlers.featherless!.remove, savingFeatherlessKey, deletingFeatherlessKey),
       aivis: createAccessCardRuntime(aivisApiKeyInput, setAivisApiKeyInput, apiKeyHandlers.aivis!.submit, apiKeyHandlers.aivis!.remove, savingAivisKey, deletingAivisKey),
       elevenlabs: createAccessCardRuntime(elevenLabsApiKeyInput, setElevenLabsApiKeyInput, apiKeyHandlers.elevenlabs!.submit, apiKeyHandlers.elevenlabs!.remove, savingElevenLabsKey, deletingElevenLabsKey),

@@ -21,6 +21,7 @@ export type AccessProviderID =
   | "poe"
   | "siliconflow"
   | "openrouter"
+  | "deepinfra"
   | "featherless"
   | "azure_speech"
   | "aivis"
@@ -229,6 +230,14 @@ const ACCESS_CARD_METADATA: AccessCardMetadata[] = [
     notSetKey: "settings.openrouterNotSet",
     placeholder: "sk-or-v1-...",
     selectStatus: (settings) => ({ configured: settings.has_openrouter_api_key, last4: settings.openrouter_api_key_last4 }),
+  },
+  {
+    id: "deepinfra",
+    titleKey: "settings.deepinfraTitle",
+    descriptionKey: "settings.deepinfraDescription",
+    notSetKey: "settings.deepinfraNotSet",
+    placeholder: "deepinfra_...",
+    selectStatus: (settings) => ({ configured: Boolean(settings.has_deepinfra_api_key), last4: settings.deepinfra_api_key_last4 ?? null }),
   },
   {
     id: "featherless",

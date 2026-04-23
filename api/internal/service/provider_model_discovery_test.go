@@ -101,6 +101,16 @@ func TestProviderModelDiscoveryFetchListAPIProviders(t *testing.T) {
 			baseURL:  "/v1",
 			wantPath: "/v1/models",
 		},
+		{
+			name: "deepinfra",
+			fetchFunc: func(ctx context.Context, svc *ProviderModelDiscoveryService) ([]string, error) {
+				return svc.fetchDeepInfraModels(ctx)
+			},
+			apiKey:   "test-deepinfra-key",
+			baseKey:  "DEEPINFRA_API_BASE_URL",
+			baseURL:  "/v1/openai/chat/completions",
+			wantPath: "/v1/models",
+		},
 	}
 
 	for _, c := range cases {
@@ -212,6 +222,70 @@ func TestProviderModelDiscoveryFetchFeatherlessSnapshots(t *testing.T) {
 	}
 	if models[0].AvailableOnCurrentPlan {
 		t.Fatal("available_on_current_plan = true, want false")
+	}
+}
+
+func TestProviderModelDiscoveryFetchDeepInfraSnapshots(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s, want %s", r.Method, http.MethodGet)
+		}
+		if r.URL.Path != "/v1/models" {
+			t.Fatalf("path = %s, want %s", r.URL.Path, "/v1/models")
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-deepinfra-key" {
+			t.Fatalf("authorization = %q, want %q", got, "Bearer test-deepinfra-key")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{
+					"id":           "meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo",
+					"display_name": "Meta Llama 3.3 70B Instruct Turbo",
+					"object":       "model",
+					"metadata": map[string]any{
+						"context_length": 131072,
+						"pricing": map[string]any{
+							"input_tokens":  0.12,
+							"output_tokens": 0.3,
+						},
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("DEEPINFRA_API_BASE_URL", server.URL+"/v1/openai/chat/completions")
+	svc := NewProviderModelDiscoveryServiceWithKeys(ProviderModelDiscoveryKeys{
+		DeepInfra: "test-deepinfra-key",
+	})
+	svc.http = server.Client()
+
+	models, err := svc.fetchDeepInfraSnapshots(context.Background())
+	if err != nil {
+		t.Fatalf("fetchDeepInfraSnapshots() error = %v", err)
+	}
+	if len(models) != 1 {
+		t.Fatalf("len(models) = %d, want 1", len(models))
+	}
+	if models[0].ModelID != "meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo" {
+		t.Fatalf("model_id = %q, want %q", models[0].ModelID, "meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo")
+	}
+	if models[0].DisplayName != "Meta Llama 3.3 70B Instruct Turbo" {
+		t.Fatalf("display_name = %q, want %q", models[0].DisplayName, "Meta Llama 3.3 70B Instruct Turbo")
+	}
+	if models[0].ReportedType != "model" {
+		t.Fatalf("reported_type = %q, want %q", models[0].ReportedType, "model")
+	}
+	if models[0].ContextLength == nil || *models[0].ContextLength != 131072 {
+		t.Fatalf("context_length = %v, want 131072", models[0].ContextLength)
+	}
+	if models[0].InputPerMTokUSD == nil || *models[0].InputPerMTokUSD != 0.12 {
+		t.Fatalf("input_per_mtok_usd = %v, want 0.12", models[0].InputPerMTokUSD)
+	}
+	if models[0].OutputPerMTokUSD == nil || *models[0].OutputPerMTokUSD != 0.3 {
+		t.Fatalf("output_per_mtok_usd = %v, want 0.3", models[0].OutputPerMTokUSD)
 	}
 }
 
@@ -332,6 +406,27 @@ func TestNormalizeFeatherlessAPIBaseURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := normalizeFeatherlessAPIBaseURL(tt.raw); got != tt.want {
 				t.Fatalf("normalizeFeatherlessAPIBaseURL(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeDeepInfraAPIBaseURL(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "empty", raw: "", want: "https://api.deepinfra.com"},
+		{name: "base", raw: "https://api.deepinfra.com", want: "https://api.deepinfra.com"},
+		{name: "v1 openai", raw: "https://api.deepinfra.com/v1/openai", want: "https://api.deepinfra.com"},
+		{name: "chat completions", raw: "https://api.deepinfra.com/v1/openai/chat/completions", want: "https://api.deepinfra.com"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizeDeepInfraAPIBaseURL(tt.raw); got != tt.want {
+				t.Fatalf("normalizeDeepInfraAPIBaseURL(%q) = %q, want %q", tt.raw, got, tt.want)
 			}
 		})
 	}

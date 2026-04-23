@@ -8,6 +8,7 @@ POE_ALIAS_PREFIX = "poe::"
 SILICONFLOW_ALIAS_PREFIX = "siliconflow::"
 TOGETHER_ALIAS_PREFIX = "together::"
 FEATHERLESS_ALIAS_PREFIX = "featherless::"
+DEEPINFRA_ALIAS_PREFIX = "deepinfra::"
 MINIMAX_ALIAS_PREFIX = "minimax::"
 MINIMAX_SLASH_PREFIX = "minimax/"
 
@@ -24,6 +25,8 @@ def resolve_model_id(model: str | None) -> str:
         return m[len(TOGETHER_ALIAS_PREFIX) :]
     if m.startswith(FEATHERLESS_ALIAS_PREFIX):
         return m[len(FEATHERLESS_ALIAS_PREFIX) :]
+    if m.startswith(DEEPINFRA_ALIAS_PREFIX):
+        return m[len(DEEPINFRA_ALIAS_PREFIX) :]
     if m.startswith(MINIMAX_ALIAS_PREFIX):
         return m[len(MINIMAX_ALIAS_PREFIX) :]
     if m.startswith(MINIMAX_SLASH_PREFIX):
@@ -70,6 +73,8 @@ def provider_for_model(model: str | None) -> str:
         return "together"
     if m.startswith(FEATHERLESS_ALIAS_PREFIX):
         return "featherless"
+    if m.startswith(DEEPINFRA_ALIAS_PREFIX):
+        return "deepinfra"
     if m.startswith(MINIMAX_ALIAS_PREFIX) or m.startswith(MINIMAX_SLASH_PREFIX):
         return "minimax"
     catalog = load_llm_catalog()

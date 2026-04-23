@@ -5,7 +5,7 @@ import type { LLMUsageDailySummary } from "./llm-usage";
 export interface ProviderModelChangeEvent {
   id: string;
   provider: string;
-  change_type: "added" | "constrained" | "removed" | string;
+  change_type: "added" | "constrained" | "removed" | "pricing_changed" | "context_changed" | string;
   model_id: string;
   detected_at: string;
   metadata?: Record<string, unknown> | null;
@@ -19,6 +19,8 @@ export interface ProviderModelChangeSummary {
   constrained: ProviderModelChangeEvent[];
   availability_changed?: ProviderModelChangeEvent[];
   gated_changed?: ProviderModelChangeEvent[];
+  pricing_changed?: ProviderModelChangeEvent[];
+  context_changed?: ProviderModelChangeEvent[];
   removed: ProviderModelChangeEvent[];
 }
 

@@ -24,6 +24,8 @@ func testProviderModelUpdatesRepoDB(t *testing.T) *pgxpool.Pool {
 		DELETE FROM provider_model_snapshots WHERE provider = 'minimax';
 		DELETE FROM provider_model_change_events WHERE provider = 'featherless';
 		DELETE FROM provider_model_snapshots WHERE provider = 'featherless';
+		DELETE FROM provider_model_change_events WHERE provider = 'deepinfra';
+		DELETE FROM provider_model_snapshots WHERE provider = 'deepinfra';
 	`); err != nil {
 		t.Fatalf("reset provider model updates tables: %v", err)
 	}
@@ -52,7 +54,7 @@ func lockProviderModelUpdatesRepoTestDB(t *testing.T, pool *pgxpool.Pool) {
 	if _, err := pool.Exec(context.Background(), `
 		ALTER TABLE provider_model_change_events
 		  ADD CONSTRAINT provider_model_change_events_change_type_check
-		  CHECK (change_type IN ('added', 'constrained', 'availability_changed', 'gated_changed', 'removed'))
+		  CHECK (change_type IN ('added', 'constrained', 'availability_changed', 'gated_changed', 'pricing_changed', 'context_changed', 'removed'))
 	`); err != nil {
 		t.Fatalf("add provider_model_change_events_change_type_check: %v", err)
 	}
@@ -126,5 +128,34 @@ func TestProviderModelUpdateRepoListLatestProviderSummaryIncludesAvailabilityAnd
 	}
 	if len(summary.Removed) != 1 || summary.Removed[0].ModelID != "removed-model" {
 		t.Fatalf("removed = %#v, want removed-model", summary.Removed)
+	}
+}
+
+func TestProviderModelUpdateRepoListLatestProviderSummaryIncludesPricingAndContextChanges(t *testing.T) {
+	ctx := context.Background()
+	pool := testProviderModelUpdatesRepoDB(t)
+	repo := NewProviderModelUpdateRepo(pool)
+	detectedAt := time.Date(2026, 4, 23, 3, 4, 5, 0, time.UTC)
+
+	events := []model.ProviderModelChangeEvent{
+		{Provider: "deepinfra", ChangeType: "pricing_changed", ModelID: "pricing-model", DetectedAt: detectedAt, Metadata: map[string]any{"trigger": "manual"}},
+		{Provider: "deepinfra", ChangeType: "context_changed", ModelID: "context-model", DetectedAt: detectedAt, Metadata: map[string]any{"trigger": "manual"}},
+	}
+	if err := repo.InsertChangeEvents(ctx, events); err != nil {
+		t.Fatalf("InsertChangeEvents() error = %v", err)
+	}
+
+	summary, err := repo.ListLatestProviderSummary(ctx, "deepinfra")
+	if err != nil {
+		t.Fatalf("ListLatestProviderSummary() error = %v", err)
+	}
+	if summary == nil {
+		t.Fatal("summary = nil, want summary")
+	}
+	if len(summary.PricingChanged) != 1 || summary.PricingChanged[0].ModelID != "pricing-model" {
+		t.Fatalf("pricing_changed = %#v, want pricing-model", summary.PricingChanged)
+	}
+	if len(summary.ContextChanged) != 1 || summary.ContextChanged[0].ModelID != "context-model" {
+		t.Fatalf("context_changed = %#v, want context-model", summary.ContextChanged)
 	}
 }

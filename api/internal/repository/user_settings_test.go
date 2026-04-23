@@ -47,6 +47,12 @@ func lockUserSettingsRepoTestDB(t *testing.T, pool *pgxpool.Pool) {
 	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS featherless_api_key_last4 text`); err != nil {
 		t.Fatalf("ensure user_settings.featherless_api_key_last4: %v", err)
 	}
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS deepinfra_api_key_enc text`); err != nil {
+		t.Fatalf("ensure user_settings.deepinfra_api_key_enc: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS deepinfra_api_key_last4 text`); err != nil {
+		t.Fatalf("ensure user_settings.deepinfra_api_key_last4: %v", err)
+	}
 }
 
 func TestUserSettingsRepoSetAndClearMiniMaxAPIKey(t *testing.T) {
@@ -178,6 +184,51 @@ func TestUserSettingsRepoSetAndClearFeatherlessAPIKey(t *testing.T) {
 	enc, err = repo.GetFeatherlessAPIKeyEncrypted(ctx, userID)
 	if err != nil {
 		t.Fatalf("GetFeatherlessAPIKeyEncrypted() after clear error = %v", err)
+	}
+	if enc != nil {
+		t.Fatalf("encrypted key after clear = %#v, want nil", enc)
+	}
+}
+
+func TestUserSettingsRepoSetAndClearDeepInfraAPIKey(t *testing.T) {
+	ctx := context.Background()
+	pool := testUserSettingsRepoDB(t)
+	repo := NewUserSettingsRepo(pool)
+	userID := "00000000-0000-4000-8000-000000000041"
+
+	settings, err := repo.SetDeepInfraAPIKey(ctx, userID, "encrypted-deepinfra-key", "3456")
+	if err != nil {
+		t.Fatalf("SetDeepInfraAPIKey() error = %v", err)
+	}
+	if !settings.HasDeepInfraAPIKey {
+		t.Fatal("HasDeepInfraAPIKey = false, want true")
+	}
+	if settings.DeepInfraAPIKeyLast4 == nil || *settings.DeepInfraAPIKeyLast4 != "3456" {
+		t.Fatalf("DeepInfraAPIKeyLast4 = %#v, want %q", settings.DeepInfraAPIKeyLast4, "3456")
+	}
+
+	enc, err := repo.GetDeepInfraAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetDeepInfraAPIKeyEncrypted() error = %v", err)
+	}
+	if enc == nil || *enc != "encrypted-deepinfra-key" {
+		t.Fatalf("encrypted key = %#v, want %q", enc, "encrypted-deepinfra-key")
+	}
+
+	settings, err = repo.ClearDeepInfraAPIKey(ctx, userID)
+	if err != nil {
+		t.Fatalf("ClearDeepInfraAPIKey() error = %v", err)
+	}
+	if settings.HasDeepInfraAPIKey {
+		t.Fatal("HasDeepInfraAPIKey = true, want false")
+	}
+	if settings.DeepInfraAPIKeyLast4 != nil {
+		t.Fatalf("DeepInfraAPIKeyLast4 = %#v, want nil", settings.DeepInfraAPIKeyLast4)
+	}
+
+	enc, err = repo.GetDeepInfraAPIKeyEncrypted(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetDeepInfraAPIKeyEncrypted() after clear error = %v", err)
 	}
 	if enc != nil {
 		t.Fatalf("encrypted key after clear = %#v, want nil", enc)

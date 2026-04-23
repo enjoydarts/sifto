@@ -16,9 +16,20 @@ test("providerLabel formats Featherless consistently", () => {
   assert.equal(providerLabel("featherless"), "Featherless.ai");
 });
 
+test("providerLabel formats DeepInfra consistently", () => {
+  assert.equal(providerLabel("deepinfra"), "DeepInfra");
+});
+
 test("formatModelDisplayName strips Featherless alias prefix", () => {
   assert.equal(
     formatModelDisplayName("featherless::Qwen/Qwen3.5-9B"),
     "Qwen/Qwen3.5-9B",
+  );
+});
+
+test("formatModelDisplayName strips DeepInfra alias prefix", () => {
+  assert.equal(
+    formatModelDisplayName("deepinfra::meta-llama/Llama-4-Scout"),
+    "meta-llama/Llama-4-Scout",
   );
 });

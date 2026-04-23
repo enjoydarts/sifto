@@ -6,6 +6,7 @@ import { PageTransition } from "@/components/page-transition";
 import { PageHeader } from "@/components/ui/page-header";
 import { useI18n } from "@/components/i18n-provider";
 import { api, ProviderModelSnapshotEntry, ProviderModelSnapshotListResponse } from "@/lib/api";
+import { providerLabel } from "@/lib/model-display";
 import { useToast } from "@/components/toast-provider";
 
 const PAGE_SIZE = 100;
@@ -94,7 +95,7 @@ export default function ProviderModelSnapshotsPage() {
                 <option value="">{t("providerModelSnapshots.filterAll")}</option>
                 {providerOptions.map((provider) => (
                   <option key={provider} value={provider}>
-                    {provider}
+                    {providerLabel(provider)}
                   </option>
                 ))}
               </select>
@@ -147,7 +148,7 @@ export default function ProviderModelSnapshotsPage() {
                 <tbody className="divide-y divide-[color:rgba(148,163,184,0.14)] bg-white/80">
                   {items.map((item: ProviderModelSnapshotEntry) => (
                     <tr key={`${item.provider}:${item.model_id}`} className="align-top text-slate-700">
-                      <td className="whitespace-nowrap px-5 py-4 font-medium">{item.provider}</td>
+                      <td className="whitespace-nowrap px-5 py-4 font-medium">{providerLabel(item.provider)}</td>
                       <td className="px-5 py-4 font-mono text-[13px] text-slate-800">{item.model_id}</td>
                       <td className="whitespace-nowrap px-5 py-4 text-slate-500">{formatDateTime(item.fetched_at)}</td>
                       <td className="px-5 py-4">

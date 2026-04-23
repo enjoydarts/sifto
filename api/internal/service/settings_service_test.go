@@ -165,6 +165,12 @@ func lockSettingsServiceTestDB(t *testing.T, db *pgxpool.Pool) {
 	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS featherless_api_key_last4 text`); err != nil {
 		t.Fatalf("ensure user_settings.featherless_api_key_last4: %v", err)
 	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS deepinfra_api_key_enc text`); err != nil {
+		t.Fatalf("ensure user_settings.deepinfra_api_key_enc: %v", err)
+	}
+	if _, err := db.Exec(context.Background(), `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS deepinfra_api_key_last4 text`); err != nil {
+		t.Fatalf("ensure user_settings.deepinfra_api_key_last4: %v", err)
+	}
 }
 
 func TestValidateCatalogModelForPurpose(t *testing.T) {
@@ -266,6 +272,61 @@ func TestUpdateAudioBriefingPersonaVoicesRequiresTTSModelForOpenAI(t *testing.T)
 	})
 	if err == nil || err.Error() != "invalid tts_model for editor" {
 		t.Fatalf("UpdateAudioBriefingPersonaVoices() error = %v, want invalid tts_model for editor", err)
+	}
+}
+
+func TestSettingsServiceSetAndDeleteDeepInfraAPIKey(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "settings-service-deepinfra-test-key")
+
+	svc := newSettingsServiceForTest(t)
+	svc.cipher = NewSecretCipher()
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+
+	settings, err := svc.SetAPIKey(ctx, userID, "deepinfra", "deepinfra-secret")
+	if err != nil {
+		t.Fatalf("SetAPIKey(deepinfra) error = %v", err)
+	}
+	if !settings.HasDeepInfraAPIKey {
+		t.Fatal("HasDeepInfraAPIKey = false, want true")
+	}
+	if settings.DeepInfraAPIKeyLast4 == nil || *settings.DeepInfraAPIKeyLast4 != "cret" {
+		t.Fatalf("DeepInfraAPIKeyLast4 = %#v, want %q", settings.DeepInfraAPIKeyLast4, "cret")
+	}
+
+	settings, err = svc.DeleteAPIKey(ctx, userID, "deepinfra")
+	if err != nil {
+		t.Fatalf("DeleteAPIKey(deepinfra) error = %v", err)
+	}
+	if settings.HasDeepInfraAPIKey {
+		t.Fatal("HasDeepInfraAPIKey = true, want false")
+	}
+	if settings.DeepInfraAPIKeyLast4 != nil {
+		t.Fatalf("DeepInfraAPIKeyLast4 = %#v, want nil", settings.DeepInfraAPIKeyLast4)
+	}
+}
+
+func TestSettingsPayloadIncludesDeepInfraAPIKeyState(t *testing.T) {
+	t.Setenv("USER_SECRET_ENCRYPTION_KEY", "settings-service-deepinfra-payload-key")
+
+	svc := newSettingsServiceForTest(t)
+	svc.cipher = NewSecretCipher()
+	ctx := context.Background()
+	userID := "00000000-0000-4000-8000-000000000021"
+
+	if _, err := svc.SetAPIKey(ctx, userID, "deepinfra", "payload-deepinfra-secret"); err != nil {
+		t.Fatalf("SetAPIKey(deepinfra) error = %v", err)
+	}
+
+	payload, err := svc.Get(ctx, userID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !payload.HasDeepInfraAPIKey {
+		t.Fatal("HasDeepInfraAPIKey = false, want true")
+	}
+	if payload.DeepInfraAPIKeyLast4 == nil || *payload.DeepInfraAPIKeyLast4 != "cret" {
+		t.Fatalf("DeepInfraAPIKeyLast4 = %#v, want %q", payload.DeepInfraAPIKeyLast4, "cret")
 	}
 }
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Bell, BookOpen, Flame, Sparkles, X } from "lucide-react";
 import { api, BriefingCluster, Item, NavigatorLLM, ProviderModelChangeEvent, ReadingGoal, ReviewQueueItem, TodayQueueItem, WeeklyReviewSnapshot } from "@/lib/api";
@@ -121,6 +121,22 @@ export default function BriefingPage() {
     if (Number.isNaN(dismissedMs)) return modelUpdates;
     return modelUpdates.filter((event) => Date.parse(event.detected_at) > dismissedMs);
   }, [dismissedModelUpdatesAt, modelUpdates]);
+  const formatModelUpdateSummary = useCallback((changeType: string) => {
+    switch (changeType) {
+      case "added":
+        return t("briefing.providerModelUpdatesChange.added");
+      case "removed":
+        return t("briefing.providerModelUpdatesChange.removed");
+      case "constrained":
+        return t("briefing.providerModelUpdatesChange.constrained");
+      case "pricing_changed":
+        return t("briefing.providerModelUpdatesChange.pricingChanged");
+      case "context_changed":
+        return t("briefing.providerModelUpdatesChange.contextChanged");
+      default:
+        return t("briefing.providerModelUpdatesChange.changed");
+    }
+  }, [t]);
   const highlights = data?.highlight_items ?? EMPTY_ITEMS;
   const activeGoals = readingGoalsQuery.data?.active ?? EMPTY_GOALS;
   const todayQueue = todayQueueQuery.data?.items ?? EMPTY_TODAY_QUEUE;
@@ -284,7 +300,10 @@ export default function BriefingPage() {
               <div className="min-w-0">
                 <h2 className="font-sans text-sm font-semibold text-[var(--warning)]">{t("briefing.providerModelUpdates")}</h2>
                 <p className="font-sans text-sm text-[var(--warning)]/90">
-                  {visibleModelUpdates.slice(0, 3).map((event) => `${providerLabel(event.provider)} ${event.change_type === "added" ? "+" : "-"} ${event.model_id}`).join(" / ")}
+                  {visibleModelUpdates
+                    .slice(0, 3)
+                    .map((event) => `${providerLabel(event.provider)} ${formatModelUpdateSummary(event.change_type)} ${event.model_id}`)
+                    .join(" / ")}
                 </p>
               </div>
             </div>

@@ -164,6 +164,8 @@ func (r *ProviderModelUpdateRepo) ListLatestProviderSummary(ctx context.Context,
 		Constrained:         []model.ProviderModelChangeEvent{},
 		AvailabilityChanged: []model.ProviderModelChangeEvent{},
 		GatedChanged:        []model.ProviderModelChangeEvent{},
+		PricingChanged:      []model.ProviderModelChangeEvent{},
+		ContextChanged:      []model.ProviderModelChangeEvent{},
 		Removed:             []model.ProviderModelChangeEvent{},
 	}
 	for rows.Next() {
@@ -184,6 +186,10 @@ func (r *ProviderModelUpdateRepo) ListLatestProviderSummary(ctx context.Context,
 			summary.AvailabilityChanged = append(summary.AvailabilityChanged, ev)
 		case "gated_changed":
 			summary.GatedChanged = append(summary.GatedChanged, ev)
+		case "pricing_changed":
+			summary.PricingChanged = append(summary.PricingChanged, ev)
+		case "context_changed":
+			summary.ContextChanged = append(summary.ContextChanged, ev)
 		case "removed":
 			summary.Removed = append(summary.Removed, ev)
 		}
@@ -199,7 +205,7 @@ func (r *ProviderModelUpdateRepo) ListSnapshotEntries(ctx context.Context, provi
 		offset = 0
 	}
 
-	excludedProviders := []string{"aivis", "openrouter", "poe", "featherless"}
+	excludedProviders := []string{"aivis", "openrouter", "poe", "featherless", "deepinfra"}
 	args := []any{excludedProviders}
 	conditions := []string{"NOT (provider = ANY($1))"}
 
@@ -267,7 +273,7 @@ func (r *ProviderModelUpdateRepo) ListSnapshotProviders(ctx context.Context) ([]
 	rows, err := r.db.Query(ctx, `
 		SELECT provider
 		FROM provider_model_snapshots
-		WHERE provider NOT IN ('aivis', 'openrouter', 'poe', 'featherless')
+		WHERE provider NOT IN ('aivis', 'openrouter', 'poe', 'featherless', 'deepinfra')
 		ORDER BY provider ASC`)
 	if err != nil {
 		return nil, err

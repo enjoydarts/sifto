@@ -288,6 +288,9 @@ func (s *ProviderModelSnapshotSyncService) buildDiscoveryService(ctx context.Con
 		if keys.Featherless == "" {
 			keys.Featherless = s.loadUserKey(ctx, user.ID, s.settings.GetFeatherlessAPIKeyEncrypted)
 		}
+		if keys.DeepInfra == "" {
+			keys.DeepInfra = s.loadUserKey(ctx, user.ID, s.settings.GetDeepInfraAPIKeyEncrypted)
+		}
 	}
 	return NewProviderModelDiscoveryServiceWithKeys(keys), nil
 }

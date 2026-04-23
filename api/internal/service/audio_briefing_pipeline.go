@@ -56,7 +56,7 @@ type audioBriefingTurnBatchResult struct {
 
 func selectAudioBriefingOpenAICompatibleKey(
 	provider string,
-	openAIKey, openRouterKey, togetherKey, moonshotKey, minimaxKey, xiaomiMiMoTokenPlanKey, poeKey, siliconFlowKey, featherlessKey *string,
+	openAIKey, openRouterKey, togetherKey, moonshotKey, minimaxKey, xiaomiMiMoTokenPlanKey, poeKey, siliconFlowKey, featherlessKey, deepinfraKey *string,
 ) *string {
 	switch provider {
 	case "openrouter":
@@ -75,6 +75,8 @@ func selectAudioBriefingOpenAICompatibleKey(
 		return siliconFlowKey
 	case "featherless":
 		return featherlessKey
+	case "deepinfra":
+		return deepinfraKey
 	default:
 		return openAIKey
 	}
@@ -473,6 +475,7 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetPoeAPIKeyEncrypted, o.cipher, userID, "")
 	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetSiliconFlowAPIKeyEncrypted, o.cipher, userID, "")
 	featherlessKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetFeatherlessAPIKeyEncrypted, o.cipher, userID, "")
+	deepinfraKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetDeepInfraAPIKeyEncrypted, o.cipher, userID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenAIAPIKeyEncrypted, o.cipher, userID, "")
 
 	normalizedPersona := normalizeAudioBriefingPersona(persona)
@@ -522,6 +525,7 @@ func (o *AudioBriefingOrchestrator) buildSingleDraft(
 					poeKey,
 					siliconFlowKey,
 					featherlessKey,
+					deepinfraKey,
 				)
 				resp, err := generateAudioBriefingScriptWithRetry(workerCtx, func(callCtx context.Context) (*AudioBriefingScriptResponse, error) {
 					return o.worker.GenerateAudioBriefingScriptWithModel(
@@ -708,6 +712,7 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 	poeKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetPoeAPIKeyEncrypted, o.cipher, job.UserID, "")
 	siliconFlowKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetSiliconFlowAPIKeyEncrypted, o.cipher, job.UserID, "")
 	featherlessKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetFeatherlessAPIKeyEncrypted, o.cipher, job.UserID, "")
+	deepinfraKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetDeepInfraAPIKeyEncrypted, o.cipher, job.UserID, "")
 	openAIKey, _ := loadAndDecryptAudioBriefingUserSecret(ctx, o.settingsRepo.GetOpenAIAPIKeyEncrypted, o.cipher, job.UserID, "")
 
 	introContext := buildAudioBriefingIntroContext(job.SlotStartedAtJST, briefingSettings.ProgramName)
@@ -751,6 +756,7 @@ func (o *AudioBriefingOrchestrator) buildDuoDraft(
 				poeKey,
 				siliconFlowKey,
 				featherlessKey,
+				deepinfraKey,
 			)
 			resp, err := generateAudioBriefingScriptWithRetry(workerCtx, func(callCtx context.Context) (*AudioBriefingScriptResponse, error) {
 				return o.worker.GenerateAudioBriefingScriptWithModel(
@@ -2017,6 +2023,8 @@ func hasAudioBriefingProviderKey(settings *model.UserSettings, provider string) 
 		return settings.HasPoeAPIKey
 	case "siliconflow":
 		return settings.HasSiliconFlowAPIKey
+	case "deepinfra":
+		return settings.HasDeepInfraAPIKey
 	case "featherless":
 		return settings.HasFeatherlessAPIKey
 	default:

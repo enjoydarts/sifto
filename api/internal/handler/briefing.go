@@ -606,6 +606,8 @@ func hasNavigatorProviderKey(settings *model.UserSettings, provider string) bool
 		return settings.HasPoeAPIKey
 	case "siliconflow":
 		return settings.HasSiliconFlowAPIKey
+	case "deepinfra":
+		return settings.HasDeepInfraAPIKey
 	case "featherless":
 		return settings.HasFeatherlessAPIKey
 	default:

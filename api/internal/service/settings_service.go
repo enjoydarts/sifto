@@ -42,6 +42,8 @@ type SettingsGetPayload struct {
 	MiniMaxAPIKeyLast4             *string                         `json:"minimax_api_key_last4,omitempty"`
 	HasXiaomiMiMoTokenPlanAPIKey   bool                            `json:"has_xiaomi_mimo_token_plan_api_key"`
 	XiaomiMiMoTokenPlanAPIKeyLast4 *string                         `json:"xiaomi_mimo_token_plan_api_key_last4,omitempty"`
+	HasDeepInfraAPIKey             bool                            `json:"has_deepinfra_api_key"`
+	DeepInfraAPIKeyLast4           *string                         `json:"deepinfra_api_key_last4,omitempty"`
 	HasFeatherlessAPIKey           bool                            `json:"has_featherless_api_key"`
 	FeatherlessAPIKeyLast4         *string                         `json:"featherless_api_key_last4,omitempty"`
 	HasGoogleAPIKey                bool                            `json:"has_google_api_key"`
@@ -401,6 +403,8 @@ func (s *SettingsService) Get(ctx context.Context, userID string) (*SettingsGetP
 		MiniMaxAPIKeyLast4:             settings.MiniMaxAPIKeyLast4,
 		HasXiaomiMiMoTokenPlanAPIKey:   settings.HasXiaomiMiMoTokenPlanAPIKey,
 		XiaomiMiMoTokenPlanAPIKeyLast4: settings.XiaomiMiMoTokenPlanAPIKeyLast4,
+		HasDeepInfraAPIKey:             settings.HasDeepInfraAPIKey,
+		DeepInfraAPIKeyLast4:           settings.DeepInfraAPIKeyLast4,
 		HasFeatherlessAPIKey:           settings.HasFeatherlessAPIKey,
 		FeatherlessAPIKeyLast4:         settings.FeatherlessAPIKeyLast4,
 		HasGoogleAPIKey:                settings.HasGoogleAPIKey,
@@ -1264,6 +1268,8 @@ func (s *SettingsService) SetAPIKey(ctx context.Context, userID, provider, apiKe
 		return s.repo.SetMiniMaxAPIKey(ctx, userID, enc, last4)
 	case "xiaomi_mimo_token_plan":
 		return s.repo.SetXiaomiMiMoTokenPlanAPIKey(ctx, userID, enc, last4)
+	case "deepinfra":
+		return s.repo.SetDeepInfraAPIKey(ctx, userID, enc, last4)
 	case "featherless":
 		return s.repo.SetFeatherlessAPIKey(ctx, userID, enc, last4)
 	case "google":
@@ -1315,6 +1321,8 @@ func (s *SettingsService) DeleteAPIKey(ctx context.Context, userID, provider str
 		return s.repo.ClearMiniMaxAPIKey(ctx, userID)
 	case "xiaomi_mimo_token_plan":
 		return s.repo.ClearXiaomiMiMoTokenPlanAPIKey(ctx, userID)
+	case "deepinfra":
+		return s.repo.ClearDeepInfraAPIKey(ctx, userID)
 	case "featherless":
 		return s.repo.ClearFeatherlessAPIKey(ctx, userID)
 	case "google":

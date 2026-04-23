@@ -182,6 +182,7 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 	poeAPIKey := allKeys["poe"]
 	siliconFlowAPIKey := allKeys["siliconflow"]
 	featherlessAPIKey := allKeys["featherless"]
+	deepinfraAPIKey := allKeys["deepinfra"]
 	openAIAPIKey := allKeys["openai"]
 	anthropicSourceSuggestionModel := s.getUserSourceSuggestionModel(ctx, userID)
 	resolved := selectSourceSuggestionLLM(
@@ -202,6 +203,7 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 		poeAPIKey,
 		siliconFlowAPIKey,
 		featherlessAPIKey,
+		deepinfraAPIKey,
 		openAIAPIKey,
 		anthropicSourceSuggestionModel,
 	)
@@ -244,7 +246,7 @@ func (s *SourceSuggestionService) BuildSourceRecommendations(ctx context.Context
 	}
 
 	cands := map[string]*sourceSuggestionAgg{}
-	aiReady := (resolved.AnthropicAPIKey != nil || resolved.GoogleAPIKey != nil || resolved.GroqAPIKey != nil || resolved.FireworksAPIKey != nil || resolved.DeepseekAPIKey != nil || resolved.AlibabaAPIKey != nil || resolved.MistralAPIKey != nil || resolved.TogetherAPIKey != nil || resolved.MoonshotAPIKey != nil || resolved.MiniMaxAPIKey != nil || resolved.XiaomiMiMoTokenPlanAPIKey != nil || resolved.XAIAPIKey != nil || resolved.ZAIAPIKey != nil || resolved.OpenAIAPIKey != nil || resolved.OpenRouterAPIKey != nil || resolved.PoeAPIKey != nil || resolved.SiliconFlowAPIKey != nil || resolved.FeatherlessAPIKey != nil) && s.worker != nil
+	aiReady := (resolved.AnthropicAPIKey != nil || resolved.GoogleAPIKey != nil || resolved.GroqAPIKey != nil || resolved.FireworksAPIKey != nil || resolved.DeepseekAPIKey != nil || resolved.AlibabaAPIKey != nil || resolved.MistralAPIKey != nil || resolved.TogetherAPIKey != nil || resolved.MoonshotAPIKey != nil || resolved.MiniMaxAPIKey != nil || resolved.XiaomiMiMoTokenPlanAPIKey != nil || resolved.XAIAPIKey != nil || resolved.ZAIAPIKey != nil || resolved.OpenAIAPIKey != nil || resolved.OpenRouterAPIKey != nil || resolved.PoeAPIKey != nil || resolved.SiliconFlowAPIKey != nil || resolved.FeatherlessAPIKey != nil || resolved.DeepInfraAPIKey != nil) && s.worker != nil
 	var seedLLMMeta map[string]any
 	timedOutInAiStep := false
 	if aiReady {
@@ -636,11 +638,12 @@ type resolvedProviderKeys struct {
 	PoeAPIKey                 *string
 	SiliconFlowAPIKey         *string
 	FeatherlessAPIKey         *string
+	DeepInfraAPIKey           *string
 	OpenAIAPIKey              *string
 	SelectedModel             *string
 }
 
-func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, togetherAPIKey, moonshotAPIKey, miniMaxAPIKey, xiaomiMiMoTokenPlanAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, featherlessAPIKey, openAIAPIKey, model *string) resolvedProviderKeys {
+func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, fireworksAPIKey, deepseekAPIKey, alibabaAPIKey, mistralAPIKey, togetherAPIKey, moonshotAPIKey, miniMaxAPIKey, xiaomiMiMoTokenPlanAPIKey, xaiAPIKey, zaiAPIKey, openRouterAPIKey, poeAPIKey, siliconFlowAPIKey, featherlessAPIKey, deepinfraAPIKey, openAIAPIKey, model *string) resolvedProviderKeys {
 	hasAnthropic := anthropicAPIKey != nil && strings.TrimSpace(*anthropicAPIKey) != ""
 	hasGoogle := googleAPIKey != nil && strings.TrimSpace(*googleAPIKey) != ""
 	hasGroq := groqAPIKey != nil && strings.TrimSpace(*groqAPIKey) != ""
@@ -658,6 +661,7 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 	hasPoe := poeAPIKey != nil && strings.TrimSpace(*poeAPIKey) != ""
 	hasSiliconFlow := siliconFlowAPIKey != nil && strings.TrimSpace(*siliconFlowAPIKey) != ""
 	hasFeatherless := featherlessAPIKey != nil && strings.TrimSpace(*featherlessAPIKey) != ""
+	hasDeepInfra := deepinfraAPIKey != nil && strings.TrimSpace(*deepinfraAPIKey) != ""
 	hasOpenAI := openAIAPIKey != nil && strings.TrimSpace(*openAIAPIKey) != ""
 	purpose := "source_suggestion"
 
@@ -738,6 +742,14 @@ func selectSourceSuggestionLLM(anthropicAPIKey, googleAPIKey, groqAPIKey, firewo
 					FeatherlessAPIKey: featherlessAPIKey,
 					OpenAIAPIKey:      featherlessAPIKey,
 					SelectedModel:     resolved,
+				}
+			}
+		case "deepinfra":
+			if hasDeepInfra {
+				return resolvedProviderKeys{
+					DeepInfraAPIKey: deepinfraAPIKey,
+					OpenAIAPIKey:    deepinfraAPIKey,
+					SelectedModel:   resolved,
 				}
 			}
 		case "openai":

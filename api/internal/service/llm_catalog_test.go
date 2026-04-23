@@ -124,6 +124,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog(FeatherlessAliasModelID("Qwen/Qwen3.5-9B")); got == nil {
 		t.Fatal("featherless::Qwen/Qwen3.5-9B not found in catalog")
 	}
+	if got := providerCatalogByID("deepinfra"); got == nil {
+		t.Fatal("deepinfra provider not found in catalog")
+	}
 }
 
 func TestCatalogProviderAndDefaults(t *testing.T) {
@@ -179,6 +182,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "poe::Claude-Sonnet-4.5", provider: "poe"},
 		{model: "siliconflow::deepseek-ai/DeepSeek-V3.2", provider: "siliconflow"},
 		{model: FeatherlessAliasModelID("Qwen/Qwen3.5-9B"), provider: "featherless"},
+		{model: "deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo", provider: "deepinfra"},
 	}
 	for _, tt := range tests {
 		if got := CatalogProviderForModel(tt.model); got != tt.provider {
@@ -312,6 +316,7 @@ func TestDynamicChatModelsMergeAcrossProviders(t *testing.T) {
 		SetDynamicChatModelsForProvider("openrouter", nil)
 		SetDynamicChatModelsForProvider("poe", nil)
 		SetDynamicChatModelsForProvider("featherless", nil)
+		SetDynamicChatModelsForProvider("deepinfra", nil)
 	})
 
 	SetDynamicChatModelsForProvider("openrouter", []LLMModelCatalog{
@@ -321,6 +326,13 @@ func TestDynamicChatModelsMergeAcrossProviders(t *testing.T) {
 		{ID: PoeAliasModelID("Claude-Sonnet-4.5"), Provider: "poe"},
 	})
 	SetDynamicChatModelsForProvider("featherless", FeatherlessModelIDsToCatalogModels([]string{"meta-llama/Llama-3.3-70B-Instruct-Turbo"}))
+	SetDynamicChatModelsForProvider("deepinfra", []LLMModelCatalog{
+		{
+			ID:                "deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo",
+			Provider:          "deepinfra",
+			AvailablePurposes: []string{"facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"},
+		},
+	})
 
 	catalog := LLMCatalogData()
 	if CatalogModelByIDInCatalog(catalog, OpenRouterAliasModelID("openai/gpt-oss-120b")) == nil {
@@ -331,5 +343,26 @@ func TestDynamicChatModelsMergeAcrossProviders(t *testing.T) {
 	}
 	if CatalogModelByIDInCatalog(catalog, FeatherlessAliasModelID("meta-llama/Llama-3.3-70B-Instruct-Turbo")) == nil {
 		t.Fatal("featherless dynamic model should be present in merged catalog")
+	}
+	if CatalogModelByIDInCatalog(catalog, "deepinfra::meta-llama/Meta-Llama-3.3-70B-Instruct-Turbo") == nil {
+		t.Fatal("deepinfra dynamic model should be present in merged catalog")
+	}
+}
+
+func TestDefaultLLMModelForPurposeFallsBackToDeepInfraDynamicCatalogModel(t *testing.T) {
+	t.Cleanup(func() {
+		SetDynamicChatModelsForProvider("deepinfra", nil)
+	})
+
+	SetDynamicChatModelsForProvider("deepinfra", []LLMModelCatalog{
+		{
+			ID:                "deepinfra::Qwen/Qwen3.5-32B-Instruct",
+			Provider:          "deepinfra",
+			AvailablePurposes: []string{"facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"},
+		},
+	})
+
+	if got := DefaultLLMModelForPurpose("deepinfra", "summary"); got != "deepinfra::Qwen/Qwen3.5-32B-Instruct" {
+		t.Fatalf("DefaultLLMModelForPurpose(%q, %q) = %q, want %q", "deepinfra", "summary", got, "deepinfra::Qwen/Qwen3.5-32B-Instruct")
 	}
 }

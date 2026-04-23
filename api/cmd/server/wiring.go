@@ -269,8 +269,12 @@ func buildSettingsModule(d *appDeps) appModule {
 				r.Delete("/minimax-key", settingsH.DeleteMiniMaxAPIKey)
 				r.Post("/xiaomi-mimo-token-plan-key", settingsH.SetXiaomiMiMoTokenPlanAPIKey)
 				r.Delete("/xiaomi-mimo-token-plan-key", settingsH.DeleteXiaomiMiMoTokenPlanAPIKey)
+				r.Post("/deepinfra-key", settingsH.SetDeepInfraAPIKey)
+				r.Delete("/deepinfra-key", settingsH.DeleteDeepInfraAPIKey)
 				r.Post("/featherless-key", settingsH.SetFeatherlessAPIKey)
 				r.Delete("/featherless-key", settingsH.DeleteFeatherlessAPIKey)
+				r.Post("/deepinfra-key", settingsH.SetDeepInfraAPIKey)
+				r.Delete("/deepinfra-key", settingsH.DeleteDeepInfraAPIKey)
 				r.Post("/moonshot-key", settingsH.SetMoonshotAPIKey)
 				r.Delete("/moonshot-key", settingsH.DeleteMoonshotAPIKey)
 				r.Post("/xai-key", settingsH.SetXAIAPIKey)
@@ -408,6 +412,7 @@ func buildLLMModelsModule(d *appDeps) appModule {
 	providerModelUpdateRepo := repository.NewProviderModelUpdateRepo(db)
 	poeModelRepo := repository.NewPoeModelRepo(db)
 	featherlessModelRepo := repository.NewFeatherlessModelRepo(db)
+	deepinfraModelRepo := repository.NewDeepInfraModelRepo(db)
 	poeUsageRepo := repository.NewPoeUsageRepo(db)
 	aivisModelRepo := repository.NewAivisModelRepo(db)
 	xaiVoiceRepo := repository.NewXAIVoiceRepo(db)
@@ -425,6 +430,8 @@ func buildLLMModelsModule(d *appDeps) appModule {
 	poeModelsH := handler.NewPoeModelsHandler(poeModelRepo, userSettingsRepo, d.secretCipher, providerModelUpdateRepo, poeCatalogSvc, poeUsageSvc)
 	featherlessCatalogSvc := service.NewFeatherlessCatalogService()
 	featherlessModelsH := handler.NewFeatherlessModelsHandler(featherlessModelRepo, userSettingsRepo, d.secretCipher, providerModelUpdateRepo, featherlessCatalogSvc)
+	deepinfraCatalogSvc := service.NewDeepInfraCatalogService()
+	deepinfraModelsH := handler.NewDeepInfraModelsHandler(deepinfraModelRepo, userSettingsRepo, d.secretCipher, providerModelUpdateRepo, deepinfraCatalogSvc)
 	aivisCatalogSvc := service.NewAivisCatalogService()
 	aivisModelsH := handler.NewAivisModelsHandler(aivisModelRepo, providerModelUpdateRepo, aivisCatalogSvc)
 	fishAudioCatalogSvc := service.NewFishAudioCatalogService()
@@ -467,6 +474,11 @@ func buildLLMModelsModule(d *appDeps) appModule {
 				r.Get("/", featherlessModelsH.List)
 				r.Get("/status", featherlessModelsH.Status)
 				r.Post("/sync", featherlessModelsH.Sync)
+			})
+			r.Route("/deepinfra-models", func(r chi.Router) {
+				r.Get("/", deepinfraModelsH.List)
+				r.Get("/status", deepinfraModelsH.Status)
+				r.Post("/sync", deepinfraModelsH.Sync)
 			})
 			r.Route("/aivis-models", func(r chi.Router) {
 				r.Get("/", aivisModelsH.List)
@@ -638,6 +650,7 @@ func preloadDynamicModels(ctx context.Context, d *appDeps) {
 	openRouterModelRepo := repository.NewOpenRouterModelRepo(db)
 	poeModelRepo := repository.NewPoeModelRepo(db)
 	featherlessModelRepo := repository.NewFeatherlessModelRepo(db)
+	deepinfraModelRepo := repository.NewDeepInfraModelRepo(db)
 
 	if latestModels, _, err := openRouterModelRepo.ListLatestSnapshots(ctx); err != nil {
 		log.Printf("openrouter snapshot preload failed: %v", err)
@@ -653,6 +666,11 @@ func preloadDynamicModels(ctx context.Context, d *appDeps) {
 		log.Printf("featherless snapshot preload failed: %v", err)
 	} else {
 		service.SetDynamicChatModelsForProvider("featherless", service.FeatherlessSnapshotsToCatalogModels(latestModels))
+	}
+	if latestModels, _, err := deepinfraModelRepo.ListLatestSnapshots(ctx); err != nil {
+		log.Printf("deepinfra snapshot preload failed: %v", err)
+	} else {
+		service.SetDynamicChatModelsForProvider("deepinfra", service.DeepInfraSnapshotsToCatalogModels(latestModels))
 	}
 }
 

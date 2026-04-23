@@ -264,6 +264,12 @@
       }
     },
     {
+      "id": "deepinfra",
+      "label": "DeepInfra",
+      "api_key_header": "x-openai-api-key",
+      "default_models": {}
+    },
+    {
       "id": "openrouter",
       "api_key_header": "x-openai-api-key",
       "default_models": {}

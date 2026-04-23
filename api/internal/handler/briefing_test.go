@@ -71,3 +71,11 @@ func TestHasNavigatorProviderKeySupportsFeatherless(t *testing.T) {
 		t.Fatal("hasNavigatorProviderKey(featherless) = false, want true")
 	}
 }
+
+func TestHasNavigatorProviderKeySupportsDeepInfra(t *testing.T) {
+	settings := &model.UserSettings{HasDeepInfraAPIKey: true}
+
+	if !hasNavigatorProviderKey(settings, "deepinfra") {
+		t.Fatal("hasNavigatorProviderKey(deepinfra) = false, want true")
+	}
+}

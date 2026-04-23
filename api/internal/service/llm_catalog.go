@@ -70,6 +70,7 @@ const poeAliasPrefix = "poe::"
 const siliconFlowAliasPrefix = "siliconflow::"
 const togetherAliasPrefix = "together::"
 const featherlessAliasPrefix = "featherless::"
+const deepInfraAliasPrefix = "deepinfra::"
 const miniMaxAliasPrefix = "minimax::"
 const miniMaxSlashPrefix = "minimax/"
 
@@ -184,6 +185,26 @@ func ResolveFeatherlessModelID(model string) string {
 
 func IsFeatherlessAliasedModel(model string) bool {
 	return strings.HasPrefix(strings.TrimSpace(model), featherlessAliasPrefix)
+}
+
+func DeepInfraAliasModelID(model string) string {
+	m := strings.TrimSpace(model)
+	if m == "" {
+		return ""
+	}
+	if strings.HasPrefix(m, deepInfraAliasPrefix) {
+		return m
+	}
+	return deepInfraAliasPrefix + m
+}
+
+func ResolveDeepInfraModelID(model string) string {
+	m := strings.TrimSpace(model)
+	return strings.TrimPrefix(m, deepInfraAliasPrefix)
+}
+
+func IsDeepInfraAliasedModel(model string) bool {
+	return strings.HasPrefix(strings.TrimSpace(model), deepInfraAliasPrefix)
 }
 
 func MiniMaxAliasModelID(model string) string {
@@ -369,6 +390,9 @@ func resolveCatalogAliasModelID(catalog *LLMCatalog, model string) string {
 	if IsFeatherlessAliasedModel(m) {
 		candidates = append(candidates, ResolveFeatherlessModelID(m))
 	}
+	if IsDeepInfraAliasedModel(m) {
+		candidates = append(candidates, ResolveDeepInfraModelID(m))
+	}
 	if IsMiniMaxAliasedModel(m) {
 		candidates = append(candidates, ResolveMiniMaxModelID(m))
 	}
@@ -465,6 +489,9 @@ func CatalogProviderForModel(model string) string {
 	}
 	if IsFeatherlessAliasedModel(m) {
 		return "featherless"
+	}
+	if IsDeepInfraAliasedModel(m) {
+		return "deepinfra"
 	}
 	if entry := findModelCatalog(m); entry != nil && entry.Provider != "" {
 		return entry.Provider

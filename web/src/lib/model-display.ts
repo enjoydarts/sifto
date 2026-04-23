@@ -15,6 +15,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   moonshot: "Moonshot",
   openrouter: "OpenRouter",
   featherless: "Featherless.ai",
+  deepinfra: "DeepInfra",
   poe: "Poe",
   siliconflow: "SiliconFlow",
 };
@@ -32,6 +33,9 @@ export function normalizeProvider(provider: string): string {
   }
   if (p.startsWith("featherless::") || p.startsWith("featherless/")) {
     return "featherless";
+  }
+  if (p.startsWith("deepinfra::") || p.startsWith("deepinfra/")) {
+    return "deepinfra";
   }
   return p;
 }
@@ -52,8 +56,12 @@ export function formatModelDisplayName(model: string): string {
       ? model.slice("siliconflow::".length)
     : model.startsWith("minimax::")
       ? model.slice("minimax::".length)
+    : model.startsWith("deepinfra::")
+      ? model.slice("deepinfra::".length)
       : model.startsWith("minimax/")
         ? model.slice("minimax/".length)
+      : model.startsWith("deepinfra/")
+        ? model.slice("deepinfra/".length)
       : model;
   switch (raw) {
     case "mimo-v2-pro":

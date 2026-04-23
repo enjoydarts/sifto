@@ -23,9 +23,45 @@ export default function ProviderModelUpdatesPanel({
     dismissed: string;
     restore: string;
     added: string;
+    constrained: string;
     removed: string;
+    pricingChanged: string;
+    contextChanged: string;
+    genericChanged: string;
   };
 }) {
+  const changeLabel = (changeType: string) => {
+    switch (changeType) {
+      case "added":
+        return labels.added;
+      case "removed":
+        return labels.removed;
+      case "constrained":
+        return labels.constrained;
+      case "pricing_changed":
+        return labels.pricingChanged;
+      case "context_changed":
+        return labels.contextChanged;
+      default:
+        return labels.genericChanged;
+    }
+  };
+
+  const changeClassName = (changeType: string) => {
+    switch (changeType) {
+      case "added":
+        return "border border-[var(--color-editorial-success-line)] bg-[var(--color-editorial-success-soft)] text-[var(--color-editorial-success)]";
+      case "removed":
+        return "border border-[var(--color-editorial-error-line)] bg-[var(--color-editorial-error-soft)] text-[var(--color-editorial-error)]";
+      case "constrained":
+        return "border border-[#ead5af] bg-[#faf1dd] text-[#916321]";
+      case "pricing_changed":
+      case "context_changed":
+      default:
+        return "border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] text-[var(--color-editorial-ink-soft)]";
+    }
+  };
+
   return (
     <section className="surface-editorial rounded-[var(--radius-panel)] p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -68,14 +104,8 @@ export default function ProviderModelUpdatesPanel({
                 <span className="rounded-full border border-[var(--color-editorial-line)] bg-[var(--color-editorial-panel)] px-2 py-0.5 text-xs font-medium text-[var(--color-editorial-ink-soft)]">
                   {providerLabel(event.provider)}
                 </span>
-                <span
-                  className={`rounded px-2 py-0.5 text-xs font-medium ${
-                    event.change_type === "added"
-                      ? "border border-[var(--color-editorial-success-line)] bg-[var(--color-editorial-success-soft)] text-[var(--color-editorial-success)]"
-                      : "border border-[var(--color-editorial-error-line)] bg-[var(--color-editorial-error-soft)] text-[var(--color-editorial-error)]"
-                  }`}
-                >
-                  {event.change_type === "added" ? labels.added : labels.removed}
+                <span className={`rounded px-2 py-0.5 text-xs font-medium ${changeClassName(event.change_type)}`}>
+                  {changeLabel(event.change_type)}
                 </span>
                 <span className="break-all text-[var(--color-editorial-ink)]">{event.model_id}</span>
                 <span className="ml-auto text-xs text-[var(--color-editorial-ink-faint)]">{new Date(event.detected_at).toLocaleString()}</span>

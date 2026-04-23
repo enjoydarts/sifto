@@ -33,6 +33,9 @@ export function inferProviderLabelFromModelID(modelID: string, t: Translate): st
   if (modelID.startsWith("featherless::")) {
     return t("settings.modelGuide.provider.featherless", "Featherless.ai");
   }
+  if (modelID.startsWith("deepinfra::") || modelID.startsWith("deepinfra/")) {
+    return t("settings.modelGuide.provider.deepinfra", "DeepInfra");
+  }
   if (modelID.startsWith("siliconflow::")) {
     return t("settings.modelGuide.provider.siliconflow", "SiliconFlow");
   }

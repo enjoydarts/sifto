@@ -17,8 +17,11 @@ import type {
   AskResponse,
   AudioBriefingDetailResponse,
   AudioBriefingJob,
+  AudioBriefingPersonaVoice,
   AudioBriefingPreset,
   AudioBriefingSettings,
+  DeepInfraModelsResponse,
+  DeepInfraSyncStatusResponse,
   BriefingNavigatorResponse,
   BriefingTodayResponse,
   CreatePlaybackSessionRequest,
@@ -114,7 +117,6 @@ import type {
   BulkRetryItemsResult,
   FavoritesMarkdownExportParams,
   ItemLaterResult,
-  AudioBriefingPersonaVoice,
 } from "@/types/api";
 
 async function clientFetch<T>(path: string, options?: RequestInit, opts?: { apiPrefix?: boolean }): Promise<T> {
@@ -1105,6 +1107,16 @@ export const api = {
       "/settings/openrouter-key",
       { method: "DELETE" }
     ),
+  setDeepInfraApiKey: (apiKey: string) =>
+    apiFetch<{ user_id: string; has_deepinfra_api_key: boolean; deepinfra_api_key_last4: string | null }>(
+      "/settings/deepinfra-key",
+      { method: "POST", body: JSON.stringify({ api_key: apiKey }) }
+    ),
+  deleteDeepInfraApiKey: () =>
+    apiFetch<{ user_id: string; has_deepinfra_api_key: boolean; deepinfra_api_key_last4: string | null }>(
+      "/settings/deepinfra-key",
+      { method: "DELETE" }
+    ),
   setFeatherlessApiKey: (apiKey: string) =>
     apiFetch<{ user_id: string; has_featherless_api_key: boolean; featherless_api_key_last4: string | null }>(
       "/settings/featherless-key",
@@ -1221,6 +1233,12 @@ export const api = {
     apiFetch<FeatherlessSyncStatusResponse>("/featherless-models/status"),
   syncFeatherlessModels: () =>
     apiFetch<FeatherlessModelsResponse>("/featherless-models/sync", { method: "POST" }),
+  getDeepInfraModels: () =>
+    apiFetch<DeepInfraModelsResponse>("/deepinfra-models"),
+  getDeepInfraSyncStatus: () =>
+    apiFetch<DeepInfraSyncStatusResponse>("/deepinfra-models/status"),
+  syncDeepInfraModels: () =>
+    apiFetch<DeepInfraModelsResponse>("/deepinfra-models/sync", { method: "POST" }),
   setOpenRouterStructuredOutputOverride: (modelId: string, allowStructuredOutput: boolean) =>
     apiFetch<{ model_id: string; override_enabled: boolean; allow_structured_output: boolean }>(
       "/openrouter-models/overrides/structured-output",

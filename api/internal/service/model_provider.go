@@ -2,7 +2,7 @@ package service
 
 import "strings"
 
-var costEfficientProviderPriority = []string{"groq", "zai", "fireworks", "together", "moonshot", "alibaba", "google", "mistral", "xai", "deepseek", "minimax", "xiaomi_mimo_token_plan", "featherless", "siliconflow", "openrouter", "openai", "anthropic"}
+var costEfficientProviderPriority = []string{"groq", "zai", "fireworks", "together", "moonshot", "alibaba", "google", "mistral", "xai", "deepseek", "minimax", "xiaomi_mimo_token_plan", "featherless", "deepinfra", "siliconflow", "openrouter", "openai", "anthropic"}
 
 func isModelByProvider(model *string, provider string) bool {
 	if model == nil {
@@ -37,6 +37,18 @@ func LLMProviderForModel(model *string) string {
 func DefaultLLMModelForPurpose(provider, purpose string) string {
 	if v := CatalogDefaultModelForPurpose(provider, purpose); v != "" {
 		return v
+	}
+	if catalog := LLMCatalogData(); catalog != nil {
+		for _, item := range catalog.ChatModels {
+			if strings.TrimSpace(item.Provider) != strings.TrimSpace(provider) {
+				continue
+			}
+			for _, availablePurpose := range item.AvailablePurposes {
+				if strings.TrimSpace(availablePurpose) == strings.TrimSpace(purpose) {
+					return item.ID
+				}
+			}
+		}
 	}
 	if v := CatalogDefaultModelForPurpose("anthropic", purpose); v != "" {
 		return v

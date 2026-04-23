@@ -33,7 +33,7 @@ func NewFeatherlessModelsHandler(repo *repository.FeatherlessModelRepo, settings
 
 type featherlessModelListEntry struct {
 	repository.FeatherlessModelSnapshot
-	ProviderSlug    string   `json:"provider_slug"`
+	ProviderSlug    string  `json:"provider_slug"`
 	Availability    string  `json:"availability"`
 	RawAvailability string  `json:"raw_availability,omitempty"`
 	Reason          *string `json:"reason,omitempty"`

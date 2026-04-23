@@ -678,6 +678,7 @@ func TestSelectAudioBriefingOpenAICompatibleKeySupportsFeatherless(t *testing.T)
 		poeKey,
 		siliconFlowKey,
 		featherlessKey,
+		nil,
 	)
 
 	if got == nil || *got != "featherless-key" {
@@ -690,6 +691,45 @@ func TestHasAudioBriefingProviderKeySupportsFeatherless(t *testing.T) {
 
 	if !hasAudioBriefingProviderKey(settings, "featherless") {
 		t.Fatal("hasAudioBriefingProviderKey(featherless) = false, want true")
+	}
+}
+
+func TestSelectAudioBriefingOpenAICompatibleKeySupportsDeepInfra(t *testing.T) {
+	openAIKey := stringPtr("openai-key")
+	openRouterKey := stringPtr("openrouter-key")
+	togetherKey := stringPtr("together-key")
+	moonshotKey := stringPtr("moonshot-key")
+	minimaxKey := stringPtr("minimax-key")
+	xiaomiMiMoTokenPlanKey := stringPtr("mimo-key")
+	poeKey := stringPtr("poe-key")
+	siliconFlowKey := stringPtr("siliconflow-key")
+	featherlessKey := stringPtr("featherless-key")
+	deepinfraKey := stringPtr("deepinfra-key")
+
+	got := selectAudioBriefingOpenAICompatibleKey(
+		"deepinfra",
+		openAIKey,
+		openRouterKey,
+		togetherKey,
+		moonshotKey,
+		minimaxKey,
+		xiaomiMiMoTokenPlanKey,
+		poeKey,
+		siliconFlowKey,
+		featherlessKey,
+		deepinfraKey,
+	)
+
+	if got == nil || *got != "deepinfra-key" {
+		t.Fatalf("deepinfra key = %v, want deepinfra-key", got)
+	}
+}
+
+func TestHasAudioBriefingProviderKeySupportsDeepInfra(t *testing.T) {
+	settings := &model.UserSettings{HasDeepInfraAPIKey: true}
+
+	if !hasAudioBriefingProviderKey(settings, "deepinfra") {
+		t.Fatal("hasAudioBriefingProviderKey(deepinfra) = false, want true")
 	}
 }
 

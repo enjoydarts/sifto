@@ -57,6 +57,7 @@ type ProviderModelDiscoveryKeys struct {
 	Together            string
 	XiaomiMiMoTokenPlan string
 	Featherless         string
+	DeepInfra           string
 }
 
 func NewProviderModelDiscoveryService() *ProviderModelDiscoveryService {
@@ -96,6 +97,7 @@ func (s *ProviderModelDiscoveryService) DiscoverAll(ctx context.Context) ([]Prov
 		{"together", s.fetchTogetherModels},
 		{"xiaomi_mimo_token_plan", s.fetchXiaomiMiMoTokenPlanModels},
 		{"featherless", s.fetchFeatherlessModels},
+		{"deepinfra", s.fetchDeepInfraModels},
 	}
 	type indexedResult struct {
 		index  int
@@ -498,6 +500,19 @@ func normalizeFeatherlessAPIBaseURL(raw string) string {
 	return base
 }
 
+func normalizeDeepInfraAPIBaseURL(raw string) string {
+	base := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if base == "" {
+		return "https://api.deepinfra.com"
+	}
+	for _, suffix := range []string{"/v1/openai/chat/completions", "/v1/openai", "/chat/completions", "/v1"} {
+		if strings.HasSuffix(base, suffix) {
+			return strings.TrimSuffix(base, suffix)
+		}
+	}
+	return base
+}
+
 func (s *ProviderModelDiscoveryService) fetchFeatherlessModels(ctx context.Context) ([]string, error) {
 	snapshots, err := s.fetchFeatherlessSnapshots(ctx)
 	if err != nil {
@@ -583,6 +598,169 @@ func (s *ProviderModelDiscoveryService) fetchFeatherlessSnapshots(ctx context.Co
 		return nil, err
 	}
 	return snapshots, nil
+}
+
+func (s *ProviderModelDiscoveryService) fetchDeepInfraModels(ctx context.Context) ([]string, error) {
+	snapshots, err := s.fetchDeepInfraSnapshots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		models = append(models, snapshot.ModelID)
+	}
+	return normalizeModelIDs(models), nil
+}
+
+func (s *ProviderModelDiscoveryService) fetchDeepInfraSnapshots(ctx context.Context) ([]repository.DeepInfraModelSnapshot, error) {
+	apiKey := strings.TrimSpace(s.keys.DeepInfra)
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(os.Getenv("DEEPINFRA_API_KEY"))
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("api key is required")
+	}
+	base := normalizeDeepInfraAPIBaseURL(os.Getenv("DEEPINFRA_API_BASE_URL"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	var snapshots []repository.DeepInfraModelSnapshot
+	if err := s.doDiscoveryRequest(ctx, req, func(resp *http.Response) error {
+		defer resp.Body.Close()
+		if resp.StatusCode >= 400 {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+			if len(body) > 0 {
+				return fmt.Errorf("status %d body=%s", resp.StatusCode, string(body))
+			}
+			return fmt.Errorf("status %d", resp.StatusCode)
+		}
+		var payload struct {
+			Data []struct {
+				ID           string `json:"id"`
+				DisplayName  string `json:"display_name"`
+				Name         string `json:"name"`
+				ReportedType string `json:"reported_type"`
+				Object       string `json:"object"`
+				OwnedBy      string `json:"owned_by"`
+				Metadata     *struct {
+					Description   string         `json:"description"`
+					ContextLength *int           `json:"context_length"`
+					MaxTokens     *int           `json:"max_tokens"`
+					Pricing       map[string]any `json:"pricing"`
+					Tags          []string       `json:"tags"`
+				} `json:"metadata"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		snapshots = make([]repository.DeepInfraModelSnapshot, 0, len(payload.Data))
+		seen := make(map[string]struct{}, len(payload.Data))
+		for _, item := range payload.Data {
+			modelID := strings.TrimSpace(item.ID)
+			if modelID == "" {
+				continue
+			}
+			if _, ok := seen[modelID]; ok {
+				continue
+			}
+			seen[modelID] = struct{}{}
+			displayName := strings.TrimSpace(item.DisplayName)
+			if displayName == "" {
+				displayName = strings.TrimSpace(item.Name)
+			}
+			if displayName == "" {
+				displayName = modelID
+			}
+			reportedType := strings.TrimSpace(item.ReportedType)
+			if reportedType == "" {
+				reportedType = strings.TrimSpace(item.Object)
+			}
+			var contextLength *int
+			var maxTokens *int
+			var pricing map[string]any
+			var descriptionEN *string
+			tagsJSON := []byte("[]")
+			if item.Metadata != nil {
+				contextLength = item.Metadata.ContextLength
+				maxTokens = item.Metadata.MaxTokens
+				pricing = item.Metadata.Pricing
+				if desc := strings.TrimSpace(item.Metadata.Description); desc != "" {
+					descriptionEN = &desc
+				}
+				if raw, err := json.Marshal(item.Metadata.Tags); err == nil && len(raw) > 0 {
+					tagsJSON = raw
+				}
+			}
+			providerSlug := strings.TrimSpace(strings.SplitN(modelID, "/", 2)[0])
+			if providerSlug == "" || providerSlug == modelID {
+				providerSlug = strings.TrimSpace(item.OwnedBy)
+			}
+			snapshots = append(snapshots, repository.DeepInfraModelSnapshot{
+				ModelID:             modelID,
+				DisplayName:         displayName,
+				ProviderSlug:        providerSlug,
+				ReportedType:        reportedType,
+				DescriptionEN:       descriptionEN,
+				ContextLength:       contextLength,
+				MaxTokens:           maxTokens,
+				InputPerMTokUSD:     parseDiscoveryFloatPtr(pricing, "input_tokens", "input"),
+				OutputPerMTokUSD:    parseDiscoveryFloatPtr(pricing, "output_tokens", "output"),
+				CacheReadPerMTokUSD: parseDiscoveryFloatPtr(pricing, "cache_read_tokens", "cache_read"),
+				TagsJSON:            tagsJSON,
+				FetchedAt:           now,
+			})
+		}
+		slices.SortFunc(snapshots, func(a, b repository.DeepInfraModelSnapshot) int {
+			return strings.Compare(a.ModelID, b.ModelID)
+		})
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return snapshots, nil
+}
+
+func parseDiscoveryFloatPtr(m map[string]any, keys ...string) *float64 {
+	if len(m) == 0 {
+		return nil
+	}
+	var raw any
+	var ok bool
+	for _, key := range keys {
+		raw, ok = m[key]
+		if ok {
+			break
+		}
+	}
+	if !ok {
+		return nil
+	}
+	switch v := raw.(type) {
+	case float64:
+		return &v
+	case float32:
+		f := float64(v)
+		return &f
+	case int:
+		f := float64(v)
+		return &f
+	case int64:
+		f := float64(v)
+		return &f
+	case json.Number:
+		if parsed, err := v.Float64(); err == nil {
+			return &parsed
+		}
+	case string:
+		if parsed, err := json.Number(strings.TrimSpace(v)).Float64(); err == nil {
+			return &parsed
+		}
+	}
+	return nil
 }
 
 func normalizeXiaomiMiMoTokenPlanAPIBaseURL(raw string) string {

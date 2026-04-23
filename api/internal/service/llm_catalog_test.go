@@ -109,6 +109,9 @@ func TestLLMCatalogIncludesExpectedModels(t *testing.T) {
 	if got := findModelCatalog(TogetherAliasModelID("moonshotai/Kimi-K2.5")); got == nil {
 		t.Fatal("together::moonshotai/Kimi-K2.5 not found in catalog")
 	}
+	if got := findModelCatalog(TogetherAliasModelID("moonshotai/Kimi-K2.6")); got == nil {
+		t.Fatal("together::moonshotai/Kimi-K2.6 not found in catalog")
+	}
 	if got := findModelCatalog(TogetherAliasModelID("zai-org/GLM-5.1")); got == nil {
 		t.Fatal("together::zai-org/GLM-5.1 not found in catalog")
 	}
@@ -166,6 +169,7 @@ func TestCatalogProviderAndDefaults(t *testing.T) {
 		{model: "mimo-v2.5-pro", provider: "xiaomi_mimo_token_plan"},
 		{model: "mimo-v2-omni", provider: "xiaomi_mimo_token_plan"},
 		{model: TogetherAliasModelID("google/gemma-4-31B-it"), provider: "together"},
+		{model: TogetherAliasModelID("moonshotai/Kimi-K2.6"), provider: "together"},
 		{model: TogetherAliasModelID("moonshotai/Kimi-K2.5"), provider: "together"},
 		{model: TogetherAliasModelID("zai-org/GLM-5.1"), provider: "together"},
 		{model: TogetherAliasModelID("openai/gpt-oss-120b"), provider: "together"},

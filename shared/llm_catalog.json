@@ -216,6 +216,7 @@
       "id": "together",
       "api_key_header": "x-openai-api-key",
       "match_exact": [
+        "moonshotai/Kimi-K2.6",
         "moonshotai/Kimi-K2.5",
         "moonshotai/Kimi-K2-Instruct",
         "zai-org/GLM-5.1",
@@ -2659,6 +2660,29 @@
         "input_per_mtok_usd": 30.0,
         "output_per_mtok_usd": 180.0,
         "cache_read_per_mtok_usd": 0.0
+      }
+    },
+    {
+      "id": "together::moonshotai/Kimi-K2.6",
+      "provider": "together",
+      "source_provider": "moonshotai",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["fast", "jsonStable"],
+      "comment": "Together AI 上の Kimi K2.6。K2.5 の後継比較候補として、要約、質問応答、ダイジェストまで広く試せる追加枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "together_model_page_2026_04",
+        "input_per_mtok_usd": 1.2,
+        "output_per_mtok_usd": 4.5
       }
     },
     {

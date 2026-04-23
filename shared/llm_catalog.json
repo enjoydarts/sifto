@@ -121,6 +121,8 @@
       "id": "xiaomi_mimo_token_plan",
       "api_key_header": "x-openai-api-key",
       "match_exact": [
+        "mimo-v2.5",
+        "mimo-v2.5-pro",
         "mimo-v2-pro",
         "mimo-v2-omni"
       ],
@@ -1381,6 +1383,50 @@
         "output_per_mtok_usd": 2.4,
         "cache_write_per_mtok_usd": 0.375,
         "cache_read_per_mtok_usd": 0.03
+      }
+    },
+    {
+      "id": "mimo-v2.5",
+      "provider": "xiaomi_mimo_token_plan",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "balanced",
+      "highlights": ["openaiCompat", "reasoning"],
+      "comment": "Xiaomi MiMo (TokenPlan) の 2.5 系ベースモデル。V2 世代より新しい比較候補として、事実抽出や要約の置き換え検証に使う枠。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "xiaomi_mimo_token_plan_subscription_2026_04",
+        "input_per_mtok_usd": 0,
+        "output_per_mtok_usd": 0
+      }
+    },
+    {
+      "id": "mimo-v2.5-pro",
+      "provider": "xiaomi_mimo_token_plan",
+      "available_purposes": ["facts", "summary", "digest_cluster_draft", "digest", "ask", "source_suggestion"],
+      "recommendation": "strong",
+      "best_for": "ask",
+      "highlights": ["openaiCompat", "reasoning"],
+      "comment": "Xiaomi MiMo (TokenPlan) の 2.5 系上位モデル。より強い推論や整理力を見込みつつ、購読枠で比較運用したい時の候補。",
+      "capabilities": {
+        "supports_structured_output": true,
+        "supports_strict_json_schema": false,
+        "supports_reasoning": true,
+        "supports_tool_calling": true,
+        "supports_cache_read_pricing": false,
+        "supports_cache_write_pricing": false
+      },
+      "pricing": {
+        "pricing_source": "xiaomi_mimo_token_plan_subscription_2026_04",
+        "input_per_mtok_usd": 0,
+        "output_per_mtok_usd": 0
       }
     },
     {

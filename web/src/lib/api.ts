@@ -119,8 +119,8 @@ import type {
   ItemLaterResult,
 } from "@/types/api";
 
-async function clientFetch<T>(path: string, options?: RequestInit, opts?: { apiPrefix?: boolean }): Promise<T> {
-  const requestPath = withCacheBust(path, options?.method);
+async function clientFetch<T>(path: string, options?: RequestInit, opts?: { apiPrefix?: boolean; forceFresh?: boolean }): Promise<T> {
+  const requestPath = withCacheBust(path, options?.method, opts?.forceFresh !== false);
   const targetPath = `${opts?.apiPrefix === false ? "" : "/api"}${requestPath}`;
   const authHeaders = await getAuthHeaders();
   let res = await fetch(targetPath, {
@@ -157,11 +157,16 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return clientFetch<T>(path, options, { apiPrefix: true });
 }
 
+async function apiFetchStable<T>(path: string, options?: RequestInit): Promise<T> {
+  return clientFetch<T>(path, options, { apiPrefix: true, forceFresh: false });
+}
+
 const FORCE_FRESH_UNTIL_KEY = "sifto.forceFreshUntil";
 
-function withCacheBust(path: string, method?: string): string {
+function withCacheBust(path: string, method?: string, enabled = true): string {
   const upperMethod = (method ?? "GET").toUpperCase();
   if (upperMethod !== "GET" && upperMethod !== "HEAD") return path;
+  if (!enabled) return path;
   if (typeof window === "undefined") return path;
   const raw = window.sessionStorage.getItem(FORCE_FRESH_UNTIL_KEY);
   const until = raw ? Number(raw) : 0;
@@ -406,7 +411,7 @@ export const api = {
     if (params?.cache_bust) q.set("cache_bust", "1");
     if (params?.navigator_preview) q.set("navigator_preview", "1");
     const qs = q.toString();
-    return apiFetch<BriefingNavigatorResponse>(`/briefing/navigator${qs ? `?${qs}` : ""}`);
+    return apiFetchStable<BriefingNavigatorResponse>(`/briefing/navigator${qs ? `?${qs}` : ""}`);
   },
   getItemNavigator: (id: string, params?: { cache_bust?: boolean; navigator_preview?: boolean }) => {
     const q = new URLSearchParams();

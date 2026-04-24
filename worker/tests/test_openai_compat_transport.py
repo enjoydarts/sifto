@@ -735,6 +735,43 @@ class RunChatJsonTests(unittest.TestCase):
 
         self.assertEqual(_ConcurrentTrackingClient.max_active_count, 1)
 
+    @patch("app.services.openai_compat_transport.httpx.Client", _ConcurrentTrackingClient)
+    def test_featherless_requests_are_limited_to_four(self):
+        previous = os.environ.get("FEATHERLESS_MAX_CONCURRENCY")
+        os.environ["FEATHERLESS_MAX_CONCURRENCY"] = "10"
+        try:
+            threads = [
+                threading.Thread(
+                    target=run_chat_json,
+                    kwargs={
+                        "prompt": "Return JSON",
+                        "model": "featherless::Qwen/Qwen3.5-9B",
+                        "api_key": "test-key",
+                        "url": "https://example.com/chat/completions",
+                        "normalize_model_name": lambda model: model,
+                        "supports_strict_schema": lambda model: False,
+                        "timeout_sec": 5,
+                        "attempts": 1,
+                        "base_sleep_sec": 0,
+                        "provider_name": "featherless",
+                        "logger": _ListLogger(),
+                        "response_schema": {"type": "object"},
+                    },
+                )
+                for _ in range(8)
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        finally:
+            if previous is None:
+                os.environ.pop("FEATHERLESS_MAX_CONCURRENCY", None)
+            else:
+                os.environ["FEATHERLESS_MAX_CONCURRENCY"] = previous
+
+        self.assertEqual(_ConcurrentTrackingClient.max_active_count, 4)
+
 
 if __name__ == "__main__":
     unittest.main()

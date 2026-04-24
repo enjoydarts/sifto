@@ -87,14 +87,28 @@ def _apply_openai_compat_request_overrides(provider_name: str, normalized_model:
 
 def _provider_max_concurrency(provider_name: str) -> int | None:
     provider = str(provider_name or "").strip().lower()
-    if provider != "zai":
+    defaults = {
+        "zai": 1,
+        "featherless": 4,
+    }
+    maximums = {
+        "featherless": 4,
+    }
+    default = defaults.get(provider)
+    if default is None:
         return None
-    raw = str(os.getenv("ZAI_MAX_CONCURRENCY", "1") or "1").strip()
+    env_name = f"{provider.upper()}_MAX_CONCURRENCY"
+    raw = str(os.getenv(env_name, str(default)) or str(default)).strip()
     try:
         value = int(raw)
     except Exception:
-        return 1
-    return value if value > 0 else None
+        value = default
+    if value <= 0:
+        return None
+    maximum = maximums.get(provider)
+    if maximum is not None and value > maximum:
+        return maximum
+    return value
 
 
 @contextmanager
